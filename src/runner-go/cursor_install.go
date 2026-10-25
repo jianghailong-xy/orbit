@@ -54,22 +54,32 @@ const (
 
 // cursorArtifact is the pinned build's tarball for one platform, as the contract measured it.
 type cursorArtifact struct {
-	path   string // the platform's segment of the download URL: linux/x64
+	path   string // the platform's segment of the download URL: linux/x64, darwin/arm64
 	sha256 string
 	size   int64
 }
 
-// cursorArtifacts are the platforms the pinned build was measured on, by GOOS/GOARCH. Linux x64 alone:
-// macOS waits for P0b and Linux arm64 for a measurement of its own (contract §17.1, item 11), so a
-// runner on either is told its platform is unsupported rather than handed a download nobody checked.
-// Tests replace it with a tarball of their own.
+// cursorArtifacts are the platforms the pinned build was measured on, by GOOS/GOARCH: Linux x64 (P0a) and
+// macOS on Apple silicon (P0b, §18.1). Linux arm64 and Intel Macs wait for measurements of their own
+// (contract §17.1, item 11), so a runner on either is told its platform is unsupported rather than handed a
+// download nobody checked. Tests replace it with a tarball of their own.
 var cursorArtifacts = map[string]cursorArtifact{
 	"linux/amd64": {
 		path:   "linux/x64",
 		sha256: "6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d",
 		size:   183861376,
 	},
+	"darwin/arm64": {
+		path:   "darwin/arm64",
+		sha256: "c6d9e2eaa1b1e24221517e0b4206b1f1593792e6f0d8a52e9b507bbe7ab0cc77",
+		size:   178006204,
+	},
 }
+
+// cursorOS and cursorArch are the platform whose rules this runner runs Cursor CLI by, the runtime's own:
+// the pinned build it installs (cursorArtifacts) and, in cursor_account_slot.go, the accounts it keeps and
+// where a sign-in saves its login. A test stands another in.
+var cursorOS, cursorArch = runtime.GOOS, runtime.GOARCH
 
 // cursorDownloadBase is where the tarballs are fetched from: downloads.cursor.com installed the build
 // in 5.8 s from HPC, where the CLI's own default host ran at ~170 KB/s (§1.1). Tests point it at a
@@ -101,7 +111,7 @@ func cursorArtifactFor(goos, arch string) (cursorArtifact, error) {
 }
 
 func cursorPlatformError() error {
-	_, err := cursorArtifactFor(runtime.GOOS, runtime.GOARCH)
+	_, err := cursorArtifactFor(cursorOS, cursorArch)
 	return err
 }
 
@@ -231,7 +241,7 @@ func publishCursor(ctx context.Context, proxyVars []envVar, replace bool) (err e
 			err = fmt.Errorf("CURSOR_INSTALL_FAILED: installing Cursor CLI %s failed: %w", cursorSupportedVersion, err)
 		}
 	}()
-	artifact, err := cursorArtifactFor(runtime.GOOS, runtime.GOARCH)
+	artifact, err := cursorArtifactFor(cursorOS, cursorArch)
 	if err != nil {
 		return err
 	}
@@ -359,9 +369,12 @@ func cursorDownloadClient(proxyVars []envVar) *http.Client {
 	return &http.Client{Transport: transport}
 }
 
-// unpackCursorTarball unpacks the package's dist-package/ into dir. The checked tarball holds regular
-// files and directories only (458 and 125 of them, §1), so anything else — a link, a device, a path
-// outside the package — is refused rather than skipped.
+// unpackCursorTarball unpacks the package's dist-package/ into dir. The checked tarballs hold regular
+// files and directories only (Linux's 458 and 125 of them, §1; macOS's 452 and 125, §18.9), so anything
+// else — a link, a device, a path outside the package — is refused rather than skipped. An entry's extended
+// attributes are not restored: in the macOS tarball only the Linux and Windows builds of one native module
+// carry any, code signatures macOS never reads, as it never loads those files; a Mach-O binary's signature
+// is inside the file, written as it is (§18.9).
 func unpackCursorTarball(tarball, dir string) error {
 	file, err := os.Open(tarball)
 	if err != nil {

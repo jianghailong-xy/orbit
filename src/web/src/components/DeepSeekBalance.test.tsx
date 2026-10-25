@@ -317,8 +317,8 @@ describe('the DeepSeek account balance', () => {
       client.setQueryData(['providers', 'shared-pools'], []);
       await show(<InfrastructurePage />);
       const lineOf = (name: string) =>
-        [...container.querySelectorAll('tr')]
-          .find((tr) => tr.querySelector('.prov-cell-name')?.textContent === name)
+        [...container.querySelectorAll('.vk-row')]
+          .find((key) => key.querySelector('.vk-name')?.textContent === name)
           ?.querySelector('[data-testid="deepseek-balance-line"]')
           ?.textContent?.replace(/\s+/g, ' ')
           .trim();

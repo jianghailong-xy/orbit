@@ -328,7 +328,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 24; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 51,
+  assert.equal(core.length, 53,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -348,7 +348,9 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + 'and 47 once 0377 added `session_dsh_runner_acquisition_guard` for DeepSeek Harness, and 50 '
     + 'once 0414 added `session_acquisition_engine_guard`, `session_engine_from_task_pin` and '
     + '`session_engine_immutable` with the recorded session engine, and 51 once 0426 added '
-    + '`session_cursor_runner_acquisition_guard` for Cursor CLI');
+    + '`session_cursor_runner_acquisition_guard` for Cursor CLI, and 53 once 0441 added '
+    + '`project_rollup_candidate_task_insert` and `project_rollup_candidate_task_update` to `task`, '
+    + 'appending the tasks GET /projects has to classify itself');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
@@ -360,7 +362,8 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + 'and 34 until 0329 removed 0122\'s `task_dispatch_authority_derive` with the column it stamped');
   assert.deepEqual(
     core.filter((entry) => Number(entry.since.slice(0, 4)) >= 207).map((entry) => entry.trigger).sort(),
-    ['project_task_status_count_delete', 'project_task_status_count_insert',
+    ['project_rollup_candidate_task_insert', 'project_rollup_candidate_task_update',
+      'project_task_status_count_delete', 'project_task_status_count_insert',
       'project_task_status_count_move', 'run_event_ingestion_provenance_guard',
       'session_acquisition_engine_guard',
       'session_antigravity_runner_claim_guard',
@@ -378,7 +381,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '0370\'s `task_owner_confirmation_review_reviewer_ended` and '
     + '0377\'s `session_dsh_runner_acquisition_guard` and 0414\'s `session_acquisition_engine_guard`, '
     + '`session_engine_from_task_pin` and `session_engine_immutable` and 0426\'s '
-    + '`session_cursor_runner_acquisition_guard`. '
+    + '`session_cursor_runner_acquisition_guard` and 0441\'s two `project_rollup_candidate_task_*`. '
     + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(

@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineHealth } from '@orbit/shared';
-import { RunnerEngines, summaryOf } from './RunnerEngines';
+import { machineChipsOf, RunnerEngines, summaryOf } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -95,7 +95,8 @@ const ROW: {
   over?: Partial<Runner>;
   codex: CodexRow;
   count: string;
-  folded: string;
+  /** What the card's head says of Codex (MachineChips), folded or open: null for no chip at all. */
+  folded: string | null;
 }[] = [
   {
     state: 'signed in',
@@ -107,7 +108,7 @@ const ROW: {
       buttons: ['More actions · text'],
     },
     count: '1 runner · 3 signed in',
-    folded: 'All signed in',
+    folded: 'Codex',
   },
   {
     state: 'signed out',
@@ -121,7 +122,7 @@ const ROW: {
       buttons: ['Sign in · primary'],
     },
     count: '1 runner · 2 signed in',
-    folded: '2 of 3 signed in',
+    folded: 'Codex signed out',
   },
   {
     state: "the CLI wouldn't say",
@@ -133,7 +134,7 @@ const ROW: {
       buttons: ['Sign in · primary'],
     },
     count: '1 runner · 2 signed in',
-    folded: '2 of 3 signed in',
+    folded: null,
   },
   {
     state: 'signed in, on a runner that is offline',
@@ -146,7 +147,7 @@ const ROW: {
       buttons: ['More actions · text'],
     },
     count: '1 runner · 3 signed in',
-    folded: 'All signed in',
+    folded: 'Codex',
   },
 ];
 
@@ -264,9 +265,15 @@ describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
       ]);
       // Pause is available inside More and adds no visible button or text to this row.
       expect(codexRow(page)).toEqual(codex);
-      // One account counts once, as the engine always did: on the section, and on a folded card.
+      // One account counts once, as the engine always did: on the section, and on the card's head —
+      // one chip, neither ×1 nor 1 of 1, and the line beside it says nothing more.
       expect(page.querySelector('.re-sec-count')?.textContent).toBe(count);
-      expect(summaryOf(box)).toBe(folded);
+      expect(
+        machineChipsOf(box)
+          .filter((chip) => chip.engine === 'codex')
+          .map((chip) => (chip.signedOut ? 'Codex signed out' : chip.logins < chip.accounts || chip.logins > 1 ? `Codex ${chip.logins}/${chip.accounts}` : 'Codex')),
+      ).toEqual(folded ? [folded] : []);
+      expect(summaryOf(box)).toBeNull();
     },
   );
 

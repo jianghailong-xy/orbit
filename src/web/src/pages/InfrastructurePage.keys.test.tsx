@@ -11,11 +11,12 @@ import type { ProviderRow } from '../lib/providerAdmin';
 import { InfrastructurePage } from './InfrastructurePage';
 
 /**
- * Infrastructure's API keys after the provider/engine split
- * (docs/mocks/provider-engine-decoupling/web-1-infrastructure.html ③ and ④): the keys under their
- * vendors, each saying which engines it runs on — the server's `engines` — and a DeepSeek key its
- * account balance; the gallery a vendor to a card, DeepSeek Harness among none of them; and a key's
- * Delete asking first what uses it on each of those engines.
+ * Infrastructure's API keys after the provider/engine split (docs/mocks/provider-engine-decoupling
+ * web-1, ③ and ④), a card per vendor (docs/mocks/infrastructure-focus): each key saying which engines it
+ * runs on — the server's `engines` — the model a session on it starts on, whether it is on and when it
+ * was last used, and a DeepSeek key its account balance; the vendors not connected yet in a line under
+ * them, DeepSeek Harness among none of them; and a key's Delete asking first what uses it on each of
+ * those engines.
  */
 
 vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
@@ -51,7 +52,14 @@ const deepseek = (n: number, label: string, over: Partial<ProviderRow> = {}) =>
 // which is a DeepSeek key like the other), Gemini, Kimi and GLM keys, and a Claude subscription token.
 /** A session ran on the first DeepSeek key three days ago; nothing has spent the others. */
 const THREE_DAYS_AGO = new Date(Date.now() - 3 * 86_400_000).toISOString();
-const DEEPSEEK = deepseek(1, 'DeepSeek', { lastUsedAt: THREE_DAYS_AGO });
+const DEEPSEEK = deepseek(1, 'DeepSeek', {
+  lastUsedAt: THREE_DAYS_AGO,
+  models: [
+    { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+    { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+  ],
+  defaultModel: 'deepseek-v4-flash',
+});
 const DEEPSEEK_2 = deepseek(2, 'DeepSeek 2', {
   runtime: 'dsh',
   engines: ['dsh', 'claude', 'opencode'] as ProviderRow['engines'],
@@ -62,6 +70,7 @@ const GEMINI = key(3, 'Gemini', {
   engines: ['antigravity', 'opencode'] as ProviderRow['engines'],
   baseUrl: 'https://generativelanguage.googleapis.com',
   presetSlug: 'gemini',
+  models: [{ value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' }],
 });
 const KIMI = key(4, 'Kimi (Moonshot)', {
   runtime: 'kimi',
@@ -76,6 +85,7 @@ const KEYS = [DEEPSEEK, DEEPSEEK_2, GEMINI, KIMI, GLM, CLAUDE_MAX];
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 let path = '';
+let keys: ProviderRow[] = [];
 let usage: Record<string, ProviderKeyUsage> = {};
 let sent: Array<{ method: string; path: string }> = [];
 
@@ -87,6 +97,7 @@ function Probe() {
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   localStorage.clear();
+  keys = KEYS;
   usage = {};
   sent = [];
   apiMock.mockImplementation((async (p: string, init?: { method?: string }) => {
@@ -96,7 +107,7 @@ beforeEach(() => {
       return {};
     }
     if (p === '/runners') return [];
-    if (p === '/providers/mine') return KEYS;
+    if (p === '/providers/mine') return keys;
     const balance = /^\/providers\/mine\/([^/]+)\/balance/.exec(p);
     if (balance) {
       return {
@@ -174,34 +185,32 @@ const words = (el: Element | null | undefined) => {
 const button = (words: string, scope: ParentNode = document.body) =>
   [...scope.querySelectorAll<HTMLButtonElement>('button')].find((el) => text(el) === words) ?? null;
 const keyRow = (label: string) =>
-  [...document.body.querySelectorAll<HTMLElement>('.provider-keys tr.prov-key')].find(
-    (row) => text(row.querySelector('.prov-cell-name')) === label,
+  [...document.body.querySelectorAll<HTMLElement>('.vk-card .vk-row')].find(
+    (row) => text(row.querySelector('.vk-name')) === label,
   )!;
 
 describe('API keys after the provider/engine split', () => {
-  it('lists the keys under their vendors, in the order each vendor first appears, each with the way to add another', async () => {
+  it('lists the keys on a card per vendor, in the order each vendor first appears, each with the way to add another', async () => {
     await mount();
-    expect(text(document.body.querySelector('.provider-keys thead th'))).toBe('Key');
-    const lines = [...document.body.querySelectorAll<HTMLElement>('.provider-keys tbody tr')].map((row) =>
-      row.classList.contains('prov-group') ? `# ${text(row.querySelector('.prov-group-in'))}` : text(row.querySelector('.prov-cell-name')),
-    );
-    expect(lines).toEqual([
+    const cards = [...document.body.querySelectorAll<HTMLElement>('.vk-cards > .vk-card')].map((card) => [
+      words(card.querySelector('.re-head')),
+      ...[...card.querySelectorAll('.vk-row .vk-name')].map(text),
+    ]);
+    expect(cards).toEqual([
       // The key made from the retired Harness preset is DeepSeek's, beside the other.
-      '# DeepSeek 2 keys + Add key',
-      'DeepSeek',
-      'DeepSeek 2',
-      '# Google Gemini + Add key',
-      'Gemini',
-      '# Moonshot (Kimi) + Add key',
-      'Kimi (Moonshot)',
-      '# Z.AI (GLM) + Add key',
-      'Z.AI (GLM)',
-      '# Anthropic + Add key',
-      'Claude Max',
+      ['DeepSeek 2 keys + Add key', 'DeepSeek', 'DeepSeek 2'],
+      ['Google Gemini + Add key', 'Gemini'],
+      ['Moonshot (Kimi) + Add key', 'Kimi (Moonshot)'],
+      ['Z.AI (GLM) + Add key', 'Z.AI (GLM)'],
+      ['Anthropic + Add key', 'Claude Max'],
     ]);
     expect(
-      [...document.body.querySelectorAll<HTMLAnchorElement>('.prov-group-add')].map((a) => a.getAttribute('href')),
+      [...document.body.querySelectorAll<HTMLAnchorElement>('.vk-card .vk-add')].map((a) => a.getAttribute('href')),
     ).toEqual(['/providers/new/deepseek', '/providers/new/gemini', '/providers/new/moonshot', '/providers/new/glm', '/providers/new/anthropic']);
+    // The section counts them, and the table's endpoint and model count are the key's own page's now.
+    expect(text(document.body.querySelector('#keys .re-sec-count'))).toBe('6 keys');
+    expect(document.body.querySelector('#keys table')).toBeNull();
+    expect(text(document.body.querySelector('#keys'))).not.toContain('https://');
   });
 
   it('says under each key which engines run it, the server’s order, and keeps a DeepSeek key’s balance', async () => {
@@ -222,54 +231,43 @@ describe('API keys after the provider/engine split', () => {
     expect(text(keyRow('DeepSeek').querySelector('.dsb-row'))).toContain('Account balance ¥110.00');
     expect(keyRow('Gemini').querySelector('.dsb-row')).toBeNull();
     // Nothing on a key says it runs on one engine, or which machines run Harness.
-    expect(text(document.body.querySelector('.provider-keys'))).not.toMatch(/Runs on|Ready on|Not ready/);
+    expect(text(document.body.querySelector('.vk-cards'))).not.toMatch(/Runs on|Ready on|Not ready/);
     expect(document.body.querySelector('[data-testid="dsh-runner-status"]')).toBeNull();
   });
 
-  it('says when each key last ran a session, and Never used for one nothing has spent', async () => {
+  it('says what each key starts a session on, whether it is on, and when it last ran one — Never used for one nothing has spent', async () => {
+    keys = [...KEYS.slice(0, 5), { ...CLAUDE_MAX, enabled: false }];
     await mount();
-    expect([...document.body.querySelectorAll('.provider-keys thead th')].map((th) => text(th))).toEqual([
-      'Key',
-      'Models',
-      'Endpoint',
-      'Enabled',
-      'Last used',
-      '',
-    ]);
-    // The last cell before the row's Edit/Delete.
-    const lastUsedCell = (label: string) => {
-      const tds = [...keyRow(label).querySelectorAll('td')];
-      return tds[tds.length - 2];
-    };
-    const used = lastUsedCell('DeepSeek');
-    expect(text(used)).toBe('3d ago');
-    // What the relative time stands for is the cell's tooltip.
-    expect(used.querySelector('span')?.getAttribute('title')).toBe(
+    // Its default model by its list's name, else the first it lists; nothing for a key that lists none.
+    expect(text(keyRow('DeepSeek').querySelector('.vk-model'))).toBe('Starts on DeepSeek V4 Flash');
+    expect(text(keyRow('Gemini').querySelector('.vk-model'))).toBe('Starts on Gemini 3.8 Flash');
+    expect(text(keyRow('Z.AI (GLM)').querySelector('.vk-model'))).toBe('');
+    const state = (label: string) => keyRow(label).querySelector<HTMLElement>('.vk-state')!;
+    expect(text(state('DeepSeek'))).toBe('Enabled Used 3d ago');
+    // What the relative time stands for is its tooltip.
+    expect(state('DeepSeek').querySelector('.vk-used')?.getAttribute('title')).toBe(
       new Date(THREE_DAYS_AGO).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
     );
-    // A key nobody has spent says so, in the muted state, rather than showing a time.
-    expect(text(lastUsedCell('Claude Max'))).toBe('Never used');
-    expect(lastUsedCell('Claude Max').querySelector('.prov-never')).not.toBeNull();
-    expect(lastUsedCell('Claude Max').querySelector('span[title]')).toBeNull();
-    // A vendor's head spans every column, the new one included.
-    expect(keyRow('DeepSeek').closest('tbody')!.querySelector('tr.prov-group td')!.getAttribute('colspan')).toBe('6');
+    // A key nobody has spent says so, in the muted state, rather than showing a time; a key switched off
+    // says that first.
+    expect(text(state('Claude Max'))).toBe('Disabled Never used');
+    expect(state('Claude Max').querySelector('.vk-used.never')).not.toBeNull();
+    expect(state('Claude Max').querySelector('[title]')).toBeNull();
+    expect([...keyRow('Claude Max').querySelectorAll('.vk-act button')].map((b) => text(b))).toEqual(['Edit', 'Delete']);
   });
 
-  it('offers a card per vendor, by the vendor’s name, and none for DeepSeek Harness', async () => {
+  it('offers each vendor not connected yet in a line under the keys, by the vendor’s name, and none for DeepSeek Harness', async () => {
     await mount();
-    const cards = [...document.body.querySelectorAll<HTMLAnchorElement>('.provider-more .provider-card')];
-    expect(cards.map((card) => [text(card.querySelector('.pc-name')), text(card.querySelector('.pc-sub'))])).toEqual([
-      ['Anthropic', 'Connected'],
-      ['OpenAI', 'Codex · OpenCode'],
-      ['Google Gemini', 'Connected'],
-      // Both DeepSeek keys count towards DeepSeek.
-      ['DeepSeek', 'Connected · 2 keys'],
-      ['Moonshot (Kimi)', 'Connected'],
-      ['Z.AI (GLM)', 'Connected'],
-      ['MiniMax', 'Claude Code · OpenCode'],
-      ['Qwen', 'Claude Code · OpenCode'],
-      ['Custom', 'Manual endpoint'],
+    const pills = [...document.body.querySelectorAll<HTMLAnchorElement>('.pv-more .pv-pill')];
+    // Every vendor with a key has its own card to add another from — both DeepSeek keys count towards
+    // DeepSeek — so the line is the rest, and Custom.
+    expect(pills.map((pill) => [words(pill), pill.getAttribute('href')])).toEqual([
+      ['OpenAI', '/providers/new/openai'],
+      ['MiniMax', '/providers/new/minimax'],
+      ['Qwen', '/providers/new/qwen'],
+      ['Custom', '/providers/new/custom'],
     ]);
+    expect(text(document.body.querySelector('.pv-more-l'))).toBe('Connect another provider');
     expect(document.body.querySelector('a[href="/providers/new/deepseek-harness"]')).toBeNull();
     // Nor for Cursor: its keys run on Cursor CLI alone, which the web does not draw yet (webShowsEngine).
     expect(document.body.querySelector('a[href="/providers/new/cursor-api"]')).toBeNull();

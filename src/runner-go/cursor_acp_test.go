@@ -94,6 +94,12 @@ type cursorRunOptions struct {
 	onServer func(url string)
 	// taskID is the task the session runs for.
 	taskID string
+	// sessionID is the session's id; cursorTestSessionID when empty. Sessions run side by side need ids of
+	// their own, and with them directories and stub control planes of their own.
+	sessionID string
+	// keepSlashRegistry runs the session on the slash registry the test already gave itself
+	// (useCursorSlashRegistry) rather than one of its own: sessions run side by side share one.
+	keepSlashRegistry bool
 }
 
 // cursorTestCard is one approval card a session filed with the stub control plane.
@@ -176,7 +182,13 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 	if !opts.sameHome {
 		useCursorRealHome(t)
 	}
-	useCursorSlashRegistry(t)
+	if !opts.keepSlashRegistry {
+		useCursorSlashRegistry(t)
+	}
+	sessionID := opts.sessionID
+	if sessionID == "" {
+		sessionID = cursorTestSessionID
+	}
 	timeout := opts.timeout
 	if timeout == 0 {
 		timeout = 60 * time.Second
@@ -204,7 +216,7 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 	if title == "" {
 		title = "Cursor test session"
 	}
-	job := &ClaimedSession{SessionID: cursorTestSessionID, Provider: providerCursor, Title: title, TaskID: opts.taskID,
+	job := &ClaimedSession{SessionID: sessionID, Provider: providerCursor, Title: title, TaskID: opts.taskID,
 		RuntimeSessionID: opts.runtimeSessionID, Agent: AgentExecConfig{Provider: providerCursor, Env: env}}
 	if opts.naming {
 		job.Naming = &SessionNamingJob{Description: "the session's opening request"}
@@ -235,7 +247,7 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 	for _, item := range opts.first {
 		inbox <- item
 	}
-	prefix := "/api/runner/sessions/" + cursorTestSessionID + "/"
+	prefix := "/api/runner/sessions/" + sessionID + "/"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == prefix+"inbox":

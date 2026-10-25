@@ -1,0 +1,789 @@
+diff -ruN today/src/web/src/components/InfrastructureOverview.tsx proposal/src/web/src/components/InfrastructureOverview.tsx
+--- today/src/web/src/components/InfrastructureOverview.tsx	2026-10-25 09:50:55.000000000 +0800
++++ proposal/src/web/src/components/InfrastructureOverview.tsx	2026-10-25 10:12:50.959873576 +0800
+@@ -180,7 +180,7 @@
+  * subscription token under Claude Code alone. Ready with any of them; with none, Not set up, and the
+  * ways to get one.
+  */
+-export function EngineOverview({
++function EngineCards({
+   runners,
+   keys,
+   pools,
+@@ -276,6 +276,80 @@
+             </div>
+           );
+         })}
++      </div>
++    </div>
++  );
++}
++
++/** PROTOTYPE (docs/mocks/infra-focus): the same overview as a compact list at the end of the page, or a
++ *  one-line strip under its head. `cards` is today's. */
++export function EngineOverview({ runners, keys, pools, variant = 'cards' }: { runners: Runner[]; keys: ProviderRow[]; pools: ProviderPool[]; variant?: 'cards' | 'compact' | 'strip' }) {
++  if (variant === 'cards') return <EngineCards runners={runners} keys={keys} pools={pools} />;
++  const online = runners.filter((runner) => runner.online);
++  const installOn = (engine: AgentProvider) =>
++    online.length > 0 ? `?runner=${encodeId(online[0].id)}&engine=${engine}` : '/runners/register';
++  const entries = ALL_ENGINES.filter((engine) => webShowsEngine(engine, runners)).map((engine) => {
++    const machines =
++      engine === AgentProvider.DSH
++        ? []
++        : online.flatMap((runner) => {
++            const logins = loginsOn(runner, engine);
++            return logins === 0 ? [] : [logins > 1 ? `${machineName(runner)} ×${logins}` : machineName(runner)];
++          });
++    const engineKeys = keys.filter((key) => key.enabled && key.engines.includes(engine));
++    const enginePools = pools.filter((pool) => !pool.unavailable && (poolRunsCodex(pool) ? 'codex' : 'claude') === engine);
++    return { engine, machines, engineKeys, enginePools, ready: machines.length > 0 || engineKeys.length > 0 || enginePools.length > 0 };
++  });
++  const none = (engine: AgentProvider) =>
++    engine === AgentProvider.DSH ? (
++      <>No DeepSeek key. <Link to={DSH_CONNECT_HREF}>Connect a DeepSeek key</Link> — it runs on Claude Code and OpenCode too.</>
++    ) : (
++      <>No machine signed in, no key. <Link to={installOn(engine)}>Install on a machine</Link> or <Link to={engine === AgentProvider.CURSOR ? CURSOR_CONNECT_HREF : '/providers/new'}>connect a key</Link>.</>
++    );
++  if (variant === 'strip') {
++    return (
++      <div className="infra-strip">
++        {entries.map((e) => (
++          <span key={e.engine} className={`infra-strip-pill${e.ready ? '' : ' none'}`}>
++            <EngineTile engine={e.engine} size={14} />
++            {ENGINE_CLI_NAMES[e.engine]}
++            <span className="infra-strip-mark">{e.ready ? '✓' : 'not set up'}</span>
++          </span>
++        ))}
++      </div>
++    );
++  }
++  return (
++    <div className="re-sec infra-index-sec">
++      <div className="re-sec-head">
++        <h3>By engine</h3>
++        <span className="re-sec-sub">Which engines can start a session right now, and on what — read from the machines, keys and pools above.</span>
++      </div>
++      <div className="infra-index">
++        {entries.map((e) => {
++          const parts = [
++            e.machines.length > 0 && <span key="m"><b>{e.engine === AgentProvider.OPENCODE ? 'Own sign-in' : 'Subscription'}</b> · {e.machines.join(', ')}</span>,
++            e.engineKeys.length > 0 && <span key="k"><b>API key</b> · {e.engineKeys.map((key) => key.label).join(', ')}</span>,
++            e.enginePools.length > 0 && <span key="p"><b>Pool</b> · {e.enginePools.map((pool) => pool.label).join(', ')}</span>,
++          ].filter(Boolean);
++          return (
++            <div key={e.engine} className={`infra-index-row${e.ready ? '' : ' none'}`}>
++              <EngineTile engine={e.engine} size={20} />
++              <span className="infra-index-name">{ENGINE_CLI_NAMES[e.engine]}</span>
++              <span className={`infra-engine-state${e.ready ? ' ready' : ''}`}>{e.ready ? 'Ready' : 'Not set up'}</span>
++              <span className="infra-index-src">
++                {e.ready
++                  ? parts.map((part, index) => (
++                      <Fragment key={index}>
++                        {index > 0 && <span className="infra-index-sep">·</span>}
++                        {part}
++                      </Fragment>
++                    ))
++                  : none(e.engine)}
++              </span>
++            </div>
++          );
++        })}
+       </div>
+     </div>
+   );
+diff -ruN today/src/web/src/components/ProviderKeyCards.tsx proposal/src/web/src/components/ProviderKeyCards.tsx
+--- today/src/web/src/components/ProviderKeyCards.tsx	1970-01-01 08:00:00.000000000 +0800
++++ proposal/src/web/src/components/ProviderKeyCards.tsx	2026-10-25 10:12:50.959873576 +0800
+@@ -0,0 +1,133 @@
++import { Link, useNavigate } from 'react-router-dom';
++import { Fragment } from 'react';
++import { useQuery } from '@tanstack/react-query';
++import { AgentProvider, ENGINE_CLI_NAMES, keyDialect, PROVIDER_PRESETS } from '@orbit/shared';
++import type { ProviderRow } from '../lib/providerAdmin';
++import { DSH_PRESET_SLUG } from '../lib/dshRuntime';
++import { hasDeepSeekBalance } from '../lib/deepseekBalance';
++import { runnersQuery } from '../lib/queries';
++import { webShowsEngine } from '../lib/runnerEngines';
++import { ago } from '../lib/watches';
++import { DeepSeekBalanceLine } from './DeepSeekBalance';
++import { CursorKeyCheckLine } from './CursorKeyCheck';
++import { EngineTile, ProviderTile, newKeyEngines, vendorName, vendorOf } from './ProviderGallery';
++import { Badge } from './ui/Badge';
++import { Button } from './ui/Button';
++
++/** PROTOTYPE for docs/mocks/infra-focus — the keys as one card per vendor, each key a row. Not shipped. */
++
++function byVendor(rows: ProviderRow[]): Array<{ vendor: string; rows: ProviderRow[] }> {
++  const groups = new Map<string, ProviderRow[]>();
++  for (const row of rows) {
++    const vendor = vendorOf(row.presetSlug);
++    groups.set(vendor, [...(groups.get(vendor) ?? []), row]);
++  }
++  return [...groups].map(([vendor, keys]) => ({ vendor, rows: keys }));
++}
++
++export function KeyEngines({ row }: { row: ProviderRow }) {
++  const subscription =
++    keyDialect(row.runtime) === 'anthropic' && row.engines.length === 1 && row.engines[0] === AgentProvider.CLAUDE;
++  return (
++    <div className="prov-runtime prov-engines">
++      {row.engines.map((engine, index) => (
++        <Fragment key={engine}>
++          {index > 0 && <> <span className="prov-engine-sep">·</span> </>}
++          <span className="prov-engine">
++            <EngineTile engine={engine} size={12} />
++            {ENGINE_CLI_NAMES[engine]}
++          </span>
++        </Fragment>
++      ))}
++      {subscription && (
++        <>
++          {' '}
++          <span className="prov-engine-sep">·</span> <span>subscription token, Claude Code only</span>
++        </>
++      )}
++    </div>
++  );
++}
++
++function defaultModelOf(key: ProviderRow): string | null {
++  const model = key.defaultModel || key.models[0]?.value;
++  if (!model) return null;
++  return key.models.find((option) => option.value === model)?.label || model;
++}
++
++export function ProviderKeyCards({ rows, nowMs, onDelete }: { rows: ProviderRow[]; nowMs: number; onDelete: (row: ProviderRow) => void }) {
++  const navigate = useNavigate();
++  return (
++    <div className="vk-cards">
++      {byVendor(rows).map((group) => (
++        <div className="re-card vk-card" key={group.vendor}>
++          <div className="re-head vk-head">
++            <ProviderTile slug={group.vendor} label={vendorName(group.vendor)} size={22} />
++            <span className="re-runner">{vendorName(group.vendor)}</span>
++            {group.rows.length > 1 && <span className="re-summary">{group.rows.length} keys</span>}
++            <span className="re-head-sp" />
++            <Link className="re-manage" to={`/providers/new/${group.vendor}`}>+ Add key</Link>
++          </div>
++          {group.rows.map((row) => {
++            const model = defaultModelOf(row);
++            return (
++              <div className="vk-row" key={row.id}>
++                <div className="vk-id">
++                  <div className="re-name">{row.label}</div>
++                  <KeyEngines row={row} />
++                  {hasDeepSeekBalance(row) && <DeepSeekBalanceLine row={row} />}
++                  {row.runtime === 'cursor' && <CursorKeyCheckLine row={row} />}
++                </div>
++                <div className="vk-model" title="The model a session on this key starts on">
++                  {model ? (
++                    <>
++                      <span className="vk-model-l">Starts on</span>
++                      <span className="infra-model">{model}</span>
++                    </>
++                  ) : (
++                    <span className="prov-never">No model</span>
++                  )}
++                </div>
++                <div className="vk-state">
++                  <Badge tone={row.enabled ? 'green' : 'default'}>{row.enabled ? 'Enabled' : 'Disabled'}</Badge>
++                  <span className="vk-last">{row.lastUsedAt ? `Used ${ago(row.lastUsedAt, nowMs)}` : 'Never used'}</span>
++                </div>
++                <span className="prov-actions vk-act">
++                  <Button size="small" onClick={() => navigate(`/providers/${row.id}`)}>Edit</Button>
++                  <Button size="small" danger onClick={() => onDelete(row)}>Delete</Button>
++                </span>
++              </div>
++            );
++          })}
++        </div>
++      ))}
++    </div>
++  );
++}
++
++/** The vendors not yet connected, one row of links into the connect page. */
++export function ConnectMore({ rows }: { rows: ProviderRow[] }) {
++  const runners = useQuery(runnersQuery());
++  const connected = new Set(rows.map((row) => vendorOf(row.presetSlug)));
++  const list = PROVIDER_PRESETS.filter(
++    (p) =>
++      p.slug !== DSH_PRESET_SLUG &&
++      !connected.has(p.slug) &&
++      newKeyEngines({ runtime: p.runtime, presetSlug: p.slug, baseUrl: p.baseUrl }).some((engine) => webShowsEngine(engine, runners.data ?? [])),
++  );
++  return (
++    <div className="pv-more">
++      <span className="pv-more-l">Connect another provider</span>
++      {list.map((p) => (
++        <Link key={p.slug} to={`/providers/new/${p.slug}`} className="pv-pill">
++          <ProviderTile slug={p.slug} label={vendorName(p.slug)} size={18} />
++          {vendorName(p.slug)}
++        </Link>
++      ))}
++      <Link to="/providers/new/custom" className="pv-pill">
++        <ProviderTile slug="custom" label="Custom" size={18} muted />
++        Custom
++      </Link>
++    </div>
++  );
++}
+diff -ruN today/src/web/src/components/RunnerEngines.tsx proposal/src/web/src/components/RunnerEngines.tsx
+--- today/src/web/src/components/RunnerEngines.tsx	2026-10-25 09:50:55.000000000 +0800
++++ proposal/src/web/src/components/RunnerEngines.tsx	2026-10-25 10:12:50.959873576 +0800
+@@ -90,7 +90,7 @@
+ import { ENGINE_PRESET, ENGINE_SLUGS } from '../lib/sessionProviderChoices';
+ import { useToast } from '../lib/toast';
+ import { DshRunnerStatus } from './DshRunnerStatus';
+-import { ProviderTile } from './ProviderGallery';
++import { EngineTile, ProviderTile } from './ProviderGallery';
+ import { ENGINE_NAME, GoogleSignInTerms, KIMI_SITE, RunnerSignIn } from './RunnerSignIn';
+ import { useRunnerTokenRotation } from './RunnerTokenRotation';
+ import type { Runner } from './TasksSidePanel';
+@@ -1479,6 +1479,65 @@
+   return ready === engines.length ? 'All signed in' : `${ready} of ${engines.length} signed in`;
+ }
+ 
++/** PROTOTYPE (docs/mocks/infra-focus). The machine-level states the folded head still says at its end:
++ *  an install or update in flight or failed, an engine not updating. Who is signed in is the chips'. */
++function machineState(runner: Runner): string | null {
++  const summary = summaryOf(runner);
++  return /signed in$/.test(summary) ? null : summary;
++}
++
++/** PROTOTYPE (docs/mocks/infra-focus). What sessions on this machine can run on: a chip per engine
++ *  signed in (×N accounts), and the engines signed out — amber, each with its own Sign in, which opens
++ *  the card on that engine's sign-in. Engines not installed, and ones whose CLI wouldn't say, are left out. */
++function MachineChips({
++  runner,
++  fleet,
++  onSignIn,
++}: {
++  runner: Runner;
++  fleet: readonly CursorRunnerFacts[];
++  onSignIn: (engine: LoginEngine) => void;
++}) {
++  const chips: Array<{ key: string; engine: AgentProvider; count: number; out: boolean }> = [];
++  const engines: Array<RowEngine | 'cursor'> = [
++    ...rowEnginesOf(runner.engines ?? []),
++    ...(webShowsEngine('cursor', fleet) ? (['cursor'] as const) : []),
++  ];
++  for (const engine of engines) {
++    const health = engineHealthOf(runner, engine as RowEngine);
++    if (!health?.installed) continue;
++    if (engine === 'antigravity' && runner.antigravity?.supported === false) continue;
++    if (engine === 'cursor' && cursorRunnerState(runner) !== 'ready') continue;
++    const accounts = health.accounts ?? [];
++    const count = accounts.length === 0 ? (health.auth === 'yes' ? 1 : 0) : accounts.filter((account) => account.auth === 'yes' || runsOnEnvKey(health, account)).length;
++    const out = count === 0 && engine !== 'opencode' && (health.auth === 'no' || accounts.some((account) => account.auth === 'no'));
++    if (count === 0 && !out) continue;
++    chips.push({ key: engine, engine: engine as AgentProvider, count, out });
++  }
++  const dsh = runner.engines?.find((e) => e.engine === 'dsh');
++  if (dsh?.installed && dsh.dsh?.versionCompatible !== false) chips.push({ key: 'dsh', engine: AgentProvider.DSH, count: 1, out: false });
++  if (chips.length === 0) return null;
++  return (
++    <div className="re-chips">
++      {chips.map((chip) => (
++        <span className="re-chip-pair" key={chip.key}>
++          <span className={`re-chip-eng${chip.out ? ' out' : ''}`}>
++            <EngineTile engine={chip.engine} size={14} />
++            {ENGINE_CLI_NAMES[chip.engine]}
++            {chip.count > 1 && <span className="re-chip-n">×{chip.count}</span>}
++            {chip.out && <span className="re-chip-out">signed out</span>}
++          </span>
++          {chip.out && (
++            <Button size="small" variant="primary" className="re-chip-signin" onClick={() => onSignIn(chip.engine as LoginEngine)}>
++              Sign in
++            </Button>
++          )}
++        </span>
++      ))}
++    </div>
++  );
++}
++
+ function RunnerEngineCard({
+   runner,
+   collapsed,
+@@ -1598,12 +1657,12 @@
+             )}
+           </span>
+         </button>
+-        {(!runner.online || collapsed) && (
++        {(!runner.online || (collapsed && machineState(runner))) && (
+           <div className="re-runner-status">
+             {!runner.online && <Badge>Offline</Badge>}
+-            {collapsed && (
++            {collapsed && machineState(runner) && (
+               <span className={`re-summary${failed ? ' warn' : ''}`}>
+-                {failed && <WarningOutlined aria-hidden />}{summaryOf(runner)}
++                {failed && <WarningOutlined aria-hidden />}{machineState(runner)}
+               </span>
+             )}
+           </div>
+@@ -1630,6 +1689,14 @@
+             />
+           }
+         />
++        <MachineChips
++          runner={runner}
++          fleet={fleet}
++          onSignIn={(engine) => {
++            if (collapsed) onToggle();
++            setSignIn(ownSignInPanel(runner, engine));
++          }}
++        />
+       </div>
+       {!collapsed && (
+         <MachineEngines
+diff -ruN today/src/web/src/index.css proposal/src/web/src/index.css
+--- today/src/web/src/index.css	2026-10-25 09:50:55.000000000 +0800
++++ proposal/src/web/src/index.css	2026-10-25 10:12:50.959873576 +0800
+@@ -25493,3 +25493,61 @@
+   text-align: center;
+   text-wrap: balance;
+ }
++
++/* ═══ PROTOTYPE docs/mocks/infra-focus — not shipped ═══ */
++/* the machine card's chip row: what sessions there can run on, and who is signed out */
++.re-runner-card .re-head { flex-wrap: wrap; }
++.re-chips { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 14px 11px 71px; }
++.re-chip-eng { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px 0 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-raised); font-size: 12px; color: var(--text-2); white-space: nowrap; }
++.re-chip-eng .provider-tile { flex: none; }
++.re-chip-n { color: var(--text-3); }
++.re-chip-eng.out { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning); }
++.re-chip-out { font-weight: 600; }
++.re-chip-pair { display: inline-flex; align-items: center; gap: 6px; }
++.re-chip-signin { margin-right: 4px; }
++.re-card.offline .re-chips { opacity: 0.62; }
++@container re-card (max-width: 600px) {
++  .re-runner-card .re-chips { grid-column: 1 / -1; padding: 0 14px 10px 14px; }
++}
++
++/* API keys: a card per vendor, a row per key */
++.vk-card .re-head.vk-head { gap: 9px; padding: 9px 14px; }
++.vk-row { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(150px, max-content) 118px 118px; align-items: center; gap: 10px 14px; padding: 10px 14px; }
++.vk-row + .vk-row { border-top: 1px solid var(--border-subtle); }
++.vk-id { min-width: 0; }
++.vk-model { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 11.5px; color: var(--text-3); }
++.vk-model .infra-model { font-size: 11.5px; color: var(--text-2); white-space: normal; }
++.vk-state { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
++.vk-last { font-size: 11.5px; color: var(--text-3); white-space: nowrap; }
++.vk-act { justify-content: flex-end; }
++@media (max-width: 700px) {
++  .vk-row { grid-template-columns: minmax(0, 1fr) auto; }
++  .vk-model { grid-column: 1 / -1; }
++  .vk-state { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 8px; }
++}
++
++/* the vendors not connected yet, as one row */
++.pv-more { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; color: var(--text-3); }
++.pv-more-l { margin-right: 2px; }
++.pv-pill { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px 0 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-raised); color: var(--text-2); font-size: 12px; white-space: nowrap; }
++.pv-pill:hover { border-color: var(--brand); color: var(--brand); }
++
++/* by engine, as a list */
++.infra-index { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-raised); overflow: hidden; }
++.infra-index-row { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 6px 14px; font-size: 12px; color: var(--text-2); }
++.infra-index-row + .infra-index-row { border-top: 1px solid var(--border-subtle); }
++.infra-index-row.none { background: var(--bg-subtle); color: var(--text-3); }
++.infra-index-name { flex: none; width: 132px; font-size: 12.5px; font-weight: 600; color: var(--text-1); }
++.infra-index-row.none .infra-index-name { color: var(--text-2); }
++.infra-index-row > .infra-engine-state { flex: none; }
++.infra-index-src { flex: 1; min-width: 0; }
++.infra-index-src b { font-weight: 600; color: var(--text-1); }
++.infra-index-src a { color: var(--brand); }
++.infra-index-sep { margin: 0 6px; color: var(--text-4); }
++
++/* by engine, as a strip under the page head */
++.infra-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 14px; }
++.infra-strip-pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px 0 5px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-raised); font-size: 12px; color: var(--text-2); }
++.infra-strip-pill .infra-strip-mark { color: var(--success); font-weight: 700; }
++.infra-strip-pill.none { background: var(--bg-subtle); color: var(--text-3); border-style: dashed; }
++.infra-strip-pill.none .infra-strip-mark { color: var(--text-4); font-weight: 500; }
+diff -ruN today/src/web/src/pages/InfrastructurePage.tsx proposal/src/web/src/pages/InfrastructurePage.tsx
+--- today/src/web/src/pages/InfrastructurePage.tsx	2026-10-25 09:50:55.000000000 +0800
++++ proposal/src/web/src/pages/InfrastructurePage.tsx	2026-10-25 10:12:50.959873576 +0800
+@@ -14,7 +14,8 @@
+ import { AccountPools, NewPoolModal, PoolHint } from '../components/AccountPools';
+ import { EngineOverview, NeedsAttention } from '../components/InfrastructureOverview';
+ import { KeyImpact } from '../components/KeyImpact';
+-import { EngineTile, ProviderGallery, ProviderTile, vendorName, vendorOf } from '../components/ProviderGallery';
++import { ProviderGallery } from '../components/ProviderGallery';
++import { ConnectMore, ProviderKeyCards } from '../components/ProviderKeyCards';
+ import { RunnerEngines } from '../components/RunnerEngines';
+ import { DeepSeekBalanceLine } from '../components/DeepSeekBalance';
+ import { CursorKeyCheckLine } from '../components/CursorKeyCheck';
+@@ -110,13 +111,17 @@
+  * The head's Add makes any of the three. `/runners` and `/providers` land here (App.tsx), and
+  * `#keys` / `#pools` bring that section into view.
+  */
++/** PROTOTYPE switches for the board's variant frames (docs/mocks/infra-focus). Not shipped. */
++const proto = {
++  banner: typeof localStorage !== 'undefined' && localStorage.getItem('proto:banner') === '1',
++  strip: typeof localStorage !== 'undefined' && localStorage.getItem('proto:strip') === '1',
++};
++
+ export function InfrastructurePage() {
+   const message = useToast();
+   const qc = useQueryClient();
+   const navigate = useNavigate();
+   const { hash } = useLocation();
+-  const isMobile = useIsMobile();
+-  const wide = useMediaQuery(WIDE_KEYS_QUERY);
+   const [confirm, confirmHolder] = useConfirm();
+   const keySection = useRef<HTMLDivElement>(null);
+   const poolSection = useRef<HTMLDivElement>(null);
+@@ -125,30 +130,16 @@
+   const online = machines.filter((runner) => runner.online);
+   const busySlots = online.reduce((n, runner) => n + (runner.activeSessions ?? 0), 0);
+   const allSlots = online.reduce((n, runner) => n + (runner.maxConcurrent ?? 0), 0);
+-  // What each machine's card says it needs a person for: read from the machine's workspaces, and the
+-  // newest release anyone can see.
+-  const workspaces = (useQuery(workspacesQuery()).data ?? []) as Array<
+-    AttentionWorkspace & { runnerId?: string | null }
+-  >;
++  const workspaces = (useQuery(workspacesQuery()).data ?? []) as Array<AttentionWorkspace & { runnerId?: string | null }>;
+   const latestVersion = latestRunnerVersion(useQuery(publishedRunnerVersionQuery()).data, machines);
+   const nowMs = Date.now();
+   const attentionOf = (runner: Runner) =>
+-    runnerAttention({
+-      runner,
+-      workspaces: workspaces.filter((workspace) => workspace.runnerId === runner.id),
+-      nowMs,
+-      latestVersion,
+-    });
++    runnerAttention({ runner, workspaces: workspaces.filter((workspace) => workspace.runnerId === runner.id), nowMs, latestVersion });
+   const providers = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
+-  // Which account is busy moves with sessions, not with provider edits, so nothing pushes it: read
+-  // again while the page is open.
+   const pools = useQuery({ ...providerPoolsQuery(), refetchInterval: 60_000 });
+   const shared = useQuery({ ...sharedPoolsQuery(), refetchInterval: 60_000 });
+-  // Who can use each Codex pool of the user's own, and its API keys: read pool by pool, beside its accounts.
+   const access = useQueries({
+-    queries: (pools.data ?? [])
+-      .filter(isLoginPool)
+-      .map((pool) => ({ ...poolAccessQuery(pool.id), refetchInterval: 60_000 })),
++    queries: (pools.data ?? []).filter(isLoginPool).map((pool) => ({ ...poolAccessQuery(pool.id), refetchInterval: 60_000 })),
+   });
+   const accessOf = new Map(access.flatMap((read) => (read.data ? [[routeId(read.data.id), read.data] as const] : [])));
+   const poolList = [
+@@ -158,15 +149,12 @@
+       return view ? ownPoolWithAccess(pool, view) : pool;
+     }),
+   ];
+-  const eligible = poolEligibleCount(providers.data ?? []);
+-  const refusals = poolRefusals(providers.data ?? []);
++  const rows = providers.data ?? [];
++  const eligible = poolEligibleCount(rows);
++  const refusals = poolRefusals(rows);
+   const [creatingPool, setCreatingPool] = useState(false);
+-  // What needs attention and what each engine can run on are read from every list on the page, so
+-  // they wait for all of them: an engine called Not set up before its keys arrived would be wrong.
+   const settled = !runners.isPending && !providers.isPending && !pools.isPending && !shared.isPending;
+ 
+-  // A section named in the address comes into view once everything above it has its height — the
+-  // top of the page included, which is read from the pools too.
+   const target = hash === '#keys' ? keySection : hash === '#pools' ? poolSection : null;
+   const arrived = target !== null && settled;
+   useEffect(() => {
+@@ -176,13 +164,10 @@
+   const deleteMut = useMutation({
+     mutationFn: (id: string) => api(`${PROVIDERS_BASE}/${id}`, { method: 'DELETE' }),
+     onSuccess: () => {
+-      // Both this list and the de-sensitized ['providers'] catalog the pickers read
+-      // must refresh on any change.
+       void qc.invalidateQueries({ queryKey: PROVIDERS_LIST_KEY });
+       void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
+       message.success('Provider deleted');
+     },
+-    // A delete that fails says so in the dialog that asked for it (deleteKey).
+   });
+   const deleteKey = (p: ProviderRow) =>
+     void confirm({
+@@ -195,209 +180,23 @@
+     });
+ 
+   const addItems: MenuItem[] = [
+-    {
+-      key: 'machine',
+-      textValue: 'Register a machine',
+-      label: (
+-        <span className="infra-add">
+-          <b>Register a machine</b>
+-          <span>Run agents on a computer you own, on its subscriptions</span>
+-        </span>
+-      ),
+-      onSelect: () => navigate('/runners/register'),
+-    },
+-    {
+-      key: 'key',
+-      textValue: 'Connect an API key',
+-      label: (
+-        <span className="infra-add">
+-          <b>Connect an API key</b>
+-          <span>Usable from every machine, billed per token</span>
+-        </span>
+-      ),
+-      onSelect: () => navigate('/providers/new'),
+-    },
+-    {
+-      key: 'pool',
+-      textValue: 'New account pool',
+-      label: (
+-        <span className="infra-add">
+-          <b>New account pool</b>
+-          <span>Several accounts behind one name</span>
+-        </span>
+-      ),
+-      onSelect: () => setCreatingPool(true),
+-    },
++    { key: 'machine', textValue: 'Register a machine', label: (<span className="infra-add"><b>Register a machine</b><span>Run agents on a computer you own, on its subscriptions</span></span>), onSelect: () => navigate('/runners/register') },
++    { key: 'key', textValue: 'Connect an API key', label: (<span className="infra-add"><b>Connect an API key</b><span>Usable from every machine, billed per token</span></span>), onSelect: () => navigate('/providers/new') },
++    { key: 'pool', textValue: 'New account pool', label: (<span className="infra-add"><b>New account pool</b><span>Several accounts behind one name</span></span>), onSelect: () => setCreatingPool(true) },
+   ];
+ 
+-  const columns: KeyColumn[] = [
+-    {
+-      key: 'key',
+-      title: 'Key',
+-      // The dispatch slug is the server's to generate and nobody's to read, so the row shows the name
+-      // the key was given — its vendor heads its group — and the engines it runs on.
+-      cell: (p) => (
+-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+-          <div style={{ minWidth: 0 }}>
+-            <div className="prov-cell-name">{p.label}</div>
+-            <KeyEngines row={p} />
+-            {/* A DeepSeek key also carries its whole account's balance (DeepSeekBalance.tsx). */}
+-            {hasDeepSeekBalance(p) && <DeepSeekBalanceLine row={p} />}
+-            {/* A Cursor key, what Cursor answered its last check (CursorKeyCheck.tsx). */}
+-            {p.runtime === 'cursor' && <CursorKeyCheckLine row={p} />}
+-          </div>
+-          {/* The Enabled column collapses to a dot on narrow screens — the tag's words would
+-              outrun a phone's width on their own. */}
+-          {isMobile && (
+-            <span
+-              className={`prov-dot${p.enabled ? ' on' : ''}`}
+-              title={p.enabled ? 'Enabled' : 'Disabled'}
+-            />
+-          )}
+-        </div>
+-      ),
+-    },
+-    // A model count is the weakest signal here — what the row is, whether it's on, and its
+-    // controls all outrank it — so it waits for a window wide enough for the whole table. The
+-    // endpoint is the widest column and the least needed on a phone: it is one tap away on the edit
+-    // page, and its long URL is exactly what pushes the table past the viewport.
+-    ...(wide
+-      ? [
+-          { key: 'models', title: 'Models', width: 96, cell: (p: ProviderRow) => (p.models?.length ? `${p.models.length}` : '—') },
+-          { key: 'baseUrl', title: 'Endpoint', width: 170, cell: (p: ProviderRow) => <code className="prov-endpoint">{p.baseUrl}</code> },
+-          {
+-            key: 'enabled',
+-            title: 'Enabled',
+-            width: 100,
+-            cell: (p: ProviderRow) => <Badge tone={p.enabled ? 'green' : 'default'}>{p.enabled ? 'Enabled' : 'Disabled'}</Badge>,
+-          },
+-          {
+-            // When a session last ran on the key: the relative answer the row is read for, with the
+-            // exact time on hover; a key nothing has spent says so rather than showing a date.
+-            key: 'lastUsed',
+-            title: 'Last used',
+-            width: 110,
+-            cell: (p: ProviderRow) =>
+-              p.lastUsedAt ? (
+-                <span title={stampOf(p.lastUsedAt)}>{ago(p.lastUsedAt, nowMs)}</span>
+-              ) : (
+-                <span className="prov-never">Never used</span>
+-              ),
+-          },
+-        ]
+-      : []),
+-    {
+-      key: 'actions',
+-      title: '',
+-      end: true,
+-      width: isMobile ? 88 : 170,
+-      cell: (p) => (
+-        <span className="prov-actions" style={{ gap: isMobile ? 4 : 8 }}>
+-          {/* Icon-only on narrow screens: the labelled pair is what pushes the table past a
+-              phone's viewport once the wide columns are hidden. */}
+-          {isMobile ? (
+-            <Button
+-              size="small"
+-              variant="text"
+-              icon={<EditOutlined />}
+-              aria-label={`Edit ${p.label}`}
+-              onClick={() => navigate(`/providers/${p.id}`)}
+-            />
+-          ) : (
+-            <Button size="small" onClick={() => navigate(`/providers/${p.id}`)}>
+-              Edit
+-            </Button>
+-          )}
+-          {isMobile ? (
+-            <Button size="small" variant="text" danger icon={<DeleteOutlined />} aria-label={`Delete ${p.label}`} onClick={() => deleteKey(p)} />
+-          ) : (
+-            <Button size="small" danger onClick={() => deleteKey(p)}>
+-              Delete
+-            </Button>
+-          )}
+-        </span>
+-      ),
+-    },
+-  ];
+-  const end = { textAlign: 'right' } as const;
+-  const keysTable = (rows: ProviderRow[], loading = false) => (
+-    <TableFrame className="provider-keys" loading={loading} style={{ marginTop: 12 }}>
+-      <table className="orbit-table" style={{ tableLayout: 'fixed' }}>
+-        <colgroup>
+-          {columns.map((column) => (
+-            <col key={column.key} style={column.width ? { width: column.width } : undefined} />
+-          ))}
+-        </colgroup>
+-        <thead>
+-          <tr>
+-            {columns.map((column) => (
+-              <th key={column.key} scope="col" style={column.end ? end : undefined}>
+-                {column.title}
+-              </th>
+-            ))}
+-          </tr>
+-        </thead>
+-        <tbody>
+-          {rows.length === 0 ? (
+-            <TableEmptyRow colSpan={columns.length} />
+-          ) : (
+-            byVendor(rows).map((group) => (
+-              <Fragment key={group.vendor}>
+-                <tr className="prov-group">
+-                  <td colSpan={columns.length}>
+-                    <div className="prov-group-in">
+-                      <ProviderTile slug={group.vendor} label={vendorName(group.vendor)} size={22} />
+-                      <b>{vendorName(group.vendor)}</b>
+-                      {group.rows.length > 1 && <> <span>{group.rows.length} keys</span></>}{' '}
+-                      <Link className="prov-group-add" to={`/providers/new/${group.vendor}`}>
+-                        + Add key
+-                      </Link>
+-                    </div>
+-                  </td>
+-                </tr>
+-                {group.rows.map((row) => (
+-                  <tr key={row.id} className="prov-key">
+-                    {columns.map((column) => (
+-                      <td key={column.key} style={column.end ? end : undefined}>
+-                        {column.cell(row)}
+-                      </td>
+-                    ))}
+-                  </tr>
+-                ))}
+-              </Fragment>
+-            ))
+-          )}
+-        </tbody>
+-      </table>
+-    </TableFrame>
+-  );
+-
+   return (
+     <div style={{ maxWidth: 900, margin: '0 auto' }}>
+       <div className="prov-page-head">
+         <h1 className="page-title" style={{ marginBottom: 0 }}>
+           Infrastructure
+         </h1>
+-        <Menu
+-          align="end"
+-          items={addItems}
+-          trigger={
+-            <Button variant="primary">
+-              Add <DownOutlined />
+-            </Button>
+-          }
+-        />
+-        <div className="prov-page-sub">
+-          Where your agents run, and whose model quota they spend.
+-        </div>
++        <Menu align="end" items={addItems} trigger={<Button variant="primary">Add <DownOutlined /></Button>} />
++        <div className="prov-page-sub">Where your agents run, and whose model quota they spend.</div>
+       </div>
+ 
+-      {settled && (
+-        <>
+-          <NeedsAttention runners={machines} pools={poolList} />
+-          <EngineOverview runners={machines} keys={providers.data ?? []} pools={poolList} />
+-        </>
+-      )}
++      {settled && proto.banner && <NeedsAttention runners={machines} pools={poolList} />}
++      {settled && proto.strip && <EngineOverview variant="strip" runners={machines} keys={rows} pools={poolList} />}
+ 
+       <div id="machines">
+         <RunnerEngines
+@@ -405,9 +204,7 @@
+           head={
+             <div className="re-sec-head">
+               <h3>Machines</h3>
+-              <span className="re-sec-sub">
+-                Subscriptions signed in here are spent only by sessions on that machine.
+-              </span>
++              <span className="re-sec-sub">Subscriptions signed in here are spent only by sessions on that machine.</span>
+               {machines.length > 0 && (
+                 <span className="re-sec-count">
+                   {machines.length} machine{machines.length === 1 ? '' : 's'} · {busySlots} / {allSlots} slots busy
+@@ -421,18 +218,11 @@
+       <div ref={keySection} id="keys">
+         <div className="re-sec-head" style={{ marginTop: 28 }}>
+           <h3>API keys</h3>
+-          <span className="re-sec-sub">
+-            On your account and usable from every machine — billed per token.
+-          </span>
++          <span className="re-sec-sub">On your account and usable from every machine — billed per token.</span>
++          {rows.length > 0 && <span className="re-sec-count">{rows.length} key{rows.length === 1 ? '' : 's'}</span>}
+         </div>
+-
+-        {pools.isSuccess && pools.data.length === 0 && eligible >= 2 && (
+-          <PoolHint rows={providers.data ?? []} eligible={eligible} />
+-        )}
+-
+-        {providers.isLoading ? (
+-          keysTable([], true)
+-        ) : (providers.data?.length ?? 0) === 0 ? (
++        {pools.isSuccess && pools.data.length === 0 && eligible >= 2 && <PoolHint rows={rows} eligible={eligible} />}
++        {providers.isLoading ? null : rows.length === 0 ? (
+           <div className="provider-empty">
+             <h3>No keys yet</h3>
+             <p>Pick a provider and paste your API key — or skip it and sign a machine in above.</p>
+@@ -440,27 +230,19 @@
+           </div>
+         ) : (
+           <>
+-            {keysTable(providers.data ?? [])}
+-            {/* The gallery stays on the page once the list isn't empty: it's how another vendor gets
+-                connected, and it's where "which of these do I already have?" gets answered. */}
+-            <div className="provider-more">
+-              <h3>Connect another provider</h3>
+-              <ProviderGallery />
+-            </div>
++            <ProviderKeyCards rows={rows} nowMs={nowMs} onDelete={deleteKey} />
++            <ConnectMore rows={rows} />
+           </>
+         )}
+       </div>
+ 
+-      {/* A pool that exists is always shown, whatever its keys have since become: hiding it would
+-          leave sessions dispatching to something the page no longer lets you see or delete. The
+-          section stands with none too: its head is where a pool is made. */}
+       <div ref={poolSection} id="pools">
+-        {!pools.isPending && !shared.isPending && (
+-          <AccountPools pools={poolList} refusals={refusals} rows={providers.data ?? []} />
+-        )}
++        {!pools.isPending && !shared.isPending && <AccountPools pools={poolList} refusals={refusals} rows={rows} />}
+       </div>
+ 
+-      {creatingPool && <NewPoolModal rows={providers.data ?? []} onClose={() => setCreatingPool(false)} />}
++      {settled && !proto.strip && <EngineOverview variant="compact" runners={machines} keys={rows} pools={poolList} />}
++
++      {creatingPool && <NewPoolModal rows={rows} onClose={() => setCreatingPool(false)} />}
+       {confirmHolder}
+     </div>
+   );

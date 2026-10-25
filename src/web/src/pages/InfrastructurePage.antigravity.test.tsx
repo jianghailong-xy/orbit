@@ -77,12 +77,13 @@ describe('Antigravity identity and readiness on the Infrastructure page', () => 
 
   it('keeps a Gemini key its own name under Google Gemini, says which engines run it, and calls the engine Antigravity CLI', async () => {
     await mount([runner(), runner({ id: 'offline', online: false })]);
-    expect(container.querySelector('.prov-group b')?.textContent).toBe('Google Gemini');
-    expect(container.querySelector('.prov-key .prov-cell-name')?.textContent).toBe('Gemini');
-    expect(words(container.querySelector('.prov-key .prov-engines'))).toBe('Antigravity CLI · OpenCode');
+    expect(container.querySelector('.vk-card .re-runner')?.textContent).toBe('Google Gemini');
+    expect(container.querySelector('.vk-row .vk-name')?.textContent).toBe('Gemini');
+    expect(words(container.querySelector('.vk-row .prov-engines'))).toBe('Antigravity CLI · OpenCode');
     // Which machines can run it is the machines' to say, on their own rows: the key no longer does.
-    expect(container.querySelector('.prov-key')?.textContent).not.toContain('Ready on');
-    expect(container.querySelector('a[href="/providers/new/gemini"] .pc-name')?.textContent).toBe('Google Gemini');
+    expect(container.querySelector('.vk-row')?.textContent).not.toContain('Ready on');
+    // Another Gemini key is added from Google Gemini's own card.
+    expect(container.querySelector('.vk-card a.vk-add')?.getAttribute('href')).toBe('/providers/new/gemini');
     expect(container.querySelector('[data-engine="antigravity"] .re-name')?.textContent).toBe('Antigravity CLI');
   });
 

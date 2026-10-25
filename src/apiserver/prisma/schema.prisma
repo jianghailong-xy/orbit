@@ -3381,6 +3381,25 @@ model ProjectTaskStatusCount {
   @@map("project_task_status_count")
 }
 
+/// The project tasks `GET /projects` has to classify itself (migration 0441): a SUPERSET of the ones
+/// that are OPEN and pass the READY guard, or are live verification gate rows. Every other task's
+/// lane follows from its status, which `ProjectTaskStatusCount` already counts.
+///
+/// Appended by triggers on `task` and `task_dependency` whenever a write can make a task qualify,
+/// and never trimmed by them: a stale row is classified into its real lane and changes no count,
+/// while a missing one would. `rebuildProjectRollupCandidates` replaces the whole table with the
+/// exact set every ten minutes, and sooner after a bulk import. No unique key and no foreign key, so
+/// an append never waits on another transaction; duplicates are folded by the read.
+model ProjectRollupCandidate {
+  id      BigInt @id @default(autoincrement())
+  ownerId String @map("owner_id") @db.Uuid
+  taskId  String @map("task_id") @db.Uuid
+
+  /// The read's one access path: this owner's candidates.
+  @@index([ownerId, taskId], map: "project_rollup_candidate_owner_task_idx")
+  @@map("project_rollup_candidate")
+}
+
 /// An exception somebody has to act on (docs/project-integration-line-contract.md §4.1, migration
 /// 0278): a task that failed, an integration that conflicted or failed its checks, a promotion waiting
 /// for the owner, a question from the coordinator, a pause of the spend fuse.

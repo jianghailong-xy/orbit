@@ -115,7 +115,7 @@ func (d *fakeCursorDashboard) serve(w http.ResponseWriter, r *http.Request) {
 func cursorUsageRunner(t *testing.T, defaultToken, teamToken string) string {
 	t.Helper()
 	useCursorRealHome(t)
-	useCursorAccountsOS(t, "linux")
+	useCursorPlatform(t, "linux", "amd64")
 	signInCursorDefault(t, defaultToken)
 	root, err := accountSlotsDir(cursorAccountKind)
 	if err != nil {
@@ -454,7 +454,7 @@ func TestCursorSessionKeepsTheUsageLimitItsAccountMet(t *testing.T) {
 		// The recorded turn that met P0a's Free plan limit: "Upgrade your plan to continue" (§12).
 		out := runCursorSession(t, cursorRunOptions{recording: "background-shell-and-commit/background", first: first, then: then,
 			env: map[string]string{}, agent: func(agent *AgentExecConfig) {
-				useCursorAccountsOS(t, "linux")
+				useCursorPlatform(t, "linux", "amd64")
 				signInCursorDefault(t, cursorTestToken(t, time.Now().Add(time.Hour)))
 				slot, err := cursorAccountKind.create("Team")
 				if err != nil {

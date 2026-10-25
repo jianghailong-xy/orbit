@@ -2,10 +2,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import type { RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
+import { ENGINE_CLI_NAMES, type RunnerEngineHealth, type RunnerInstallState } from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
 import { updateNoteOf } from '../lib/runnerEngines';
-import { RunnerEngines, rowKindOf, summaryOf } from './RunnerEngines';
+import { machineChipsOf, RunnerEngines, rowKindOf, summaryOf } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
 
 const health = (over: Partial<RunnerEngineHealth>): RunnerEngineHealth => ({
@@ -23,6 +23,13 @@ const install = (over: Partial<RunnerInstallState>): RunnerInstallState => ({
   mode: over.status ? 'install' : null,
   ...over,
 });
+
+/** What a machine card's head says it runs on (MachineChips), a chip each, as words. */
+const chipsOf = (runner: Runner) =>
+  machineChipsOf(runner).map(
+    (chip) =>
+      `${ENGINE_CLI_NAMES[chip.engine]}${chip.signedOut ? ' signed out' : chip.logins < chip.accounts ? ` ${chip.logins} of ${chip.accounts} signed in` : chip.logins > 1 ? ` ×${chip.logins}` : ''}`,
+  );
 
 const NOW = Date.parse('2026-08-04T12:00:00.000Z');
 const hoursAgo = (h: number) => new Date(NOW - h * 3600_000).toISOString();
@@ -269,15 +276,20 @@ describe('the "On your runners" section', () => {
   ] as const)('shows Antigravity readiness and the upgrade required for older runners: %s', (state, label) => {
     const box = runner({ antigravity: state, engines: [health({ engine: 'kimi' })] });
     const html = render([box], { path: `/providers?runner=${encodeId(box.id)}&engine=antigravity` });
-    const row = html.slice(html.indexOf('data-engine="antigravity"'), html.indexOf('>Kimi Code<'));
-    expect(html.indexOf('>Antigravity CLI<')).toBeLessThan(html.indexOf('>Kimi Code<'));
+    // The rows, after the head's chips (which name Kimi Code too).
+    const rows = html.slice(html.indexOf('class="re-row'));
+    const row = rows.slice(rows.indexOf('data-engine="antigravity"'), rows.indexOf('>Kimi Code<'));
+    expect(rows.indexOf('>Antigravity CLI<')).toBeLessThan(rows.indexOf('>Kimi Code<'));
     expect(html.match(/re-row focused/g)).toHaveLength(1);
     expect(row).toContain('>Antigravity CLI<');
     expect(row).toContain(label);
     expect(row).toContain('Update this runner to sign in with Google.');
     expect(row).not.toContain('>Sign in<');
     expect(html).toContain('1 runner · 1 signed in');
-    expect(summaryOf(box)).toBe('1 of 3 signed in');
+    // Its head runs on Kimi Code alone: an Antigravity CLI no session can use here gets no chip, and isn't
+    // called signed out either.
+    expect(chipsOf(box)).toEqual(['Kimi Code']);
+    expect(summaryOf(box)).toBeNull();
     expect(summaryOf({ ...box, install: install({ engine: 'antigravity', status: 'installing' }) })).toBe('Installing…');
     if (!state.supported) {
       expect(row).toContain('Update runner');
@@ -382,9 +394,13 @@ describe('the "On your runners" section', () => {
       { open: false },
     );
 
-    // The card is there and says how it's doing — it just isn't unpacked into a row per engine.
+    // The card is there and says how it's doing — what it runs on, and the engine signed out there, with
+    // its Sign in — it just isn't unpacked into a row per engine.
     expect(html).toContain('mac-studio');
-    expect(html).toContain('1 of 3 signed in');
+    // (Static markup marks where one text node ends and the next begins with an empty comment.)
+    expect(html).toMatch(/<span class="mc-chip">(?:(?!<\/span>).)*Claude Code(?:<!-- -->)? <\/span>/);
+    expect(html).toMatch(/<span class="mc-chip out">(?:(?!mc-out).)*Codex(?:<!-- -->)? <span class="mc-out">signed out<\/span><\/span><button/);
+    expect(html).not.toContain('class="re-row');
     expect(html).not.toContain('Signed out');
   });
 
@@ -396,11 +412,17 @@ describe('the "On your runners" section', () => {
         health({ engine: 'kimi', installed: false, auth: 'unknown' }),
       ],
     });
-    // Nothing in flight: the summary is the count.
-    expect(summaryOf(busy)).toBe('1 of 3 signed in');
+    // Nothing in flight: the chips say who is signed in and who isn't, and the line has nothing to add.
+    expect(chipsOf(busy)).toEqual(['Claude Code', 'Codex signed out']);
+    expect(summaryOf(busy)).toBeNull();
+    const all = runner({ engines: [health({}), health({ engine: 'codex' }), health({ engine: 'kimi' })] });
+    expect(chipsOf(all)).toEqual(['Claude Code', 'Codex', 'Kimi Code']);
+    expect(summaryOf(all)).toBeNull();
+    // With nothing signed in or out to draw — a CLI that wouldn't say, one not installed — the line is
+    // the count.
     expect(
-      summaryOf(runner({ engines: [health({}), health({ engine: 'codex' }), health({ engine: 'kimi' })] })),
-    ).toBe('All signed in');
+      summaryOf(runner({ engines: [health({ auth: 'unknown' }), health({ engine: 'codex', installed: false, auth: 'unknown' })] })),
+    ).toBe('0 of 3 signed in');
     expect(summaryOf(runner({ engines: null }))).toBe('Engines not reported');
     // A folded card must still say that something needs attention, or collapsing becomes a way
     // to lose a failed install.
@@ -412,15 +434,17 @@ describe('the "On your runners" section', () => {
     ).toBe('Installing…');
   });
 
-  it('counts only the login engines, whatever Antigravity reports beside them', () => {
+  it('chips Antigravity only where a session can run on it, and never calls it signed out with no Google sign-in to offer', () => {
     const loggedIn = [health({}), health({ engine: 'codex' }), health({ engine: 'kimi' })];
     for (const auth of ['yes', 'no', 'unknown'] as const) {
       const box = runner({ engines: [...loggedIn, health({ engine: 'antigravity', auth })] });
-      expect(summaryOf(box), auth).toBe('All signed in');
+      expect(chipsOf(box), auth).toEqual(['Claude Code', 'Codex', ...(auth === 'yes' ? ['Antigravity CLI'] : []), 'Kimi Code']);
+      expect(summaryOf(box), auth).toBeNull();
     }
-    expect(summaryOf(runner({ engines: [health({}), health({ engine: 'antigravity' })] }))).toBe(
-      '1 of 3 signed in',
-    );
+    expect(chipsOf(runner({ engines: [health({}), health({ engine: 'antigravity' })] }))).toEqual([
+      'Claude Code',
+      'Antigravity CLI',
+    ]);
   });
 
   it('marks the one row a "Not signed in" link came here for', () => {
@@ -564,7 +588,8 @@ describe('the "On your runners" section', () => {
         }),
       ],
     });
-    expect(summaryOf(drifting)).not.toContain('not updating');
+    // Claude Code's chip says the rest.
+    expect(summaryOf(drifting)).toBeNull();
     // Sanity: the same record on an engine this page does show is still counted, so the filter
     // is scoping the summary rather than disabling it.
     const shown = runner({
@@ -663,7 +688,7 @@ describe('the "On your runners" section', () => {
     });
     expect(summaryOf(drifted)).toBe('1 engine not updating');
     // An offline machine isn't drifting, it's away — and the header already says so.
-    expect(summaryOf({ ...drifted, online: false })).toBe('1 of 3 signed in');
+    expect(summaryOf({ ...drifted, online: false })).toBeNull();
     // An update in flight, and its outcome, are the card's news while they last.
     expect(
       summaryOf(runner({ engines: [health({})], install: install({ status: 'installing', mode: 'update' }) })),

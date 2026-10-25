@@ -13,7 +13,7 @@ import {
   type RunnerLoginState,
 } from '@orbit/shared';
 import { KIMI_ACCOUNT_LOGIN_CAPABILITY } from '../lib/engineAccounts';
-import { RunnerEngines, summaryOf } from './RunnerEngines';
+import { machineChipsOf, RunnerEngines, summaryOf } from './RunnerEngines';
 import { clickRunnerMenuItem, openRunnerCards } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
@@ -342,7 +342,13 @@ describe('two Kimi accounts on one runner', () => {
     expect(current(work)).toEqual(['kimi.com']);
     await click(site(work, 'kimi.com'));
     expect(loginPosts()).toEqual([{ engine: 'kimi', account: WORK.id, region: 'mainland-cn' }]);
-    expect(summaryOf(out)).toBe('2 of 3 signed in');
+    expect(machineChipsOf(out).find((chip) => chip.engine === 'kimi')).toEqual({
+      engine: 'kimi',
+      logins: 1,
+      accounts: 2,
+      signedOut: false,
+    });
+    expect(summaryOf(out)).toBeNull();
   });
 });
 

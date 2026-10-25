@@ -2446,7 +2446,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // is created, replaced or dropped, so it is not another writer of the DONE fence and names none
       // of the six preserved objects. No INSERT, UPDATE or DELETE: every stored runner reads as one
       // whose every Default is listed and used, and a removal is written only when somebody asks.
-      '0440_runner_default_removed'],
+      '0440_runner_default_removed',
+      // The candidates `GET /projects` classifies itself (0441): one new table,
+      // `project_rollup_candidate`, with no unique key and no foreign key, its (owner_id, task_id)
+      // index, three new trigger functions and four statement triggers — AFTER INSERT and AFTER
+      // UPDATE on `task`, AFTER DELETE and AFTER UPDATE on `task_dependency`. Read against every claim
+      // above: it names `task` and `task_dependency`, which are preserved, only to hang AFTER triggers
+      // on them and to READ them; every function it creates writes `project_rollup_candidate` and
+      // nothing else, so no preserved row is written, dropped or altered, no column, constraint or
+      // type of `task` changes, and neither 0177 relation, `task_executable_acceptance_pair` nor any
+      // `project_acceptance_*` object is named. None of the six preserved triggers/functions is named
+      // or replaced and the DONE writer fence is untouched, so it is not another writer of it. Its one
+      // INSERT seeds the new table from a read of `task` and `task_dependency`.
+      '0441_project_rollup_candidate'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
-import { RunnerEngines, summaryOf, tildePath } from './RunnerEngines';
+import { machineChipsOf, RunnerEngines, summaryOf, tildePath } from './RunnerEngines';
 import { clickRunnerMenuItem, openRunnerCards } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
@@ -306,9 +306,11 @@ describe('a runner with two Codex accounts', () => {
 
   it('lets a folded card say an account still needs signing in', () => {
     // Every engine's own answer is yes — Default's, for Codex. Folding the card must not turn a
-    // signed-out Work into "All signed in".
-    expect(summaryOf(runner({ accounts: [DEFAULT, WORK] }))).toBe('2 of 3 signed in');
-    expect(summaryOf(runner({ accounts: [DEFAULT, { ...WORK, auth: 'yes' }] }))).toBe('All signed in');
+    // signed-out Work into a Codex that is all signed in: its chip says 1 of 2.
+    const codex = (box: Runner) => machineChipsOf(box).find((chip) => chip.engine === 'codex');
+    expect(codex(runner({ accounts: [DEFAULT, WORK] }))).toEqual({ engine: 'codex', logins: 1, accounts: 2, signedOut: false });
+    expect(codex(runner({ accounts: [DEFAULT, { ...WORK, auth: 'yes' }] }))).toEqual({ engine: 'codex', logins: 2, accounts: 2, signedOut: false });
+    expect(summaryOf(runner({ accounts: [DEFAULT, WORK] }))).toBeNull();
   });
 });
 
