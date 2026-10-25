@@ -2459,6 +2459,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or replaced and the DONE writer fence is untouched, so it is not another writer of it. Its one
       // INSERT seeds the new table from a read of `task` and `task_dependency`.
       '0441_project_rollup_candidate',
+      // The runner dispatch pause (0442, docs/runner-link-design.md §11.1, §11.3): one new table,
+      // `dispatch_pause`, of at most one row (`dispatch_pause_one_row_chk`, `id` = 1) with no foreign
+      // key — `updated_by_id` names an administrator by id only. Read against every claim above: no
+      // `task`, `session`, `project` or `project_acceptance_*` object is named, the 0177 pair and every
+      // stored task and criterion row are out of its reach, and no function, trigger or type is
+      // created, replaced or dropped, so it is not another writer of the DONE fence and names none of
+      // the six preserved objects. No INSERT, UPDATE or DELETE: no row means the pause is off, and the
+      // row is written only when an administrator switches it. Every statement can run twice.
+      '0442_dispatch_pause',
       // The runner link's connection tokens (0443, docs/runner-link-design.md §6.2): two new tables —
       // `tenant_cell`, the cell directory, with a CHECK naming its one cell and a foreign key to `user`
       // that cascades, and `runner_link_revocation`, with a reason CHECK, two indexes and no foreign
@@ -2469,7 +2478,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `runner_link_revocation` and nothing else, and names none of the six preserved
       // triggers/functions, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE runs: both tables start empty, and the trigger records only changes made after it.
-      '0443_runner_link_token'],
+      '0443_runner_link_token',
+      // The runner link request id a session was claimed under (0445, docs/runner-link-design.md §5.6):
+      // one nullable TEXT column, `session.claim_request_id`, added with IF NOT EXISTS and no default,
+      // read and written only by the claim (QueueService.trySessionClaim). Read against every claim
+      // above: `session` gains a column and nothing of it changes — no CHECK, no index, no constraint,
+      // no trigger — and no `task`, `project` or `project_acceptance_*` object is named, so the 0177
+      // pair and every stored task and criterion row are out of its reach. No function or trigger is
+      // created, and no INSERT, UPDATE or DELETE runs: every existing session reads NULL there.
+      '0445_session_claim_request_id'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

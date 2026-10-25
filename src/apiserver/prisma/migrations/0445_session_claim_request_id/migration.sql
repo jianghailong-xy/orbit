@@ -1,0 +1,25 @@
+-- 0445 — the runner link request id a session was claimed under (docs/runner-link-design.md §5.6, §6.4).
+--
+-- WHAT IT ADDS
+-- ============
+-- `session.claim_request_id`, nullable text: the Rpc.request_id of the link call whose claim moved the
+-- session to RUNNING. A claim the link gateway forwards again under the same id — its answer lost on the
+-- way, or retried on another replica — is answered with that session while it is still RUNNING under
+-- that id, and claims no other (QueueService.trySessionClaim). Every claim writes it, NULL for one made
+-- over HTTPS, so an id an earlier claim of the session recorded never answers for a later one. Nothing
+-- reads it over HTTPS.
+--
+-- WHY ON THE ROW
+-- ==============
+-- The answer a repeat needs is the session the first attempt claimed, and that is this row: the claim
+-- already writes it under the global claim lock, which is also where the repeat looks. A table of
+-- requests would hold the same fact a second time and need purging; the answer itself (credentials, an
+-- engine environment with decrypted keys) is rebuilt for the repeat as the reclaim rebuilds it, never
+-- stored.
+--
+-- 0445: the next number free on main, on every branch of origin and in every worktree on this host
+-- (2026-10-25); 0442 to 0444 are taken by other tasks of the same project. A nullable column with no
+-- default is a catalog-only change, so the hot table is not rewritten. It can run twice (IF NOT EXISTS);
+-- nothing that exists is altered, no index, function, trigger or type is created, and no row is written.
+
+ALTER TABLE "session" ADD COLUMN IF NOT EXISTS "claim_request_id" TEXT;

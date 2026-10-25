@@ -506,9 +506,11 @@ const SRC = path.resolve(__dirname, '../..', 'src');
 
 test('the boundary is registered, in front of the id filter rather than beside it', () => {
   const main = readFileSync(path.join(SRC, 'main.ts'), 'utf8');
+  // The runner link's boundary sits between the two, and hands every request that is not a link
+  // call to the id filter untouched (runner-link-error.filter.ts).
   assert.match(
     main,
-    /useGlobalFilters\(\s*new TransientDbConflictFilter\(new PublicIdExceptionFilter\(/,
+    /useGlobalFilters\(\s*new TransientDbConflictFilter\(\s*new RunnerLinkErrorFilter\(new PublicIdExceptionFilter\(/,
     'the conflict boundary is gone from main.ts — every 40P01 that escapes a service is a 500 again',
   );
   // Chained, not listed: Nest reverses the global filters and runs the FIRST whose @Catch matches,

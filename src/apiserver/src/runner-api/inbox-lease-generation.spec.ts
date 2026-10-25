@@ -58,7 +58,8 @@ test('dequeue row-locks runner ownership and stamps the engine generation with t
   const lockSQL = renderRawQuery(h.rawCalls[0]).text;
   assert.match(lockSQL, /"assigned_runner_id" = \?::uuid[\s\S]*FOR UPDATE/);
   assert.match(lockSQL, /"inbox_lease_owner" AS "inboxLeaseOwner", status/);
-  assert.deepEqual(h.rawCalls[0].slice(1), [SESSION_ID, RUNNER_ID]);
+  // The values it binds once composed: the dispatch pause it reads beside the lock binds none.
+  assert.deepEqual(renderRawQuery(h.rawCalls[0]).values, [SESSION_ID, RUNNER_ID]);
 
   const activeSQL = renderRawQuery(h.rawCalls[1]).text;
   assert.match(activeSQL, /FROM "inbox_lease_generation"/);
