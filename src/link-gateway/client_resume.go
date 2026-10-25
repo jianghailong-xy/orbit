@@ -79,9 +79,10 @@ func (d *driver) resumeDrill(ctx context.Context, o drillOptions) {
 	acked := held.from - 1
 	f["ackedBeforeCut"] = acked
 
-	// The cut: batches sent back to back, the connection dropped at once, with no close handshake.
+	// The cut: batches sent back to back, and the connection dropped with no close handshake as soon as the first of them
+	// is acknowledged, while the gateway is storing the rest.
 	var sentThrough uint64
-	d.step(fmt.Sprintf("the stream cut: %d batches sent back to back, the connection dropped with them in flight", resumeInFlight), func() (string, error) {
+	d.step(fmt.Sprintf("the stream cut: %d batches sent back to back, the connection dropped while they are being stored", resumeInFlight), func() (string, error) {
 		for i := 0; i < resumeInFlight; i++ {
 			if err := d.send(&linkpb.Frame{Body: &linkpb.Frame_EventBatch{EventBatch: d.batch(sid, next, next+resumeBatch-1, "assistant", 0)}}); err != nil {
 				return "", err
@@ -89,8 +90,15 @@ func (d *driver) resumeDrill(ctx context.Context, o drillOptions) {
 			next += resumeBatch
 		}
 		sentThrough = next - 1
+		first, err := d.nextEventAck(claimed.SessionID, 30*time.Second)
+		if err != nil {
+			return "", err
+		}
 		_ = d.cc.ws.CloseNow()
 		<-d.cc.done
+		if first.GetFailure() == nil && first.GetDurableSeq() >= held.from {
+			held.from = first.GetDurableSeq() + 1
+		}
 		// What was acknowledged before the cut reached the runner, which drops it from its buffer.
 		for {
 			select {
@@ -106,7 +114,8 @@ func (d *driver) resumeDrill(ctx context.Context, o drillOptions) {
 		held.to = sentThrough
 		return fmt.Sprintf("sent through seq %d; acknowledged through %d before the cut, %d events held", sentThrough, held.from-1, held.to-held.from+1), nil
 	})
-	f["sentThrough"], f["ackedAtCut"] = sentThrough, held.from-1
+	ackedAtCut := held.from - 1
+	f["sentThrough"], f["ackedAtCut"] = sentThrough, ackedAtCut
 
 	// Back on a new connection: the Welcome says how far the session is stored, and the runner resumes from there.
 	resumed, err := dialDriver(ctx, d.cl, d.report, &linkpb.SessionResume{SessionId: claimed.SessionID, LastSeq: sentThrough})
@@ -121,12 +130,12 @@ func (d *driver) resumeDrill(ctx context.Context, o drillOptions) {
 			return fmt.Sprintf("%v", states), errors.New("want one SessionState, for the session Hello named: is the gateway older than B4a, or the welcome route unanswered?")
 		}
 		durable = states[0].GetDurableSeq()
-		detail := fmt.Sprintf("durable_seq %d, lease_held %v (acknowledged through %d before the cut, sent through %d)",
-			durable, states[0].GetLeaseHeld(), acked, sentThrough)
+		detail := fmt.Sprintf("durable_seq %d, lease_held %v (acknowledged through %d when the connection was cut, sent through %d)",
+			durable, states[0].GetLeaseHeld(), ackedAtCut, sentThrough)
 		switch {
 		case !states[0].GetLeaseHeld():
 			return detail, errors.New("the process holds the session's lease")
-		case durable < acked || durable > sentThrough:
+		case durable < ackedAtCut || durable > sentThrough:
 			return detail, errors.New("want a durable_seq between what was acknowledged and what was sent")
 		}
 		return detail, nil
