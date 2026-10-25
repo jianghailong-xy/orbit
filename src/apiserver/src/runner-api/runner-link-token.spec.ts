@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sign, verify, type KeyObject } from 'node:crypto';
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import { HttpException, type ExecutionContext } from '@nestjs/common';
 import type { Runner } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { RunnerLinkGatewayGuard, RunnerLinkTokenController } from './runner-link-token.controller';
 import {
+  CheckedRunnerLinkTokens,
   RUNNER_LINK_AUDIENCE,
   RUNNER_LINK_CELL,
   RUNNER_LINK_NOT_CONFIGURED,
@@ -21,6 +22,8 @@ import {
   type RunnerLinkConfig,
   type RunnerLinkState,
 } from './runner-link-token';
+// The module object itself, whose `verify` runner-link-token.ts calls: what a spy on it counts.
+import nodeCrypto = require('node:crypto');
 
 /**
  * The runner link's connection tokens (runner-link-token.ts, docs/runner-link-design.md §5.4/§6.2):
@@ -172,6 +175,42 @@ test('a token expires an hour after it was issued', () => {
   assert.equal(verifyRunnerLinkToken(token, config.publicKey, at(3599.999)).exp, claims.exp);
   assert.equal(refusal(() => verifyRunnerLinkToken(token, config.publicKey, at(3600))), 'EXPIRED');
   assert.equal(refusal(() => verifyRunnerLinkToken(token, config.publicKey, at(86_400))), 'EXPIRED');
+});
+
+test('a token whose signature passed is not checked again while it lives, and only under the key that checked it', () => {
+  const config = configured();
+  const now = new Date('2026-10-25T04:00:00.000Z');
+  const { token, claims } = issue(config, now);
+  const [header, , signature] = token.split('.');
+  const checks = mock.method(nodeCrypto, 'verify');
+  try {
+    assert.deepEqual(verifyRunnerLinkToken(token, config.publicKey, now), claims);
+    assert.deepEqual(verifyRunnerLinkToken(token, config.publicKey, new Date(now.getTime() + 60_000)), claims);
+    assert.equal(checks.mock.callCount(), 1, 'the next call of the connection is not checked again');
+    assert.equal(refusal(() => verifyRunnerLinkToken(token, configured().publicKey, now)), 'SIGNATURE', 'another key checks it afresh');
+    const forged = `${header}.${encode({ ...claims, runnerId: OWNER_ID })}.${signature}`;
+    assert.equal(refusal(() => verifyRunnerLinkToken(forged, config.publicKey, now)), 'SIGNATURE', 'its signature on other claims');
+    assert.equal(refusal(() => verifyRunnerLinkToken(forged, config.publicKey, now)), 'SIGNATURE', 'a refused token is not kept');
+    assert.equal(checks.mock.callCount(), 4);
+    assert.equal(refusal(() => verifyRunnerLinkToken(token, config.publicKey, new Date(claims.exp * 1000))), 'EXPIRED', 'its expiry is read each time');
+  } finally {
+    checks.mock.restore();
+  }
+});
+
+test('the checked tokens kept are bounded: when full, the expired go first, then the oldest', () => {
+  const config = configured();
+  const tokens = new CheckedRunnerLinkTokens(2);
+  const claims = (exp: number) => ({ ...issue(config).claims, exp });
+  const at = (seconds: number) => new Date(seconds * 1000);
+  const kept = (...names: string[]) => names.map((name) => tokens.get(name, config.publicKey) !== undefined);
+  tokens.remember('a', config.publicKey, claims(10), at(0));
+  tokens.remember('b', config.publicKey, claims(1000), at(0));
+  tokens.remember('c', config.publicKey, claims(1000), at(20));
+  assert.deepEqual(kept('a', 'b', 'c'), [false, true, true], 'the expired one went');
+  tokens.remember('d', config.publicKey, claims(1000), at(20));
+  assert.deepEqual(kept('b', 'c', 'd'), [false, true, true], 'then the oldest');
+  assert.equal(tokens.get('c', configured().publicKey), undefined, 'a token is kept under the key that checked it');
 });
 
 test("a token this server did not sign, or that was changed after it was, is refused", () => {
