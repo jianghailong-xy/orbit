@@ -23,7 +23,7 @@ import {
   RunnerLinkErrorFilter,
 } from '../common/runner-link-error.filter';
 import { TransientDbConflictFilter } from '../common/transient-db-conflict.filter';
-import { RunnerAuthGuard } from './runner-auth.guard';
+import { AdmitsLinkCallItself, RunnerAuthGuard } from './runner-auth.guard';
 import {
   AFTER_SEQ_PENDING_CODE,
   parseRunnerLinkRequest,
@@ -147,7 +147,10 @@ test('a link call names its request id and the events it waits for', () => {
 // ── RunnerAuthGuard's link branch ────────────────────────────────────────────────────────────────
 
 @MachineProtocol()
-class MachineDoor {}
+class MachineDoor {
+  @AdmitsLinkCallItself()
+  admitsItself(): void {}
+}
 class AgentDoor {}
 
 interface GuardFixture {
@@ -192,10 +195,14 @@ function guardOf(fixture: GuardFixture, link: 'on' | 'off' | 'absent' = 'on') {
   return new RunnerAuthGuard(prisma as never, state);
 }
 
-function contextOf(request: Record<string, unknown>, controller: object = MachineDoor): ExecutionContext {
+function contextOf(
+  request: Record<string, unknown>,
+  controller: object = MachineDoor,
+  handler?: (...args: never[]) => unknown,
+): ExecutionContext {
   return {
     getClass: () => controller,
-    getHandler: () => undefined,
+    getHandler: () => handler,
     switchToHttp: () => ({ getRequest: () => request }),
   } as unknown as ExecutionContext;
 }
@@ -276,6 +283,41 @@ test('a link call is refused without a token the link vouches for, and off the m
   // A process whose link is off, or a guard built without it, takes no link call at all.
   await refusedWith(guardOf(fixture, 'off').canActivate(contextOf(withToken(fixture.token))), 404, 'RUNNER_LINK_NOT_CONFIGURED');
   await refusedWith(guardOf(fixture, 'absent').canActivate(contextOf(withToken(fixture.token))), 404, 'RUNNER_LINK_NOT_CONFIGURED');
+});
+
+test('a route that admits link calls itself is handed the token\'s word and reads nothing; a bad token is still refused', async () => {
+  const fixture = guardFixture();
+  const reads: string[] = [];
+  const guard = guardOf(fixture);
+  const prisma = (guard as unknown as { prisma: Record<string, Record<string, unknown>> }).prisma;
+  prisma.runner.findUnique = async () => void reads.push('runner');
+  prisma.managedRunner.findUnique = async () => void reads.push('managedRunner');
+  const admitsItself = MachineDoor.prototype.admitsItself;
+  const request = linkRequest({ [RUNNER_LINK_TOKEN_HEADER]: fixture.token, 'x-orbit-link-gateway-id': 'orbit-link-gateway' });
+  assert.equal(await guard.canActivate(contextOf(request, MachineDoor, admitsItself)), true);
+  assert.equal(reads.length, 0, 'the route admits the caller in its own statement (link-heartbeat.ts)');
+  assert.deepEqual(request.runner, { id: fixture.runnerId, ownerId: fixture.ownerId });
+  assert.deepEqual(request.runnerLink, {
+    leaseOwner: fixture.leaseOwner,
+    requestId: null,
+    afterSeq: null,
+    gatewayId: 'orbit-link-gateway',
+    admission: { credential: runnerLinkCredential(fixture.tokenHash), ownerId: fixture.ownerId },
+  });
+  // The token itself is checked as for every link call.
+  await refusedWith(
+    guard.canActivate(contextOf(linkRequest({ [RUNNER_LINK_TOKEN_HEADER]: `${fixture.token}x` }), MachineDoor, admitsItself)),
+    401,
+    'RUNNER_LINK_TOKEN_REFUSED',
+  );
+  // Over HTTPS the route is the guard's like any other: it reads the runner by its token.
+  const https = { headers: { authorization: 'Bearer the runner token' } };
+  prisma.runner.findFirst = async () => {
+    reads.push('runner by token');
+    return { id: fixture.runnerId, ownerId: fixture.ownerId, tokenHash: fixture.tokenHash, owner: { disabledAt: null } };
+  };
+  assert.equal(await guard.canActivate(contextOf(https, MachineDoor, admitsItself)), true);
+  assert.deepEqual(reads, ['runner by token', 'managedRunner']);
 });
 
 test('a link call waiting for events not yet stored is refused before its route runs, as retryable', async () => {

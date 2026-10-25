@@ -14,7 +14,8 @@ import { normalizeToolOutputEvent } from '../runner-api/tool-output';
  *
  *   - a message waiting in a session's inbox (RealtimeService.notifyInbox), for the runner the session is assigned to;
  *   - a session queued for a runner (QueueService.notifySessionQueued), for that runner;
- *   - something a heartbeat delivers (RealtimeService.notifyRunnerWake), for that runner.
+ *   - something a heartbeat delivers (RealtimeService.markRunnerChanged, which notifyRunnerWake calls), for that runner,
+ *     once runner_presence says so (runner-api/link-heartbeat.ts).
  *
  * So is a person's decision on an approval (the APPROVAL_RESOLVED that SessionsService.decideApproval publishes once
  * its write has committed, RealtimeService.publish), for the runner the session is assigned to: the card's reader may
@@ -212,12 +213,17 @@ export class RunnerHints implements OnModuleInit, OnModuleDestroy {
   /** Names this apiserver instance to the gateway, which sums the watchers it counts with every other instance's. */
   readonly instanceId = randomUUID();
 
-  /** `url` null leaves hints off. `openBus` is NATS outside the specs. */
+  /**
+   * `url` null leaves hints off. `openBus` is NATS outside the specs. `linkConfigured` is whether the runner link is
+   * configured at all, which it can be without a NATS server to hint over: link heartbeats then still answer from
+   * runner_presence, and RealtimeService.markRunnerChanged still marks what changed for them.
+   */
   constructor(
     private readonly prisma: Pick<PrismaService, 'session'>,
     private readonly url: string | null,
     private readonly openBus: (url: string, log: Logger) => HintBus = (url, log) => new NatsHintBus(url, log, null),
     private readonly now: () => number = Date.now,
+    readonly linkConfigured: boolean = url !== null,
   ) {}
 
   /** On when the runner link is configured and RUNNER_LINK_NATS_URL is set. A link without the URL says so once. */
@@ -232,7 +238,7 @@ export class RunnerHints implements OnModuleInit, OnModuleDestroy {
     if (link.config && !url) {
       new Logger('RunnerHints').warn('RUNNER_LINK_NATS_URL is not set: no runner link hints are published, and runners on the link learn of work at their heartbeat');
     }
-    return new RunnerHints(prisma, link.config ? url : null, (u, log) => new NatsHintBus(u, log, seed));
+    return new RunnerHints(prisma, link.config ? url : null, (u, log) => new NatsHintBus(u, log, seed), undefined, link.config !== null);
   }
 
   get enabled(): boolean {
