@@ -1,0 +1,8 @@
+Test Case '-[T07ProbeUITests.ReplayTests test21RootOnHome]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test21RootOnHome]' passed (84.920 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test22NiaNewAccountHome]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test22NiaNewAccountHome]' passed (20.346 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 105.266 (105.272) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 105.266 (105.273) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 105.266 (105.277) seconds
+** TEST SUCCEEDED **

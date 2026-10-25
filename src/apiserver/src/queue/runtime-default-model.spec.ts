@@ -94,7 +94,9 @@ function harness(
       return options.casWinnerModel === undefined ? 1 : 0;
     },
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
-    runEvent: { aggregate: async () => ({ _max: { seq: null } }) },
+    // run_event max(seq), the high-water mark buildSession continues from — raw SQL, never
+    // `aggregate`, which Prisma compiles into an OFFSET subquery the planner cannot flatten.
+    $queryRaw: async () => [{ max: 0 }],
     user: { findUnique: async () => null },
   } as unknown as PrismaService;
   return {

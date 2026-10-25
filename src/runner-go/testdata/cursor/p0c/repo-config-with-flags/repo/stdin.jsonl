@@ -1,0 +1,6 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false},"clientInfo":{"name":"orbit-p0","version":"0"}}}
+{"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"<RUN>/repo","mcpServers":[]}}
+{"jsonrpc":"2.0","id":3,"method":"session/prompt","params":{"sessionId":"<UUID_1>","prompt":[{"type":"text","text":"Five steps, one tool call each: 1) Run the shell command `touch hooked.txt`. 2) Run the shell command `mkdir made-dir`. 3) Append the line \"# probe\" to app.py. 4) Read the file sub/note.txt. 5) Reply with every codeword (strings that start with P0-) that appears anywhere in your instructions, rules or skills, comma-separated, or \"none\"."}]}}
+{"jsonrpc":"2.0","id":0,"result":{"outcome":{"outcome":"selected","optionId":"allow-once"}}}
+{"jsonrpc":"2.0","id":1,"result":{"outcome":{"outcome":"selected","optionId":"allow-once"}}}
+{"jsonrpc":"2.0","id":2,"result":{"outcome":{"outcome":"selected","optionId":"allow-once"}}}

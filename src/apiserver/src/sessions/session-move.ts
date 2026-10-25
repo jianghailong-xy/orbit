@@ -5,13 +5,12 @@
  * the rows it has locked — judge by the same rules and give the same reasons. The reasons are
  * English sentences the clients show exactly as they are.
  */
-import { AgentProvider } from '@orbit/shared';
+import { AgentProvider, ENGINE_CLI_NAMES } from '@orbit/shared';
 import { RunStatus } from '@prisma/client';
 import { isSessionGenerating } from '../common/session-generating';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
-import { runAccount } from '../providers/plan-usage-accounts';
+import { reportedRunAccount } from '../providers/plan-usage-accounts';
 import { makeBranchName } from './naming';
-import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
 import { branchName } from '../projects/project-criterion-landing';
 
 /** What a runner declares when it can take in a session moved from another workspace: it checks an
@@ -28,6 +27,7 @@ const RUNTIME_LABEL: Record<AgentProvider, string> = {
   [AgentProvider.OPENCODE]: 'OpenCode',
   [AgentProvider.ANTIGRAVITY]: 'Antigravity',
   [AgentProvider.DSH]: 'DeepSeek Harness',
+  [AgentProvider.CURSOR]: ENGINE_CLI_NAMES[AgentProvider.CURSOR],
 };
 
 /** Why a session cannot move at all (§5.2, "会话自身"). */
@@ -45,6 +45,9 @@ export const MOVE_REFUSAL = {
   RETRY: 'An automatic retry is scheduled. Try again after it runs.',
   /** The move itself only takes an ended session; the client ends an idle one first (End and Move). */
   END: 'End the session first.',
+  /** Its engine was never recorded and its provider is gone (sessionEngine answered null), so nothing
+   *  says which CLI's conversation would have to be carried over. */
+  ENGINE_UNKNOWN: "This session's provider is gone, so Orbit can't tell which engine it runs on.",
 } as const;
 
 /** The session's own state, as §5.2 judges it. */
@@ -69,8 +72,9 @@ export interface SessionMoveFacts {
   /** A merge recovery waiting on its owner (readMergeRecovery). */
   mergeRecoveryOpen: boolean;
   retryAt: Date | null;
-  /** The runtime that runs it (sessionExecRuntime), which a move never changes. */
-  runtime: AgentProvider;
+  /** The engine that runs it (sessionEngine: Session.engine, or the old rules for a row without
+   *  one), which a move never changes; null when nobody can tell. */
+  runtime: AgentProvider | null;
 }
 
 export type SessionMoveVerdict =
@@ -91,14 +95,17 @@ export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
   if (s.coordinatesProject || s.dispatchOrigin === 'PROJECT_COORDINATOR') return refuse(MOVE_REFUSAL.COORDINATOR);
   if (s.taskId) return refuse(MOVE_REFUSAL.TASK);
   if (s.importSourceCwd != null) return refuse(MOVE_REFUSAL.IMPORTING);
+  if (s.runtime === null) return refuse(MOVE_REFUSAL.ENGINE_UNKNOWN);
   // How their conversations would carry over has not been verified. agy's lives in a per-session
   // gemini directory on the runner (docs/antigravity-runtime-contract.md §3.1), and a resume from
-  // any other directory silently starts a new conversation (§4.3).
+  // any other directory silently starts a new conversation (§4.3). Cursor CLI's loading a session in
+  // another directory is unverified too (docs/cursor-runtime-contract.md §17.1).
   if (
     s.runtime === AgentProvider.KIMI ||
     s.runtime === AgentProvider.OPENCODE ||
     s.runtime === AgentProvider.ANTIGRAVITY ||
-    s.runtime === AgentProvider.DSH
+    s.runtime === AgentProvider.DSH ||
+    s.runtime === AgentProvider.CURSOR
   ) {
     return refuse(`Moving ${RUNTIME_LABEL[s.runtime]} sessions isn't supported yet.`);
   }
@@ -140,29 +147,17 @@ export function runnerLabel(runner: { name: string; displayName: string | null }
   return runner.displayName?.trim() || runner.name;
 }
 
-/** The runners list's rule (RunnersService isRunnerOnline, not imported: that file pulls in the
- *  runner controller): not marked offline, and heard from within the last three heartbeats. */
-export function runnerIsOnline(
-  runner: { status: string; lastHeartbeatAt: Date | null },
-  now: number = Date.now(),
-): boolean {
-  return (
-    runner.status !== 'OFFLINE' &&
-    !!runner.lastHeartbeatAt &&
-    runner.lastHeartbeatAt.getTime() >= now - SESSION_RUNNER_OFFLINE_AFTER_MS
-  );
-}
-
 /**
  * Why `session` cannot move to `target`, or null when it can. An offline runner is no reason: the
  * move only changes where the session belongs, and its next message waits for the runner.
  */
 export function moveTargetRefusal(
-  session: { runtime: AgentProvider; assignedRunnerId: string | null; runnerName: string },
+  session: { runtime: AgentProvider | null; assignedRunnerId: string | null; runnerName: string },
   target: MoveTargetFacts,
 ): string | null {
   if (!target.enabled) return 'This workspace is disabled.';
   if (!target.runnerId || !target.runner) return 'This workspace has no runner.';
+  if (session.runtime === null) return MOVE_REFUSAL.ENGINE_UNKNOWN;
   const runner = runnerLabel(target.runner);
   // As the New Session picker reads the report: an engine the runner says is not installed. No report,
   // or none for this engine, is a runner too old to say — not one that cannot run it.
@@ -194,13 +189,29 @@ export function branchAfterMove(
 /**
  * The account columns a move writes (§5.1). On the same runner the session stays on the account it
  * actually runs on, written onto the session: an empty column follows the workspace, and a Codex
- * conversation lives in its account's directory. On another runner the columns are cleared and
- * follow the new workspace — an account id names a slot on one machine only.
+ * conversation lives in its account's directory (a Claude or Kimi one too). A Cursor CLI conversation
+ * lives in the session's own, but is not known to continue on another account (D5,
+ * CURSOR_ACCOUNT_MOVE_V1), so it stays where it is too. On another runner the columns are cleared and
+ * follow the new workspace — an account id names a slot on one machine only. The account it runs on is
+ * read off the runner's report alone (reportedRunAccount): one still on a Default its owner removed from
+ * Orbit is written onto that Default, and moved off it, with its transcript told, before its next turn.
  */
 export function accountsAfterMove(args: {
   sameRunner: boolean;
-  session: { provider: string; claudeAccount: string | null; codexAccount: string | null };
-  from: { env: unknown; claudeAccount: string | null; codexAccount: string | null } | null;
+  session: {
+    provider: string;
+    claudeAccount: string | null;
+    codexAccount: string | null;
+    kimiAccount: string | null;
+    cursorAccount: string | null;
+  };
+  from: {
+    env: unknown;
+    claudeAccount: string | null;
+    codexAccount: string | null;
+    kimiAccount: string | null;
+    cursorAccount: string | null;
+  } | null;
   runnerEngines: unknown;
 }): {
   claudeAccount?: string | null;
@@ -209,24 +220,39 @@ export function accountsAfterMove(args: {
   codexAccountPinned?: boolean;
   antigravityAccount?: string | null;
   antigravityAccountPinned?: boolean;
+  kimiAccount?: string | null;
+  kimiAccountPinned?: boolean;
+  cursorAccount?: string | null;
+  cursorAccountPinned?: boolean;
 } {
   if (!args.sameRunner) {
     return {
       claudeAccount: null, claudeAccountPinned: false, codexAccount: null, codexAccountPinned: false,
-      antigravityAccount: null, antigravityAccountPinned: false,
+      antigravityAccount: null, antigravityAccountPinned: false, kimiAccount: null, kimiAccountPinned: false,
+      cursorAccount: null, cursorAccountPinned: false,
     };
   }
   // A configured provider or a pool runs on a credential of its own, not on one of the runner's accounts.
   const { session } = args;
   if (session.provider === AgentProvider.CLAUDE) {
     const choice = { claudeAccount: session.claudeAccount ?? args.from?.claudeAccount };
-    const current = runAccount(AgentProvider.CLAUDE, args.from?.env, choice, args.runnerEngines);
+    const current = reportedRunAccount(AgentProvider.CLAUDE, args.from?.env, choice, args.runnerEngines);
     return typeof current === 'string' ? { claudeAccount: current } : {};
   }
   if (session.provider === AgentProvider.CODEX) {
     const choice = { codexAccount: session.codexAccount ?? args.from?.codexAccount };
-    const current = runAccount(AgentProvider.CODEX, args.from?.env, choice, args.runnerEngines);
+    const current = reportedRunAccount(AgentProvider.CODEX, args.from?.env, choice, args.runnerEngines);
     return typeof current === 'string' ? { codexAccount: current } : {};
+  }
+  if (session.provider === AgentProvider.KIMI) {
+    const choice = { kimiAccount: session.kimiAccount ?? args.from?.kimiAccount };
+    const current = reportedRunAccount(AgentProvider.KIMI, args.from?.env, choice, args.runnerEngines);
+    return typeof current === 'string' ? { kimiAccount: current } : {};
+  }
+  if (session.provider === AgentProvider.CURSOR) {
+    const choice = { cursorAccount: session.cursorAccount ?? args.from?.cursorAccount };
+    const current = reportedRunAccount(AgentProvider.CURSOR, args.from?.env, choice, args.runnerEngines);
+    return typeof current === 'string' ? { cursorAccount: current } : {};
   }
   return {};
 }

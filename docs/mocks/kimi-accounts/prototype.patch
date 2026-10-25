@@ -1,0 +1,139 @@
+diff --git a/src/shared/src/dto.ts b/src/shared/src/dto.ts
+index 9a1406b..d8911b8 100644
+--- a/src/shared/src/dto.ts
++++ b/src/shared/src/dto.ts
+@@ -1329,6 +1329,8 @@ export interface RunnerEngineAccount {
+   codexHome?: string;
+   /** The CLI's own answer for this account, with `unknown` for anything ambiguous. */
+   auth: 'yes' | 'no' | 'unknown';
++  /** A Kimi Code account's site: kimi.com or kimi.ai, whose accounts are separate (prototype). */
++  kimiRegion?: KimiRegion;
+   /** `cxa1_` and the first 8 hex digits of the account's fingerprint. Absent until the runner has
+    *  read one for this account, and for engines that report none. Two accounts showing the same one
+    *  are the same account. */
+diff --git a/src/shared/src/planUsage.ts b/src/shared/src/planUsage.ts
+index db6c1b7..77b3c10 100644
+--- a/src/shared/src/planUsage.ts
++++ b/src/shared/src/planUsage.ts
+@@ -222,10 +222,11 @@ export const ACCOUNT_DIR_VAR: Readonly<Record<AccountEngine, string>> = {
+   codex: 'CODEX_HOME',
+   claude: 'CLAUDE_CONFIG_DIR',
+   antigravity: 'ORBIT_ANTIGRAVITY_GOOGLE_DIR',
++  kimi: 'KIMI_CODE_HOME',
+ };
+ 
+ /** The engines that keep a login per directory, so that one runner holds several accounts of them. */
+-export const ACCOUNT_ENGINES: readonly AccountEngine[] = ['claude', 'codex', 'antigravity'];
++export const ACCOUNT_ENGINES: readonly AccountEngine[] = ['claude', 'codex', 'antigravity', 'kimi'];
+ 
+ export function isAccountEngine(engine: string | null | undefined): engine is AccountEngine {
+   return !!engine && (ACCOUNT_ENGINES as readonly string[]).includes(engine);
+@@ -341,7 +342,7 @@ export function planUsageBlockedUntil(
+ /** The engines whose CLI keeps a login per directory — a CODEX_HOME, a CLAUDE_CONFIG_DIR, an
+  *  Antigravity Google sign-in's Gemini directory — so that a runner can hold several accounts of them,
+  *  each with its own quota. */
+-export type AccountEngine = 'codex' | 'claude' | 'antigravity';
++export type AccountEngine = 'codex' | 'claude' | 'antigravity' | 'kimi';
+ 
+ /**
+  * `usage` (a runner's heartbeat planUsage) with Antigravity's quota folded in from the engine health it
+diff --git a/src/web/src/components/RunnerEngines.tsx b/src/web/src/components/RunnerEngines.tsx
+index 32e1b4a..391a8f5 100644
+--- a/src/web/src/components/RunnerEngines.tsx
++++ b/src/web/src/components/RunnerEngines.tsx
+@@ -25,6 +25,7 @@ import {
+   accountNameOf,
+   accountPlanUsage,
+   addsAntigravityAccounts,
++  addsKimiAccounts,
+   defaultAccountName,
+   engineKeepsAccounts,
+   runsOnEnvKey,
+@@ -513,7 +514,8 @@ function EngineRow({
+   const addAccountTo: LoginEngine | null =
+     loginEngine !== null && engineKeepsAccounts(loginEngine) &&
+     (kind === 'in' || kind === 'out' || kind === 'unknown') &&
+-    (loginEngine !== 'antigravity' || addsAntigravityAccounts(runner))
++    (loginEngine !== 'antigravity' || addsAntigravityAccounts(runner)) &&
++    (loginEngine !== 'kimi' || addsKimiAccounts(runner))
+       ? loginEngine
+       : null;
+ 
+@@ -1006,6 +1008,7 @@ function AccountRow({
+           {/* Where the account lives and which one it is — never who: the account's email and id
+               stay on the machine, and the fingerprint is a prefix of a non-reversible one. */}
+           <div className="re-meta" title={accountDir(account)}>
++            {engine === 'kimi' && account.kimiRegion && `${KIMI_SITE[account.kimiRegion].domain} · `}
+             {tildePath(accountDir(account))}
+             {account.fingerprintPrefix && ` · account ${account.fingerprintPrefix}…`}
+           </div>
+@@ -1181,7 +1184,7 @@ function AddEngineAccount({
+           spellCheck={false}
+         />
+       </label>
+-      <RunnerSignIn runnerId={runnerId} engine={engine} accountName={name} autoStart onCancel={onClose} />
++      <RunnerSignIn runnerId={runnerId} engine={engine} accountName={name} autoStart={engine !== 'kimi'} onCancel={onClose} />
+     </>
+   );
+ }
+diff --git a/src/web/src/components/RunnerSignIn.tsx b/src/web/src/components/RunnerSignIn.tsx
+index 8d339b9..6d20933 100644
+--- a/src/web/src/components/RunnerSignIn.tsx
++++ b/src/web/src/components/RunnerSignIn.tsx
+@@ -163,7 +163,14 @@ export function RunnerSignIn({
+     select: (list) => (list as ProbedRunner[]).find((r) => r.id === runnerId),
+   });
+   const choosesSite = !!kimiRunner.data?.capabilities?.includes(KIMI_LOGIN_REGION_V1);
+-  const currentSite = kimiRunner.data?.engines?.find((e) => e.engine === 'kimi')?.kimiRegion;
++  // The site of the login this card signs in again: the account's own, Default's being the engine's.
++  // A card adding an account has none yet.
++  const kimiHealth = kimiRunner.data?.engines?.find((e) => e.engine === 'kimi');
++  const currentSite = accountName !== undefined
++    ? undefined
++    : account && account !== 'default'
++      ? kimiHealth?.accounts?.find((a) => a.id === account)?.kimiRegion
++      : kimiHealth?.kimiRegion;
+   // Both sites can always be pressed. A runner too old to be told a site signs in where its CLI
+   // decides — kimi.com, on an install Orbit made — so kimi.com goes to it unnamed; kimi.ai is named
+   // either way, and such a runner is refused it in words that say to update it (RunnerApiController).
+@@ -420,7 +427,11 @@ export function RunnerSignIn({
+     return (
+       <div className="rsi">
+         <div className="rsi-hint">
+-          {adding ? (
++          {adding && site ? (
++            <>
++              Sign in with the <b>{KIMI_SITE[site].domain}</b> account you are adding, then enter this one-time code:
++            </>
++          ) : adding ? (
+             <>
+               Sign in <b>with the other account</b>, then enter this one-time code:
+             </>
+@@ -531,7 +542,7 @@ export function RunnerSignIn({
+               key={region}
+               className="rsi-site"
+               type="button"
+-              disabled={start.isPending || kimiRunner.isPending}
++              disabled={start.isPending || kimiRunner.isPending || (adding && !accountName.trim())}
+               onClick={() => begin(kimiSiteToName(region))}
+             >
+               <span className="rsi-site-name">
+diff --git a/src/web/src/lib/engineAccounts.ts b/src/web/src/lib/engineAccounts.ts
+index 2fa4499..a0c8fdf 100644
+--- a/src/web/src/lib/engineAccounts.ts
++++ b/src/web/src/lib/engineAccounts.ts
+@@ -33,6 +33,14 @@ export function addsAntigravityAccounts(runner: Pick<Runner, 'antigravity' | 'ca
+   );
+ }
+ 
++/** What a runner declares once it signs a Kimi Code account the control plane names into that
++ *  account's own KIMI_CODE_HOME (prototype). Without it a named sign-in would replace Default's. */
++export const KIMI_ACCOUNT_LOGIN_CAPABILITY = 'kimi-account-login/v1';
++
++export function addsKimiAccounts(runner: Pick<Runner, 'capabilities'>): boolean {
++  return !!runner.capabilities?.includes(KIMI_ACCOUNT_LOGIN_CAPABILITY);
++}
++
+ /**
+  * Antigravity's Default on a runner that runs agy on its own GEMINI_API_KEY: the engine answers signed
+  * in (on the key, `authSource` env_key) while Default, which is the runner's Google sign-in and

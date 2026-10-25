@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
  *
  * So the count is held here for every selector at once: a top-level rule's selector is written once.
  * Six were already written twice in the sheet the paste landed on (c00eefef3^); the five still in
- * it are held at the two they had rather than judged here (the toast rule left with AntD's toasts). At-rules are not counted — `@media (max-width: 600px)` is
+ * it are held at the two they had rather than judged here (the toast rule left with the replaced toasts). At-rules are not counted — `@media (max-width: 600px)` is
  * meant to recur beside each thing it adjusts.
  */
 const css = readFileSync(new URL('./index.css', import.meta.url), 'utf8');

@@ -7,6 +7,10 @@ import Foundation
 /// destination rather than a trail of counts to follow down a tree — it names the workspace when
 /// exactly one thing is waiting (the name is what lets you decide whether to go now; "1" tells you
 /// nothing), counts when several are, and sends you straight to the one that has waited longest.
+///
+/// Two lines (the owner, 2026-10-21, board `docs/mocks/needs-you-capsule`): WHAT is waiting, and
+/// WHERE. One line put the two in a row, and the "where" — the part that decides whether to go now —
+/// was what the truncation took ("Question from coordinator · 落地会话：每次…").
 public struct NeedsYouBanner: Equatable, Sendable {
     /// How many sessions are waiting. Never 0 — `NeedsYouLogic.banner` answers nil instead, so the
     /// bar is absent from the layout entirely rather than present at zero height.
@@ -14,8 +18,16 @@ public struct NeedsYouBanner: Equatable, Sendable {
     /// Where a tap goes: the session blocked the longest. Clearing it leaves the banner pointing at
     /// the next one, which is what makes this an inbox rather than a notification.
     public let target: Session
-    /// The one line the bar shows.
+    /// The bar's first line, what is waiting: one of the four by its word, or the sentence for a
+    /// blocked session ("wikova-develop needs you", "2 sessions need you").
     public let text: String
+    /// The second line, where: the project an owner item stops, or the conversation a press opens.
+    /// Nil when nothing names it — a conversation with no project, or one whose title the first
+    /// line has already said.
+    public let detail: String?
+    /// Since when the thing the first line names has waited (ISO-8601): an owner item's own `since`,
+    /// or the conversation's last state move, which is when it stopped to ask.
+    public let since: String?
     /// The owner item the line is about, when the oldest thing waiting is one of the four (§7.6
     /// V13): the merge to confirm, the coordinator's question, the exception that became yours, the
     /// pause to lift. Carried rather than re-derived so the press lands on the CARD — the target
@@ -23,11 +35,44 @@ public struct NeedsYouBanner: Equatable, Sendable {
     /// waiting is an ordinary blocked tool call, which is the bar as it always was.
     public let ownerItem: SessionOwnerItem?
 
-    public init(count: Int, target: Session, text: String, ownerItem: SessionOwnerItem? = nil) {
+    public init(count: Int, target: Session, text: String, detail: String? = nil, since: String? = nil,
+                ownerItem: SessionOwnerItem? = nil) {
         self.count = count
         self.target = target
         self.text = text
+        self.detail = detail
+        self.since = since
         self.ownerItem = ownerItem
+    }
+
+    /// The mark the bar draws for what it names: the owner item's kind, or the raised hand of a
+    /// blocked tool call.
+    public var glyph: NeedsYouGlyph { ownerItem.map { NeedsYouGlyph($0.kind) } ?? .hand }
+
+    /// How many other conversations are waiting behind the one the bar names — its "+2". None when
+    /// the first line is itself the count ("2 sessions need you"), which would say it twice.
+    public var more: Int { ownerItem == nil ? 0 : max(0, count - 1) }
+}
+
+/// Which mark the needs-you bar draws in its circle: one per owner item kind, so the four read apart
+/// at a glance, and the raised hand for a blocked tool call. In the conversation on screen, the
+/// question's mark while the card a press goes to is a question, and the warning's while it is an
+/// exception the reader answers by pressing.
+public enum NeedsYouGlyph: Equatable, Sendable {
+    case merge
+    case question
+    case warning
+    case pause
+    case hand
+
+    init(_ kind: OwnerItemKind) {
+        switch kind {
+        case .promotionApproval: self = .merge
+        case .coordinatorQuestion: self = .question
+        case .escalated: self = .warning
+        case .fusePaused: self = .pause
+        case .unknown: self = .hand
+        }
     }
 }
 
@@ -51,12 +96,16 @@ public struct WaitingBelow: Equatable, Sendable {
     /// built from, carried so the bar's chevron can point the same way the words do. Nil is "not
     /// known", which is also when the line carries no direction word at all.
     public let side: ReaderSide?
+    /// The mark for the row a press goes to: a question's, or an exception's.
+    public let glyph: NeedsYouGlyph
 
-    public init(count: Int, rowID: String, text: String, side: ReaderSide? = nil) {
+    public init(count: Int, rowID: String, text: String, side: ReaderSide? = nil,
+                glyph: NeedsYouGlyph = .question) {
         self.count = count
         self.rowID = rowID
         self.text = text
         self.side = side
+        self.glyph = glyph
     }
 }
 
@@ -128,7 +177,8 @@ public enum NeedsYouLogic {
                             text: belowText(count: rows.count,
                                             allQuestions: rows.allSatisfy(\.isQuestion),
                                             side: side),
-                            side: side)
+                            side: side,
+                            glyph: first.isQuestion ? .question : .warning)
     }
 
     /// "1 open question below" while every card below is a question — the words this bar has always
@@ -184,7 +234,9 @@ public enum NeedsYouLogic {
         // the same FIFO the session target below uses, and the same one the project page sorts by.
         if let oldest = oldestOwnerItem(elsewhere) {
             return NeedsYouBanner(count: elsewhere.count, target: oldest.session,
-                                  text: ownerItemText(oldest.item, project: oldest.session.projectTitle),
+                                  text: ownerItemWord(oldest.item),
+                                  detail: named(oldest.session.projectTitle),
+                                  since: oldest.item.since,
                                   ownerItem: oldest.item)
         }
         // Longest-waiting first (FIFO). Ordered on the same parsed recency key Recents uses rather
@@ -193,7 +245,9 @@ public enum NeedsYouLogic {
         guard let target = elsewhere.min(by: { RecentsLogic.recency($0) < RecentsLogic.recency($1) })
         else { return nil }
         return NeedsYouBanner(count: elsewhere.count, target: target,
-                              text: text(count: elsewhere.count, target: target))
+                              text: text(count: elsewhere.count, target: target),
+                              detail: detail(count: elsewhere.count, target: target),
+                              since: target.lastTurnAt ?? target.updatedAt ?? target.createdAt)
     }
 
     /// The owner item that has waited longest across these conversations, with the one it is on.
@@ -201,7 +255,12 @@ public enum NeedsYouLogic {
     /// A kind this build does not know is skipped rather than named: the count already includes it
     /// (the server counted it), and a bar reading "needs you ·" with nothing after it would be
     /// worse than the bar the older wording gives.
-    static func oldestOwnerItem(_ sessions: [Session]) -> (session: Session, item: SessionOwnerItem)? {
+    ///
+    /// Public because a session ROW's own press asks it too: the row that says which item is
+    /// waiting lands on that item's card (`AppModel`'s row press → `ConsoleModel.focus(ownerItem:)`),
+    /// and picking a different item there than the banner does would send the reader to a card the
+    /// line above them was not about.
+    public static func oldestOwnerItem(_ sessions: [Session]) -> (session: Session, item: SessionOwnerItem)? {
         var oldest: (session: Session, item: SessionOwnerItem, at: Date)?
         for session in sessions {
             for item in session.ownerItems ?? [] where item.kind != .unknown {
@@ -215,16 +274,13 @@ public enum NeedsYouLogic {
         return (found.session, found.item)
     }
 
-    /// What the bar says about one owner item: which of the four, and which project (§7.6 V13).
-    ///
-    /// The project and not the item's own title, because the title is a sentence written for a
-    /// card — "Coordinator asks: should the migration keep the old column?" — and this is one line
-    /// that has to answer "is this mine to go and do now" at a glance. A conversation that names no
-    /// project says only the first half rather than trailing an empty separator.
-    static func ownerItemText(_ item: SessionOwnerItem, project: String?) -> String {
-        let what = kindWord(item.kind) ?? "Needs you"
-        guard let project, !project.isEmpty else { return what }
-        return "\(what) · \(project)"
+    /// What the bar's first line says about one owner item: which of the four (§7.6 V13), its merge
+    /// named by the main branch the item carries. The project goes on the second line — and not the
+    /// item's own title, because the title is a sentence written for a card ("Coordinator asks:
+    /// should the migration keep the old column?") and the bar has to answer "is this mine to go and
+    /// do now" at a glance.
+    static func ownerItemWord(_ item: SessionOwnerItem) -> String {
+        kindWord(item.kind, main: RunSettings.mainBranchName(item.mainBranch)) ?? "Needs you"
     }
 
     /// Which of the four, in the words the banner and the card share, and nothing else — no project,
@@ -234,10 +290,12 @@ public enum NeedsYouLogic {
     /// Separate from `ownerItemText` because a session ROW says this half alone: a row has one line
     /// and the project it is about is the conversation the row already names. Both readers take the
     /// words from here, so the row above a bar can never spell one of the four differently from the
-    /// bar itself.
-    public static func kindWord(_ kind: OwnerItemKind) -> String? {
+    /// bar itself. A merge approval names the branch it merges into: `main`, the item's project's
+    /// main branch by name (`SessionOwnerItem.mainBranch`).
+    public static func kindWord(_ kind: OwnerItemKind,
+                                main: String = RunSettings.defaultMainBranch) -> String? {
         switch kind {
-        case .promotionApproval: return "Approve merge to main"
+        case .promotionApproval: return "Approve merge to \(main)"
         case .coordinatorQuestion: return "Question from coordinator"
         case .escalated: return "Escalated to you"
         case .fusePaused: return "Paused"
@@ -245,14 +303,26 @@ public enum NeedsYouLogic {
         }
     }
 
+    /// What separates the word for a kind from the short reason an escalated item carries — the
+    /// browser's `OWNER_ITEM_NEED_SEPARATOR`.
+    public static let needSeparator = " · "
+
     /// The word for the item a row says it is waiting on: the oldest one, which is the same item the
     /// banner names, so the row and the bar above it point at the same card. Nil when nothing on the
     /// row is a kind this build can name.
+    ///
+    /// An ESCALATED item says its `need` as well — `Escalated to you · the check on the combined
+    /// tree failed` — because "Escalated to you" alone names the route and not the thing; the
+    /// browser's row does the same and the two ends are held to each other by
+    /// `OwnerItemCardsTests`. The other three kinds carry no need, and one that is absent or blank
+    /// leaves the row with the word alone rather than trailing a separator.
     public static func oldestItemWord(_ items: [SessionOwnerItem]?) -> String? {
         guard let items else { return nil }
         var oldest: (word: String, at: Date)?
         for item in items {
-            guard let word = kindWord(item.kind) else { continue }
+            let main = RunSettings.mainBranchName(item.mainBranch)
+            guard let base = kindWord(item.kind, main: main) else { continue }
+            let word = itemWord(item, base: base)
             // An unparseable instant sorts last rather than first, exactly as it does for the
             // banner: it must not beat an item whose wait is known.
             let at = RelativeTime.parse(item.since) ?? Date.distantFuture
@@ -261,11 +331,33 @@ public enum NeedsYouLogic {
         return oldest?.word
     }
 
+    /// One item's word, in the browser's own reading: the kind's word, and — for the one kind that
+    /// carries one — the short reason after it.
+    static func itemWord(_ item: SessionOwnerItem, base: String) -> String {
+        guard item.kind == .escalated,
+              let need = item.need?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !need.isEmpty else { return base }
+        return base + needSeparator + need
+    }
+
     /// One session names its workspace; several collapse to a count. The workspace name (not the
     /// session title) is the "where" the user navigates by, and it stays short — session titles are
     /// often absent or long enough to truncate away exactly the part that identifies them.
     private static func text(count: Int, target: Session) -> String {
         guard count == 1 else { return "\(count) sessions need you" }
         return "\(target.agent?.name ?? target.title ?? "A session") needs you"
+    }
+
+    /// The conversation a press opens, by its title — unless the first line already named it by that
+    /// title, for a session with no workspace name.
+    private static func detail(count: Int, target: Session) -> String? {
+        if count == 1, target.agent?.name == nil { return nil }
+        return named(target.title)
+    }
+
+    /// A name worth a line: nil for none, and for one that is only whitespace.
+    private static func named(_ name: String?) -> String? {
+        guard let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return name
     }
 }

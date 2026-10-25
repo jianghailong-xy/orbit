@@ -1,0 +1,100 @@
+# TEMPORARY (probe branch, never merged). Photographs one scripted live turn in the iPhone and Mac
+# apps against docs/evidence/composer-fade/thinking-fold/probe-harness/stub.py: three thinking
+# stretches that fold one after another while the transcript is pinned at its tail, with per-frame
+# geometry (offset / content height / bottom gap / scroll phase) recorded by diag.py's
+# instrumentation and a photograph around every fold. The report job pushes the pictures, notes,
+# metrics, request logs and build log tails to probe/thinking-fold-tail-results.
+name: Client CI (macOS + iOS)
+
+on:
+  push:
+    branches: ["probe/thinking-fold-tail"]
+
+concurrency:
+  group: client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shots:
+    name: Three thinking folds, pinned at the tail (iPhone + Mac)
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      # project.yml's `../src` paths are relative to the repository root, so the harness runs from
+      # a copy of itself placed there (the tail-open probe's `.cfade-probe/`).
+      - name: Stage the harness at the repository root
+        run: |
+          mkdir -p .tfold-probe
+          cp -R docs/evidence/composer-fade/thinking-fold/probe-harness/. .tfold-probe/
+      - name: Instrument the tree under test
+        run: |
+          python3 .tfold-probe/diag.py "$GITHUB_WORKSPACE"
+          grep -c "DiagLog" src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        run: |
+          bash .tfold-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          P="$GITHUB_WORKSPACE/.tfold-probe"
+          mkdir -p "$P/shots"
+          cp run-output.log "$P/shots/run-output.log" 2>/dev/null || true
+          for log in "$P"/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD|XCTAssert|failed" "$log" | head -400 > "$P/shots/summary-$base.txt" || true
+            tail -300 "$log" > "$P/shots/tail-$base.txt" || true
+          done
+          find "$P/shots" -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          rm -rf "$P/shots/ios/attachments" "$P/shots/mac/attachments"
+          echo "tree=diag capture=${{ steps.capture.outcome }}" > "$P/shots/outcomes.txt"
+          mkdir -p out/diag
+          cp -R "$P/shots/." "out/diag/"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots-diag
+          path: out
+
+  report:
+    name: Push the results where a clone can read them
+    needs: [shots]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/thinking-fold-tail-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "shots: ${{ needs.shots.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "thinking-fold probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/thinking-fold-tail-results

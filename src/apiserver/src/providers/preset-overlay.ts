@@ -16,6 +16,13 @@ function governing(row: PresetBackedRow) {
   return row.followsPreset ? providerPreset(row.presetSlug) : undefined;
 }
 
+/** A key whose model values are its engine's own ACP catalogue's opaque selections, which neither the
+ *  row nor a models.dev list can supply: a legacy DeepSeek Harness row, and a Cursor key — Cursor CLI's
+ *  catalogue on each runner (docs/cursor-runtime-contract.md §10). */
+function acpCatalogueOnly(row: PresetBackedRow): boolean {
+  return row.runtime === AgentProvider.DSH || row.runtime === AgentProvider.CURSOR;
+}
+
 /**
  * The model a configured-provider session dispatches with when it has no explicit model.
  *
@@ -26,7 +33,7 @@ function governing(row: PresetBackedRow) {
  * (followsPreset false) and keeps its own default from then on.
  */
 export function presetDefaultModel(row: PresetBackedRow): string | null {
-  if (row.runtime === AgentProvider.DSH) return null;
+  if (acpCatalogueOnly(row)) return null;
   const preset = governing(row);
   return preset ? catalogDefaultModel(preset) : row.defaultModel;
 }
@@ -42,9 +49,9 @@ export function presetDefaultModel(row: PresetBackedRow): string | null {
  * it's better than an empty picker.
  */
 export function withPreset<T extends PresetBackedRow>(row: T): T {
-  if (row.runtime === AgentProvider.DSH) {
-    // Harness config option values are opaque and session-scoped. Only its ACP catalogue owns
-    // these ids; a provider row or a models.dev list cannot supply a fallback selection.
+  if (acpCatalogueOnly(row)) {
+    // Harness and Cursor CLI config option values are opaque and session-scoped. Only their ACP
+    // catalogues own these ids; a provider row or a models.dev list cannot supply a fallback selection.
     return { ...row, models: [], defaultModel: null, modelsFromRuntime: true } as T;
   }
   const preset = governing(row);
@@ -69,7 +76,7 @@ export function withPreset<T extends PresetBackedRow>(row: T): T {
  * Swift `WorkspaceDefaults.models(for:catalog:configured:)`); this is what lets dispatch agree.
  */
 export function followsRuntimeCatalog(row: PresetBackedRow): boolean {
-  return row.runtime === AgentProvider.DSH || governing(row)?.modelsFromRuntime === true;
+  return acpCatalogueOnly(row) || governing(row)?.modelsFromRuntime === true;
 }
 
 /**

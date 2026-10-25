@@ -1,0 +1,23 @@
+== effective configuration 1-previous-version at 2026-10-17T11:20:07Z, checkout c291f9af6dcf908758b9d0e2bdad17cc6e90bb10
+-- .env (mode 644; secrets redacted)
+DATABASE_URL="postgresql://orbit:orbit@localhost:5432/orbit?schema=public"
+JWT_SECRET=<redacted>
+PROVIDER_SECRET_KEY=<redacted>
+PORT=3000
+PUBLIC_ORIGIN="http://localhost:2086"
+-- data/managed-runners
+(absent)
+-- apiserver: managed runner environment
+(none)
+-- apiserver: mounts
+
+-- apiserver: what it said about managed runners at start
+-- docker-channel: (no container)
+-- network orbit-managed-runners: (absent)
+-- docker compose ps
+orbit-apiserver	orbit-apiserver:local	Up About a minute (healthy)
+orbit-gateway	nginx:alpine	Up 9 seconds (healthy)
+orbit-pgbackup	postgres:16-alpine	Up About a minute
+orbit-postgres	postgres:16-alpine	Up About a minute (healthy)
+orbit-web	orbit-web	Up 15 seconds (healthy)
+orbit-wiki-worker	orbit-apiserver:local	Up 16 seconds

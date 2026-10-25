@@ -32,7 +32,8 @@ import { ProjectOpenItemService } from './project-open-item.service';
  *
  * This is deliberately a PostgreSQL spec: the validation is a write-path contract, the FK's
  * `SET NULL` is a database contract, and the escalation reader and sweep must share the same SQL.
- * A generic coordinator chat turn is not progress on an exception; an attached live fix is.
+ * A generic coordinator chat turn is not progress on an exception; an attached live fix is, and an
+ * answered delivery takes the item up for a coordinator that is still up (revision 13).
  */
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -318,38 +319,50 @@ test('a live fix has no escalation deadline, then one quiet window after it ends
     }
   });
 
-test('the answered delivery counts, but an unrelated chat turn does not', { skip, timeout: 180_000 }, async () => {
-  const stack = await connect();
-  try {
-    const w = await world(stack, 'chat-clock');
-    const item = await failedItem(stack, w, 'chat-clock');
-    const delivery = await stack.db.projectOpenItemDelivery.findFirstOrThrow({
-      where: { itemId: item.id, purpose: 'ITEM' },
-      orderBy: { createdAt: 'desc' },
-    });
-    const delivered = await stack.db.conversationTurn.findFirstOrThrow({
-      where: { sessionId: delivery.sessionId, clientTurnId: delivery.clientTurnId },
-    });
-    const old = new Date(Date.now() - 3 * 60 * 60 * 1_000);
-    await stack.db.conversationTurn.update({
-      where: { id: delivered.id },
-      data: { deliveredAt: old, answeredAt: old, status: 'ANSWERED' },
-    });
-    await ageItem(stack, item.id, 3 * 60 * 60 * 1_000);
+test('an answered delivery holds the item for its coordinator; unanswered, a generic chat turn does not',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'chat-clock');
 
-    const chat = await stack.sessions.createTurn(w.ownerId, w.coordinatorSessionId, {
-      clientTurnId: randomUUID(), content: 'unrelated project chat', intent: 'NEXT_TURN',
-    });
-    await stack.db.conversationTurn.update({
-      where: { id: chat.turnId },
-      data: { deliveredAt: new Date(), answeredAt: new Date(), status: 'ANSWERED' },
-    });
-    const escalated = await stack.escalation.sweep();
-    assert.ok(escalated.some((row) => row.itemId === item.id),
-      'generic chat does not renew the item delivery clock');
-  } finally {
-    await stack.db.$disconnect();
-  }
-});
+      // Answered three hours ago by the conversation the project is coordinated from, which is still
+      // up: taken up, so it has no deadline however long ago that was (§4.6, revision 13).
+      const taken = await failedItem(stack, w, 'chat-clock-taken');
+      const delivery = await stack.db.projectOpenItemDelivery.findFirstOrThrow({
+        where: { itemId: taken.id, purpose: 'ITEM' },
+        orderBy: { createdAt: 'desc' },
+      });
+      const delivered = await stack.db.conversationTurn.findFirstOrThrow({
+        where: { sessionId: delivery.sessionId, clientTurnId: delivery.clientTurnId },
+      });
+      const old = new Date(Date.now() - 3 * 60 * 60 * 1_000);
+      await stack.db.conversationTurn.update({
+        where: { id: delivered.id },
+        data: { deliveredAt: old, answeredAt: old, status: 'ANSWERED' },
+      });
+      await ageItem(stack, taken.id, 3 * 60 * 60 * 1_000);
+
+      // Never answered, beside it — and the conversation's latest turn is a generic chat a moment ago.
+      const unanswered = await failedItem(stack, w, 'chat-clock-unanswered');
+      await ageItem(stack, unanswered.id, 3 * 60 * 60 * 1_000);
+      const chat = await stack.sessions.createTurn(w.ownerId, w.coordinatorSessionId, {
+        clientTurnId: randomUUID(), content: 'unrelated project chat', intent: 'NEXT_TURN',
+      });
+      await stack.db.conversationTurn.update({
+        where: { id: chat.turnId },
+        data: { deliveredAt: new Date(), answeredAt: new Date(), status: 'ANSWERED' },
+      });
+
+      const escalated = (await stack.escalation.sweep()).map((row) => row.itemId);
+      assert.ok(!escalated.includes(taken.id), 'the coordinator that answered the delivery keeps the item');
+      assert.ok(escalated.includes(unanswered.id),
+        'generic chat neither takes an item up nor renews its delivery clock');
+      const read = await stack.openItems.list(w.ownerId, w.projectId);
+      assert.equal(read.withCoordinator.find((row) => row.itemId === taken.id)?.escalateAt, null,
+        'the reader agrees that a taken-up item has no deadline');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
 
 test('the fix-link PostgreSQL target is explicitly disposable', { skip }, verifyDisposableDatabase);

@@ -1,0 +1,145 @@
+{
+  "at": "2026-10-18T00:44:51.180+00:00",
+  "attachments": [],
+  "defaultWorkspace": {
+    "auto_init_git": true,
+    "enable_worktree": true,
+    "id": "01a14c74-cd3e-7266-9f9e-3838eccb45be",
+    "name": "Default",
+    "runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "target_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "work_dir": "/var/lib/orbit/home/orbit-repos/default"
+  },
+  "display": {
+    "acceptsWork": true,
+    "detail": "It went to sleep while idle. Send a message to wake it; its workspace and files are kept.",
+    "ensure": false,
+    "kind": "sleeping",
+    "moving": false,
+    "retry": false,
+    "signIn": false,
+    "startsNewSession": true,
+    "title": "Managed runner asleep"
+  },
+  "mapping": {
+    "attempt": 0,
+    "demand_revision": 1,
+    "desired_state": "SLEEPING",
+    "generation": 2,
+    "id": "01a14c74-cd40-70fe-9eaf-66a6bf073d61",
+    "initial_provider": "deepseek",
+    "last_demand_at": "2026-10-18T00:42:26.624+00:00",
+    "last_error": null,
+    "management_state": "SLEEPING",
+    "node_name": null,
+    "pod_name": null,
+    "pod_uid": null,
+    "pv_uid": "d86b7ef7-1d16-447c-b317-ec70d2b0cea9",
+    "pvc_name": "mr-data-01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "pvc_uid": "3831f550-8fc3-4718-8fbd-940a7979157b",
+    "reservation": {
+      "compute": null,
+      "pool": "bb0a87ab-68f7-4a2c-90b9-626e139eadbc",
+      "storage": {
+        "durableBytes": 2147483648,
+        "reservedAt": "2026-10-18T00:41:25.590Z"
+      },
+      "version": 1
+    },
+    "revision": 17,
+    "state_entered_at": "2026-10-18T00:43:51.063+00:00",
+    "volume_handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-5d9bc8b5-7e96-4cce-9e70-4f3e14c98007"
+  },
+  "owner": "amy",
+  "pod": null,
+  "podsUsingTheClaim": [],
+  "pv": {
+    "handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-5d9bc8b5-7e96-4cce-9e70-4f3e14c98007",
+    "image": "csi-vol-5d9bc8b5-7e96-4cce-9e70-4f3e14c98007",
+    "reclaim": "Retain",
+    "uid": "d86b7ef7-1d16-447c-b317-ec70d2b0cea9"
+  },
+  "pvc": {
+    "createdAt": "2026-10-18T00:41:25Z",
+    "phase": "Bound",
+    "uid": "3831f550-8fc3-4718-8fbd-940a7979157b",
+    "volumeName": "pvc-3831f550-8fc3-4718-8fbd-940a7979157b"
+  },
+  "runner": {
+    "capabilities": [
+      "antigravity-account-login/v1",
+      "antigravity-account-remove/v1",
+      "antigravity-google-login/v1",
+      "claude-account-login/v1",
+      "claude-account-move/v1",
+      "claude-account-remove/v1",
+      "codex-account-login/v1",
+      "codex-account-move/v1",
+      "codex-account-remove/v1",
+      "codex-rate-limit-reset-v1",
+      "cursor-account-login/v1",
+      "cursor-account-remove/v1",
+      "cursor-key-check/v1",
+      "integration-job/v1",
+      "kimi-account-login/v1",
+      "kimi-account-move/v1",
+      "kimi-account-remove/v1",
+      "kimi-login-region/v1",
+      "managed-runner-instance-v1",
+      "managed-runner-sleep-v1",
+      "promotion-automatic-land/v1",
+      "session-claude-coordinator-context-v1",
+      "session-claude-steer-withdraw-v1",
+      "session-codex-coordinator-context-v1",
+      "session-codex-steer-v1",
+      "session-current-work-routing-v1",
+      "session-merge-recovery-v1",
+      "session-move/v1",
+      "session-orchestration-credential-v1",
+      "session-terminal-handoff-v1",
+      "session-worktree-ops-v1",
+      "source-pin/v1",
+      "wiki-maintenance-run/v1",
+      "wiki-repo-op-read/v1",
+      "wiki-repo-op/v1",
+      "provider:claude",
+      "provider:codex",
+      "provider:opencode",
+      "provider:antigravity",
+      "provider:dsh",
+      "os:linux"
+    ],
+    "enrolled_at": "2026-10-18T00:41:25.564",
+    "id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "last_heartbeat_at": "2026-10-18T00:43:45.144",
+    "name": "orbit-managed",
+    "status": "ONLINE",
+    "token_hash_prefix": "69bab4e3e12c"
+  },
+  "sessions": [
+    {
+      "id": "01a14c75-bbb6-724b-83b5-8d8649235e38",
+      "retry_at": null,
+      "retry_attempts": 0,
+      "status": "AWAITING_INPUT",
+      "task_id": null,
+      "title": "T06-AMY-S1 hello from amy's first session"
+    }
+  ],
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": true
+    },
+    "desiredState": "SLEEPING",
+    "heartbeatStatus": "ONLINE",
+    "managementState": "SLEEPING",
+    "reason": null,
+    "retryAfter": null,
+    "revision": 17,
+    "usable": false
+  }
+}

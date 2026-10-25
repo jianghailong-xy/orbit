@@ -1,0 +1,36 @@
+{
+  "action": "sleep",
+  "answer": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34hkStZUFwfMnlkqFdxh1",
+    "contractVersion": 1,
+    "desiredState": "SLEEPING",
+    "enabled": true,
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": "deepseek-4",
+    "lastHeartbeatAt": "2026-10-17T23:44:02.570Z",
+    "managementState": "READY",
+    "reason": null,
+    "retryAfter": null,
+    "revision": 14,
+    "runnerId": "34hkStZO8ZS2duDLFwczC",
+    "runnerPublicId": "34hkStZO8ZS2duDLFwczC",
+    "usable": true,
+    "workspaceId": "34hkStZUFwfMnlkqFdxh1",
+    "workspacePublicId": "34hkStZUFwfMnlkqFdxh1"
+  },
+  "at": "2026-10-17T23:44:26.396+00:00",
+  "before": {
+    "desiredState": "RUNNING",
+    "managementState": "READY",
+    "revision": 13
+  },
+  "owner": "ivy",
+  "status": 202
+}

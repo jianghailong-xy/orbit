@@ -1,0 +1,205 @@
+{
+ "beyond": [
+  {
+   "clusters": [
+    [
+     [
+      197,
+      207
+     ],
+     [
+      148,
+      157
+     ],
+     65,
+     20
+    ]
+   ],
+   "max": 20,
+   "pixels": 65,
+   "shot": "chromium-dark-phone/p42-runners-loading.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      367,
+      372
+     ],
+     [
+      414,
+      420
+     ],
+     11,
+     3
+    ]
+   ],
+   "max": 3,
+   "pixels": 11,
+   "shot": "chromium-dark-phone/p42-workspace-menu.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      782,
+      791
+     ],
+     [
+      749,
+      758
+     ],
+     62,
+     20
+    ]
+   ],
+   "max": 20,
+   "pixels": 62,
+   "shot": "chromium-light-desktop/p42-keys-loading.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      782,
+      791
+     ],
+     [
+      108,
+      117
+     ],
+     62,
+     20
+    ]
+   ],
+   "max": 20,
+   "pixels": 62,
+   "shot": "chromium-light-desktop/p42-runners-loading.png"
+  }
+ ],
+ "missing": [],
+ "screenshots": {
+  "antialias": 12,
+  "beyond": 4,
+  "identical": 628,
+  "missing": 0
+ },
+ "styleDeltas": {},
+ "tests": {
+  "notPassedDel": [
+   "chromium-dark-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "chromium-light-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "webkit-dark-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "webkit-light-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed"
+  ],
+  "notPassedRef": [
+   "chromium-dark-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "chromium-light-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "webkit-dark-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "webkit-light-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed"
+  ],
+  "total": 184
+ },
+ "traces": {
+  "differing": {
+   "webkit-dark-desktop :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Save anyway",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "apiKey": "sk-ant-fixture-0123456789",
+         "baseUrl": "https://api.anthropic.com",
+         "enabled": true,
+         "followsPreset": true,
+         "label": "Anthropic (Claude) 2",
+         "presetSlug": "anthropic",
+         "runtime": "claude"
+        },
+        "method": "POST",
+        "path": "/api/providers/mine"
+       }
+      ],
+      "step": "saved anyway",
+      "url": "/providers"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "apiKey": "sk-ant-fixture-0123456789",
+         "baseUrl": "https://api.anthropic.com",
+         "enabled": true,
+         "followsPreset": true,
+         "label": "Anthropic (Claude) 2",
+         "presetSlug": "anthropic",
+         "runtime": "claude"
+        },
+        "method": "POST",
+        "path": "/api/providers/mine"
+       }
+      ],
+      "step": "saved anyway",
+      "url": "/providers"
+     },
+     "step": "saved anyway"
+    }
+   ],
+   "webkit-dark-phone :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Leave pool",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/providers/shared-pools/2zwQZ2hd93IvLb59t6vPn/leave"
+       }
+      ],
+      "step": "left",
+      "url": "/providers"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/providers/shared-pools/2zwQZ2hd93IvLb59t6vPn/leave"
+       }
+      ],
+      "step": "left",
+      "url": "/providers"
+     },
+     "step": "left"
+    }
+   ]
+  },
+  "equal": 178,
+  "total": 180
+ }
+}

@@ -724,7 +724,8 @@ suite('(q) the core tables keep every trigger that predates this project', async
   // `project_task_status_count_insert`/`_delete`/`_move`. Six additions by two later projects:
   // same reasoning as `session` above — the number moves, the claim does not. 30 since 0329
   // dropped 0122's `task_dispatch_authority_derive` with the column it stamped: a later, separate
-  // removal, named below with the others.
+  // removal, named below with the others. 32 since 0441 added `project_rollup_candidate_task_insert`
+  // and `_update`, which append to `project_rollup_candidate` and write no other relation.
   //
   // `session`: 12 since 0350 added `session_request_recipient_ended`, which closes the session
   // requests still waiting on a session whose run ends, and writes only `session_request`; 13 since
@@ -736,8 +737,14 @@ suite('(q) the core tables keep every trigger that predates this project', async
   // records on the confirmation reviews still waiting on a session that their reviewer ended, and
   // writes only `task_owner_confirmation_review`; 16 since 0377 added
   // `session_dsh_runner_acquisition_guard`, which reads the provider and locks the runner
-  // FOR SHARE NOWAIT to enforce DeepSeek Harness admission without writing another relation.
-  assert.deepEqual(counts, { run_event: 1, session: 16, task: 30 });
+  // FOR SHARE NOWAIT to enforce DeepSeek Harness admission without writing another relation; 19
+  // since 0414 added `session_acquisition_engine_guard`, `session_engine_from_task_pin` and
+  // `session_engine_immutable`, which keep a recorded session engine claimed only by a control
+  // plane that reads it, give an older one's task run the task's engine pin, and refuse any change
+  // of a recorded engine — reading `task` at most, and writing no other relation; 20 since 0426
+  // added `session_cursor_runner_acquisition_guard`, which does for Cursor CLI what 0377's does for
+  // DeepSeek Harness and writes no other relation either.
+  assert.deepEqual(counts, { run_event: 1, session: 20, task: 32 });
 
   // And every one that went is named, so a reader can tell a removal from an accident.
   for (const trigger of [

@@ -6,11 +6,11 @@ import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AgentProvider } from '@orbit/shared';
 import { api } from '../api';
-import { currentProviderChoice, providerChoices } from '../lib/sessionProviderChoices';
-import { RunnerEngines } from './RunnerEngines';
+import { currentProviderChoice, engineProviders } from '../lib/sessionProviderChoices';
+import { MachineEngines, RunnerEngines } from './RunnerEngines';
 import { clickRunnerMenuItem } from './RunnerEngines.test-helpers';
-import { RunnerEnginesSection } from './RunnerEnginesSection';
 import { probeReportsSignedIn } from './RunnerSignIn';
 import { AuthErrorCtx, Transcript } from './Transcript';
 import type { Runner } from './TasksSidePanel';
@@ -39,6 +39,16 @@ describe('Antigravity Google login across client surfaces', () => {
     container.innerHTML = renderToStaticMarkup(wrap(<RunnerEngines />, fixtures[state]));
     return container.querySelector('[data-engine="antigravity"]')!;
   }
+  /** The rows the runner's own page draws (MachineEngines, as RunnerDetailPage holds them), with every
+   *  group of accounts folded, as the card's start. */
+  const machinePage = (runner: Runner) => (
+    <MachineEngines runner={runner} signIn={null} onSignIn={() => {}} openAccounts={[]} onFoldAccounts={() => {}} machinePage />
+  );
+  function machineRow(runner: Runner) {
+    const container = document.createElement('div');
+    container.innerHTML = renderToStaticMarkup(wrap(machinePage(runner), runner));
+    return container.querySelector('[data-engine="antigravity"]')!;
+  }
 
   it('offers Google sign-in with a linked terms warning when signed out', () => {
     const rendered = row('signed-out');
@@ -57,13 +67,8 @@ describe('Antigravity Google login across client surfaces', () => {
     expect(rendered.textContent).toContain('5-hour18% remaining');
     expect(rendered.querySelectorAll('.re-reset')).toHaveLength(2);
     expect(rendered.querySelector('[aria-label="More actions"]')).not.toBeNull();
-    // The runner page's row carries the one bucket closest to its limit.
-    const summary = renderToStaticMarkup(wrap(<RunnerEnginesSection runner={fixtures.google} />, fixtures.google));
-    expect(summary).toContain('class="rd-engine-auth ok">Signed in<');
-    expect(summary).not.toContain('Google account');
-    expect(summary).toContain('18% remaining');
-    expect(summary).not.toContain('72% remaining');
-    expect(summary).toContain('resets');
+    // The runner's own page draws the same row.
+    expect(machineRow(fixtures.google).textContent).toBe(rendered.textContent);
   });
 
   it.each([['macos', 'not supported on macOS runners yet'], ['old', 'Update this runner']])('gates %s runners without offering Google sign-in', (state, hint) => {
@@ -74,18 +79,24 @@ describe('Antigravity Google login across client surfaces', () => {
   });
 
   it('keeps old runners visible on the runner page when they have not reported Antigravity', () => {
-    const runner = { ...fixtures.old, antigravity: undefined, engines: [{ engine: 'claude' as const, installed: true, auth: 'yes' as const }] };
-    const html = renderToStaticMarkup(wrap(<RunnerEnginesSection runner={runner} />, runner));
-    expect(html).toContain('Antigravity');
-    expect(html).toContain('Update runner');
-    expect(html).toContain('Update this runner to sign in with Google.');
-    expect(html).not.toContain('Sign in with Google');
+    // How the control plane describes a runner too old for Antigravity (runner-antigravity.spec.ts).
+    const runner = {
+      ...fixtures.old,
+      antigravity: { supported: false, installed: null, version: null, envKeyAvailable: false, authSource: null, googleLogin: 'needs_update' as const },
+      engines: [{ engine: 'claude' as const, installed: true, auth: 'yes' as const }],
+    };
+    const rendered = machineRow(runner);
+    expect(rendered.textContent).toContain('Antigravity');
+    expect(rendered.textContent).toContain('Update runner');
+    expect(rendered.textContent).toContain('Update this runner to sign in with Google.');
+    expect(rendered.textContent).not.toContain('Sign in with Google');
+    expect(rendered.querySelector('button')).toBeNull();
   });
 
   it.each([['macos', 'not supported on macOS runners yet'], ['old', 'Update this runner']])('preserves the env-key identity and %s Google-login guidance on the runner page', (state, hint) => {
     const runner = structuredClone(fixtures['env-key']);
     runner.antigravity!.googleLogin = fixtures[state].antigravity!.googleLogin;
-    for (const view of [<RunnerEnginesSection runner={runner} />, <RunnerEngines />]) {
+    for (const view of [machinePage(runner), <RunnerEngines />]) {
       const html = renderToStaticMarkup(wrap(view, runner));
       expect(html).toContain('env key');
       expect(html).toContain(hint);
@@ -107,9 +118,11 @@ describe('Antigravity Google login across client surfaces', () => {
     expect(rendered.textContent).toContain('Install');
     expect(rendered.textContent).not.toContain('Sign in with Google');
     for (const antigravity of [runner.antigravity, undefined]) {
-      const summary = renderToStaticMarkup(wrap(<RunnerEnginesSection runner={{ ...runner, antigravity }} />, runner));
-      expect(summary).toContain('class="rd-engine-auth muted">Not installed');
-      expect(summary).not.toContain('class="rd-engine-auth muted">Update runner');
+      const machine = machineRow({ ...runner, antigravity });
+      expect(machine.textContent).toContain('Not installed');
+      expect(machine.textContent).toContain('Install');
+      expect(machine.textContent).not.toContain('Update runner');
+      expect(machine.textContent).not.toContain('Sign in with Google');
     }
   });
 
@@ -119,9 +132,10 @@ describe('Antigravity Google login across client surfaces', () => {
     expect(unknown.textContent).toContain('Unknown');
     expect(unknown.querySelector('[aria-label="More actions"]')).toBeNull();
     expect(unknown.textContent).not.toContain('remaining');
-    const summary = renderToStaticMarkup(wrap(<RunnerEnginesSection runner={fixtures.unknown} />, fixtures.unknown));
-    expect(summary).not.toContain('Google account');
-    expect(summary).not.toContain('Signed in');
+    const machine = machineRow(fixtures.unknown);
+    expect(machine.textContent).toContain('Unknown');
+    expect(machine.textContent).not.toContain('Google account');
+    expect(machine.textContent).not.toContain('Signed in');
     expect(probeReportsSignedIn([fixtures['env-key']], fixtures.google.id, 'antigravity')).toBe(false);
     expect(probeReportsSignedIn([fixtures.google], fixtures.google.id, 'antigravity')).toBe(true);
   });
@@ -137,15 +151,20 @@ describe('Antigravity Google login across client surfaces', () => {
   });
 
   it('offers the Google account in the selector and blocks a lapsed login while Gemini keys still work', () => {
-    const choices = (r: Runner) => providerChoices([{ slug: 'gemini-key', label: 'Gemini', runtime: 'antigravity', presetSlug: 'gemini', models: [] }], undefined, undefined, r.engines, [], undefined, r.antigravity);
-    expect(choices(fixtures.google).find(c => c.slug === 'antigravity')).toMatchObject({ kind: 'engine', labelDetail: 'Google account' });
+    const choices = (r: Runner) =>
+      engineProviders(AgentProvider.ANTIGRAVITY, {
+        configured: [{ slug: 'gemini-key', label: 'Gemini', runtime: 'antigravity', presetSlug: 'gemini', models: [], engines: ['antigravity', 'opencode'] }],
+        engineHealth: r.engines,
+        antigravity: r.antigravity,
+      });
+    expect(choices(fixtures.google).find(c => c.slug === 'antigravity')).toMatchObject({ kind: 'login', labelDetail: 'Google account' });
     expect(choices(fixtures.expired).find(c => c.slug === 'antigravity')).toMatchObject({ unavailable: 'Not signed in', fixEngine: 'antigravity' });
     expect(choices(fixtures.expired).find(c => c.slug === 'gemini-key')?.unavailable).toBeUndefined();
     const signedOut = structuredClone(fixtures.google);
     signedOut.engines![0].auth = 'no';
     expect(choices(signedOut).find(c => c.slug === 'antigravity')?.unavailable).toBe('Not signed in');
     expect(choices(fixtures['env-key']).find(c => c.slug === 'antigravity')?.labelDetail).toBe('env key');
-    expect(currentProviderChoice('antigravity', [], undefined, [], undefined, fixtures.expired.antigravity).unavailable).toBe('Not signed in');
+    expect(currentProviderChoice(AgentProvider.ANTIGRAVITY, 'antigravity', [], { configured: [], antigravity: fixtures.expired.antigravity }).unavailable).toBe('Not signed in');
   });
 
   it('puts the Google sign-in button and warning on an unauthenticated transcript card', () => {

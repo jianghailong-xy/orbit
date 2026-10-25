@@ -1,0 +1,839 @@
+{
+ "a": {
+  "dir": "docs/evidence/cursor-cli/2026.10.14-941492e/p0c",
+  "cli": {
+   "version": "2026.10.14-941492e",
+   "pinned": true,
+   "tarballSha256": "6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d",
+   "launcherSha256": "2ccc9a8e167797641448b5e5c936f006ba137a2555f117f38c5eb76a5238a233",
+   "indexJsSha256": "27776c587649c9b6fa9671ac8dda2810f29346e66937efe8ac254012d2113482"
+  },
+  "lastRunId": "2026-10-17T02-53-37-145Z"
+ },
+ "b": {
+  "dir": "docs/evidence/cursor-cli/2026.10.16-e3cb207/p0c",
+  "cli": {
+   "version": "2026.10.16-e3cb207",
+   "pinned": false,
+   "tarballSha256": "3aa3f48cd7a3909a98c9b3f2a4085f0c021088bf826690b22c61f424c843e552",
+   "launcherSha256": "2ccc9a8e167797641448b5e5c936f006ba137a2555f117f38c5eb76a5238a233",
+   "indexJsSha256": "d8e53146370532fce1069aff55efb0df0fa290ce8d53f5f84d1eac1147f8cc29"
+  },
+  "lastRunId": "2026-10-17T02-55-37-289Z"
+ },
+ "volatileSetAside": "numbers under timing/size/pid/count keys, run times, redacted-id numbering, the two version strings",
+ "packages": {
+  "files": [
+   458,
+   460
+  ],
+  "bytes": [
+   586293819,
+   585824095
+  ],
+  "added": [
+   ".npmrc",
+   "7853.index.js",
+   "8044.index.js",
+   "9227.index.js"
+  ],
+  "removed": [
+   "159.index.js",
+   "2496.index.js"
+  ],
+  "changed": [
+   {
+    "file": "1326.index.js",
+    "bytes": [
+     39027,
+     39927
+    ]
+   },
+   {
+    "file": "1499.index.js",
+    "bytes": [
+     12470,
+     12429
+    ]
+   },
+   {
+    "file": "1623.index.js",
+    "bytes": [
+     116136,
+     116164
+    ]
+   },
+   {
+    "file": "190.index.js",
+    "bytes": [
+     116619,
+     119968
+    ]
+   },
+   {
+    "file": "2240.index.js",
+    "bytes": [
+     221412,
+     239721
+    ]
+   },
+   {
+    "file": "2422.index.js",
+    "bytes": [
+     1966,
+     1970
+    ]
+   },
+   {
+    "file": "272.index.js",
+    "bytes": [
+     6881,
+     6881
+    ]
+   },
+   {
+    "file": "2721.index.js",
+    "bytes": [
+     92713,
+     94570
+    ]
+   },
+   {
+    "file": "3190.index.js",
+    "bytes": [
+     1795,
+     1804
+    ]
+   },
+   {
+    "file": "3244.index.js",
+    "bytes": [
+     899,
+     903
+    ]
+   },
+   {
+    "file": "3284.index.js",
+    "bytes": [
+     573,
+     577
+    ]
+   },
+   {
+    "file": "3548.index.js",
+    "bytes": [
+     416968,
+     479508
+    ]
+   },
+   {
+    "file": "3857.index.js",
+    "bytes": [
+     6881,
+     6885
+    ]
+   },
+   {
+    "file": "4161.index.js",
+    "bytes": [
+     5594,
+     5594
+    ]
+   },
+   {
+    "file": "4632.index.js",
+    "bytes": [
+     21998,
+     21998
+    ]
+   },
+   {
+    "file": "478.index.js",
+    "bytes": [
+     14533,
+     14521
+    ]
+   },
+   {
+    "file": "5336.index.js",
+    "bytes": [
+     29510,
+     29764
+    ]
+   },
+   {
+    "file": "5380.index.js",
+    "bytes": [
+     59306,
+     62952
+    ]
+   },
+   {
+    "file": "5688.index.js",
+    "bytes": [
+     483885,
+     512574
+    ]
+   },
+   {
+    "file": "5720.index.js",
+    "bytes": [
+     2505,
+     2615
+    ]
+   },
+   {
+    "file": "5818.index.js",
+    "bytes": [
+     9840,
+     826
+    ]
+   },
+   {
+    "file": "6136.index.js",
+    "bytes": [
+     100885,
+     100922
+    ]
+   },
+   {
+    "file": "6174.index.js",
+    "bytes": [
+     15810,
+     15810
+    ]
+   },
+   {
+    "file": "6918.index.js",
+    "bytes": [
+     3587,
+     3586
+    ]
+   },
+   {
+    "file": "7000.index.js",
+    "bytes": [
+     983231,
+     975314
+    ]
+   },
+   {
+    "file": "7373.index.js",
+    "bytes": [
+     12363,
+     3349
+    ]
+   },
+   {
+    "file": "7627.index.js",
+    "bytes": [
+     4893,
+     4893
+    ]
+   },
+   {
+    "file": "7923.index.js",
+    "bytes": [
+     15700,
+     18506
+    ]
+   },
+   {
+    "file": "8096.index.js",
+    "bytes": [
+     6286401,
+     6341117
+    ]
+   },
+   {
+    "file": "8192.index.js",
+    "bytes": [
+     57900,
+     57946
+    ]
+   },
+   {
+    "file": "903.index.js",
+    "bytes": [
+     9590,
+     576
+    ]
+   },
+   {
+    "file": "9063.index.js",
+    "bytes": [
+     9811,
+     9728
+    ]
+   },
+   {
+    "file": "9494.index.js",
+    "bytes": [
+     47082,
+     47079
+    ]
+   },
+   {
+    "file": "crepectl",
+    "bytes": [
+     23489192,
+     23486184
+    ]
+   },
+   {
+    "file": "cursor-agent-sea",
+    "bytes": [
+     136842432,
+     136580288
+    ]
+   },
+   {
+    "file": "cursor-agent-worker-sea",
+    "bytes": [
+     146279616,
+     146148544
+    ]
+   },
+   {
+    "file": "cursorsandbox",
+    "bytes": [
+     4613624,
+     4613768
+    ]
+   },
+   {
+    "file": "diff-worker.js",
+    "bytes": [
+     5945,
+     7908
+    ]
+   },
+   {
+    "file": "file_service.linux-x64-gnu.node",
+    "bytes": [
+     46760072,
+     46790328
+    ]
+   },
+   {
+    "file": "index.js",
+    "bytes": [
+     7727655,
+     7425055
+    ]
+   },
+   {
+    "file": "index.js.LICENSE.txt",
+    "bytes": [
+     1719,
+     1561
+    ]
+   },
+   {
+    "file": "merkle-tree-napi.linux-x64-gnu.node",
+    "bytes": [
+     4305856,
+     4304584
+    ]
+   },
+   {
+    "file": "node_modules/better-sqlite3/build/Release/obj.target/deps/sqlite3.a",
+    "bytes": [
+     2591556,
+     2591556
+    ]
+   },
+   {
+    "file": "node_modules/better-sqlite3/build/Release/sqlite3.a",
+    "bytes": [
+     2591556,
+     2591556
+    ]
+   },
+   {
+    "file": "node_modules/tree-sitter/build/Release/obj.target/tree_sitter.a",
+    "bytes": [
+     262596,
+     262596
+    ]
+   },
+   {
+    "file": "node_modules/tree-sitter/build/Release/tree_sitter.a",
+    "bytes": [
+     262596,
+     262596
+    ]
+   },
+   {
+    "file": "package.json",
+    "bytes": [
+     64,
+     327
+    ]
+   }
+  ],
+  "unchanged": 409,
+  "acpLoadsChunks": [
+   [
+    "2240",
+    "8096",
+    "7923",
+    "190",
+    "1429",
+    "2496",
+    "1623",
+    "6136"
+   ],
+   [
+    "2240",
+    "8096",
+    "7923",
+    "190",
+    "1429",
+    "7853",
+    "1623",
+    "6136"
+   ]
+  ]
+ },
+ "scenarios": {
+  "api-key-session-management": {
+   "passed": [
+    true,
+    false
+   ],
+   "checks": [
+    32,
+    32
+   ],
+   "checksThatDiffer": [
+    {
+     "check": "session/new without mcpServers -> -32603 with zod issues",
+     "a": true,
+     "b": false
+    }
+   ],
+   "detailDifferences": []
+  },
+  "ask-question": {
+   "onlyIn": "2026.10.14-941492e"
+  },
+  "ask-question-plan-mode": {
+   "onlyIn": "2026.10.14-941492e"
+  },
+  "background-shell-and-commit": {
+   "onlyIn": "2026.10.14-941492e"
+  },
+  "credential-stores": {
+   "passed": [
+    true,
+    true
+   ],
+   "checks": [
+    10,
+    10
+   ],
+   "checksThatDiffer": [],
+   "detailDifferences": []
+  },
+  "debug-log-location": {
+   "passed": [
+    true,
+    true
+   ],
+   "checks": [
+    5,
+    5
+   ],
+   "checksThatDiffer": [],
+   "detailDifferences": []
+  },
+  "directory-variables": {
+   "passed": [
+    true,
+    true
+   ],
+   "checks": [
+    8,
+    8
+   ],
+   "checksThatDiffer": [],
+   "detailDifferences": [
+    {
+     "path": "detail.files per layout (after initialize + session/new).home-only",
+     "onlyA": [
+      "home/.cursor/statsig-cache.json 644 938946"
+     ],
+     "onlyB": [
+      "home/.cursor/statsig-cache.json 644 938979"
+     ]
+    },
+    {
+     "path": "detail.files per layout (after initialize + session/new).home+CURSOR_CONFIG_DIR",
+     "onlyA": [
+      "cursor-config/statsig-cache.json 644 938946"
+     ],
+     "onlyB": [
+      "cursor-config/statsig-cache.json 644 938979"
+     ]
+    },
+    {
+     "path": "detail.files per layout (after initialize + session/new).home+CURSOR_DATA_DIR",
+     "onlyA": [
+      "home/.cursor/statsig-cache.json 644 938946"
+     ],
+     "onlyB": [
+      "home/.cursor/statsig-cache.json 644 938979"
+     ]
+    },
+    {
+     "path": "detail.files per layout (after initialize + session/new).home+XDG_CONFIG_HOME",
+     "onlyA": [
+      "xdg-config/cursor/statsig-cache.json 644 938946"
+     ],
+     "onlyB": [
+      "xdg-config/cursor/statsig-cache.json 644 938979"
+     ]
+    },
+    {
+     "path": "detail.files per layout (after initialize + session/new).home+XDG_DATA_HOME+XDG_CACHE_HOME",
+     "onlyA": [
+      "home/.cursor/statsig-cache.json 644 938946"
+     ],
+     "onlyB": [
+      "home/.cursor/statsig-cache.json 644 938979"
+     ]
+    },
+    {
+     "path": "detail.files per layout (after initialize + session/new).all-variables",
+     "onlyA": [
+      "cursor-config/statsig-cache.json 644 938946"
+     ],
+     "onlyB": [
+      "cursor-config/statsig-cache.json 644 938979"
+     ]
+    }
+   ]
+  },
+  "failure-shapes-without-prompt": {
+   "passed": [
+    true,
+    true
+   ],
+   "checks": [
+    17,
+    17
+   ],
+   "checksThatDiffer": [],
+   "detailDifferences": []
+  },
+  "install-and-version": {
+   "passed": [
+    true,
+    true
+   ],
+   "checks": [
+    7,
+    7
+   ],
+   "checksThatDiffer": [],
+   "detailDifferences": [
+    {
+     "path": "detail.unpacked.files",
+     "a": "458",
+     "b": "460"
+    },
+    {
+     "path": "detail.unpacked.indexJsSha256",
+     "a": "\"27776c587649c9b6fa9671ac8dda2810f29346e66937efe8ac254012d2113482\"",
+     "b": "\"d8e53146370532fce1069aff55efb0df0fa290ce8d53f5f84d1eac1147f8cc29\""
+    },
+    {
+     "path": "detail.about.latestStatus",
+     "a": "\"update_available\"",
+     "b": "\"up_to_date\""
+    },
+    {
+     "path": "detail.update channel: latest build and status (recorded, not asserted).latestStatus",
+     "a": "\"update_available\"",
+     "b": "\"up_to_date\""
+    },
+    {
+     "path": "detail.update channel: latest build and status (recorded, not asserted).isLatest",
+     "a": "false",
+     "b": "true"
+    },
+    {
+     "path": "detail.installer-home-tree",
+     "onlyA": [
+      ".local/share/cursor-agent/versions/<VERSION>/1326.index.js 644 39027",
+      ".local/share/cursor-agent/versions/<VERSION>/1499.index.js 644 12470",
+      ".local/share/cursor-agent/versions/<VERSION>/159.index.js 644 353078",
+      ".local/share/cursor-agent/versions/<VERSION>/1623.index.js 644 116136",
+      ".local/share/cursor-agent/versions/<VERSION>/190.index.js 644 116619",
+      ".local/share/cursor-agent/versions/<VERSION>/2240.index.js 644 221412",
+      ".local/share/cursor-agent/versions/<VERSION>/2422.index.js 644 1966",
+      ".local/share/cursor-agent/versions/<VERSION>/2496.index.js 644 30631",
+      ".local/share/cursor-agent/versions/<VERSION>/2721.index.js 644 92713",
+      ".local/share/cursor-agent/versions/<VERSION>/3190.index.js 644 1795",
+      ".local/share/cursor-agent/versions/<VERSION>/3244.index.js 644 899",
+      ".local/share/cursor-agent/versions/<VERSION>/3284.index.js 644 573",
+      ".local/share/cursor-agent/versions/<VERSION>/3548.index.js 644 416968",
+      ".local/share/cursor-agent/versions/<VERSION>/3857.index.js 644 6881",
+      ".local/share/cursor-agent/versions/<VERSION>/478.index.js 644 14533",
+      ".local/share/cursor-agent/versions/<VERSION>/5336.index.js 644 29510",
+      ".local/share/cursor-agent/versions/<VERSION>/5380.index.js 644 59306",
+      ".local/share/cursor-agent/versions/<VERSION>/5688.index.js 644 483885",
+      ".local/share/cursor-agent/versions/<VERSION>/5720.index.js 644 2505",
+      ".local/share/cursor-agent/versions/<VERSION>/5818.index.js 644 9840",
+      ".local/share/cursor-agent/versions/<VERSION>/6136.index.js 644 100885"
+     ],
+     "onlyB": [
+      ".local/share/cursor-agent/versions/<VERSION>/.npmrc 644 20",
+      ".local/share/cursor-agent/versions/<VERSION>/1326.index.js 644 39927",
+      ".local/share/cursor-agent/versions/<VERSION>/1499.index.js 644 12429",
+      ".local/share/cursor-agent/versions/<VERSION>/1623.index.js 644 116164",
+      ".local/share/cursor-agent/versions/<VERSION>/190.index.js 644 119968",
+      ".local/share/cursor-agent/versions/<VERSION>/2240.index.js 644 239721",
+      ".local/share/cursor-agent/versions/<VERSION>/2422.index.js 644 1970",
+      ".local/share/cursor-agent/versions/<VERSION>/2721.index.js 644 94570",
+      ".local/share/cursor-agent/versions/<VERSION>/3190.index.js 644 1804",
+      ".local/share/cursor-agent/versions/<VERSION>/3244.index.js 644 903",
+      ".local/share/cursor-agent/versions/<VERSION>/3284.index.js 644 577",
+      ".local/share/cursor-agent/versions/<VERSION>/3548.index.js 644 479508",
+      ".local/share/cursor-agent/versions/<VERSION>/3857.index.js 644 6885",
+      ".local/share/cursor-agent/versions/<VERSION>/478.index.js 644 14521",
+      ".local/share/cursor-agent/versions/<VERSION>/5336.index.js 644 29764",
+      ".local/share/cursor-agent/versions/<VERSION>/5380.index.js 644 62952",
+      ".local/share/cursor-agent/versions/<VERSION>/5688.index.js 644 512574",
+      ".local/share/cursor-agent/versions/<VERSION>/5720.index.js 644 2615",
+      ".local/share/cursor-agent/versions/<VERSION>/5818.index.js 644 826",
+      ".local/share/cursor-agent/versions/<VERSION>/6136.index.js 644 100922",
+      ".local/share/cursor-agent/versions/<VERSION>/6174.index.js 644 15810"
+     ]
+    }
+   ]
+  },
+  "login-link-and-logout": {
+   "passed": [
+    true,
+    true
+   ],
+   "checks": [
+    4,
+    4
+   ],
+   "checksThatDiffer": [],
+   "detailDifferences": []
+  },
+  "mcp-and-hook-sources-at-startup": {
+   "passed": [
+    true,
+    true
+   ],
+   "checks": [
+    8,
+    8
+   ],
+   "checksThatDiffer": [],
+   "detailDifferences": []
+  },
+  "network-drop-mid-turn": {
+   "onlyIn": "2026.10.14-941492e"
+  },
+  "parameterized-model-picker": {
+   "passed": [
+    true,
+    true
+   ],
+   "checks": [
+    7,
+    7
+   ],
+   "checksThatDiffer": [],
+   "detailDifferences": []
+  },
+  "process-signals": {
+   "passed": [
+    true,
+    true
+   ],
+   "checks": [
+    5,
+    5
+   ],
+   "checksThatDiffer": [],
+   "detailDifferences": []
+  },
+  "repo-config-baseline": {
+   "onlyIn": "2026.10.14-941492e"
+  },
+  "repo-config-with-flags": {
+   "onlyIn": "2026.10.14-941492e"
+  },
+  "shell-wrapper-env": {
+   "onlyIn": "2026.10.14-941492e"
+  },
+  "signed-out-handshake": {
+   "passed": [
+    true,
+    true
+   ],
+   "checks": [
+    12,
+    12
+   ],
+   "checksThatDiffer": [],
+   "detailDifferences": []
+  },
+  "startup-processes-and-network": {
+   "passed": [
+    true,
+    true
+   ],
+   "checks": [
+    12,
+    12
+   ],
+   "checksThatDiffer": [],
+   "detailDifferences": [
+    {
+     "path": "detail.per variant.fresh data dir.programs",
+     "onlyA": [
+      "rg --files --follow --max-depth"
+     ],
+     "onlyB": [
+      "rg --files --max-depth 16"
+     ]
+    },
+    {
+     "path": "detail.per variant.fresh data dir.rpcs",
+     "a": "[{\"phase\":\"initialize\",\"process\":\"index.js acp\"},{\"phase\":\"initialize\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\"},{\"phase\":\"session/new\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.DashboardService/GetUserPrivacyMode\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.ServerConfigServic…",
+     "b": "[{\"phase\":\"initialize\",\"process\":\"index.js acp\"},{\"phase\":\"initialize\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\"},{\"phase\":\"session/new\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.DashboardService/GetUserPrivacyMode\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.ServerConfigServic…"
+    },
+    {
+     "path": "detail.per variant.project data dir exists.programs",
+     "onlyA": [
+      "rg --files --follow --max-depth"
+     ],
+     "onlyB": [
+      "rg --files --max-depth 16"
+     ]
+    },
+    {
+     "path": "detail.per variant.project data dir exists.rpcs",
+     "a": "[{\"phase\":\"initialize\",\"process\":\"index.js acp\"},{\"phase\":\"initialize\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\"},{\"phase\":\"session/new\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.DashboardService/GetUserPrivacyMode\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.ServerConfigServic…",
+     "b": "[{\"phase\":\"initialize\",\"process\":\"index.js acp\"},{\"phase\":\"initialize\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\"},{\"phase\":\"session/new\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.DashboardService/GetUserPrivacyMode\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.ServerConfigServic…"
+    },
+    {
+     "path": "detail.per variant.project data dir exists.workerLog",
+     "a": "\"[info] runServer socketPath=/tmp/.cursor/mnt-data-cursor-p0-runs-<TIME>-startup-processes-and--b95bdb4/worker.sock\\n[debug] Starting typescript-language-server npxPath=/usr/local/bin/npx\\n[debug] Child Typescript LSP process spawned with PID <n>\\n[debug] Sending LSP initialize request\\n[debug] did not initialize LSP provider error=Request initialize failed with message: Could not find a valid TypeScript installation. Please ensure that the \\\"typescript\\\" dependency is installed in the workspace or that a valid `tsserver.path` is specified. Exiting.\\n[info] Skipping codebase telemetry sync\\n\"",
+     "b": "\"[info] runServer socketPath=/tmp/.cursor/mnt-data-cursor-p0-runs-<TIME>-startup-processes-and-1d7d482/worker.sock\\n[debug] Starting typescript-language-server npxPath=/usr/local/bin/npx\\n[debug] Child Typescript LSP process spawned with PID <n>\\n[debug] Sending LSP initialize request\\n[debug] did not initialize LSP provider error=Request initialize failed with message: Could not find a valid TypeScript installation. Please ensure that the \\\"typescript\\\" dependency is installed in the workspace or that a valid `tsserver.path` is specified. Exiting.\\n[info] Skipping codebase telemetry sync\\n\""
+    },
+    {
+     "path": "detail.per variant.project data dir exists.unixSockets",
+     "onlyA": [
+      "/tmp/.cursor/mnt-data-cursor-p0-runs-<TIME>-startup-processes-and--b95bdb4/worker.sock"
+     ],
+     "onlyB": [
+      "/tmp/.cursor/mnt-data-cursor-p0-runs-<TIME>-startup-processes-and-1d7d482/worker.sock"
+     ]
+    },
+    {
+     "path": "detail.per variant.--disable-indexing.programs",
+     "onlyA": [
+      "rg --files --follow --max-depth"
+     ],
+     "onlyB": [
+      "rg --files --max-depth 16"
+     ]
+    },
+    {
+     "path": "detail.per variant.--disable-indexing.rpcs",
+     "a": "[{\"phase\":\"initialize\",\"process\":\"index.js acp\"},{\"phase\":\"initialize\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\"},{\"phase\":\"session/new\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.DashboardService/GetUserPrivacyMode\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.ServerConfigServic…",
+     "b": "[{\"phase\":\"initialize\",\"process\":\"index.js acp\"},{\"phase\":\"initialize\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\"},{\"phase\":\"session/new\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.DashboardService/GetUserPrivacyMode\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.ServerConfigServic…"
+    },
+    {
+     "path": "detail.per variant.--disable-indexing.workerLog",
+     "a": "\"[info] runServer socketPath=/tmp/.cursor/mnt-data-cursor-p0-runs-<TIME>-startup-processes-and--b95bdb4/worker.sock\\n[debug] Starting typescript-language-server npxPath=/usr/local/bin/npx\\n[debug] Child Typescript LSP process spawned with PID <n>\\n[debug] Sending LSP initialize request\\n[debug] did not initialize LSP provider error=Request initialize failed with message: Could not find a valid TypeScript installation. Please ensure that the \\\"typescript\\\" dependency is installed in the workspace or that a valid `tsserver.path` is specified. Exiting.\\n\"",
+     "b": "\"[info] runServer socketPath=/tmp/.cursor/mnt-data-cursor-p0-runs-<TIME>-startup-processes-and-1d7d482/worker.sock\\n[debug] Starting typescript-language-server npxPath=/usr/local/bin/npx\\n[debug] Child Typescript LSP process spawned with PID <n>\\n[debug] Sending LSP initialize request\\n[debug] did not initialize LSP provider error=Request initialize failed with message: Could not find a valid TypeScript installation. Please ensure that the \\\"typescript\\\" dependency is installed in the workspace or that a valid `tsserver.path` is specified. Exiting.\\n\""
+    },
+    {
+     "path": "detail.per variant.--disable-indexing.unixSockets",
+     "onlyA": [
+      "/tmp/.cursor/mnt-data-cursor-p0-runs-<TIME>-startup-processes-and--b95bdb4/worker.sock"
+     ],
+     "onlyB": [
+      "/tmp/.cursor/mnt-data-cursor-p0-runs-<TIME>-startup-processes-and-1d7d482/worker.sock"
+     ]
+    },
+    {
+     "path": "detail.per variant.--disable-codebase-ref.programs",
+     "onlyA": [
+      "rg --files --follow --max-depth"
+     ],
+     "onlyB": [
+      "rg --files --max-depth 16"
+     ]
+    },
+    {
+     "path": "detail.per variant.--disable-codebase-ref.rpcs",
+     "a": "[{\"phase\":\"initialize\",\"process\":\"index.js acp\"},{\"phase\":\"initialize\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\"},{\"phase\":\"session/new\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.DashboardService/GetUserPrivacyMode\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.ServerConfigService/GetServerCon…",
+     "b": "[{\"phase\":\"initialize\",\"process\":\"index.js acp\"},{\"phase\":\"initialize\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\"},{\"phase\":\"session/new\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.DashboardService/GetUserPrivacyMode\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.ServerConfigService/GetServerCon…"
+    },
+    {
+     "path": "detail.per variant.TMPDIR set.programs",
+     "onlyA": [
+      "rg --files --follow --max-depth"
+     ],
+     "onlyB": [
+      "rg --files --max-depth 16"
+     ]
+    },
+    {
+     "path": "detail.per variant.TMPDIR set.rpcs",
+     "a": "[{\"phase\":\"initialize\",\"process\":\"index.js acp\"},{\"phase\":\"initialize\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\"},{\"phase\":\"session/new\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.DashboardService/GetUserPrivacyMode\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.ServerConfigServic…",
+     "b": "[{\"phase\":\"initialize\",\"process\":\"index.js acp\"},{\"phase\":\"initialize\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\"},{\"phase\":\"session/new\",\"kind\":\"fetch\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.AnalyticsService/BootstrapStatsig\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.DashboardService/GetUserPrivacyMode\",\"times\":\"<n>\"},{\"phase\":\"session/new\",\"kind\":\"https\",\"host\":\"api2.cursor.sh\",\"method\":\"POST\",\"path\":\"/aiserver.v1.ServerConfigServic…"
+    },
+    {
+     "path": "detail.per variant.TMPDIR set.workerLog",
+     "a": "\"[info] runServer socketPath=/tmp/.cursor/mnt-data-cursor-p0-runs-<TIME>-startup-processes-and--b95bdb4/worker.sock\\n[debug] Starting typescript-language-server npxPath=/usr/local/bin/npx\\n[debug] Child Typescript LSP process spawned with PID <n>\\n[debug] Sending LSP initialize request\\n[debug] did not initialize LSP provider error=Request initialize failed with message: Could not find a valid TypeScript installation. Please ensure that the \\\"typescript\\\" dependency is installed in the workspace or that a valid `tsserver.path` is specified. Exiting.\\n[info] Skipping codebase telemetry sync\\n\"",
+     "b": "\"[info] runServer socketPath=/tmp/.cursor/mnt-data-cursor-p0-runs-<TIME>-startup-processes-and-1d7d482/worker.sock\\n[debug] Starting typescript-language-server npxPath=/usr/local/bin/npx\\n[debug] Child Typescript LSP process spawned with PID <n>\\n[debug] Sending LSP initialize request\\n[debug] did not initialize LSP provider error=Request initialize failed with message: Could not find a valid TypeScript installation. Please ensure that the \\\"typescript\\\" dependency is installed in the workspace or that a valid `tsserver.path` is specified. Exiting.\\n[info] Skipping codebase telemetry sync\\n\""
+    },
+    {
+     "path": "detail.per variant.TMPDIR set.unixSockets",
+     "onlyA": [
+      "/tmp/.cursor/mnt-data-cursor-p0-runs-<TIME>-startup-processes-and--b95bdb4/worker.sock"
+     ],
+     "onlyB": [
+      "/tmp/.cursor/mnt-data-cursor-p0-runs-<TIME>-startup-processes-and-1d7d482/worker.sock"
+     ]
+    }
+   ]
+  },
+  "team-pin": {
+   "passed": [
+    true,
+    true
+   ],
+   "checks": [
+    4,
+    4
+   ],
+   "checksThatDiffer": [],
+   "detailDifferences": []
+  },
+  "usage-api": {
+   "passed": [
+    true,
+    true
+   ],
+   "checks": [
+    5,
+    5
+   ],
+   "checksThatDiffer": [],
+   "detailDifferences": []
+  }
+ }
+}

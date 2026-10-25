@@ -1,0 +1,1049 @@
+diff --git a/src/shared/src/dto.ts b/src/shared/src/dto.ts
+index 9849a8c..6af2587 100644
+--- a/src/shared/src/dto.ts
++++ b/src/shared/src/dto.ts
+@@ -1135,7 +1135,7 @@ export interface CodexRateLimitResetResultRefusal {
+  * Antigravity signs in a Google account, and only on a runner that declares
+  * `antigravity-google-login/v1` (RunnerAntigravityState.googleLogin).
+  */
+-export type LoginEngine = 'claude' | 'codex' | 'kimi' | 'antigravity';
++export type LoginEngine = 'claude' | 'codex' | 'kimi' | 'antigravity' | 'cursor';
+ 
+ /**
+  * Kimi Code's two sign-in sites, as `kimi login --region` names them: `mainland-cn` is kimi.com,
+diff --git a/src/shared/src/enums.ts b/src/shared/src/enums.ts
+index c34da57..221d97e 100644
+--- a/src/shared/src/enums.ts
++++ b/src/shared/src/enums.ts
+@@ -460,4 +460,6 @@ export enum AgentProvider {
+   /** DeepSeek Harness, driven through ACP. An engine like the rest: it runs on a DeepSeek key, which
+    *  Claude Code and OpenCode can run as well (providerEngines.ts). */
+   DSH = 'dsh',
++  /** Cursor CLI (`agent acp`), driven through ACP; see docs/cursor-runtime-contract.md. */
++  CURSOR = 'cursor',
+ }
+diff --git a/src/shared/src/models.ts b/src/shared/src/models.ts
+index edc80e0..5bd6fcb 100644
+--- a/src/shared/src/models.ts
++++ b/src/shared/src/models.ts
+@@ -19,6 +19,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
+   // ACP supplies opaque model tokens via configOptions. No static model or window fallback:
+   // a blank selection leaves the Harness's current/default choice intact (P0 contract §4).
+   [AgentProvider.DSH]: '',
++  [AgentProvider.CURSOR]: 'default',
+ };
+ 
+ /**
+diff --git a/src/shared/src/permissionSemantics.ts b/src/shared/src/permissionSemantics.ts
+index 7c7eb75..f97ee95 100644
+--- a/src/shared/src/permissionSemantics.ts
++++ b/src/shared/src/permissionSemantics.ts
+@@ -49,6 +49,7 @@ export function runtimeApprovalSupport(provider: string): ApprovalSupport {
+     case AgentProvider.KIMI:
+     case AgentProvider.CODEX:
+     case AgentProvider.DSH:
++    case AgentProvider.CURSOR:
+       return 'partial';
+     default:
+       return 'none';
+@@ -260,6 +261,41 @@ export function derivePermissionSemantics(
+     };
+   }
+ 
++  // Board prototype (docs/mocks/cursor-engine): Cursor CLI over ACP never asks before a workspace
++  // write (contract §5.4), so Default can't be enforced. D6 decides between refusing it (A) and
++  // running it as Accept Edits (B); the board's prototype reads which from globalThis.__ORBIT_D6__.
++  if (provider === AgentProvider.CURSOR) {
++    const d6b = (globalThis as { __ORBIT_D6__?: string }).__ORBIT_D6__ === 'B';
++    const asks = 'Commands, MCP tools and web fetches ask you first.';
++    switch (mode) {
++      case PermissionMode.DEFAULT:
++        return d6b
++          ? { mode, unapproved: 'ask', approvalSupport, honored: false,
++              note: 'Cursor CLI can’t ask before it edits a file, so Default runs as Accept Edits: edits inside the workspace happen without asking. ' + asks,
++              shortNote: 'runs as Accept Edits, file edits don’t ask' }
++          : { mode, unapproved: 'deny', approvalSupport, honored: false,
++              note: 'Cursor CLI can’t ask before it edits a file, so Default is not offered. Use Accept Edits, or Plan to keep files unchanged.',
++              shortNote: 'not on Cursor CLI, it edits files without asking' };
++      case PermissionMode.ACCEPT_EDITS:
++        return { mode, unapproved: 'ask', approvalSupport, honored: true, note: 'Edits inside the workspace run without asking. ' + asks };
++      case PermissionMode.PLAN:
++        return { mode, unapproved: 'deny', approvalSupport, honored: true,
++          note: 'Cursor’s plan mode blocks file writes, and Orbit refuses every command, MCP tool and web fetch without asking.',
++          shortNote: 'file writes blocked, commands refused' };
++      case PermissionMode.AUTO:
++        return { mode, unapproved: 'allow', approvalSupport, honored: true,
++          note: 'Edits inside the workspace run without asking and are not reviewed. Orbit allows a routine command itself and asks you about the rest, such as a push or an install.',
++          shortNote: 'file edits aren’t reviewed' };
++      case PermissionMode.BYPASS:
++        return { mode, unapproved: 'allow', approvalSupport, honored: true,
++          note: 'Nothing asks. If your Cursor team turns off Run Everything, Cursor still sends requests, and Orbit asks you.' };
++      default:
++        return { mode, unapproved: 'deny', approvalSupport, honored: true,
++          note: 'Commands, MCP tools and web fetches are refused without asking, but edits inside the workspace still happen.',
++          shortNote: 'file edits still happen' };
++    }
++  }
++
+   // Bypass on a runner deployed as root. Unlike every other unhonored mode here this one is not a
+   // difference of degree: the CLI refuses to start at all, so the session produces nothing. It runs
+   // as Don't Ask instead (normalizeBuiltinPermissionMode), which still never asks — disclosed here
+diff --git a/src/shared/src/planUsage.ts b/src/shared/src/planUsage.ts
+index 0d4d295..d6966a7 100644
+--- a/src/shared/src/planUsage.ts
++++ b/src/shared/src/planUsage.ts
+@@ -214,6 +214,7 @@ const OWN_CREDENTIAL_KEYS: Partial<Record<string, readonly string[]>> = {
+   claude: ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_OAUTH_TOKEN'],
+   antigravity: ['GEMINI_API_KEY'],
+   kimi: ['KIMI_MODEL_NAME', 'KIMI_MODEL_API_KEY'],
++  cursor: ['CURSOR_API_KEY'],
+ };
+ 
+ /** The engines whose variables above count only all together. Kimi Code runs on a model of the
+@@ -231,6 +232,7 @@ const ENGINE_DEFAULT_DIR: Partial<Record<string, (home: string | undefined) => s
+   claude: (home) => (home === undefined ? undefined : `${home}/.claude`),
+   antigravity: () => undefined,
+   kimi: (home) => (home === undefined ? undefined : `${home}/.kimi-code`),
++  cursor: () => undefined,
+ };
+ 
+ /** The variable that hands one account's directory to each engine that keeps accounts: the CLI's own
+@@ -241,10 +243,11 @@ export const ACCOUNT_DIR_VAR: Readonly<Record<AccountEngine, string>> = {
+   claude: 'CLAUDE_CONFIG_DIR',
+   antigravity: 'ORBIT_ANTIGRAVITY_GOOGLE_DIR',
+   kimi: 'KIMI_CODE_HOME',
++  cursor: 'ORBIT_CURSOR_ACCOUNT_DIR',
+ };
+ 
+ /** The engines that keep a login per directory, so that one runner holds several accounts of them. */
+-export const ACCOUNT_ENGINES: readonly AccountEngine[] = ['claude', 'codex', 'antigravity', 'kimi'];
++export const ACCOUNT_ENGINES: readonly AccountEngine[] = ['claude', 'codex', 'antigravity', 'kimi', 'cursor'];
+ 
+ export function isAccountEngine(engine: string | null | undefined): engine is AccountEngine {
+   return !!engine && (ACCOUNT_ENGINES as readonly string[]).includes(engine);
+diff --git a/src/shared/src/providerEngines.ts b/src/shared/src/providerEngines.ts
+index 6d15e3f..6ae9c7f 100644
+--- a/src/shared/src/providerEngines.ts
++++ b/src/shared/src/providerEngines.ts
+@@ -25,6 +25,7 @@ export const ALL_ENGINES: readonly AgentProvider[] = [
+   AgentProvider.ANTIGRAVITY,
+   AgentProvider.OPENCODE,
+   AgentProvider.DSH,
++  AgentProvider.CURSOR,
+ ];
+ 
+ /** Each engine's CLI by its own product name, as the web already shows it (runnerEngines.ts). */
+@@ -35,6 +36,7 @@ export const ENGINE_CLI_NAMES: Readonly<Record<AgentProvider, string>> = {
+   [AgentProvider.ANTIGRAVITY]: 'Antigravity CLI',
+   [AgentProvider.OPENCODE]: 'OpenCode',
+   [AgentProvider.DSH]: 'DeepSeek Harness',
++  [AgentProvider.CURSOR]: 'Cursor CLI',
+ };
+ 
+ export function isEngine(value: unknown): value is AgentProvider {
+@@ -101,6 +103,7 @@ export function credentialEngines(credential: EngineCredential): AgentProvider[]
+ }
+ 
+ function keyEngines(key: Extract<EngineCredential, { kind: 'key' }>): AgentProvider[] {
++  if (key.presetSlug === 'cursor' || key.runtime === AgentProvider.CURSOR) return [AgentProvider.CURSOR];
+   const dialect = keyDialect(key.runtime);
+   if (!dialect) return [];
+   if (key.subscriptionToken) return dialect === 'anthropic' ? [AgentProvider.CLAUDE] : [];
+diff --git a/src/shared/src/providerPresets.ts b/src/shared/src/providerPresets.ts
+index eb65455..a271db2 100644
+--- a/src/shared/src/providerPresets.ts
++++ b/src/shared/src/providerPresets.ts
+@@ -58,7 +58,7 @@ export interface ProviderPreset {
+    * key — DeepSeek Harness. `dsh` is only the retired `deepseek-harness` preset's, kept until every
+    * deployment has folded those rows into DeepSeek keys.
+    */
+-  runtime?: 'claude' | 'codex' | 'kimi' | 'antigravity' | 'dsh';
++  runtime?: 'claude' | 'codex' | 'kimi' | 'antigravity' | 'dsh' | 'cursor';
+   /**
+    * True when this vendor's endpoint IS the runtime CLI's own — Anthropic for `claude`, OpenAI
+    * for `codex`, Gemini for `antigravity`. The runner probes those CLIs for their live model list
+@@ -202,6 +202,18 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
+     brand: { mono: 'K', from: '#3a3a3a', to: '#111111' },
+     keyUrl: 'https://platform.moonshot.ai',
+   },
++  {
++    // Board prototype (docs/mocks/cursor-engine): a Cursor User API Key, which runs Cursor CLI alone.
++    slug: 'cursor',
++    label: 'Cursor',
++    runtime: 'cursor',
++    baseUrl: 'https://api2.cursor.sh',
++    modelsFromRuntime: true,
++    models: [{ value: 'default', label: 'Auto' }],
++    defaultModel: 'default',
++    brand: { mono: 'C', from: '#2b2b2b', to: '#000000' },
++    keyUrl: 'https://cursor.com/dashboard',
++  },
+   {
+     slug: 'glm',
+     label: 'Z.AI (GLM)',
+diff --git a/src/shared/src/providerTransport.ts b/src/shared/src/providerTransport.ts
+index dc11e24..92208b9 100644
+--- a/src/shared/src/providerTransport.ts
++++ b/src/shared/src/providerTransport.ts
+@@ -22,6 +22,7 @@ export const PROVIDER_TRANSPORTS: Record<AgentProvider, ProviderTransport> = {
+   // ACP JSON-RPC over one resident process; a prompt remains outstanding until ordered updates
+   // settle. It has cancellation and configuration, but no mid-turn steer (P0 contract §4).
+   [AgentProvider.DSH]: 'json-rpc',
++  [AgentProvider.CURSOR]: 'json-rpc',
+   // One process per turn, carrying that turn's prompt and exiting with it.
+   [AgentProvider.OPENCODE]: 'one-shot',
+   // One resident `agy --print=` process per session, stream-json in both directions, a `result`
+@@ -78,6 +79,8 @@ const MID_TURN_STEER: Record<AgentProvider, string | typeof ALWAYS | typeof NEVE
+   [AgentProvider.CODEX]: SESSION_CODEX_STEER_V1,
+   [AgentProvider.KIMI]: NEVER,
+   [AgentProvider.DSH]: NEVER,
++  // A second session/prompt cancels the running turn (contract §3.2): a mid-turn message queues.
++  [AgentProvider.CURSOR]: NEVER,
+   [AgentProvider.OPENCODE]: NEVER,
+   // agy runs a mid-turn frame as a turn of its own after the current `result` (contract §8.1),
+   // and the runner refuses a steer for it (provider_runtime.go). A message sent mid-turn queues.
+diff --git a/src/web/src/components/PendingTray.tsx b/src/web/src/components/PendingTray.tsx
+index 5a0a7df..ddd6bc6 100644
+--- a/src/web/src/components/PendingTray.tsx
++++ b/src/web/src/components/PendingTray.tsx
+@@ -115,11 +115,13 @@ function Row({ row }: { row: PendingTrayRow }) {
+   );
+ }
+ 
+-export function PendingTray({ rows }: { rows: readonly PendingTrayRow[] }) {
++export function PendingTray({ rows, note }: { rows: readonly PendingTrayRow[]; note?: string | null }) {
+   if (rows.length === 0) return null;
+   return (
+     <div className="pending-tray" role="list" aria-label="Messages not read yet">
+       {rows.map((row) => <Row key={row.key} row={row} />)}
++      {/* Board prototype (docs/mocks/cursor-engine): why nothing here can go into the running turn. */}
++      {note && <div className="pending-tray-note">{note}</div>}
+     </div>
+   );
+ }
+diff --git a/src/web/src/components/RunnerEngines.tsx b/src/web/src/components/RunnerEngines.tsx
+index b2cbf67..be85f3b 100644
+--- a/src/web/src/components/RunnerEngines.tsx
++++ b/src/web/src/components/RunnerEngines.tsx
+@@ -82,9 +82,15 @@ const ENGINES = Object.keys(ENGINE_NAME) as LoginEngine[];
+ /** An engine this page has a row for: one a runner signs in with, or OpenCode — which it does not. */
+ type RowEngine = LoginEngine | 'opencode';
+ 
++/* Board prototype (docs/mocks/cursor-engine): what a machine that predates Cursor CLI, or holds a
++   version other than the pinned one, says on Cursor's row. */
++const CURSOR_PIN = '2026.10.14-941492e';
++const cursorUnsupported = (runner: Runner) => !runner.capabilities?.includes('provider:cursor');
++const cursorWrongVersion = (health?: RunnerEngineHealth) => health?.engine === 'cursor' && !!health.installed && !!health.version && health.version !== CURSOR_PIN;
++
+ /** Every engine a card can draw a row for: the CLIs a runner signs in with, and OpenCode — the one
+  *  engine here with no sign-in to relay, whose row exists to be installed and kept current. */
+-const ROW_ENGINES: RowEngine[] = [...ENGINE_SLUGS, 'opencode'];
++const ROW_ENGINES: RowEngine[] = [...ENGINE_SLUGS, 'opencode', 'cursor'];
+ 
+ /** The rows one card draws: those, minus OpenCode on a machine that never reports it. A runner
+  *  reports every CLI on the machine, so the row appearing is that report's doing — and one that has
+@@ -319,6 +325,8 @@ interface Quota {
+   /** Kimi only: the login's quota was read and its plan carries no limit — no window to gauge
+    *  (kimiNoQuotaLimit), said as "No quota limit" rather than "No quota reported". */
+   noLimit: boolean;
++  /** Cursor only (board prototype): the plan's limit is not readable (the Free plan's requests). */
++  unavailable?: string | null;
+ }
+ 
+ /** Older than this, a reading has missed three of the runner's reads (every 5 min with a session
+@@ -327,6 +335,8 @@ const STALE_QUOTA_MS = 30 * 60_000;
+ 
+ function quotaOf(kind: RowKind, snapshot: PlanUsageSnapshot | null, online: boolean, now: number): Quota {
+   if (kind !== 'in' || !snapshot) return { windows: [], stale: null, noLimit: false };
++  const cursorPlan = (snapshot as { unavailable?: string; planName?: string });
++  if (cursorPlan.unavailable) return { windows: [], stale: null, noLimit: false, unavailable: cursorPlan.planName ?? 'Free' };
+   const windows = currentPlanUsageRows(snapshot, now);
+   const read = snapshot.fetchedAt;
+   // An offline machine reads nothing, and the card already says it is offline: one note per row
+@@ -380,7 +390,14 @@ function QuotaCell({ kind, quota, next }: { kind: RowKind; quota: Quota; next?:
+           {quota.stale && <div className="re-stale">{quota.stale}</div>}
+         </>
+       ) : (
+-        <span className="re-quota-none">
++        quota.unavailable ? (
++          <>
++            <div className="re-quota-head"><b>{quota.unavailable} plan</b></div>
++            <span className="re-quota-none re-quota-na" title={`Cursor doesn’t report how much of the ${quota.unavailable} plan’s requests are left, so Orbit shows no number rather than 0%.`}>
++              Usage unavailable
++            </span>
++          </>
++        ) : <span className="re-quota-none">
+           {kind === 'in'
+             ? quota.noLimit
+               ? RUNNER_ENGINE_NO_QUOTA_LIMIT
+@@ -394,6 +411,7 @@ function QuotaCell({ kind, quota, next }: { kind: RowKind; quota: Quota; next?:
+   );
+ }
+ 
++
+ /** Routine account maintenance stays in one menu. The pause dialog lives outside the dropdown
+  *  so closing the menu does not unmount the operation it just opened. `moreRef` is its button. */
+ function RunnerAccountMenu({ onRename, onSignIn, onRemove, offline, removing, pause, moreRef }: {
+@@ -491,7 +509,7 @@ function FoldedAccounts({
+       )}
+       <QuotaCell
+         kind={kind}
+-        quota={{ windows: binding ? [binding] : [], stale: quota.stale, noLimit: quota.noLimit }}
++        quota={{ windows: binding ? [binding] : [], stale: quota.stale, noLimit: quota.noLimit, unavailable: quota.unavailable }}
+         next={account && accountNameOf(account)}
+       />
+     </>
+@@ -604,7 +622,8 @@ function EngineRow({
+     loginEngine !== null && engineKeepsAccounts(loginEngine) &&
+     (kind === 'in' || kind === 'out' || kind === 'unknown') &&
+     (loginEngine !== 'antigravity' || addsAntigravityAccounts(runner)) &&
+-    (loginEngine !== 'kimi' || addsKimiAccounts(runner))
++    (loginEngine !== 'kimi' || addsKimiAccounts(runner)) &&
++    (loginEngine !== 'cursor' || !!runner.capabilities?.includes('cursor-account-login/v1'))
+       ? loginEngine
+       : null;
+ 
+@@ -739,7 +758,13 @@ function EngineRow({
+       {/* Signed in and quota are each account's, not the engine's: an open group's head has no
+           columns for them, and its line runs the width of the row instead. Folded, it speaks for
+           its accounts in those columns. */}
+-      {!grouped && (
++      {!grouped && cursorWrongVersion(health) && (
++        <>
++          <div className="re-status"><Badge tone="orange">Unsupported version</Badge></div>
++          <div className="re-quota"><span className="re-quota-none">—</span></div>
++        </>
++      )}
++      {!grouped && !cursorWrongVersion(health) && (
+         <>
+           <AccountPauseStatus until={single?.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={antigravity?.supported === false ? { color: 'orange', label: 'Update runner' } : statusOf(kind, quota, now)} />
+           {envKey ? <div className="re-quota re-meta">env key · runs on your Gemini key</div> : <QuotaCell kind={kind} quota={quota} />}
+@@ -766,7 +791,9 @@ function EngineRow({
+           </Button>
+         )}
+         {/* A group's sign-ins are its accounts', each on its own row. */}
+-        {!grouped && action()}
++        {!grouped && cursorWrongVersion(health) ? (
++          <Button size="small" className="re-action re-install" icon={<DownloadOutlined aria-hidden />}>Reinstall</Button>
++        ) : !grouped && action()}
+         {!grouped && (
+           <RunnerAccountMenu
+             offline={offline}
+@@ -799,6 +826,9 @@ function EngineRow({
+         </div>
+       )}
+       {loginHint && <div className="re-panel-hint re-login-note">{loginHint}</div>}
++      {cursorWrongVersion(health) && (
++        <div className="re-panel-hint re-login-note">Orbit runs Cursor CLI {CURSOR_PIN}. Reinstall puts that version back on this runner; sessions here can’t start until then.</div>
++      )}
+       {openCodeHint && <div className="re-panel-hint re-login-note">{openCodeHint}</div>}
+       {googleLogin === 'available' && signIn !== engine && <div className="re-login-note"><GoogleSignInTerms /></div>}
+ 
+@@ -1104,6 +1134,7 @@ function AccountRow({
+               account says its site first, which is each account's own (kimi.com or kimi.ai). */}
+           <div className="re-meta" title={accountDir(account)}>
+             {engine === 'kimi' && account.kimiRegion && `${KIMI_SITE[account.kimiRegion].domain} · `}
++            {engine === 'cursor' && (snapshot as { planName?: string } | undefined)?.planName && `${(snapshot as { planName?: string }).planName} plan · `}
+             {tildePath(accountDir(account))}
+             {account.fingerprintPrefix && ` · account ${account.fingerprintPrefix}…`}
+           </div>
+@@ -1546,9 +1577,7 @@ export function MachineEngines({
+     );
+   }
+   const rows = rowEnginesOf(engines);
+-  return (
+-    <>
+-      {rows.map((engine) => {
++  const renderRow = (engine: RowEngine) => {
+         const health = engineHealthOf(runner, engine);
+         const accounts = accountRowsOf(engine, health, runner.install);
+         // Read across the whole group, since a repeat is a fact about two of its rows.
+@@ -1594,8 +1623,23 @@ export function MachineEngines({
+             ))}
+           </Fragment>
+         );
+-      })}
++  };
++  return (
++    <>
++      {rows.filter((engine) => engine !== 'cursor').map(renderRow)}
+       <DshRunnerStatus runner={runner} />
++      {cursorUnsupported(runner) ? (
++        <div className="re-row" data-engine="cursor">
++          <div className="re-id">
++            <ProviderTile slug="cursor" label="Cursor CLI" size={28} />
++            <div style={{ minWidth: 0 }}><div className="re-name">Cursor CLI</div></div>
++          </div>
++          <div className="re-status"><Badge tone="orange">Update runner</Badge></div>
++          <div className="re-quota"><span className="re-quota-none">—</span></div>
++          <div className="re-act" />
++          <div className="re-panel-hint re-login-note">This runner predates Cursor CLI. It updates itself when no session is running on it.</div>
++        </div>
++      ) : rows.includes('cursor') ? renderRow('cursor') : null}
+     </>
+   );
+ }
+diff --git a/src/web/src/components/RunnerSignIn.tsx b/src/web/src/components/RunnerSignIn.tsx
+index 9e9f4cb..fc3054c 100644
+--- a/src/web/src/components/RunnerSignIn.tsx
++++ b/src/web/src/components/RunnerSignIn.tsx
+@@ -42,6 +42,7 @@ export const ENGINE_NAME: Record<LoginEngine, string> = {
+   codex: 'Codex',
+   kimi: 'Kimi Code',
+   antigravity: 'Antigravity',
++  cursor: 'Cursor CLI',
+ };
+ 
+ export function GoogleSignInTerms() {
+@@ -418,6 +419,42 @@ export function RunnerSignIn({
+   // both halves and wait for the CLI to finish approving itself. The code comes first, and the one
+   // press both copies it and opens the page it goes into (VS Code's "Copy & Continue to GitHub"), so
+   // what is left over there is a paste.
++  // Board prototype (docs/mocks/cursor-engine): Cursor's `agent login` prints one link and waits on it
++  // for about 27 minutes (contract §9). Nothing comes back through here — the runner sees the sign-in
++  // finish — so the card offers the link, says how long it lasts, and waits.
++  if (status === 'awaiting_approval' && s?.url && engine === 'cursor') {
++    const expiresAt = (s as RunnerLoginState & { expiresAt?: string }).expiresAt;
++    const left = expiresAt ? Math.max(1, Math.round((Date.parse(expiresAt) - Date.now()) / 60_000)) : 27;
++    const signInUrl = s.url;
++    return (
++      <div className="rsi">
++        <div className="rsi-hint">
++          {adding ? (
++            <>Sign in on <b>cursor.com</b> with the account you are adding:</>
++          ) : account && account !== 'default' ? (
++            <>Sign in on <b>cursor.com</b> with this account again:</>
++          ) : (
++            <>Sign in on <b>cursor.com</b> with the account this runner should use:</>
++          )}
++        </div>
++        <div className="rsi-actions">
++          <a className="rsi-open" href={signInUrl} target="_blank" rel="noopener noreferrer">
++            <ExportOutlined /> Open cursor.com
++          </a>
++          <button className="rsi-link" type="button" onClick={() => { void copyText(signInUrl).then((ok) => { if (ok) setCopiedUrl(signInUrl); }); }}>
++            {copiedUrl === signInUrl ? 'Sign-in link copied' : 'Copy sign-in link'}
++          </button>
++        </div>
++        <div className="rsi-row">
++          <LoadingOutlined /> Waiting for you to sign in… <span className="rsi-expiry">· link expires in {left} min</span>
++        </div>
++        <button className="rsi-link" onClick={() => cancel.mutate()} type="button">
++          Cancel
++        </button>
++      </div>
++    );
++  }
++
+   if (status === 'awaiting_approval' && s?.url) {
+     // Kimi's page belongs to one of its two sites, named so the user knows which account it wants.
+     const site = engine === 'kimi' ? kimiSiteOf(s.url) : null;
+@@ -602,6 +639,8 @@ export function RunnerSignIn({
+         >
+           {start.isPending
+             ? 'Starting…'
++            : status === 'failed' && engine === 'cursor'
++              ? 'Get a new link'
+             : status === 'failed'
+               ? `Try signing in to ${ENGINE_NAME[engine]} again`
+               : engine === 'antigravity' ? 'Sign in with Google' : `Sign in to ${ENGINE_NAME[engine]}`}
+diff --git a/src/web/src/components/Transcript.tsx b/src/web/src/components/Transcript.tsx
+index 12e65a7..00c1667 100644
+--- a/src/web/src/components/Transcript.tsx
++++ b/src/web/src/components/Transcript.tsx
+@@ -2444,7 +2444,7 @@ function AutoRetryCard({
+             ? `Tried ${help?.attempts} times — the quota still reports as spent. Over to you.`
+             : `Tried ${help?.attempts} times — the API is still failing. Over to you.`
+           : quota
+-            ? `${window.what} for ${help?.provider ?? 'this provider'}${
++            ? `${window.what} for ${help?.provider === 'cursor' ? 'Default (Cursor CLI)' : help?.provider ?? 'this provider'}${
+                 help?.runnerName ? ` on “${help.runnerName}”` : ''
+               } is used up.${continues
+                 ? ` Nothing to re-send — the limit landed on a turn that wasn’t yours.`
+@@ -2454,6 +2454,15 @@ function AutoRetryCard({
+                  ? ` Nothing to re-send — the failure landed on a turn that wasn’t yours.`
+                  : needsYou ? ' Auto-retry is off.' : ''}`}
+       </div>
++      {/* Board prototype (docs/mocks/cursor-engine): Cursor ends a turn it can't pay for with one line
++          of text ("Upgrade your plan to continue", contract §12). P5b turns it into this card; what
++          Cursor said is quoted, and the way on is a new session on an account with room (D5). */}
++      {quota && help?.provider === 'cursor' && (
++        <div className="chat-quota-msg">
++          Cursor answered “Upgrade your plan to continue”: Default’s Free plan has no requests left until Oct 3.
++          This conversation can’t move to Team yet — <a href="#">start a new session on Team</a>.
++        </div>
++      )}
+       {/* The error verbatim. Which one it was is the only actionable detail if it keeps
+           recurring, and unlike a quota's sentence it is not restated by anything above. */}
+       {!quota && <div className="chat-quota-err">{message}</div>}
+diff --git a/src/web/src/components/WorkspaceView.tsx b/src/web/src/components/WorkspaceView.tsx
+index 708ce1d..d6e2e5e 100644
+--- a/src/web/src/components/WorkspaceView.tsx
++++ b/src/web/src/components/WorkspaceView.tsx
+@@ -694,6 +694,7 @@ const ACCOUNT_MOVE_CAPABILITY: Record<AccountEngine, string> = {
+   claude: 'claude-account-move/v1',
+   antigravity: ANTIGRAVITY_ACCOUNT_LOGIN_CAPABILITY,
+   kimi: 'kimi-account-move/v1',
++  cursor: 'cursor-account-move/v1',
+ };
+ /** Where a session, and its workspace, keep the account each engine runs on — and whether a session's
+  *  was picked by hand. */
+@@ -744,7 +745,7 @@ function lastContextReading(events: RunEvent[]): { tokens: number; window?: numb
+ // Donut gauge for the context pill — a distinct silhouette from the linear plan-usage bar so the
+ // session-local context metric doesn't read as "another usage bar". Brand blue until it
+ // fills, then ramps amber (≥75%) → red (≥90%) as the window fills.
+-function ContextRing({ pct, tier }: { pct: number; tier: 'neutral' | 'warn' | 'danger' }) {
++function ContextRing({ pct, tier, na }: { pct: number; tier: 'neutral' | 'warn' | 'danger'; na?: boolean }) {
+   const r = 5.5;
+   const circ = 2 * Math.PI * r;
+   const frac = Math.min(100, Math.max(0, pct)) / 100;
+@@ -756,8 +757,8 @@ function ContextRing({ pct, tier }: { pct: number; tier: 'neutral' | 'warn' | 'd
+       viewBox="0 0 14 14"
+       aria-hidden="true"
+     >
+-      <circle className="context-ring-track" cx="7" cy="7" r={r} fill="none" strokeWidth="2.5" />
+-      <circle
++      <circle className="context-ring-track" cx="7" cy="7" r={r} fill="none" strokeWidth={na ? 1.5 : 2.5} strokeDasharray={na ? '2.2 2.2' : undefined} />
++      {!na && <circle
+         className="context-ring-fill"
+         cx="7"
+         cy="7"
+@@ -768,7 +769,7 @@ function ContextRing({ pct, tier }: { pct: number; tier: 'neutral' | 'warn' | 'd
+         strokeDasharray={circ}
+         strokeDashoffset={circ * (1 - frac)}
+         transform="rotate(-90 7 7)"
+-      />
++      />}
+     </svg>
+   );
+ }
+@@ -783,6 +784,7 @@ function ContextWindowIndicator({
+   provider,
+   modelCatalog,
+   configured,
++  unavailable,
+ }: {
+   tokens: number;
+   /** The window this session reported alongside its tokens, when it did. */
+@@ -791,6 +793,8 @@ function ContextWindowIndicator({
+   provider?: string;
+   modelCatalog?: Runner['modelCatalog'];
+   configured?: ConfiguredProvider[];
++  /** Board prototype: an engine that never reports context use (Cursor CLI, contract §4.1). */
++  unavailable?: string;
+ }) {
+   const windowTokens = reportedWindow ?? contextWindowFor(model, modelCatalog, configured, provider);
+   // Two things can be missing, and they are not the same thing. Occupancy is missing until the
+@@ -827,6 +831,35 @@ function ContextWindowIndicator({
+     </div>
+   );
+   const tier = pct >= 90 ? 'danger' : pct >= 75 ? 'warn' : 'neutral';
++  if (unavailable) {
++    return (
++      <Popover
++        title="Context"
++        side="top"
++        align="end"
++        openOnHover
++        nativeButton={false}
++        trigger={
++          <span className="composer-pill composer-usage is-na" aria-label={`Context window unavailable: ${unavailable} doesn’t report it`}>
++            <ContextRing pct={0} tier="neutral" na />
++            <span className="composer-usage-pct">—</span>
++          </span>
++        }
++      >
++        <div className="cu-pop">
++          <div className="cu-row">
++            <div className="cu-head">
++              <span className="cu-label">Context window</span>
++              <span className="cu-pct">Unavailable</span>
++            </div>
++            <div className="cu-reset">
++              {unavailable} doesn’t report how much of the window a session has used, so there is no reading to show{sized ? ` · ${fmtTokens(windowTokens!)} window` : ''}.
++            </div>
++          </div>
++        </div>
++      </Popover>
++    );
++  }
+   return (
+     <Popover
+       title="Context"
+@@ -3937,7 +3970,9 @@ export function WorkspaceView({
+       ((mode === 'Auto' && !supportsAuto(model, shownEngine, shownProvider, configuredProviders, runner.modelCatalog)) ||
+         !permissionModeSupported(MODE_TO_PERMISSION[mode], shownEngine))
+     ) {
+-      setMode('Default');
++      // Board prototype: Cursor CLI has no Default to fall back to (D6 A); a new session starts on
++      // Accept Edits, the mode the server gives one that names none (P1).
++      setMode(shownEngine === AgentProvider.CURSOR ? 'Accept Edits' : 'Default');
+     }
+   }, [
+     configuredProviders,
+@@ -8482,8 +8517,14 @@ export function WorkspaceView({
+   // Unresolved means no, which is the safe direction: a pill that appears and then vanishes is
+   // worse than one that appears a moment late, and this is the same fact the server polices at
+   // dispatch.
++  // Board prototype (docs/mocks/cursor-engine): a Cursor model's own parameters (contract §10).
++  const cursorRow = shownEngine === AgentProvider.CURSOR
++    ? (runner.modelCatalog?.cursor as (RunnerModelInfo & { contextOptions?: string[]; cursorFast?: boolean })[] | undefined)?.find((m) => m.value === shownModel)
++    : undefined;
++  const cursorAuto = shownEngine === AgentProvider.CURSOR && (shownModel === 'default' || !shownModel);
++  const cursorContext: string = (selected as { cursorContext?: string } | undefined)?.cursorContext ?? cursorRow?.contextOptions?.[0] ?? '';
+   const fastModeUsable =
+-    shownProviderCapabilitiesResolved && fastModeAvailable(shownEngine, shownModel, runner.modelCatalog);
++    shownProviderCapabilitiesResolved && (shownEngine === AgentProvider.CURSOR ? !!cursorRow?.cursorFast : fastModeAvailable(shownEngine, shownModel, runner.modelCatalog));
+   const shownFastMode: boolean = live ? effectiveFastMode : fastMode;
+   // What a permission mode ACTUALLY means on the engine that will run it. Derived with the same
+   // shared table the server stamps onto the session payload, so the picker cannot drift from it —
+@@ -9083,8 +9124,11 @@ export function WorkspaceView({
+   // the New Session picker lists them. Only with two or more (one is nothing to choose), and for a session
+   // only on a runner that carries a conversation from one account to another: an older one would resume
+   // it where it was. A draft has no conversation to carry, so it starts on any of them.
++  // Board prototype (docs/mocks/cursor-engine, D5): until a runner declares cursor-account-move/v1, a
++  // Cursor session that has started lists its other credentials but can't move to them.
++  const cursorMoveBlocked = shownEngine === AgentProvider.CURSOR && !!selected && !runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY.cursor);
+   const accountRows =
+-    shownAccountEngine && (!selected || runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[shownAccountEngine]))
++    shownAccountEngine && (!selected || cursorMoveBlocked || runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[shownAccountEngine]))
+       ? (providerSwitchChoices.find((choice) => choice.slug === shownAccountEngine)?.accounts ?? [])
+       : [];
+   const accountsOffered = accountRows.length > 1;
+@@ -9167,6 +9211,7 @@ export function WorkspaceView({
+         : [
+             {
+               key: `provider:${choice.slug}`,
++              disabled: cursorMoveBlocked && choice.slug !== shownProvider,
+               // Distinguishable at a glance from a credential that is ready to run, without being
+               // inert: the identity is dimmed, the call to action is not.
+               className: blocked ? 'composer-provider-fix' : undefined,
+@@ -9189,6 +9234,7 @@ export function WorkspaceView({
+         ? [
+             {
+               key: `${choice.slug}-account:automatic`,
++              disabled: cursorMoveBlocked,
+               className: 'composer-account-row',
+               label: (
+                 <span className="scope-menu-row">
+@@ -9203,6 +9249,7 @@ export function WorkspaceView({
+         : []),
+       ...accounts.map((account) => ({
+         key: `${choice.slug}-account:${account.id}`,
++        disabled: cursorMoveBlocked && !(here && account.id === shownAccount && !sessionAutomatic),
+         className: `composer-account-row${account.nearLimit ? ' near-limit' : ''}${
+           account.unavailable ? ' composer-provider-fix' : ''
+         }`,
+@@ -9274,6 +9321,20 @@ export function WorkspaceView({
+     ),
+     ...providerGroup('pools', 'Account pools', listedChoices.filter((c) => c.kind === 'pool')),
+     ...providerGroup('keys', 'API keys', listedChoices.filter((c) => c.kind === 'key')),
++    ...(cursorMoveBlocked
++      ? [
++          {
++            key: 'provider-foot-cursor',
++            type: 'group' as const,
++            label: (
++              <span className="composer-provider-foot">
++                Cursor CLI can’t carry a conversation to another account or key yet. Start a new session to use one of
++                these.
++              </span>
++            ),
++          },
++        ]
++      : []),
+     ...(subscriptionOnly.length > 0
+       ? [
+           {
+@@ -9299,7 +9360,7 @@ export function WorkspaceView({
+       className: 'composer-engine-title',
+       label: (
+         <span className="composer-engine-title-row">
+-          <span className="composer-engine-title-glyph" style={{ color: engineTitle.brand.from }}>
++          <span className="composer-engine-title-glyph" style={{ color: engineTitle.glyphKey === 'cursor' ? 'var(--text-1)' : engineTitle.brand.from }}>
+             {engineTitleGlyph ? (
+               <svg
+                 viewBox="0 0 24 24"
+@@ -9376,7 +9437,12 @@ export function WorkspaceView({
+       onSelect: () => pickModel(option.value),
+     })),
+     { key: 'effort-divider', type: 'separator' as const },
+-    {
++    ...(cursorAuto ? [{
++      key: 'cursor-auto-note',
++      type: 'group' as const,
++      label: <div className="composer-route-note"><div className="composer-route-reason">Auto picks a model for each request. Cursor doesn’t report which one it used, and Auto has no effort or context to set.</div></div>,
++    }] : []),
++    ...(cursorAuto ? [] : [{
+       key: 'effort',
+       label: (
+         <span className="scope-menu-row">
+@@ -9394,7 +9460,26 @@ export function WorkspaceView({
+         ),
+         onSelect: () => pickEffort(option.value),
+       })),
+-    },
++    }]),
++    ...(cursorRow?.contextOptions?.length ? [{
++      key: 'context',
++      label: (
++        <span className="scope-menu-row">
++          Context
++          {menuValue(cursorContext === '1m' ? '1M' : cursorContext)}
++        </span>
++      ),
++      children: cursorRow.contextOptions.map((value) => ({
++        key: `context:${value}`,
++        label: (
++          <span className="scope-menu-row">
++            {value === '1m' ? '1M tokens' : `${value} tokens`}
++            {checkSlot(value === cursorContext)}
++          </span>
++        ),
++        onSelect: () => undefined,
++      })),
++    }] : []),
+     // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast" tier
+     // both exist on some models and not others. A row offered to a session that cannot have it
+     // would be a control whose only outcome is being ignored — the server clamps it at dispatch
+@@ -9588,7 +9673,9 @@ export function WorkspaceView({
+           : replyTo
+             ? replyTo.placeholder
+             : selectedId
+-              ? 'Reply…'
++              ? selectedEngine === AgentProvider.CURSOR && selectedRunStatus === 'RUNNING'
++                ? 'Reply — it goes to Cursor CLI when this turn ends…'
++                : 'Reply…'
+               : 'Send this workspace a task…';
+   // The engine's guess at the next message (lib/promptSuggestion): offered in an idle, empty
+   // composer as a grey line where "Reply…" would be, taken with Tab (a double-tap on a touch
+@@ -11221,7 +11308,12 @@ export function WorkspaceView({
+           </div>
+         )}
+         {/* The reader's messages nothing has read yet, tucked behind the composer's top edge. */}
+-        <PendingTray rows={pendingTrayRows} />
++        <PendingTray
++          rows={pendingTrayRows}
++          note={selectedEngine === AgentProvider.CURSOR && pendingTrayRows.some((row) => row.heading === 'next')
++            ? 'Cursor CLI can’t take a message mid-turn — sending one would stop the turn. These go in order once it ends.'
++            : null}
++        />
+         <div className={shellMode ? 'composer-box composer-box-shell' : 'composer-box'}>
+           {/* Drag to set an explicit height (overrides auto-grow); double-click to reset.
+               Only shown once the box has hit its auto-grow cap or the user set a manual
+@@ -11810,7 +11902,7 @@ export function WorkspaceView({
+                       )}
+                       <span className="composer-model-name">{shownModelLabel}</span>
+                       <span className="composer-model-effort">
+-                        {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}
++                        {[cursorAuto ? '' : shownEffortLabel, cursorContext === '1m' ? '1M' : '', fastModeUsable && shownFastMode ? 'Fast' : ''].filter(Boolean).join(' · ')}
+                       </span>
+                     </button>
+                   }
+@@ -11864,6 +11956,7 @@ export function WorkspaceView({
+                 provider={shownProvider}
+                 modelCatalog={runner.modelCatalog}
+                 configured={configuredProviders}
++                unavailable={shownEngine === AgentProvider.CURSOR ? 'Cursor CLI' : undefined}
+               />
+             )}
+             {showStop ? (
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index 9fda894..04e28ba 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -6382,6 +6382,13 @@ html[data-theme='dark'] .session-tag-chip {
+   font-size: 12.5px;
+   color: var(--error);
+ }
++.pending-tray-note {
++  padding: 6px 14px 4px 40px;
++  font-size: 12px;
++  line-height: 1.45;
++  color: var(--text-3);
++  border-top: 1px dashed var(--border-subtle);
++}
+ .pending-tray-state {
+   flex: none;
+   font-size: 12px;
+diff --git a/src/web/src/lib/planUsage.ts b/src/web/src/lib/planUsage.ts
+index 1579f78..81b484a 100644
+--- a/src/web/src/lib/planUsage.ts
++++ b/src/web/src/lib/planUsage.ts
+@@ -45,6 +45,11 @@ export function planUsageSnapshotForProvider(
+     if (usage.antigravity) return usage.antigravity;
+     return usage.provider === 'antigravity' ? usage : null;
+   }
++  if (provider === 'cursor') {
++    const cursor = (usage as { cursor?: PlanUsageSnapshot }).cursor;
++    if (cursor) return cursor;
++    return usage.provider === 'cursor' ? usage : null;
++  }
+   if (provider === 'codex') {
+     if (usage.codex) return usage.codex;
+     if (usage.provider && usage.provider !== 'codex') return null;
+@@ -239,7 +244,9 @@ export function planUsageRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
+   });
+   const codex = usage.provider === 'codex' || !!usage.primary || !!usage.secondary || !!usage.rateLimits?.length;
+   if (codex) return codexRows(usage);
+-  return (usage.provider === 'kimi' ? KIMI_ROWS : CLAUDE_ROWS).flatMap(({ key, label }) => {
++  // Board prototype: Cursor's included usage is one window, the billing cycle's (contract §11).
++  const cursorRows = usage.provider === 'cursor' || (usage as { planName?: string }).planName ? [{ key: 'month' as const, label: 'Monthly limit' }] : null;
++  return (cursorRows ?? (usage.provider === 'kimi' ? KIMI_ROWS : CLAUDE_ROWS)).flatMap(({ key, label }) => {
+     const window = usage[key];
+     if (!window || typeof window.utilization !== 'number') return [];
+     const percent = clampPercent(window.utilization);
+diff --git a/src/web/src/lib/providerGlyphs.ts b/src/web/src/lib/providerGlyphs.ts
+index 073f0d0..8b2a6a5 100644
+--- a/src/web/src/lib/providerGlyphs.ts
++++ b/src/web/src/lib/providerGlyphs.ts
+@@ -13,6 +13,9 @@ export const PROVIDER_GLYPHS: Record<string, string> = {
+   antigravity: `<path d="M21.751 22.607c1.34 1.005 3.35.335 1.508-1.508C17.73 15.74 18.904 1 12.037 1 5.17 1 6.342 15.74.815 21.1c-2.01 2.009.167 2.511 1.507 1.506 5.192-3.517 4.857-9.714 9.715-9.714 4.857 0 4.522 6.197 9.714 9.715z"></path>`,
+ };
+ 
++// Cursor (LobeHub icons, src/Cursor/components/Mono.tsx, MIT; board prototype).
++PROVIDER_GLYPHS.cursor = `<path fill-rule="evenodd" d="M22.106 5.68L12.5.135a.998.998 0 00-.998 0L1.893 5.68a.84.84 0 00-.419.726v11.186c0 .3.16.577.42.727l9.607 5.547a.999.999 0 00.998 0l9.608-5.547a.84.84 0 00.42-.727V6.407a.84.84 0 00-.42-.726zm-.603 1.176L12.228 22.92c-.063.108-.228.064-.228-.061V12.34a.59.59 0 00-.295-.51l-9.11-5.26c-.107-.062-.063-.228.062-.228h18.55c.264 0 .428.286.296.514z"></path>`;
++
+ // The configured Moonshot provider uses the vendor slug while the native runtime is named Kimi.
+ // Both surfaces share the same official mark.
+ PROVIDER_GLYPHS.moonshot = PROVIDER_GLYPHS.kimi;
+diff --git a/src/web/src/lib/runnerAttention.ts b/src/web/src/lib/runnerAttention.ts
+index 65df254..3093b54 100644
+--- a/src/web/src/lib/runnerAttention.ts
++++ b/src/web/src/lib/runnerAttention.ts
+@@ -180,12 +180,13 @@ const DAY = 24 * HOUR;
+ const MIB = 1024 * 1024;
+ const GIB = 1024 * MIB;
+ 
+-const LOGIN_ENGINES: LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity'];
++const LOGIN_ENGINES: LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity', 'cursor'];
+ const LOGIN_NAME: Record<LoginEngine, string> = {
+   claude: RUNNER_LOGIN_CLAUDE,
+   codex: RUNNER_LOGIN_CODEX,
+   kimi: RUNNER_LOGIN_KIMI,
+   antigravity: 'Antigravity',
++  cursor: 'Cursor CLI',
+ };
+ /** Every engine a runner reports on, in the order its page lists them. */
+ const REPORTED_ENGINES = Object.keys(ENGINE_CLI_NAME) as ReportedEngine[];
+diff --git a/src/web/src/lib/runnerEngines.ts b/src/web/src/lib/runnerEngines.ts
+index 279e524..0237cb3 100644
+--- a/src/web/src/lib/runnerEngines.ts
++++ b/src/web/src/lib/runnerEngines.ts
+@@ -18,6 +18,7 @@ export const ENGINE_CLI_NAME: Record<ReportedEngine, string> = {
+   opencode: 'OpenCode',
+   antigravity: 'Antigravity CLI',
+   dsh: 'DeepSeek Harness',
++  cursor: 'Cursor CLI',
+ };
+ 
+ const MINUTE = 60_000;
+@@ -63,6 +64,8 @@ export function updateNoteOf(
+   // Naming one reason here was worse than naming none: a Kimi skipped for permissions still read
+   // "updated by its package manager", promising an updater that did not exist.
+   if (update.status === 'skipped') return { tone: 'quiet', text: 'not auto-updated' };
++  // Board prototype: Cursor CLI stays on the version Orbit pins; a runner update moves the pin.
++  if ((update.status as string) === 'pinned') return { tone: 'quiet', text: `pinned · checked ${ago(update.at ?? '', now)}` };
+   // Drift decides first, because it is the reading taken on the binary. The rule underneath used
+   // to be "a clean run in the last week means updating works here", and it was wrong in the one
+   // case that matters: a machine that can't download anything still runs clean every pass nothing
+diff --git a/src/web/src/lib/sessionProviderChoices.ts b/src/web/src/lib/sessionProviderChoices.ts
+index 1b00467..a9a6299 100644
+--- a/src/web/src/lib/sessionProviderChoices.ts
++++ b/src/web/src/lib/sessionProviderChoices.ts
+@@ -136,7 +136,9 @@ export const runtimeSummary = (runtime?: string | null): string =>
+       ? 'Moonshot API'
+       : runtime === AgentProvider.ANTIGRAVITY
+         ? 'Gemini API'
+-        : 'Anthropic-compatible';
++        : runtime === AgentProvider.CURSOR
++          ? 'Cursor API'
++          : 'Anthropic-compatible';
+ 
+ // A built-in engine has no ModelProvider row, so it has no preset to inherit a look from. Borrow
+ // the vendor preset that ships the same mark: the engine and the BYOK provider are the same
+@@ -145,6 +147,7 @@ export const ENGINE_PRESET: Record<string, string> = {
+   [AgentProvider.CLAUDE]: 'anthropic',
+   [AgentProvider.CODEX]: 'openai',
+   [AgentProvider.KIMI]: 'moonshot',
++  [AgentProvider.CURSOR]: 'cursor',
+ };
+ 
+ // Antigravity, the engine, ships no preset to borrow a mark from. A Gemini key is Google Gemini's
+@@ -196,7 +199,16 @@ export function defaultModelLabel(
+  *  signed out — a CLI that isn't installed has nothing to sign into. Only the CLI's own "no"
+  *  counts for auth: `unknown` is an engine that wouldn't answer, which is not evidence enough to
+  *  take the choice away. */
++/* Board prototype (docs/mocks/cursor-engine): Cursor's admission, read like Harness's. */
++let cursorRunnerCaps: readonly string[] | null | undefined;
++function cursorBlocker(health?: RunnerEngineHealth): string | undefined {
++  if (cursorRunnerCaps && !cursorRunnerCaps.includes('provider:cursor')) return 'Update runner';
++  if (health?.installed && health.version && health.version !== '2026.10.14-941492e') return 'Unsupported version';
++  return undefined;
++}
++
+ function engineBlocker(health?: RunnerEngineHealth): string | undefined {
++  if (health?.engine === AgentProvider.CURSOR) { const c = cursorBlocker(health); if (c) return c; }
+   if (!health) return undefined;
+   if (!health.installed) return 'Not installed';
+   if (health.auth === 'no') return 'Not signed in';
+@@ -322,6 +334,7 @@ export function engineProviders(engine: AgentProvider, sources: ChoiceSources):
+   const pools = sources.pools ?? [];
+   const antigravityKeyAvailable = sources.antigravityKeyAvailable ?? antigravity?.envKeyAvailable ?? false;
+   const health = engineHealth?.find((e) => e.engine === engine);
++  if (engine === AgentProvider.CURSOR) cursorRunnerCaps = (sources.dshRunner as { capabilities?: string[] | null } | null | undefined)?.capabilities ?? null;
+   const modelLabel = (provider: string) =>
+     defaultModelLabel(engine, provider, modelCatalog, configured, runtimeDefaultModels);
+   // What a credential that brings its own key needs from this runner: the engine's CLI, and for
+@@ -335,7 +348,9 @@ export function engineProviders(engine: AgentProvider, sources: ChoiceSources):
+           ? openCodeMissing(engineHealth)
+             ? 'Not installed'
+             : undefined
+-          : byokBlocker(health);
++          : engine === AgentProvider.CURSOR
++            ? (cursorBlocker(health ?? { engine: 'cursor' } as RunnerEngineHealth) ?? byokBlocker(health))
++            : byokBlocker(health);
+ 
+   const own: ProviderChoice[] = [];
+   if (isLoginProvider(engine) && (engine !== AgentProvider.ANTIGRAVITY || antigravityKeyAvailable || antigravity?.authSource === 'google')) {
+diff --git a/src/web/src/lib/workspaceDefaults.ts b/src/web/src/lib/workspaceDefaults.ts
+index 4e9c217..972de02 100644
+--- a/src/web/src/lib/workspaceDefaults.ts
++++ b/src/web/src/lib/workspaceDefaults.ts
+@@ -59,6 +59,7 @@ const LOGIN_ENGINES: readonly string[] = [
+   AgentProvider.CODEX,
+   AgentProvider.KIMI,
+   AgentProvider.ANTIGRAVITY,
++  AgentProvider.CURSOR,
+ ];
+ 
+ /** Whether `provider` is an engine's own sign-in on the runner (its slug is the engine's name). */
+@@ -85,7 +86,9 @@ const nativeEngine = (runtime?: string | null): AgentProvider =>
+       ? AgentProvider.KIMI
+       : runtime === AgentProvider.ANTIGRAVITY
+         ? AgentProvider.ANTIGRAVITY
+-        : AgentProvider.CLAUDE;
++        : runtime === AgentProvider.CURSOR
++          ? AgentProvider.CURSOR
++          : AgentProvider.CLAUDE;
+ 
+ /**
+  * The engines `provider` runs on, the one a session naming only it gets first (the compatibility
+@@ -255,6 +258,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
+   antigravity: '',
+   // Harness's model values are opaque ACP tokens from the runner's catalogue; none is shipped.
+   dsh: '',
++  cursor: 'default',
+ };
+ 
+ /** A key's (or pool's) own model table, the same on every engine that runs it: what the runner's CLI
+@@ -607,6 +611,12 @@ export const effortOptionsFor = (
+   configured?: ConfiguredProvider[] | null,
+ ) => {
+   if (engine === AgentProvider.DSH) return dshEffortOptions(model, modelCatalog);
++  // Board prototype: Cursor's effort is a parameter of the model picked (contract §10); Auto has none.
++  if (engine === AgentProvider.CURSOR) {
++    const row = modelCatalog?.cursor?.find((m) => m.value === model);
++    const levels = [...new Set((row?.reasoningLevels ?? []).filter(Boolean))];
++    return levels.length ? [{ value: '', label: 'Default' }, ...levels.map((level) => ({ value: level, label: effortLabel(level) }))] : [{ value: '', label: 'Default' }];
++  }
+   const declared = declaredEffortLevels(engine, provider, model, configured);
+   if (declared) {
+     return CLAUDE_EFFORT_OPTIONS.filter(
+@@ -725,7 +735,9 @@ export const supportsAuto = (
+  *  outright (DSH_PERMISSION_MODES, which the server enforces at admission): those are not offered
+  *  rather than caveated, since the session would be rejected. */
+ export const permissionModeSupported = (mode: string, engine: AgentProvider): boolean =>
+-  engine !== AgentProvider.DSH || (DSH_PERMISSION_MODES as readonly string[]).includes(mode);
++  engine === AgentProvider.CURSOR
++    ? mode !== 'default' || (globalThis as { __ORBIT_D6__?: string }).__ORBIT_D6__ === 'B'
++    : engine !== AgentProvider.DSH || (DSH_PERMISSION_MODES as readonly string[]).includes(mode);
+ 
+ export const clampPermissionModeForModel = (
+   mode: string,
+diff --git a/src/web/src/pages/InfrastructurePage.tsx b/src/web/src/pages/InfrastructurePage.tsx
+index eacb4c6..132a1ec 100644
+--- a/src/web/src/pages/InfrastructurePage.tsx
++++ b/src/web/src/pages/InfrastructurePage.tsx
+@@ -242,6 +242,13 @@ export function InfrastructurePage() {
+             <KeyEngines row={p} />
+             {/* A DeepSeek key also carries its whole account's balance (DeepSeekBalance.tsx). */}
+             {hasDeepSeekBalance(p) && <DeepSeekBalanceLine row={p} />}
++            {/* Board prototype: a Cursor key says what its last check found (P2: `agent models`). */}
++            {(p as ProviderRow & { cursorCheck?: string }).cursorCheck === 'rejected' && (
++              <div className="prov-runtime dsb-row"><div className="dsb-line fail">Rejected by Cursor · 4m ago <span className="dsb-sep">·</span>{' '}<Link className="re-link" to={`/providers/${p.id}`}>Paste a new key</Link></div></div>
++            )}
++            {(p as ProviderRow & { cursorCheck?: string }).cursorCheck === 'unreachable' && (
++              <div className="prov-runtime dsb-row"><div className="dsb-line fail">Couldn’t reach Cursor to check this key · 12m ago <span className="dsb-sep">·</span>{' '}<button type="button" className="re-link">Retry</button></div></div>
++            )}
+           </div>
+           {/* The Enabled column collapses to a dot on narrow screens — the tag's words would
+               outrun a phone's width on their own. */}
+diff --git a/src/web/src/pages/ProviderConnectPage.tsx b/src/web/src/pages/ProviderConnectPage.tsx
+index f06c705..77d5da7 100644
+--- a/src/web/src/pages/ProviderConnectPage.tsx
++++ b/src/web/src/pages/ProviderConnectPage.tsx
+@@ -545,7 +545,9 @@ function ProviderForm({
+               {runtimeSummary(identity.runtime)} ·{' '}
+               {/* Counting a shipped list would misstate what this offers — the runner's CLI
+                   decides, and that list changes without us. */}
+-              {preset?.modelsFromRuntime
++              {identity.runtime === 'cursor'
++                ? 'models from Cursor CLI on each machine'
++                : preset?.modelsFromRuntime
+                 ? 'models from the runtime CLI'
+                 : `${identity.count} model${identity.count === 1 ? '' : 's'} ${identity.counted}`}
+             </div>
+@@ -651,7 +653,7 @@ function ProviderForm({
+           ) : (
+             ''
+           )}
+-          {newKey ? ` ${editing ? 'Saving' : 'Connecting'} sends one tiny test request first.` : ''}
++          {newKey ? (runtime === 'cursor' ? ` ${editing ? 'Saving' : 'Connecting'} checks it with Cursor first.` : ` ${editing ? 'Saving' : 'Connecting'} sends one tiny test request first.`) : ''}
+         </div>
+         {/* What agy does with the key, which the owner should know before handing it over
+             (docs/antigravity-runtime-contract.md §3.2 and §7; docs/provider-engine-contract.md §4.6). */}
+@@ -668,6 +670,34 @@ function ProviderForm({
+           one — the server asks DeepSeek with what is stored, never with what is being typed. */}
+       {editing && hasDeepSeekBalance(editing) && <DeepSeekBalanceSection row={editing} />}
+ 
++      {engines.includes(AgentProvider.CURSOR) && (
++        <section className="provider-step">
++          <div className="provider-works">
++            <div className="provider-works-head">
++              Works with
++              <small>— Cursor CLI only; sessions on this key are billed to its Cursor plan</small>
++            </div>
++            <div className="provider-works-row">
++              <span className="provider-works-engine">
++                <EngineTile engine={AgentProvider.CURSOR} size={18} />
++                {ENGINE_CLI_NAMES[AgentProvider.CURSOR]}
++              </span>
++              <span className="provider-works-how">Cursor’s own agent · models from Cursor on each machine</span>
++            </div>
++          </div>
++          {!editing && (
++            <div className="provider-who">
++              <b>Who gets this key</b>
++              <ul>
++                <li>Sessions on Cursor CLI hand it to the CLI in its environment, where commands the agent runs can read it.</li>
++                <li>A runner with Cursor CLI checks it when you connect. The check spends none of your requests.</li>
++                <li>It never runs another engine, and no other key runs Cursor CLI.</li>
++              </ul>
++            </div>
++          )}
++        </section>
++      )}
++
+       {harness && (
+         <section className="provider-step">
+           <WorksWith
+@@ -887,7 +917,7 @@ function ProviderForm({
+           </span>
+         </span>
+         <span className="prov-actions" style={{ gap: 8 }}>
+-          {probeError && (
++          {probeError && !probeError.startsWith('Cursor rejected') && (
+             <Button loading={saveMut.isPending} onClick={() => saveMut.mutate()}>
+               Save anyway
+             </Button>

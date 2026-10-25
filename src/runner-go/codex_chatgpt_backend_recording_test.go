@@ -42,6 +42,16 @@ package main
 //     ORBIT_RECORD_CODEX_CHATGPT_FIXTURE=$PWD/../apiserver/src/providers/fixtures/codex-chatgpt-backend-recording.json \
 //     go test -run TestRealCodexOnAChatGPTLogin -count=1 .
 //
+// With ORBIT_RECORD_CODEX_CHATGPT_STARTUP_FIXTURE=<file> it writes, separately, the ChatGPT-backend
+// calls codex makes for itself around the turn — workspace routing, the plugin and settings reads, the
+// model list, the analytics — which the login gateway's own allowed paths (codex-login-gateway.ts
+// loginGatewayAllows) are held to. That fixture is codex-version-independent of the turn's and can be
+// re-recorded on its own (the checked-in turn fixture is pinned to 0.158 and must not be disturbed):
+//
+//   env -u ORBIT_SESSION_ID -u ORBIT_TASK_ID -u ORBIT_AGENT_ID \
+//     ORBIT_RECORD_CODEX_CHATGPT_STARTUP_FIXTURE=$PWD/../apiserver/src/providers/fixtures/codex-chatgpt-startup-recording.json \
+//     go test -run TestRealCodexOnAChatGPTLogin -count=1 .
+//
 // It skips without a `codex` on PATH.
 
 import (
@@ -64,6 +74,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -173,6 +184,17 @@ type chatgptRecording struct {
 		chatgptRecordedExchange
 		Codex recordedCodexVerdict `json:"codex"`
 	} `json:"rateLimit"`
+}
+
+// The ChatGPT backend calls a codex signed in with a ChatGPT login makes for itself around a turn —
+// workspace routing, the plugin and settings reads, the model list, the turn's analytics — recorded
+// apart from the turn so the gateway's own path list (codex-login-gateway.ts loginGatewayAllows) can be
+// held to what the CLI actually asks for.
+type chatgptStartupRecording struct {
+	Note    string                    `json:"note"`
+	Codex   string                    `json:"codex"`
+	Account string                    `json:"account"`
+	Startup []chatgptRecordedExchange `json:"startup"`
 }
 
 // chatgptRecorder stands where https://chatgpt.com/backend-api and the token endpoint stand, keeping
@@ -380,7 +402,7 @@ func runChatGPTScenario(t *testing.T, exe string, server *httptest.Server, caFil
 		}
 	}
 	request("initialize", map[string]interface{}{
-		"clientInfo":   map[string]interface{}{"name": "orbit", "title": "Orbit", "version": "0.1.0"},
+		"clientInfo":   map[string]interface{}{"name": codexClientName, "title": "Codex CLI", "version": "0.1.0"},
 		"capabilities": map[string]interface{}{"experimentalApi": true},
 	})
 	send(map[string]interface{}{"method": "initialized", "params": map[string]interface{}{}})
@@ -503,6 +525,38 @@ func (rec *chatgptRecorder) exchanges(method, path string) []chatgptRecordedExch
 	return found
 }
 
+// The ChatGPT-backend calls codex made for itself: everything but the token endpoint and the turn's own
+// requests (the websocket probe included), in the order they arrived.
+func (rec *chatgptRecorder) startup() []chatgptRecordedExchange {
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	var found []chatgptRecordedExchange
+	for _, exchange := range rec.seen {
+		path := strings.SplitN(exchange.Request.Path, "?", 2)[0]
+		if path == "/oauth/token" || strings.HasPrefix(path, "/backend-api/codex/responses") {
+			continue
+		}
+		found = append(found, exchange)
+	}
+	return found
+}
+
+// codexRefreshMismatch says how `refresh`, the body codex sent the token endpoint for a 401, differs from
+// the refresh the CLI is known to send, or nil when it does not: client_id, grant_type and refresh_token,
+// as the gateway's own refresh (codex-login-gateway.ts refreshRequestBody) sends them, and from codex 0.164
+// on a refresh_reason beside them, which for a refresh a 401 set off is "unauthorized_recovery". Another
+// reason, or any other field, is a codex whose refresh has changed shape again.
+func codexRefreshMismatch(refresh map[string]interface{}) error {
+	want := map[string]interface{}{"client_id": codexOAuthClientID, "grant_type": "refresh_token", "refresh_token": recordedRefreshToken}
+	if _, named := refresh["refresh_reason"]; named {
+		want["refresh_reason"] = "unauthorized_recovery"
+	}
+	if fmt.Sprint(refresh) != fmt.Sprint(want) {
+		return fmt.Errorf("codex's refresh is %v, want %v", refresh, want)
+	}
+	return nil
+}
+
 func TestRealCodexOnAChatGPTLogin(t *testing.T) {
 	t.Parallel()
 	exe, err := exec.LookPath("codex")
@@ -555,9 +609,9 @@ func TestRealCodexOnAChatGPTLogin(t *testing.T) {
 	if err := json.Unmarshal(sent, &refresh); err != nil {
 		t.Fatalf("codex's refresh is not JSON: %q", sent)
 	}
-	want := map[string]interface{}{"client_id": codexOAuthClientID, "grant_type": "refresh_token", "refresh_token": recordedRefreshToken}
-	if fmt.Sprint(refresh) != fmt.Sprint(want) {
-		t.Fatalf("codex's refresh is %v, want %v", refresh, want)
+	// The three fields 0.161 sent, and from codex 0.164 on refresh_reason "unauthorized_recovery" as well.
+	if err := codexRefreshMismatch(refresh); err != nil {
+		t.Fatal(err)
 	}
 	if got := headerOf(tokens[0].Request.Headers, "content-type"); got != "application/json" {
 		t.Fatalf("codex's refresh is sent as %q", got)
@@ -586,6 +640,40 @@ func TestRealCodexOnAChatGPTLogin(t *testing.T) {
 		if waited := limited[i].at.Sub(limited[i-1].at); waited < 2*time.Second {
 			t.Fatalf("codex asked again %v after a 429 whose retry-after named 2s", waited)
 		}
+	}
+
+	// What codex asks the ChatGPT backend for itself, around the turn — the paths the login gateway's own
+	// list (codex-login-gateway.ts loginGatewayAllows) exists to forward. Asserted here so a codex that
+	// stopped asking for them is noticed rather than leaving that list unmeasured.
+	startup := turnRec.startup()
+	if !slices.ContainsFunc(startup, func(exchange chatgptRecordedExchange) bool {
+		return strings.SplitN(exchange.Request.Path, "?", 2)[0] == "/backend-api/wham/accounts/check"
+	}) {
+		var paths []string
+		for _, exchange := range startup {
+			paths = append(paths, exchange.Request.Path)
+		}
+		t.Fatalf("codex never asked for the workspace routing among %v", paths)
+	}
+	if startupTarget := os.Getenv("ORBIT_RECORD_CODEX_CHATGPT_STARTUP_FIXTURE"); startupTarget != "" {
+		version, _ := exec.Command(exe, "--version").Output()
+		recording := chatgptStartupRecording{
+			Note: "Written by src/runner-go/codex_chatgpt_backend_recording_test.go from a real codex app-server " +
+				"signed in with a fake ChatGPT login against a recorder: the calls it makes for itself around a " +
+				"turn. Read by src/apiserver/src/providers/codex-login-gateway.spec.ts, which holds the gateway's " +
+				"own allowed paths (loginGatewayAllows) to it. Re-record on a codex upgrade.",
+			Codex:   strings.TrimSpace(string(version)),
+			Account: recordedChatGPTAccount,
+			Startup: startup,
+		}
+		data, err := json.MarshalIndent(recording, "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(startupTarget, append(data, '\n'), 0o644); err != nil {
+			t.Fatalf("writing the startup fixture: %v", err)
+		}
+		t.Logf("recorded %s's startup to %s", recording.Codex, startupTarget)
 	}
 
 	target := os.Getenv("ORBIT_RECORD_CODEX_CHATGPT_FIXTURE")
@@ -619,4 +707,36 @@ func TestRealCodexOnAChatGPTLogin(t *testing.T) {
 		t.Fatalf("writing the fixture: %v", err)
 	}
 	t.Logf("recorded %s against a ChatGPT login to %s", fixture.Codex, target)
+}
+
+// The refresh check of TestRealCodexOnAChatGPTLogin on the shapes it has to tell apart, of which the codex
+// on PATH only ever shows it one.
+func TestCodexRefreshShapes(t *testing.T) {
+	const fields = `"client_id":"` + codexOAuthClientID + `","grant_type":"refresh_token","refresh_token":"` + recordedRefreshToken + `"`
+	for _, sample := range []struct {
+		name, body string
+		accepted   bool
+	}{
+		// codex 0.161: the three fields alone.
+		{"accepts-no-reason", `{` + fields + `}`, true},
+		// codex 0.164: the reason a 401 gives, beside them.
+		{"accepts-unauthorized-recovery", `{` + fields + `,"refresh_reason":"unauthorized_recovery"}`, true},
+		// What no codex has sent for a 401: another of its reasons, another field (beside the reason too),
+		// another refresh token, one of the three left out.
+		{"refuses-another-reason", `{` + fields + `,"refresh_reason":"scheduled"}`, false},
+		{"refuses-another-field", `{` + fields + `,"scope":"openid"}`, false},
+		{"refuses-another-field-beside-the-reason", `{` + fields + `,"refresh_reason":"unauthorized_recovery","scope":"openid"}`, false},
+		{"refuses-another-refresh-token", `{"client_id":"` + codexOAuthClientID + `","grant_type":"refresh_token","refresh_token":"rt_OTHER"}`, false},
+		{"refuses-no-client-id", `{"grant_type":"refresh_token","refresh_token":"` + recordedRefreshToken + `"}`, false},
+	} {
+		t.Run(sample.name, func(t *testing.T) {
+			var refresh map[string]interface{}
+			if err := json.Unmarshal([]byte(sample.body), &refresh); err != nil {
+				t.Fatal(err)
+			}
+			if err := codexRefreshMismatch(refresh); (err == nil) != sample.accepted {
+				t.Fatalf("%s: accepted %v, want %v (%v)", sample.body, err == nil, sample.accepted, err)
+			}
+		})
+	}
 }

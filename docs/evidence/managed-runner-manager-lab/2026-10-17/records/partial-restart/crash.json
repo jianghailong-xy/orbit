@@ -1,0 +1,19 @@
+{
+  "claimedAt": "2026-10-17T22:01:19.368+00:00",
+  "control": {
+    "armedAt": "2026-10-17T22:01:19.203+00:00",
+    "claimedAt": "2026-10-17T22:01:19.368+00:00",
+    "claimedDone": false,
+    "followers": 0,
+    "hold": 60.0,
+    "minBytes": 1650,
+    "mode": "lose-answer",
+    "skip": 0,
+    "then": 0
+  },
+  "killedAt": "2026-10-17T22:01:19.377+00:00",
+  "units": [
+    "orbit-mr-lab-api",
+    "orbit-mr-lab-api-b"
+  ]
+}

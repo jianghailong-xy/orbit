@@ -1,0 +1,716 @@
+{
+ "tests": 76,
+ "steps": 464,
+ "semantic": [
+  {
+   "test": "chromium-dark-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+   "step": "Escape closed the full screen",
+   "delta": {
+    "url": [
+     "/tasks",
+     "/tasks/2zwQZ2hd93IvLb59t6p5W"
+    ],
+    "layers": [
+     [],
+     [
+      "Open full-screen graph"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-dark-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+   "step": "Escape closed the full screen",
+   "delta": {
+    "layers": [
+     [],
+     [
+      "Open full-screen graph"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-dark-phone :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+   "step": "Escape closed the full screen",
+   "delta": {
+    "url": [
+     "/tasks",
+     "/tasks/2zwQZ2hd93IvLb59t6p5W"
+    ],
+    "layers": [
+     [],
+     [
+      "Open full-screen graph"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-dark-phone :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+   "step": "Escape closed the full screen",
+   "delta": {
+    "layers": [
+     [],
+     [
+      "Open full-screen graph"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-dark-phone :: P4.3b project decision cards › the owner’s start: the plan as the task graph when it fits; by level, with the graph full screen, when it does not",
+   "step": "task graph closed",
+   "delta": {
+    "layers": [
+     [],
+     [
+      "Start this project?Start this project?FROM ORBITOrbit UI migrationNobody asked yet · no coordinator yetDone when · 2 criteriaRepresentative browser scenes can b"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-light-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+   "step": "Escape closed the full screen",
+   "delta": {
+    "url": [
+     "/tasks",
+     "/tasks/2zwQZ2hd93IvLb59t6p5W"
+    ],
+    "layers": [
+     [],
+     [
+      "Open full-screen graph"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-light-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+   "step": "Escape closed the full screen",
+   "delta": {
+    "layers": [
+     [],
+     [
+      "Open full-screen graph"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-light-phone :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+   "step": "Escape closed the full screen",
+   "delta": {
+    "url": [
+     "/tasks",
+     "/tasks/2zwQZ2hd93IvLb59t6p5W"
+    ],
+    "layers": [
+     [],
+     [
+      "Open full-screen graph"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-light-phone :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+   "step": "Escape closed the full screen",
+   "delta": {
+    "layers": [
+     [],
+     [
+      "Open full-screen graph"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-light-phone :: P4.3b project decision cards › the owner’s start: the plan as the task graph when it fits; by level, with the graph full screen, when it does not",
+   "step": "task graph closed",
+   "delta": {
+    "layers": [
+     [],
+     [
+      "Start this project?Start this project?FROM ORBITOrbit UI migrationNobody asked yet · no coordinator yetDone when · 2 criteriaRepresentative browser scenes can b"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-dark-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+   "step": "Escape closed the full screen",
+   "delta": {
+    "url": [
+     "/tasks",
+     "/tasks/2zwQZ2hd93IvLb59t6p5W"
+    ],
+    "layers": [
+     [],
+     [
+      "Open full-screen graph"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-dark-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+   "step": "Escape closed the full screen",
+   "delta": {
+    "layers": [
+     [],
+     [
+      "Open full-screen graph"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-dark-phone :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+   "step": "Escape closed the full screen",
+   "delta": {
+    "url": [
+     "/tasks",
+     "/tasks/2zwQZ2hd93IvLb59t6p5W"
+    ],
+    "layers": [
+     [],
+     [
+      "Open full-screen graph"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-dark-phone :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+   "step": "Escape closed the full screen",
+   "delta": {
+    "layers": [
+     [],
+     [
+      "Open full-screen graph"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-dark-phone :: P4.3b project decision cards › the owner’s start: the plan as the task graph when it fits; by level, with the graph full screen, when it does not",
+   "step": "task graph closed",
+   "delta": {
+    "layers": [
+     [],
+     [
+      "Start this project?Start this project?FROM ORBITOrbit UI migrationNobody asked yet · no coordinator yetDone when · 2 criteriaRepresentative browser scenes can b"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-light-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+   "step": "Escape closed the full screen",
+   "delta": {
+    "url": [
+     "/tasks",
+     "/tasks/2zwQZ2hd93IvLb59t6p5W"
+    ],
+    "layers": [
+     [],
+     [
+      "Open full-screen graph"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-light-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+   "step": "Escape closed the full screen",
+   "delta": {
+    "layers": [
+     [],
+     [
+      "Open full-screen graph"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-light-phone :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+   "step": "Escape closed the full screen",
+   "delta": {
+    "url": [
+     "/tasks",
+     "/tasks/2zwQZ2hd93IvLb59t6p5W"
+    ],
+    "layers": [
+     [],
+     [
+      "Open full-screen graph"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-light-phone :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+   "step": "Escape closed the full screen",
+   "delta": {
+    "layers": [
+     [],
+     [
+      "Open full-screen graph"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-light-phone :: P4.3b project decision cards › the owner’s start: the plan as the task graph when it fits; by level, with the graph full screen, when it does not",
+   "step": "task graph closed",
+   "delta": {
+    "layers": [
+     [],
+     [
+      "Start this project?Start this project?FROM ORBITOrbit UI migrationNobody asked yet · no coordinator yetDone when · 2 criteriaRepresentative browser scenes can b"
+     ]
+    ]
+   }
+  }
+ ],
+ "reads": [
+  {
+   "test": "chromium-dark-desktop :: P4.3b project decision cards › a merge into main, refused",
+   "refOnly": {
+    "/api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 1
+   },
+   "delOnly": {}
+  },
+  {
+   "test": "chromium-dark-phone :: P4.3b project decision cards › a merge into main, refused",
+   "refOnly": {
+    "/api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 1
+   },
+   "delOnly": {}
+  },
+  {
+   "test": "chromium-dark-phone :: P4.3b project decision cards › the owner’s start: the plan as the task graph when it fits; by level, with the graph full screen, when it does not",
+   "refOnly": {},
+   "delOnly": {
+    "/api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 1
+   }
+  },
+  {
+   "test": "chromium-light-desktop :: P4.3b project decision cards › a merge into main, refused",
+   "refOnly": {},
+   "delOnly": {
+    "/api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 1
+   }
+  },
+  {
+   "test": "chromium-light-desktop :: P4.3b project decision cards › the owner’s start: the plan as the task graph when it fits; by level, with the graph full screen, when it does not",
+   "refOnly": {},
+   "delOnly": {
+    "/api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 1
+   }
+  },
+  {
+   "test": "chromium-light-phone :: P4.3b project decision cards › a merge into main, refused",
+   "refOnly": {
+    "/api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 1
+   },
+   "delOnly": {}
+  },
+  {
+   "test": "webkit-light-desktop :: P4.3b project decision cards › the owner’s start: the plan as the task graph when it fits; by level, with the graph full screen, when it does not",
+   "refOnly": {
+    "/api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 1
+   },
+   "delOnly": {}
+  },
+  {
+   "test": "webkit-light-phone :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+   "refOnly": {
+    "/api/projects/2zwQZ2hd93IvLb59t6p9d/open-items": 1,
+    "/api/projects/2zwQZ2hd93IvLb59t6p9d/promotions/current": 1
+   },
+   "delOnly": {}
+  }
+ ],
+ "presentation": {
+  "focus": 138,
+  "filed": 156
+ },
+ "examples": {
+  "focus": [
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "remove asked",
+    "ref": {
+     "role": "button",
+     "name": "Remove Capture browser baselines as a prerequisite"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Remove prerequisite?"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "remove cancelled",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Remove Capture browser baselines as a prerequisite"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "full screen",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Dependency graph · Migrate the task detail pilot"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "Escape closed the full screen",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Open dependency graph full screen"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "motif opened",
+    "ref": {
+     "role": "button",
+     "name": "Compare one page, 4 instances, 8 tasks folded"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Compare one page"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "full screen",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Task graph"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "motif opened in full screen",
+    "ref": {
+     "role": "button",
+     "name": "Compare one page, 4 instances, 8 tasks folded"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Compare one page"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again",
+    "step": "done question",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Is this project done?FROM ORBITOrbit UI migration · asked by the coordinator · w"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again",
+    "step": "not yet refused",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Send to coordinator"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again",
+    "step": "closed",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Review"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again",
+    "step": "opened again",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Is this project done?FROM ORBITOrbit UI migration · asked by the coordinator · w"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again",
+    "step": "record refused",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Record as done anyway"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the owner’s own start: its settings, the line menu, the merge check, refused; loading and unread",
+    "step": "reading",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "div"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the owner’s own start: its settings, the line menu, the merge check, refused; loading and unread",
+    "step": "start card",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Start this project?FROM ORBITOrbit UI migrationNobody asked yet · no coordinator"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the owner’s own start: its settings, the line menu, the merge check, refused; loading and unread",
+    "step": "line menu open",
+    "ref": {
+     "role": "combobox",
+     "name": "Tasks land on"
+    },
+    "del": {
+     "role": "option",
+     "name": "A project branchproject/2zwQZ2hd93IvLb59t6p9dRecommended when tasks depend on ea"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the owner’s own start: its settings, the line menu, the merge check, refused; loading and unread",
+    "step": "unread",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "This card could not be re-read just now, so the version it would confirm cannot "
+    }
+   }
+  ],
+  "filed": [
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "full screen",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "full screen dragged",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "Escape closed the full screen",
+    "ref": {
+     "dialogs": 0,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "full screen",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "motif opened in full screen",
+    "ref": {
+     "dialogs": 1,
+     "popups": 1
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 2
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "Escape closed the motif only",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "Escape closed the full screen",
+    "ref": {
+     "dialogs": 0,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "full screen dragged",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again",
+    "step": "done question",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again",
+    "step": "not yet, a note typed",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again",
+    "step": "not yet refused",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again",
+    "step": "opened again",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again",
+    "step": "record refused",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the owner’s own start: its settings, the line menu, the merge check, refused; loading and unread",
+    "step": "start card",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the owner’s own start: its settings, the line menu, the merge check, refused; loading and unread",
+    "step": "automatic off",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b project decision cards › the owner’s own start: its settings, the line menu, the merge check, refused; loading and unread",
+    "step": "line menu open",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   }
+  ]
+ }
+}

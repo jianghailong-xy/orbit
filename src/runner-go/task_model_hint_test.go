@@ -191,6 +191,7 @@ func TestTaskModelHintCLIBatchForwarding(t *testing.T) {
 }
 
 func TestTaskModelHintCLIRejectsInvalidOrConflictingFlags(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	for _, action := range []string{"create", "update"} {
 		for _, flags := range [][]string{
 			{"--model-hint", "XXL"}, {"--model-hint", ""},

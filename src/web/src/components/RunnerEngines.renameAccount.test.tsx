@@ -3,11 +3,10 @@ import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { App as AntApp } from 'antd';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { RunnerEngines } from './RunnerEngines';
-import { clickRunnerMenuItem, openRunnerCards, runnerMenuItem } from './RunnerEngines.test-helpers';
+import { clickRunnerMenuItem, dialogDescription, openDialog, openRunnerCards, runnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -56,7 +55,7 @@ let client: QueryClient | null = null;
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  // Remove asks in an antd popup, which measures itself with a ResizeObserver jsdom does not have.
+  // The account menu measures its button with a ResizeObserver, which jsdom does not have.
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
 afterAll(() => {
@@ -116,10 +115,7 @@ function mount(runners: Runner[], { strict = false } = {}) {
   const page = (
     <MemoryRouter initialEntries={['/providers']}>
       <QueryClientProvider client={qc}>
-        {/* The app mounts AntD's `App`, which is what gives `App.useApp()` its message API. */}
-        <AntApp>
-          <RunnerEngines />
-        </AntApp>
+        <RunnerEngines />
       </QueryClientProvider>
     </MemoryRouter>
   );
@@ -167,9 +163,11 @@ async function press(input: HTMLInputElement, key: string) {
 }
 async function startRename(row: HTMLElement): Promise<HTMLInputElement> {
   await clickRunnerMenuItem(row, 'Rename');
-  const input = editorOf(row);
-  expect(input, 'the name turns into its editor').toBeTruthy();
-  return input!;
+  // The editor opens a task after the press, once the closing menu has handed focus back to its button.
+  await act(async () => {
+    await vi.waitFor(() => expect(editorOf(row), 'the name turns into its editor').toBeTruthy());
+  });
+  return editorOf(row)!;
 }
 
 describe('renaming an account on a runner', () => {
@@ -291,15 +289,9 @@ describe('renaming an account on a runner', () => {
     const [, rdRow] = accountsOf(page);
 
     await clickRunnerMenuItem(rdRow, 'Remove account');
-    await act(async () => {
-      await vi.waitFor(
-        () =>
-          expect(document.querySelector('.ant-popconfirm-description')?.textContent).toContain(
-            'Workspaces set to this account run on jianghailong.main.',
-          ),
-        { timeout: 20_000, interval: 20 },
-      );
-    });
+    expect(dialogDescription(await openDialog('Remove jianghailong.rd?'))).toContain(
+      'Workspaces set to this account run on jianghailong.main.',
+    );
   });
 });
 

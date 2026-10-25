@@ -561,8 +561,8 @@ final class BackgroundWakeTests: XCTestCase {
         }
         XCTAssertEqual(said(nil), "Sending…", "waiting for the runner: no event exists yet")
         XCTAssertEqual(said("enqueued"), "Sending…")
-        XCTAssertEqual(said("written"), "Delivering…")
-        XCTAssertEqual(said("acknowledged"), "Sent into this turn")
+        XCTAssertEqual(said("written"), "Waiting to be read")
+        XCTAssertEqual(said("acknowledged"), "Read in this turn")
         XCTAssertEqual(said("requeued"), "Queued for next turn instead")
         XCTAssertNil(said("failed"))
         XCTAssertNil(said("unconfirmed"))

@@ -50,14 +50,18 @@ public struct RunnerModelInfo: Codable, Equatable, Sendable, Identifiable {
     public let permissionModes: [String]?
     /// Whether this model has the runtime's fast lane, from the same probe. nil is "could not say".
     public let fastMode: Bool?
+    /// Every setting the model takes beside its name, as the runtime lists them: Cursor CLI's effort,
+    /// context size, fast lane and thinking (runner `ModelParameter`, docs/cursor-runtime-contract.md §10).
+    /// nil for a runtime that lists none.
+    public let parameters: [RunnerModelParameter]?
     public var id: String { value }
 
-    /// Spelled out rather than synthesized so the two fields above can be added without every
+    /// Spelled out rather than synthesized so the fields above can be added without every
     /// construction site having to name them.
     public init(value: String, label: String, priority: Int? = nil, contextWindow: Int? = nil,
                 reasoningLevels: [String]? = nil, defaultReasoningLevel: String? = nil,
                 serviceTiers: [String]? = nil, permissionModes: [String]? = nil,
-                fastMode: Bool? = nil) {
+                fastMode: Bool? = nil, parameters: [RunnerModelParameter]? = nil) {
         self.value = value
         self.label = label
         self.priority = priority
@@ -67,6 +71,55 @@ public struct RunnerModelInfo: Codable, Equatable, Sendable, Identifiable {
         self.serviceTiers = serviceTiers
         self.permissionModes = permissionModes
         self.fastMode = fastMode
+        self.parameters = parameters
+    }
+}
+
+/// One setting a model takes beside its name, with the values it accepts and the one it starts on
+/// (runner `ModelParameter`): Cursor CLI's `context` (300K / 1M) and `fast` (Off / Fast), say. Read
+/// leniently — a field the runner leaves out or spells another way costs that field, never the
+/// catalogue around it.
+public struct RunnerModelParameter: Codable, Equatable, Sendable {
+    public let id: String
+    public let label: String?
+    public let category: String?
+    /// The value a session starts on when it names none.
+    public let defaultValue: String?
+    public let values: [RunnerModelParameterValue]
+
+    enum CodingKeys: String, CodingKey {
+        case id, label, category, values
+        case defaultValue = "default"
+    }
+
+    public init(id: String, label: String? = nil, category: String? = nil, defaultValue: String? = nil,
+                values: [RunnerModelParameterValue]) {
+        self.id = id
+        self.label = label
+        self.category = category
+        self.defaultValue = defaultValue
+        self.values = values
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? c.decodeIfPresent(String.self, forKey: .id)) ?? ""
+        label = try? c.decodeIfPresent(String.self, forKey: .label)
+        category = try? c.decodeIfPresent(String.self, forKey: .category)
+        defaultValue = try? c.decodeIfPresent(String.self, forKey: .defaultValue)
+        values = ((try? c.decodeIfPresent([LossyDecodable<RunnerModelParameterValue>].self, forKey: .values)) ?? [])
+            .compactMap(\.value)
+    }
+}
+
+/// One value a model's setting takes, and its name: `1m` is "1M".
+public struct RunnerModelParameterValue: Codable, Equatable, Sendable {
+    public let value: String
+    public let label: String?
+
+    public init(value: String, label: String? = nil) {
+        self.value = value
+        self.label = label
     }
 }
 
@@ -83,16 +136,21 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
     /// DeepSeek Harness's ACP `configOptions`: opaque model values (`value` is never reparsed) with
     /// their `reasoning_effort` levels, and no context window (P0 contract §4).
     public let dsh: [RunnerModelInfo]?
+    /// Cursor CLI's ACP catalogue (`cursor/list_available_models`, docs/cursor-runtime-contract.md §10):
+    /// Auto is `default`, and each other model carries its effort as `reasoningLevels`.
+    public let cursor: [RunnerModelInfo]?
 
     public init(claude: [RunnerModelInfo]? = nil, codex: [RunnerModelInfo]? = nil,
                 kimi: [RunnerModelInfo]? = nil, opencode: [RunnerModelInfo]? = nil,
-                antigravity: [RunnerModelInfo]? = nil, dsh: [RunnerModelInfo]? = nil) {
+                antigravity: [RunnerModelInfo]? = nil, dsh: [RunnerModelInfo]? = nil,
+                cursor: [RunnerModelInfo]? = nil) {
         self.claude = claude
         self.codex = codex
         self.kimi = kimi
         self.opencode = opencode
         self.antigravity = antigravity
         self.dsh = dsh
+        self.cursor = cursor
     }
 
     public func models(for provider: String) -> [ModelOption]? {
@@ -103,6 +161,7 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
         case "opencode": rows = opencode
         case "antigravity": rows = antigravity
         case "dsh":      rows = dsh
+        case "cursor":   rows = cursor
         default:         rows = claude
         }
         guard let rows, !rows.isEmpty else { return nil }
@@ -112,7 +171,7 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
     public func contextWindow(for id: String) -> Int? {
         // A list rather than one `(rows ?? []) + …` chain: at five runtimes that expression is past
         // what the Swift type-checker resolves in reasonable time, and it fails the build outright.
-        let runtimes: [[RunnerModelInfo]?] = [claude, codex, kimi, opencode, antigravity, dsh]
+        let runtimes: [[RunnerModelInfo]?] = [claude, codex, kimi, opencode, antigravity, dsh, cursor]
         let all = runtimes.flatMap { $0 ?? [] }
         return all.first { $0.value == id }?.contextWindow
     }
@@ -128,9 +187,15 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
         case "opencode": rows = opencode
         case "antigravity": rows = antigravity
         case "dsh": rows = dsh
+        case "cursor": rows = cursor
         default: rows = claude
         }
-        return rows?.first { $0.value == model }
+        if let row = rows?.first(where: { $0.value == model }) { return row }
+        // A Cursor CLI variant the catalogue doesn't list as it stands (`claude-opus-5-5[context=1m]`) is its
+        // model's row (shared `runnerCatalogRow`); another engine's brackets are its own ids.
+        guard provider == CursorRuntime.engine else { return nil }
+        let name = CursorRuntime.decodeModel(model).model
+        return rows?.first { $0.value == name }
     }
 
     /// Runtimes whose reasoning levels are declared per model: Codex efforts, OpenCode variants,
@@ -226,10 +291,12 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     public let installed: Bool?
     /// Whatever `<engine> --version` printed; absent when not installed or the CLI wouldn't say.
     public let version: String?
-    /// The CLI's own answer to "am I signed in": `yes` / `no` / `unknown`.
+    /// The CLI's own answer to "am I signed in": `yes` / `no` / `unknown`. While Default is removed from
+    /// Orbit (`removedDefault`), the answer of the accounts that remain instead.
     public let auth: String?
     /// The accounts this engine is signed into on the runner, Default first — reported for an engine
-    /// whose CLI keeps a login per directory (Codex, Claude, Antigravity). Absent from an older runner.
+    /// whose CLI keeps a login per directory (Codex, Claude, Antigravity, Kimi). Absent from an older
+    /// runner. Default is left out while it is removed from Orbit (`removedDefault`).
     /// `auth` above stays the engine's answer: for Antigravity that may be a GEMINI_API_KEY, while its
     /// Default account is the runner's Google sign-in alone (`RunnerPageFormat.runsOnEnvKey`).
     public let accounts: [RunnerEngineAccount]?
@@ -247,6 +314,12 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     /// Kimi only: the site its login is on, `mainland-cn` (kimi.com) or `global` (kimi.ai) — see
     /// `KimiSite`. Absent before the first Kimi sign-in on that machine, and from an older runner.
     public let kimiRegion: String?
+    /// The Default the owner removed from Orbit on this runner (`DELETE /runners/:id/accounts/:engine/
+    /// default`), which `POST …/default/restore` brings back (shared `RunnerEngineHealth.removedDefault`).
+    /// Present only while the runner reports another account of this engine: Default is then left out
+    /// of `accounts`, and what sums up sign-in here — `auth`, `authSource`, `kimiRegion`, the quota —
+    /// speaks for the accounts that remain. The machine keeps Default and its sign-in.
+    public let removedDefault: RunnerRemovedDefault?
     public var id: String { engine }
     /// Only the CLI's own "yes" counts — the third state exists precisely so an engine that
     /// wouldn't answer is never shown as signed in (web's `rowKindOf`).
@@ -255,11 +328,13 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     public init(engine: String, installed: Bool? = nil, version: String? = nil, auth: String? = nil,
                 accounts: [RunnerEngineAccount]? = nil, update: RunnerEngineUpdate? = nil,
                 authSource: String? = nil, planUsage: PlanUsageSnapshot? = nil,
-                installationError: String? = nil, dsh: DshRuntimeHealth? = nil, kimiRegion: String? = nil) {
+                installationError: String? = nil, dsh: DshRuntimeHealth? = nil, kimiRegion: String? = nil,
+                removedDefault: RunnerRemovedDefault? = nil) {
         self.engine = engine
         self.installationError = installationError
         self.dsh = dsh
         self.kimiRegion = kimiRegion
+        self.removedDefault = removedDefault
         self.installed = installed
         self.version = version
         self.auth = auth
@@ -267,6 +342,24 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
         self.update = update
         self.authSource = authSource
         self.planUsage = planUsage
+    }
+}
+
+/// The Default an engine leaves out while it is removed from Orbit (shared `RunnerRemovedDefault`):
+/// what the line that offers it back names it by.
+public struct RunnerRemovedDefault: Codable, Equatable, Sendable {
+    /// Its directory on that machine, absolute, as the runner reports it: the one the machine's own
+    /// environment selects (~/.codex for Codex).
+    public let home: String
+    /// The name it was given in Orbit. Absent for a Default never renamed, which is "Default".
+    public let name: String?
+    /// As on its account (`RunnerEngineAccount.fingerprintPrefix`). Absent where the runner read none.
+    public let fingerprintPrefix: String?
+
+    public init(home: String, name: String? = nil, fingerprintPrefix: String? = nil) {
+        self.home = home
+        self.name = name
+        self.fingerprintPrefix = fingerprintPrefix
     }
 }
 
@@ -302,8 +395,8 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     public let name: String?
     /// The CLI's own answer for this account: `yes` / `no` / `unknown`.
     public let auth: String?
-    /// The account's directory on that machine: a CODEX_HOME, a CLAUDE_CONFIG_DIR, or the Gemini
-    /// directory an Antigravity Google sign-in lives in.
+    /// The account's directory on that machine: a CODEX_HOME, a CLAUDE_CONFIG_DIR, the Gemini
+    /// directory an Antigravity Google sign-in lives in, or a KIMI_CODE_HOME.
     public let home: String?
     /// The same directory under Codex's historical field name, Codex accounts only: read
     /// `home ?? codexHome`.
@@ -316,11 +409,14 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     /// When this signed-in account's login lapses (ISO 8601): the CLI's own expiry for it, Claude Code
     /// only. Absent where the CLI recorded none.
     public let loginExpiresAt: String?
+    /// Kimi only: the site this account's login is on, `mainland-cn` (kimi.com) or `global` (kimi.ai)
+    /// — each account's own (`KimiSite.site(of:)`). Absent before its first sign-in.
+    public let kimiRegion: String?
 
     public init(id: String, name: String? = nil, auth: String? = nil,
                 home: String? = nil, codexHome: String? = nil,
                 fingerprintPrefix: String? = nil, pausedUntil: String? = nil,
-                loginExpiresAt: String? = nil) {
+                loginExpiresAt: String? = nil, kimiRegion: String? = nil) {
         self.id = id
         self.name = name
         self.auth = auth
@@ -329,6 +425,7 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
         self.fingerprintPrefix = fingerprintPrefix
         self.pausedUntil = pausedUntil
         self.loginExpiresAt = loginExpiresAt
+        self.kimiRegion = kimiRegion
     }
 }
 
@@ -420,18 +517,29 @@ public struct RunnerLoginState: Codable, Equatable, Sendable {
     public let userCode: String?
     public let message: String?
     public let account: String?
+    /// When the link at `url` stops working, as the runner reported it: what a Cursor CLI sign-in card
+    /// counts down from. Present only while a sign-in waits on a link that has one.
+    public let expiresAt: String?
+    /// Why a `failed` sign-in failed, where a card answers it differently: `expired` is the sign-in
+    /// link running out before anyone signed in with it (shared `LoginFailureReason`).
+    public let reason: String?
 
     public init(status: RunnerLoginStatus? = nil, engine: String? = nil, url: String? = nil,
-                userCode: String? = nil, message: String? = nil, account: String? = nil) {
+                userCode: String? = nil, message: String? = nil, account: String? = nil,
+                expiresAt: String? = nil, reason: String? = nil) {
         self.status = status
         self.engine = engine
         self.url = url
         self.userCode = userCode
         self.message = message
         self.account = account
+        self.expiresAt = expiresAt
+        self.reason = reason
     }
 
-    private enum CodingKeys: String, CodingKey { case status, engine, url, userCode, message, account }
+    private enum CodingKeys: String, CodingKey {
+        case status, engine, url, userCode, message, account, expiresAt, reason
+    }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         status = (try? c.decodeIfPresent(String.self, forKey: .status))
@@ -442,6 +550,8 @@ public struct RunnerLoginState: Codable, Equatable, Sendable {
         userCode = try? c.decodeIfPresent(String.self, forKey: .userCode)
         message = try? c.decodeIfPresent(String.self, forKey: .message)
         account = try? c.decodeIfPresent(String.self, forKey: .account)
+        expiresAt = try? c.decodeIfPresent(String.self, forKey: .expiresAt)
+        reason = try? c.decodeIfPresent(String.self, forKey: .reason)
     }
 }
 
@@ -657,13 +767,48 @@ public struct PlanUsageBucket: Codable, Equatable, Sendable {
     }
 }
 
-/// One provider's usage snapshot. Claude fills fiveHour/sevenDay; Codex fills primary/secondary.
+/// One Cursor CLI account's included usage this period, as Cursor's dashboard reports it to that
+/// account's own token (shared `PlanUsageIncludedUsage`, docs/cursor-runtime-contract.md §11). Every
+/// field is nil when Cursor did not send it: what was not read is unavailable, never 0.
+public struct PlanUsageIncludedUsage: Codable, Equatable, Sendable {
+    /// `weekly` or `monthly`, as Cursor names the period; nil for the Free plan's billing month.
+    public let period: String?
+    /// When this period began.
+    public let startsAt: String?
+    /// When the included usage resets: a spent account runs again then.
+    public let resetsAt: String?
+    /// Share used, in percent — present only above 0, since Cursor's 0% is no reading.
+    public let percentUsed: Double?
+    /// When a turn on the account last met Cursor's usage limit within this period.
+    public let limitReachedAt: String?
+
+    public init(period: String? = nil, startsAt: String? = nil, resetsAt: String? = nil,
+                percentUsed: Double? = nil, limitReachedAt: String? = nil) {
+        self.period = period
+        self.startsAt = startsAt
+        self.resetsAt = resetsAt
+        self.percentUsed = percentUsed
+        self.limitReachedAt = limitReachedAt
+    }
+}
+
+/// One provider's usage snapshot. Claude fills fiveHour/sevenDay; Codex fills primary/secondary;
+/// Kimi Code fills fiveHour/sevenDay/month/monthCode; Cursor CLI fills planName/includedUsage (shared
+/// `PlanUsageSnapshot`).
 public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     public let provider: String?
+    /// Cursor CLI only: the plan the account is on, in Cursor's words ("Free", "Pro", …).
+    public var planName: String? = nil
+    /// Cursor CLI only: the account's included usage this period.
+    public var includedUsage: PlanUsageIncludedUsage? = nil
     public let fiveHour: PlanUsageWindow?
     public let sevenDay: PlanUsageWindow?
     public let sevenDayOpus: PlanUsageWindow?
     public let sevenDaySonnet: PlanUsageWindow?
+    /// Kimi Code only: the monthly limit on everything the account spends (`usages.limit_month_total`).
+    public let month: PlanUsageWindow?
+    /// Kimi Code only: the monthly limit on coding use (`usages.limit_month_code`), beside `month`.
+    public let monthCode: PlanUsageWindow?
     public let primary: PlanUsageWindow?
     public let secondary: PlanUsageWindow?
     public let limitId: String?
@@ -675,27 +820,33 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     /// Earned Codex reset state (absent on older runners and non-Codex snapshots).
     public let rateLimitReset: PlanUsageRateLimitReset?
     public let fetchedAt: String?
-    /// The runner's other accounts of this engine — Codex, Claude Code or Antigravity — by account id,
-    /// each as its own windows: this snapshot's windows (or buckets) are Default's (web
+    /// The runner's other accounts of this engine — Codex, Claude Code, Antigravity or Kimi Code — by
+    /// account id, each as its own windows: this snapshot's windows (or buckets) are Default's (web
     /// `codexAccountSnapshot`).
     public var accounts: [String: PlanUsageSnapshot]? = nil
     public let buckets: [PlanUsageBucket]?
 
     public init(provider: String? = nil, fiveHour: PlanUsageWindow? = nil,
                 sevenDay: PlanUsageWindow? = nil, sevenDayOpus: PlanUsageWindow? = nil,
-                sevenDaySonnet: PlanUsageWindow? = nil, primary: PlanUsageWindow? = nil,
+                sevenDaySonnet: PlanUsageWindow? = nil, month: PlanUsageWindow? = nil,
+                monthCode: PlanUsageWindow? = nil, primary: PlanUsageWindow? = nil,
                 secondary: PlanUsageWindow? = nil, limitId: String? = nil,
                 limitName: String? = nil, planType: String? = nil,
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
                 rateLimits: [PlanUsageRateLimit]? = nil,
                 rateLimitReset: PlanUsageRateLimitReset? = nil,
                 fetchedAt: String? = nil, accounts: [String: PlanUsageSnapshot]? = nil,
-                buckets: [PlanUsageBucket]? = nil) {
+                buckets: [PlanUsageBucket]? = nil, planName: String? = nil,
+                includedUsage: PlanUsageIncludedUsage? = nil) {
         self.provider = provider
+        self.planName = planName
+        self.includedUsage = includedUsage
         self.fiveHour = fiveHour
         self.sevenDay = sevenDay
         self.sevenDayOpus = sevenDayOpus
         self.sevenDaySonnet = sevenDaySonnet
+        self.month = month
+        self.monthCode = monthCode
         self.primary = primary
         self.secondary = secondary
         self.limitId = limitId
@@ -719,6 +870,9 @@ public struct PlanUsage: Codable, Equatable, Sendable {
     public let sevenDay: PlanUsageWindow?
     public let sevenDayOpus: PlanUsageWindow?
     public let sevenDaySonnet: PlanUsageWindow?
+    /// Kimi Code's monthly pair on a flat payload (`PlanUsageSnapshot.month`, `.monthCode`).
+    public let month: PlanUsageWindow?
+    public let monthCode: PlanUsageWindow?
     public let primary: PlanUsageWindow?
     public let secondary: PlanUsageWindow?
     public let limitId: String?
@@ -738,11 +892,15 @@ public struct PlanUsage: Codable, Equatable, Sendable {
     public let claude: PlanUsageSnapshot?
     public let codex: PlanUsageSnapshot?
     public let kimi: PlanUsageSnapshot?
+    /// Cursor CLI's, only ever nested: Default's plan and included usage, every other account's under
+    /// its `accounts` (shared `PlanUsage.cursor`).
+    public var cursor: PlanUsageSnapshot? = nil
     public let fetchedAt: String?
 
     public init(provider: String? = nil, fiveHour: PlanUsageWindow? = nil,
                 sevenDay: PlanUsageWindow? = nil, sevenDayOpus: PlanUsageWindow? = nil,
-                sevenDaySonnet: PlanUsageWindow? = nil, primary: PlanUsageWindow? = nil,
+                sevenDaySonnet: PlanUsageWindow? = nil, month: PlanUsageWindow? = nil,
+                monthCode: PlanUsageWindow? = nil, primary: PlanUsageWindow? = nil,
                 secondary: PlanUsageWindow? = nil, limitId: String? = nil,
                 limitName: String? = nil, planType: String? = nil,
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
@@ -750,13 +908,15 @@ public struct PlanUsage: Codable, Equatable, Sendable {
                 rateLimitReset: PlanUsageRateLimitReset? = nil,
                 accounts: [String: PlanUsageSnapshot]? = nil,
                 claude: PlanUsageSnapshot? = nil, codex: PlanUsageSnapshot? = nil,
-                kimi: PlanUsageSnapshot? = nil,
+                kimi: PlanUsageSnapshot? = nil, cursor: PlanUsageSnapshot? = nil,
                 fetchedAt: String? = nil) {
         self.provider = provider
         self.fiveHour = fiveHour
         self.sevenDay = sevenDay
         self.sevenDayOpus = sevenDayOpus
         self.sevenDaySonnet = sevenDaySonnet
+        self.month = month
+        self.monthCode = monthCode
         self.primary = primary
         self.secondary = secondary
         self.limitId = limitId
@@ -770,6 +930,7 @@ public struct PlanUsage: Codable, Equatable, Sendable {
         self.claude = claude
         self.codex = codex
         self.kimi = kimi
+        self.cursor = cursor
         self.fetchedAt = fetchedAt
     }
 }
@@ -810,6 +971,16 @@ private func codexWindowLabel(_ window: PlanUsageWindow, secondary: Bool) -> Str
 public extension PlanUsageSnapshot {
     /// Present windows in provider order, preserving every Codex TUI rate-limit bucket.
     var rows: [PlanUsageRow] {
+        // A Cursor CLI account's included usage, one window, and only while Cursor reports some of it
+        // used: its 0% is no reading (web `cursorRows`), so an account with none has no row and every
+        // reader says "Usage unavailable" rather than draw 0%.
+        if provider == "cursor" {
+            guard let included = includedUsage, let used = included.percentUsed, used.isFinite, used > 0 else {
+                return []
+            }
+            return [PlanUsageRow(key: "included", label: included.period == "weekly" ? "Weekly limit" : "Monthly limit",
+                                 groupLabel: nil, window: PlanUsageWindow(utilization: used, resetsAt: included.resetsAt))]
+        }
         if provider == "antigravity" {
             return (buckets ?? []).map { bucket in
                 let label = bucket.window == "weekly" ? "Weekly" : bucket.window == "5h" ? "5-hour" : bucket.window
@@ -842,7 +1013,12 @@ public extension PlanUsageSnapshot {
                 }
             }
         }
-        let raw: [(String, String, PlanUsageWindow?)] = [
+        // Kimi Code's in the words of its own /usage panel, the month as the one limit that stops the
+        // account — its total; the coding share of it (`monthCode`) is not a row of its own.
+        let raw: [(String, String, PlanUsageWindow?)] = provider == "kimi" ? [
+            ("fiveHour", "5h limit", fiveHour),
+            ("sevenDay", "Weekly limit", sevenDay),
+            ("month", "Monthly limit", month)] : [
             ("fiveHour", "5-hour limit", fiveHour),
             ("sevenDay", "Weekly · all models", sevenDay),
             ("sevenDayOpus", "Weekly · Opus", sevenDayOpus),
@@ -900,6 +1076,7 @@ public extension PlanUsage {
     var flatSnapshot: PlanUsageSnapshot {
         PlanUsageSnapshot(provider: provider, fiveHour: fiveHour, sevenDay: sevenDay,
                           sevenDayOpus: sevenDayOpus, sevenDaySonnet: sevenDaySonnet,
+                          month: month, monthCode: monthCode,
                           primary: primary, secondary: secondary, limitId: limitId,
                           limitName: limitName, planType: planType,
                           rateLimitReachedType: rateLimitReachedType, credits: credits,
@@ -926,8 +1103,10 @@ public extension PlanUsage {
             // Kimi must be explicit: its session must never inherit a legacy flat Claude quota.
             return flat.provider == "kimi" ? flat : nil
         }
-        // Only the built-in Claude engine spends the runner's Claude login. A configured provider
-        // slug bills its own credential and is answered by `AgentDefaults.planUsage(for:...)`;
+        // Cursor CLI's is only ever nested (web `planUsageSnapshotForProvider`).
+        if provider == "cursor" { return cursor }
+        // Only Claude Code's own sign-in spends the runner's Claude login. A key bills its own
+        // credential on whichever engine runs it and is answered by `AgentDefaults.planUsage(engine:...)`;
         // falling through to here would show it the runner's subscription numbers instead.
         guard provider == "claude" else { return nil }
         if let claude { return claude }

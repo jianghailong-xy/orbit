@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
@@ -119,14 +118,12 @@ async function visit(path: string): Promise<void> {
   await act(async () => {
     root!.render(
       <QueryClientProvider client={qc}>
-        <AntApp>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/tasks" element={<TaskListView />} />
-              <Route path="/lists/:key" element={<TaskListView />} />
-            </Routes>
-          </BrowserRouter>
-        </AntApp>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/tasks" element={<TaskListView />} />
+            <Route path="/lists/:key" element={<TaskListView />} />
+          </Routes>
+        </BrowserRouter>
       </QueryClientProvider>,
     );
   });

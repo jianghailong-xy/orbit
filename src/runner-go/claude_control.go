@@ -54,6 +54,15 @@ const (
 	// Orbit uses exactly one of them, effortLevel, and reads nothing back: unlike the two
 	// above, this subtype answers `success` whatever it was handed (claude_setconfig.go).
 	ctrlApplyFlagSettings = "apply_flag_settings"
+	// generate_session_title names the session from a description, on the process's own
+	// credentials; with persist false it only answers {"title": …} and writes nothing
+	// (session_naming.go).
+	ctrlGenerateSessionTitle = "generate_session_title"
+	// cancel_async_message drops a user message still waiting in the CLI's queue, named by the
+	// uuid its frame carried: {"subtype":"cancel_async_message","message_uuid":"…"}, answered
+	// {"cancelled": true} if it was there and is gone, false if it had been read already
+	// (claude_withdraw.go).
+	ctrlCancelAsyncMessage = "cancel_async_message"
 )
 
 var (
@@ -78,6 +87,11 @@ type controlWaiter struct {
 	settled    atomic.Bool
 	resp       claudeControlResponse
 	err        error
+	// onAnswer, when set, runs in the settle that wins, before anyone waiting is woken, on the
+	// goroutine that delivered the outcome. For the CLI's reply that is the stdout reader, so
+	// whatever the answer changes is in place before the reader takes the next frame: a message
+	// the CLI just dropped leaves the delivery ledger before the echo that follows is matched.
+	onAnswer func(resp claudeControlResponse, err error)
 }
 
 // settle records this request's outcome, once. Whichever path gets there first is the
@@ -90,6 +104,9 @@ func (w *controlWaiter) settle(resp claudeControlResponse, err error) bool {
 		return false
 	}
 	w.resp, w.err = resp, err
+	if w.onAnswer != nil {
+		w.onAnswer(resp, err)
+	}
 	close(w.done)
 	return true
 }
@@ -147,6 +164,12 @@ func (r *claudeRuntime) requestControl(subtype string) (*controlWaiter, error) {
 // gone — is reported as the failure it is instead of leaving a request outstanding for
 // something that was never sent.
 func (r *claudeRuntime) requestControlWith(subtype string, payload map[string]interface{}) (*controlWaiter, error) {
+	return r.requestControlAnswered(subtype, payload, nil)
+}
+
+// requestControlAnswered is requestControlWith with an onAnswer hook (see controlWaiter), set
+// before the frame is sent so no answer can arrive ahead of it.
+func (r *claudeRuntime) requestControlAnswered(subtype string, payload map[string]interface{}, onAnswer func(claudeControlResponse, error)) (*controlWaiter, error) {
 	slot, err := r.reserve()
 	if err != nil {
 		return nil, err
@@ -156,6 +179,7 @@ func (r *claudeRuntime) requestControlWith(subtype string, payload map[string]in
 		subtype:    subtype,
 		generation: r.generation,
 		done:       make(chan struct{}),
+		onAnswer:   onAnswer,
 	}
 	r.mu.Lock()
 	if r.closed || r.phase == phaseTerminal {

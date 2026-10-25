@@ -1,0 +1,40 @@
+== landing checks on c8eaef57d0cc8bba8ffed138cd300856e81a3d60 (the merge of 51c3b80da with origin/main 1c1c78d72), 2026-10-18T13:15:36Z to 2026-10-18T13:23:51Z, outside the runner's cgroup (MemoryMax 9G), TZ=UTC
+== lines at start
+1c1c78d72aae5a8c12bb7ace2276a300acac1928	refs/heads/main
+da89a8185b00dc65db726c52804b181265ae780a	refs/heads/project/34ZteKCnYMpKY46f63Leb
+== lines at end
+1c1c78d72aae5a8c12bb7ace2276a300acac1928	refs/heads/main
+da89a8185b00dc65db726c52804b181265ae780a	refs/heads/project/34ZteKCnYMpKY46f63Leb
+== merge check (npm run test:compose-topology && npm run prisma:generate && npm run build && npm test -w @orbit/shared && npm test -w @orbit/apiserver && npm test -w @orbit/web): exit 0
+# tests 14
+# pass 14
+# fail 0
+ Test Files  32 passed (32)
+      Tests  491 passed (491)
+ℹ tests 5340
+ℹ pass 5340
+ℹ fail 0
+ℹ skipped 0
+ Test Files  414 passed (414)
+      Tests  5374 passed (5374)
+== managed-runner Python (python3 -m unittest discover -s scripts/managed-runner -p '*test*.py'): exit 0
+Ran 154 tests in 5.203s
+
+OK
+== pg specs (scripts/run-pg-spec.sh src/apiserver/src/managed-runners/*.pg.spec.ts src/apiserver/src/auth/tenant-isolation-runner.pg.spec.ts): exit 0
+==> OK: /root/.orbit/worktrees/b9c9bee8-b958-53fb-99b6-0f59640f3d94 is ready to build and test
+==== docker-backend.pg.spec.ts tests=14 pass=14 fail=0 skipped=0 
+==== managed-runner-account-disabled.pg.spec.ts tests=5 pass=5 fail=0 skipped=0 
+==== managed-runner-backend.pg.spec.ts tests=7 pass=7 fail=0 skipped=0 
+==== managed-runner-boot.pg.spec.ts tests=5 pass=5 fail=0 skipped=0 
+==== managed-runner-capacity.pg.spec.ts tests=7 pass=7 fail=0 skipped=0 
+==== managed-runner-existing.pg.spec.ts tests=3 pass=3 fail=0 skipped=0 
+==== managed-runner-fencing.pg.spec.ts tests=16 pass=16 fail=0 skipped=0 
+==== managed-runner-first-session.pg.spec.ts tests=4 pass=4 fail=0 skipped=0 
+==== managed-runner-manager.pg.spec.ts tests=14 pass=14 fail=0 skipped=0 
+==== managed-runner-recovery.pg.spec.ts tests=28 pass=28 fail=0 skipped=0 
+==== managed-runner-sign-in.pg.spec.ts tests=13 pass=13 fail=0 skipped=0 
+==== managed-runner-sleep.pg.spec.ts tests=10 pass=10 fail=0 skipped=0 
+==== managed-runner-wake.pg.spec.ts tests=10 pass=10 fail=0 skipped=0 
+==== tenant-isolation-runner.pg.spec.ts tests=725 pass=725 fail=0 skipped=0 
+==> OK: 14 spec(s) witnessed against PostgreSQL 16.15, no skips

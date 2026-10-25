@@ -84,7 +84,10 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// is a committed fact that cannot change.
         case acceptanceConfirmationReceipt(confirmed: RecordedStandardSetConfirmation)
         /// One revision of one task's completion evidence. The revision is part of the address
-        /// because the door's compare-and-set is against it: a newer revision is its own card.
+        /// because the door's compare-and-set is against it: a newer revision is its own card. A
+        /// revision waiting for a paused coordinator, or handed to it since, keeps this same card,
+        /// anchored the same way — the card draws it folded, or as one line
+        /// (`EvidenceDecisions.standing`).
         case evidenceDecision(taskID: String, evidenceRevision: String)
         /// One OWNER_CONFIRMED task's run waiting on its owner, by the report the door's
         /// compare-and-set is against: a later report is its own card, and the earlier one becomes a
@@ -114,6 +117,12 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// One question the project's coordinator put to its owner (§5.2 R7), by the item the
         /// answer door takes — the same address the push payload and the Needs-you bar carry.
         case coordinatorQuestion(itemID: String)
+        /// The record such a question became once it ended — answered, here or at another end, or
+        /// withdrawn (§5.2 R10, R12; `CoordinatorQuestions.receipts`): drawn where it ended, in
+        /// place of the question's card. Carries the record itself, for `criteriaDecisionReceipt`'s
+        /// reason: the read serves the newest fifty, and one falling out of that window is not a
+        /// reason to take it out of the conversation it was asked in.
+        case coordinatorQuestionRecord(record: ProjectClosedQuestion)
         /// One exception that became the owner's without anybody asking, by the item the
         /// hand-back door takes (§7.5, mock 5's right column). The same address the push payload
         /// and the Needs-you banner carry, so a press that names the item lands on this row.
@@ -199,6 +208,8 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case .promotionReceipt(let promotion):
             return "promotion-receipt-\(promotion.promotionId)"
         case .coordinatorQuestion(let itemID):    return "question-\(itemID)"
+        case .coordinatorQuestionRecord(let record):
+            return CoordinatorQuestions.Receipt(record: record).id
         // The exception cards' ids, in the web's own spelling too: `open-item-<itemId>` is what
         // `ProjectProgressStatus.tsx` gives the two exception cards, and `fuse-<itemId>` is what
         // the pause card gives itself.
@@ -349,11 +360,11 @@ public enum DeliveryAnchor {
         // arrival, kept because these two are questions still waiting on the reader: dropping one
         // for a bad stamp would take away the only thing on screen that can be pressed.
         //
-        // All FIVE receipts are placed by the door's own clock rather than here —
+        // All the receipts are placed by the door's own clock rather than here —
         // `CriteriaDecisions.receipts`, `EvidenceDecisions.receipts`,
-        // `AcceptanceConfirmations.receipt`, `OwnerConfirmations.receipts` and
-        // `PromotionCards.receipts`: a record has no arrival of its own on a device that was not
-        // there. They answer the same question this switch asks — where a row delivered RIGHT NOW
+        // `AcceptanceConfirmations.receipt`, `OwnerConfirmations.receipts`,
+        // `PromotionCards.receipts` and `CoordinatorQuestions.receipts`: a record has no arrival of
+        // its own on a device that was not there. They answer the same question this switch asks — where a row delivered RIGHT NOW
         // would go — and none of them is delivered that way. The last of them arrived here first,
         // and the owner's iOS screenshot of 2026-09-20 is what that cost: three records stacked
         // under the newest row.
@@ -369,8 +380,8 @@ public enum DeliveryAnchor {
              .startProject, .projectDone, .projectNotDone, .criteriaChange,
              .acceptanceConfirmationReceipt,
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
-             .promotionApproval, .promotionReceipt, .coordinatorQuestion, .escalatedItem,
-             .fusePause:
+             .promotionApproval, .promotionReceipt, .coordinatorQuestion,
+             .coordinatorQuestionRecord, .escalatedItem, .fusePause:
             return items.last?.id
         }
     }
@@ -434,6 +445,8 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     case statusCard(LocalStatusCard)
     case decisionCard(DeliveredDecisionCard)
     case approval(PendingApproval)
+    /// The conversation's last row while it is at rest (`RecapCard`): its recap, whole.
+    case recap(RecapCard)
     case working
     case queued(UserBubble)
     case bottom
@@ -454,6 +467,7 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
         case .statusCard(let card):  return "local-status-\(card.id)"
         case .decisionCard(let card): return card.id
         case .approval(let appr):    return "approval-\(appr.id)"
+        case .recap:                 return "session-recap"
         case .working:               return "working-indicator"
         case .queued(let bubble):    return "queued-\(bubble.id)"
         case .bottom:                return "transcript-bottom"
@@ -462,14 +476,21 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
 }
 
 public enum TranscriptRows {
-    /// Flatten one snapshot into the rows to render, in web's order: history, then pending
-    /// approvals, then the working indicator, then queued sends, then the scroll-to-bottom target.
+    /// Flatten one snapshot into the rows to render, in web's order: history and the accepted head
+    /// at its end, the Recap card of a conversation at rest, then pending approvals, then the
+    /// working indicator, then queued sends, then the scroll-to-bottom target.
+    ///
+    /// `recap` is the caller's to decide (`RecapCard.make`, and whether it has stepped aside for
+    /// this visit): this only places it — under everything the conversation said, and above the
+    /// questions still trailing at the tail, which stay nearest the composer (web parity: the card
+    /// is drawn after the transcript and before the cards that ask the owner something).
     public static func build(state: TranscriptState,
                              statusCards: [LocalStatusCard],
                              canPageOlder: Bool,
                              showWorkingIndicator: Bool,
                              decisionCards: [DeliveredDecisionCard] = [],
-                             clocks known: ReceiptAnchor.Clocks? = nil) -> [TranscriptRow] {
+                             clocks known: ReceiptAnchor.Clocks? = nil,
+                             recap: RecapCard? = nil) -> [TranscriptRow] {
         var rows: [TranscriptRow] = []
         // A command run before the first transcript event belongs above events that arrive later;
         // the rest are placed after the item that was last at invocation time.
@@ -533,6 +554,12 @@ public enum TranscriptRows {
                 rows.append(.decisionCard(card))
             }
         }
+        // The accepted head waiting on its echo, drawn where that echo will land — after every item —
+        // and as the transcript draws a user turn, so with no Cancel: the runner has it. Its row
+        // carries the id the echo takes over (`appendUser`), so the echo replaces it in place rather
+        // than removing one row and inserting another (web parity: `acceptedUserTurnEvent`, appended
+        // after the last event).
+        rows.append(contentsOf: state.accepted.map { TranscriptRow.item(.user($0)) })
         // An anchor no longer in the window (its item was dropped — e.g. an optimistic bubble whose
         // send failed) would otherwise take the card down with it. Trail those instead of losing them.
         for card in statusCards where card.afterItemID.map({ anchored[$0] != nil }) == true {
@@ -547,6 +574,9 @@ public enum TranscriptRows {
                   anchoredDecisions[anchor] != nil else { continue }
             trailingDecisions.append(card)
         }
+        // Only under a conversation there is something of: a window with nothing loaded yet has
+        // nothing for the recap to sum up.
+        if let recap, !state.items.isEmpty { rows.append(.recap(recap)) }
         rows.append(contentsOf: trailingDecisions.map(TranscriptRow.decisionCard))
 
         // Approvals render as the agent's latest turn (web's AgentView puts the panel right after
@@ -554,7 +584,9 @@ public enum TranscriptRows {
         // behind it.
         rows.append(contentsOf: state.pendingApprovals.map(TranscriptRow.approval))
         if showWorkingIndicator { rows.append(.working) }
-        rows.append(contentsOf: state.queued.map(TranscriptRow.queued))
+        // …except the reader's own messages still on their way, which the tray above the composer
+        // holds instead (`PendingTray.holds`); what Orbit queued keeps its card here.
+        rows.append(contentsOf: state.queued.filter { !PendingTray.holds($0) }.map(TranscriptRow.queued))
         // Zero-height tail row: a stable `scrollTo` target that always sits below the last message
         // (the last item's own id moves as it streams).
         rows.append(.bottom)

@@ -29,13 +29,29 @@
     "",
     "`rows`: the live RESUME_SESSION watches one session is the observer of → what its session list",
     "row says about the wait: `word`, the header's word, which the row's glyph says as its tooltip,",
-    "and `line`, the row's second line — the strip's folded line in one string. A lone watch on a lone",
-    "live target names it: `Watching <title>`. Otherwise what the wait needs (a lone watch's",
+    "and `line`, the row's second line — the strip's folded line in one string. One live target left",
+    "is named, however many watches wait on it: `Watching <title>`. Otherwise what the wait needs (a lone watch's",
     "threshold, or the distinct live targets across several) and then the `counts` sentence over",
     "them. With every watch paused it leads with the paused word instead of `Watching`. Targets carry",
     "an `id`, so two watches naming one target count it once, and `state` GONE when deleted. The web",
     "reads this in `lib/watches.test.ts` (`watchingSessions`), the native client in",
-    "`WatchStripCopyParityTests` (`WatchSessionSummary.rowLine` and `.word`)."
+    "`WatchStripCopyParityTests` (`WatchSessionSummary.rowLine` and `.word`).",
+    "",
+    "`fold`: the live RESUME_SESSION watches one session is the observer of, as the watch read sends",
+    "them → how the cards above its composer and its watching words fold a task and its run session",
+    "into one target. A target's `task` is its `targetTask`, the task its session runs: absent from an",
+    "older server, null for a session that runs no task. A session target that carries one counts as a",
+    "target on that task — its id, its title, where it stands — and anything else stays as it is.",
+    "`watchedTasks`: what the Tasks card is given, one per live task target or run session, each",
+    "flagged stale when its watch has gone unchecked (two waits on one task are one row there).",
+    "`strip`: the watches, by index, the Watching strip keeps — those still waiting on something that",
+    "is not a task or its run — and none is no strip. `taskStaleLines`: the unchecked lines the opened",
+    "Tasks card puts at its top, for the watches the strip does not keep. `word` and `line` as in",
+    "`rows`. `card`, where given, names the `session-created-tasks.fixture.json` card case these",
+    "watched tasks are the `watched` of. The web reads this in `lib/watches.test.ts` (`watchedTasks`,",
+    "`waitsBeyondTasks`, `taskStaleLines`, `watchingSessions`), OrbitKit in `WatchStripCopyParityTests`",
+    "and Android in `WatchStripCopyParityTest` (`WatchSessionSummary`'s `watchedTasks`, `beyondTasks`,",
+    "`taskStaleLines`, `rowLine` and `word`)."
   ],
   "now": "2026-09-14T10:00:00Z",
   "sentences": [
@@ -454,6 +470,295 @@
       ],
       "word": "Watching 1 target",
       "line": "Watching Ship the release"
+    }
+  ],
+  "fold": [
+    {
+      "case": "the owner's case: a task_await on a task and a session_await on its run session are one target",
+      "watches": [
+        {
+          "state": "ACTIVE",
+          "predicate": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+              { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_FAILED" }
+            ]
+          },
+          "lastEvaluatedAt": "2026-09-14T09:59:30Z",
+          "createdAt": "2026-09-14T09:35:00Z",
+          "targets": [
+            { "id": "T1", "kind": "TASK", "title": "Android: tapping a notification opens the session it names",
+              "status": { "status": "IN_PROGRESS", "running": true, "queued": false } }
+          ]
+        },
+        {
+          "state": "ACTIVE",
+          "predicate": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+              { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "SESSION_NEEDS_ATTENTION" }
+            ]
+          },
+          "lastEvaluatedAt": "2026-09-14T09:59:30Z",
+          "createdAt": "2026-09-14T09:35:00Z",
+          "targets": [
+            { "id": "S1", "kind": "SESSION", "title": "Task: Android: tapping a notification opens the session it names",
+              "status": { "status": "RUNNING", "running": true, "queued": false },
+              "task": { "id": "T1", "title": "Android: tapping a notification opens the session it names",
+                        "status": { "status": "IN_PROGRESS", "running": true, "queued": false } } }
+          ]
+        }
+      ],
+      "watchedTasks": [
+        { "id": "T1", "title": "Android: tapping a notification opens the session it names",
+          "status": "IN_PROGRESS", "running": true, "queued": false, "stale": false },
+        { "id": "T1", "title": "Android: tapping a notification opens the session it names",
+          "status": "IN_PROGRESS", "running": true, "queued": false, "stale": false }
+      ],
+      "strip": [],
+      "taskStaleLines": [],
+      "word": "Watching 1 target",
+      "line": "Watching Android: tapping a notification opens the session it names",
+      "card": "the owner's case: a task and its run session, waited on apart, are one row with one eye"
+    },
+    {
+      "case": "a run of a task created elsewhere: the task by its own title and standing, never the session's",
+      "watches": [
+        {
+          "state": "ACTIVE",
+          "predicate": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+              { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "SESSION_NEEDS_ATTENTION" }
+            ]
+          },
+          "lastEvaluatedAt": "2026-09-14T09:59:30Z",
+          "createdAt": "2026-09-14T09:35:00Z",
+          "targets": [
+            { "id": "S2", "kind": "SESSION", "title": "Task: iOS: share sheet saves the image to Photos",
+              "status": { "status": "RUNNING", "running": true, "queued": false },
+              "task": { "id": "Tz1", "title": "iOS: share sheet saves the image to Photos",
+                        "status": { "status": "IN_PROGRESS", "running": true, "queued": false } } }
+          ]
+        }
+      ],
+      "watchedTasks": [
+        { "id": "Tz1", "title": "iOS: share sheet saves the image to Photos",
+          "status": "IN_PROGRESS", "running": true, "queued": false, "stale": false }
+      ],
+      "strip": [],
+      "taskStaleLines": [],
+      "word": "Watching 1 target",
+      "line": "Watching iOS: share sheet saves the image to Photos",
+      "card": "a run of a task created elsewhere is a row of its own, where that task stands"
+    },
+    {
+      "case": "a child session runs no task: it stays in Watching, as today",
+      "watches": [
+        {
+          "state": "ACTIVE",
+          "predicate": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+              { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_FAILED" }
+            ]
+          },
+          "lastEvaluatedAt": "2026-09-14T09:59:30Z",
+          "createdAt": "2026-09-14T09:35:00Z",
+          "targets": [
+            { "id": "T1", "kind": "TASK", "title": "Android: tapping a notification opens the session it names",
+              "status": { "status": "IN_PROGRESS", "running": true, "queued": false } }
+          ]
+        },
+        {
+          "state": "ACTIVE",
+          "predicate": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+              { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "SESSION_NEEDS_ATTENTION" }
+            ]
+          },
+          "lastEvaluatedAt": "2026-09-14T09:59:30Z",
+          "createdAt": "2026-09-14T09:35:00Z",
+          "targets": [
+            { "id": "S3", "kind": "SESSION", "title": "Deploy main 06f4463: runner 0.1.231 at 40%",
+              "status": { "status": "RUNNING", "running": true, "queued": false }, "task": null }
+          ]
+        }
+      ],
+      "watchedTasks": [
+        { "id": "T1", "title": "Android: tapping a notification opens the session it names",
+          "status": "IN_PROGRESS", "running": true, "queued": false, "stale": false }
+      ],
+      "strip": [1],
+      "taskStaleLines": [],
+      "word": "Watching 2 targets",
+      "line": "Watching 2 targets · 2 running · 0/2 done"
+    },
+    {
+      "case": "two watches on one task, both through its run session: one target, named once",
+      "watches": [
+        {
+          "state": "ACTIVE",
+          "predicate": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+              { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "SESSION_NEEDS_ATTENTION" }
+            ]
+          },
+          "lastEvaluatedAt": "2026-09-14T09:59:30Z",
+          "createdAt": "2026-09-14T09:35:00Z",
+          "targets": [
+            { "id": "S1", "kind": "SESSION", "title": "Task: Android: tapping a notification opens the session it names",
+              "status": { "status": "RUNNING", "running": true, "queued": false },
+              "task": { "id": "T1", "title": "Android: tapping a notification opens the session it names",
+                        "status": { "status": "IN_PROGRESS", "running": true, "queued": false } } }
+          ]
+        },
+        {
+          "state": "ACTIVE",
+          "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_RUN_TERMINAL" },
+          "lastEvaluatedAt": "2026-09-14T09:59:30Z",
+          "createdAt": "2026-09-14T09:40:00Z",
+          "targets": [
+            { "id": "S1", "kind": "SESSION", "title": "Task: Android: tapping a notification opens the session it names",
+              "status": { "status": "RUNNING", "running": true, "queued": false },
+              "task": { "id": "T1", "title": "Android: tapping a notification opens the session it names",
+                        "status": { "status": "IN_PROGRESS", "running": true, "queued": false } } }
+          ]
+        }
+      ],
+      "watchedTasks": [
+        { "id": "T1", "title": "Android: tapping a notification opens the session it names",
+          "status": "IN_PROGRESS", "running": true, "queued": false, "stale": false },
+        { "id": "T1", "title": "Android: tapping a notification opens the session it names",
+          "status": "IN_PROGRESS", "running": true, "queued": false, "stale": false }
+      ],
+      "strip": [],
+      "taskStaleLines": [],
+      "word": "Watching 1 target",
+      "line": "Watching Android: tapping a notification opens the session it names",
+      "card": "the owner's case: a task and its run session, waited on apart, are one row with one eye"
+    },
+    {
+      "case": "an unchecked run-session watch: its line moves to the Tasks card, and the eye turns orange",
+      "watches": [
+        {
+          "state": "ACTIVE",
+          "predicate": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+              { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "SESSION_NEEDS_ATTENTION" }
+            ]
+          },
+          "lastEvaluatedAt": "2026-09-14T09:48:00Z",
+          "createdAt": "2026-09-14T09:35:00Z",
+          "targets": [
+            { "id": "S1", "kind": "SESSION", "title": "Task: Android: tapping a notification opens the session it names",
+              "status": { "status": "RUNNING", "running": true, "queued": false },
+              "task": { "id": "T1", "title": "Android: tapping a notification opens the session it names",
+                        "status": { "status": "IN_PROGRESS", "running": true, "queued": false } } }
+          ]
+        }
+      ],
+      "watchedTasks": [
+        { "id": "T1", "title": "Android: tapping a notification opens the session it names",
+          "status": "IN_PROGRESS", "running": true, "queued": false, "stale": true }
+      ],
+      "strip": [],
+      "taskStaleLines": ["Not checked for 12m — the resume may be late."],
+      "word": "Watching 1 target",
+      "line": "Watching Android: tapping a notification opens the session it names",
+      "card": "an unchecked run-session watch turns its row's eye and the card's eye orange"
+    },
+    {
+      "case": "one session_await over the runs of two tasks: two tasks, each where its task stands",
+      "watches": [
+        {
+          "state": "ACTIVE",
+          "predicate": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+              { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "SESSION_NEEDS_ATTENTION" }
+            ]
+          },
+          "lastEvaluatedAt": "2026-09-14T09:59:30Z",
+          "createdAt": "2026-09-14T09:35:00Z",
+          "targets": [
+            { "id": "S1", "kind": "SESSION", "title": "Task: Android: tapping a notification opens the session it names",
+              "status": { "status": "RUNNING", "running": true, "queued": false },
+              "task": { "id": "T1", "title": "Android: tapping a notification opens the session it names",
+                        "status": { "status": "IN_PROGRESS", "running": true, "queued": false } } },
+            { "id": "S2", "kind": "SESSION", "title": "Task: iOS: share sheet saves the image to Photos", "state": "SATISFIED",
+              "status": { "status": "AWAITING_INPUT", "running": false, "queued": false },
+              "task": { "id": "Tz1", "title": "iOS: share sheet saves the image to Photos",
+                        "status": { "status": "IN_PROGRESS", "running": false, "queued": false } } }
+          ]
+        }
+      ],
+      "watchedTasks": [
+        { "id": "T1", "title": "Android: tapping a notification opens the session it names",
+          "status": "IN_PROGRESS", "running": true, "queued": false, "stale": false },
+        { "id": "Tz1", "title": "iOS: share sheet saves the image to Photos",
+          "status": "IN_PROGRESS", "running": false, "queued": false, "stale": false }
+      ],
+      "strip": [],
+      "taskStaleLines": [],
+      "word": "Watching 2 targets",
+      "line": "Watching all 2 tasks · 1 running · 0/2 done"
+    },
+    {
+      "case": "an older server names no task: the run session stays in Watching, as today",
+      "watches": [
+        {
+          "state": "ACTIVE",
+          "predicate": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+              { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_FAILED" }
+            ]
+          },
+          "lastEvaluatedAt": "2026-09-14T09:59:30Z",
+          "createdAt": "2026-09-14T09:35:00Z",
+          "targets": [
+            { "id": "T1", "kind": "TASK", "title": "Android: tapping a notification opens the session it names",
+              "status": { "status": "IN_PROGRESS", "running": true, "queued": false } }
+          ]
+        },
+        {
+          "state": "ACTIVE",
+          "predicate": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+              { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "SESSION_NEEDS_ATTENTION" }
+            ]
+          },
+          "lastEvaluatedAt": "2026-09-14T09:59:30Z",
+          "createdAt": "2026-09-14T09:35:00Z",
+          "targets": [
+            { "id": "S1", "kind": "SESSION", "title": "Task: Android: tapping a notification opens the session it names",
+              "status": { "status": "RUNNING", "running": true, "queued": false } }
+          ]
+        }
+      ],
+      "watchedTasks": [
+        { "id": "T1", "title": "Android: tapping a notification opens the session it names",
+          "status": "IN_PROGRESS", "running": true, "queued": false, "stale": false }
+      ],
+      "strip": [1],
+      "taskStaleLines": [],
+      "word": "Watching 2 targets",
+      "line": "Watching 2 targets · 2 running · 0/2 done"
     }
   ],
   "sessionWords": {

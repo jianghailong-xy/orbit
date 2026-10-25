@@ -410,3 +410,27 @@ $33 全部丢掉，只因为一句"继续"没人替它说（2026-08-03 那次事
 的 turn 在 transcript 里仍画成普通 user bubble（§8.5 的 "Resumed automatically at …" 分隔线还是
 没做）；API-error 变体共用同一套（同一选择器、同一形态，文案不同：`Continue — this usually
 clears` / `Nothing to re-send — the failure landed on a turn that wasn’t yours.`）。
+
+### 9.1 追问：卡片不许替服务端承诺（同日补丁）
+
+上线当天就被真实会话打中：`34b78GE7Ud2aXWq8H1JsU`（一个项目协调会话，weekly 窗口用尽）里按下
+Retry，弹的是 **"Couldn't re-send the message / this session has no message for a retry to
+re-send"** —— 409。根因是两端判据不同：**卡片按自己窗口最后一条"有字的消息"承诺**（那是一条别的
+会话发来的报告，带 `sessionMessage`，于是按钮正确地走服务端门），而**服务端按 turn 的归属与是否已
+被回答**回答（这次失败落在"没人发的那一轮"上，选择器拒绝跨过它去重发上面那条已答的消息）。窗口看
+不见 turn 归属，也看不见"已答"，所以它做出的承诺可以是服务端必然拒绝的。
+
+修法：**凡是按下去要走服务端门的 retry，客户端先问 `GET /sessions/:id/retry-message`，并且只渲染
+服务端的答案**——它的词、它的 `sessionMessage`（决定路由）、或 `nothingToResend`（渲染成 §9 的
+Continue 卡）。触发条件只看**窗口自己**：窗口里没有"读者本人写的字"（没有消息，或最后一条是别的会
+话的）→ 先问；读者自己的字仍走客户端的 `send`，不产生额外请求（"不许在每个人打开的会话上都发一个
+请求"这条约束没有破）。两条卡（配额卡、登录卡）共用这一条规则；Swift 两个卡本来就走同一条
+`retryLastMessage`，改一处。附件同源：只有读者自己那条 bubble 的字才带它的文件，服务端答案来的字
+不带任何文件（`retryIsTheReaders ? retry.attachmentIds : []`）。
+
+用例：web `WorkspaceView.retrySessionMessage.test.tsx`（"asks before promising, and continues
+instead…" + 登录卡"要先问"），Swift `RetrySendWiringTests.testTheCardAsksTheServerUnlessTheWindowHoldsTheReadersOwnWords`。
+
+**残留的一条缝**：问到的答案是**卡片出现那一刻**的快照。页面长开着、会话又自己往前走（不是用户
+消息，所以卡片不 stale）时，那份承诺可能过期，按下去仍会拿到 409 —— 差别是现在这是少见情形，而
+不是必然。要彻底关掉，得让"按下"本身先 re-ask 再发（两步），暂不做。

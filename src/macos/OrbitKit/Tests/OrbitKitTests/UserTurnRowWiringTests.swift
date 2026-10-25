@@ -33,7 +33,7 @@ final class UserTurnRowWiringTests: XCTestCase {
 
     /// The cards a user turn can be drawn as.
     private static let cardViews = [
-        "SessionMessageCardView(", "OpenItemDeliveryCardView(", "TaskStartCardView(",
+        "SessionMessageCardView(", "OpenItemDeliveryCardView(", "OwnerAnswerLineView(", "TaskStartCardView(",
         "ProjectStartedCardView(", "ReviewRequestedCardView(", "SentBackByReviewerCardView(",
         "SessionReplyCardsView(", "WatchWakeCardView(", "BackgroundWakeCardView(",
     ]
@@ -81,7 +81,7 @@ final class UserTurnRowWiringTests: XCTestCase {
     /// or never.
     func testTheTranscriptAndTheQueueDrawAUserTurnThroughTheOneRow() throws {
         let console = statements(try source(Self.consolePath))
-        XCTAssertTrue(console.contains("UserTurnRow(bubble: b)"),
+        XCTAssertTrue(console.contains("UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))"),
                       "the transcript no longer draws a user turn with the row")
         XCTAssertTrue(console.contains("UserTurnRow(bubble: bubble, queued: QueuedControls(bubble: bubble) {"),
                       "the queued tail no longer draws its turn with the row the transcript draws it with")
@@ -113,7 +113,7 @@ final class UserTurnRowWiringTests: XCTestCase {
     }
 
     /// The queue adds only its Cancel, built in one place — none until the turn id is known, none for a
-    /// steer, which the server refuses to withdraw — and every card is handed that one, never its own.
+    /// steer, which has a Withdraw of its own — and every card is handed that one, never its own.
     func testEveryCardTakesTheQueuesOneCancelAndASteerGetsNone() throws {
         let controls = statements(try section(try source(Self.rowPath),
                                               from: "struct QueuedControls", to: "struct UserTurnRow"))
@@ -131,6 +131,27 @@ final class UserTurnRowWiringTests: XCTestCase {
         // Each card, and the owner's own bubble last.
         XCTAssertEqual(values.count, Self.cardViews.count + 1, "a card is drawn with no Cancel while queued")
         XCTAssertEqual(Set(values), ["cancel"], "a card is handed a Cancel that is not the queue's")
+    }
+
+    /// A steer's Withdraw is built in one place too (`SteerControls`, off `SteerDelivery.offersWithdraw`)
+    /// and handed out by both rows — the queued tail, where the server still holds a steer, and the
+    /// transcript, where one a runner holds is drawn — through to the owner's bubble alone, which draws
+    /// it beside the steer's state.
+    func testBothRowsHandASteerItsOwnWithdraw() throws {
+        let controls = statements(try section(try source(Self.rowPath),
+                                              from: "struct SteerControls", to: "struct UserTurnRow"))
+        XCTAssertTrue(controls.contains("onWithdraw = SteerDelivery.offersWithdraw(bubble) ? withdraw : nil"),
+                      "the Withdraw is no longer decided by the one rule")
+        XCTAssertTrue(try rowBody.contains("UserBubbleView(bubble: b, onCancelQueued: cancel, steer: steer, onPutBack: putBack)"),
+                      "the owner's bubble is no longer handed the steer's Withdraw")
+
+        let console = statements(try source(Self.consolePath))
+        XCTAssertTrue(console.contains("}, steer: SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {"),
+                      "the queued tail no longer hands a steer its Withdraw")
+        XCTAssertTrue(console.contains("return SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {"),
+                      "the transcript no longer hands a steer its Withdraw")
+        XCTAssertEqual(console.filter { $0 == "Task { await console.withdrawSteer(bubble) }" }.count, 2,
+                       "a Withdraw that does not go to the console's withdrawSteer")
     }
 
     /// A queued turn's words still hold the blocks delivery moves into the note, and the card draws

@@ -1,14 +1,17 @@
 /**
- * The dossier and the cursor (criterion 2; contracts/wiki.contract.json `maintenance`), over real HTTP
- * and against a real PostgreSQL — and a space's maintenance settings, which say who a maintenance run is.
+ * The dossier and the cursor (criterion 2; contracts/wiki.contract.json `maintenance`), against a real
+ * PostgreSQL — the dossier pages and the cursor through `WikiMaintenance`, the calls the server's
+ * maintenance job makes (`maintenance.job.server`) — and a space's maintenance settings, on the owner's
+ * door over real HTTP.
  *
- * What criterion 2's verification method asks, each read back from the doors and from the database:
+ * What criterion 2's verification method asks, each read back from what the run is handed, from the owner's door
+ * and from the database:
  *
  *   1. the same records extracted twice give the same text byte for byte, and the same hash;
  *   2. the seeded secrets — every shape the shared redactor knows, and the owner's workspace.env
  *      values — leak zero times, in lines the dossier provably carries;
  *   3. a session whose timeline passes 8,000 tokens is cut to it, and says it was;
- *   4. a session that is not a maintenance run of the space, and any other tenant, are refused;
+ *   4. another tenant reads no dossier of the space and moves none of its cursor;
  *   5. each of the five committed facts adds one to the backlog;
  *   6. the cursor only moves forward, and a run that did not succeed does not move it;
  *   7. every line goes back to its first-hand record: the words at the positions it names, read from the
@@ -16,11 +19,12 @@
  *      compressed as much as the ones it copied whole (revision 2);
  *
  * and beside them: maintenance is off by default and only the owner changes it; turning it on makes
- * one hidden list, and starts the cursor as far back as the owner's look-back says — 14 days by default,
+ * no task list, and starts the cursor as far back as the owner's look-back says — 14 days by default,
  * the moment itself, or the earliest fact — never moving a cursor that has a position; the dossier
  * keeps nothing but its sources and hash; the agent's own trace is in it
- * and memory-file tool calls are not; a batch project gets counts and no dossiers; and a tool error
- * shared by three sessions is a cluster.
+ * and memory-file tool calls are not; a batch project gets counts and no dossiers; a tool error
+ * shared by three sessions is a cluster; and what a maintenance task made before the server ran the runs
+ * left in its hidden list is still no fact.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-dossier.pg.spec.ts
  *
@@ -31,7 +35,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 
-import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
+import { HttpException, type INestApplication, Module, NotFoundException, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
@@ -47,10 +51,11 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
-import { RunnerWikiMaintenanceController } from '../runner-api/runner-wiki-maintenance.controller';
+import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
+import { wikiMaintainJobPrincipal } from '../wiki-worker/wiki-maintain-job';
 import { WikiController } from './wiki.controller';
 import { buildDossier, loadDossierRecords, storedDossierSources } from './wiki-dossier';
-import { isWikiMaintenanceSession, WikiMaintenance, wikiMaintenanceSpaceOf } from './wiki-maintenance';
+import { WikiMaintenance, type DossierPageOptions } from './wiki-maintenance';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService, type WikiPrincipal } from './wiki.service';
 
@@ -83,7 +88,8 @@ function boot(): Promise<Harness> {
     const maintenance = new WikiMaintenance(prisma as unknown as PrismaService);
 
     @Module({
-      controllers: [WikiController, RunnerWikiMaintenanceController],
+      // The runner door is stood up whole, so that what it does not have — a settings route — is a 404 of a door that exists.
+      controllers: [WikiController, RunnerWikiController],
       providers: [
         { provide: WikiService, useValue: service },
         { provide: WikiMaintenance, useValue: maintenance },
@@ -160,6 +166,29 @@ async function call(h: Harness, who: Caller, method: string, route: string, body
 
 function expectStatus(answer: Answer, status: number, why: string): void {
   assert.equal(answer.status, status, `${why}: answered ${answer.status} ${JSON.stringify(answer.body).slice(0, 600)}`);
+}
+
+/**
+ * What one of the maintenance job's calls answers, in the shape a door's answer has: its result, or the
+ * refusal it threw with the status the contract gives that refusal (`refusalRules.status`).
+ */
+async function serve(work: Promise<unknown>): Promise<Answer> {
+  try {
+    return { status: 200, body: await work };
+  } catch (error) {
+    if (!(error instanceof HttpException)) throw error;
+    return { status: error.getStatus(), body: error.getResponse() };
+  }
+}
+
+/** One page of the space's dossiers, read as the server's maintenance job reads it. */
+function dossiers(h: Harness, ownerId: string, spaceId: string, options: DossierPageOptions = {}): Promise<Answer> {
+  return serve(h.maintenance.dossierPage(ownerId, spaceId, options));
+}
+
+/** How a run ended, as the job's end tells the cursor (`finishWikiMaintenanceJob`): only a succeeded run moves it. */
+function advance(h: Harness, ownerId: string, spaceId: string, body: { to?: string; outcome?: 'succeeded' | 'failed' | 'truncated'; error?: string }): Promise<Answer> {
+  return serve(h.maintenance.advanceCursor(ownerId, spaceId, { to: body.to ?? '', outcome: body.outcome, error: body.error ?? null }));
 }
 
 // ── fixtures ────────────────────────────────────────────────────────────────────────────────────
@@ -426,24 +455,23 @@ async function space(h: Harness, owner: Account, workspaceId: string, repoUrl?: 
   return id;
 }
 
-/** Maintenance turned on by the owner, and the list it made. */
-async function maintained(h: Harness, owner: Account, spaceId: string, workspaceId: string): Promise<string> {
+/** Maintenance turned on by the owner: no list is made, and none named. */
+async function maintained(h: Harness, owner: Account, spaceId: string, workspaceId: string): Promise<void> {
   const on = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { enabled: true, workspaceId } });
   expectStatus(on, 200, 'the owner turns maintenance on');
-  const listId = on.body.settings.maintenance.listId as string;
-  assert.ok(listId, 'turning maintenance on makes the list');
-  return toUuid(listId);
+  assert.equal(on.body.settings.maintenance.listId, null, 'turning maintenance on makes no list: a run is the server\'s job');
 }
 
-/** A maintenance run of the space: a task in its list, and that task's session on the runner. */
-async function maintenanceRun(h: Harness, ownerId: string, listId: string, workspaceId: string, runnerId: string): Promise<string> {
-  const run = await task(h, ownerId, { title: 'Wiki maintenance run', listId, assigneeId: workspaceId });
-  return session(h, ownerId, { workspaceId, runnerId, taskId: run, status: 'RUNNING', lastTurnAt: minutesAgo(1) });
+/** The space's maintenance run as the server makes it: a `maintain` wiki job, with no task and no session. */
+async function maintainJob(h: Harness, ownerId: string, spaceId: string): Promise<string> {
+  const id = randomUUID();
+  await h.sql.query(`INSERT INTO "wiki_job"("id","owner_id","space_id","kind","state") VALUES ($1,$2,$3,'maintain','queued')`, [id, ownerId, spaceId]);
+  return id;
 }
 
 // ── 0. maintenance settings: off by default, the owner's alone ───────────────────────────────────
 
-test('maintenance is off by default, only the owner changes it, and turning it on makes one hidden list', { skip }, async () => {
+test('maintenance is off by default, only the owner changes it, and turning it on makes no list: neither a list nor a provider a request names is taken', { skip }, async () => {
   const h = await boot();
   const owner = await account(h, 'owner');
   const stranger = await account(h, 'stranger');
@@ -486,11 +514,12 @@ test('maintenance is off by default, only the owner changes it, and turning it o
     'none of the refused requests turned it on');
   assert.equal((await h.sql.query(`SELECT 1 FROM "task_list" WHERE "owner_id" = $1`, [owner.id])).rowCount, 0, 'and none made a list');
 
-  // The owner turns it on: the list is made hidden, and recorded; a listId in the request is not taken.
+  // The owner turns it on: no list is made — a run is the server's `maintain` job, with no task — and neither a
+  // listId nor a provider in the request is taken: a client that predates server execution may still send both.
   const decoy = randomUUID();
   const on = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, {
     push: false,
-    maintenance: { enabled: true, workspaceId: ws, provider: 'local-vllm', dailyRunLimit: 12, listId: decoy },
+    maintenance: { enabled: true, workspaceId: ws, provider: 'my-own-endpoint', dailyRunLimit: 12, listId: decoy },
   });
   expectStatus(on, 200, 'the owner turns maintenance on');
   const settings = on.body.settings;
@@ -498,26 +527,23 @@ test('maintenance is off by default, only the owner changes it, and turning it o
   assert.equal(settings.maintenance.enabled, true);
   assert.equal(toUuid(settings.maintenance.workspaceId), ws);
   assert.equal(settings.maintenance.dailyRunLimit, 12);
-  const listId = toUuid(settings.maintenance.listId);
-  assert.notEqual(listId, decoy, 'the list is the server\'s, never the request\'s');
-  const list = await h.sql.query<{ title: string; hidden: boolean; max_concurrent: number | null; owner_id: string }>(
-    `SELECT "title", "hidden", "max_concurrent", "owner_id" FROM "task_list" WHERE "id" = $1`,
-    [listId],
-  );
-  assert.deepEqual(list.rows[0], { title: 'Wiki maintenance', hidden: true, max_concurrent: 1, owner_id: owner.id });
+  assert.equal(settings.maintenance.listId, null, 'a listId in the request is never the space\'s');
+  assert.equal(settings.maintenance.provider, 'local-vllm', 'nor a provider: nothing runs on one');
+  const stored = await h.sql.query<{ settings: { maintenance: Record<string, unknown> } }>(`SELECT "settings" FROM "wiki_space" WHERE "id" = $1`, [spaceId]);
+  assert.equal(stored.rows[0].settings.maintenance.listId ?? null, null, 'and none is stored');
+  assert.notEqual(stored.rows[0].settings.maintenance.provider, 'my-own-endpoint');
 
-  // Changing it again, turning it off and on: still the one list.
+  // Changing it again, turning it off and on: still no list.
   const budget = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { dailyRunLimit: 24 } });
   expectStatus(budget, 200, 'the owner changes the daily limit');
   assert.equal(budget.body.settings.maintenance.enabled, true, 'a key left out stays as it was');
   const off = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { enabled: false } });
   expectStatus(off, 200, 'the owner turns it off');
   assert.equal(off.body.settings.maintenance.enabled, false);
-  assert.equal(toUuid(off.body.settings.maintenance.listId), listId, 'turning it off keeps the list');
   const again = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { enabled: true } });
   expectStatus(again, 200, 'the owner turns it on again');
-  assert.equal(toUuid(again.body.settings.maintenance.listId), listId);
-  assert.equal((await h.sql.query(`SELECT 1 FROM "task_list" WHERE "owner_id" = $1`, [owner.id])).rowCount, 1, 'one list, ever');
+  assert.equal(again.body.settings.maintenance.listId, null);
+  assert.equal((await h.sql.query(`SELECT 1 FROM "task_list" WHERE "owner_id" = $1`, [owner.id])).rowCount, 0, 'no list, ever');
   // A write of another setting leaves maintenance as it stands.
   const push = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { push: true });
   expectStatus(push, 200, 'the owner turns push back on');
@@ -586,8 +612,7 @@ test('turning maintenance on starts the cursor as far back as the owner says —
   assert.equal(state.backlog, 2, 'the facts of the last fourteen days, and none older');
   assert.equal(state.oldestPendingAt, fourteen.sessions[2]!.at.toISOString(), 'the oldest fact after the start is thirteen days old');
   // The first run reads from there.
-  const run = await maintenanceRun(h, owner.id, toUuid(on.settings.listId as string), fourteen.ws, machine.id);
-  const page = await call(h, { runner: machine.token, session: run }, 'GET', `/runner/wiki/spaces/${fourteen.spaceId}/dossiers`);
+  const page = await dossiers(h, owner.id, fourteen.spaceId);
   expectStatus(page, 200, 'the first run reads its first page');
   assert.deepEqual((page.body.dossiers as Array<{ sessionId: string }>).map((dossier) => toUuid(dossier.sessionId)),
     [fourteen.sessions[2]!.id, fourteen.sessions[3]!.id], 'the first page starts thirteen days back, not forty');
@@ -624,7 +649,7 @@ test('turning maintenance on starts the cursor as far back as the owner says —
   const again = await turnOn(fourteen.spaceId, fourteen.ws, { lookbackDays: 1 });
   assert.equal(again.settings.lookbackDays, 1);
   assert.deepEqual(await cursorRowOf(h, fourteen.spaceId), read, 'turning it on again starts nothing: the cursor has its position');
-  const advanced = await call(h, { runner: machine.token, session: run }, 'POST', `/runner/wiki/spaces/${fourteen.spaceId}/cursor`, { to: page.body.cursor });
+  const advanced = await advance(h, owner.id, fourteen.spaceId, { to: page.body.cursor });
   expectStatus(advanced, 200, 'the run advances past what it read');
   assert.equal(advanced.body.advanced, true);
   const moved = await cursorRowOf(h, fourteen.spaceId);
@@ -643,7 +668,8 @@ test('turning maintenance on starts the cursor as far back as the owner says —
   expectStatus(fromSession, 403, 'a session may not set the look-back');
   assert.equal(fromSession.body.code, 'WIKI_OWNER_CHANNEL_ONLY');
   expectStatus(await patch(now.spaceId, { lookbackDays: 30 }, { bearer: stranger.bearer }), 404, "another account's space is a plain 404");
-  const runnerDoor = await call(h, { runner: machine.token, session: run }, 'PATCH', `/runner/wiki/spaces/${now.spaceId}`, { maintenance: { lookbackDays: 30 } });
+  const runnerDoor = await call(h, { runner: machine.token, session: await session(h, owner.id, { workspaceId: now.ws, runnerId: machine.id }) },
+    'PATCH', `/runner/wiki/spaces/${now.spaceId}`, { maintenance: { lookbackDays: 30 } });
   expectStatus(runnerDoor, 404, 'the runner door has no settings route at all');
   for (const bad of [-1, 366, 2.5, '14']) {
     expectStatus(await patch(now.spaceId, { lookbackDays: bad }), 400, `a look-back of ${JSON.stringify(bad)}`);
@@ -654,57 +680,38 @@ test('turning maintenance on starts the cursor as far back as the owner says —
   assert.equal((await call(h, { bearer: owner.bearer }, 'GET', `/wiki/spaces/${now.spaceId}`)).body.settings.maintenance.lookbackDays, 30);
 });
 
-// ── 4. only a maintenance session of the space, and no other tenant ──────────────────────────────
+// ── 4. no other tenant ──────────────────────────────────────────────────────────────────────────
 
-test('the dossier door and the cursor answer a maintenance session of the space and refuse everyone else', { skip }, async () => {
+test('another tenant reads no dossier of the space and moves none of its cursor: every call is a plain 404', { skip }, async () => {
   const h = await boot();
   const owner = await account(h, 'owner');
   const machine = await runner(h, owner.id);
   const ws = await workspace(h, owner.id);
   const spaceId = await space(h, owner, ws);
-  const listId = await maintained(h, owner, spaceId, ws);
-  const run = await maintenanceRun(h, owner.id, listId, ws, machine.id);
-  const plain = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id });
-  const otherTask = await task(h, owner.id, { assigneeId: ws });
-  const taskSession = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id, taskId: otherTask });
-  const secondSpace = await space(h, owner, await workspace(h, owner.id));
+  await maintained(h, owner, spaceId, ws);
+  const talk = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id });
+  await turn(h, talk, 'The owner says what the wiki should know.');
 
-  assert.equal(await isWikiMaintenanceSession(h.prisma, { ownerId: owner.id, sessionId: run, spaceId }), true);
-  assert.deepEqual(await wikiMaintenanceSpaceOf(h.prisma, run), { spaceId, ownerId: owner.id });
-  assert.equal(await isWikiMaintenanceSession(h.prisma, { ownerId: owner.id, sessionId: plain, spaceId }), false);
-  assert.equal(await isWikiMaintenanceSession(h.prisma, { ownerId: owner.id, sessionId: taskSession, spaceId }), false);
-  assert.equal(await isWikiMaintenanceSession(h.prisma, { ownerId: owner.id, sessionId: run, spaceId: secondSpace }), false);
+  const ok = await dossiers(h, owner.id, spaceId);
+  expectStatus(ok, 200, 'the space\'s own run reads its dossiers');
+  assert.equal(ok.body.dossiers.length, 1);
+  const before = await h.maintenance.cursorState(owner.id, spaceId);
 
-  const ok = await call(h, { runner: machine.token, session: run }, 'GET', `/runner/wiki/spaces/${spaceId}/dossiers`);
-  expectStatus(ok, 200, 'a maintenance run reads its space\'s dossiers');
-  for (const [who, sessionId] of [['a plain session', plain], ['a task outside the list', taskSession]] as const) {
-    const read = await call(h, { runner: machine.token, session: sessionId }, 'GET', `/runner/wiki/spaces/${spaceId}/dossiers`);
-    expectStatus(read, 403, `${who} reads no dossier`);
-    assert.equal(read.body.code, 'WIKI_NOT_MAINTENANCE_SESSION');
-    const move = await call(h, { runner: machine.token, session: sessionId }, 'POST', `/runner/wiki/spaces/${spaceId}/cursor`, { to: ok.body.cursor });
-    expectStatus(move, 403, `${who} moves no cursor`);
-    assert.equal(move.body.code, 'WIKI_NOT_MAINTENANCE_SESSION');
-  }
-  const elsewhere = await call(h, { runner: machine.token, session: run }, 'GET', `/runner/wiki/spaces/${secondSpace}/dossiers`);
-  expectStatus(elsewhere, 403, 'a maintenance run of one space reads nothing of another');
-  const headless = await call(h, { runner: machine.token }, 'GET', `/runner/wiki/spaces/${spaceId}/dossiers`);
-  expectStatus(headless, 400, 'a headless call has no session to be a maintenance run');
-
-  // Another tenant: their runner, their own maintenance run, our space — and our session on their runner.
+  // Another tenant: their own space and its maintenance, and our space named under their account.
   const tenant = await account(h, 'tenant');
-  const theirs = await runner(h, tenant.id);
   const theirWorkspace = await workspace(h, tenant.id);
   const theirSpace = await space(h, tenant, theirWorkspace);
-  const theirList = await maintained(h, tenant, theirSpace, theirWorkspace);
-  const theirRun = await maintenanceRun(h, tenant.id, theirList, theirWorkspace, theirs.id);
-  const across = await call(h, { runner: theirs.token, session: theirRun }, 'GET', `/runner/wiki/spaces/${spaceId}/dossiers`);
+  await maintained(h, tenant, theirSpace, theirWorkspace);
+  const across = await dossiers(h, tenant.id, spaceId);
   expectStatus(across, 404, "another owner's space is a plain 404");
-  const acrossMove = await call(h, { runner: theirs.token, session: theirRun }, 'POST', `/runner/wiki/spaces/${spaceId}/cursor`, { to: ok.body.cursor });
-  expectStatus(acrossMove, 404, "and its cursor is as absent");
-  const borrowed = await call(h, { runner: theirs.token, session: run }, 'GET', `/runner/wiki/spaces/${spaceId}/dossiers`);
-  expectStatus(borrowed, 403, 'a session their runner does not host is nobody here');
-  assert.equal(await isWikiMaintenanceSession(h.prisma, { ownerId: tenant.id, sessionId: run, spaceId }), false);
-  const theirsOk = await call(h, { runner: theirs.token, session: theirRun }, 'GET', `/runner/wiki/spaces/${theirSpace}/dossiers`);
+  const acrossMove = await advance(h, tenant.id, spaceId, { to: ok.body.cursor });
+  expectStatus(acrossMove, 404, 'and its cursor is as absent');
+  await assert.rejects(h.maintenance.advanceRecorded(tenant.id, spaceId, ok.body.cursor), NotFoundException, 'a run\'s recorded advance too');
+  await assert.rejects(h.maintenance.cursorState(tenant.id, spaceId), NotFoundException, 'and so is its state');
+  const after = await h.maintenance.cursorState(owner.id, spaceId);
+  assert.deepEqual([after.position, after.lastRunAt, after.consecutiveFailures], [before.position, before.lastRunAt, before.consecutiveFailures],
+    'none of it moved our cursor, or counted a run on it');
+  const theirsOk = await dossiers(h, tenant.id, theirSpace);
   expectStatus(theirsOk, 200, 'their own run reads their own space');
   assert.equal(theirsOk.body.dossiers.length, 0, 'and finds nothing of ours in it');
 });
@@ -718,8 +725,17 @@ test('each committed fact — settled session, settled task, answered approval, 
   const ws = await workspace(h, owner.id);
   const repo = `https://github.com/orbit-dossier-spec/${randomUUID()}`;
   const spaceId = await space(h, owner, ws, repo);
-  const listId = await maintained(h, owner, spaceId, ws);
-  const run = await maintenanceRun(h, owner.id, listId, ws, machine.id);
+  await maintained(h, owner, spaceId, ws);
+  // The hidden «Wiki maintenance» list a space's maintenance tasks were made in before the server ran its runs:
+  // spaces that had one keep it named in their settings, and what it holds is history.
+  const listId = randomUUID();
+  await h.sql.query(`INSERT INTO "task_list"("id","title","owner_id","hidden","max_concurrent","updated_at") VALUES ($1,'Wiki maintenance',$2,true,1,now())`,
+    [listId, owner.id]);
+  await h.sql.query(`UPDATE "wiki_space" SET "settings" = jsonb_set("settings", '{maintenance,listId}', to_jsonb($2::text)) WHERE "id" = $1`, [spaceId, listId]);
+  const run = await session(h, owner.id, {
+    workspaceId: ws, runnerId: machine.id, status: 'RUNNING', lastTurnAt: minutesAgo(1),
+    taskId: await task(h, owner.id, { title: 'Wiki maintenance run', listId, assigneeId: ws }),
+  });
 
   const backlog = async () => h.maintenance.cursorState(owner.id, spaceId);
   let state = await backlog();
@@ -761,11 +777,11 @@ test('each committed fact — settled session, settled task, answered approval, 
   await criterion(h, await project(h, owner.id, 'https://github.com/somebody-else/other'), 1);
   assert.equal((await backlog()).backlog, state.backlog, "another repository's criterion is not this space's");
 
-  // A maintenance run feeds nothing to its own backlog: its session, its task and its receipt.
+  // What a maintenance task of that list left is no fact either: its session, its task and its receipt.
   await h.sql.query(`UPDATE "session" SET "status" = 'AWAITING_INPUT', "last_turn_at" = $2 WHERE "id" = $1`, [run, utc(minutesAgo(5))]);
   await receipt(h, owner.id, run, minutesAgo(5));
   await h.sql.query(`UPDATE "task" SET "status" = 'CANCELLED', "updated_at" = $2 WHERE "list_id" = $1`, [listId, utc(minutesAgo(5))]);
-  assert.equal((await backlog()).backlog, state.backlog, 'nothing of the maintenance run is a fact');
+  assert.equal((await backlog()).backlog, state.backlog, 'nothing of the old maintenance run is a fact');
 
   assert.equal(state.backlog, 5);
   assert.equal(state.pendingSessions, 1, 'the session, its approval and its receipt name one session');
@@ -799,11 +815,9 @@ test('the cursor only moves forward, and a failed or truncated run does not move
   const machine = await runner(h, owner.id);
   const ws = await workspace(h, owner.id);
   const spaceId = await space(h, owner, ws);
-  const listId = await maintained(h, owner, spaceId, ws);
-  const run = await maintenanceRun(h, owner.id, listId, ws, machine.id);
-  const as = { runner: machine.token, session: run };
-  const page = () => call(h, as, 'GET', `/runner/wiki/spaces/${spaceId}/dossiers`);
-  const advance = (body: Record<string, unknown>) => call(h, as, 'POST', `/runner/wiki/spaces/${spaceId}/cursor`, body);
+  await maintained(h, owner, spaceId, ws);
+  const page = (options: DossierPageOptions = {}) => dossiers(h, owner.id, spaceId, options);
+  const end = (body: Parameters<typeof advance>[3]) => advance(h, owner.id, spaceId, body);
 
   for (let n = 0; n < 3; n += 1) {
     const talk = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id, lastTurnAt: minutesAgo(30 - n) });
@@ -823,31 +837,31 @@ test('the cursor only moves forward, and a failed or truncated run does not move
   const start = first.body.state.position as string;
   assert.ok(start, 'the cursor starts where turning maintenance on put it');
 
-  const failed = await advance({ to: t1, outcome: 'failed', error: 'the model endpoint answered 500; POSTGRES_PASSWORD=hunter2-dossier-spec' });
+  const failed = await end({ to: t1, outcome: 'failed', error: 'the model endpoint answered 500; POSTGRES_PASSWORD=hunter2-dossier-spec' });
   expectStatus(failed, 200, 'a failed run is recorded');
   assert.equal(failed.body.advanced, false);
   assert.equal(failed.body.state.position, start, 'a failed run moves nothing');
   assert.equal(failed.body.state.consecutiveFailures, 1);
   assert.equal(failed.body.state.lastOutcome, 'failed');
   assert.doesNotMatch(failed.body.state.lastError, /hunter2/, 'the error is redacted before it is kept');
-  const truncated = await advance({ to: t1, outcome: 'truncated' });
+  const truncated = await end({ to: t1, outcome: 'truncated' });
   expectStatus(truncated, 200, 'a truncated run is recorded');
   assert.equal(truncated.body.advanced, false);
   assert.equal(truncated.body.state.position, start, 'a truncated run moves nothing');
   assert.equal(truncated.body.state.consecutiveFailures, 2);
   assert.equal(truncated.body.state.backlog, 4);
-  const noToken = await advance({ outcome: 'failed', error: 'died before its first page' });
+  const noToken = await end({ outcome: 'failed', error: 'died before its first page' });
   expectStatus(noToken, 200, 'a run that failed before reading a page is counted too');
   assert.equal(noToken.body.state.consecutiveFailures, 3);
 
-  const moved = await advance({ to: t1 });
+  const moved = await end({ to: t1 });
   expectStatus(moved, 200, 'a succeeded run moves the cursor');
   assert.equal(moved.body.advanced, true);
   assert.equal(moved.body.state.position, t1);
   assert.equal(moved.body.state.backlog, 1, 'what the page covered is behind the watermark now; the recent fact is not');
   assert.equal(moved.body.state.consecutiveFailures, 0);
   assert.ok(moved.body.state.lastOkAt);
-  const replay = await advance({ to: t1 });
+  const replay = await end({ to: t1 });
   expectStatus(replay, 200, 'the same advance again is a success that moves nothing');
   assert.equal(replay.body.advanced, false);
   assert.equal(replay.body.state.position, t1);
@@ -862,12 +876,12 @@ test('the cursor only moves forward, and a failed or truncated run does not move
   assert.equal(second.body.dossiers.length, 2, 'only the facts after the watermark');
   const t2 = second.body.cursor as string;
   assert.notEqual(t2, t1);
-  const forward = await advance({ to: t2 });
+  const forward = await end({ to: t2 });
   expectStatus(forward, 200, 'the cursor moves on to the second page');
   assert.equal(forward.body.advanced, true);
   assert.equal(forward.body.state.backlog, 0);
 
-  const back = await advance({ to: t1 });
+  const back = await end({ to: t1 });
   expectStatus(back, 409, 'a token behind the watermark moves nothing');
   assert.equal(back.body.code, 'WIKI_CURSOR_BEHIND');
   assert.equal(back.body.state.position, t2, 'the answer says where the cursor stands');
@@ -877,21 +891,20 @@ test('the cursor only moves forward, and a failed or truncated run does not move
   // A token no page of this space handed out is none: past the furthest issue, another space's, noise.
   const decoded = JSON.parse(Buffer.from(t2.slice('wc1.'.length), 'base64url').toString('utf8')) as { s: string; p: [string, string, string] };
   const ahead = `wc1.${Buffer.from(JSON.stringify({ s: decoded.s, p: [new Date(Date.now() + 86_400_000).toISOString(), 'session_settled', randomUUID()] })).toString('base64url')}`;
-  const forged = await advance({ to: ahead });
+  const forged = await end({ to: ahead });
   expectStatus(forged, 400, 'a position no page handed out');
   assert.equal(forged.body.code, 'WIKI_CURSOR_INVALID');
   const foreign = `wc1.${Buffer.from(JSON.stringify({ s: randomUUID(), p: decoded.p })).toString('base64url')}`;
-  expectStatus(await advance({ to: foreign }), 400, "another space's token");
-  expectStatus(await advance({ to: 'not-a-token' }), 400, 'noise');
-  expectStatus(await advance({}), 400, 'a succeeded run names where it got to');
+  expectStatus(await end({ to: foreign }), 400, "another space's token");
+  expectStatus(await end({ to: 'not-a-token' }), 400, 'noise');
+  expectStatus(await end({}), 400, 'a succeeded run names where it got to');
   assert.equal((await h.maintenance.cursorState(owner.id, spaceId)).position, t2, 'none of them moved it');
 
   // A page asked to start after the watermark is empty, and its token is where it started.
-  const empty = await call(h, as, 'GET', `/runner/wiki/spaces/${spaceId}/dossiers?after=${encodeURIComponent(t2)}`);
+  const empty = await page({ after: t2 });
   expectStatus(empty, 200, 'a page past everything');
   assert.equal(empty.body.dossiers.length, 0);
   assert.equal(empty.body.cursor, t2);
-  expectStatus(await call(h, as, 'GET', `/runner/wiki/spaces/${spaceId}/dossiers?limit=0`), 400, 'a page of no sessions');
 });
 
 // ── 1, 2, 3. the dossier: deterministic, redacted first, cut to 8k ──────────────────────────────
@@ -996,8 +1009,8 @@ test('a dossier is the same twice, carries no secret, keeps the agent\'s trace, 
   const literal = `envval-${randomUUID()}`;
   const ws = await workspace(h, owner.id, { DEPLOY_HOOK: literal });
   const spaceId = await space(h, owner, ws);
-  const listId = await maintained(h, owner, spaceId, ws);
-  const run = await maintenanceRun(h, owner.id, listId, ws, machine.id);
+  await maintained(h, owner, spaceId, ws);
+  const run = await maintainJob(h, owner.id, spaceId);
   const secrets = seededSecrets(literal);
   assert.ok(secrets.length >= 50, `seed ${secrets.length} shapes, at least fifty`);
 
@@ -1053,12 +1066,12 @@ test('a dossier is the same twice, carries no secret, keeps the agent\'s trace, 
   assert.equal(twice.hash, once.hash, 'and the same hash');
   assert.deepEqual(twice.sources, once.sources);
 
-  const first = await call(h, { runner: machine.token, session: run }, 'GET', `/runner/wiki/spaces/${spaceId}/dossiers`);
+  const first = await dossiers(h, owner.id, spaceId);
   expectStatus(first, 200, 'the maintenance run reads the page');
   const dossier = (first.body.dossiers as Array<{ sessionId: string; text: string; hash: string; tokens: number; truncated: boolean; unchanged: boolean; sources: Array<{ ref: string; kind: string; id: string; spans: WikiDossierSpan[] }> }>)
     .find((one) => toUuid(one.sessionId) === talk);
   assert.ok(dossier, 'the settled session has its dossier on the page');
-  assert.equal(dossier.hash, once.hash, 'the door hands out the very dossier the function makes');
+  assert.equal(dossier.hash, once.hash, 'the page hands out the very dossier the function makes');
   assert.equal(dossier.text, once.text);
   assert.equal(dossier.unchanged, false, 'never handed out before');
 
@@ -1073,9 +1086,9 @@ test('a dossier is the same twice, carries no secret, keeps the agent\'s trace, 
   }
   assert.ok(dossier.text.includes('[redacted]'));
 
-  // What the dossier carries, and cites. The door serves every id in its public spelling.
+  // What the dossier carries, and cites.
   const sources = dossier.sources.map((source) => ({ ref: source.ref, kind: source.kind, id: toUuid(source.id), spans: source.spans }));
-  assert.deepEqual(sources, once.sources, 'the door hands out the sources the function made');
+  assert.deepEqual(sources, once.sources, 'the page hands out the sources the function made');
   const cited = new Map(sources.map((source) => [source.id, source.kind]));
   for (const [id, kind] of [
     [opening, 'turn'], [owned[0]!, 'turn'], [asked, 'approval'], [denied, 'approval'], [plan, 'approval'],
@@ -1101,9 +1114,9 @@ test('a dossier is the same twice, carries no secret, keeps the agent\'s trace, 
   assert.ok(dossier.tokens <= WIKI_MAINTENANCE_RULES.dossierMaxTokens);
   assert.equal(dossier.tokens, wikiEstimateTokens(dossier.text));
 
-  // The lines cite records a proposal can name: the receipt and the owner's decision resolve, and a
+  // The lines cite records the run's proposal can name: the receipt and the owner's decision resolve, and a
   // quote taken from the dossier's receipt line is found in the receipt.
-  const proposer: WikiPrincipal = { origin: 'agent', ownerId: owner.id, userId: null, sessionId: run, toolCallId: null };
+  const proposer: WikiPrincipal = wikiMaintainJobPrincipal(owner.id, run);
   const checked = await h.service.submitChangeset(proposer, spaceId, {
     dryRun: true,
     idempotencyKey: `dossier-dry-${randomUUID()}`,
@@ -1144,9 +1157,9 @@ test('a dossier is the same twice, carries no secret, keeps the agent\'s trace, 
   assert.equal((await h.sql.query(`SELECT 1 FROM "wiki_dossier" WHERE "source_ids"::text LIKE '%do not keep this%'`)).rowCount, 0);
 
   // Once the cursor has advanced past it, the same dossier is marked unchanged.
-  expectStatus(await call(h, { runner: machine.token, session: run }, 'POST', `/runner/wiki/spaces/${spaceId}/cursor`, { to: first.body.cursor }), 200, 'advance');
+  expectStatus(await advance(h, owner.id, spaceId, { to: first.body.cursor }), 200, 'advance');
   await h.sql.query(`UPDATE "session" SET "last_turn_at" = $2 WHERE "id" = $1`, [talk, utc(minutesAgo(8))]);
-  const again = await call(h, { runner: machine.token, session: run }, 'GET', `/runner/wiki/spaces/${spaceId}/dossiers`);
+  const again = await dossiers(h, owner.id, spaceId);
   expectStatus(again, 200, 'the session comes to rest again');
   const same = (again.body.dossiers as Array<{ sessionId: string; hash: string; unchanged: boolean }>).find((one) => toUuid(one.sessionId) === talk);
   assert.equal(same?.hash, dossier.hash, 'nothing it is made of changed');
@@ -1161,7 +1174,7 @@ test('a dossier is the same twice, carries no secret, keeps the agent\'s trace, 
   const short = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id, status: 'AWAITING_INPUT', lastTurnAt: minutesAgo(7) });
   await turn(h, short, 'One small thing.');
   await event(h, short, 'assistant', { text: 'Done.' }, minutesAgo(50));
-  const cutPage = await call(h, { runner: machine.token, session: run }, 'GET', `/runner/wiki/spaces/${spaceId}/dossiers`);
+  const cutPage = await dossiers(h, owner.id, spaceId);
   expectStatus(cutPage, 200, 'the page with the long session');
   const byId = new Map((cutPage.body.dossiers as Array<{ sessionId: string; text: string; tokens: number; truncated: boolean }>).map((one) => [toUuid(one.sessionId), one]));
   const longOne = byId.get(long)!;
@@ -1193,8 +1206,8 @@ test('every line goes back to its record: the words at its spans, redacted, are 
   const literal = `envval-${randomUUID()}`;
   const ws = await workspace(h, owner.id, { DEPLOY_HOOK: literal });
   const spaceId = await space(h, owner, ws);
-  const listId = await maintained(h, owner, spaceId, ws);
-  const run = await maintenanceRun(h, owner.id, listId, ws, machine.id);
+  await maintained(h, owner, spaceId, ws);
+  const run = await maintainJob(h, owner.id, spaceId);
   // A token the redactor takes out wherever it stands: the positions count in the text as redacted, so a
   // secret before a line's words moves them, and the spans must say where they are after it.
   const token = `ghp_${randomUUID().replace(/-/g, '')}Ab12`;
@@ -1202,7 +1215,9 @@ test('every line goes back to its record: the words at its spans, redacted, are 
 
   const work = await task(h, owner.id, { title: 'Place every line', status: 'FAILED', assigneeId: ws, acceptance: 'Every line has its place.' });
   const talk = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id, taskId: work, status: 'SUCCEEDED', lastTurnAt: minutesAgo(20) });
-  const prompt = 'Place every line of the dossier 🎯.\n\nPositions count in code points, not in UTF-16 units.\n\n请按以下步骤进行：\n1. read\n2. write';
+  // The brief's step list under its English heading; the first dossier above keeps the Chinese one older
+  // transcripts hold, and both are cut.
+  const prompt = 'Place every line of the dossier 🎯.\n\nPositions count in code points, not in UTF-16 units.\n\nFollow these steps:\n1. read\n2. write';
   const opening = await turn(h, talk, prompt, { clientTurnId: `initial-${randomUUID()}`, sendIntent: null, at: at(59) });
   const retried = await turn(h, talk, prompt, { clientTurnId: `initial-${randomUUID()}`, sendIntent: null, at: at(58) });
   const long = await turn(h, talk, `Keep 🎯 the budget at 8k, never 16k: ${token} ${literal} ${'the reason is recall, measured. '.repeat(220)}`, { at: at(57) });
@@ -1258,7 +1273,7 @@ test('every line goes back to its record: the words at its spans, redacted, are 
 
   // Every line: its record resolves among the owner's own, and the words at each of its spans — read from the
   // record as a quote of it is checked, then redacted — are the words it declares, in order, none overlapping.
-  const reader: WikiPrincipal = { origin: 'agent', ownerId: owner.id, userId: null, sessionId: run, toolCallId: null };
+  const reader: WikiPrincipal = wikiMaintainJobPrincipal(owner.id, run);
   const recordWords = async (source: { kind: WikiSourceKind; id: string }): Promise<string[]> => {
     const found = await h.service.sourceText(h.prisma, reader, { kind: source.kind, ref: source.id });
     assert.ok(found, `${source.kind} ${source.id} is one of the owner's records`);
@@ -1313,6 +1328,7 @@ test('every line goes back to its record: the words at its spans, redacted, are 
   const opened = bySource(opening, 'turn');
   assert.deepEqual(texts(opened), ['Place every line of the dossier 🎯.\n\nPositions count in code points, not in UTF-16 units.'],
     'the opening prompt without the step list every task ends with');
+  assert.doesNotMatch(dossier.text, /Follow these steps/, 'the step list is cut under its English heading too');
   const repeated = bySource(retried, 'turn');
   assert.equal(lineOf.get(repeated.ref), `${repeated.ref} taskprompt: (the same opening prompt again)`);
   assert.deepEqual(texts(repeated), texts(opened), 'a repeated prompt points at the prompt it stands for');
@@ -1338,12 +1354,12 @@ test('every line goes back to its record: the words at its spans, redacted, are 
   assert.deepEqual(texts(bySource(merged.id, 'merge_receipt')), [`MERGED orbit/dossier-spec@${merged.sourceSha} → main@${merged.targetSha}`]);
   assert.deepEqual(texts(bySource(decision, 'owner_decision')), ['decide whether the extra files land', 'Accepted: spans count in code points.']);
 
-  // The door hands the spans out with the words at them; the table keeps where they are and nothing they say.
-  const page = await call(h, { runner: machine.token, session: run }, 'GET', `/runner/wiki/spaces/${spaceId}/dossiers`);
+  // The page hands the spans out with the words at them; the table keeps where they are and nothing they say.
+  const page = await dossiers(h, owner.id, spaceId);
   expectStatus(page, 200, 'the maintenance run reads the page');
   const served = (page.body.dossiers as Array<{ sessionId: string; sources: Placed[] }>).find((one) => toUuid(one.sessionId) === talk)!;
   assert.deepEqual(served.sources.map(({ ref, kind, id, spans }) => ({ ref, kind, id: toUuid(id), spans })), dossier.sources,
-    'the door serves every id in its public spelling, and the spans as they are');
+    'the page serves every line\'s record, and the spans as they are');
   const kept = await h.sql.query<{ source_ids: unknown }>(`SELECT "source_ids" FROM "wiki_dossier" WHERE "space_id" = $1 AND "session_id" = $2`, [spaceId, talk]);
   assert.deepEqual(kept.rows[0]!.source_ids, storedDossierSources(dossier.sources));
   assert.equal((await h.sql.query(`SELECT 1 FROM "wiki_dossier" WHERE "session_id" = $1 AND "source_ids"::text LIKE '%release.sh next%'`, [talk])).rowCount, 0,
@@ -1382,8 +1398,7 @@ test("a project's coordinator and judgment sessions are the space's only when th
   const ws = await workspace(h, owner.id);
   const elsewhere = await workspace(h, owner.id);
   const spaceId = await space(h, owner, ws);
-  const listId = await maintained(h, owner, spaceId, ws);
-  const run = await maintenanceRun(h, owner.id, listId, ws, machine.id);
+  await maintained(h, owner, spaceId, ws);
 
   // The demo's werewolf project: coordinated from this space's workspace, its task sessions all elsewhere.
   const game = await project(h, owner.id);
@@ -1437,7 +1452,7 @@ test("a project's coordinator and judgment sessions are the space's only when th
     merge_receipt: 0,
     criterion_revised: 1,
   }, "our three coordinators' rests and our criterion: nothing of the game's is this space's");
-  const page = await call(h, { runner: machine.token, session: run }, 'GET', `/runner/wiki/spaces/${spaceId}/dossiers`);
+  const page = await dossiers(h, owner.id, spaceId);
   expectStatus(page, 200, 'the page');
   assert.deepEqual((page.body.dossiers as Array<{ sessionId: string }>).map((one) => toUuid(one.sessionId)),
     [ourCoordinator, plannedCoordinator, emptyCoordinator],
@@ -1453,8 +1468,7 @@ test('a batch project is counted, never extracted, and a tool error three sessio
   const machine = await runner(h, owner.id);
   const ws = await workspace(h, owner.id);
   const spaceId = await space(h, owner, ws);
-  const listId = await maintained(h, owner, spaceId, ws);
-  const run = await maintenanceRun(h, owner.id, listId, ws, machine.id);
+  await maintained(h, owner, spaceId, ws);
 
   // FineWeb's shape: one project, one title template, many tasks.
   const fineweb = await project(h, owner.id);
@@ -1484,7 +1498,7 @@ test('a batch project is counted, never extracted, and a tool error three sessio
     await tool(h, s, 'Bash', { command: 'git push' }, 'error: failed to push some refs to origin', { isError: port !== 5434 });
   }
 
-  const page = await call(h, { runner: machine.token, session: run }, 'GET', `/runner/wiki/spaces/${spaceId}/dossiers?limit=50`);
+  const page = await dossiers(h, owner.id, spaceId, { limit: 50 });
   expectStatus(page, 200, 'the page');
   const dossierSessions = new Set((page.body.dossiers as Array<{ sessionId: string }>).map((one) => toUuid(one.sessionId)));
   for (const s of batchSessions) assert.ok(!dossierSessions.has(s), 'a batch project\'s session gets no dossier of its own');

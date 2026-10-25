@@ -19,6 +19,10 @@ public enum ProjectOpenItemKind: String, Codable, Sendable {
     case promotionApproval = "PROMOTION_APPROVAL"
     case coordinatorQuestion = "COORDINATOR_QUESTION"
     case fusePaused = "FUSE_PAUSED"
+    /// A finished delivery whose landing needs a bounded decision (§4.8).
+    case deliveryReview = "DELIVERY_REVIEW"
+    /// §4.6 X-E5: a landing attempt whose runner stopped reporting, escalated at birth.
+    case landingLeaseExpired = "LANDING_LEASE_EXPIRED"
     case unknown = "UNKNOWN"
 
     public init(from decoder: Decoder) throws {
@@ -118,11 +122,29 @@ public enum ProjectOpenItemAction: String, Codable, Sendable {
     case askCoordinatorAgain = "ASK_COORDINATOR_AGAIN"
     case resume = "RESUME"
     case answer = "ANSWER"
+    /// The way into the landing session this item is about (§2.9 LS6) — a reading door.
+    case openLanding = "OPEN_LANDING"
+    /// End the timed-out landing attempt the item is about (§4.6 X-E5, J12).
+    case abandon = "ABANDON"
     case unknown = "UNKNOWN"
 
     public init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
         self = ProjectOpenItemAction(rawValue: raw) ?? .unknown
+    }
+}
+
+/// One task filed as a concrete fix for an open item (§4.7, `fixes_open_item_id`), as the owner's
+/// read serves it under `handledBy`: the task and where its run stands.
+public struct OpenItemFixTask: Codable, Equatable, Sendable {
+    public let taskId: String
+    public let title: String
+    public let state: String
+
+    public init(taskId: String, title: String, state: String) {
+        self.taskId = taskId
+        self.title = title
+        self.state = state
     }
 }
 
@@ -147,6 +169,62 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
             state = try c.decodeIfPresent(String.self, forKey: .state) ?? ""
             sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
             at = try c.decodeIfPresent(String.self, forKey: .at)
+        }
+    }
+
+    /// The claim an X-E5 item is about (§4.6 revision 23): the last report its runner made, the
+    /// limit it went past, and the two facts J12's verdict branches on.
+    public struct OpenItemLease: Codable, Equatable, Sendable {
+        public let lastReportAt: String?
+        /// When the claim's lease ran out — the last report plus the step's limit (§7.2 V6).
+        public let leaseExpiredAt: String?
+        /// `LAND_TASK`, `CHECK_PROMOTION` or `LAND_PROMOTION`: J12's verdict branches on it.
+        public let jobKind: String?
+        public let generation: Int?
+        public let phase: String?
+        public let step: String?
+        public let claimGeneration: Int?
+        public let round: Int?
+        public let checkCount: Int?
+        public let runner: String?
+        /// `'v2'` for a claim that reports periodically, nil for a legacy claim.
+        public let progressProtocol: String?
+        /// Whether the claim ever recorded a PUSH; false proves nothing was pushed on a v2 claim.
+        public let pushReported: Bool
+
+        public init(lastReportAt: String? = nil, leaseExpiredAt: String? = nil,
+                    jobKind: String? = nil, generation: Int? = nil, phase: String? = nil,
+                    step: String? = nil, claimGeneration: Int? = nil, round: Int? = nil,
+                    checkCount: Int? = nil, runner: String? = nil,
+                    progressProtocol: String? = nil, pushReported: Bool = false) {
+            self.lastReportAt = lastReportAt
+            self.leaseExpiredAt = leaseExpiredAt
+            self.jobKind = jobKind
+            self.generation = generation
+            self.phase = phase
+            self.step = step
+            self.claimGeneration = claimGeneration
+            self.round = round
+            self.checkCount = checkCount
+            self.runner = runner
+            self.progressProtocol = progressProtocol
+            self.pushReported = pushReported
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            lastReportAt = try? c.decodeIfPresent(String.self, forKey: .lastReportAt)
+            leaseExpiredAt = try? c.decodeIfPresent(String.self, forKey: .leaseExpiredAt)
+            jobKind = try? c.decodeIfPresent(String.self, forKey: .jobKind)
+            generation = try? c.decodeIfPresent(Int.self, forKey: .generation)
+            phase = try? c.decodeIfPresent(String.self, forKey: .phase)
+            step = try? c.decodeIfPresent(String.self, forKey: .step)
+            claimGeneration = try? c.decodeIfPresent(Int.self, forKey: .claimGeneration)
+            round = try? c.decodeIfPresent(Int.self, forKey: .round)
+            checkCount = try? c.decodeIfPresent(Int.self, forKey: .checkCount)
+            runner = try? c.decodeIfPresent(String.self, forKey: .runner)
+            progressProtocol = try? c.decodeIfPresent(String.self, forKey: .progressProtocol)
+            pushReported = try c.decodeIfPresent(Bool.self, forKey: .pushReported) ?? false
         }
     }
 
@@ -175,10 +253,32 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     public let promotionId: String?
     /// The pause this item is, for a `FUSE_PAUSED`; nil for every other kind.
     public let fuseEpisodeId: String?
+    /// The landing session of the attempt this item is about (§2.9 LS1), when the row recorded one:
+    /// `OPEN_LANDING` opens it, and the transcript card links to it. Null for a row an older build
+    /// opened, and for a kind that lands nothing.
+    public let landingSessionId: String?
+    /// The landing attempt an X-E5 item is about (§4.6): the integration job whose claim stopped
+    /// reporting. `ABANDON` names that job in its route. Nil for every other kind.
+    public let integrationJobId: String?
+    /// The claim an X-E5 item is about, as the card's heading and its Abandon consequence read it
+    /// (§4.6, revision 23). Nil on every other kind and on a server that predates it.
+    public let lease: OpenItemLease?
     /// Where this item is on its way to the coordinator, or that it is not owed to one.
     public let delivery: Delivery?
     /// The presses the server offers on this item.
     public let actions: [ProjectOpenItemAction]
+    /// The server's one-sentence answer to "what must happen next" — the first thing a card says
+    /// (§7.5, T9). Optional for rolling deploys: a row from a server that predates it draws what the
+    /// card drew before (`ExceptionCards.requiredAction`).
+    public let requiredAction: String?
+    /// The first executable door for the item, when the server can name one (T9): the press the card
+    /// leads with. Absent from a server that predates it, and then the kind decides the lead as it
+    /// did before (`ExceptionCards.leadingDoors`).
+    public let primaryAction: ProjectOpenItemAction?
+    /// The tasks filed as concrete fixes for this item, newest task state included (§4.7): what the
+    /// card's "The coordinator is fixing this in …" line names. Absent from an older server, and
+    /// empty when none is linked.
+    public let handledBy: [OpenItemFixTask]?
     /// What was asked, for a `COORDINATOR_QUESTION`; nil for every other kind.
     public let question: CoordinatorQuestion?
     /// The request a `START_REQUEST` carries — what the "Start this project?" card is drawn from
@@ -202,7 +302,11 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                 escalateAt: String? = nil, escalatedAt: String? = nil, taskId: String? = nil,
                 sessionId: String? = nil, promotionId: String? = nil,
                 fuseEpisodeId: String? = nil, delivery: Delivery? = nil,
-                actions: [ProjectOpenItemAction] = [], question: CoordinatorQuestion? = nil,
+                landingSessionId: String? = nil, integrationJobId: String? = nil,
+                lease: OpenItemLease? = nil,
+                actions: [ProjectOpenItemAction] = [], requiredAction: String? = nil,
+                primaryAction: ProjectOpenItemAction? = nil, handledBy: [OpenItemFixTask]? = nil,
+                question: CoordinatorQuestion? = nil,
                 startRequest: ProjectStartRequest? = nil, doneRequest: DoneRequest? = nil,
                 facts: OpenItemFacts? = nil) {
         self.itemId = itemId
@@ -219,7 +323,13 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         self.promotionId = promotionId
         self.fuseEpisodeId = fuseEpisodeId
         self.delivery = delivery
+        self.landingSessionId = landingSessionId
+        self.integrationJobId = integrationJobId
+        self.lease = lease
         self.actions = actions
+        self.requiredAction = requiredAction
+        self.primaryAction = primaryAction
+        self.handledBy = handledBy
         self.question = question
         self.startRequest = startRequest
         self.doneRequest = doneRequest
@@ -243,7 +353,16 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         promotionId = try c.decodeIfPresent(String.self, forKey: .promotionId)
         fuseEpisodeId = try c.decodeIfPresent(String.self, forKey: .fuseEpisodeId)
         delivery = try c.decodeIfPresent(Delivery.self, forKey: .delivery)
+        landingSessionId = (try? c.decodeIfPresent(String.self, forKey: .landingSessionId)) ?? nil
+        integrationJobId = (try? c.decodeIfPresent(String.self, forKey: .integrationJobId)) ?? nil
+        lease = (try? c.decodeIfPresent(OpenItemLease.self, forKey: .lease)) ?? nil
         actions = try c.decodeIfPresent([ProjectOpenItemAction].self, forKey: .actions) ?? []
+        // Read with `try?`: a field this build cannot read costs the card that field and never the
+        // whole read that carried it — the same rule `startRequest` below is read under.
+        requiredAction = (try? c.decodeIfPresent(String.self, forKey: .requiredAction)) ?? nil
+        primaryAction = (try? c.decodeIfPresent(ProjectOpenItemAction.self,
+                                                forKey: .primaryAction)) ?? nil
+        handledBy = (try? c.decodeIfPresent([OpenItemFixTask].self, forKey: .handledBy)) ?? nil
         question = try c.decodeIfPresent(CoordinatorQuestion.self, forKey: .question)
         // Read with `try?`: a request this build cannot read is an item without one — the card it
         // would have drawn is not drawn — rather than an open-items read that fails to decode.
@@ -339,10 +458,80 @@ public struct OpenItemFacts: Codable, Equatable, Sendable {
     }
 }
 
+/// One question the coordinator asked that has ended (§4.8 `closedQuestions`, §5.2 R10, R12): the
+/// owner answered it, or it was withdrawn. The card the conversation drew for it is drawn as this
+/// record — the question as it was asked, every option, what the owner chose and wrote, and where
+/// the answer went — so it is there after a relaunch and on a device that never saw it open.
+///
+/// The same shape carries the answer THIS device just sent, until the read publishes it
+/// (`CoordinatorQuestions.answeredHere`): the card never has nothing to draw in between.
+public struct ProjectClosedQuestion: Codable, Equatable, Sendable, Identifiable {
+    /// What the owner answered: an option's index, their own words, or both.
+    public struct Answer: Codable, Equatable, Sendable {
+        public let option: Int?
+        public let text: String?
+
+        public init(option: Int? = nil, text: String? = nil) {
+            self.option = option
+            self.text = text
+        }
+    }
+
+    /// The first coordinator conversation the answer reached, and when.
+    public struct Delivery: Codable, Equatable, Sendable {
+        public let sessionId: String
+        public let at: String
+
+        public init(sessionId: String, at: String) {
+            self.sessionId = sessionId
+            self.at = at
+        }
+    }
+
+    public let itemId: String
+    public let question: CoordinatorQuestion
+    public let askedAt: String
+    /// `ANSWERED` or `WITHDRAWN`.
+    public let resolution: String
+    /// `USER` — the owner — or `COORDINATOR`, the conversation that asked it.
+    public let resolvedBy: String
+    /// The moment it ended, which is where the record is drawn.
+    public let resolvedAt: String
+    /// Nil for a withdrawn question.
+    public let answer: Answer?
+    /// Nil while no coordinator has had the answer, and for a withdrawn question.
+    public let delivery: Delivery?
+    /// The reason it was withdrawn with; nil for an answered question.
+    public let withdrawReason: String?
+
+    public var id: String { itemId }
+
+    public init(itemId: String, question: CoordinatorQuestion, askedAt: String,
+                resolution: String = "ANSWERED", resolvedBy: String = "USER", resolvedAt: String,
+                answer: Answer? = nil, delivery: Delivery? = nil, withdrawReason: String? = nil) {
+        self.itemId = itemId
+        self.question = question
+        self.askedAt = askedAt
+        self.resolution = resolution
+        self.resolvedBy = resolvedBy
+        self.resolvedAt = resolvedAt
+        self.answer = answer
+        self.delivery = delivery
+        self.withdrawReason = withdrawReason
+    }
+
+    /// Withdrawn rather than answered.
+    public var withdrawn: Bool { resolution == "WITHDRAWN" }
+}
+
 /// The project's open exceptions, split by who is expected to act (§4.8).
 public struct ProjectOpenItemsView: Codable, Equatable, Sendable {
     public let needsYou: [ProjectOpenItemRow]
     public let withCoordinator: [ProjectOpenItemRow]
+    /// The coordinator's questions that have ended, newest first — answered or withdrawn. Drawn as
+    /// records at the moment each ended, and counted by nothing. Empty from a server that predates
+    /// the group.
+    public let closedQuestions: [ProjectClosedQuestion]
     /// The coordinator's open request to start the project (`START_REQUEST`), or nil — a project
     /// holds at most one. Served beside the two groups rather than in `needsYou`, because a build
     /// that predates the kind draws every owner row it cannot name as an escalation. Absent from a
@@ -356,9 +545,11 @@ public struct ProjectOpenItemsView: Codable, Equatable, Sendable {
     public let doneRequest: ProjectOpenItemRow?
 
     public init(needsYou: [ProjectOpenItemRow] = [], withCoordinator: [ProjectOpenItemRow] = [],
+                closedQuestions: [ProjectClosedQuestion] = [],
                 startRequest: ProjectOpenItemRow? = nil, doneRequest: ProjectOpenItemRow? = nil) {
         self.needsYou = needsYou
         self.withCoordinator = withCoordinator
+        self.closedQuestions = closedQuestions
         self.startRequest = startRequest
         self.doneRequest = doneRequest
     }
@@ -367,6 +558,11 @@ public struct ProjectOpenItemsView: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         needsYou = try c.decodeIfPresent([ProjectOpenItemRow].self, forKey: .needsYou) ?? []
         withCoordinator = try c.decodeIfPresent([ProjectOpenItemRow].self, forKey: .withCoordinator) ?? []
+        // Read with `try?` for the reason the two requests are: records this build cannot read are
+        // records it does not draw, never an open-items read that fails and takes the open
+        // questions down with it.
+        closedQuestions = (try? c.decodeIfPresent([ProjectClosedQuestion].self,
+                                                  forKey: .closedQuestions)) ?? []
         startRequest = (try? c.decodeIfPresent(ProjectOpenItemRow.self, forKey: .startRequest)) ?? nil
         doneRequest = (try? c.decodeIfPresent(ProjectOpenItemRow.self, forKey: .doneRequest)) ?? nil
     }
@@ -433,6 +629,30 @@ public struct OwnerAnswerRequest: Codable, Sendable {
 public struct OpenItemResolveRequest: Codable, Sendable {
     public let note: String
     public init(note: String) { self.note = note }
+}
+
+/// What a rerun answers (§2.3 J-T1b, §4.7 H1): the generation it queued, the failed generation it
+/// replaces, and the reason it carried. The same three facts whichever door ran it — a failed
+/// landing's retry (`IntegrationRetried`) and a blocked candidate's re-check
+/// (`PromotionCheckRetried`) — so the card reads one shape for both and lets the read that follows
+/// say what changed.
+public struct IntegrationRetryReceipt: Codable, Equatable, Sendable {
+    public let generation: Int
+    public let retryOfJobId: String
+    public let reason: String
+
+    public init(generation: Int, retryOfJobId: String, reason: String) {
+        self.generation = generation
+        self.retryOfJobId = retryOfJobId
+        self.reason = reason
+    }
+}
+
+/// The reason a rerun press carries, as both owner doors take it (`RetryIntegrationDto`). The door
+/// requires one — the reason is the record the rerun leaves — so there is no request without it.
+public struct IntegrationRetryRequest: Codable, Sendable {
+    public let reason: String
+    public init(reason: String) { self.reason = reason }
 }
 
 /// An item its assignee closed by hand, and what that ending is called (§4.7).
@@ -516,6 +736,11 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
     public let tasks: [PromotionTask]
     public let checks: [IntegrationCheckResult]
     public let conflicts: [String]
+    /// Why a BLOCKED candidate is blocked, as the job that blocked it answered (migration 0409):
+    /// `ALREADY_LANDED`, `CHECK_FAILED`, `CONFLICT` or `ERROR`. Nil on a candidate blocked before the
+    /// reason was recorded, on one that is not blocked, and from a server older than the field —
+    /// all of which are read off `checks` and `conflicts` as before (`@orbit/shared`'s field).
+    public let blockedReason: String?
     /// `MERGE_COMMIT` for a project branch, `FAST_FORWARD` for a single task's branch (M6).
     public let landsAs: String?
     public let askedAt: String?
@@ -533,6 +758,26 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
     /// older than the rule — both are "no moment", never an error.
     public let decidedAt: String?
     public let merged: Merged?
+    /// What a passing check leads to, while this candidate is being checked: `MERGE` when the
+    /// project's Automatic setting will merge it into main itself (§3.3 M-T11), `ASK` when the owner
+    /// will be asked first. Read as the project stands now, so switching Automatic mid-check changes it
+    /// on the next poll (`@orbit/shared`'s `onPass`). Nil in every other state, and from a server older
+    /// than the field — the checking card then says nothing about what comes next.
+    public let onPass: String?
+    /// The landing session of this round of merging into main (§2.9 LS1), while there is one to
+    /// open: `CHECKING`, `CONFIRMED` and `RECHECKING` (the check line opens it), and `MERGED` (the
+    /// receipt's "Open landing ›"). Absent from a server that predates the field.
+    public let landingSessionId: String?
+    /// The active merge job has been asked to stop and has not ended yet: the card draws it as
+    /// "cancelling" (§3.3 M-T10). Absent from a server older than the field.
+    public let cancelRequested: Bool
+    /// That job's current claim has passed the push boundary (§2.2 J-T4): Cancel is no longer
+    /// accepted past it. Absent from a server older than the field.
+    public let pushBoundaryPassed: Bool
+    /// The tree the checks passed on, which is the tree that lands (M6). Nil before they have.
+    public let landsTreeSha: String?
+    /// The upstream tip the checks ran against; nil until a check has passed.
+    public let upstreamShaChecked: String?
 
     public struct Execution: Codable, Equatable, Sendable {
         public let state: String
@@ -561,9 +806,12 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
     public init(promotionId: String, state: PromotionState, sourceRef: String, sourceSha: String,
                 upstreamRef: String, commitsAhead: Int? = nil, filesChanged: Int? = nil,
                 taskIds: [String] = [], tasks: [PromotionTask] = [], checks: [IntegrationCheckResult] = [],
-                conflicts: [String] = [], landsAs: String? = "MERGE_COMMIT",
+                conflicts: [String] = [], blockedReason: String? = nil, landsAs: String? = "MERGE_COMMIT",
                 askedAt: String? = nil, recheckedAt: String? = nil, decidedAt: String? = nil,
-                merged: Merged? = nil, execution: Execution? = nil) {
+                merged: Merged? = nil, execution: Execution? = nil, onPass: String? = nil,
+                landingSessionId: String? = nil, cancelRequested: Bool = false,
+                pushBoundaryPassed: Bool = false, landsTreeSha: String? = nil,
+                upstreamShaChecked: String? = nil) {
         self.promotionId = promotionId
         self.state = state
         self.sourceRef = sourceRef
@@ -575,12 +823,19 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         self.tasks = tasks
         self.checks = checks
         self.conflicts = conflicts
+        self.blockedReason = blockedReason
         self.landsAs = landsAs
         self.askedAt = askedAt
         self.recheckedAt = recheckedAt
         self.execution = execution
         self.decidedAt = decidedAt
         self.merged = merged
+        self.onPass = onPass
+        self.landingSessionId = landingSessionId
+        self.cancelRequested = cancelRequested
+        self.pushBoundaryPassed = pushBoundaryPassed
+        self.landsTreeSha = landsTreeSha
+        self.upstreamShaChecked = upstreamShaChecked
     }
 
     public init(from decoder: Decoder) throws {
@@ -596,12 +851,19 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         tasks = try c.decodeIfPresent([PromotionTask].self, forKey: .tasks) ?? []
         checks = try c.decodeIfPresent([IntegrationCheckResult].self, forKey: .checks) ?? []
         conflicts = try c.decodeIfPresent([String].self, forKey: .conflicts) ?? []
+        blockedReason = try c.decodeIfPresent(String.self, forKey: .blockedReason)
         landsAs = try c.decodeIfPresent(String.self, forKey: .landsAs)
         askedAt = try c.decodeIfPresent(String.self, forKey: .askedAt)
         recheckedAt = try c.decodeIfPresent(String.self, forKey: .recheckedAt)
         execution = try c.decodeIfPresent(Execution.self, forKey: .execution)
         decidedAt = try c.decodeIfPresent(String.self, forKey: .decidedAt)
         merged = try c.decodeIfPresent(Merged.self, forKey: .merged)
+        onPass = try c.decodeIfPresent(String.self, forKey: .onPass)
+        landingSessionId = try? c.decodeIfPresent(String.self, forKey: .landingSessionId)
+        cancelRequested = try c.decodeIfPresent(Bool.self, forKey: .cancelRequested) ?? false
+        pushBoundaryPassed = try c.decodeIfPresent(Bool.self, forKey: .pushBoundaryPassed) ?? false
+        landsTreeSha = try? c.decodeIfPresent(String.self, forKey: .landsTreeSha)
+        upstreamShaChecked = try? c.decodeIfPresent(String.self, forKey: .upstreamShaChecked)
     }
 }
 

@@ -1,0 +1,6 @@
+Test Case '-[RecapMacProbeUITests.RecapShotTests testMacShowsTheRecapOnTheSessionList]' started.
+Test Case '-[RecapMacProbeUITests.RecapShotTests testMacShowsTheRecapOnTheSessionList]' passed (25.783 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 25.783 (25.784) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 25.783 (25.785) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 25.783 (25.786) seconds
+** TEST SUCCEEDED **

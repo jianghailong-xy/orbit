@@ -43,7 +43,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { CreatorType, Prisma, PrismaClient, TaskStatus } from '@prisma/client';
+import { CreatorType, Prisma, PrismaClient, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
 import type { IntegrationJobKind, IntegrationJobPhase } from '@orbit/shared';
 import { Client } from 'pg';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -53,6 +53,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { readProjectIntegrationLines, readProjectIntegrationView } from './project-integration-line';
+import { medianMs } from './project-promotion';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -115,19 +116,28 @@ async function task(db: PrismaClient, f: Fixture, title: string): Promise<string
 async function job(
   db: PrismaClient,
   f: Fixture,
-  spec: { at: Date; claimedAt?: Date; finishedAt?: Date; heartbeatAt?: Date; state: string;
+  spec: { at: Date; claimedAt?: Date; finishedAt?: Date; startedAt?: Date | null; heartbeatAt?: Date; state: string;
           taskId?: string | null; idempotency: string;
           kind?: IntegrationJobKind; phase?: IntegrationJobPhase | null;
           checks?: Prisma.InputJsonValue; aheadOfUpstream?: number;
-          runnerId?: string; targetRef?: string; generation?: number },
+          runnerId?: string; targetRef?: string; generation?: number;
+          sessionId?: string | null; promotionId?: string | null;
+          confirmedAutomatically?: boolean; progressProtocol?: string | null;
+          claimGeneration?: number; round?: number | null; step?: string | null;
+          stepStartedAt?: Date | null; outputMovedAt?: Date | null;
+          currentCheck?: Prisma.InputJsonValue | null; serialKey?: string;
+          cancelRequestedAt?: Date | null; landingId?: string | null; id?: string },
 ): Promise<string> {
-  const id = randomUUID();
+  const id = spec.id ?? randomUUID();
   await db.projectIntegrationJob.create({
     data: {
       id,
       projectId: f.projectId,
       ownerId: f.ownerId,
       codebaseId: f.codebaseId,
+      // §2.9 LS1: the landing subject this attempt belongs to, which the line hands to a client
+      // that opens it. Absent in the older fixtures, exactly as on a row an older build queued.
+      landingId: spec.landingId ?? null,
       kind: spec.kind ?? (spec.taskId ? 'LAND_TASK' : 'LAND_PROMOTION'),
       phase: spec.phase ?? null,
       checks: spec.checks ?? [],
@@ -136,15 +146,28 @@ async function job(
         ? { landedSha: 'b'.repeat(40), testedTreeSha: 'a'.repeat(40), landedTreeSha: 'a'.repeat(40) }
         : {}),
       taskId: spec.taskId ?? null,
+      sessionId: spec.sessionId ?? null,
+      promotionId: spec.promotionId ?? null,
+      confirmedAutomatically: spec.confirmedAutomatically ?? false,
+      progressProtocol: spec.progressProtocol ?? null,
+      claimGeneration: spec.claimGeneration ?? 0,
+      round: spec.round ?? null,
+      step: spec.step ?? null,
+      stepStartedAt: spec.stepStartedAt ?? null,
+      outputMovedAt: spec.outputMovedAt ?? null,
+      currentCheck: spec.currentCheck ?? Prisma.DbNull,
+      cancelRequestedAt: spec.cancelRequestedAt ?? null,
       generation: spec.generation ?? 1,
       runnerId: spec.runnerId ?? null,
-      serialKey: `${f.projectId}:${spec.targetRef ?? `refs/heads/project/${f.projectId}`}`,
+      serialKey: spec.serialKey
+        ?? `${f.projectId}:${spec.targetRef ?? `refs/heads/project/${f.projectId}`}`,
       targetRef: spec.targetRef ?? `refs/heads/project/${f.projectId}`,
       upstreamRef: 'refs/heads/main',
       sourceRef: `refs/heads/orbit/${spec.idempotency}`,
       state: spec.state,
       createdAt: spec.at,
       claimedAt: spec.claimedAt ?? null,
+      startedAt: spec.startedAt === undefined ? spec.claimedAt ?? null : spec.startedAt,
       heartbeatAt: spec.heartbeatAt ?? null,
       finishedAt: spec.finishedAt ?? null,
       idempotencyKey: `ij:v1:test:${f.projectId}:${spec.idempotency}`,
@@ -197,6 +220,94 @@ async function onlyJob(db: PrismaClient, f: Fixture) {
   return jobs[0];
 }
 
+/** A runner the queue would claim with: online, leased, reporting now, taking integration jobs
+ *  (and, when asked, landing Automatic merges too). */
+async function usableRunner(
+  db: PrismaClient,
+  f: Fixture,
+  name: string,
+  capabilities: string[] = ['integration-job/v1'],
+): Promise<string> {
+  const id = randomUUID();
+  await db.runner.create({
+    data: {
+      id, name, ownerId: f.ownerId, tokenHash: `hash-${id}`,
+      status: RunnerStatus.ONLINE,
+      capabilities,
+      capabilitiesReportedAt: new Date(),
+      lastHeartbeatAt: new Date(),
+      heartbeatLeaseOwner: randomUUID(),
+    },
+  });
+  return id;
+}
+
+/** A workspace on that runner — the only one a claim can hand the job to (J-T2). */
+async function workspaceOn(db: PrismaClient, f: Fixture, runnerId: string, label: string): Promise<string> {
+  const id = randomUUID();
+  await db.workspace.create({
+    data: {
+      id, ownerId: f.ownerId, runnerId, name: `${label}-workspace`, enabled: true,
+      repoUrl: `https://git.invalid/${label}.git`, workDir: `/srv/${label}`,
+    },
+  });
+  return id;
+}
+
+/** A session for a job to name, as production writes the work session it belongs to. */
+async function sessionOf(
+  db: PrismaClient,
+  f: Fixture,
+  workspaceId: string,
+  opts: { taskId?: string | null; finished?: boolean; startsTaskWork?: boolean } = {},
+): Promise<string> {
+  const id = randomUUID();
+  await db.session.create({
+    data: {
+      id, ownerId: f.ownerId, creatorId: f.ownerId, workspaceId,
+      taskId: opts.taskId ?? null, title: 'landing fixture', prompt: 'landing fixture',
+      provider: 'claude', status: opts.finished ? RunStatus.SUCCEEDED : RunStatus.RUNNING,
+      startsTaskWork: opts.startsTaskWork ?? false,
+      startedAt: new Date(), ...(opts.finished ? { finishedAt: new Date() } : {}),
+    },
+  });
+  return id;
+}
+
+/** Another project of an owner that already has one, bound to a repository of its own. */
+async function projectOn(db: PrismaClient, ownerId: string, label: string): Promise<Fixture> {
+  const projectId = randomUUID();
+  await db.project.create({ data: { id: projectId, ownerId, title: label } });
+  const codebase = await db.projectCodebase.create({
+    data: {
+      projectId, ownerId, canonicalRepoUrl: `ssh://git@example.invalid/${label}`,
+      upstreamRef: 'refs/heads/main', integrationRef: `refs/heads/project/${projectId}`,
+      integrationRefSource: 'EXPLICIT', refAuthority: 'REMOTE',
+    },
+  });
+  return { ownerId, projectId, codebaseId: codebase.id };
+}
+
+/** The OPEN INTEGRATION_CONFLICT item the claim's M2 condition reads. */
+async function openItemFor(db: PrismaClient, f: Fixture, taskId: string, jobId: string): Promise<string> {
+  const item = await db.projectOpenItem.create({
+    data: {
+      projectId: f.projectId, ownerId: f.ownerId, kind: 'INTEGRATION_CONFLICT', state: 'OPEN',
+      assignee: 'OWNER', assigneeReason: 'NO_COORDINATOR', taskId, integrationJobId: jobId,
+      dedupeKey: `IC:${jobId}:fixture`, title: 'A landing conflicted',
+      payload: { files: ['a.txt'] }, waitingSince: new Date(), assignedAt: new Date(),
+    },
+    select: { id: true },
+  });
+  return item.id;
+}
+
+/** A passing or failing MERGE_CHECK result, in the shape `checks` (finished results) holds. */
+function check(exitCode: number) {
+  return { name: 'MERGE_CHECK', command: 'npm test', expectedExitCode: 0, exitCode,
+    timedOut: false, durationMs: 100, outputTail: '' };
+}
+
 test('the landing line describes running work before the queue, on real PostgreSQL',
   { skip: !URL, timeout: 300_000 }, async (t) => {
     assertCoordinatorPgUrlIsIsolated(URL);
@@ -226,7 +337,7 @@ test('the landing line describes running work before the queue, on real PostgreS
         const f = await fixture(db, 'queued-first');
         const taskId = await task(db, f, 'T1 wiki 契约');
         await job(db, f, { at: at(0), state: 'QUEUED', idempotency: 'older' });
-        await job(db, f, { at: at(30), claimedAt: at(60), state: 'RUNNING', taskId,
+        const running = await job(db, f, { at: at(30), claimedAt: at(60), state: 'RUNNING', taskId,
                           phase: 'CHECK', heartbeatAt: at(65), idempotency: 'newer' });
 
         const view = await read(db, f);
@@ -238,6 +349,23 @@ test('the landing line describes running work before the queue, on real PostgreS
           state: 'RUNNING',
           startedAt: at(60),
           heartbeatAt: at(65),
+          // The wait it paid: enqueued at :30, claimed at :60.
+          waitMs: 30_000,
+          jobId: running,
+          landingSessionId: null,
+          taskId,
+          promotionId: null,
+          runner: null,
+          claim: 0,
+          round: null,
+          check: null,
+          stepStartedAt: null,
+          outputMovedAt: null,
+          progressProtocol: null,
+          typicalMs: null,
+          // A legacy claim whose last word was on 2026-09-25: silent past its lease.
+          liveness: 'LEASE_EXPIRED',
+          blockingReason: null,
         });
         assert.equal(view.integratingCount, 1);
         assert.equal(view.queuedCount, 1);
@@ -252,7 +380,8 @@ test('the landing line describes running work before the queue, on real PostgreS
         // Enqueued at 0, claimed at 10, and a second job enqueued at 30 — after the first was
         // already being checked. The claim is when the wait this card counts really began: measured
         // from the enqueue instead, the job that started first would read as the newer of the two.
-        await job(db, f, { at: at(0), claimedAt: at(10), state: 'RUNNING', taskId, idempotency: 'older' });
+        const running = await job(db, f, { at: at(0), claimedAt: at(10), state: 'RUNNING', taskId,
+                                           idempotency: 'older' });
         await job(db, f, { at: at(30), state: 'QUEUED', idempotency: 'newer' });
 
         const view = await read(db, f);
@@ -264,6 +393,21 @@ test('the landing line describes running work before the queue, on real PostgreS
           state: 'RUNNING',
           startedAt: at(10),
           heartbeatAt: null,
+          waitMs: 10_000,
+          jobId: running,
+          landingSessionId: null,
+          taskId,
+          promotionId: null,
+          runner: null,
+          claim: 0,
+          round: null,
+          check: null,
+          stepStartedAt: null,
+          outputMovedAt: null,
+          progressProtocol: null,
+          typicalMs: null,
+          liveness: 'LEASE_EXPIRED',
+          blockingReason: null,
         });        assert.deepEqual(await listInFlight(db, f), view.inFlight);
       });
 
@@ -271,14 +415,17 @@ test('the landing line describes running work before the queue, on real PostgreS
         const f = await fixture(db, 'promotion');
         // A promotion of the project's own branch lands no single task, so there is no title to
         // carry — and the row still says the platform is working.
-        await job(db, f, { at: at(0), claimedAt: at(10), state: 'RUNNING', taskId: null,
+        const promotion = await job(db, f, { at: at(0), claimedAt: at(10), state: 'RUNNING', taskId: null,
                            idempotency: 'promotion' });
 
         const view = await read(db, f);
 
         assert.deepEqual(view.inFlight, {
           taskTitle: null, kind: 'LAND_PROMOTION', phase: null,
-          state: 'RUNNING', startedAt: at(10), heartbeatAt: null,
+          state: 'RUNNING', startedAt: at(10), heartbeatAt: null, waitMs: 10_000,
+          jobId: promotion, taskId: null, landingSessionId: null, promotionId: null, runner: null, claim: 0,
+          round: null, check: null, stepStartedAt: null, outputMovedAt: null,
+          progressProtocol: null, typicalMs: null, liveness: 'LEASE_EXPIRED', blockingReason: null,
         });        assert.deepEqual(await listInFlight(db, f), view.inFlight);
       });
 
@@ -286,11 +433,20 @@ test('the landing line describes running work before the queue, on real PostgreS
         const f = await fixture(db, 'only-queued');
         const taskId = await task(db, f, 'Oldest queued task');
         await job(db, f, { at: at(30), state: 'QUEUED', idempotency: 'newer' });
-        await job(db, f, { at: at(0), state: 'QUEUED', taskId, idempotency: 'older' });
+        const older = await job(db, f, { at: at(0), state: 'QUEUED', taskId, idempotency: 'older' });
 
         assert.deepEqual((await read(db, f)).inFlight, {
+          // A queued job's whole clock is the wait, so it carries no separate measurement of one.
           taskTitle: 'Oldest queued task', kind: 'LAND_TASK', phase: null,
-          state: 'QUEUED', startedAt: at(0), heartbeatAt: null,
+          state: 'QUEUED', startedAt: at(0), heartbeatAt: null, waitMs: null,
+          jobId: older, taskId, landingSessionId: null, promotionId: null, runner: null, claim: 0,
+          round: null, check: null, stepStartedAt: null, outputMovedAt: null,
+          progressProtocol: null, typicalMs: null, liveness: null,
+          // No session, so there is no workspace whose runner could take it.
+          blockingReason: {
+            code: 'WAITING_RUNNER',
+            summary: 'Waiting for a runner: the work’s workspace has no runner to land it',
+          },
         });
         assert.deepEqual(await listInFlight(db, f), (await read(db, f)).inFlight);
       });
@@ -305,7 +461,10 @@ test('the landing line describes running work before the queue, on real PostgreS
           await db.projectIntegrationJob.update({ where: { id }, data: { phase } });
           assert.deepEqual((await read(db, f)).inFlight, {
             taskTitle: null, kind: 'CHECK_PROMOTION', phase,
-            state: 'RUNNING', startedAt: at(10), heartbeatAt: null,
+            state: 'RUNNING', startedAt: at(10), heartbeatAt: null, waitMs: 10_000,
+            jobId: id, taskId: null, landingSessionId: null, promotionId: null, runner: null, claim: 0,
+            round: null, check: null, stepStartedAt: null, outputMovedAt: null,
+            progressProtocol: null, typicalMs: null, liveness: 'LEASE_EXPIRED', blockingReason: null,
           });
         }
       });
@@ -387,10 +546,31 @@ test('the landing line describes running work before the queue, on real PostgreS
             startedAt: jobs[0].startedAt, queuedAt: jobs[0].queuedAt, heartbeatAt: jobs[0].heartbeatAt,
             runnerName: 'workstation-gpu', retriedBy: null, timedOut: false, limitSeconds: 600,
             retryable: false,
+            // A row claimed before the progress protocol existed — which is every fixture here — is
+            // a legacy claim (§2.2 J-T4). The optional field travels on the wire from 0434.
+            progressProtocol: null,
+            // The landing-session fields travel beside it (0434's columns, §7.2 V6). A fixture
+            // without them reads their empty forms: no promotion, no current check, no round.
+            promotionId: null, claim: 0, round: null, check: null, stepStartedAt: null,
+            outputMovedAt: null, typicalMs: null,
+            // No landing subject was opened for this fixture's job, so there is no address to it.
+            landingSessionId: null,
+            // Claimed one minute before its last report, which is inside the lease.
+            liveness: 'LEGACY', blockingReason: null,
           });
           assert.deepEqual(
             { taskTitle: jobs[0].taskTitle, kind: jobs[0].kind, phase: jobs[0].phase, state: jobs[0].state,
-              startedAt: jobs[0].startedAt, heartbeatAt: jobs[0].heartbeatAt },
+              startedAt: jobs[0].startedAt, heartbeatAt: jobs[0].heartbeatAt,
+              // The line's own "Waited …", derived from the two instants the row above carries: a
+              // claimed job's wait is its claim minus its enqueue (project-integration-line.ts).
+              waitMs: jobs[0].startedAt.getTime() - jobs[0].queuedAt.getTime(),
+              jobId: jobs[0].jobId, landingSessionId: jobs[0].landingSessionId,
+              taskId: jobs[0].taskId, promotionId: jobs[0].promotionId,
+              runner: jobs[0].runnerName, claim: jobs[0].claim, round: jobs[0].round,
+              check: jobs[0].check, stepStartedAt: jobs[0].stepStartedAt,
+              outputMovedAt: jobs[0].outputMovedAt, progressProtocol: jobs[0].progressProtocol,
+              typicalMs: jobs[0].typicalMs, liveness: jobs[0].liveness,
+              blockingReason: jobs[0].blockingReason },
             view.inFlight,
             'the first job is the one inFlight describes');
           assert.deepEqual(
@@ -461,6 +641,732 @@ test('the landing line describes running work before the queue, on real PostgreS
           await db.projectIntegrationJob.update({ where: { id: holder }, data: { state: 'CHECK_FAILED', finishedAt: minutesAgo(1) } });
           assert.equal((await onlyJob(db, f)).timedOut, true, 'nothing ahead of it on the runner');
         });
+
+      // (j)–(p): the landing-session read model — blocking reasons for all three kinds, the
+      // runner's local lock, the five liveness values, and the typical duration of a merge check.
+
+      await t.test('(j) the three kinds say what holds a queued job, as the claim reads it', async () => {
+        const f = await fixture(db, 'queue-reasons');
+        const machine = await usableRunner(db, f, 'queue-runner');
+        const ws = await workspaceOn(db, f, machine, 'queue-reasons');
+        const workTask = await task(db, f, 'Waits on its own work');
+        const heldSession = await sessionOf(db, f, ws, { taskId: workTask, startsTaskWork: true });
+        const held = await job(db, f, { at: at(0), state: 'QUEUED', taskId: workTask,
+          sessionId: heldSession, idempotency: 'held' });
+
+        const promotionTask = await task(db, f, 'Waits on the task its branch froze');
+        const frozenSession = await sessionOf(db, f, ws, { taskId: promotionTask, finished: true });
+        await sessionOf(db, f, ws, { taskId: promotionTask, startsTaskWork: true });
+        const checked = await job(db, f, { at: at(1), state: 'QUEUED', kind: 'CHECK_PROMOTION',
+          sessionId: frozenSession, idempotency: 'checked' });
+
+        const dispatchSession = await sessionOf(db, f, ws);
+        const dispatches = await job(db, f, { at: at(2), state: 'QUEUED', kind: 'LAND_PROMOTION',
+          sessionId: dispatchSession, idempotency: 'dispatch' });
+
+        const jobs = (await read(db, f)).inFlightJobs ?? [];
+        const reasonOf = (id: string) => jobs.find((entry) => entry.jobId === id)?.blockingReason;
+        assert.deepEqual(reasonOf(held), {
+          code: 'WAITING_TASK_WORK',
+          summary: 'Waiting to land: the task’s work session is still running, and its branch can still move',
+        });
+        assert.deepEqual(reasonOf(checked), {
+          code: 'WAITING_TASK_WORK',
+          summary: 'Waiting to land: the task’s work session is still running, and its branch can still move',
+        }, 'a promotion check is held by the work its branch froze');
+        assert.deepEqual(reasonOf(dispatches), {
+          code: 'WAITING_DISPATCH',
+          summary: 'Waiting to land: next for runner queue-runner, which claims it on its next heartbeat',
+        });
+      });
+
+      await t.test('(k) a serial wait names another account’s job by its reason alone', async () => {
+        const f = await fixture(db, 'serial-mine');
+        const shared = `repo-serial-${f.projectId}`;
+        const machine = await usableRunner(db, f, 'serial-runner');
+        const ws = await workspaceOn(db, f, machine, 'serial-mine');
+        const mineSession = await sessionOf(db, f, ws);
+        const queued = await job(db, f, { at: minutesAgo(2), state: 'QUEUED', kind: 'LAND_PROMOTION',
+          sessionId: mineSession, serialKey: shared, targetRef: 'refs/heads/main', idempotency: 'queued' });
+
+        const otherProject = await projectOn(db, f.ownerId, 'serial-mine-other');
+        const blockerTask = await task(db, otherProject, 'Their merge');
+        const holder = await job(db, otherProject, { at: minutesAgo(5), claimedAt: minutesAgo(4),
+          state: 'RUNNING', taskId: blockerTask, serialKey: shared, targetRef: 'refs/heads/main',
+          heartbeatAt: minutesAgo(3), idempotency: 'holder' });
+        let reason = ((await read(db, f)).inFlightJobs ?? [])
+          .find((entry) => entry.jobId === queued)?.blockingReason;
+        assert.deepEqual(reason, {
+          code: 'WAITING_SERIAL_SLOT',
+          summary: 'Waiting to land: the landing of “Their merge” is running on this branch first',
+          jobId: holder,
+        });
+
+        // Ended, so another account's landing can hold the same repository and ref.
+        await db.projectIntegrationJob.update({ where: { id: holder },
+          data: { state: 'CHECK_FAILED', finishedAt: minutesAgo(1) } });
+        const theirs = await fixture(db, 'serial-theirs');
+        const theirTask = await task(db, theirs, 'Another account’s merge');
+        await job(db, theirs, { at: minutesAgo(5), claimedAt: minutesAgo(4), state: 'RUNNING',
+          taskId: theirTask, serialKey: shared, targetRef: 'refs/heads/main',
+          heartbeatAt: minutesAgo(3), idempotency: 'theirs' });
+        reason = ((await read(db, f)).inFlightJobs ?? [])
+          .find((entry) => entry.jobId === queued)?.blockingReason;
+        assert.deepEqual(reason, {
+          code: 'WAITING_SERIAL_SLOT',
+          summary: 'Waiting to land: another integration job is running on this branch first',
+        }, 'no id and no title from another account');
+      });
+
+      await t.test('(l) an open MAIN_SYNC conflict holds later landings, named only within the account',
+        async () => {
+          const f = await fixture(db, 'sync-hold');
+          const shared = `repo-sync-${f.projectId}`;
+          const machine = await usableRunner(db, f, 'sync-runner');
+          const ws = await workspaceOn(db, f, machine, 'sync-hold');
+          const mineSession = await sessionOf(db, f, ws);
+          const queued = await job(db, f, { at: minutesAgo(2), state: 'QUEUED', kind: 'LAND_PROMOTION',
+            sessionId: mineSession, serialKey: shared, targetRef: 'refs/heads/main', idempotency: 'queued' });
+
+          const otherProject = await projectOn(db, f.ownerId, 'sync-hold-other');
+          const conflicted = await task(db, otherProject, 'Their conflicted landing');
+          const failed = await job(db, otherProject, { at: minutesAgo(9), claimedAt: minutesAgo(8),
+            state: 'CONFLICT', phase: 'MAIN_SYNC', taskId: conflicted, serialKey: shared,
+            targetRef: 'refs/heads/main', finishedAt: minutesAgo(7), idempotency: 'failed' });
+          const item = await openItemFor(db, otherProject, conflicted, failed);
+          let reason = ((await read(db, f)).inFlightJobs ?? [])
+            .find((entry) => entry.jobId === queued)?.blockingReason;
+          assert.deepEqual(reason, {
+            code: 'WAITING_MAIN_SYNC',
+            summary: 'Waiting for the project line to sync: the landing of “Their conflicted landing” '
+              + 'could not merge upstream into this branch, and its conflict is still open',
+            jobId: failed,
+            openItemId: item,
+          });
+
+          // Another account's conflict is the reason alone.
+          await db.projectOpenItem.delete({ where: { id: item } });
+          const theirs = await fixture(db, 'sync-hold-theirs');
+          const theirTask = await task(db, theirs, 'Another account’s conflict');
+          const theirFailed = await job(db, theirs, { at: minutesAgo(9), claimedAt: minutesAgo(8),
+            state: 'CONFLICT', phase: 'MAIN_SYNC', taskId: theirTask, serialKey: shared,
+            targetRef: 'refs/heads/main', finishedAt: minutesAgo(7), idempotency: 'failed' });
+          await openItemFor(db, theirs, theirTask, theirFailed);
+          reason = ((await read(db, f)).inFlightJobs ?? [])
+            .find((entry) => entry.jobId === queued)?.blockingReason;
+          assert.deepEqual(reason, {
+            code: 'WAITING_MAIN_SYNC',
+            summary: 'Waiting for the project line to sync: an earlier landing could not merge upstream '
+              + 'into this branch, and its conflict is still open',
+          }, 'no id and no title from another account');
+        });
+
+      await t.test('(m) an automatic merge waits for a runner that declares promotion-automatic-land/v1',
+        async () => {
+          const f = await fixture(db, 'automatic-wait');
+          const plain = await usableRunner(db, f, 'plain-runner');
+          const plainWs = await workspaceOn(db, f, plain, 'automatic-wait');
+          const plainSession = await sessionOf(db, f, plainWs);
+          const waiting = await job(db, f, { at: minutesAgo(3), state: 'QUEUED', kind: 'LAND_PROMOTION',
+            sessionId: plainSession, confirmedAutomatically: true, targetRef: 'refs/heads/main',
+            idempotency: 'automatic' });
+
+          const able = await usableRunner(db, f, 'landing-runner',
+            ['integration-job/v1', 'promotion-automatic-land/v1']);
+          const ableWs = await workspaceOn(db, f, able, 'automatic-able');
+          const ableSession = await sessionOf(db, f, ableWs);
+          const dispatch = await job(db, f, { at: minutesAgo(2), state: 'QUEUED', kind: 'LAND_PROMOTION',
+            sessionId: ableSession, confirmedAutomatically: true, targetRef: 'refs/heads/merge',
+            idempotency: 'automatic-able' });
+
+          const jobs = (await read(db, f)).inFlightJobs ?? [];
+          assert.deepEqual(jobs.find((entry) => entry.jobId === waiting)?.blockingReason, {
+            code: 'WAITING_AUTOMATIC_RUNNER',
+            summary: 'Waiting for runner plain-runner: it cannot land a merge the Automatic setting '
+              + 'approved, which needs promotion-automatic-land/v1',
+          });
+          assert.equal(jobs.find((entry) => entry.jobId === dispatch)?.blockingReason?.code,
+            'WAITING_DISPATCH', 'a runner that declares it is handed the merge');
+        });
+
+      await t.test('(n) a historical queued cancellation is CANCELLING for every kind', async () => {
+        const f = await fixture(db, 'cancelling');
+        const cancelledAt = minutesAgo(1);
+        // The rows this reason exists for were written before J-T8, when a QUEUED stop request was
+        // only a column; 0433's CHECK now forbids creating one. Dropped for this fixture alone.
+        await db.$executeRawUnsafe(
+          'ALTER TABLE "project_integration_job" DROP CONSTRAINT IF EXISTS "project_integration_job_queued_cancel_chk"');
+        const ids: string[] = [];
+        try {
+          const landingTask = await task(db, f, 'Cancelled landing');
+          ids.push(await job(db, f, { at: at(0), state: 'QUEUED', taskId: landingTask,
+            cancelRequestedAt: cancelledAt, idempotency: 'cancel-land' }));
+          ids.push(await job(db, f, { at: at(1), state: 'QUEUED', kind: 'CHECK_PROMOTION',
+            cancelRequestedAt: cancelledAt, idempotency: 'cancel-check' }));
+          ids.push(await job(db, f, { at: at(2), state: 'QUEUED', kind: 'LAND_PROMOTION',
+            cancelRequestedAt: cancelledAt, idempotency: 'cancel-promotion' }));
+
+          const jobs = (await read(db, f)).inFlightJobs ?? [];
+          for (const id of ids) {
+            assert.deepEqual(jobs.find((entry) => entry.jobId === id)?.blockingReason, {
+              code: 'CANCELLING',
+              summary: 'Waiting to land: it was cancelled and will not start',
+            });
+          }
+        } finally {
+          await db.projectIntegrationJob.deleteMany({ where: { id: { in: ids } } });
+          await db.$executeRawUnsafe('ALTER TABLE "project_integration_job" ADD CONSTRAINT '
+            + '"project_integration_job_queued_cancel_chk" CHECK ("state" <> \'QUEUED\' '
+            + 'OR "cancel_requested_at" IS NULL) NOT VALID');
+          await db.$executeRawUnsafe('ALTER TABLE "project_integration_job" '
+            + 'VALIDATE CONSTRAINT "project_integration_job_queued_cancel_chk"');
+        }
+      });
+
+      await t.test('(o) a claimed job waiting on the runner’s local lock says so, for every kind',
+        async () => {
+          const f = await fixture(db, 'local-lock');
+          const ids: string[] = [];
+          for (const [index, kind] of (['LAND_TASK', 'CHECK_PROMOTION', 'LAND_PROMOTION'] as const)
+            .entries()) {
+            ids.push(await job(db, f, {
+              at: minutesAgo(3), claimedAt: minutesAgo(2), state: 'RUNNING', kind,
+              taskId: kind === 'LAND_TASK' ? await task(db, f, `Local lock ${kind}`) : null,
+              progressProtocol: 'v2', step: 'WAITING_LOCAL_LOCK', stepStartedAt: minutesAgo(2),
+              heartbeatAt: minutesAgo(1), outputMovedAt: minutesAgo(1),
+              targetRef: `refs/heads/local-${index}`, serialKey: `local-lock-${index}`,
+              idempotency: `local-${index}`,
+            }));
+          }
+          const jobs = (await read(db, f)).inFlightJobs ?? [];
+          for (const id of ids) {
+            const entry = jobs.find((candidate) => candidate.jobId === id);
+            assert.deepEqual(entry?.blockingReason, {
+              code: 'WAITING_LOCAL_LOCK',
+              summary: 'Waiting for another job on this runner: it is using this repository and target branch',
+            });
+            assert.equal(entry?.liveness, 'LIVE');
+          }
+
+          // A legacy claim says the same thing by being behind an earlier claim on the runner.
+          const g = await fixture(db, 'legacy-lock');
+          const other = await fixture(db, 'legacy-lock-holder');
+          const machine = await usableRunner(db, g, 'legacy-runner');
+          const repo = (await db.projectCodebase.findUniqueOrThrow({ where: { id: g.codebaseId } }))
+            .canonicalRepoUrl;
+          await db.projectCodebase.update({
+            where: { id: other.codebaseId }, data: { canonicalRepoUrl: repo },
+          });
+          await job(db, other, { at: minutesAgo(40), claimedAt: minutesAgo(30), state: 'RUNNING',
+            kind: 'CHECK_PROMOTION', phase: 'CHECK', heartbeatAt: minutesAgo(29), runnerId: machine,
+            targetRef: 'refs/heads/main', idempotency: 'holder' });
+          const waiting = await job(db, g, { at: minutesAgo(25), claimedAt: minutesAgo(20),
+            state: 'RUNNING', kind: 'LAND_PROMOTION', phase: 'FETCH', heartbeatAt: minutesAgo(20),
+            runnerId: machine, targetRef: 'refs/heads/main', idempotency: 'waiting' });
+          const legacy = ((await read(db, g)).inFlightJobs ?? [])
+            .find((entry) => entry.jobId === waiting);
+          assert.equal(legacy?.timedOut, false, 'waiting its turn is not a lost runner');
+          assert.deepEqual(legacy?.blockingReason, {
+            code: 'WAITING_LOCAL_LOCK',
+            summary: 'Waiting for another job on this runner: it is using this repository and target branch',
+          });
+          assert.equal(legacy?.liveness, 'LEGACY');
+        });
+
+      await t.test('(p) the five liveness values ride on v2 and legacy claims', async () => {
+        const cases: Array<{ label: string; protocol: string | null; heartbeatAgo: number;
+                             outputAgo: number | null; liveness: string }> = [
+          { label: 'live', protocol: 'v2', heartbeatAgo: 0.5, outputAgo: 2, liveness: 'LIVE' },
+          { label: 'quiet', protocol: 'v2', heartbeatAgo: 0.5, outputAgo: 11, liveness: 'QUIET' },
+          { label: 'silent', protocol: 'v2', heartbeatAgo: 2, outputAgo: 1, liveness: 'SILENT' },
+          { label: 'expired', protocol: 'v2', heartbeatAgo: 11, outputAgo: 1, liveness: 'LEASE_EXPIRED' },
+          { label: 'legacy', protocol: null, heartbeatAgo: 1, outputAgo: null, liveness: 'LEGACY' },
+        ];
+        for (const spec of cases) {
+          const f = await fixture(db, `liveness-${spec.label}`);
+          const id = await job(db, f, {
+            at: minutesAgo(12), claimedAt: minutesAgo(12), state: 'RUNNING', kind: 'LAND_PROMOTION',
+            phase: 'CHECK', progressProtocol: spec.protocol,
+            heartbeatAt: minutesAgo(spec.heartbeatAgo),
+            outputMovedAt: spec.outputAgo === null ? null : minutesAgo(spec.outputAgo),
+            idempotency: spec.label,
+          });
+          const entry = (await read(db, f)).inFlightJobs?.[0];
+          assert.equal(entry?.jobId, id);
+          assert.equal(entry?.liveness, spec.liveness, spec.label);
+        }
+      });
+
+      await t.test('(q) every new field on a live v2 job, and the legacy claim beside it', async () => {
+        const f = await fixture(db, 'v2-fields');
+        const machine = await usableRunner(db, f, 'v2-runner');
+        const taskId = await task(db, f, 'A live v2 landing');
+        const queuedAt = minutesAgo(6);
+        const startedAt = minutesAgo(4);
+        const heartbeatAt = minutesAgo(0.5);
+        const checkStartedAt = minutesAgo(3);
+        const outputMovedAt = minutesAgo(1);
+        const promotionId = (await db.projectPromotion.create({
+          data: {
+            projectId: f.projectId, ownerId: f.ownerId, codebaseId: f.codebaseId,
+            sourceKind: 'PROJECT_BRANCH', sourceRef: `refs/heads/project/${f.projectId}`,
+            upstreamRef: 'refs/heads/main', includedTaskIds: [], state: 'CHECKING',
+          },
+          select: { id: true },
+        })).id;
+        const running = await job(db, f, {
+          at: queuedAt, claimedAt: startedAt, state: 'RUNNING', taskId,
+          runnerId: machine, progressProtocol: 'v2', claimGeneration: 2, round: 2,
+          step: 'PREPARE', stepStartedAt: checkStartedAt, outputMovedAt,
+          heartbeatAt,
+          currentCheck: { name: 'MERGE_CHECK', index: 1, count: 2, budgetSeconds: 3600,
+            startedAt: checkStartedAt.toISOString() },
+          idempotency: 'v2',
+        });
+        await job(db, f, {
+          at: minutesAgo(5), claimedAt: minutesAgo(5), state: 'RUNNING', kind: 'LAND_PROMOTION',
+          promotionId, runnerId: machine, heartbeatAt: minutesAgo(1), progressProtocol: 'v2',
+          targetRef: 'refs/heads/merge', serialKey: 'v2-fields-promotion', idempotency: 'promotion',
+        });
+
+        const view = await read(db, f);
+        const entry = view.inFlightJobs?.find((candidate) => candidate.jobId === running);
+        assert.deepEqual(entry, {
+          jobId: running, kind: 'LAND_TASK', state: 'RUNNING', phase: null, taskId,
+          taskTitle: 'A live v2 landing', promotionId: null, generation: 1,
+          startedAt, queuedAt, heartbeatAt,
+          runnerName: 'v2-runner', retriedBy: null, timedOut: false, limitSeconds: 600,
+          progressProtocol: 'v2', claim: 2, round: 2,
+          check: { name: 'MERGE_CHECK', index: 1, count: 2, budgetSeconds: 3600,
+            startedAt: checkStartedAt },
+          stepStartedAt: checkStartedAt, outputMovedAt, typicalMs: null,
+          // This fixture writes its jobs directly, with no landing subject beside them.
+          landingSessionId: null,
+          liveness: 'LIVE', blockingReason: null, retryable: false,
+        });
+        const promotion = view.inFlightJobs?.find((entry) => entry.kind === 'LAND_PROMOTION');
+        assert.equal(promotion?.promotionId, promotionId);
+        assert.equal(promotion?.progressProtocol, 'v2');
+        assert.equal(promotion?.claim, 0);
+        assert.equal(promotion?.check, null);
+        assert.deepEqual(await listInFlight(db, f), view.inFlight, 'the list and the view agree');
+      });
+
+      await t.test('(r) typicalMs is the middle of PASSING merge checks, from their last claim',
+        async () => {
+          const f = await fixture(db, 'typical');
+          const base = new Date('2026-10-01T10:00:00Z');
+          const minutes = (n: number) => new Date(base.getTime() + n * 60_000);
+          // Three passing runs of 10, 20 and 10 minutes from their LAST claim; the third began an
+          // hour earlier under a claim that was given back (J-T11 keeps `started_at`). The failing
+          // run must not be a sample: 10, 10, 20 has its middle at 10m, while including the failure
+          // (60m) or measuring from `started_at` (40m) would read 15m or 20m.
+          await job(db, f, { at: minutes(0), claimedAt: minutes(0), startedAt: minutes(0),
+            finishedAt: minutes(10), state: 'ALREADY_LANDED', checks: [check(0)],
+            idempotency: 'passed-10' });
+          await job(db, f, { at: minutes(20), claimedAt: minutes(20), startedAt: minutes(20),
+            finishedAt: minutes(40), state: 'ALREADY_LANDED', checks: [check(0)],
+            idempotency: 'passed-20' });
+          await job(db, f, { at: minutes(0), claimedAt: minutes(30), startedAt: minutes(0),
+            finishedAt: minutes(40), state: 'ALREADY_LANDED', checks: [check(0)],
+            idempotency: 'passed-requeued' });
+          await job(db, f, { at: minutes(40), claimedAt: minutes(40), startedAt: minutes(40),
+            finishedAt: minutes(100), state: 'CHECK_FAILED', checks: [check(1)],
+            idempotency: 'failed-60' });
+
+          const running = await job(db, f, {
+            at: minutesAgo(2), claimedAt: minutesAgo(1), state: 'RUNNING', kind: 'LAND_PROMOTION',
+            progressProtocol: 'v2', heartbeatAt: minutesAgo(0.5),
+            currentCheck: { name: 'MERGE_CHECK', index: 1, count: 1, budgetSeconds: 3600,
+              startedAt: minutesAgo(1).toISOString() },
+            idempotency: 'running',
+          });
+          const entry = (await read(db, f)).inFlightJobs?.find((job) => job.jobId === running);
+          assert.equal(entry?.typicalMs, 10 * 60_000);
+
+          // Only a MERGE_CHECK has a usual duration: a task's own acceptance command is not one.
+          const g = await fixture(db, 'typical-task');
+          const taskAcceptance = await job(db, g, {
+            at: minutesAgo(2), claimedAt: minutesAgo(1), state: 'RUNNING',
+            progressProtocol: 'v2', heartbeatAt: minutesAgo(0.5),
+            currentCheck: { name: 'TASK_ACCEPTANCE', index: 1, count: 2, budgetSeconds: 900,
+              startedAt: minutesAgo(1).toISOString() },
+            idempotency: 'task-check',
+          });
+          assert.equal(((await read(db, g)).inFlightJobs ?? [])
+            .find((job) => job.jobId === taskAcceptance)?.typicalMs, null);
+        });
+
+      await t.test('(s) a job names its landing session in the line and in the job list, and the '
+        + 'session survives on a queued job too', async () => {
+        const f = await fixture(db, 'landing-session');
+        const taskId = await task(db, f, 'C7 · 落地有自己的会话');
+        const queuedTaskId = await task(db, f, 'C8 · 排队中的落地');
+        const runningLanding = { id: randomUUID(), sessionId: randomUUID(), taskId };
+        const queuedLanding = { id: randomUUID(), sessionId: randomUUID(), taskId: queuedTaskId };
+        for (const landing of [runningLanding, queuedLanding]) {
+          await db.projectLanding.create({
+            data: {
+              id: landing.id, projectId: f.projectId, ownerId: f.ownerId, codebaseId: f.codebaseId,
+              subject: 'TASK', taskId: landing.taskId, episode: 1, sessionId: landing.sessionId,
+            },
+          });
+        }
+        // A RUNNING job and a QUEUED one, each on its own task's landing (J3 allows one in-flight
+        // landing per task): the line describes the running one and the list carries both.
+        const running = await job(db, f, {
+          at: at(0), claimedAt: at(10), state: 'RUNNING', taskId,
+          landingId: runningLanding.id, idempotency: 'with-session',
+        });
+        const queued = await job(db, f, {
+          at: at(20), state: 'QUEUED', taskId: queuedTaskId, landingId: queuedLanding.id,
+          idempotency: 'queued-session', serialKey: `${f.projectId}:refs/heads/other`,
+        });
+
+        const view = await read(db, f);
+        assert.equal(view.inFlight?.jobId, running);
+        assert.equal(view.inFlight?.landingSessionId, runningLanding.sessionId,
+          'the line opens the landing its job belongs to');
+        const jobs = view.inFlightJobs ?? [];
+        assert.equal(jobs.find((entry) => entry.jobId === running)?.landingSessionId,
+          runningLanding.sessionId, 'the job list lost the running landing');
+        assert.equal(jobs.find((entry) => entry.jobId === queued)?.landingSessionId,
+          queuedLanding.sessionId, 'a queued job carries the landing it will join');
+        // Every entry carries the field — the ones with a subject and the ones without — so a list
+        // row and the page describe one job the same way.
+        assert.ok(jobs.every((entry) => 'landingSessionId' in entry),
+          'an in-flight job did not state its landing session at all');
+        assert.deepEqual(await listInFlight(db, f), view.inFlight,
+          'the list row and the view agree, field by field');
+      });
+
+      // (t)–(x): `typicalMs` is the middle of up to five passes among the project's newest 25
+      // finished jobs. The helpers write finished jobs the way the queue and the runner do, and state
+      // that rule in words from what was written: the jobs that were claimed and finished after their
+      // claim, newest finish first with `id` breaking a tie the way uuid ordering does, the first 25
+      // of them, the first five of those that passed, their middle.
+      const typicalBase = new Date('2026-10-01T10:00:00Z');
+      const typicalAt = (n: number) => new Date(typicalBase.getTime() + n * 60_000);
+      // Every shape a finished job's checks take: a pass, a failure, a timeout, a pass of the task's
+      // own command beside no merge check, no checks at all, and checks that are not an array. Only
+      // the first is a sample.
+      const shapes: Array<{ state: string; checks: Prisma.InputJsonValue; passes: boolean }> = [
+        { state: 'ALREADY_LANDED', checks: [check(0)], passes: true },
+        { state: 'CHECK_FAILED', checks: [check(1)], passes: false },
+        { state: 'CHECK_FAILED', checks: [{ ...check(0), exitCode: null, timedOut: true }], passes: false },
+        { state: 'ALREADY_LANDED', checks: [{ ...check(0), name: 'TASK_ACCEPTANCE' }], passes: false },
+        { state: 'ALREADY_LANDED', checks: [], passes: false },
+        { state: 'ALREADY_LANDED', checks: { MERGE_CHECK: check(0) }, passes: false },
+      ];
+      const passing = shapes[0]!;
+      const failing = (i: number) => shapes[1 + (i % (shapes.length - 1))]!;
+      interface Written { id: string; finishedAt: Date; ms: number; counted: boolean; passes: boolean }
+      const finished = async (f: Fixture, label: string, i: number, spec: {
+        start: number; ms: number; shape: (typeof shapes)[number]; claimed?: boolean; id?: string;
+      }): Promise<Written> => {
+        const claimedAt = typicalAt(spec.start);
+        const finishedAt = new Date(claimedAt.getTime() + spec.ms);
+        const claimed = spec.claimed !== false;
+        const id = await job(db, f, {
+          at: typicalAt(spec.start - 1), claimedAt: claimed ? claimedAt : undefined,
+          startedAt: claimed ? claimedAt : null,
+          finishedAt, state: spec.shape.state, checks: spec.shape.checks,
+          idempotency: `${label}-${i}`, id: spec.id,
+        });
+        const counted = claimed && spec.ms > 0;
+        return { id, finishedAt, ms: spec.ms, counted, passes: counted && spec.shape.passes };
+      };
+      const newestFirst = (a: Written, b: Written) => b.finishedAt.getTime() - a.finishedAt.getTime()
+        || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+      const windowOf = (written: Written[]) => written.filter((row) => row.counted).sort(newestFirst)
+        .slice(0, 25);
+      const byRule = (written: Written[]) => medianMs(windowOf(written)
+        .filter((row) => row.passes).slice(0, 5).map((row) => row.ms));
+      /** What the list row says, every project read in one call, and what the page says, one project
+       *  at a time — each while the project's merge check is running. */
+      const assertTypical = async (want: Array<[Fixture, number | null]>) => {
+        const running = new Map<string, string>();
+        for (const [f] of want) {
+          running.set(f.projectId, await job(db, f, {
+            at: minutesAgo(2), claimedAt: minutesAgo(1), state: 'RUNNING', kind: 'LAND_PROMOTION',
+            progressProtocol: 'v2', heartbeatAt: minutesAgo(0.5),
+            currentCheck: { name: 'MERGE_CHECK', index: 1, count: 1, budgetSeconds: 3600,
+              startedAt: minutesAgo(1).toISOString() },
+            idempotency: 'running',
+          }));
+        }
+        const lines = await readProjectIntegrationLines(db, want.map(([f]) => f.projectId));
+        for (const [f, ms] of want) {
+          assert.equal(lines.get(f.projectId)?.inFlight?.typicalMs ?? null, ms,
+            `${f.projectId}: the list row's usual duration`);
+          const entry = ((await read(db, f)).inFlightJobs ?? [])
+            .find((job) => job.jobId === running.get(f.projectId));
+          assert.ok(entry, `${f.projectId}: the running merge check is not in the job list`);
+          assert.equal(entry.typicalMs ?? null, ms, `${f.projectId}: the page's usual duration`);
+        }
+      };
+
+      await t.test('(t) typicalMs answers what the full scan of every finished job answered whenever '
+        + 'the newest 25 finished jobs hold five passes', async () => {
+        // The read before it was bounded, verbatim: every finished job of the project opened, the
+        // passes numbered newest first, the newest five kept. Wherever the window holds five passes
+        // those are the same five, so it is the oracle here rather than a second copy of the rule.
+        const fullScan = async (projectIds: string[]) => {
+          const ids = Prisma.join(projectIds.map((id) => Prisma.sql`${id}::uuid`));
+          const rows = await db.$queryRaw<Array<{ projectId: string; ms: number }>>(Prisma.sql`
+            WITH passed AS (
+              SELECT j."project_id" AS "projectId",
+                     (EXTRACT(EPOCH FROM (j."finished_at" - j."claimed_at")) * 1000)::float8 AS "ms",
+                     row_number() OVER (
+                       PARTITION BY j."project_id" ORDER BY j."finished_at" DESC, j."id" DESC) AS "rn"
+                FROM "project_integration_job" j
+               WHERE j."project_id" IN (${ids})
+                 AND j."finished_at" IS NOT NULL AND j."claimed_at" IS NOT NULL
+                 AND j."finished_at" > j."claimed_at"
+                 AND EXISTS (
+                   SELECT 1
+                     FROM jsonb_array_elements(
+                            CASE WHEN jsonb_typeof(j."checks") = 'array' THEN j."checks" ELSE '[]'::jsonb END) c
+                    WHERE c->>'name' = 'MERGE_CHECK'
+                      AND c->>'timedOut' = 'false'
+                      AND (c->>'exitCode') ~ '^[0-9]+$'
+                      AND (c->>'expectedExitCode') ~ '^[0-9]+$'
+                      AND (c->>'exitCode')::int = (c->>'expectedExitCode')::int)
+            )
+            SELECT "projectId", "ms" FROM passed WHERE "rn" <= 5`);
+          const durations = new Map<string, number[]>();
+          for (const row of rows) {
+            durations.set(row.projectId, [...(durations.get(row.projectId) ?? []), Number(row.ms)]);
+          }
+          return new Map(projectIds.map((id) => [id, medianMs(durations.get(id) ?? [])]));
+        };
+
+        // A fixed sequence, so a red names the same rows every run.
+        let seed = 20261020;
+        const next = (n: number) => {
+          seed = (seed * 48271) % 2147483647;
+          return seed % n;
+        };
+        // Two projects of one owner and one of another, each with 40 finished jobs in a mixed
+        // order: finishes on whole minutes so some tie, claims that end at or before they began,
+        // and a few that were never claimed at all.
+        const mixed = [await fixture(db, 'typical-mixed-a')];
+        mixed.push(await projectOn(db, mixed[0]!.ownerId, 'typical-mixed-b'));
+        mixed.push(await fixture(db, 'typical-mixed-c'));
+        const writtenOf = new Map<string, Written[]>();
+        for (const f of mixed) {
+          const written: Written[] = [];
+          for (let i = 0; i < 40; i += 1) {
+            const roll = next(20);
+            written.push(await finished(f, 'mixed', i, {
+              start: next(600),
+              ms: roll === 0 ? 0 : roll === 1 ? -60_000 : (1 + next(45)) * 60_000,
+              shape: next(3) === 0 ? passing : shapes[next(shapes.length)]!,
+              claimed: roll !== 2,
+            }));
+          }
+          writtenOf.set(f.projectId, written);
+        }
+
+        // Exactly five passes in the window, the oldest of them its 25th job, behind twenty failures
+        // and four jobs that are not in it at all: two never claimed and two that ended at or before
+        // their claim, each newer than the five. Eight older passes lie past the window.
+        const edge = await fixture(db, 'typical-edge');
+        const edgeWritten: Written[] = [];
+        for (let i = 0; i < 8; i += 1) {
+          edgeWritten.push(await finished(edge, 'edge-old', i, {
+            start: i * 60, ms: (40 + i) * 60_000, shape: passing }));
+        }
+        for (const [i, ms] of [30, 6, 5, 4, 3].entries()) {
+          edgeWritten.push(await finished(edge, 'edge-pass', i, {
+            start: 1000 + i * 60, ms: ms * 60_000, shape: passing }));
+        }
+        for (let i = 0; i < 20; i += 1) {
+          edgeWritten.push(await finished(edge, 'edge-fail', i, {
+            start: 2000 + i * 60, ms: 20 * 60_000, shape: failing(i) }));
+        }
+        for (const [i, spec] of [{ ms: 5 * 60_000, claimed: false }, { ms: 0 }, { ms: -60_000 },
+          { ms: 5 * 60_000, claimed: false }].entries()) {
+          edgeWritten.push(await finished(edge, 'edge-outside', i, {
+            start: 2000 + i * 300 + 30, shape: passing, ...spec }));
+        }
+        assert.equal(windowOf(edgeWritten).at(-1)?.ms, 30 * 60_000,
+          'the oldest of the five passes is not the 25th job of the window');
+        assert.equal(byRule(edgeWritten), 5 * 60_000);
+        writtenOf.set(edge.projectId, edgeWritten);
+
+        const all = [...mixed, edge];
+        for (const f of all) {
+          // The fixture has to tell the window from the full history: five passes inside it, older
+          // passes outside it, and a middle of every pass that is not the answer.
+          const written = writtenOf.get(f.projectId)!;
+          const inWindow = new Set(windowOf(written).map((row) => row.id));
+          const passes = written.filter((row) => row.passes);
+          assert.ok(passes.filter((row) => inWindow.has(row.id)).length >= 5,
+            `${f.projectId}: fewer than five passes in the newest 25 finished jobs`);
+          assert.ok(passes.some((row) => !inWindow.has(row.id)),
+            `${f.projectId}: no pass older than the newest 25 finished jobs`);
+          assert.notEqual(medianMs(passes.map((row) => row.ms)), byRule(written),
+            `${f.projectId}: the middle of every pass is the answer too`);
+        }
+        const oracle = await fullScan(all.map((f) => f.projectId));
+        for (const f of all) {
+          assert.equal(oracle.get(f.projectId), byRule(writtenOf.get(f.projectId)!),
+            `${f.projectId}: the full scan and the rule in words disagree`);
+        }
+        await assertTypical(all.map((f) => [f, oracle.get(f.projectId) ?? null]));
+      });
+
+      await t.test('(u) typicalMs with three passes in the newest 25 finished jobs is the middle of '
+        + 'those three, not of older passes', async () => {
+        // Six older passes of 20 through 25 minutes; then 25 jobs of which three passed, in 50, 6 and
+        // 4 minutes, the 50 the oldest of the window. The middle of those three is 6; the newest five
+        // passes ever (4, 6, 50, 25, 24) would say 24.
+        const f = await fixture(db, 'typical-three');
+        const written: Written[] = [];
+        for (let i = 0; i < 6; i += 1) {
+          written.push(await finished(f, 'three-old', i, {
+            start: i * 60, ms: (20 + i) * 60_000, shape: passing }));
+        }
+        const passAt = new Map([[0, 50], [12, 6], [23, 4]]);
+        for (let i = 0; i < 25; i += 1) {
+          const ms = passAt.get(i);
+          written.push(await finished(f, 'three-window', i, ms === undefined
+            ? { start: 1000 + i * 60, ms: 30 * 60_000, shape: failing(i) }
+            : { start: 1000 + i * 60, ms: ms * 60_000, shape: passing }));
+        }
+        assert.equal(byRule(written), 6 * 60_000);
+        await assertTypical([[f, 6 * 60_000]]);
+      });
+
+      await t.test('(v) typicalMs is absent when the newest 25 finished jobs hold no pass, however '
+        + 'many passed before them', async () => {
+        // Six passes of 7 through 12 minutes, then 25 jobs that failed or skipped the check in every
+        // way a job can. The newest five passes ever (8 through 12) would say 10 minutes.
+        const f = await fixture(db, 'typical-stale');
+        const written: Written[] = [];
+        for (let i = 0; i < 6; i += 1) {
+          written.push(await finished(f, 'stale-pass', i, {
+            start: i * 60, ms: (7 + i) * 60_000, shape: passing }));
+        }
+        for (let i = 0; i < 25; i += 1) {
+          written.push(await finished(f, 'stale-fail', i, {
+            start: 1000 + i * 60, ms: 30 * 60_000, shape: failing(i) }));
+        }
+        assert.equal(byRule(written), null);
+        await assertTypical([[f, null]]);
+      });
+
+      await t.test('(w) one call reads each project’s own newest 25 finished jobs: a busy project does '
+        + 'not crowd out a quiet one', async () => {
+        // The quiet project finished four jobs, three of them passes (5, 9 and 30 minutes: middle 9),
+        // all before the busy one finished any of its 60. A window shared by the call would hold
+        // only the busy project's jobs and leave the quiet one with none.
+        const quiet = await fixture(db, 'typical-quiet');
+        const quietWritten: Written[] = [];
+        for (const [i, ms] of [5, 9, 30].entries()) {
+          quietWritten.push(await finished(quiet, 'quiet-pass', i, {
+            start: i * 60, ms: ms * 60_000, shape: passing }));
+        }
+        quietWritten.push(await finished(quiet, 'quiet-fail', 0, {
+          start: 200, ms: 2 * 60_000, shape: failing(0) }));
+        // The busy project, an hour between claims: its older 35 jobs pass every other time, in 40
+        // minutes; its newest 25 hold seven passes, the newest five of them 3 through 7 minutes
+        // (middle 5).
+        const busy = await projectOn(db, quiet.ownerId, 'typical-busy');
+        const busyWritten: Written[] = [];
+        const passAt = new Map([[36, 20], [40, 21], [44, 3], [48, 4], [52, 5], [56, 6], [59, 7]]);
+        for (let i = 0; i < 60; i += 1) {
+          const ms = i < 35 && i % 2 === 0 ? 40 : passAt.get(i);
+          busyWritten.push(await finished(busy, 'busy', i, ms === undefined
+            ? { start: 1000 + i * 60, ms: 10 * 60_000, shape: failing(i) }
+            : { start: 1000 + i * 60, ms: ms * 60_000, shape: passing }));
+        }
+        assert.equal(byRule(quietWritten), 9 * 60_000);
+        assert.equal(byRule(busyWritten), 5 * 60_000);
+        assert.deepEqual(windowOf(busyWritten).map((row) => row.finishedAt),
+          busyWritten.slice(35).map((row) => row.finishedAt).reverse(),
+          'the busy project’s window is not its newest 25 jobs');
+        assert.ok(Math.min(...busyWritten.map((row) => row.finishedAt.getTime()))
+          > Math.max(...quietWritten.map((row) => row.finishedAt.getTime())),
+          'the busy project has a job no newer than the quiet one’s');
+        await assertTypical([[busy, 5 * 60_000], [quiet, 9 * 60_000]]);
+      });
+
+      await t.test('(x) a finished_at tie on either cut is broken by id, newest id first: at the 25th '
+        + 'job of the window and at the fifth pass', async () => {
+        // (t)–(w) never put two jobs with one `finished_at` on a cut, so either ORDER BY could break
+        // its tie by `id` ASC and they would all stay green. Here every job has a literal id, and on
+        // each cut the job the id DESC rule keeps is the one whose duration moves the middle. Every
+        // id is `<8 hex>-0000-4000-8000-<12 hex>`, so two ids compare by their first group, and by
+        // the last where the first is the same: within each tie the `2…` id sorts after the `1…` one,
+        // and id DESC puts it first.
+        const fixedId = (head: string, n: number) => `${head}-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+        // The window's cut. Twenty-four jobs finished after minute 1000, newest first, two of them
+        // passes (3 and 9 minutes); then two that finished together at minute 1000: a 30-minute pass
+        // with id `2…` and a failure with id `1…`. Newest id first, the pass is the 25th job and the
+        // failure the 26th, so the window holds three passes and their middle is 9 minutes; `id` ASC
+        // would keep the failure, leave two passes and say their mean, 6 minutes.
+        const windowCut = await fixture(db, 'typical-tie-window');
+        const windowWritten: Written[] = [
+          await finished(windowCut, 'tie-window-pass', 0, {
+            start: 1000 - 30, ms: 30 * 60_000, shape: passing,
+            id: '20000000-0000-4000-8000-000000000025' }),
+          await finished(windowCut, 'tie-window-fail', 0, {
+            start: 1000 - 20, ms: 20 * 60_000, shape: failing(0),
+            id: '10000000-0000-4000-8000-000000000026' }),
+        ];
+        const windowPassAt = new Map([[8, 9], [20, 3]]);
+        for (let i = 0; i < 24; i += 1) {
+          const minutes = windowPassAt.get(i) ?? 20;
+          windowWritten.push(await finished(windowCut, 'tie-window-newer', i, {
+            start: 1010 + i * 10 - minutes, ms: minutes * 60_000,
+            shape: windowPassAt.has(i) ? passing : failing(i), id: fixedId('30000000', i) }));
+        }
+        const windowOrder = windowWritten.filter((row) => row.counted).sort(newestFirst);
+        const [keptByWindow, cutByWindow] = [windowOrder[24]!, windowOrder[25]!];
+        assert.equal(keptByWindow.finishedAt.getTime(), cutByWindow.finishedAt.getTime(),
+          'the 25th and 26th jobs of the window do not share a finished_at');
+        assert.deepEqual([keptByWindow.id, keptByWindow.passes, cutByWindow.id, cutByWindow.passes],
+          ['20000000-0000-4000-8000-000000000025', true, '10000000-0000-4000-8000-000000000026', false],
+          'the tie on the window’s cut is not the pass (newer id) against the failure (older id)');
+        assert.ok(windowOrder.slice(0, 24).every((row) => row.finishedAt > keptByWindow.finishedAt),
+          'a job of the window is no newer than the tie on its cut');
+        assert.equal(byRule(windowWritten), 9 * 60_000);
+
+        // The sample's cut. Four passes of 2, 4, 6 and 8 minutes, newest first, all newer than two
+        // passes that finished together: a 1-minute one with id `2…` and a 10-minute one with id `1…`.
+        // Newest id first, the 1-minute pass is the fifth and the middle of {1, 2, 4, 6, 8} is 4
+        // minutes; `id` ASC would take the 10-minute one and the middle of {2, 4, 6, 8, 10}, 6.
+        const sampleCut = await fixture(db, 'typical-tie-sample');
+        const sampleWritten: Written[] = [
+          await finished(sampleCut, 'tie-sample-short', 0, {
+            start: 1000 - 1, ms: 1 * 60_000, shape: passing,
+            id: '20000000-0000-4000-8000-000000000005' }),
+          await finished(sampleCut, 'tie-sample-long', 0, {
+            start: 1000 - 10, ms: 10 * 60_000, shape: passing,
+            id: '10000000-0000-4000-8000-000000000006' }),
+        ];
+        for (const [i, minutes] of [8, 6, 4, 2].entries()) {
+          sampleWritten.push(await finished(sampleCut, 'tie-sample-newer', i, {
+            start: 1010 + i * 10 - minutes, ms: minutes * 60_000, shape: passing,
+            id: fixedId('40000000', i) }));
+        }
+        const samplePasses = windowOf(sampleWritten).filter((row) => row.passes);
+        const [keptBySample, cutBySample] = [samplePasses[4]!, samplePasses[5]!];
+        assert.equal(keptBySample.finishedAt.getTime(), cutBySample.finishedAt.getTime(),
+          'the fifth and sixth passes do not share a finished_at');
+        assert.deepEqual([keptBySample.id, keptBySample.ms, cutBySample.id, cutBySample.ms],
+          ['20000000-0000-4000-8000-000000000005', 1 * 60_000, '10000000-0000-4000-8000-000000000006',
+            10 * 60_000], 'the tie on the sample’s cut is not the 1-minute pass (newer id) against the '
+            + '10-minute one (older id)');
+        assert.ok(samplePasses.slice(0, 4).every((row) => row.finishedAt > keptBySample.finishedAt),
+          'a pass of the sample is no newer than the tie on its cut');
+        assert.equal(byRule(sampleWritten), 4 * 60_000);
+
+        await assertTypical([[windowCut, 9 * 60_000], [sampleCut, 4 * 60_000]]);
+      });
     } finally {
       await db.$disconnect();
       // Both halves of the harness: the `pg` Client holds an open socket, and a spec that leaves it
@@ -469,8 +1375,3 @@ test('the landing line describes running work before the queue, on real PostgreS
       await identity.end();
     }
   });
-
-function check(exitCode: number) {
-  return { name: 'MERGE_CHECK', command: 'npm test', expectedExitCode: 0, exitCode,
-    timedOut: false, durationMs: 100, outputTail: '' };
-}

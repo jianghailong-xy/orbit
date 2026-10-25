@@ -1,0 +1,103 @@
+{
+  "canI": {
+    "create configmaps in orbit-mr-test": "no",
+    "create pods in kube-system": "no",
+    "create pods in orbit-mr-test": "yes",
+    "create pods/exec in orbit-mr-test": "no",
+    "create validatingwebhookconfigurations.admissionregistration.k8s.io": "no",
+    "delete persistentvolumeclaims in orbit-mr-test": "no",
+    "delete pods in orbit-mr-test": "yes",
+    "get nodes": "no",
+    "get persistentvolumes": "yes",
+    "get secrets in orbit-mr-test": "yes",
+    "list pods in orbit-mr-test": "no",
+    "list volumeattachments.storage.k8s.io": "yes",
+    "patch pods/ephemeralcontainers in orbit-mr-test": "no",
+    "update pods in orbit-mr-test": "no"
+  },
+  "context": "orbit-mr-lab-manager",
+  "groups": [
+    "system:serviceaccounts",
+    "system:serviceaccounts:orbit-mr-test",
+    "system:authenticated"
+  ],
+  "kubeconfig": "/mnt/data/managed-runner-lab/test-server-t02a/manager-kubeconfig.json",
+  "rules": [
+    [
+      {
+        "apiGroups": [
+          ""
+        ],
+        "resources": [
+          "pods"
+        ],
+        "verbs": [
+          "get",
+          "create",
+          "delete"
+        ]
+      },
+      {
+        "apiGroups": [
+          ""
+        ],
+        "resources": [
+          "persistentvolumeclaims"
+        ],
+        "verbs": [
+          "get",
+          "create"
+        ]
+      },
+      {
+        "apiGroups": [
+          ""
+        ],
+        "resources": [
+          "secrets"
+        ],
+        "verbs": [
+          "get",
+          "create",
+          "delete"
+        ]
+      },
+      {
+        "apiGroups": [
+          ""
+        ],
+        "resources": [
+          "configmaps"
+        ],
+        "verbs": [
+          "get"
+        ]
+      }
+    ],
+    [
+      {
+        "apiGroups": [
+          ""
+        ],
+        "resources": [
+          "persistentvolumes"
+        ],
+        "verbs": [
+          "get"
+        ]
+      },
+      {
+        "apiGroups": [
+          "storage.k8s.io"
+        ],
+        "resources": [
+          "volumeattachments"
+        ],
+        "verbs": [
+          "list"
+        ]
+      }
+    ]
+  ],
+  "username": "system:serviceaccount:orbit-mr-test:orbit-mr-manager"
+}

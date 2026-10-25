@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { AgentProvider } from '@orbit/shared';
-import { PrismaService } from '../prisma/prisma.service';
+import { managedFirstSessionKey } from '../managed-runners/managed-runner-supply';
+import { legacySessionEngine, recordedEngine } from '../providers/session-engine';
 
 /**
  * Which provider a workspace's next session starts on.
@@ -15,14 +16,23 @@ import { PrismaService } from '../prisma/prisma.service';
  * interactive session in this project ran on. It needs no write path, so it cannot drift from what
  * actually happened, and every surface — web, native, MCP, task auto-run — answers the question
  * the same way.
+ *
+ * A session has two axes now (docs/provider-engine-contract.md §3.4): the engine that ran it and the
+ * credential it ran on, so the default is the pair. A new session re-checks it (engine-provider.ts):
+ * a credential that is gone is refused as it always was, and one its engine no longer runs gives way to
+ * the credential's own default engine.
  */
 export interface AgentProviderSeed {
+  /** The engine that session ran on: its recorded one, else derived by the old rules (§5.4). Null when
+   *  nobody can tell — its key is gone — which a new session started from it is refused on anyway. */
+  engine: AgentProvider | null;
   provider: string;
   providerBuiltin: boolean;
 }
 
 /** A project that has never run anything has no history to read; start where Orbit starts. */
 export const DEFAULT_AGENT_PROVIDER: AgentProviderSeed = {
+  engine: AgentProvider.CLAUDE,
   provider: AgentProvider.CLAUDE,
   providerBuiltin: true,
 };
@@ -40,6 +50,13 @@ export const DEFAULT_AGENT_PROVIDER: AgentProviderSeed = {
  *    reproduce the startup path" test is the common case). Counting those let one scripted probe
  *    re-point the project default, which is what put OpenCode in front of a human who had never
  *    chosen it.
+ *  • LANDING rows (`kind = 'CONVERSATION'` below) — the platform-driven container a landing subject
+ *    opens. It sits in a workspace with `task_id`/`parent_session_id` both NULL like an ordinary
+ *    conversation, but its provider is the reserved `orbit` slug that no engine runs: counting one
+ *    would make every later session created without a provider in that workspace be refused with
+ *    `provider not available: "orbit"` (docs/project-integration-line-contract.md §2.9 LS6, errata
+ *    E4). The same predicate guards the task dispatcher and @-mention delivery, which seed the same
+ *    way.
  *
  * Written as a LATERAL per id rather than the obvious `DISTINCT ON (workspace_id) … ORDER BY
  * created_at DESC`: Postgres has no skip scan, so that form reads *every* session belonging to
@@ -49,48 +66,95 @@ export const DEFAULT_AGENT_PROVIDER: AgentProviderSeed = {
  * database: 4.7ms and 930 rows scanned → 0.3ms and one row per workspace.
  *
  * One kind of workspace has a default before it has history: a managed runner's default workspace,
- * once its runner became READY with a runtime installed and signed in (`managed_runner.initial_provider`,
- * docs/managed-runner-design.md "Provisioning retry wake and sleep" 3). Its first session starts there
- * rather than on the floor below, which that runner may not have; from then on its history decides,
- * as everywhere. No other workspace is affected — the floor stays Claude.
+ * once its runner became READY (`managed_runner.initial_provider`, docs/managed-runner-design.md
+ * "Provisioning retry wake and sleep" 3). Its first session starts there rather than on the floor
+ * below, which that runner may not have; from then on its history decides, as everywhere. No other
+ * workspace is affected — the floor stays Claude. A managed runner's `initial_provider` is either a
+ * built-in engine's name — a runtime signed in on it, both the engine and the credential — or the slug
+ * of one of its owner's own model keys, which runs on the engine the key's row names. Before its runner
+ * was ever ready, such a workspace starts on the owner's own key that READY would record
+ * (managedFirstSessionKey), a session on which waits for the runner; an owner with none gets the floor.
+ *
+ * The session's engine is its recorded one; a row an older API replica wrote has none, and is placed by
+ * the rules dispatch followed before the split (legacySessionEngine), read here only for those rows.
  */
 export async function lastProviderByWorkspace(
-  // Only the raw query, so a caller inside a transaction can hand over its own client.
-  prisma: Pick<PrismaService, '$queryRaw'>,
+  // A caller inside a transaction can hand over its own client.
+  prisma: Prisma.TransactionClient,
   workspaceIds: Array<string | null | undefined>,
 ): Promise<Map<string, AgentProviderSeed>> {
   const ids = [...new Set(workspaceIds.filter((id): id is string => !!id))];
   if (ids.length === 0) return new Map();
-  const rows = await prisma.$queryRaw<
-    Array<{ workspace_id: string; provider: string; provider_builtin: boolean }>
-  >(Prisma.sql`
+  const rows = await prisma.$queryRaw<Array<{
+    workspace_id: string;
+    engine: string | null;
+    provider: string;
+    provider_builtin: boolean;
+    owner_id: string | null;
+    /** A managed default workspace whose runner has not been found ready yet; its owner is managed_owner_id. */
+    managed_unready?: boolean;
+    managed_owner_id: string | null;
+  }>>(Prisma.sql`
     WITH a(id) AS (SELECT unnest(ARRAY[${Prisma.join(ids)}]::uuid[]))
-    SELECT a.id AS workspace_id, s.provider, s.provider_builtin
+    SELECT a.id AS workspace_id, s.engine, s.provider, s.provider_builtin, s.owner_id::text AS owner_id,
+           false AS managed_unready, NULL::text AS managed_owner_id
     FROM a
     CROSS JOIN LATERAL (
-      SELECT provider, provider_builtin
+      SELECT engine, provider, provider_builtin, owner_id
       FROM "session"
       WHERE workspace_id = a.id AND task_id IS NULL AND parent_session_id IS NULL
+        AND kind = 'CONVERSATION'
       ORDER BY created_at DESC
       LIMIT 1
     ) s
     UNION ALL
-    SELECT a.id, m.initial_provider, true
+    SELECT a.id, m.initial_provider, m.initial_provider, true, NULL, false, m.owner_id::text
     FROM a
     JOIN managed_runner m ON m.default_workspace_id = a.id AND m.initial_provider IS NOT NULL
     WHERE NOT EXISTS (
       SELECT 1 FROM "session"
       WHERE workspace_id = a.id AND task_id IS NULL AND parent_session_id IS NULL
+        AND kind = 'CONVERSATION'
+    )
+    UNION ALL
+    SELECT a.id, NULL, NULL, false, NULL, true, m.owner_id::text
+    FROM a
+    JOIN managed_runner m ON m.default_workspace_id = a.id AND m.initial_provider IS NULL
+    WHERE NOT EXISTS (
+      SELECT 1 FROM "session"
+      WHERE workspace_id = a.id AND task_id IS NULL AND parent_session_id IS NULL
+        AND kind = 'CONVERSATION'
     )
   `);
-  return new Map(
-    rows.map((r) => [r.workspace_id, { provider: r.provider, providerBuiltin: r.provider_builtin }]),
-  );
+  const seeds = new Map<string, AgentProviderSeed>();
+  for (const r of rows) {
+    // A managed runner not found ready yet: the owner's own key its first session waits for it on, on
+    // the engine the key's row names; with none, nothing here, so the floor applies.
+    if (r.managed_unready && r.managed_owner_id) {
+      const key = await managedFirstSessionKey(prisma, r.managed_owner_id);
+      if (key) {
+        const engine = await legacySessionEngine(prisma, { provider: key, providerBuiltin: false, ownerId: r.managed_owner_id });
+        seeds.set(r.workspace_id, { engine, provider: key, providerBuiltin: false });
+      }
+      continue;
+    }
+    // A managed runner READY on one of its owner's model keys: that key, on the engine its row names.
+    if (r.managed_owner_id && !recordedEngine(r.provider)) {
+      const engine = await legacySessionEngine(prisma, { provider: r.provider, providerBuiltin: false, ownerId: r.managed_owner_id });
+      seeds.set(r.workspace_id, { engine, provider: r.provider, providerBuiltin: false });
+      continue;
+    }
+    const engine = recordedEngine(r.engine) ?? (r.owner_id
+      ? await legacySessionEngine(prisma, { provider: r.provider, providerBuiltin: r.provider_builtin, ownerId: r.owner_id })
+      : null);
+    seeds.set(r.workspace_id, { engine, provider: r.provider, providerBuiltin: r.provider_builtin });
+  }
+  return seeds;
 }
 
 /** The seed for one workspace, with the floor applied. */
 export async function agentProviderSeed(
-  prisma: PrismaService,
+  prisma: Prisma.TransactionClient,
   workspaceId: string,
 ): Promise<AgentProviderSeed> {
   const seeds = await lastProviderByWorkspace(prisma, [workspaceId]);
@@ -100,19 +164,21 @@ export async function agentProviderSeed(
 /**
  * Attach the derived default to workspace payloads.
  *
- * `lastProvider` is the honest name and what clients read. `provider` is kept as a read-only alias
- * for one release: iOS and macOS builds already in the field read it for a workspace's badge and
- * avatar, and dropping it would render every workspace as Claude until those ship. Neither is stored —
- * the column is gone (migration 0088).
+ * `lastProvider` is the honest name and what clients read, with `lastEngine` beside it: the engine that
+ * session ran on (null when nobody can tell). `provider` is kept as a read-only alias for one release:
+ * iOS and macOS builds already in the field read it for a workspace's badge and avatar, and dropping it
+ * would render every workspace as Claude until those ship. None is stored — the column is gone
+ * (migration 0088).
  */
 export function withProviderSeed<T extends { id: string }>(
   workspaces: T[],
   seeds: Map<string, AgentProviderSeed>,
-): Array<T & { lastProvider: string; provider: string; providerBuiltin: boolean }> {
+): Array<T & { lastEngine: AgentProvider | null; lastProvider: string; provider: string; providerBuiltin: boolean }> {
   return workspaces.map((workspace) => {
     const seed = seeds.get(workspace.id) ?? DEFAULT_AGENT_PROVIDER;
     return {
       ...workspace,
+      lastEngine: seed.engine,
       lastProvider: seed.provider,
       provider: seed.provider,
       providerBuiltin: seed.providerBuiltin,

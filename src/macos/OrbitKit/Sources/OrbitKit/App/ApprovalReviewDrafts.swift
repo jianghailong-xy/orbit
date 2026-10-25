@@ -51,6 +51,4 @@ public final class OwnerReviewDraft {
 public final class CoordinatorReviewDraft {
     public var chosen: CoordinatorQuestionChoice?
     public var text = ""
-    public var receipt: OwnerAnswerReceipt?
-    public var sent = ""
 }

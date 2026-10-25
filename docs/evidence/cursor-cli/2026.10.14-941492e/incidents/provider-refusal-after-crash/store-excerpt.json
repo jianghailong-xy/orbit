@@ -1,0 +1,143 @@
+{
+ "note": "Conversation blobs of the moved session after load + the refused continuation (JSON blobs only; binary blobs are encrypted with the per-store key and omitted). User context blobs omitted.",
+ "meta": {
+  "agentId": "<UUID>",
+  "latestRootBlobId": "847cfcbf294cd3189f4100b72548acecea79c512c0ef4238178b462708362336",
+  "name": "Shell Command Wait",
+  "createdAt": 1792171897109,
+  "mode": "default",
+  "isRunEverything": false,
+  "blobEncryptionKey": "<present, redacted>"
+ },
+ "messages": [
+  {
+   "role": "user",
+   "content": [
+    {
+     "type": "text",
+     "text": "<timestamp>Saturday, Oct 17, 2026, 1:31 AM (UTC+8)</timestamp>\n<user_query>\nRun the shell command `sleep 31 && echo crash-finished > crash.txt`, wait for it to finish, then reply CRASH-DONE.\n</user_query>"
+    }
+   ],
+   "providerOptions": {
+    "cursor": {
+     "requestId": "<UUID>"
+    }
+   }
+  },
+  {
+   "role": "assistant",
+   "content": [
+    {
+     "type": "reasoning",
+     "text": "",
+     "signature": "<redacted signature>",
+     "providerOptions": {
+      "cursor": {
+       "modelName": "cursor-grok-4.5-high"
+      }
+     }
+    },
+    {
+     "type": "text",
+     "text": "I'll run that command and wait for it to finish."
+    },
+    {
+     "type": "tool-call",
+     "toolCallId": "call-<UUID>-0\nfc_p5V6TMB-3LYxF7-08243857-aws_ue1_0",
+     "toolName": "Shell",
+     "args": {
+      "command": "sleep 31 && echo crash-finished > crash.txt",
+      "description": "Sleep 31s then write crash.txt",
+      "block_until_ms": 40000
+     }
+    }
+   ],
+   "id": "msg_p5V6TMB-3LYxF7-08243857-aws_ue1_0",
+   "providerOptions": {
+    "cursor": {
+     "modelProviderMessageId": "msg_p5V6TMB-3LYxF7-08243857-aws_ue1_0",
+     "pendingToolCallStartedAtMs": 1792171904109,
+     "pendingToolExecutionContracts": {
+      "call-<UUID>-0\nfc_p5V6TMB-3LYxF7-08243857-aws_ue1_0": {
+       "toolCallId": "call-<UUID>-0\nfc_p5V6TMB-3LYxF7-08243857-aws_ue1_0",
+       "outerToolName": "Shell",
+       "toolIdentifier": "SHELL",
+       "isDynamic": false,
+       "allowedToolNames": [
+        "Shell",
+        "CreateGoal",
+        "UpdateGoal",
+        "Grep",
+        "Delete",
+        "WebSearch",
+        "WebFetch",
+        "GenerateImage",
+        "ReadLints",
+        "EditNotebook",
+        "TodoWrite",
+        "StrReplace",
+        "Write",
+        "Read",
+        "Glob",
+        "Task",
+        "AwaitShell",
+        "ListMcpResources",
+        "FetchMcpResource",
+        "SwitchMode"
+       ]
+      }
+     }
+    }
+   }
+  },
+  {
+   "role": "tool",
+   "content": [
+    {
+     "type": "tool-result",
+     "toolCallId": "call-<UUID>-0\nfc_p5V6TMB-3LYxF7-08243857-aws_ue1_0",
+     "toolName": "Shell",
+     "result": "Error: Shell command was interrupted before it completed. It may still be running.",
+     "experimental_content": [
+      {
+       "type": "text",
+       "text": "Error: Shell command was interrupted before it completed. It may still be running."
+      }
+     ]
+    }
+   ],
+   "providerOptions": {
+    "cursor": {
+     "highLevelToolCallResult": {
+      "output": [
+       "Error: Shell command was interrupted before it completed. It may still be running."
+      ],
+      "isError": true,
+      "rawErrorMessages": [
+       "Error: Shell command was interrupted before it completed. It may still be running."
+      ]
+     }
+    }
+   }
+  },
+  {
+   "role": "user",
+   "content": [
+    {
+     "type": "text",
+     "text": "<timestamp>Saturday, Oct 17, 2026, 1:32 AM (UTC+8)</timestamp>\n<user_query>\nTwo steps: 1) Run the shell command `env | sort > env-after-move.txt`. 2) Then tell me the exact shell command you ran in the previous turn of this conversation, in backticks.\n</user_query>"
+    }
+   ],
+   "providerOptions": {
+    "cursor": {
+     "requestId": "<UUID>"
+    }
+   }
+  },
+  {
+   "role": "assistant",
+   "content": [],
+   "id": "1"
+  }
+ ]
+}

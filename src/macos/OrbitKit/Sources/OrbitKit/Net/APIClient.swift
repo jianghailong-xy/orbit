@@ -145,9 +145,14 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("push/register", body: req)
     }
 
-    /// Drop this device's token (e.g. on sign-out) so it stops receiving pushes.
-    public func unregisterDeviceToken(token: String) async throws {
-        _ = try await postRaw("push/unregister", body: ["token": token])
+    /// Drop this device's token on sign-out so it stops receiving pushes. Best-effort; like
+    /// `revokeRefreshToken` it takes its credential — the signed-out session's access token —
+    /// explicitly, so the caller can clear local storage at once. A 401 is not refreshed: by then the
+    /// store may hold the next sign-in's session, whose registration this must not touch.
+    public func unregisterDeviceToken(token: String, accessToken: String) async {
+        guard var req = try? makeRequest("push/unregister", method: "POST", body: ["token": token]) else { return }
+        req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        _ = try? await rawResponse(req, cancellationAware: false)
     }
 
     // MARK: admin (role-gated; non-admins get 403)
@@ -165,22 +170,31 @@ public final class APIClient: @unchecked Sendable {
     /// spelling only doubled that read, on every poll. (A pre-Completed server with nothing Open
     /// answers an empty list for Completed too, and keeps it.)
     public func listSessions(view: SessionView = .open,
-                             runnerId: String? = nil, projectId: String? = nil) async throws -> [Session] {
+                             runnerId: String? = nil, projectId: String? = nil,
+                             includeLanding: Bool = false) async throws -> [Session] {
         do {
-            let sessions = try await listSessions(queryValue: view.queryValue, runnerId: runnerId, projectId: projectId)
+            let sessions = try await listSessions(queryValue: view.queryValue, runnerId: runnerId,
+                                                  projectId: projectId, includeLanding: includeLanding)
             if view == .open || sessions.allSatisfy({ $0.effectiveLifecycleState == view.lifecycleState }) {
                 return sessions
             }
         } catch APIError.http(let status, _) where [400, 404, 422].contains(status) {
             // Fall through to the compatibility request.
         }
-        return try await listSessions(queryValue: view.legacyQueryValue, runnerId: runnerId, projectId: projectId)
+        return try await listSessions(queryValue: view.legacyQueryValue, runnerId: runnerId,
+                                      projectId: projectId, includeLanding: includeLanding)
     }
 
-    private func listSessions(queryValue: String, runnerId: String?, projectId: String?) async throws -> [Session] {
+    private func listSessions(queryValue: String, runnerId: String?, projectId: String?,
+                              includeLanding: Bool = false) async throws -> [Session] {
         var q = [URLQueryItem(name: "view", value: queryValue)]
         if let runnerId { q.append(URLQueryItem(name: "runnerId", value: runnerId)) }
         if let projectId { q.append(URLQueryItem(name: "projectId", value: projectId)) }
+        // The project sessions page's own widening (§2.9 LS6): LANDING rows ride along, with the
+        // subject summary their Landings group is folded from. Only ever with a project.
+        if includeLanding, projectId != nil {
+            q.append(URLQueryItem(name: "includeLanding", value: "1"))
+        }
         return try await get("sessions", query: q)
     }
 
@@ -249,35 +263,41 @@ public final class APIClient: @unchecked Sendable {
     /// A page of a session's persisted events for tail-first loading (web parity): `tail=N` returns
     /// the newest N (initial paint — open a long session at the latest message instead of replaying
     /// its whole history over SSE), `before=<seq>&limit=N` the N events just older than a seq
-    /// (scroll-up). Events come back chronological (seq ascending).
+    /// (scroll-up). Events come back chronological (seq ascending). `timeout` is the narrow
+    /// exception to the session default — see `makeRequest`.
     public func eventPage(sessionID: String, tail: Int? = nil,
-                          before: Int? = nil, limit: Int? = nil) async throws -> EventPage {
+                          before: Int? = nil, limit: Int? = nil,
+                          timeout: TimeInterval? = nil) async throws -> EventPage {
         var q: [URLQueryItem] = []
         if let tail { q.append(URLQueryItem(name: "tail", value: String(tail))) }
         if let before { q.append(URLQueryItem(name: "before", value: String(before))) }
         if let limit { q.append(URLQueryItem(name: "limit", value: String(limit))) }
         q.append(URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)))
-        return try await get("sessions/\(sessionID)/events/page", query: q)
+        return try await get("sessions/\(sessionID)/events/page", query: q, timeout: timeout)
     }
 
     /// The page of a session's history around one record — a turn, an event or a tool call, by its
     /// id in either spelling — for a link that opens the session at that record (`SessionRecordLink`).
     /// The page names the `anchor` the record resolved to and carries a cursor each way. A record that
     /// is not this session's is a 404. Web parity: `getSessionEventPageAround`.
-    public func eventPageAround(sessionID: String, record: String, limit: Int? = nil) async throws -> EventPage {
+    public func eventPageAround(sessionID: String, record: String, limit: Int? = nil,
+                                timeout: TimeInterval? = nil) async throws -> EventPage {
         var q = [URLQueryItem(name: "around", value: record)]
         if let limit { q.append(URLQueryItem(name: "limit", value: String(limit))) }
         q.append(URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)))
-        return try await get("sessions/\(sessionID)/events/page", query: q)
+        return try await get("sessions/\(sessionID)/events/page", query: q, timeout: timeout)
     }
 
     /// The page just newer than a seq (`after=<seq>&limit=N`): how a window opened at a record pages
-    /// back down to the latest message, the mirror of `before=`. Web parity: `getSessionEventPageAfter`.
-    public func eventPageAfter(sessionID: String, after: Int, limit: Int? = nil) async throws -> EventPage {
+    /// back down to the latest message, the mirror of `before=` — and, in the console's reconnect
+    /// catch-up, how a gap is closed over compressed REST pages instead of the SSE replay. Web
+    /// parity: `getSessionEventPageAfter`.
+    public func eventPageAfter(sessionID: String, after: Int, limit: Int? = nil,
+                               timeout: TimeInterval? = nil) async throws -> EventPage {
         var q = [URLQueryItem(name: "after", value: String(after))]
         if let limit { q.append(URLQueryItem(name: "limit", value: String(limit))) }
         q.append(URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)))
-        return try await get("sessions/\(sessionID)/events/page", query: q)
+        return try await get("sessions/\(sessionID)/events/page", query: q, timeout: timeout)
     }
 
     /// One event's untrimmed payload (GET /sessions/:id/events/:seq/full) — fetched when the user
@@ -319,14 +339,25 @@ public final class APIClient: @unchecked Sendable {
         try await post("sessions/\(sessionID)/turns", body: req)
     }
 
-    /// Still-PENDING user turns, oldest first. Unlike leased turns these have no transcript event,
-    /// so opening/reconnecting a console fetches this durable queue explicitly.
+    /// The user turns no transcript event draws yet, oldest first, each with its `placement`: the
+    /// accepted head a runner has taken but not echoed, the turns queued behind it, and steers. They
+    /// have no replayable event, so opening/reconnecting a console fetches them explicitly.
+    ///
+    /// The `active` view, not the bare one: that one is the queue alone and leaves the accepted head
+    /// out, so a turn vanished from this end between the runner taking it and its echo — a resumed
+    /// run's brief behind a busy runner was a blank pane until it ran. The bare view stays as it is
+    /// for the clients already installed. Web parity: `listQueuedTurns`.
     public func queuedTurns(sessionID: String) async throws -> [QueuedTurnInfo] {
-        try await get("sessions/\(sessionID)/turns")
+        try await get("sessions/\(sessionID)/turns", query: [URLQueryItem(name: "view", value: "active")])
     }
 
-    public func interrupt(sessionID: String) async throws {
-        _ = try await postRaw("sessions/\(sessionID)/interrupt", body: Optional<Empty>.none)
+    /// Stop the turn the session is running. `stopBackgroundWork` is the composer's Stop and only
+    /// that: it also ends the background work the session left running (see `SessionStopRequest`).
+    /// Omitted, this is a bodyless interrupt — nothing killed, the engine and its conversation
+    /// left standing.
+    public func interrupt(sessionID: String, stopBackgroundWork: Bool = false) async throws {
+        let body: SessionStopRequest? = stopBackgroundWork ? SessionStopRequest() : nil
+        _ = try await postRaw("sessions/\(sessionID)/interrupt", body: body)
     }
 
     /// Stop the running turn and queue the follow-up in the SAME request (`SessionInterruptRequest`).
@@ -723,6 +754,26 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("projects/\(projectID)/fuse/\(episodeID)/resume")
     }
 
+    /// Run a failed task landing again (`POST /projects/:id/tasks/:taskId/integration/retry`) — the
+    /// owner's own door (§4.7, T5). The reason is required: it is the record the rerun leaves, and
+    /// it is what the coordinator is told when the item is being handled.
+    ///
+    /// The owner's own credential and no acting session, like the three doors above: the door
+    /// refuses a session, and it is the same decision the coordinator's card-gated route makes.
+    public func retryTaskIntegration(projectID: String, taskID: String,
+                                     _ req: IntegrationRetryRequest) async throws -> IntegrationRetryReceipt {
+        try await post("projects/\(projectID)/tasks/\(taskID)/integration/retry", body: req)
+    }
+
+    /// Run a blocked candidate's failed check again
+    /// (`POST /projects/:id/promotions/:promotionId/integration/retry`) — the owner's own door
+    /// (§4.7, T5). No new candidate is created: the check is queued again on this one, and the
+    /// reason travels with it.
+    public func retryPromotionCheck(projectID: String, promotionID: String,
+                                    _ req: IntegrationRetryRequest) async throws -> IntegrationRetryReceipt {
+        try await post("projects/\(projectID)/promotions/\(promotionID)/integration/retry", body: req)
+    }
+
     /// What this project is currently asking its owner to merge, or nil when it is asking nothing.
     /// The door answers a bare `null` for that, which decodes straight into the optional.
     public func currentPromotion(projectID: String) async throws -> ProjectPromotionView? {
@@ -759,6 +810,45 @@ public final class APIClient: @unchecked Sendable {
     public func cancelPromotion(projectID: String,
                                 promotionID: String) async throws -> ProjectPromotionView {
         try await postEmpty("projects/\(projectID)/promotions/\(promotionID)/cancel")
+    }
+
+    // MARK: a landing session's own doors (§2.9 LS6)
+
+    /// Stop a task's in-flight landing (J-T8): a queued one ends at once, a running claim is asked
+    /// and answers at its next report, and one past the push boundary is refused. The page then
+    /// re-reads the landing; the door's answer is not drawn.
+    public func stopTaskIntegration(projectID: String, taskID: String) async throws {
+        let _: JSONValue = try await postEmpty(
+            "projects/\(projectID)/tasks/\(taskID)/integration/stop")
+    }
+
+    /// Abandon a running job whose runner stopped reporting (J-T10) — the X-E5 card's lead door and
+    /// the landing page's timed-out one.
+    public func abandonIntegrationJob(projectID: String, jobID: String) async throws {
+        let _: JSONValue = try await postEmpty(
+            "projects/\(projectID)/integration/jobs/\(jobID)/abandon")
+    }
+
+    /// Re-run a timed-out merge check on the same candidate (Re-run the check, revision 16): no new
+    /// candidate. The owner route takes a reason (`RetryIntegrationDto.reason`, at least one
+    /// character), and each door names where it was pressed — the merge card sends
+    /// `LandingPageCopy.rerunCheckReason`, the landing page `rerunLandingCheckReason`, as web and
+    /// Android do.
+    public func rerunPromotionCheck(projectID: String, promotionID: String, reason: String) async throws {
+        _ = try await postRaw(
+            "projects/\(projectID)/promotions/\(promotionID)/integration/retry",
+            body: ["reason": reason])
+    }
+
+    /// One page of a landing's check output (§2.2 J-T4, §2.9 LS2). Read only when a log is opened.
+    public func landingLog(sessionID: String, _ selectors: LandingLogSelectors,
+                           cursor: String? = nil) async throws -> LandingLogPage {
+        var query = [URLQueryItem(name: "jobId", value: selectors.jobId)]
+        if let claim = selectors.claim { query.append(URLQueryItem(name: "claim", value: String(claim))) }
+        if let round = selectors.round { query.append(URLQueryItem(name: "round", value: String(round))) }
+        if let check = selectors.check { query.append(URLQueryItem(name: "check", value: String(check))) }
+        if let cursor, !cursor.isEmpty { query.append(URLQueryItem(name: "cursor", value: cursor)) }
+        return try await get("sessions/\(sessionID)/landing/log", query: query)
     }
 
     // MARK: a project's crossings — work asked across its line, answered by its owner
@@ -1099,6 +1189,16 @@ public final class APIClient: @unchecked Sendable {
     public func wikiHealth(spaceID: String) async throws -> WikiSpaceHealth {
         try await get("wiki/spaces/\(spaceID)/health")
     }
+    /// `GET /wiki/spaces/:id/jobs`: the space's newest server runs with their calls — what Activity's Runs band
+    /// and a run's page draw (contract `jobs.read`, P9).
+    public func wikiJobs(spaceID: String) async throws -> WikiJobsRead {
+        try await get("wiki/spaces/\(spaceID)/jobs")
+    }
+    /// `GET /wiki/system-model`: the deployment's System model — its name and state, never its address or key —
+    /// and whether the server executes this account's wiki (contract `systemModel.read`).
+    public func wikiSystemModel() async throws -> WikiSystemModelStatus {
+        try await get("wiki/system-model")
+    }
     /// `GET /wiki/spaces/:id/articles`: the category directory — categories → topics → each topic's
     /// article and its subtopic parts (contract `articles.reads.directory`).
     public func wikiArticleDirectory(spaceID: String) async throws -> WikiArticleDirectory {
@@ -1227,6 +1327,13 @@ public final class APIClient: @unchecked Sendable {
         try await get("providers/mine/\(id)/balance", query: refresh ? [URLQueryItem(name: "refresh", value: "1")] : [])
     }
 
+    /// Check Again on one of the account's own Cursor keys (POST /api/providers/mine/:id/key-check): one
+    /// of its runners asks Cursor CLI's `agent models` with the key, which never comes here, and the
+    /// answer is kept on the key when it can be.
+    public func recheckCursorKey(_ id: String) async throws -> CursorKeyRecheckAnswer {
+        try await post("providers/mine/\(id)/key-check", body: Empty())
+    }
+
     /// The caller's account pools (GET /api/providers/pools), which the catalogue above doesn't
     /// list: each with its members, their own quota and where each stands. A pool this build can't
     /// read is left out rather than failing the list.
@@ -1311,6 +1418,32 @@ public final class APIClient: @unchecked Sendable {
 
     public func runners() async throws -> [Runner] { try await get("runners") }
     public func runner(_ id: String) async throws -> Runner { try await get("runners/\(id)") }
+
+    // MARK: managed runner (docs/managed-runner-design.md, "Server and three client interfaces")
+
+    /// `GET /api/auth/capabilities`. A server from before the feature answers 404: nil, which is no
+    /// capability rather than an error. Reading it allocates nothing.
+    public func serverCapabilities() async throws -> ServerCapabilities? {
+        do {
+            let capabilities: ServerCapabilities = try await get("auth/capabilities")
+            return capabilities
+        } catch APIError.http(404, _) {
+            return nil
+        }
+    }
+    /// `GET /api/managed-runner`: the owner's mapping as stored and derived, allocating nothing.
+    public func managedRunnerStatus() async throws -> ManagedRunnerStatus { try await get("managed-runner") }
+    /// Retry a FAILED managed runner the server allows it for: the revision it was read at, and one
+    /// key per press, so a resent request is the same request. Answers 202 with the status.
+    public func retryManagedRunner(revision: Int,
+                                   idempotencyKey: String = UUID().uuidString) async throws -> ManagedRunnerStatus {
+        try await post("managed-runner/retry",
+                       body: ManagedRunnerWriteRequest(idempotencyKey: idempotencyKey, revision: revision))
+    }
+    /// Ask for the owner's managed runner where the server offers one (`actions.canEnsure`).
+    public func ensureManagedRunner(idempotencyKey: String = UUID().uuidString) async throws -> ManagedRunnerStatus {
+        try await post("managed-runner/ensure", body: ManagedRunnerWriteRequest(idempotencyKey: idempotencyKey))
+    }
     /// The active and latest Codex reset-credit operations for a runner.
     public func codexRateLimitResetOperations(runnerID: String) async throws -> CodexRateLimitResetOperations {
         try await get("runners/\(runnerID)/codex-rate-limit-reset")
@@ -1399,6 +1532,13 @@ public final class APIClient: @unchecked Sendable {
         return try await post("runners/\(runnerID)/install", body: Request())
     }
 
+    /// Install one engine's CLI on the runner (POST /runners/:id/install) — what an engine's page offers
+    /// for an engine the machine doesn't have, as the web's engine row does.
+    public func installEngine(_ runnerID: String, engine: String) async throws -> RunnerInstallState {
+        struct Request: Encodable { let engine: String }
+        return try await post("runners/\(runnerID)/install", body: Request(engine: engine))
+    }
+
     @discardableResult
     public func refreshRunnerModels(_ id: String) async throws -> RunnerModelRefresh {
         try await postEmpty("runners/\(id)/refresh-models")
@@ -1436,9 +1576,18 @@ public final class APIClient: @unchecked Sendable {
         try await delete("runners/\(id)/login")
     }
 
+    /// An added account comes off the machine, by the runner. Default (`account: "default"`) comes off
+    /// Orbit's list alone, answered `done` at once with nothing sent to the machine, and is refused while
+    /// the runner reports no other account of that engine.
     public func removeRunnerAccount(_ id: String, engine: LoginEngine,
                                     account: String) async throws -> RunnerAccountRemoveState {
         try await delete("runners/\(id)/accounts/\(engine.rawValue)/\(account)")
+    }
+
+    /// Bring back the Default `removeRunnerAccount` took off Orbit's list: Orbit's own record, as the
+    /// removal is, so it works with the runner offline.
+    public func restoreRunnerDefault(_ id: String, engine: LoginEngine) async throws {
+        try await postRaw("runners/\(id)/accounts/\(engine.rawValue)/default/restore", body: Optional<Empty>.none)
     }
 
     public func pauseRunnerAccount(_ id: String, engine: LoginEngine, account: String,
@@ -1490,6 +1639,15 @@ public final class APIClient: @unchecked Sendable {
                                        body: Optional<Empty>.none))
     }
 
+    /// Send a message queued for the next turn into the one running now (the tray's Steer). It
+    /// becomes the steer it would have been had it been sent that way; with no turn left to join, or
+    /// an engine or runner that cannot take one, it stays queued and the refusal is
+    /// `CURRENT_WORK_UNAVAILABLE` with its `reason`. Web parity: `steerQueuedTurn`.
+    public func steerQueuedTurn(sessionID: String, turnId: String) async throws {
+        _ = try await send(makeRequest("sessions/\(sessionID)/turns/\(turnId)/steer", method: "POST",
+                                       body: Optional<Empty>.none))
+    }
+
     public func resume(sessionID: String, _ req: ResumeRequest) async throws -> TurnAccepted {
         try await post("sessions/\(sessionID)/resume", body: req)
     }
@@ -1515,6 +1673,14 @@ public final class APIClient: @unchecked Sendable {
 
     public func refreshDiff(sessionID: String) async throws {
         _ = try await postRaw("sessions/\(sessionID)/diff/refresh", body: Optional<Empty>.none)
+    }
+
+    // MARK: recap
+
+    /// Write this session's recap again now, past the settle hooks' two-minute window — the
+    /// conversation's Recap card's refresh. Answers once the pass has finished, with what it did.
+    public func refreshRecap(sessionID: String) async throws -> RecapOutcome {
+        try await postEmpty("sessions/\(sessionID)/recap")
     }
 
     public func commit(sessionID: String) async throws {
@@ -1647,8 +1813,10 @@ public final class APIClient: @unchecked Sendable {
     private struct Empty: Codable {}
     private struct RunnerReleaseManifest: Decodable { let version: String? }
 
-    private func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
-        let data = try await send(makeRequest(path, method: "GET", query: query, body: Optional<Empty>.none))
+    private func get<T: Decodable>(_ path: String, query: [URLQueryItem] = [],
+                                   timeout: TimeInterval? = nil) async throws -> T {
+        let data = try await send(makeRequest(path, method: "GET", query: query,
+                                              body: Optional<Empty>.none, timeout: timeout))
         return try decoder.decode(T.self, from: data)
     }
 
@@ -1699,12 +1867,18 @@ public final class APIClient: @unchecked Sendable {
         return try decoder.decode(T.self, from: data)
     }
 
+    /// `timeout` overrides the session's default request timeout (60s) for this request alone.
+    /// A caller passes one only for a read whose failure has a fast answer: the transcript pages
+    /// that gate a first paint or a reconnect's catch-up retry on a fresh connection 300ms later,
+    /// so waiting out a dead socket's full default buys nothing (the seed loop's own retry rule).
     private func makeRequest<B: Encodable>(_ path: String, method: String,
-                                           query: [URLQueryItem] = [], body: B?) throws -> URLRequest {
+                                           query: [URLQueryItem] = [], body: B?,
+                                           timeout: TimeInterval? = nil) throws -> URLRequest {
         var comps = URLComponents(url: baseURL.appendingPathComponent("api/\(path)"), resolvingAgainstBaseURL: false)!
         if !query.isEmpty { comps.queryItems = query }
         var req = URLRequest(url: comps.url!)
         req.httpMethod = method
+        if let timeout { req.timeoutInterval = timeout }
         req.setValue(Self.clientHeader, forHTTPHeaderField: "X-Orbit-Client")
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {

@@ -185,7 +185,6 @@ export const WIKI_REFUSAL_CODES = [
   'WIKI_REVIEW_QUEUE_FULL',
   'WIKI_PROBE_REFUSED',
   'WIKI_OWNER_CHANNEL_ONLY',
-  'WIKI_NOT_MAINTENANCE_SESSION',
   'WIKI_SESSION_EXCLUDED',
   'WIKI_IDEMPOTENCY_KEY_REUSED',
   'WIKI_CURSOR_BEHIND',
@@ -195,7 +194,6 @@ export const WIKI_REFUSAL_CODES = [
   'WIKI_PLAN_GATE',
   'WIKI_PLAN_STALE',
   'WIKI_PLAN_UNCONFIRMED',
-  'WIKI_PLAN_NO_JOB',
   'WIKI_DOC_INVALID',
 ] as const;
 export type WikiRefusalCode = (typeof WIKI_REFUSAL_CODES)[number];
@@ -960,9 +958,6 @@ export const WIKI_DEFAULT_MAINTENANCE_SETTINGS: Readonly<WikiMaintenanceSettings
   listId: null,
 };
 
-/** The title of a space's hidden maintenance list (UI copy is English). */
-export const WIKI_MAINTENANCE_LIST_TITLE = 'Wiki maintenance';
-
 /** Stored maintenance settings as they read: every absent or malformed key its default. */
 export function wikiMaintenanceSettings(stored: unknown): WikiMaintenanceSettings {
   const raw = (stored !== null && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}) as Record<string, unknown>;
@@ -1173,53 +1168,6 @@ export interface WikiDossierPage {
   state: WikiCursorState;
 }
 
-// ── Wiki maintenance: the run a maintenance session is claimed with (contract `maintenance.run`) ──
-
-/**
- * The guardrails of a maintenance run (design §8.2): every maintenance session is claimed with these,
- * whatever its workspace or its owner's defaults say. Tools a run may not have are named even when the
- * clean start leaves them out anyway: a runtime that ignored the one would still meet the other.
- */
-export const WIKI_MAINTENANCE_RUN = {
-  /** Model turns the run's opening prompt may take; a run cut short by it failed. */
-  maxTurns: 120,
-  /** Sub-agents (Task, Agent) and the web (WebFetch, WebSearch). */
-  disallowedTools: ['Task', 'Agent', 'WebFetch', 'WebSearch'],
-  /** Nobody watches a maintenance run: what is not pre-approved is refused, never asked. */
-  permissionMode: 'dontAsk',
-  /** The one runtime whose clean start and disallowedTools hold (the codex path ignores disallowedTools). */
-  runtime: 'claude',
-  /**
-   * The timeout of the run's one Bash call, the command its task names, in milliseconds: five hours. The
-   * clean start's default and most (BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS), and what the task's prompt
-   * tells the model to give the call, since a timeout the call names wins over the default.
-   */
-  bashTimeoutMs: 18_000_000,
-} as const;
-
-/**
- * What a runner declares to be handed maintenance sessions. A runner that does not is never sent one —
- * it would start the session as an ordinary one, without the clean start or the turn limit.
- */
-export const WIKI_MAINTENANCE_RUN_V1 = 'wiki-maintenance-run/v1';
-
-/** `wikiMaintenance` on a claimed or reclaimed session: present on a maintenance session only. */
-export interface WikiMaintenanceRun {
-  /** The space the session maintains. */
-  spaceId: string;
-  /** The space's maintenance settings, as the run was claimed under them. */
-  workspaceId: string | null;
-  provider: string;
-  /** Always empty: a maintenance run falls back to no other provider. */
-  providerFallbacks: [];
-  maxTurns: number;
-  disallowedTools: string[];
-  /** Start the engine clean (contract `maintenance.run.cleanStart`). */
-  cleanStart: true;
-  /** Why the run may not start, when it may not: the runner ends it FAILED with this and starts no engine. */
-  refusal?: string;
-}
-
 // ── Anchor re-verification (criterion 4, contract `anchorRules.verify`) ────────────────────────
 
 /** The anchor types a maintenance run re-verifies with git, on origin/main (design §4.4). */
@@ -1256,23 +1204,30 @@ export interface WikiAnchorDueEntry {
   anchors: WikiDueAnchor[];
 }
 
-/** `GET /api/runner/wiki/spaces/:id/anchors`. */
+/** One page of the anchors a maintenance run re-verifies (contract `anchorRules.verify.list`). */
 export interface WikiAnchorList {
   spaceId: string;
-  /** The work directory of the space's workspace on this runner, as stored (`~/orbit` is not expanded). */
-  repo: { workspaceId: string; workDir: string } | null;
   entries: WikiAnchorDueEntry[];
   /** The last entryId of this page, to read the next; null on the last page. */
   next: string | null;
 }
 
-/** One anchor's check, as the runner reports it. */
+/**
+ * One anchor's check, as the runner reports it. `path` / `symbol` / `sha` are the identity of the
+ * anchor the reporter says it checked — the fields its type names. A report may leave them out (the
+ * runner's own CLI does), and then the server checks the type at the index alone; when they are
+ * there, the server applies the check only to the anchor they name (`anchorRules.verify.identity`).
+ */
 export interface WikiAnchorCheckInput {
   index: number;
   type: WikiGitAnchorType;
   state: 'verified' | 'changed' | 'missing';
   /** A symbol found: the sha256 of its region on the checked ref. */
   regionSha256?: string;
+  /** The identity a check may carry, per its type: a path anchor's path; a symbol's path and symbol; a commit's sha. */
+  path?: string;
+  symbol?: string;
+  sha?: string;
 }
 
 /** `POST /api/runner/wiki/spaces/:id/anchor-checks`. */
@@ -1496,6 +1451,15 @@ export interface WikiVerificationList {
   items: WikiVerificationItem[];
   /** Pass as `after` for the next page; null when this page is the last. */
   next: string | null;
+  /**
+   * Who verifies the ops this list would carry (contract `reviewModes.verification.servedBy`): `server`
+   * where the executor switch says the server runs for this account, in which case `items` is empty
+   * because the server's own job (`jobs.kindRuns.verify`) is the verifier and a session must not ask a
+   * model of its provider about them. Absent under the default `runner` mode, where the caller verifies.
+   */
+  servedBy?: 'server';
+  /** With `servedBy`: how many of the caller's ops are waiting, so a caller can wait for it to reach zero. */
+  waiting?: number;
 }
 
 /** One verdict, as `POST /api/runner/wiki/spaces/:id/verifications` takes it. */

@@ -72,6 +72,51 @@ final class WatchCodableTests: XCTestCase {
         XCTAssertTrue(watch.expiryDeliveries.isEmpty)
     }
 
+    /// A session target names the task its session runs (`targetTask`, its id with a `publicId` twin
+    /// beside it), null when it runs none, and nothing at all from an older server; a task target
+    /// carries null. Only the first is a target on a task (`waitedOn`).
+    func testDecodesTheTaskASessionTargetRuns() throws {
+        let json = """
+        {
+          "id":"4ZcDj8QnWm0KxO4hQ2Hn9V","observerType":"SESSION","observerSessionId":"5beHmMJGwRpQhndTZImQL3",
+          "predicateVersion":1,
+          "predicate":{"kind":"ALL","over":"ALL_TARGETS","leaf":"SESSION_TURN_SETTLED"},
+          "mode":"ONE_SHOT","action":"RESUME_SESSION","state":"ACTIVE","generation":0,
+          "expiresAt":"2026-09-15T02:27:18.859Z","nextEvaluateAt":null,
+          "lastEvaluatedAt":"2026-09-14T03:01:02.003Z","idempotencyKey":null,
+          "createdAt":"2026-09-14T02:27:18.859Z","updatedAt":"2026-09-14T03:01:02.003Z",
+          "targets":[
+            {"targetKind":"SESSION","targetResourceId":"34hIEi8dVmbm5Cd8XsBr2","state":"OBSERVED","targetEpoch":0,
+             "lastEvaluatedAt":null,"targetTitle":"Task: Ship the release",
+             "targetStatus":{"status":"RUNNING","running":true,"queued":false},
+             "targetTask":{"id":"34hIEi97xkVk0S4TDo5D8","publicId":"34hIEi97xkVk0S4TDo5D8",
+               "title":"Ship the release","status":{"status":"IN_PROGRESS","running":true,"queued":false}}},
+            {"targetKind":"SESSION","targetResourceId":"34hIEi8dVmbm5Cd8XsBr3","state":"OBSERVED","targetEpoch":0,
+             "lastEvaluatedAt":null,"targetTitle":"A child session","targetTask":null},
+            {"targetKind":"SESSION","targetResourceId":"34hIEi8dVmbm5Cd8XsBr4","state":"OBSERVED","targetEpoch":0,
+             "lastEvaluatedAt":null},
+            {"targetKind":"TASK","targetResourceId":"34hIEi2gz3Kc8wSO1gv8s","state":"OBSERVED","targetEpoch":0,
+             "lastEvaluatedAt":null,"targetTitle":"Another task","targetTask":null}
+          ],
+          "matches":[],"expiryDeliveries":[]
+        }
+        """
+        let watch = try JSONDecoder().decode(Watch.self, from: Data(json.utf8))
+        let run = watch.targets[0]
+        XCTAssertEqual(run.targetTask, WatchTargetTask(id: "34hIEi97xkVk0S4TDo5D8", title: "Ship the release",
+                                                       status: WatchTargetStatus(status: "IN_PROGRESS", running: true,
+                                                                                 queued: false)))
+        XCTAssertEqual(run.waitedOn.targetKind, .task)
+        XCTAssertEqual(run.waitedOn.targetResourceId, "34hIEi97xkVk0S4TDo5D8")
+        XCTAssertEqual(run.waitedOn.targetTitle, "Ship the release", "the task's own title, not the session's")
+        XCTAssertEqual(run.waitedOn.targetStatus?.status, "IN_PROGRESS")
+        XCTAssertEqual(run.waitedOn.state, run.state)
+        for target in watch.targets.dropFirst() {
+            XCTAssertNil(target.targetTask)
+            XCTAssertEqual(target.waitedOn, target, "anything else is itself")
+        }
+    }
+
     /// Only an expiry carries a snapshot; a revoked watch reports nothing about its targets (§7).
     func testDecodesUnmatchedEndsWithTheDeliveryFlattenedBesideTheKind() throws {
         let json = """

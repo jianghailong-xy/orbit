@@ -1,5 +1,6 @@
-import { AgentProvider, DSH_PERMISSION_MODES, PermissionMode } from './enums';
+import { AgentProvider, CURSOR_PERMISSION_MODES, DSH_PERMISSION_MODES, PermissionMode } from './enums';
 import { runnerCatalogRow } from './models';
+import { ENGINE_CLI_NAMES } from './providerEngines';
 import type { ApprovalSupport, PermissionSemantics, RunnerModelCatalog } from './dto';
 
 /**
@@ -29,10 +30,18 @@ import type { ApprovalSupport, PermissionSemantics, RunnerModelCatalog } from '.
  *                       primitives — but not every tool, and Don't Ask is still not enforced
  *                       (see below).
  *  - DSH      partial — measured on 0.2.0-rc.2 (P4): only a file-sandbox escalation raises an
- *                       ACP approval, which the runner bridges to the same card, once. Reads,
- *                       sandboxed commands, web tools and MCP tools never ask; subagent tools are
- *                       removed because their escalations never reach ACP. Default, Auto and
- *                       Don't Ask are enforced (DSH_PERMISSION_MODES); the rest are refused.
+ *                       ACP approval, which the runner bridges to the same card, once — in Auto
+ *                       only when it is not routine (dshAutoRoutineEscalation). Orbit's tool gate
+ *                       asks the same way before a command that acts on another system and before
+ *                       a third-party MCP tool. Reads, web tools, Orbit's MCP tools and other
+ *                       sandboxed commands never ask; subagent tools are removed because their
+ *                       escalations never reach ACP. Default, Auto and Don't Ask are enforced
+ *                       (DSH_PERMISSION_MODES); the rest are refused.
+ *  - CURSOR   partial — measured on 2026.10.14-941492e (docs/cursor-runtime-contract.md §5): an ACP
+ *                       permission request comes for a command not on its allowlist, an MCP tool or a
+ *                       web fetch, and Orbit answers it from the card. A write inside the workspace
+ *                       never asks, in any mode. Accept Edits, Plan, Auto, Don't Ask and Bypass are
+ *                       kept (CURSOR_PERMISSION_MODES); Default is refused.
  *
  * Shared rather than server-only so the composer can describe a session it has not created yet
  * with the same table the server will apply to it. Update it together with the runner; this is
@@ -46,6 +55,7 @@ export function runtimeApprovalSupport(provider: string): ApprovalSupport {
     case AgentProvider.KIMI:
     case AgentProvider.CODEX:
     case AgentProvider.DSH:
+    case AgentProvider.CURSOR:
       return 'partial';
     default:
       return 'none';
@@ -59,7 +69,24 @@ const ASK_MODES: ReadonlySet<string> = new Set([
   PermissionMode.PLAN,
 ]);
 
-/** Modes that deliberately never ask and simply allow. */
+/**
+ * Modes whose unapproved actions are allowed rather than asked about. Bypass never asks. Auto
+ * promises that for routine work, on every runtime, and leaves the rest to the runtime's own
+ * judgement of what must reach a person — a boundary crossing or a high-impact action such as a
+ * push, a deploy, an install or data leaving the machine. Each runtime keeps it its own way, and
+ * where one falls short its session note says so:
+ *  - CLAUDE: Claude Code's Auto mode and its classifier.
+ *  - CODEX: a workspace-write sandbox without network; codexAutoApproval allows routine requests,
+ *    the rest go to Codex's reviewer and then to the card.
+ *  - DSH: a workspace-write file sandbox; dshAutoRoutineEscalation allows routine escalations, the
+ *    rest reach the card, as do commands its tool gate names (dshToolGateRules) and third-party MCP
+ *    tools. Other commands that write no files, network ones included, are not reviewed.
+ *  - CURSOR: no sandbox; the runner allows a command Cursor CLI asks about when it is routine and stays
+ *    in the workspace (cursorAutoAllows), and every other request — MCP tools, web fetches, a push or an
+ *    install — reaches the card. Edits inside the workspace never ask, and are not reviewed.
+ *  - KIMI, OPENCODE, ANTIGRAVITY: the CLI's own allow-everything mode; nothing is reviewed.
+ * A runtime that offers Auto states its line here.
+ */
 const ALLOW_MODES: ReadonlySet<string> = new Set([PermissionMode.AUTO, PermissionMode.BYPASS]);
 
 /**
@@ -90,6 +117,8 @@ export const AUTO_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
  * `on-request` ("the model decides when to ask the user for approval"), Kimi and OpenCode expose it as a plain mode,
  * and Antigravity runs it as `--dangerously-skip-permissions`, on any model it lists.
  * DeepSeek Harness runs it as its workspace-write sandbox, on any model.
+ * Cursor CLI runs it as Orbit's own review of each request it asks about, on any model: its own
+ * `--auto-review` does nothing over ACP and `--force` lets everything through.
  * Claude alone makes it model-specific, and the assigned runner's catalogue is where that answer
  * comes from — its row lists the modes the CLI that will run the model accepts. Only a model that
  * row does not cover falls back to the static list above. A configured (BYOK) provider's model
@@ -201,9 +230,13 @@ export function derivePermissionSemantics(
         shortNote: 'unsupported on DeepSeek Harness; session configuration is rejected',
       };
     }
-    const unasked =
-      'Reading files, read-only commands, web tools and MCP tools (Orbit’s included) run ' +
-      'without asking; subagents are not available.';
+    // The file sandbox reviews writes only; Orbit's tool gate (runner dshToolGateRules) asks before a
+    // command that acts on another system, in every mode.
+    const beyondFiles = (outcome: string) =>
+      'Reading files, web tools and Orbit’s MCP tools run without asking, and so do commands that ' +
+      'write no files, network ones included — except a push, a remote shell, an HTTP write, a ' +
+      `GitHub, cluster, cloud or service change, a privilege change or a publish, which ${outcome}; ` +
+      'subagents are not available.';
     if (mode === PermissionMode.AUTO) {
       return {
         mode,
@@ -211,8 +244,11 @@ export function derivePermissionSemantics(
         approvalSupport,
         honored: true,
         note:
-          'Edits and commands inside the workspace and temporary directories run without asking; ' +
-          'a write anywhere else asks you once. ' + unasked,
+          'Edits and commands inside the workspace and temporary directories run without asking. ' +
+          'A command that must write elsewhere runs outside the file sandbox: Orbit allows a ' +
+          'routine one itself (a commit in an isolated worktree, a build cache) and asks you ' +
+          'about the rest, such as a push or an install. Third-party MCP tools ask you first. ' +
+          beyondFiles('ask you first'),
       };
     }
     if (mode === PermissionMode.DEFAULT) {
@@ -223,7 +259,7 @@ export function derivePermissionSemantics(
         honored: true,
         note:
           'Files are read-only: each write, by a tool or a command, asks you once before it runs. ' +
-          unasked,
+          beyondFiles('ask you first'),
       };
     }
     return {
@@ -231,7 +267,89 @@ export function derivePermissionSemantics(
       unapproved: 'deny',
       approvalSupport,
       honored: true,
-      note: 'Files are read-only and every write is refused without asking. ' + unasked,
+      note:
+        'Files are read-only and every write is refused without asking. ' + beyondFiles('are refused'),
+    };
+  }
+
+  // Cursor CLI over ACP (docs/cursor-runtime-contract.md §5): a write inside the workspace or a temporary
+  // directory never asks, whatever the mode; a write anywhere else, a command off its allowlist, an MCP tool
+  // or a web fetch asks (measured in P5c). A mode that needs more than that is refused by API admission.
+  // Root is no concern: `--force` runs as root.
+  if (provider === AgentProvider.CURSOR) {
+    const cursor = ENGINE_CLI_NAMES[AgentProvider.CURSOR];
+    const supported = 'use Accept Edits, Plan, Auto, Don’t Ask or Bypass.';
+    if (!(CURSOR_PERMISSION_MODES as readonly string[]).includes(mode)) {
+      return {
+        mode,
+        unapproved: 'deny',
+        approvalSupport,
+        honored: false,
+        note:
+          mode === PermissionMode.DEFAULT
+            ? `${cursor} cannot ask before it edits a file: it writes inside the workspace without ` +
+              `asking in every mode. Session configuration is rejected; ${supported}`
+            : `${cursor} does not support this permission mode. Session configuration is rejected; ${supported}`,
+        shortNote: `unsupported on ${cursor}; session configuration is rejected`,
+      };
+    }
+    if (mode === PermissionMode.BYPASS) {
+      return {
+        mode,
+        unapproved: 'allow',
+        approvalSupport,
+        honored: true,
+        note:
+          `Nothing asks. If your Cursor team turns off Run Everything, ${cursor} still sends requests, ` +
+          'and Orbit asks you.',
+      };
+    }
+    if (mode === PermissionMode.AUTO) {
+      return {
+        mode,
+        unapproved: 'allow',
+        approvalSupport,
+        honored: true,
+        note:
+          'Edits inside the workspace and in temporary directories run without asking and are not reviewed. ' +
+          'Orbit allows a routine command itself and asks you about the rest, such as a push or an install, ' +
+          'and about other edits, MCP tools and web fetches.',
+      };
+    }
+    if (mode === PermissionMode.ACCEPT_EDITS) {
+      return {
+        mode,
+        unapproved: 'ask',
+        approvalSupport,
+        honored: true,
+        note:
+          'Edits inside the workspace and in temporary directories run without asking. Other edits, ' +
+          `commands, MCP tools and web fetches ask you first, except the few ${cursor} allows on its own, ` +
+          'such as `ls`.',
+      };
+    }
+    if (mode === PermissionMode.PLAN) {
+      return {
+        mode,
+        unapproved: 'deny',
+        approvalSupport,
+        honored: true,
+        note:
+          `${cursor} plans without writing files, and every command, edit, MCP tool and web fetch it asks ` +
+          'to run is refused without asking, except Orbit’s own tools. If it switches itself out of Plan, ' +
+          'Orbit stops the turn.',
+      };
+    }
+    return {
+      mode,
+      unapproved: 'deny',
+      approvalSupport,
+      honored: false,
+      note:
+        `Commands, MCP tools, web fetches and other edits that would ask are refused without asking, but ${cursor} ` +
+        'edits files inside the workspace and in temporary directories without asking in every mode, so those ' +
+        'edits still run.',
+      shortNote: 'partly enforced, edits inside the workspace still run',
     };
   }
 

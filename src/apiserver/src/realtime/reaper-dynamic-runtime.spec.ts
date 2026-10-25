@@ -16,6 +16,9 @@ test('reaper keeps the short runtime-initialization watchdog for Kimi', async ()
           assignedRunnerId: runnerId,
           status: RunStatus.RUNNING,
           provider: AgentProvider.KIMI,
+          providerBuiltin: true,
+          // The watchdog asks the session's recorded engine (migration 0414), as every row carries it.
+          engine: AgentProvider.KIMI,
           runtimeSessionId: null,
           lastTurnAt: new Date(Date.now() - 3 * 60_000),
           cancelRequestedAt: null,

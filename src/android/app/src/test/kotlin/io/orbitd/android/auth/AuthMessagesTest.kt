@@ -40,15 +40,25 @@ class AuthMessagesTest {
     }
 
     @Test fun aPasswordLoginReadsTheCodeBeforeTheStatus() {
-        assertEquals(AuthMessage.INVALID_CREDENTIALS, messageFor(refusal(401)))
         assertEquals(AuthMessage.ACCOUNT_DISABLED, messageFor(refusal(401, "ACCOUNT_DISABLED")))
         assertEquals(AuthMessage.ACCOUNT_DISABLED, messageFor(refusal(403, "ACCOUNT_DISABLED")))
-        assertEquals(AuthMessage.SERVER, messageFor(refusal(403, "SOMETHING_NEW")))
-        assertEquals(AuthMessage.SERVER, messageFor(refusal(500)))
         assertEquals(AuthMessage.INVALID_ADDRESS, messageFor(InvalidServerAddress()))
         assertEquals(AuthMessage.STORAGE, messageFor(SecureStorageException()))
+    }
+
+    /** iOS LoginFailure.message (40a70be24): why a password sign-in failed, so a refused form never reads as an unreachable server. */
+    @Test fun aFailedPasswordLoginSaysWhetherTheCredentialsTheServerOrTheAddressFailed() {
+        // The server turned the form down (400 is a form it can't read, such as an email that isn't one).
+        for (status in listOf(400, 401, 403, 422)) assertEquals("HTTP $status", AuthMessage.INVALID_CREDENTIALS, messageFor(refusal(status)))
+        // A code this app doesn't know yet is still a refusal of the credentials, as before the codes.
+        assertEquals(AuthMessage.INVALID_CREDENTIALS, messageFor(refusal(401, "SOMETHING_NEW")))
+        assertEquals(AuthMessage.INVALID_CREDENTIALS, messageFor(refusal(403, "SOMETHING_NEW")))
+        for (status in listOf(500, 502, 503, 504)) assertEquals("HTTP $status", AuthMessage.SERVER, messageFor(refusal(status)))
         assertEquals(AuthMessage.NETWORK, messageFor(NetworkException()))
-        assertEquals(AuthMessage.SERVER, messageFor(ProtocolException()))
+        // Whatever answered is no Orbit sign-in: a 404, or a body that isn't one.
+        assertEquals(AuthMessage.UNEXPECTED, messageFor(refusal(404)))
+        assertEquals(AuthMessage.UNEXPECTED, messageFor(ProtocolException()))
+        assertEquals(AuthMessage.UNEXPECTED, messageFor(IllegalStateException()))
     }
 
     @Test fun aGoogleExchangeNeverReadsAsAWrongPassword() {
@@ -62,6 +72,6 @@ class AuthMessagesTest {
         assertEquals(AuthMessage.SERVER, googleMessageFor(refusal(503)))
         assertEquals(AuthMessage.STORAGE, googleMessageFor(SecureStorageException()))
         assertEquals(AuthMessage.NETWORK, googleMessageFor(NetworkException()))
-        assertEquals(AuthMessage.SERVER, googleMessageFor(ProtocolException()))
+        assertEquals(AuthMessage.UNEXPECTED, googleMessageFor(ProtocolException()))
     }
 }

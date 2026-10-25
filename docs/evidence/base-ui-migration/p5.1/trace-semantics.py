@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+"""Compare what each step of two P5.1 runs did, apart from how focus and layers present themselves.
+
+usage: trace-semantics.py REF_REPORT.json DEL_REPORT.json > OUT.json
+
+For every test both runs attached a `trace` to (p51.browser.mjs observe(): each step's address, theme, focus, open
+dialogs, menus, tips and popovers, alerts, notifications, the requests the step sent and the runtime census of
+AntD-classed elements, the sidebar included), step by step:
+- `semantic`: the step name, the address, the theme, the sidebar row that is lit (`lit`), the requests (method, path,
+  body), the notifications, the open menus' items (text, disabled), the tips' words, the open popovers' words (whatever
+  role their box carries: a replaced popover's is a tooltip, an Orbit one's a dialog), the alerts, and where a step
+  records them, the palette's rows and its highlighted row (`rows`, `active`), a bar's button (`label`), the engine
+  card's name (`card`) and the engine list (`rows`). Any difference is listed; the exit code is 1 if there is one.
+- `antd`: per run, the steps whose census found AntD-classed elements, and which classes. The delivery keeps the
+  application root's `ant-app` (P6) and, on the session workspace, WorkspaceView's own controls (P5.3) and Transcript's
+  (P5.2); none of P5.1's.
+- `presentation`: focus and the open dialogs' text, counted per field, with the first examples. These follow the
+  component conventions already accepted in P2–P4 (where focus lands when a layer opens or closes; a replaced popover's
+  dialog semantics).
+A request body's `clientRequestId` (the reset credit's create) is fresh on every press and is read as present. Only
+reads.
+"""
+import base64
+import json
+import re
+import sys
+
+SEMANTIC = ('step', 'url', 'theme', 'lit', 'requests', 'notifications', 'menus', 'tips', 'popovers', 'alerts', 'rows', 'active', 'label', 'card')
+PRESENTATION = ('focus', 'dialogs')
+UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+
+
+def traces(path):
+    found = {}
+
+    def walk(suite, prefix):
+        for child in suite.get('suites', []):
+            walk(child, prefix + [child['title']])
+        for spec in suite.get('specs', []):
+            for test in spec['tests']:
+                for result in test['results']:
+                    for attachment in result.get('attachments', []):
+                        if attachment['name'] == 'trace' and attachment.get('contentType') == 'application/json' and 'body' in attachment:
+                            found[f"{test['projectName']} :: {' › '.join(prefix[1:] + [spec['title']])}"] = json.loads(base64.b64decode(attachment['body']))
+    for suite in json.load(open(path))['suites']:
+        walk(suite, [suite['title']])
+    return found
+
+
+def fresh(body):
+    body = dict(body)
+    if isinstance(body.get('clientRequestId'), str) and UUID.fullmatch(body['clientRequestId']):
+        body['clientRequestId'] = '<present>'
+    return body
+
+
+def meaning(step):
+    step = dict(step)
+    if isinstance(step.get('requests'), list):
+        step['requests'] = [{**r, 'body': fresh(r['body'])} if isinstance(r.get('body'), dict) else r for r in step['requests']]
+    return step
+
+
+ref, dele = traces(sys.argv[1]), traces(sys.argv[2])
+ref = {key: [meaning(step) for step in steps] for key, steps in ref.items()}
+dele = {key: [meaning(step) for step in steps] for key, steps in dele.items()}
+semantic, presentation, examples = [], {field: 0 for field in PRESENTATION}, {field: [] for field in PRESENTATION}
+for key in sorted(set(ref) | set(dele)):
+    r, d = ref.get(key), dele.get(key)
+    if r is None or d is None:
+        semantic.append({'test': key, 'missing': 'ref' if r is None else 'del'})
+        continue
+    if len(r) != len(d):
+        semantic.append({'test': key, 'steps': [len(r), len(d)]})
+    for rs, ds in zip(r, d):
+        delta = {field: [rs.get(field), ds.get(field)] for field in SEMANTIC if rs.get(field) != ds.get(field)}
+        if delta:
+            semantic.append({'test': key, 'step': rs.get('step'), 'delta': delta})
+        for field in PRESENTATION:
+            if rs.get(field) != ds.get(field):
+                presentation[field] += 1
+                if len(examples[field]) < 16:
+                    examples[field].append({'test': key, 'step': rs.get('step'), 'ref': rs.get(field), 'del': ds.get(field)})
+both = set(ref) & set(dele)
+census = {side: [{'test': key, 'step': step.get('step'), 'url': step.get('url'), 'antd': step['antd']}
+                 for key in sorted(runs) for step in runs[key] if step.get('antd')]
+          for side, runs in (('ref', ref), ('del', dele))}
+classes = {side: sorted({cls for row in rows for cls in row['antd']}) for side, rows in census.items()}
+json.dump({'tests': len(both), 'steps': sum(len(ref[key]) for key in both), 'semantic': semantic,
+           'antd': {side: {'steps': len(rows), 'classes': classes[side], 'rows': rows} for side, rows in census.items()},
+           'presentation': presentation, 'examples': examples}, sys.stdout, indent=1, ensure_ascii=False)
+print()
+sys.exit(1 if semantic else 0)

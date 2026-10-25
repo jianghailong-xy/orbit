@@ -1,0 +1,15 @@
+argv: env P43A_SNAPSHOTS=/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs/geom-fix-final-r3-shots P43A_OUTPUT=/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs/geom-fix-final-r3-out npx playwright test ui-migration/p43a-keys-geom-probe.browser.mjs --config ui-migration/p43a.config.mjs --project webkit-light-desktop --project webkit-dark-desktop
+tree: fix
+head: 423aa3fdb4da9eb51aee4fa198488ac77a4c76fe
+uncommitted:
+?? src/web/ui-migration/p43a-keys-geom-probe.browser.mjs
+load: 49.83 44.67 39.14 7/3839 2244015
+memory: 3404 MB available
+disk: / 22103M available, TMPDIR /mnt/data/tmp/34coPBqt8gi229cVNds0E/tmp
+started: 2026-10-10T01:40:21Z
+
+Error: Timed out waiting 30000ms from config.webServer.
+
+exit=1
+load: 45.87 44.86 39.70 7/4229 2250309
+ended: 2026-10-10T01:41:48Z

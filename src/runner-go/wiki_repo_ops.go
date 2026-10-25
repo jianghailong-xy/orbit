@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -24,10 +27,12 @@ import (
 //   snapshot   every path of origin/main with its size, every document's title and headings, every source
 //              file's symbols, the contracts' shapes, the commits reachable from origin/main, and the
 //              README's first paragraph. Above `wikiRepoOpInlineBytes` it travels in fragments.
-//   read       the text of given paths at a given commit, one section of a document or a whole file,
-//              each item within its own limit and the request within one section's material.
+//   read       the whole text of given paths at a given commit (owner 2026-10-08), one file up to
+//              `wikiRepoOpWholeFileBytes` — a larger one is missing, with `too_large` as the reason — and
+//              an answer too large for one request body uploaded in fragments, as a snapshot is. A request
+//              that names a limit is answered within it, the way an older control plane asks.
 //   diff       `--name-status -M` between two commits, and the design documents the range added.
-//   anchors    the maintenance run's own anchor checks (wiki_anchors.go), reused.
+//   anchors    each path, symbol and commit anchor checked with git (wiki_anchors.go).
 //
 // EVERY ONE OF THEM CHECKS ITS CHECKOUT FIRST: the repository's origin URL must be the space's
 // `repo.urlNorm` and the checkout's root commit must be the space's `rootCommitSha` (design §7, "the
@@ -39,14 +44,19 @@ import (
 // declare this is handed nothing rather than handed work it would have to fail.
 const wikiRepoOpCapabilityV1 = "wiki-repo-op/v1"
 
+// The capability a runner declares when its `read` answers with whole files (owner 2026-10-08). A runner
+// that declares only wikiRepoOpCapabilityV1 still reads, but with the old window (wikiRepoOpBoundedChars);
+// the server hands whole-file reads only to a runner that declares this. Its apiserver twin is
+// WIKI_REPO_OP_READ_CAPABILITY in src/shared/src/wikiRepoOps.ts.
+const wikiRepoOpReadCapabilityV1 = "wiki-repo-op-read/v1"
+
 // The contract's numbers (`repoOps.fragments`, `.read`), mirrored here as the runner applies them.
 const (
 	wikiRepoOpInlineBytes      = 4 << 20
 	wikiRepoOpFragmentBytes    = 2 << 20
-	wikiRepoOpDocSectionChars  = 4200
-	wikiRepoOpContractChars    = 2500
-	wikiRepoOpSectionChars     = 22000
-	wikiRepoOpAfterwardsMarker = "\n…（后略）\n"
+	wikiRepoOpWholeFileBytes   = 2 << 20
+	wikiRepoOpBoundedChars     = 22000
+	wikiRepoOpAfterwardsMarker = "\n… (rest omitted)\n"
 )
 
 // One git command's budget: the snapshot reads a whole tree, which is minutes of work on a cold object
@@ -75,25 +85,28 @@ type wikiRepoOpInput struct {
 	Anchors []wikiDueAnchor `json:"anchors,omitempty"`
 }
 
-// wikiRepoOpReadItem is one thing to read: a whole file, or one section of a document, within a limit.
+// wikiRepoOpReadItem is one thing to read: the whole file at the commit, or — when a limit is named, as an
+// older control plane asks — that much of it.
 type wikiRepoOpReadItem struct {
 	Path    string `json:"path"`
 	Section string `json:"section,omitempty"`
-	// The most characters to answer with; absent gets the path's default (a contract 2,500, else 4,200),
-	// and nothing may ask for more than one section's material (22,000).
+	// The most characters to answer with. Absent reads the whole file, up to wikiRepoOpWholeFileBytes;
+	// a number asks for a bounded read, never more than one section's material (wikiRepoOpBoundedChars).
 	MaxChars int `json:"maxChars,omitempty"`
 }
 
 // ── what this side answers with ─────────────────────────────────────────────────────────────────
 
-// wikiRepoOpOutcome is what one operation came to. `payload` is a snapshot too large to travel inside the
-// result: the caller uploads it in fragments and reports their count instead of the text.
+// wikiRepoOpOutcome is what one operation came to. `payload` is the part too large to travel inside the
+// result: the caller uploads it in fragments and reports their count instead of the text, under `payloadKey`
+// when the kind nests its shape (a read's answer under `read`) and flat when it does not (a snapshot's index).
 type wikiRepoOpOutcome struct {
-	state   string
-	result  map[string]interface{}
-	payload string
-	sha     string
-	err     string
+	state      string
+	result     map[string]interface{}
+	payload    string
+	payloadKey string
+	sha        string
+	err        string
 }
 
 type wikiRepoOpReadAnswer struct {
@@ -106,8 +119,12 @@ type wikiRepoOpReadPiece struct {
 	Path    string `json:"path"`
 	Section string `json:"section,omitempty"`
 	Found   bool   `json:"found"`
-	Text    string `json:"text,omitempty"`
-	// The answer was cut at the limit, so its end is not the file's (or the section's).
+	// Why it is not there: "too_large" for a file over wikiRepoOpWholeFileBytes. Absent otherwise.
+	Reason string `json:"reason,omitempty"`
+	// The file's size in bytes at the commit; 0 when the commit has no such path.
+	Size int64  `json:"size,omitempty"`
+	Text string `json:"text,omitempty"`
+	// The answer was cut at the limit the request named, so its end is not the file's.
 	Truncated bool `json:"truncated,omitempty"`
 	Chars     int  `json:"chars"`
 }
@@ -186,15 +203,15 @@ type wikiRepoOpIndexContract struct {
 // runWikiRepoOp performs one claimed operation. `progress` is called at each step it reaches, best effort:
 // a report that does not go out costs the control plane a phase, never the answer.
 func runWikiRepoOp(cmd WikiRepoOpCommand, progress func()) wikiRepoOpOutcome {
-	root, ref, err := wikiRepoOpCheckout(cmd)
-	if err != nil {
-		return wikiRepoOpFailed(err.Error())
-	}
 	var input wikiRepoOpInput
 	if raw, marshalErr := json.Marshal(cmd.Input); marshalErr == nil && len(raw) > 0 && string(raw) != "null" {
 		if unmarshalErr := json.Unmarshal(raw, &input); unmarshalErr != nil {
 			return wikiRepoOpFailed(fmt.Sprintf("the operation's input could not be read: %v", unmarshalErr))
 		}
+	}
+	root, ref, err := wikiRepoOpCheckout(cmd, input)
+	if err != nil {
+		return wikiRepoOpFailed(err.Error())
 	}
 	switch cmd.Kind {
 	case "snapshot":
@@ -222,7 +239,14 @@ func wikiRepoOpSucceeded(result map[string]interface{}) wikiRepoOpOutcome {
 // is read of it (design §7): the work directory is a git checkout, its origin is the space's repository,
 // and it starts from the space's first commit. The fetch is part of it: a read of a stale origin/main
 // would be an answer about a commit nobody asked about.
-func wikiRepoOpCheckout(cmd WikiRepoOpCommand) (string, string, error) {
+//
+// Except where the operation names its commits. A read or a diff answers about the commits it was given,
+// and a commit is the same text whichever fetch brought it: when the checkout already has every one of
+// them, no fetch could change the answer and none is run — so the reads a job keeps in flight neither
+// queue for the fetch lock nor race another fetch (fetchWikiOriginMain). The first commit is then asked
+// of those commits themselves rather than of origin/main: each must start from it, or it is another
+// repository's and nothing is read. The ref answered is "" — neither kind reads origin/main.
+func wikiRepoOpCheckout(cmd WikiRepoOpCommand, input wikiRepoOpInput) (string, string, error) {
 	workDir := expandTilde(strings.TrimSpace(cmd.WorkDir))
 	if workDir == "" {
 		return "", "", fmt.Errorf("the operation names no working directory to read the repository in")
@@ -238,18 +262,88 @@ func wikiRepoOpCheckout(cmd WikiRepoOpCommand) (string, string, error) {
 				"nothing was read", root, firstNonEmpty(got, "no origin"), want)
 		}
 	}
-	ref, err := fetchWikiAnchorsRef(root)
-	if err != nil {
-		return "", "", fmt.Errorf("the checkout %s could not be fetched: %w", root, err)
-	}
-	if sha := strings.ToLower(strings.TrimSpace(cmd.RootCommitSha)); sha != "" {
-		roots, _ := wikiImportGit(root, "rev-list", "--max-parents=0", ref)
-		if !contains(strings.Fields(roots), sha) {
-			return "", "", fmt.Errorf("the checkout %s does not start from the space's first commit %s: "+
-				"it is another repository behind the same URL, so nothing was read", root, sha)
+	first := strings.ToLower(strings.TrimSpace(cmd.RootCommitSha))
+	if local := wikiRepoOpLocalCommits(root, cmd.Kind, input); len(local) > 0 {
+		for _, sha := range local {
+			if first != "" && !wikiRepoOpStartsFrom(root, sha, first) {
+				return "", "", fmt.Errorf("the commit %s in the checkout %s does not start from the space's first commit %s: "+
+					"it is another repository's, so nothing was read", sha, root, first)
+			}
 		}
+		return root, "", nil
+	}
+	// A failure here is read in the job's error: it says which operation, in which checkout, and what git said.
+	if err := fetchWikiOriginMain(root); err != nil {
+		return "", "", fmt.Errorf("the %s operation could not fetch origin main into the checkout %s, so nothing was read: %v",
+			cmd.Kind, root, err)
+	}
+	out, code, stderr, err := wikiAnchorGit(root, wikiAnchorGitTimeout, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}")
+	ref := strings.TrimSpace(string(out))
+	if err != nil || code != 0 || !wikiCommitSha.MatchString(ref) {
+		return "", "", fmt.Errorf("the %s operation found no commit at origin/main in the checkout %s after the fetch, so "+
+			"nothing was read: %s", cmd.Kind, root, firstNonEmpty(strings.TrimSpace(stderr), errString(err), ref))
+	}
+	if first != "" && !wikiRepoOpStartsFrom(root, ref, first) {
+		return "", "", fmt.Errorf("the checkout %s does not start from the space's first commit %s: "+
+			"it is another repository behind the same URL, so nothing was read", root, first)
 	}
 	return root, ref, nil
+}
+
+// wikiRepoOpLocalCommits is the commits a read or a diff names, when the checkout already has every one of
+// them; nil otherwise, and always for a snapshot or anchors, which ask about origin/main as it is now.
+func wikiRepoOpLocalCommits(root, kind string, input wikiRepoOpInput) []string {
+	var named []string
+	switch kind {
+	case "read":
+		named = []string{input.Sha}
+	case "diff":
+		named = []string{input.From, input.To}
+	}
+	for i, sha := range named {
+		named[i] = strings.ToLower(strings.TrimSpace(sha))
+		if !wikiCommitSha.MatchString(named[i]) {
+			return nil
+		}
+		if _, err := wikiImportGit(root, "cat-file", "-e", named[i]+"^{commit}"); err != nil {
+			return nil
+		}
+	}
+	return named
+}
+
+// wikiRepoOpStartsFrom says whether the history of commit starts from the space's first commit.
+func wikiRepoOpStartsFrom(root, commit, first string) bool {
+	roots, _ := wikiImportGit(root, "rev-list", "--max-parents=0", commit)
+	return contains(strings.Fields(roots), first)
+}
+
+var (
+	wikiRepoSCP    = regexp.MustCompile(`^(?:[^@/\s]+@)?([^:/\s]+):([^/\s]\S*)$`)
+	wikiRepoScheme = regexp.MustCompile(`(?i)^[a-z][a-z0-9+.-]*://`)
+	wikiRepoRemote = regexp.MustCompile(`(?i)^([a-z][a-z0-9+.-]*)://(?:[^@/]*@)?([^/]*)(.*)$`)
+)
+
+// normalizeWikiRepoURL is the server's normalizeRepoUrl (canonicalRepoUrl, then no scheme, no trailing / or
+// .git): `git@github.com:a/b.git` and `https://github.com/a/b` both read `github.com/a/b`.
+func normalizeWikiRepoURL(raw string) string {
+	u := strings.TrimSpace(raw)
+	if m := wikiRepoSCP.FindStringSubmatch(u); m != nil && !wikiRepoScheme.MatchString(u) {
+		u = "ssh://" + m[1] + "/" + m[2]
+	}
+	if m := wikiRepoRemote.FindStringSubmatch(u); m != nil {
+		u = strings.ToLower(m[1]) + "://" + strings.ToLower(m[2]) + m[3]
+	}
+	trim := func(s string) string {
+		for {
+			next := strings.TrimSuffix(strings.TrimRight(s, "/"), ".git")
+			if next == s {
+				return s
+			}
+			s = next
+		}
+	}
+	return trim(wikiRepoScheme.ReplaceAllString(trim(u), ""))
 }
 
 // ── snapshot ────────────────────────────────────────────────────────────────────────────────────
@@ -342,11 +436,62 @@ func wikiRepoOpReachable(root, ref string) ([]string, error) {
 	return commits, nil
 }
 
+// How much of a repository's README tells the model what the repository is.
+const wikiMaintainAboutMaxChars = 300
+
+var (
+	wikiMaintainTag      = regexp.MustCompile(`<[^>]*>`)
+	wikiMaintainMdLink   = regexp.MustCompile(`!?\[([^\]]*)\]\([^)]*\)`)
+	wikiMaintainEmphasis = regexp.MustCompile("[*_`]{1,3}")
+)
+
+// wikiMaintainAbout is a sentence or two of what the repository is: the first paragraph of its README on
+// origin/main that says something, markup taken out. Empty when there is none.
+func wikiMaintainAbout(root, ref string) string {
+	readme, err := wikiImportGit(root, "show", ref+":README.md")
+	if err != nil {
+		return ""
+	}
+	for _, paragraph := range strings.Split(readme, "\n\n") {
+		text := wikiMaintainTag.ReplaceAllString(paragraph, " ")
+		text = wikiMaintainMdLink.ReplaceAllString(text, "$1")
+		text = wikiMaintainEmphasis.ReplaceAllString(html.UnescapeString(text), "")
+		text = strings.Join(strings.Fields(text), " ")
+		if strings.HasPrefix(text, "#") || len([]rune(text)) < 40 {
+			continue
+		}
+		return cutRunes(text, wikiMaintainAboutMaxChars)
+	}
+	return ""
+}
+
+func cutRunes(text string, max int) string {
+	runes := []rune(text)
+	if len(runes) <= max {
+		return text
+	}
+	return string(runes[:max])
+}
+
+// shortWikiHash is enough of a commit's hash to tell two apart at a glance.
+func shortWikiHash(hash string) string {
+	if len(hash) > 12 {
+		return hash[:12]
+	}
+	return hash
+}
+
 // ── read ────────────────────────────────────────────────────────────────────────────────────────
 
-// wikiRepoOpRead answers with bounded text: one section of a document or a whole file per item, each
-// within its own limit, and the whole answer within one section's material (design §4.3 — the numbers the
-// docs build already reads by).
+// wikiRepoOpRead answers with the whole text of what was asked — one file per item, at the commit named, up
+// to wikiRepoOpWholeFileBytes each (owner 2026-10-08). A file over that limit is missing with `too_large` as
+// the reason rather than cut: what a caller does with it is the same as with a path the commit does not
+// have, and the reason says which of the two it is.
+//
+// A request that names a limit is answered within it, the way an older control plane asks (its window is one
+// section's material, wikiRepoOpBoundedChars) — a new control plane names none and gets the file. The answer
+// travels inside the result while it fits; above wikiRepoOpInlineBytes the caller uploads it in fragments,
+// exactly as a snapshot's index is uploaded (wikiRepoOpFragments).
 func wikiRepoOpRead(root string, input wikiRepoOpInput) wikiRepoOpOutcome {
 	sha := strings.ToLower(strings.TrimSpace(input.Sha))
 	if !wikiCommitSha.MatchString(sha) {
@@ -360,67 +505,67 @@ func wikiRepoOpRead(root string, input wikiRepoOpInput) wikiRepoOpOutcome {
 	}
 	answer := wikiRepoOpReadAnswer{Sha: sha, Items: []wikiRepoOpReadPiece{}}
 	for _, item := range input.Items {
-		piece, err := wikiRepoOpReadOne(root, sha, item, wikiRepoOpSectionChars-answer.Chars)
+		piece, err := wikiRepoOpReadOne(root, sha, item)
 		if err != nil {
 			return wikiRepoOpFailed(err.Error())
 		}
 		answer.Chars += piece.Chars
 		answer.Items = append(answer.Items, piece)
 	}
-	return wikiRepoOpSucceeded(map[string]interface{}{"read": answer})
+	payload, err := json.Marshal(answer)
+	if err != nil {
+		return wikiRepoOpFailed(fmt.Sprintf("the read could not be written: %v", err))
+	}
+	outcome := wikiRepoOpOutcome{state: "succeeded", sha: sha}
+	if len(payload) > wikiRepoOpInlineBytes {
+		// Too large for one request body: the caller uploads it in fragments and the result names how many,
+		// under `read` — the answer's own key — so the server reassembles what it asked for.
+		outcome.payload = string(payload)
+		outcome.payloadKey = "read"
+		return outcome
+	}
+	outcome.result = map[string]interface{}{"read": answer}
+	return outcome
 }
 
-func wikiRepoOpReadOne(root, sha string, item wikiRepoOpReadItem, left int) (wikiRepoOpReadPiece, error) {
+func wikiRepoOpReadOne(root, sha string, item wikiRepoOpReadItem) (wikiRepoOpReadPiece, error) {
 	path := wikiAnchorPath(item.Path)
 	piece := wikiRepoOpReadPiece{Path: item.Path, Section: item.Section}
 	if path == "" {
 		return piece, fmt.Errorf("a read item names no path")
 	}
-	text, err := wikiRepoOpBlob(root, sha, path)
+	text, exists, err := wikiRepoOpBlob(root, sha, path)
 	if err != nil {
 		return piece, err
 	}
-	if text == "" {
+	if !exists {
+		return piece, nil
+	}
+	piece.Size = int64(len(text))
+	if piece.Size > wikiRepoOpWholeFileBytes {
+		piece.Reason = "too_large"
 		return piece, nil
 	}
 	piece.Found = true
-	max := item.MaxChars
-	if max <= 0 {
-		max = wikiRepoOpDefaultChars(path)
-	}
-	if max > wikiRepoOpSectionChars {
-		max = wikiRepoOpSectionChars
-	}
-	if max > left {
-		// The request's own budget is one section's material: when what is left of it is less than this
-		// item asked for, the item gets what is left — nothing at all, when nothing is left.
-		max = left
-	}
-	if max <= 0 {
-		piece.Chars = 0
-		piece.Truncated = true
-		return piece, nil
-	}
 	if section := strings.TrimSpace(item.Section); section != "" {
 		text = wikiRepoOpSectionText(text, section)
 	}
-	piece.Text, piece.Truncated = wikiRepoOpCut(text, max)
-	piece.Chars = len([]rune(piece.Text))
-	return piece, nil
-}
-
-// wikiRepoOpDefaultChars is what an item gets when it names no limit: a contract file 2,500 characters,
-// anything else one design-document section (4,200).
-func wikiRepoOpDefaultChars(path string) int {
-	if strings.HasPrefix(path, "contracts/") || strings.HasSuffix(path, ".json") {
-		return wikiRepoOpContractChars
+	if max := item.MaxChars; max > 0 {
+		// A limit is what an older control plane asks by; it is honoured rather than ignored, and it is
+		// never more than the window such a caller reads in.
+		if max > wikiRepoOpBoundedChars {
+			max = wikiRepoOpBoundedChars
+		}
+		text, piece.Truncated = wikiRepoOpCut(text, max)
 	}
-	return wikiRepoOpDocSectionChars
+	piece.Text = text
+	piece.Chars = len([]rune(text))
+	return piece, nil
 }
 
 // wikiRepoOpCut is a text cut to at most max characters, saying so when it was. The marker is counted
 // inside the limit rather than added to it, so what an item answers with is what it asked for: a caller
-// that adds its items up (the worker holds a section to 22,000) reads the number the limit is about.
+// reads the number the limit is about.
 func wikiRepoOpCut(text string, max int) (string, bool) {
 	runes := []rune(text)
 	if len(runes) <= max {
@@ -435,7 +580,8 @@ func wikiRepoOpCut(text string, max int) (string, bool) {
 
 // wikiRepoOpSectionText is one section of a Markdown document: the heading that reads as the named one and
 // the lines under it, up to the next heading of its level or above — the same reading of a section the
-// plan's gate does (wikiPlanFindSection), applied to the text instead of to the headings alone.
+// server's plan gate does (wiki-plan-repo.ts wikiPlanFindSection), applied to the text instead of to the
+// headings alone.
 func wikiRepoOpSectionText(text, section string) string {
 	lines := strings.Split(text, "\n")
 	type heading struct {
@@ -498,18 +644,19 @@ func wikiRepoOpSectionText(text, section string) string {
 }
 
 // wikiRepoOpBlob is one file's text at a commit: `git show <sha>:<path>`, with the path spelled so a
-// leading dash or a glob is a path and not an option.
-func wikiRepoOpBlob(root, sha, path string) (string, error) {
+// leading dash or a glob is a path and not an option. `exists` says whether the commit has the path at all,
+// which an empty file and a missing one would otherwise answer alike.
+func wikiRepoOpBlob(root, sha, path string) (string, bool, error) {
 	out, code, stderr, err := wikiAnchorGit(root, wikiRepoOpGitTimeout, "--literal-pathspecs", "show", sha+":"+path)
 	switch {
 	case err != nil:
-		return "", fmt.Errorf("git show %s:%s: %v", sha, path, err)
+		return "", false, fmt.Errorf("git show %s:%s: %v", sha, path, err)
 	case code == 0:
-		return string(out), nil
+		return string(out), true, nil
 	case wikiGitSaysAbsent(code, stderr):
-		return "", nil
+		return "", false, nil
 	}
-	return "", fmt.Errorf("git show %s:%s exited %d: %s", sha, path, code, strings.TrimSpace(stderr))
+	return "", false, fmt.Errorf("git show %s:%s exited %d: %s", sha, path, code, strings.TrimSpace(stderr))
 }
 
 // ── diff ────────────────────────────────────────────────────────────────────────────────────────
@@ -570,7 +717,7 @@ func wikiRepoOpDiff(root string, input wikiRepoOpInput) wikiRepoOpOutcome {
 
 // ── anchors ─────────────────────────────────────────────────────────────────────────────────────
 
-// wikiRepoOpAnchors reuses the maintenance run's own checks (wiki_anchors.go): one state per anchor, and
+// wikiRepoOpAnchors runs the anchor checks of wiki_anchors.go: one state per anchor, and
 // git failing to check one is the operation failing rather than an anchor coming back `missing`.
 func wikiRepoOpAnchors(root, ref string, input wikiRepoOpInput) wikiRepoOpOutcome {
 	sha := strings.ToLower(strings.TrimSpace(input.Sha))
@@ -621,12 +768,23 @@ func wikiRepoOpFragments(payload string) []string {
 
 // ── the run and its report ──────────────────────────────────────────────────────────────────────
 
+// errWikiRepoOpPayloadWindowSpent is what an upload that ran out of window before a piece could be
+// staged reports. It is not an answer from the control plane — it is this process's own ending — so the
+// result that follows says the payload was never uploaded, which is what happened.
+var errWikiRepoOpPayloadWindowSpent = errors.New("the payload could not be uploaded before the window a result is worth sending inside was spent")
+
 // runWikiRepoOpAndReport performs one claimed operation and reports what it came to, the way an
 // integration job does (integrate.go): a payload too large for one request body is uploaded as fragments
-// first, and the result that follows names what they reassemble to. A 4xx is final — the claim is no
-// longer this process's — and anything else is tried again, because the operation is done either way and
-// a result that never arrives is work nobody is credited for.
-func runWikiRepoOpAndReport(t *Transport, cmd WikiRepoOpCommand) {
+// first, and the result that follows names what they reassemble to. Both the fragments and the result are
+// sent again while they can still be used — inside the window the claim opened — and an answer that
+// settles the matter, 2xx, 409 STALE_CLAIM, 404, 400 INVALID_RESULT or 422 UNSTORABLE_RESULT among them,
+// ends the sending there (wiki_repo_op_retry.go). ctx is the run loop's: it says the runner is draining,
+// which ends the retrying but never the operations still owed to the control plane — a stop still sends
+// them, once each.
+func runWikiRepoOpAndReport(ctx context.Context, t *Transport, cmd WikiRepoOpCommand) {
+	// The window runs from the claim: this process was handed the operation by the heartbeat that claimed
+	// it, so this is when its life — and the usefulness of anything reported about it — started.
+	deadline := wikiRepoOpRetry.deadline(wikiRepoOpRetry.now())
 	logln("wiki repo op", cmd.ID, cmd.Kind, "in", cmd.WorkDir)
 	renew := func() {
 		// Best effort: the renewal matters, what it reports does not, and the work carries on either way.
@@ -647,69 +805,93 @@ func runWikiRepoOpAndReport(t *Transport, cmd WikiRepoOpCommand) {
 	}
 	if outcome.state == "succeeded" && outcome.payload != "" {
 		fragments := wikiRepoOpFragments(outcome.payload)
-		if err := uploadWikiRepoOpFragments(t, cmd, outcome.sha, fragments); err != nil {
+		uploadErr := uploadWikiRepoOpFragments(ctx, t, cmd, outcome.sha, fragments, deadline)
+		if uploadErr != nil && !wikiRepoOpResultWorthSendingAgain(uploadErr) {
+			// The control plane answered for good about this operation — each of those answers settles it —
+			// so there is nothing left for a result to say. A runner that is stopping is not that case: it
+			// still reports the failure below, once.
+			return
+		}
+		if uploadErr != nil {
 			// Not settled with a payload that is not all there: the server would refuse the digest, and the
-			// next attempt builds the snapshot again.
+			// next attempt builds the snapshot (or reads the files) again.
 			body.State = "failed"
 			body.Result = nil
-			body.Error = fmt.Sprintf("the snapshot (%d bytes, %d fragments) could not be uploaded: %v",
-				len(outcome.payload), len(fragments), err)
+			body.Error = fmt.Sprintf("the %s payload (%d bytes, %d fragments) could not be uploaded: %v",
+				cmd.Kind, len(outcome.payload), len(fragments), uploadErr)
 		} else {
 			digest := sha256.Sum256([]byte(outcome.payload))
-			body.Result = map[string]interface{}{
+			shape := map[string]interface{}{
 				"sha":       outcome.sha,
 				"bytes":     len(outcome.payload),
 				"digest":    hex.EncodeToString(digest[:]),
 				"fragments": len(fragments),
 			}
-			logln("wiki repo op", cmd.ID, "snapshot uploaded:",
+			if outcome.payloadKey != "" {
+				// The kind nests its answer (a read's under `read`); a snapshot's index is the result itself.
+				body.Result = map[string]interface{}{outcome.payloadKey: shape}
+			} else {
+				body.Result = shape
+			}
+			logln("wiki repo op", cmd.ID, cmd.Kind, "payload uploaded:",
 				fmt.Sprintf("%d bytes in %d fragments", len(outcome.payload), len(fragments)))
 		}
 	}
-	for attempt := 0; attempt < 5; attempt++ {
-		answer, err := t.wikiRepoOpResult(cmd.ID, body)
-		if err == nil {
-			logln("wiki repo op", cmd.ID, "reported", outcome.state, fmt.Sprintf("accepted=%v", answer.Accepted))
-			return
-		}
-		var httpErr *transportHTTPError
-		if errors.As(err, &httpErr) && httpErr.statusCode >= 400 && httpErr.statusCode < 500 {
-			logln("wiki repo op", cmd.ID, "result refused:", err)
-			return
-		}
-		logln("wiki repo op", cmd.ID, "result not delivered, retrying:", err)
-		time.Sleep(time.Duration(attempt+1) * 2 * time.Second)
-	}
+	reportWikiRepoOpResult(ctx, t, cmd, body, deadline)
 }
 
 // uploadWikiRepoOpFragments sends every piece of a payload, each within the contract's fragment size and
-// each retried on its own: the route stages a piece by its ordinal, so sending one again is sending the
-// same piece.
-func uploadWikiRepoOpFragments(t *Transport, cmd WikiRepoOpCommand, sha string, fragments []string) error {
+// each sent again on its own — the route stages a piece by its ordinal, so sending one again is sending
+// the same piece. The retrying is the result's: the same capped, jittered wait, and the same window, so a
+// payload that cannot be staged before the operation stops being this process's to report is given up on.
+// An answer that settles the matter ends the upload at once: 409 STALE_CLAIM (the claim moved on), 404,
+// 400 INVALID_RESULT or 422 UNSTORABLE_RESULT — each of the last two has already failed the operation at
+// the control plane, so no fragment after it is worth sending either.
+//
+// The caller's context is the runner's state, not the send's (wiki_repo_op_retry.go): every piece still
+// unstaged when the runner is stopping is sent once — pieces that succeed go on being sent, since the
+// payload is worthless incomplete — and a piece that fails ends the upload there rather than being waited
+// out.
+func uploadWikiRepoOpFragments(ctx context.Context, t *Transport, cmd WikiRepoOpCommand, sha string, fragments []string, deadline time.Time) error {
+	p := wikiRepoOpRetry
 	for index, content := range fragments {
-		var last error
-		for attempt := 0; attempt < 3; attempt++ {
-			_, err := t.wikiRepoOpFragment(cmd.ID, WikiRepoOpFragmentRequest{
-				ClaimGeneration: cmd.ClaimGeneration,
-				LeaseOwner:      cmd.LeaseOwner,
-				Sha:             sha,
-				Index:           index,
-				Total:           len(fragments),
-				Content:         content,
-			})
-			if err == nil {
-				last = nil
-				break
-			}
-			last = err
-			var httpErr *transportHTTPError
-			if errors.As(err, &httpErr) && httpErr.statusCode >= 400 && httpErr.statusCode < 500 {
-				break
-			}
-			time.Sleep(time.Duration(attempt+1) * time.Second)
+		what := fmt.Sprintf("fragment %d/%d", index+1, len(fragments))
+		if !p.fits(deadline, 0) {
+			// The pieces before this one took the window: nothing staged now could be part of a result
+			// anybody still reads.
+			logln("wiki repo op", cmd.ID, what, "not staged and the window a result is worth sending inside is spent, so the upload stops")
+			return errWikiRepoOpPayloadWindowSpent
 		}
-		if last != nil {
-			return last
+		body := WikiRepoOpFragmentRequest{
+			ClaimGeneration: cmd.ClaimGeneration,
+			LeaseOwner:      cmd.LeaseOwner,
+			Sha:             sha,
+			Index:           index,
+			Total:           len(fragments),
+			Content:         content,
+		}
+		for attempt := 1; ; attempt++ {
+			_, err := t.wikiRepoOpFragment(cmd.ID, body) // no context of the caller's: see sendWikiRepoOpResult
+			if err == nil {
+				break
+			}
+			if !wikiRepoOpResultWorthSendingAgain(err) {
+				logln("wiki repo op", cmd.ID, what, "refused, so the upload stops:", err)
+				return err
+			}
+			if ctx.Err() != nil {
+				logln("wiki repo op", cmd.ID, what, "not staged, and this runner is stopping, so it is not sent again:", err)
+				return err
+			}
+			wait := p.wait(attempt)
+			if !p.fits(deadline, wait) {
+				logln("wiki repo op", cmd.ID, what, fmt.Sprintf("not staged on attempt %d:", attempt), err,
+					"and the window it is worth sending inside is spent, so the upload stops")
+				return err
+			}
+			logln("wiki repo op", cmd.ID, what, fmt.Sprintf("not staged on attempt %d:", attempt), err,
+				"sending it again in", wait.Round(100*time.Millisecond))
+			p.sleep(ctx, wait)
 		}
 	}
 	return nil

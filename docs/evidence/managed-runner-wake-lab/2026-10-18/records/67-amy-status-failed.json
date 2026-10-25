@@ -1,0 +1,44 @@
+{
+  "at": "2026-10-18T01:48:00.140+00:00",
+  "display": {
+    "acceptsWork": false,
+    "detail": "The cluster refused the manager. An operator has to check its permissions; then it can be retried.",
+    "ensure": false,
+    "kind": "failed",
+    "moving": false,
+    "retry": true,
+    "signIn": false,
+    "startsNewSession": false,
+    "title": "Managed runner failed"
+  },
+  "owner": "amy",
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": true,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34hlwBX3PDHoZvmmu6hPq",
+    "contractVersion": 1,
+    "desiredState": "RUNNING",
+    "enabled": true,
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": "deepseek",
+    "lastHeartbeatAt": "2026-10-18T01:47:46.836Z",
+    "managementState": "FAILED",
+    "reason": {
+      "code": "KUBERNETES_FORBIDDEN",
+      "message": "The cluster refused the manager. An operator has to check its permissions; then it can be retried.",
+      "retryable": true
+    },
+    "retryAfter": null,
+    "revision": 201,
+    "runnerId": "34hlwBWrKOm4SMrYIA6An",
+    "runnerPublicId": "34hlwBWrKOm4SMrYIA6An",
+    "usable": false,
+    "workspaceId": "34hlwBX3PDHoZvmmu6hPq",
+    "workspacePublicId": "34hlwBX3PDHoZvmmu6hPq"
+  }
+}

@@ -1,0 +1,351 @@
+argv: env P53_SNAPSHOTS=/mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots P53_OUTPUT=/mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-out npx playwright test --config ui-migration/p53.config.mjs --update-snapshots=all
+tree: /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/ref
+head: 8f94ddda9069bc2301fefc87f276570b04f4c774
+uncommitted:
+load: 7.72 9.12 10.95 5/3104 3044150
+mem: 5974M available
+disk: / 7930M available, TMPDIR /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/tmp
+started: 2026-10-10T10:54:41Z
+
+
+Running 56 tests using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-composer-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-composer-two-lines.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-composer-capped.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-composer-dragged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-queued.png, writing actual.
+  ✓   1 [chromium-light-desktop] › ui-migration/p53.browser.mjs:256:3 › P5.3 the session workspace › composer: types and grows, holds a dragged height, sends, streams in order, queues and stops (13.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-slash-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-mention-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-mention-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-chinese.png, writing actual.
+  ✓   2 [chromium-light-desktop] › ui-migration/p53.browser.mjs:327:3 › P5.3 the session workspace › composer menus: slash, mention and reference, and Chinese input (6.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-attach-uploading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-attach-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-attach-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-attach-preview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-drop-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-attach-file.png, writing actual.
+  ✓   3 [chromium-light-desktop] › ui-migration/p53.browser.mjs:371:3 › P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed (7.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-plus-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-shell.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-mode-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-model-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-model-provider.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-model-effort.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-context-popover.png, writing actual.
+  ✓   4 [chromium-light-desktop] › ui-migration/p53.browser.mjs:418:3 › P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar (13.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-tip-failed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-row-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-confirm-trash.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-scope-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-scope-tags.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-folder-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-confirm-folder.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-confirm-purge.png, writing actual.
+  ✓   5 [chromium-light-desktop] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (23.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-header-tags.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-find.png, writing actual.
+  ✓   6 [chromium-light-desktop] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (12.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-console-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-desktop/p53-not-found.png, writing actual.
+  ✓   7 [chromium-light-desktop] › ui-migration/p53.browser.mjs:721:3 › P5.3 the session workspace › a link to one record, a phone’s Back, and a session link that leads nowhere (12.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-composer-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-composer-two-lines.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-composer-capped.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-queued.png, writing actual.
+  ✓   8 [chromium-light-phone] › ui-migration/p53.browser.mjs:256:3 › P5.3 the session workspace › composer: types and grows, holds a dragged height, sends, streams in order, queues and stops (10.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-slash-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-mention-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-mention-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-chinese.png, writing actual.
+  ✓   9 [chromium-light-phone] › ui-migration/p53.browser.mjs:327:3 › P5.3 the session workspace › composer menus: slash, mention and reference, and Chinese input (5.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-attach-uploading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-attach-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-attach-preview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-drop-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-attach-file.png, writing actual.
+  ✓  10 [chromium-light-phone] › ui-migration/p53.browser.mjs:371:3 › P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed (6.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-plus-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-shell.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-mode-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-model-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-model-provider.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-model-effort.png, writing actual.
+  ✓  11 [chromium-light-phone] › ui-migration/p53.browser.mjs:418:3 › P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar (11.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-press-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-scope-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-scope-tags.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-folder-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-confirm-folder.png, writing actual.
+  ✓  12 [chromium-light-phone] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (12.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-header-tags.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-find.png, writing actual.
+  ✓  13 [chromium-light-phone] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (9.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-console-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-light-phone/p53-not-found.png, writing actual.
+  ✓  14 [chromium-light-phone] › ui-migration/p53.browser.mjs:721:3 › P5.3 the session workspace › a link to one record, a phone’s Back, and a session link that leads nowhere (14.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-composer-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-composer-two-lines.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-composer-capped.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-composer-dragged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-queued.png, writing actual.
+  ✓  15 [chromium-dark-desktop] › ui-migration/p53.browser.mjs:256:3 › P5.3 the session workspace › composer: types and grows, holds a dragged height, sends, streams in order, queues and stops (12.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-slash-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-mention-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-mention-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-chinese.png, writing actual.
+  ✓  16 [chromium-dark-desktop] › ui-migration/p53.browser.mjs:327:3 › P5.3 the session workspace › composer menus: slash, mention and reference, and Chinese input (6.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-attach-uploading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-attach-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-attach-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-attach-preview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-drop-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-attach-file.png, writing actual.
+  ✓  17 [chromium-dark-desktop] › ui-migration/p53.browser.mjs:371:3 › P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed (7.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-plus-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-shell.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-mode-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-model-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-model-provider.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-model-effort.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-context-popover.png, writing actual.
+  ✓  18 [chromium-dark-desktop] › ui-migration/p53.browser.mjs:418:3 › P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar (13.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-tip-failed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-row-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-confirm-trash.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-scope-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-scope-tags.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-folder-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-confirm-folder.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-confirm-purge.png, writing actual.
+  ✓  19 [chromium-dark-desktop] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (22.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-header-tags.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-find.png, writing actual.
+  ✓  20 [chromium-dark-desktop] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (12.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-console-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-desktop/p53-not-found.png, writing actual.
+  ✓  21 [chromium-dark-desktop] › ui-migration/p53.browser.mjs:721:3 › P5.3 the session workspace › a link to one record, a phone’s Back, and a session link that leads nowhere (12.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-composer-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-composer-two-lines.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-composer-capped.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-queued.png, writing actual.
+  ✓  22 [chromium-dark-phone] › ui-migration/p53.browser.mjs:256:3 › P5.3 the session workspace › composer: types and grows, holds a dragged height, sends, streams in order, queues and stops (10.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-slash-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-mention-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-mention-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-chinese.png, writing actual.
+  ✓  23 [chromium-dark-phone] › ui-migration/p53.browser.mjs:327:3 › P5.3 the session workspace › composer menus: slash, mention and reference, and Chinese input (5.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-attach-uploading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-attach-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-attach-preview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-drop-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-attach-file.png, writing actual.
+  ✓  24 [chromium-dark-phone] › ui-migration/p53.browser.mjs:371:3 › P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed (6.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-plus-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-shell.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-mode-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-model-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-model-provider.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-model-effort.png, writing actual.
+  ✓  25 [chromium-dark-phone] › ui-migration/p53.browser.mjs:418:3 › P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar (11.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-press-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-scope-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-scope-tags.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-folder-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-confirm-folder.png, writing actual.
+  ✓  26 [chromium-dark-phone] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (12.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-header-tags.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-find.png, writing actual.
+  ✓  27 [chromium-dark-phone] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (9.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-console-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/chromium-dark-phone/p53-not-found.png, writing actual.
+  ✓  28 [chromium-dark-phone] › ui-migration/p53.browser.mjs:721:3 › P5.3 the session workspace › a link to one record, a phone’s Back, and a session link that leads nowhere (14.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-composer-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-composer-two-lines.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-composer-capped.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-composer-dragged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-queued.png, writing actual.
+  ✓  29 [webkit-light-desktop] › ui-migration/p53.browser.mjs:256:3 › P5.3 the session workspace › composer: types and grows, holds a dragged height, sends, streams in order, queues and stops (14.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-slash-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-mention-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-mention-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-chinese.png, writing actual.
+  ✓  30 [webkit-light-desktop] › ui-migration/p53.browser.mjs:327:3 › P5.3 the session workspace › composer menus: slash, mention and reference, and Chinese input (6.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-attach-uploading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-attach-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-attach-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-attach-preview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-drop-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-attach-file.png, writing actual.
+  ✓  31 [webkit-light-desktop] › ui-migration/p53.browser.mjs:371:3 › P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed (8.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-plus-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-shell.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-mode-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-model-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-model-provider.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-model-effort.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-context-popover.png, writing actual.
+  ✓  32 [webkit-light-desktop] › ui-migration/p53.browser.mjs:418:3 › P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar (14.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-tip-failed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-row-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-confirm-trash.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-scope-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-scope-tags.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-folder-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-confirm-folder.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-confirm-purge.png, writing actual.
+  ✓  33 [webkit-light-desktop] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (24.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-header-tags.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-find.png, writing actual.
+  ✓  34 [webkit-light-desktop] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (12.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-console-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-desktop/p53-not-found.png, writing actual.
+  ✓  35 [webkit-light-desktop] › ui-migration/p53.browser.mjs:721:3 › P5.3 the session workspace › a link to one record, a phone’s Back, and a session link that leads nowhere (12.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-composer-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-composer-two-lines.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-composer-capped.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-queued.png, writing actual.
+  ✓  36 [webkit-light-phone] › ui-migration/p53.browser.mjs:256:3 › P5.3 the session workspace › composer: types and grows, holds a dragged height, sends, streams in order, queues and stops (11.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-slash-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-mention-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-mention-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-chinese.png, writing actual.
+  ✓  37 [webkit-light-phone] › ui-migration/p53.browser.mjs:327:3 › P5.3 the session workspace › composer menus: slash, mention and reference, and Chinese input (5.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-attach-uploading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-attach-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-attach-preview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-drop-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-attach-file.png, writing actual.
+  ✓  38 [webkit-light-phone] › ui-migration/p53.browser.mjs:371:3 › P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed (6.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-plus-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-shell.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-mode-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-model-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-model-provider.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-model-effort.png, writing actual.
+  ✓  39 [webkit-light-phone] › ui-migration/p53.browser.mjs:418:3 › P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar (11.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-scope-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-scope-tags.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-folder-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-confirm-folder.png, writing actual.
+  ✓  40 [webkit-light-phone] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (16.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-header-tags.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-find.png, writing actual.
+  ✓  41 [webkit-light-phone] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (10.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-console-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-light-phone/p53-not-found.png, writing actual.
+  ✓  42 [webkit-light-phone] › ui-migration/p53.browser.mjs:721:3 › P5.3 the session workspace › a link to one record, a phone’s Back, and a session link that leads nowhere (14.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-composer-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-composer-two-lines.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-composer-capped.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-composer-dragged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-queued.png, writing actual.
+  ✓  43 [webkit-dark-desktop] › ui-migration/p53.browser.mjs:256:3 › P5.3 the session workspace › composer: types and grows, holds a dragged height, sends, streams in order, queues and stops (14.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-slash-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-mention-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-mention-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-chinese.png, writing actual.
+  ✓  44 [webkit-dark-desktop] › ui-migration/p53.browser.mjs:327:3 › P5.3 the session workspace › composer menus: slash, mention and reference, and Chinese input (6.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-attach-uploading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-attach-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-attach-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-attach-preview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-drop-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-attach-file.png, writing actual.
+  ✓  45 [webkit-dark-desktop] › ui-migration/p53.browser.mjs:371:3 › P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed (8.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-plus-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-shell.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-mode-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-model-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-model-provider.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-model-effort.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-context-popover.png, writing actual.
+  ✓  46 [webkit-dark-desktop] › ui-migration/p53.browser.mjs:418:3 › P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar (14.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-tip-failed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-row-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-confirm-trash.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-scope-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-scope-tags.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-folder-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-confirm-folder.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-confirm-purge.png, writing actual.
+  ✓  47 [webkit-dark-desktop] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (24.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-header-tags.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-find.png, writing actual.
+  ✓  48 [webkit-dark-desktop] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (13.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-console-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-desktop/p53-not-found.png, writing actual.
+  ✓  49 [webkit-dark-desktop] › ui-migration/p53.browser.mjs:721:3 › P5.3 the session workspace › a link to one record, a phone’s Back, and a session link that leads nowhere (12.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-composer-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-composer-two-lines.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-composer-capped.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-queued.png, writing actual.
+  ✓  50 [webkit-dark-phone] › ui-migration/p53.browser.mjs:256:3 › P5.3 the session workspace › composer: types and grows, holds a dragged height, sends, streams in order, queues and stops (11.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-slash-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-mention-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-mention-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-chinese.png, writing actual.
+  ✓  51 [webkit-dark-phone] › ui-migration/p53.browser.mjs:327:3 › P5.3 the session workspace › composer menus: slash, mention and reference, and Chinese input (5.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-attach-uploading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-attach-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-attach-preview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-drop-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-attach-file.png, writing actual.
+  ✓  52 [webkit-dark-phone] › ui-migration/p53.browser.mjs:371:3 › P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed (6.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-plus-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-shell.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-mode-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-model-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-model-provider.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-model-effort.png, writing actual.
+  ✓  53 [webkit-dark-phone] › ui-migration/p53.browser.mjs:418:3 › P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar (11.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-scope-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-scope-tags.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-folder-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-confirm-folder.png, writing actual.
+  ✓  54 [webkit-dark-phone] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (16.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-header-tags.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-find.png, writing actual.
+  ✓  55 [webkit-dark-phone] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (10.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-console-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Ov1yysHZaYL6wgJ/v1/f1/p53-ref-shots/webkit-dark-phone/p53-not-found.png, writing actual.
+  ✓  56 [webkit-dark-phone] › ui-migration/p53.browser.mjs:721:3 › P5.3 the session workspace › a link to one record, a phone’s Back, and a session link that leads nowhere (14.7s)
+
+  56 passed (11.1m)
+exit=0
+load: 9.89 8.47 9.45 11/3096 3066734
+ended: 2026-10-10T11:05:46Z

@@ -95,8 +95,7 @@ final class NeedsYouOwnerDecisionTests: XCTestCase {
             "the row says the item's own word, not the approval one")
         // The same words the bar says about the same item, so a person who pressed either arrives
         // at a card saying what they read.
-        XCTAssertEqual(NeedsYouLogic.ownerItemText(escalated, project: "FineWeb"),
-                       "Escalated to you · FineWeb")
+        XCTAssertEqual(NeedsYouLogic.ownerItemWord(escalated), "Escalated to you")
         XCTAssertEqual(NeedsYouLogic.kindWord(.fusePaused), "Paused")
         XCTAssertNil(NeedsYouLogic.kindWord(.unknown),
                      "a kind this build cannot name is not named")
@@ -115,6 +114,35 @@ final class NeedsYouOwnerDecisionTests: XCTestCase {
             SessionLine.make(for: parkedCoordinator(pending: 1, waitingKind: .ownerItem,
                                                     ownerItems: [unknown]), live: true),
             SessionLine(text: "Waiting for approval", tone: .approval))
+    }
+
+    /// An escalated row says WHAT as well as whose: the server's short `need` after the word, in
+    /// the browser's own separator. "Escalated to you" alone names the route and not the thing, and
+    /// the row is one line — the reader should not have to open three conversations to find the one
+    /// of them that is about the failing check.
+    func testTheRowSaysWhatTheEscalationIsAbout() {
+        let withNeed = SessionOwnerItem(itemId: "i1", kind: .escalated, title: "t",
+                                        since: "2026-09-22T00:19:41Z",
+                                        need: "the check on the combined tree failed")
+        XCTAssertEqual(
+            SessionLine.make(for: parkedCoordinator(pending: 1, waitingKind: .ownerItem,
+                                                    ownerItems: [withNeed]), live: true),
+            SessionLine(text: "Escalated to you · the check on the combined tree failed",
+                        tone: .approval),
+            "the row says the word and the reason, in the browser's own separator")
+        XCTAssertEqual(NeedsYouLogic.oldestItemWord([withNeed]),
+                       "Escalated to you · the check on the combined tree failed")
+        // The other three kinds carry none, and a missing or blank one leaves the word alone rather
+        // than trailing a separator: the browser's own `item?.need` truthiness test.
+        let paused = SessionOwnerItem(itemId: "i2", kind: .fusePaused, title: "t",
+                                      since: "2026-09-22T02:00:00Z",
+                                      need: "which this kind never carries")
+        XCTAssertEqual(NeedsYouLogic.oldestItemWord([paused]), "Paused")
+        for blank in [nil, "", "   "] as [String?] {
+            let bare = SessionOwnerItem(itemId: "i3", kind: .escalated, title: "t",
+                                        since: "2026-09-22T03:00:00Z", need: blank)
+            XCTAssertEqual(NeedsYouLogic.oldestItemWord([bare]), "Escalated to you")
+        }
     }
 
     /// A project ready to start is not one of the sessions that need you (the account owner's

@@ -1,0 +1,132 @@
+{
+ "checks": [
+  {
+   "check": "Ceph is HEALTH_OK",
+   "ok": true,
+   "value": "HEALTH_OK"
+  }
+ ],
+ "endedAt": "2026-10-18T12:30:05.627+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "facts",
+ "result": {
+  "crushRules": [
+   {
+    "name": "replicated_rule",
+    "steps": [
+     {
+      "item": -1,
+      "item_name": "default",
+      "op": "take"
+     },
+     {
+      "num": 0,
+      "op": "choose_firstn",
+      "type": "osd"
+     },
+     {
+      "op": "emit"
+     }
+    ]
+   }
+  ],
+  "df": {
+   "pools": [
+    {
+     "maxAvail": 19543162880,
+     "name": ".mgr",
+     "stored": 328192
+    },
+    {
+     "maxAvail": 19543162880,
+     "name": "orbit-mr-rbd",
+     "stored": 449101798
+    }
+   ],
+   "total": {
+    "num_osds": 3,
+    "num_per_pool_omap_osds": 3,
+    "num_per_pool_osds": 3,
+    "total_avail_bytes": 61851070464,
+    "total_bytes": 64411926528,
+    "total_used_bytes": 2560856064,
+    "total_used_raw_bytes": 2560856064,
+    "total_used_raw_ratio": 0.03975748270750046
+   }
+  },
+  "fsid": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+  "health": "HEALTH_OK",
+  "monmap": {
+   "mons": 1
+  },
+  "osdTree": [
+   {
+    "crush_weight": null,
+    "device_class": null,
+    "id": -1,
+    "name": "default",
+    "status": null,
+    "type": "root"
+   },
+   {
+    "crush_weight": null,
+    "device_class": null,
+    "id": -3,
+    "name": "orbit-mr-lab",
+    "status": null,
+    "type": "host"
+   },
+   {
+    "crush_weight": 0.0194854736328125,
+    "device_class": "hdd",
+    "id": 0,
+    "name": "osd.0",
+    "status": "up",
+    "type": "osd"
+   },
+   {
+    "crush_weight": 0.0194854736328125,
+    "device_class": "hdd",
+    "id": 1,
+    "name": "osd.1",
+    "status": "up",
+    "type": "osd"
+   },
+   {
+    "crush_weight": 0.0194854736328125,
+    "device_class": "hdd",
+    "id": 2,
+    "name": "osd.2",
+    "status": "up",
+    "type": "osd"
+   }
+  ],
+  "osdmap": {
+   "epoch": 188,
+   "num_in_osds": 3,
+   "num_osds": 3,
+   "num_remapped_pgs": 0,
+   "num_up_osds": 3,
+   "osd_in_since": 1792215315,
+   "osd_up_since": 1792317777
+  },
+  "pool": {
+   "application_metadata": {
+    "rbd": {}
+   },
+   "crush_rule": 0,
+   "min_size": 2,
+   "pg_num": 32,
+   "pool_id": 2,
+   "pool_name": "orbit-mr-rbd",
+   "size": 3
+  },
+  "versions": {
+   "ceph version 20.2.4 (7f793731f1b39eb4f465e960113d2363c311b964) tentacle (stable - RelWithDebInfo)": 5
+  }
+ },
+ "seconds": 2.8,
+ "startedAt": "2026-10-18T12:30:02.809+00:00",
+ "step": "ceph"
+}

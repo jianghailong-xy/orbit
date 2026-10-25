@@ -31,6 +31,7 @@ test('needs-you includes only canonical Open, non-ending sessions', async () => 
   assert.deepEqual(calls[0].where, {
     ownerId: 'owner-1',
     status: RunStatus.RUNNING,
+    sessionKind: 'CONVERSATION',
     completedAt: null,
     archivedAt: null,
     deletedAt: null,
@@ -66,7 +67,7 @@ function ownerItemRow(id: string, coordinatorSessionId: string, over: Record<str
     title: 'Coordinator asks: Take the slower fix?',
     waitingSince: new Date('2026-09-13T10:00:00Z'),
     projectId: 'project-1',
-    project: { coordinatorSessionId },
+    project: { coordinatorSessionId, codebases: [] },
     ...over,
   };
 }
@@ -169,8 +170,14 @@ function settledSession(over: Record<string, unknown> = {}) {
 
 function settleHarness(session: Record<string, unknown> | null) {
   const sent: { body: string; collapseId?: string }[] = [];
+  const lookups: any[] = [];
   const prisma = {
-    session: { findUnique: async () => session },
+    session: {
+      findUnique: async (args: any) => {
+        lookups.push(args);
+        return session;
+      },
+    },
     deviceToken: { findMany: async () => [{ token: 'device', environment: 'sandbox' }] },
   };
   const service = new PushService(prisma as any, enabledConfig());
@@ -184,7 +191,7 @@ function settleHarness(session: Record<string, unknown> | null) {
   ) => {
     sent.push({ body, collapseId });
   };
-  return { service, sent };
+  return { service, sent, lookups };
 }
 
 test('a settled session alerts its owner, collapsing on the session', async () => {
@@ -237,6 +244,40 @@ test('a vanished session is not an error', async () => {
   const { service, sent } = settleHarness(null);
   await service.notifySessionSettled('s-gone');
   assert.equal(sent.length, 0);
+});
+
+// ── the settle body prefers the recap ──────────────────────────────────────
+
+test('a settled session with a recap says the recap', async () => {
+  const { service, sent, lookups } = settleHarness(
+    settledSession({ recapText: 'Fixed the redirect; tests pass. Next: ship it.' }),
+  );
+
+  await service.notifySessionSettled('s-1');
+
+  const payload = JSON.parse(sent[0].body);
+  assert.equal(payload.kind, 'finished');
+  assert.equal(payload.aps.alert.body, 'Fixed the redirect; tests pass. Next: ship it.');
+  // The recap has to be read off the row — a select that forgets it is silently back to rules.
+  assert.equal(lookups[0].select.recapText, true);
+});
+
+test('a settled session with no recap keeps the rules line', async () => {
+  const { service, sent } = settleHarness(settledSession());
+
+  await service.notifySessionSettled('s-1');
+
+  assert.equal(JSON.parse(sent[0].body).aps.alert.body, 'Finished');
+});
+
+test('a recap too long for a notification is cut', async () => {
+  const { service, sent } = settleHarness(settledSession({ recapText: 'y'.repeat(300) }));
+
+  await service.notifySessionSettled('s-1');
+
+  const body = JSON.parse(sent[0].body).aps.alert.body as string;
+  assert.equal(body.length, 200);
+  assert.ok(body.endsWith('…'));
 });
 
 test('approval push initially requires a canonical Open, non-ending RUNNING session', async () => {
@@ -629,6 +670,28 @@ test('an escalated item says which way it became yours', async () => {
     await service.notifyOwnerItem('item-1');
     assert.equal(JSON.parse(sent[0].body).aps.alert.title, title, reason);
   }
+});
+
+test('X-E5’s lease item tells how long the runner has been silent, not the escalation formula', async () => {
+  // The item is escalated at birth, so "no one acted on this for …" would only ever say 1s: the
+  // contract (revision 23) gives this kind its own heading, counted from the last report the claim
+  // made — ten minutes of lease plus X-E5's fifteen, at the earliest. The body is §4.2's own title,
+  // so the banner names the landing the silence belongs to.
+  const { service, sent } = ownerItemHarness(openItem({
+    kind: 'LANDING_LEASE_EXPIRED',
+    assignee: 'OWNER',
+    assigneeReason: 'ESCALATED',
+    title: 'No word from the runner: Add the landing receipt',
+    payload: { lastReportAt: '2026-09-13T12:00:00.000Z' },
+    waitingSince: new Date('2026-09-13T12:27:00Z'),
+    escalatedAt: new Date('2026-09-13T12:27:00Z'),
+  }));
+  await service.notifyOwnerItem('item-1');
+  assert.equal(sent.length, 1);
+  const payload = JSON.parse(sent[0].body);
+  assert.equal(payload.kind, 'escalated-to-you');
+  assert.equal(payload.aps.alert.title, 'Now yours — no report from the runner for 27m');
+  assert.equal(payload.aps.alert.body, 'No word from the runner: Add the landing receipt · Integration line');
 });
 
 test('an Antigravity sign-out is announced under the name the Providers page gives it', async () => {

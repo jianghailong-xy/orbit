@@ -1,0 +1,17 @@
+{
+  "admin": true,
+  "at": "2026-10-18T09:02:12.327+00:00",
+  "bootstrap": {
+    "ms": 61.3,
+    "status": 201
+  },
+  "owner": "root",
+  "preferences": {
+    "defaultPermissionMode": "bypassPermissions",
+    "status": 200
+  },
+  "user": {
+    "email": "t06-root@lab.invalid",
+    "id": "34hyE8v8O5H8AfNzFmgdV"
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "desktop-1280": {
+    "before": {
+      "dialog": {
+        "x": 0,
+        "y": 0,
+        "w": 640,
+        "h": 1202.3
+      },
+      "close": {
+        "x": 596,
+        "y": 12,
+        "w": 32,
+        "h": 32
+      },
+      "card": {
+        "x": 24,
+        "y": 66,
+        "w": 592,
+        "h": 1106.3
+      },
+      "closeBottom": 44,
+      "cardTop": 66,
+      "gapBox": 22,
+      "dialogHeight": 1202.3
+    },
+    "after": {
+      "dialog": {
+        "x": 0,
+        "y": 0,
+        "w": 640,
+        "h": 1202.3
+      },
+      "close": {
+        "x": 596,
+        "y": 12,
+        "w": 32,
+        "h": 32
+      },
+      "card": {
+        "x": 24,
+        "y": 66,
+        "w": 592,
+        "h": 1106.3
+      },
+      "closeBottom": 44,
+      "cardTop": 66,
+      "gapBox": 22,
+      "dialogHeight": 1202.3
+    }
+  },
+  "window-1000": {
+    "before": {
+      "dialog": {
+        "x": 0,
+        "y": 0,
+        "w": 640,
+        "h": 1202.3
+      },
+      "close": {
+        "x": 596,
+        "y": 12,
+        "w": 32,
+        "h": 32
+      },
+      "card": {
+        "x": 24,
+        "y": 66,
+        "w": 592,
+        "h": 1106.3
+      },
+      "closeBottom": 44,
+      "cardTop": 66,
+      "gapBox": 22,
+      "dialogHeight": 1202.3
+    },
+    "after": {
+      "dialog": {
+        "x": 0,
+        "y": 0,
+        "w": 640,
+        "h": 1202.3
+      },
+      "close": {
+        "x": 596,
+        "y": 12,
+        "w": 32,
+        "h": 32
+      },
+      "card": {
+        "x": 24,
+        "y": 66,
+        "w": 592,
+        "h": 1106.3
+      },
+      "closeBottom": 44,
+      "cardTop": 66,
+      "gapBox": 22,
+      "dialogHeight": 1202.3
+    }
+  }
+}

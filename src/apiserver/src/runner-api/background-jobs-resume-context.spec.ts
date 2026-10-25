@@ -425,7 +425,7 @@ test('the block rides the continuation of an interrupted turn too', async () => 
 
   assert.ok(turn);
   const text = turn.content ?? '';
-  assert.match(text, /因所在 runner 重启而中断/, 'this must be the continuation path, not a fresh send');
+  assert.match(text, /interrupted because its runner restarted/, 'this must be the continuation path, not a fresh send');
   assert.match(text, /bgj_live/);
 });
 

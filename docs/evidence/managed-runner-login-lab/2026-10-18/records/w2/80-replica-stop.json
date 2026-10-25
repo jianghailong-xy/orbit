@@ -1,0 +1,9 @@
+{
+  "at": "2026-10-17T23:45:06.849+00:00",
+  "managedSwitch": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+    "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t05/managed-runner-profile.json"
+  ],
+  "port": 13720,
+  "unit": "inactive"
+}

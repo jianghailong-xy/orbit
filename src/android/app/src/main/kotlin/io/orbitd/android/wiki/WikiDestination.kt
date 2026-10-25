@@ -17,6 +17,7 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.navigation.*
+import io.orbitd.android.toast.OrbitToasts
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
@@ -39,6 +40,8 @@ internal class WikiNav(private val push: (OrbitRoute) -> Unit,
             else OrbitRoute(Destination.SESSION, session, origin = Origin.LINK))
     }
     fun task(id: String) = push(OrbitRoute(Destination.TASK, id, origin = Origin.LINK))
+    /** A server run's page: its row on the Runs band, or View run for a run the server's job made (P9). */
+    fun job(id: String) = push(OrbitRoute(Destination.WIKI_JOB, id))
     fun project(id: String) = push(OrbitRoute(Destination.PROJECT, id, origin = Origin.LINK))
     fun runner(id: String) = push(OrbitRoute(Destination.RUNNER, id, origin = Origin.LINK))
     /** A web page — a repository host at a commit — in the browser. */
@@ -76,7 +79,7 @@ fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRo
     val nav = remember(store, open, navigate) {
         WikiNav(open, navigate, handle.account.server) { raw ->
             try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(raw))) }
-            catch (_: ActivityNotFoundException) { WikiToast.show("No application can open this link.") }
+            catch (_: ActivityNotFoundException) { OrbitToasts.show("No application can open this link.") }
         }
     }
     Column(Modifier.fillMaxSize().testTag("wiki-destination")) {
@@ -84,9 +87,11 @@ fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRo
       Box(Modifier.fillMaxWidth().weight(1f)) {
         when (route.destination) {
             Destination.WIKI -> WikiHomeScreen(store, route, data, nav)
+            Destination.WIKI_ACTIVITY -> WikiActivityScreen(store, route, data, nav)
             Destination.WIKI_ENTRY -> WikiEntryScreen(store, route, data, nav)
             Destination.WIKI_REVIEW -> WikiReviewScreen(store, route, data, nav)
             Destination.WIKI_RUN -> WikiRunScreen(store, route, nav)
+            Destination.WIKI_JOB -> WikiJobScreen(store, route)
             Destination.WIKI_SETTINGS -> WikiSettingsScreen(store, route, data, nav)
             Destination.WIKI_ARTICLE -> WikiArticleScreen(store, route, data, nav)
             Destination.WIKI_BROWSE -> WikiBrowseScreen(store, route, data, nav)
@@ -95,7 +100,6 @@ fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRo
             Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION -> WikiPlanScreen(store, route, data, nav)
             else -> Unit
         }
-        WikiToast.Host()
       }
     }
 }
@@ -103,16 +107,48 @@ fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRo
 /** The account event that says a wiki space changed (contract `realtime.event`). */
 private const val WIKI_CHANGED = "wiki.changed"
 
-/** The drawer's Wiki row's amber number: the proposals waiting for review, summed over every space — the home
- * banner's and Review's own count — and nothing at zero (iOS `CompactShell.wikiRow`). The drawer reads the spaces
- * it counts each time it opens; deciding a proposal, not opening the Wiki, is what lowers it. */
+/** The drawer's Wiki row, drawn only for an account the server has the wiki on for (iOS `CompactShell`'s
+ * `wiki?.shown`): no row at all after a WIKI_DISABLED answer, as the web sidebar draws none — a row that led to a
+ * refusal would be worse than none. The spaces it is decided by are read as the drawer is first composed, as iOS reads
+ * them with the drawer, and again each time it opens. */
 @Composable
-fun WikiDrawerCount(app: OrbitApplication, handle: SessionHandle, drawerOpen: Boolean) {
+fun WikiDrawerRow(app: OrbitApplication, handle: SessionHandle, drawerOpen: Boolean, row: @Composable () -> Unit) {
     val store = remember(handle) { WikiStore.of(app.session, handle, app.processScope) }
     val state by store.state.collectAsState()
-    LaunchedEffect(store, drawerOpen) { if (drawerOpen && store.live()) store.loadSpaces() }
-    val waiting = state.proposalsToReview
+    LaunchedEffect(store, drawerOpen) { if ((drawerOpen || !store.state.value.spacesState.hasLoaded) && store.live()) store.loadSpaces() }
+    if (state.shown) row()
+}
+
+/** The drawer's Wiki row's amber number: what waits on the owner across every space — the proposals in Review and what
+ * each plan waits for (design §12.3.3) — the web sidebar's count and the Wiki bar's Activity badge, written and said the
+ * way the Projects row writes and says its own ("3 waiting on you"), and nothing at all at zero (iOS
+ * `CompactShell.wikiRow`). The drawer reads the spaces it counts each time it opens ([WikiDrawerRow]); opening the Wiki
+ * never clears it: only answering what waits does. */
+@Composable
+fun WikiDrawerCount(app: OrbitApplication, handle: SessionHandle) {
+    val store = remember(handle) { WikiStore.of(app.session, handle, app.processScope) }
+    val state by store.state.collectAsState()
+    val waiting = state.waiting
     if (waiting > 0) androidx.compose.material3.Text("$waiting", color = androidx.compose.ui.graphics.Color(0xFFFF9500),
         style = androidx.compose.material3.MaterialTheme.typography.labelSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
-        modifier = Modifier.testTag("wiki-drawer-count").semantics { contentDescription = WikiCopy.proposalsToReview(waiting) })
+        modifier = Modifier.testTag("wiki-drawer-count").semantics { contentDescription = WikiCopy.waitingOnYou(waiting) })
+}
+
+/** Where the reader is as they come into the Wiki (iOS `WikiSpaceLogic.workspaceInView`, design §12.3.4): the workspace
+ * whose session list the section shows, or — on a project's page, or a page opened over it — the project, whose
+ * coordinator's workspace the store reads; nowhere on a page that is neither (the Projects or Tasks list), which leaves
+ * the choice to the space last looked at. */
+internal data class WikiFrom(val workspaceId: String? = null, val projectId: String? = null)
+
+internal fun wikiFrom(navigation: OrbitNavigation): WikiFrom {
+    val frames = navigation.frames
+    frames.lastOrNull { it.destination == Destination.PROJECT && it.id != null }?.let { return WikiFrom(projectId = it.id) }
+    val root = frames.firstOrNull() ?: return WikiFrom()
+    return if (root.destination == Destination.WORKSPACE) WikiFrom(workspaceId = root.id ?: root.workspaceId) else WikiFrom()
+}
+
+/** The drawer's Wiki row pressed from another section: the Wiki opens the space bound to where the reader was
+ * ([WikiStore.open]), as iOS's `selectedSection` does on its way into the Wiki. */
+fun wikiEntered(app: OrbitApplication, handle: SessionHandle, navigation: OrbitNavigation) {
+    WikiStore.of(app.session, handle, app.processScope).open(wikiFrom(navigation))
 }

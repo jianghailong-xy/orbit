@@ -1,0 +1,27 @@
+{
+  "at": "2026-10-17T23:44:48.754+00:00",
+  "changes": [
+    [
+      "2026-10-17T23:44:48.754+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "SLEEPING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 2,
+        "initial_provider": "deepseek-5",
+        "last_heartbeat_at": "2026-10-17T23:44:34.091",
+        "management_state": "SLEEPING",
+        "pod": null,
+        "reason": null,
+        "revision": 23,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ]
+  ],
+  "owner": "jack",
+  "reached": {
+    "reason": null,
+    "state": "SLEEPING"
+  }
+}

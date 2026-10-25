@@ -1,11 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Button } from 'antd';
 import { RightOutlined } from '@ant-design/icons';
 import type { WikiSpace } from '@orbit/shared';
 import { relTime } from './Transcript';
 import { WikiCard } from './WikiCards';
 import { WikiDot } from './WikiMarks';
+import { Button } from './ui/Button';
 import { wikiDocsQuery, wikiPlanQuery } from '../lib/queries';
 import { useWikiMaintenanceWhere } from '../lib/useWikiMaintenanceWhere';
 import { wikiSettingsPath } from '../lib/wikiReviewMode';
@@ -83,7 +83,7 @@ export function WikiPlanCard({ space }: { space: WikiSpace }) {
   const { plan, look, counts, maintenance } = usePlanLook(space);
   const draft = useWikiWrite(() => redraftWikiPlan(space.id, null));
   if (!plan || !look) return null;
-  const card = wikiPlanCard(look, plan, { now: Date.now(), docs: counts, runnerOnline: maintenance.runnerOnline, provider: maintenance.provider });
+  const card = wikiPlanCard(look, plan, { now: Date.now(), docs: counts, runnerOnline: maintenance.runnerOnline });
   const base = plan.confirmed ? wikiPlanFromVersion(plan.confirmed) : null;
   const amber = card.dot === 'amber' || look === 'noPlan';
   const go = async (to: 'draft' | 'plan' | 'settings') => {
@@ -118,7 +118,7 @@ export function WikiPlanCard({ space }: { space: WikiSpace }) {
           );
         })}
       <div className="wk-rv-foot">
-        <Button type={amber ? 'primary' : 'default'} size="small" loading={draft.isPending} onClick={() => void go(card.primary.to)}>
+        <Button variant={amber ? 'primary' : 'default'} size="small" loading={draft.isPending} onClick={() => void go(card.primary.to)}>
           {card.primary.label}
         </Button>
         {card.secondary && (

@@ -2,140 +2,19 @@ import { randomUUID } from 'node:crypto';
 import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
-  AgentProvider,
   WIKI_CURSOR_FACT_KINDS,
-  WIKI_MAINTENANCE_LIST_TITLE,
-  wikiMaintenanceEndpointIsLocal,
   wikiMaintenanceSettings,
   type WikiMaintenanceSettings,
 } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
-import { adminOnlyProviderRefusal, execRuntime, isBuiltinProvider, usableProviderScope } from '../providers/custom-provider';
 import type { FactPosition } from './wiki-maintenance';
 
 /**
- * Who a Wiki maintenance session is, and the owner's maintenance settings of a space (design §8.2,
- * contracts/wiki.contract.json `space.settings.maintenance` and `maintenance.session`).
- *
- * A MAINTENANCE SESSION is a session whose task is in its space's hidden «Wiki maintenance» list, and
- * `isWikiMaintenanceSession` below is the one test of it: the dossier route and the cursor, and the
- * anchor re-verification, article generation, maintenance job and clean start that come after them,
- * all ask it rather than deciding for themselves. It reads nothing but the session, its task's list and
- * the spaces' settings, so it can be asked from any module without a service injected.
+ * The owner's maintenance settings of a space (design §8.2, contracts/wiki.contract.json
+ * `space.settings.maintenance`): whether facts make runs, the workspace whose runner the server reads the
+ * repository through, how many runs a UTC day may make, and how far back the first one reads.
  */
-
-// ── Who a maintenance session is ────────────────────────────────────────────────────────────────
-
-/** Reads the maintenance tests need: the session, its task's list, and the space that list is. */
-type MaintenanceReader = Pick<Prisma.TransactionClient, 'session' | 'wikiSpace'>;
-
-/**
- * The space a session maintains, or null: the session's task is in that space's maintenance list
- * (`settings.maintenance.listId`). A deleted session, a session with no task, or a task in any other
- * list maintains nothing.
- */
-export async function wikiMaintenanceSpaceOf(
-  reader: MaintenanceReader,
-  sessionId: string,
-): Promise<{ spaceId: string; ownerId: string } | null> {
-  const session = await reader.session.findFirst({
-    where: { id: sessionId, deletedAt: null },
-    select: { ownerId: true, task: { select: { listId: true, ownerId: true } } },
-  });
-  const listId = session?.task?.listId;
-  if (!session || !listId || session.task?.ownerId !== session.ownerId) return null;
-  const space = await reader.wikiSpace.findFirst({
-    where: { ownerId: session.ownerId, settings: { path: ['maintenance', 'listId'], equals: listId } },
-    select: { id: true },
-  });
-  return space ? { spaceId: space.id, ownerId: session.ownerId } : null;
-}
-
-/** Is this session a maintenance run of this space, for this owner? The one test every maintenance-only door asks. */
-export async function isWikiMaintenanceSession(
-  reader: MaintenanceReader,
-  input: { ownerId: string; sessionId: string; spaceId: string },
-): Promise<boolean> {
-  const maintained = await wikiMaintenanceSpaceOf(reader, input.sessionId);
-  return maintained !== null && maintained.ownerId === input.ownerId && maintained.spaceId === input.spaceId;
-}
-
-// ── Which provider a maintenance run may be pinned to ───────────────────────────────────────────
-
-/** Why a provider cannot carry a maintenance run. */
-export interface WikiMaintenanceProviderProblem {
-  why: string;
-  /**
-   * Nothing the owner can run holds the slug now — no provider has it, or the one that has it is turned
-   * off. The claim refuses it like any other problem; the settings door takes it, a name the owner may
-   * configure next.
-   */
-  unavailable: boolean;
-}
-
-/** Why `slug` cannot carry a maintenance run of `ownerId`'s, or null when it can. */
-export async function wikiMaintenanceProviderProblem(
-  db: Pick<Prisma.TransactionClient, 'modelProvider' | 'providerPool' | 'user'>,
-  ownerId: string,
-  slug: string,
-): Promise<WikiMaintenanceProviderProblem | null> {
-  const offRuntime = (runtime: string): WikiMaintenanceProviderProblem => ({
-    why: `'${slug}' runs on the ${runtime} runtime, and a Wiki maintenance run takes a provider on the Claude Code `
-      + 'runtime only: its clean start and its disallowedTools hold there, and the codex path ignores disallowedTools '
-      + '(design §8.2)',
-    unavailable: false,
-  });
-  if (isBuiltinProvider(slug)) {
-    if (slug !== AgentProvider.CLAUDE) return offRuntime(slug);
-    return {
-      why: "'claude' is this machine's own Claude Code sign-in, which a clean start cannot use: it reads no login, only "
-        + "the key of a configured provider's endpoint. Pin a configured provider on the Claude Code runtime",
-      unavailable: false,
-    };
-  }
-  const row = await db.modelProvider.findFirst({
-    where: { slug, ...(await usableProviderScope(db, ownerId)) },
-    select: { runtime: true, baseUrl: true, apiKeyEnc: true, defaultModel: true, enabled: true },
-  });
-  if (row) {
-    if (!row.enabled) {
-      return { why: `the provider '${slug}' is turned off, and a Wiki maintenance run falls back to no other`, unavailable: true };
-    }
-    const runtime = execRuntime({ declaredProvider: slug, customRow: row });
-    return runtime === AgentProvider.CLAUDE ? null : offRuntime(runtime);
-  }
-  if (await db.providerPool.findFirst({ where: { slug, ownerId }, select: { id: true } })) {
-    return {
-      why: `'${slug}' is an account pool: its members are Claude Code sign-ins, which a clean start cannot use, and a `
-        + "pool with none free runs on the runner's own. Pin one configured provider on the Claude Code runtime",
-      unavailable: false,
-    };
-  }
-  // A shared provider is there, and runs an admin's sessions only (usableProviderScope): refused where it is named.
-  const adminOnly = await adminOnlyProviderRefusal(db, ownerId, slug);
-  if (adminOnly) return { why: adminOnly, unavailable: false };
-  return { why: `no provider of this account is called '${slug}', and a Wiki maintenance run falls back to no other`, unavailable: true };
-}
-
-/**
- * Whether the provider `slug` names for `ownerId` is a local endpoint (contract `maintenance.job.catchUp.localEndpoint`):
- * a configured provider made from no vendor preset — a preset is its vendor's API, which bills — whose base URL's
- * host is this machine or a private network (`wikiMaintenanceEndpointIsLocal`). A built-in engine, an account pool
- * or a name no provider has is not.
- */
-export async function wikiMaintenanceProviderIsLocal(
-  db: Pick<Prisma.TransactionClient, 'modelProvider' | 'user'>,
-  ownerId: string,
-  slug: string,
-): Promise<boolean> {
-  if (isBuiltinProvider(slug)) return false;
-  const row = await db.modelProvider.findFirst({
-    where: { slug, ...(await usableProviderScope(db, ownerId)) },
-    select: { baseUrl: true, presetSlug: true },
-  });
-  return row !== null && row.presetSlug === null && wikiMaintenanceEndpointIsLocal(row.baseUrl);
-}
 
 // ── The owner's maintenance settings ────────────────────────────────────────────────────────────
 
@@ -143,7 +22,6 @@ export async function wikiMaintenanceProviderIsLocal(
 export interface WikiMaintenanceInput {
   enabled?: boolean;
   workspaceId?: string | null;
-  provider?: string;
   dailyRunLimit?: number;
   /** Null is a value — all of history — and left out is none. */
   lookbackDays?: number | null;
@@ -169,15 +47,11 @@ function wikiCursorStart(lookbackDays: number | null, now: Date): FactPosition |
 }
 
 /**
- * Write the owner's maintenance settings, merged over what the space has, and make the space's hidden
- * «Wiki maintenance» list the first time maintenance is turned on (contract `maintenance.list`).
+ * Write the owner's maintenance settings, merged over what the space has.
  *
  * The door has already refused a request with a session header (WIKI_OWNER_CHANNEL_ONLY): this is
  * the owner's alone. Only the `maintenance` key of the settings is written, merged in SQL, so a
- * concurrent write of another setting survives it; and the list is written before the space row is
- * locked — the user row's key (rank 10) and the list (20) before the wiki row (60) — so the
- * transaction takes its locks in the order docs/postgres-lock-order.md gives them. A list made by the
- * loser of two concurrent first enables is deleted again before it commits.
+ * concurrent write of another setting survives it.
  *
  * THE WRITE THAT TURNS MAINTENANCE ON STARTS THE CURSOR, when it has no position yet: `lookbackDays` days
  * back (`wikiCursorStart`), in the same transaction, so no fact finds the space on with its cursor still
@@ -196,8 +70,9 @@ export function setWikiMaintenance(
 
 /**
  * What a request names of a space's maintenance, checked before a space is made with it (contract
- * `space.settings.maintenance.channel`): a workspace of the owner's, and — named or turned on — a
- * provider a maintenance run could start on. The same refusals `setWikiMaintenance` answers.
+ * `space.settings.maintenance.channel`): a workspace of the owner's, which turning maintenance on needs.
+ * The same refusals `setWikiMaintenance` answers. No provider is asked: the server's run calls the
+ * deployment's System model (contract `maintenance.job.server`).
  */
 export async function checkWikiMaintenanceInput(prisma: PrismaService, ownerId: string, input: WikiMaintenanceInput): Promise<void> {
   if (input.workspaceId) {
@@ -208,21 +83,6 @@ export async function checkWikiMaintenanceInput(prisma: PrismaService, ownerId: 
   if (asked.enabled && !asked.workspaceId) {
     throw new BadRequestException('maintenance.workspaceId is required to turn maintenance on: the workspace its runs take place in');
   }
-  if (input.provider !== undefined || asked.enabled) {
-    const problem = await wikiMaintenanceProviderProblem(prisma, ownerId, asked.provider);
-    if (problem && !problem.unavailable) throw new BadRequestException(`maintenance.provider: ${problem.why}`);
-  }
-}
-
-/**
- * The space's hidden «Wiki maintenance» list, made now when the space has none (contract
- * `maintenance.list`): what a plan job needs to be made in, whether or not maintenance was ever turned on
- * (contract `plan.jobs.task`). Answers the list the space's settings name, or null for a space that is
- * gone. The list is made before the space row is locked, as `setWikiMaintenance` makes it, and deleted
- * again when the locked row names one already.
- */
-export function ensureWikiMaintenanceList(prisma: PrismaService, ownerId: string, spaceId: string): Promise<string | null> {
-  return new MaintenanceSettingsWriter(prisma).ensureList(ownerId, spaceId);
 }
 
 /** The one writer of `settings.maintenance`: a class only so that its retry is labelled like every other. */
@@ -248,32 +108,16 @@ class MaintenanceSettingsWriter {
         );
       }
     };
-    const asked = merged(storedMaintenance(before.settings), input);
-    needsWorkspace(asked);
-    // A provider no maintenance run could start on is refused here, where the owner names it. One that is
-    // merely not there (yet) is taken: the claim refuses the run that finds it still missing.
-    if (input.provider !== undefined || asked.enabled) {
-      const problem = await wikiMaintenanceProviderProblem(this.prisma, ownerId, asked.provider);
-      if (problem && !problem.unavailable) throw new BadRequestException(`maintenance.provider: ${problem.why}`);
-    }
+    needsWorkspace(merged(storedMaintenance(before.settings), input));
     return withTransactionRetry(
       this.prisma,
       async (tx) => {
-        const unlocked = merged(storedMaintenance(before.settings), input);
-        const made = unlocked.enabled && !unlocked.listId
-          ? await tx.taskList.create({
-            data: { ownerId, title: WIKI_MAINTENANCE_LIST_TITLE, hidden: true, maxConcurrent: 1 },
-            select: { id: true },
-          })
-          : null;
         const [locked] = await tx.$queryRaw<Array<{ settings: unknown }>>`
           SELECT "settings" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
         if (!locked) throw new NotFoundException('no such wiki space');
         const was = storedMaintenance(locked.settings);
         const next = merged(was, input);
         needsWorkspace(next);
-        if (next.enabled && !next.listId && made) next.listId = made.id;
-        else if (made) await tx.taskList.delete({ where: { id: made.id } });
         const change = JSON.stringify({ maintenance: next });
         await tx.$executeRaw`
           UPDATE "wiki_space" SET "settings" = "settings" || ${change}::jsonb, "updated_at" = now()
@@ -302,31 +146,6 @@ class MaintenanceSettingsWriter {
       loggedRetry(this.logger, 'wiki.setMaintenance'),
     );
   }
-
-  async ensureList(ownerId: string, spaceId: string): Promise<string | null> {
-    return withTransactionRetry(
-      this.prisma,
-      async (tx) => {
-        const made = await tx.taskList.create({
-          data: { ownerId, title: WIKI_MAINTENANCE_LIST_TITLE, hidden: true, maxConcurrent: 1 },
-          select: { id: true },
-        });
-        const [locked] = await tx.$queryRaw<Array<{ settings: unknown }>>`
-          SELECT "settings" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
-        const current = locked ? storedMaintenance(locked.settings) : null;
-        if (!current || current.listId) {
-          await tx.taskList.delete({ where: { id: made.id } });
-          return current?.listId ?? null;
-        }
-        const change = JSON.stringify({ maintenance: { ...current, listId: made.id } });
-        await tx.$executeRaw`
-          UPDATE "wiki_space" SET "settings" = "settings" || ${change}::jsonb, "updated_at" = now()
-           WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid`;
-        return made.id;
-      },
-      loggedRetry(this.logger, 'wiki.ensureMaintenanceList'),
-    );
-  }
 }
 
 function storedMaintenance(settings: unknown): WikiMaintenanceSettings {
@@ -340,7 +159,8 @@ function merged(current: WikiMaintenanceSettings, input: WikiMaintenanceInput): 
   return {
     enabled: input.enabled ?? current.enabled,
     workspaceId: input.workspaceId === undefined ? current.workspaceId : input.workspaceId,
-    provider: input.provider?.trim() || current.provider,
+    // Kept as stored, for the clients that read it (contract `space.settings.maintenance.keys.provider`): nothing runs on it.
+    provider: current.provider,
     dailyRunLimit: input.dailyRunLimit ?? current.dailyRunLimit,
     lookbackDays: input.lookbackDays === undefined ? current.lookbackDays : input.lookbackDays,
     listId: current.listId,

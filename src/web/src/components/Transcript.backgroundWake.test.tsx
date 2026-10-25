@@ -3,7 +3,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActiveSessionTurn } from '../api';
@@ -203,8 +202,8 @@ describe('a wake turn in the transcript', () => {
     const tail = line().querySelector('.bgwake-tail')!;
     expect(tail, 'the failure’s tail is drawn').not.toBeNull();
     expect(fold().contains(tail), 'why it failed is what woke anybody: not behind the fold').toBe(false);
-    expect(row().querySelector('.bgwake-details-label')?.textContent).toBe('任务详情');
-    expect(tail.querySelector('.bgwake-output-label')?.textContent).toBe('输出末尾');
+    expect(row().querySelector('.bgwake-details-label')?.textContent).toBe('Job details');
+    expect(tail.querySelector('.bgwake-output-label')?.textContent).toBe('Output tail');
     const output = tail.querySelector<HTMLDetailsElement>('details.bgwake-output')!;
     const toggle = output.querySelector('summary')!;
     expect(output.open).toBe(false);
@@ -228,7 +227,7 @@ describe('a wake turn in the transcript', () => {
     const output = line().querySelector<HTMLDetailsElement>('details.bgwake-output')!;
     expect(output.open).toBe(false);
     expect(output.querySelector('.bgwake-output-preview')?.textContent).toBe(json);
-    expect(output.querySelector('.bgwake-output-expand')?.textContent).toBe('展开输出');
+    expect(output.querySelector('.bgwake-output-expand')?.textContent).toBe('Show full output');
     await act(async () => { output.querySelector('summary')!.click(); });
     expect(output.open).toBe(true);
     expect(output.querySelector('.bgwake-output-full')?.textContent).toBe(json);
@@ -512,9 +511,7 @@ describe('a wake still waiting in the queued tail', { timeout: 60_000 }, () => {
       nextRoot.render(
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
-            <AntApp>
-              <WorkspaceView runner={RUNNER} />
-            </AntApp>
+            <WorkspaceView runner={RUNNER} />
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -523,7 +520,7 @@ describe('a wake still waiting in the queued tail', { timeout: 60_000 }, () => {
       await vi.waitFor(
         () => {
           expect(mounted().querySelector('.bgwake')).not.toBeNull();
-          expect(mounted().querySelector('.chat-queued')).not.toBeNull();
+          expect(mounted().querySelector('.pending-tray-row')).not.toBeNull();
         },
         { timeout: 20_000, interval: 20 },
       );
@@ -548,9 +545,10 @@ describe('a wake still waiting in the queued tail', { timeout: 60_000 }, () => {
     expect(queueLine.querySelector('.chat-queued-tag')?.textContent).toBe('Queued for next turn');
     expect([...queueLine.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Cancel']);
 
-    // The message typed behind it is drawn as it always was.
-    const bubbles = mounted().querySelectorAll<HTMLElement>('.chat-queued');
-    expect(bubbles).toHaveLength(1);
-    expect(bubbles[0].querySelector('.md')?.textContent?.trim()).toBe(TYPED);
+    // The message typed behind it waits in the tray above the composer, the wake's line staying here.
+    expect(mounted().querySelectorAll('.chat-queued')).toHaveLength(0);
+    const rows = mounted().querySelectorAll<HTMLElement>('.pending-tray-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector('.pending-tray-text')?.textContent).toBe(TYPED);
   });
 });

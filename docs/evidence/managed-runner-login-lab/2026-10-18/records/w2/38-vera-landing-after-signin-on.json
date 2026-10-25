@@ -1,0 +1,135 @@
+{
+  "added": [
+    {
+      "autoInitGit": true,
+      "createdAt": "2026-10-17T23:39:43.532Z",
+      "enableWorktree": true,
+      "id": "34hkQIyNjyAjsIXngyDiP",
+      "lastEngine": "claude",
+      "lastProvider": "claude",
+      "name": "Default",
+      "position": null,
+      "runnerId": "34hkQIyHd7Hzt3eHh6cRM",
+      "targetRunnerId": "34hkQIyHd7Hzt3eHh6cRM",
+      "workDir": "/var/lib/orbit/home/orbit-repos/default"
+    }
+  ],
+  "addedSortLast": true,
+  "at": "2026-10-17T23:39:43.880+00:00",
+  "deepLinks": {
+    "/sessions/34hjevhVS63Lhg6SCyKsE": 200,
+    "/workspaces/34hjeveO1EZrLVBRhVBxq": 200,
+    "/workspaces/34hjevf4P8kRBrKxRBbr8": 200
+  },
+  "deepLinksUnchanged": true,
+  "differences": {},
+  "now": {
+    "deepLinks": {
+      "/sessions/34hjevhVS63Lhg6SCyKsE": {
+        "body": {
+          "assignedRunnerId": "34hjevasZMWeC7cxU1Th1",
+          "createdAt": "2026-10-17T23:08:35.347Z",
+          "engine": "claude",
+          "id": "34hjevhVS63Lhg6SCyKsE",
+          "provider": "claude",
+          "title": "t05 existing work",
+          "workspaceId": "34hjeveO1EZrLVBRhVBxq"
+        },
+        "status": 200
+      },
+      "/workspaces/34hjeveO1EZrLVBRhVBxq": {
+        "body": {
+          "autoInitGit": false,
+          "createdAt": "2026-10-17T23:08:35.315Z",
+          "enableWorktree": false,
+          "id": "34hjeveO1EZrLVBRhVBxq",
+          "lastEngine": "claude",
+          "lastProvider": "claude",
+          "name": "api",
+          "position": 1,
+          "runnerId": "34hjevasZMWeC7cxU1Th1",
+          "targetRunnerId": null,
+          "workDir": "/srv/api"
+        },
+        "status": 200
+      },
+      "/workspaces/34hjevf4P8kRBrKxRBbr8": {
+        "body": {
+          "autoInitGit": false,
+          "createdAt": "2026-10-17T23:08:35.322Z",
+          "enableWorktree": false,
+          "id": "34hjevf4P8kRBrKxRBbr8",
+          "lastEngine": "claude",
+          "lastProvider": "claude",
+          "name": "web",
+          "position": 0,
+          "runnerId": "34hjevasZMWeC7cxU1Th1",
+          "targetRunnerId": null,
+          "workDir": "/srv/web"
+        },
+        "status": 200
+      }
+    },
+    "list": [
+      {
+        "autoInitGit": false,
+        "createdAt": "2026-10-17T23:08:35.322Z",
+        "enableWorktree": false,
+        "id": "34hjevf4P8kRBrKxRBbr8",
+        "lastEngine": "claude",
+        "lastProvider": "claude",
+        "name": "web",
+        "position": 0,
+        "runnerId": "34hjevasZMWeC7cxU1Th1",
+        "targetRunnerId": null,
+        "workDir": "/srv/web"
+      },
+      {
+        "autoInitGit": false,
+        "createdAt": "2026-10-17T23:08:35.315Z",
+        "enableWorktree": false,
+        "id": "34hjeveO1EZrLVBRhVBxq",
+        "lastEngine": "claude",
+        "lastProvider": "claude",
+        "name": "api",
+        "position": 1,
+        "runnerId": "34hjevasZMWeC7cxU1Th1",
+        "targetRunnerId": null,
+        "workDir": "/srv/api"
+      },
+      {
+        "autoInitGit": true,
+        "createdAt": "2026-10-17T23:39:43.532Z",
+        "enableWorktree": true,
+        "id": "34hkQIyNjyAjsIXngyDiP",
+        "lastEngine": "claude",
+        "lastProvider": "claude",
+        "name": "Default",
+        "position": null,
+        "runnerId": "34hkQIyHd7Hzt3eHh6cRM",
+        "targetRunnerId": "34hkQIyHd7Hzt3eHh6cRM",
+        "workDir": "/var/lib/orbit/home/orbit-repos/default"
+      }
+    ],
+    "sessionRuns": {
+      "34hjevhVS63Lhg6SCyKsE": {
+        "runStatus": "PENDING",
+        "status": "PENDING"
+      }
+    },
+    "web": {
+      "landing": "34hjevf4P8kRBrKxRBbr8",
+      "order": [
+        "34hjevf4P8kRBrKxRBbr8",
+        "34hjeveO1EZrLVBRhVBxq",
+        "34hkQIyNjyAjsIXngyDiP"
+      ]
+    }
+  },
+  "owner": "vera",
+  "sameLanding": true,
+  "sameOrderOfThoseWorkspaces": true,
+  "sameWorkspacesKept": true,
+  "webLandingBefore": "34hjevf4P8kRBrKxRBbr8",
+  "webLandingNow": "34hjevf4P8kRBrKxRBbr8"
+}

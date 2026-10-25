@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Drawer, Popover } from 'antd';
 import { ClockCircleOutlined } from '@ant-design/icons';
 import {
   getSharedWikiDoc,
@@ -12,6 +11,8 @@ import {
   type SharedWikiFootnote,
 } from '../api';
 import { PublicShell } from '../components/PublicShell';
+import { Drawer } from '../components/ui/Drawer';
+import { Popover } from '../components/ui/Popover';
 import { WikiDocRow } from '../components/WikiDocList';
 import { WikiDocFootnoteCard, WikiDocFootnoteList } from '../components/WikiDocPage';
 import { MOBILE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
@@ -246,10 +247,10 @@ function SharedWikiDocument({ token, data }: { token: string; data: SharedWikiDo
             placement="bottom"
             open={open !== null}
             onClose={() => setOpen(null)}
-            size="auto"
+            height="auto"
             closable={false}
-            rootClassName="wk-fnsheet"
-            styles={{ body: { padding: 0 } }}
+            title={null}
+            className="wk-fnsheet"
           >
             {open && notes.get(open.n) && (
               <WikiDocFootnoteCard note={notes.get(open.n)!} via={NO_ENTRIES} github={null} spaceSlug="" docSlug={doc.slug} sheet visitor />
@@ -386,15 +387,16 @@ function SharedWikiSentence({
               <Popover
                 key={n}
                 open={on}
-                trigger="click"
-                placement="bottomLeft"
-                arrow={{ pointAtCenter: true }}
+                side="bottom"
+                align="start"
+                pointAtCenter
+                title={null}
                 onOpenChange={(visible) => {
                   if (!visible && on) setOpen(null);
                 }}
-                content={<WikiDocFootnoteCard note={footnote} via={NO_ENTRIES} github={null} spaceSlug="" docSlug={docSlug} visitor />}
+                trigger={marker}
               >
-                {marker}
+                <WikiDocFootnoteCard note={footnote} via={NO_ENTRIES} github={null} spaceSlug="" docSlug={docSlug} visitor />
               </Popover>
             );
           })}

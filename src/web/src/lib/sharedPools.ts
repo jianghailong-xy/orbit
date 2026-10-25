@@ -170,7 +170,7 @@ function keyWindow(key: SharedPoolKey, pool: SharedPool): PlanUsageSnapshot | nu
 
 /**
  * A pool read as its people and keys as an account pool is drawn — its ChatGPT accounts first, then its
- * keys — so the Providers page card, the session picker and the composer take it as they take one: each
+ * keys — so Infrastructure's pool card, the session picker and the composer take it as they take one: each
  * member carries its `login` or its `key`, and the pool itself the whole view (`shared`) for what only a
  * shared pool has. The order is every session's: the accounts while any can run, its keys after
  * (pool-credential-select.ts).

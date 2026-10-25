@@ -17,6 +17,9 @@ import { encodeId } from './idCodec';
 /** The query parameter a session URL names its record in. */
 export const RECORD_PARAM = 'at';
 
+/** The query parameter a session URL uses to name an owner-item card. */
+export const ITEM_PARAM = 'item';
+
 /** How long the record a link opened stays marked — long enough to find it after the jump. */
 export const RECORD_FLASH_MS = 2400;
 
@@ -36,6 +39,14 @@ export function sessionRecordHref(sessionId: string, recordId: string): string {
   return `/sessions/${encodeURIComponent(encodeId(sessionId))}?${RECORD_PARAM}=${encodeURIComponent(encodeId(recordId))}`;
 }
 
+/** A link to the owner-item card delivered into a session. */
+export function sessionItemHref(sessionId: string, itemId: string): string {
+  return `/sessions/${encodeURIComponent(encodeId(sessionId))}?${ITEM_PARAM}=${encodeURIComponent(encodeId(itemId))}`;
+}
+
+/** Explicit owner-item aliases used by callers that name the card rather than the query slot. */
+export const sessionOwnerItemHref = sessionItemHref;
+
 /**
  * The record a session URL names, in its public spelling — or null when it names none, or names
  * something that is not an id: a malformed link opens the session at its latest message, as a link
@@ -50,6 +61,19 @@ export function recordAtOf(search: URLSearchParams): string | null {
     return null;
   }
 }
+
+/** The owner-item id a session URL names, or null for a malformed/missing parameter. */
+export function itemAtOf(search: URLSearchParams): string | null {
+  const raw = search.get(ITEM_PARAM)?.trim();
+  if (!raw) return null;
+  try {
+    return encodeId(raw);
+  } catch {
+    return null;
+  }
+}
+
+export const ownerItemAtOf = itemAtOf;
 
 /**
  * The page a link card for a session leads to: the session's own page, keeping the record a pasted

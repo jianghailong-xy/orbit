@@ -1,0 +1,61 @@
+{
+  "answers": [
+    "FAKE MODEL reply #1: this conversation has 2 message(s); secrets seen: none."
+  ],
+  "at": "2026-10-17T23:14:47.619+00:00",
+  "events": 8,
+  "fakeModelRequests": [
+    {
+      "at": "2026-10-17T23:14:25Z",
+      "lastUser": "T05-DORA-KEY-PREFIX say hello from the managed runner",
+      "messages": 2,
+      "model": "deepseek-v4-pro",
+      "n": 1,
+      "path": "/anthropic/v1/messages?beta=true",
+      "secrets": [],
+      "slow": 0,
+      "stream": true
+    }
+  ],
+  "owner": "dora",
+  "row": [
+    {
+      "assigned_runner_id": "01a14c23-4d07-7679-812d-f74876266c72",
+      "created_at": "2026-10-17T23:14:24.443",
+      "engine": "claude",
+      "id": "01a14c25-223b-731d-b1f3-6dc502788775",
+      "model": "deepseek-v4-pro",
+      "provider": "deepseek",
+      "provider_builtin": false,
+      "runtime_session_id": "ff5c3424-19bc-491e-b02d-5e8bb6c62da3",
+      "status": "AWAITING_INPUT"
+    }
+  ],
+  "session": "34hjnmZQEN769B3aeIpfB",
+  "timedOut": false,
+  "timeline": [
+    [
+      "2026-10-17T23:14:47.541+00:00",
+      {
+        "assignedRunnerId": "34hjkjiVESUBoVp9PV5Va",
+        "endReason": null,
+        "engine": "claude",
+        "error": null,
+        "model": "deepseek-v4-pro",
+        "provider": "deepseek",
+        "runState": "AWAITING_INPUT",
+        "runStatus": "AWAITING_INPUT",
+        "runtimeSessionId": "ff5c3424-19bc-491e-b02d-5e8bb6c62da3",
+        "sessionState": "AWAITING_INPUT",
+        "status": "AWAITING_INPUT"
+      }
+    ]
+  ],
+  "types": {
+    "assistant": 1,
+    "system": 3,
+    "turn_end": 1,
+    "user": 1,
+    "user_delivery": 2
+  }
+}

@@ -1,0 +1,17 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 npm run test:ui-choices -w @orbit/web -- --project webkit-light-phone'",
+ "commit": "f162a2f9de3cb4bdea8e9a6120dd28a8e2184328",
+ "webTree": "d8ae59f026644577041afea38b5994da1eef0f9f",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-08T04:01:34Z",
+ "endedAt": "2026-10-08T04:04:00+00:00",
+ "loadAverage": {
+  "start": "34.65 35.16 31.16",
+  "end": [
+   "23.67",
+   "30.66",
+   "30.06"
+  ]
+ },
+ "exitCode": 0
+}

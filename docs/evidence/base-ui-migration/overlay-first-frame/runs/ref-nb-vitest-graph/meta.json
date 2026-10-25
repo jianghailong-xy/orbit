@@ -1,0 +1,27 @@
+{
+ "label": "ref-nb-vitest-graph",
+ "step": "vitest-graph",
+ "tree": "/mnt/data/tmp/overlay-first-frame-34brok/ref",
+ "command": "cd src/web && npx vitest run src/components/ProjectTasksGraph.test.tsx",
+ "commit": "c4c94c924e6163abd1bcff74d376899f69c4a8a0",
+ "webChanges": [
+  "M src/web/src/components/ui/Combobox.tsx",
+  " M src/web/src/components/ui/Floating.ts",
+  " M src/web/src/components/ui/Menu.tsx",
+  " M src/web/src/components/ui/MultiSelect.tsx",
+  " M src/web/src/components/ui/Overlay.tsx",
+  " M src/web/src/components/ui/Popconfirm.tsx",
+  " M src/web/src/components/ui/Popover.tsx",
+  " M src/web/src/components/ui/README.md",
+  " M src/web/src/components/ui/Select.tsx",
+  " M src/web/src/components/ui/Tooltip.tsx"
+ ],
+ "webDiffSha256": "85eab0fbf2d29bfd677007b1963ad64ee8bd9048bb93ea0c83f1074e0f1023e5",
+ "startedAt": "2026-10-08T16:32:42Z",
+ "endedAt": "2026-10-08T16:35:25+00:00",
+ "loadAverage": {
+  "start": "24.16 30.17 27.76",
+  "end": "25.61 28.46 27.51"
+ },
+ "exitCode": 0
+}

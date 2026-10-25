@@ -1,0 +1,629 @@
+{
+ "command": {
+  "stats": {
+   "startTime": "2026-10-08T09:14:42.392Z",
+   "duration": 340152.556,
+   "expected": 81,
+   "skipped": 11,
+   "unexpected": 20,
+   "flaky": 0
+  },
+  "passed": 81,
+  "skipped": 11,
+  "failures": [
+   {
+    "project": "chromium-light-desktop",
+    "test": "both sides of existing 600, 640 and 960px rules",
+    "screenshot": "breakpoint-959-wiki.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A10",
+    "differentPixels": 466
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "both sides of existing 600, 640 and 960px rules",
+    "screenshot": "breakpoint-959-wiki.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A10",
+    "differentPixels": 414
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "both sides of existing 600, 640 and 960px rules",
+    "screenshot": "breakpoint-959-wiki.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A10",
+    "differentPixels": 472
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "both sides of existing 600, 640 and 960px rules",
+    "screenshot": "breakpoint-959-wiki.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A10",
+    "differentPixels": 405
+   },
+   {
+    "project": "chromium-light-desktop",
+    "test": "wiki",
+    "screenshot": "wiki-home.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A10",
+    "differentPixels": 394
+   },
+   {
+    "project": "chromium-light-desktop",
+    "test": "settings",
+    "screenshot": "settings.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A11",
+    "differentPixels": 4065
+   },
+   {
+    "project": "chromium-light-phone",
+    "test": "wiki",
+    "screenshot": "wiki-home.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A10",
+    "differentPixels": 160
+   },
+   {
+    "project": "chromium-light-phone",
+    "test": "settings",
+    "screenshot": "settings.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A11",
+    "differentPixels": 409
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "wiki",
+    "screenshot": "wiki-home.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A10",
+    "differentPixels": 344
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "settings",
+    "screenshot": "settings.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A11",
+    "differentPixels": 3706
+   },
+   {
+    "project": "chromium-dark-phone",
+    "test": "wiki",
+    "screenshot": "wiki-home.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A10",
+    "differentPixels": 141
+   },
+   {
+    "project": "chromium-dark-phone",
+    "test": "settings",
+    "screenshot": "settings.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A11",
+    "differentPixels": 335
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "wiki",
+    "screenshot": "wiki-home.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A10",
+    "differentPixels": 401
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "screenshot": "settings.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A11",
+    "differentPixels": 4116
+   },
+   {
+    "project": "webkit-light-phone",
+    "test": "wiki",
+    "screenshot": "wiki-home.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A10",
+    "differentPixels": 159
+   },
+   {
+    "project": "webkit-light-phone",
+    "test": "settings",
+    "screenshot": "settings.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A11",
+    "differentPixels": 414
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "wiki",
+    "screenshot": "wiki-home.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A10",
+    "differentPixels": 341
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "settings",
+    "screenshot": "settings.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A11",
+    "differentPixels": 3766
+   },
+   {
+    "project": "webkit-dark-phone",
+    "test": "wiki",
+    "screenshot": "wiki-home.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A10",
+    "differentPixels": 136
+   },
+   {
+    "project": "webkit-dark-phone",
+    "test": "settings",
+    "screenshot": "settings.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A11",
+    "differentPixels": 351
+   }
+  ]
+ },
+ "updateMode": {
+  "comparatorFails": 40,
+  "newlyRegisteredFailing": 40,
+  "newlyRegisteredPassing": [
+   "chromium-dark-phone/wiki-contents.png",
+   "chromium-light-phone/wiki-contents.png",
+   "webkit-dark-phone/wiki-contents.png",
+   "webkit-light-phone/wiki-contents.png"
+  ],
+  "otherFailing": [],
+  "rows": {
+   "chromium-dark-desktop/breakpoint-959-wiki.png": {
+    "differentPixels": 1863,
+    "maxChannelDelta": 167,
+    "box": {
+     "x": 410,
+     "y": 64,
+     "width": 533,
+     "height": 108
+    },
+    "p0Comparator": "414 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-dark-desktop/breakpoint-961-wiki.png": {
+    "differentPixels": 1330,
+    "maxChannelDelta": 162,
+    "box": {
+     "x": 493,
+     "y": 24,
+     "width": 212,
+     "height": 32
+    },
+    "p0Comparator": "344 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-dark-desktop/settings-saved.png": {
+    "differentPixels": 23108,
+    "maxChannelDelta": 208,
+    "box": {
+     "x": 500,
+     "y": 434,
+     "width": 560,
+     "height": 466
+    },
+    "p0Comparator": "3706 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-dark-desktop/settings.png": {
+    "differentPixels": 23108,
+    "maxChannelDelta": 208,
+    "box": {
+     "x": 500,
+     "y": 434,
+     "width": 560,
+     "height": 466
+    },
+    "p0Comparator": "3706 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-dark-desktop/wiki-home.png": {
+    "differentPixels": 1330,
+    "maxChannelDelta": 162,
+    "box": {
+     "x": 812,
+     "y": 24,
+     "width": 212,
+     "height": 32
+    },
+    "p0Comparator": "344 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-dark-desktop/wiki-new-entry.png": {
+    "differentPixels": 1330,
+    "maxChannelDelta": 89,
+    "box": {
+     "x": 812,
+     "y": 24,
+     "width": 212,
+     "height": 32
+    },
+    "p0Comparator": "205 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-dark-phone/settings-saved.png": {
+    "differentPixels": 2737,
+    "maxChannelDelta": 167,
+    "box": {
+     "x": 16,
+     "y": 744,
+     "width": 358,
+     "height": 100
+    },
+    "p0Comparator": "335 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-dark-phone/settings.png": {
+    "differentPixels": 2737,
+    "maxChannelDelta": 167,
+    "box": {
+     "x": 16,
+     "y": 744,
+     "width": 358,
+     "height": 100
+    },
+    "p0Comparator": "335 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-dark-phone/wiki-home.png": {
+    "differentPixels": 1108,
+    "maxChannelDelta": 167,
+    "box": {
+     "x": 111,
+     "y": 64,
+     "width": 183,
+     "height": 32
+    },
+    "p0Comparator": "141 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-dark-phone/wiki-new-entry.png": {
+    "differentPixels": 1108,
+    "maxChannelDelta": 92,
+    "box": {
+     "x": 111,
+     "y": 64,
+     "width": 183,
+     "height": 32
+    },
+    "p0Comparator": "49 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-light-desktop/breakpoint-959-wiki.png": {
+    "differentPixels": 1856,
+    "maxChannelDelta": 224,
+    "box": {
+     "x": 410,
+     "y": 64,
+     "width": 309,
+     "height": 32
+    },
+    "p0Comparator": "466 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-light-desktop/breakpoint-961-wiki.png": {
+    "differentPixels": 1342,
+    "maxChannelDelta": 217,
+    "box": {
+     "x": 493,
+     "y": 24,
+     "width": 212,
+     "height": 32
+    },
+    "p0Comparator": "394 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-light-desktop/settings-saved.png": {
+    "differentPixels": 23339,
+    "maxChannelDelta": 224,
+    "box": {
+     "x": 500,
+     "y": 434,
+     "width": 560,
+     "height": 466
+    },
+    "p0Comparator": "4065 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-light-desktop/settings.png": {
+    "differentPixels": 23339,
+    "maxChannelDelta": 224,
+    "box": {
+     "x": 500,
+     "y": 434,
+     "width": 560,
+     "height": 466
+    },
+    "p0Comparator": "4065 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-light-desktop/wiki-home.png": {
+    "differentPixels": 1342,
+    "maxChannelDelta": 217,
+    "box": {
+     "x": 812,
+     "y": 24,
+     "width": 212,
+     "height": 32
+    },
+    "p0Comparator": "394 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-light-desktop/wiki-new-entry.png": {
+    "differentPixels": 1340,
+    "maxChannelDelta": 119,
+    "box": {
+     "x": 812,
+     "y": 24,
+     "width": 212,
+     "height": 32
+    },
+    "p0Comparator": "286 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-light-phone/settings-saved.png": {
+    "differentPixels": 2748,
+    "maxChannelDelta": 224,
+    "box": {
+     "x": 16,
+     "y": 744,
+     "width": 358,
+     "height": 100
+    },
+    "p0Comparator": "409 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-light-phone/settings.png": {
+    "differentPixels": 2748,
+    "maxChannelDelta": 224,
+    "box": {
+     "x": 16,
+     "y": 744,
+     "width": 358,
+     "height": 100
+    },
+    "p0Comparator": "409 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-light-phone/wiki-home.png": {
+    "differentPixels": 1129,
+    "maxChannelDelta": 224,
+    "box": {
+     "x": 15,
+     "y": 64,
+     "width": 359,
+     "height": 142
+    },
+    "p0Comparator": "160 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "chromium-light-phone/wiki-new-entry.png": {
+    "differentPixels": 1102,
+    "maxChannelDelta": 123,
+    "box": {
+     "x": 111,
+     "y": 64,
+     "width": 183,
+     "height": 32
+    },
+    "p0Comparator": "94 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-dark-desktop/breakpoint-959-wiki.png": {
+    "differentPixels": 1879,
+    "maxChannelDelta": 167,
+    "box": {
+     "x": 410,
+     "y": 64,
+     "width": 309,
+     "height": 32
+    },
+    "p0Comparator": "405 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-dark-desktop/breakpoint-961-wiki.png": {
+    "differentPixels": 1353,
+    "maxChannelDelta": 162,
+    "box": {
+     "x": 493,
+     "y": 24,
+     "width": 212,
+     "height": 32
+    },
+    "p0Comparator": "341 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-dark-desktop/settings-saved.png": {
+    "differentPixels": 23307,
+    "maxChannelDelta": 208,
+    "box": {
+     "x": 492,
+     "y": 434,
+     "width": 560,
+     "height": 466
+    },
+    "p0Comparator": "3766 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-dark-desktop/settings.png": {
+    "differentPixels": 23307,
+    "maxChannelDelta": 208,
+    "box": {
+     "x": 496,
+     "y": 434,
+     "width": 560,
+     "height": 466
+    },
+    "p0Comparator": "3766 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-dark-desktop/wiki-home.png": {
+    "differentPixels": 1353,
+    "maxChannelDelta": 162,
+    "box": {
+     "x": 812,
+     "y": 24,
+     "width": 212,
+     "height": 32
+    },
+    "p0Comparator": "341 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-dark-desktop/wiki-new-entry.png": {
+    "differentPixels": 1351,
+    "maxChannelDelta": 89,
+    "box": {
+     "x": 812,
+     "y": 24,
+     "width": 212,
+     "height": 32
+    },
+    "p0Comparator": "205 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-dark-phone/settings-saved.png": {
+    "differentPixels": 2731,
+    "maxChannelDelta": 167,
+    "box": {
+     "x": 16,
+     "y": 744,
+     "width": 350,
+     "height": 100
+    },
+    "p0Comparator": "351 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-dark-phone/settings.png": {
+    "differentPixels": 2731,
+    "maxChannelDelta": 167,
+    "box": {
+     "x": 16,
+     "y": 744,
+     "width": 350,
+     "height": 100
+    },
+    "p0Comparator": "351 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-dark-phone/wiki-home.png": {
+    "differentPixels": 1133,
+    "maxChannelDelta": 167,
+    "box": {
+     "x": 111,
+     "y": 64,
+     "width": 183,
+     "height": 32
+    },
+    "p0Comparator": "136 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-dark-phone/wiki-new-entry.png": {
+    "differentPixels": 1133,
+    "maxChannelDelta": 92,
+    "box": {
+     "x": 111,
+     "y": 64,
+     "width": 183,
+     "height": 32
+    },
+    "p0Comparator": "45 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-light-desktop/breakpoint-959-wiki.png": {
+    "differentPixels": 1881,
+    "maxChannelDelta": 224,
+    "box": {
+     "x": 410,
+     "y": 64,
+     "width": 309,
+     "height": 32
+    },
+    "p0Comparator": "472 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-light-desktop/breakpoint-961-wiki.png": {
+    "differentPixels": 1365,
+    "maxChannelDelta": 217,
+    "box": {
+     "x": 493,
+     "y": 24,
+     "width": 212,
+     "height": 32
+    },
+    "p0Comparator": "401 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-light-desktop/settings-saved.png": {
+    "differentPixels": 23629,
+    "maxChannelDelta": 224,
+    "box": {
+     "x": 492,
+     "y": 434,
+     "width": 560,
+     "height": 466
+    },
+    "p0Comparator": "4116 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-light-desktop/settings.png": {
+    "differentPixels": 23629,
+    "maxChannelDelta": 224,
+    "box": {
+     "x": 496,
+     "y": 434,
+     "width": 560,
+     "height": 466
+    },
+    "p0Comparator": "4116 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-light-desktop/wiki-home.png": {
+    "differentPixels": 1365,
+    "maxChannelDelta": 217,
+    "box": {
+     "x": 812,
+     "y": 24,
+     "width": 212,
+     "height": 32
+    },
+    "p0Comparator": "401 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-light-desktop/wiki-new-entry.png": {
+    "differentPixels": 1364,
+    "maxChannelDelta": 119,
+    "box": {
+     "x": 812,
+     "y": 24,
+     "width": 212,
+     "height": 32
+    },
+    "p0Comparator": "288 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-light-phone/settings-saved.png": {
+    "differentPixels": 2745,
+    "maxChannelDelta": 224,
+    "box": {
+     "x": 16,
+     "y": 744,
+     "width": 350,
+     "height": 100
+    },
+    "p0Comparator": "414 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-light-phone/settings.png": {
+    "differentPixels": 2745,
+    "maxChannelDelta": 224,
+    "box": {
+     "x": 16,
+     "y": 744,
+     "width": 350,
+     "height": 100
+    },
+    "p0Comparator": "414 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-light-phone/wiki-home.png": {
+    "differentPixels": 1121,
+    "maxChannelDelta": 224,
+    "box": {
+     "x": 111,
+     "y": 64,
+     "width": 183,
+     "height": 32
+    },
+    "p0Comparator": "159 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "webkit-light-phone/wiki-new-entry.png": {
+    "differentPixels": 1120,
+    "maxChannelDelta": 123,
+    "box": {
+     "x": 111,
+     "y": 64,
+     "width": 183,
+     "height": 32
+    },
+    "p0Comparator": "85 pixels (ratio 0.01 of all image pixels) are different."
+   }
+  }
+ }
+}

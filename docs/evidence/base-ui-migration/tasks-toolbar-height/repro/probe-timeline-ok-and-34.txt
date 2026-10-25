@@ -1,0 +1,20 @@
+== webkit-dark-desktop 0: settled toolbar 42 bar 42; bar inserted at 36
+      35 MO {'header:attributes': 1}
+      36 MO {'header:attributes': 5, 'toolbar:childList': 5, 'body:attributes': 31, 'panel:attributes': 43}
+      41 frame 0
+      44 RO tasks-toolbar 42, tasks-header 169.8, tasks-body 682.2, tasks-bulkbar 42
+     127 MO {'header:attributes': 6, 'body:attributes': 24, 'panel:attributes': 53, 'panel:childList': 7}
+     153 frame 1
+     158 MO {'panel:childList': 3}
+     204 frame 2
+     220 frame 3
+== webkit-dark-desktop 1: settled toolbar 34 bar 42; bar inserted at 43
+      43 MO {'header:attributes': 6, 'toolbar:childList': 5, 'body:attributes': 31, 'panel:attributes': 43}
+      44 MO {'panel:attributes': 1}
+      47 frame 0
+      80 MO {'header:attributes': 6, 'body:attributes': 24, 'panel:attributes': 43, 'panel:childList': 3}
+      80 RO tasks-toolbar 34, tasks-header 161.8, tasks-body 690.2, tasks-bulkbar 42
+      92 MO {'panel:attributes': 1}
+     228 frame 1
+     241 frame 2
+     258 frame 3

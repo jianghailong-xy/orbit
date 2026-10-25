@@ -44,6 +44,14 @@ export const OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX = 'owner-confirmation-an
 export const EVIDENCE_REVIEW_TURN_KEY_PREFIX = 'evidence-review:v1:';
 
 /**
+ * The namespace a SEND_BACK decision's note is handed to the run that submitted the decided
+ * revision in (tasks/evidence-review.ts `evidenceSendBackTurnId`). Keyed by the decision row, for
+ * the reason the review keys are: a caller naming one names a decision by id, and takes the only
+ * delivery the note ever gets.
+ */
+export const EVIDENCE_SEND_BACK_TURN_KEY_PREFIX = 'evidence-send-back:v1:';
+
+/**
  * The namespace an exception item is handed to its coordinator in (projects/project-open-item.ts
  * `openItemTurnId`), and the item is read back off the key wherever the turn is drawn — the card on
  * the queue and on the echo (sessions/turn-cards.ts). A caller naming a key in it names an item by id.
@@ -60,6 +68,7 @@ const RESERVED_TURN_KEY_PREFIXES = [
   CONFIRMATION_RETURN_TURN_KEY_PREFIX,
   OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX,
   EVIDENCE_REVIEW_TURN_KEY_PREFIX,
+  EVIDENCE_SEND_BACK_TURN_KEY_PREFIX,
   // A shell turn under it is delivered to the runner as the task's EXECUTABLE acceptance command
   // (`taskAcceptance`), which the runner executes itself even where a person's `!` shell is refused
   // (DeepSeek Harness, P5), and whose exit code is judged against the task. Only the server queues one.

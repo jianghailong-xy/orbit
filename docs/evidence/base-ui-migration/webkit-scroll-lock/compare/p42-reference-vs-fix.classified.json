@@ -1,0 +1,619 @@
+[
+ {
+  "file": "chromium-dark-desktop/p42-account-pause-custom.png",
+  "differentPixels": 3,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/p42-connect-models.png",
+  "differentPixels": 32,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/p42-deepseek-loading.png",
+  "differentPixels": 45,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/p42-deepseek-read.png",
+  "differentPixels": 39,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/p42-keys.png",
+  "differentPixels": 51,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/p42-new-pool-claude.png",
+  "differentPixels": 22,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/p42-new-pool-people.png",
+  "differentPixels": 22,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/p42-new-pool.png",
+  "differentPixels": 22,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/p42-pool-add-account.png",
+  "differentPixels": 23567,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 0,
+   "shift4": 808,
+   "shift8": 647,
+   "other": 22112
+  },
+  "otherBox": [
+   366,
+   95,
+   913,
+   454
+  ]
+ },
+ {
+  "file": "chromium-dark-desktop/p42-pool-replace-key.png",
+  "differentPixels": 21291,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 0,
+   "shift4": 476,
+   "shift8": 455,
+   "other": 20360
+  },
+  "otherBox": [
+   330,
+   77,
+   903,
+   395
+  ]
+ },
+ {
+  "file": "chromium-dark-desktop/p42-pool-signout.png",
+  "differentPixels": 7,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-phone/p42-account-pause-custom.png",
+  "differentPixels": 5,
+  "maxChannelDelta": 4,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-phone/p42-connect-probe-error.png",
+  "differentPixels": 4,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-phone/p42-new-pool-people.png",
+  "differentPixels": 10,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-phone/p42-workspace-menu.png",
+  "differentPixels": 11,
+  "maxChannelDelta": 3,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/p42-connect-dialect-open.png",
+  "differentPixels": 35,
+  "maxChannelDelta": 18,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 0,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 35
+  },
+  "otherBox": [
+   1094,
+   379,
+   1107,
+   387
+  ]
+ },
+ {
+  "file": "chromium-light-desktop/p42-connect-models.png",
+  "differentPixels": 8,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/p42-deepseek-low.png",
+  "differentPixels": 101,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/p42-deepseek-read.png",
+  "differentPixels": 32,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/p42-deepseek-refreshing.png",
+  "differentPixels": 54,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/p42-pool-add-account.png",
+  "differentPixels": 47387,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 0,
+   "shift4": 3973,
+   "shift8": 2024,
+   "other": 41390
+  },
+  "otherBox": [
+   352,
+   81,
+   927,
+   468
+  ]
+ },
+ {
+  "file": "chromium-light-desktop/p42-pool-replace-key.png",
+  "differentPixels": 42409,
+  "maxChannelDelta": 3,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 0,
+   "shift4": 3504,
+   "shift8": 1709,
+   "other": 37196
+  },
+  "otherBox": [
+   362,
+   81,
+   917,
+   409
+  ]
+ },
+ {
+  "file": "chromium-light-desktop/p42-runners-loading.png",
+  "differentPixels": 62,
+  "maxChannelDelta": 20,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 0,
+   "shift4": 11,
+   "shift8": 0,
+   "other": 51
+  },
+  "otherBox": [
+   784,
+   109,
+   791,
+   116
+  ]
+ },
+ {
+  "file": "chromium-light-desktop/p42-users-loading.png",
+  "differentPixels": 63,
+  "maxChannelDelta": 20,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 0,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 63
+  },
+  "otherBox": [
+   782,
+   217,
+   792,
+   227
+  ]
+ },
+ {
+  "file": "chromium-light-phone/p42-account-pause-custom.png",
+  "differentPixels": 7,
+  "maxChannelDelta": 9,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 0,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 7
+  },
+  "otherBox": [
+   155,
+   343,
+   159,
+   345
+  ]
+ },
+ {
+  "file": "chromium-light-phone/p42-connect-probe-error.png",
+  "differentPixels": 7,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-phone/p42-workspace-history.png",
+  "differentPixels": 195,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "webkit-dark-desktop/p42-pool-add-account.png",
+  "differentPixels": 23427,
+  "maxChannelDelta": 255,
+  "p0Comparator": "9712 pixels (ratio 0.01 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 15606,
+   "shift8": 97,
+   "other": 523
+  },
+  "otherBox": [
+   330,
+   94,
+   924,
+   331
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop/p42-pool-delete.png",
+  "differentPixels": 33475,
+  "maxChannelDelta": 255,
+  "p0Comparator": "14156 pixels (ratio 0.02 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 26234,
+   "shift8": 4,
+   "other": 36
+  },
+  "otherBox": [
+   181,
+   296,
+   332,
+   331
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop/p42-pool-replace-key.png",
+  "differentPixels": 368338,
+  "maxChannelDelta": 255,
+  "p0Comparator": "23310 pixels (ratio 0.03 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 15713,
+   "shift8": 7381,
+   "other": 338043
+  },
+  "otherBox": [
+   326,
+   0,
+   1225,
+   899
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop/p42-pool-signout.png",
+  "differentPixels": 482390,
+  "maxChannelDelta": 255,
+  "p0Comparator": "50667 pixels (ratio 0.05 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 15849,
+   "shift8": 7282,
+   "other": 452058
+  },
+  "otherBox": [
+   326,
+   0,
+   1271,
+   899
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop/p42-users-delete.png",
+  "differentPixels": 185075,
+  "maxChannelDelta": 255,
+  "p0Comparator": "22455 pixels (ratio 0.02 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 9148,
+   "shift8": 8146,
+   "other": 160580
+  },
+  "otherBox": [
+   312,
+   210,
+   1271,
+   810
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop/p42-users-disabled.png",
+  "differentPixels": 151327,
+  "maxChannelDelta": 255,
+  "p0Comparator": "21912 pixels (ratio 0.02 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 11853,
+   "shift8": 14343,
+   "other": 117930
+  },
+  "otherBox": [
+   312,
+   210,
+   1247,
+   810
+  ]
+ },
+ {
+  "file": "webkit-dark-phone/p42-pool-delete.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "6752 pixels (ratio 0.03 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-dark-phone/p42-pool-signout.png",
+  "differentPixels": 6813,
+  "maxChannelDelta": 255,
+  "p0Comparator": "6710 pixels (ratio 0.03 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 21,
+   "shift8": 0,
+   "other": 39
+  },
+  "otherBox": [
+   0,
+   255,
+   379,
+   458
+  ]
+ },
+ {
+  "file": "webkit-dark-phone/p42-users-delete.png",
+  "differentPixels": 12351,
+  "maxChannelDelta": 255,
+  "p0Comparator": "7842 pixels (ratio 0.03 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 2030,
+   "shift8": 1598,
+   "other": 1970
+  },
+  "otherBox": [
+   144,
+   612,
+   381,
+   739
+  ]
+ },
+ {
+  "file": "webkit-dark-phone/p42-users-disabled.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "6726 pixels (ratio 0.03 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-light-desktop/p42-pool-add-account.png",
+  "differentPixels": 22852,
+  "maxChannelDelta": 255,
+  "p0Comparator": "10056 pixels (ratio 0.01 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 14240,
+   "shift8": 1,
+   "other": 1410
+  },
+  "otherBox": [
+   332,
+   77,
+   935,
+   331
+  ]
+ },
+ {
+  "file": "webkit-light-desktop/p42-pool-delete.png",
+  "differentPixels": 40708,
+  "maxChannelDelta": 255,
+  "p0Comparator": "7271 pixels (ratio 0.01 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 33359,
+   "shift8": 13,
+   "other": 135
+  },
+  "otherBox": [
+   153,
+   294,
+   332,
+   338
+  ]
+ },
+ {
+  "file": "webkit-light-desktop/p42-pool-replace-key.png",
+  "differentPixels": 328503,
+  "maxChannelDelta": 255,
+  "p0Comparator": "39553 pixels (ratio 0.04 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 13145,
+   "shift8": 7727,
+   "other": 300430
+  },
+  "otherBox": [
+   326,
+   0,
+   1225,
+   899
+  ]
+ },
+ {
+  "file": "webkit-light-desktop/p42-pool-signout.png",
+  "differentPixels": 439169,
+  "maxChannelDelta": 255,
+  "p0Comparator": "48371 pixels (ratio 0.05 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 12909,
+   "shift8": 7642,
+   "other": 411417
+  },
+  "otherBox": [
+   313,
+   0,
+   1271,
+   899
+  ]
+ },
+ {
+  "file": "webkit-light-desktop/p42-users-delete.png",
+  "differentPixels": 162769,
+  "maxChannelDelta": 255,
+  "p0Comparator": "16548 pixels (ratio 0.02 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 7491,
+   "shift8": 6420,
+   "other": 141657
+  },
+  "otherBox": [
+   312,
+   210,
+   1271,
+   810
+  ]
+ },
+ {
+  "file": "webkit-light-desktop/p42-users-disabled.png",
+  "differentPixels": 120484,
+  "maxChannelDelta": 255,
+  "p0Comparator": "15808 pixels (ratio 0.02 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 9869,
+   "shift8": 13260,
+   "other": 90154
+  },
+  "otherBox": [
+   312,
+   210,
+   1247,
+   810
+  ]
+ },
+ {
+  "file": "webkit-light-phone/p42-pool-delete.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-light-phone/p42-pool-signout.png",
+  "differentPixels": 7077,
+  "maxChannelDelta": 255,
+  "p0Comparator": "16 pixels (ratio 0.01 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 116,
+   "shift8": 3,
+   "other": 205
+  },
+  "otherBox": [
+   0,
+   232,
+   381,
+   483
+  ]
+ },
+ {
+  "file": "webkit-light-phone/p42-users-delete.png",
+  "differentPixels": 17357,
+  "maxChannelDelta": 255,
+  "p0Comparator": "1320 pixels (ratio 0.01 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 3753,
+   "shift8": 3167,
+   "other": 3684
+  },
+  "otherBox": [
+   136,
+   593,
+   381,
+   752
+  ]
+ },
+ {
+  "file": "webkit-light-phone/p42-users-disabled.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ }
+]

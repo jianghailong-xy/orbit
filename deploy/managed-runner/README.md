@@ -1,9 +1,19 @@
 # Optional managed runner image and restore contract
 
-This directory is an independent test delivery. Root Compose, installation, release and upgrade
-entry points do not build or start it. The product default remains disabled. The image uses the
-existing owner enrollment and foreground `orbit run` protocol; it does not implement the future
-manager, admission guard, generation authorization or Ceph fencing.
+This directory is an independent test delivery, except for the two parts a new deployment's Docker
+backend uses: the image below, which `scripts/install-server.sh` builds on the host and `/upgrade`
+rebuilds there (docs/self-hosting.md, "What an upgrade does"), and the
+[restricted Docker channel](docker-channel/README.md), which root Compose runs under the
+`managed-runners-docker` profile a fresh install switches on (docs/self-hosting.md, "Managed
+runners"). Root Compose, installation, release and upgrade entry points reference nothing else here
+and nothing of Kubernetes, Rook, Ceph or CSI (`scripts/managed-runner/deployment_boundary_test.py`
+checks that). The server's switch is off unless a deployment's `.env` turns it on, which an upgrade
+never does. The image starts the foreground `orbit run` protocol in
+one of two ways: from the runner credential the manager issued for its Pod's generation (the managed
+path), or by one owner enrollment (standalone image smoke). The single-writer protection — the
+admission guard, generation-bound runner authentication and the manager's stop/fencing gate — is
+described under [Single-writer protection](#single-writer-protection). Fencing a node or Ceph
+clients is an infrastructure operator's action; nothing here performs it.
 
 The deployment owner confirmed on 2026-10-04 that no non-production Kubernetes/Ceph test cluster is
 available. Do not create a cluster, use the current kubeconfig context, borrow production resources,
@@ -11,10 +21,16 @@ or infer permission from available credentials. Local fixtures are preparation e
 
 ## Image and build
 
-[Dockerfile](image/Dockerfile) pins the base images by digest, Go 1.27.1, Node 26.10.0, Codex 0.158.0
-and a dated Debian package snapshot. Codex is the first supplied engine; Claude, Kimi, OpenCode and
-Antigravity are not installed. Codex uses its native binary with adjacent vendor tools, avoiding a
-Node wrapper between Orbit and the engine. The generated `/usr/local/share/orbit/tool-versions.json`
+[Dockerfile](image/Dockerfile) pins the base images by digest, Go 1.27.1, Node 26.10.0, Codex 0.158.0,
+Claude Code 2.1.300 and a dated Debian package snapshot. Codex and Claude Code are the supplied
+engines (Claude Code runs Anthropic-dialect API keys, DeepSeek's included); Kimi, OpenCode,
+Antigravity and DeepSeek Harness are not installed. Both use their native binaries (Codex with its
+adjacent vendor tools), avoiding a Node wrapper between Orbit and the engine, and Claude Code's own
+updater is off (`DISABLE_AUTOUPDATER=1`). A neutral git identity, `Orbit Runner <runner@orbit.invalid>`,
+is set at system level (`/etc/gitconfig`), so the runner's own commits (the `autoInitGit` baseline,
+finalize, checkpoints) work on a fresh volume; an identity in the repository, the user's
+`~/.gitconfig` or the environment takes precedence over it. The build checks both, and the image
+smoke repeats the check. The generated `/usr/local/share/orbit/tool-versions.json`
 records the source SHA, actual tool versions and installed package versions. That build artifact,
 the final image digest and actual test environment must accompany later acceptance evidence.
 
@@ -48,7 +64,7 @@ stay constant across rebuilds and nodes:
 | `/var/lib/orbit/home/.orbit/uploads` | Attachment scratch retained until ordinary session-aware GC. |
 | `/var/lib/orbit/home/.orbit/codex-state` | Codex SQLite partitions, including database, WAL and SHM. |
 | `/var/lib/orbit/home/.codex` | Default Codex auth/configuration, transcripts and sessions. |
-| `/var/lib/orbit/home/.claude` | Reserved persistent location if a later image explicitly supplies Claude. |
+| `/var/lib/orbit/home/.claude` | Claude Code configuration and session transcripts (`projects/<cwd>/<session>.jsonl`). |
 | `/var/lib/orbit/home/orbit-repos/default` | Stable default workspace directory and original repository. |
 
 The entrypoint fixes `HOME`, `ORBIT_HOME`, `CODEX_HOME` and `CLAUDE_CONFIG_DIR` to these paths. Codex
@@ -63,7 +79,29 @@ directory is `0700`, and config/identity files are regular non-symlink files at 
 `configStoragePrivate`. Unexpected owners, retained symlinks and an unmounted state path are refused.
 No `fsGroup` is used because its recursive permission changes can widen private credential storage.
 
-First start requires all of:
+### Managed start (the manager's Pod)
+
+The manager creates the runner row before the Pod and issues that row's credential for one
+generation into Secret `mr-boot-<runner-uuid>` (keys `token` and `generation`), mounted at
+`/run/orbit-bootstrap`. [runner-pod.yaml.example](runner-pod.yaml.example) is exactly the Pod it
+creates. With `ORBIT_RUNNER_CREDENTIAL_FILE` set the entrypoint never enrolls; it requires:
+
+- `ORBIT_RUNNER_SERVER_URL`, `ORBIT_RUNNER_NAME`, `ORBIT_RUNNER_MAX_CONCURRENT` as below;
+- `ORBIT_RUNNER_EXPECTED_ID`: the runner UUID of the mapping;
+- `ORBIT_MANAGED_RUNNER_GENERATION` and `ORBIT_MANAGED_RUNNER_POD_UID`, from the Downward API: the
+  Pod's `orbit.dev/generation` annotation and `metadata.uid`;
+- a non-empty credential whose Secret `generation` equals the Pod's generation.
+
+It writes the expected runner ID and this generation's credential into `config.json`, refuses a
+config or volume of another runner, a volume a later generation (or another Pod of this
+generation) has already run on (`managed-instance.json`), and a volume with an uncertain
+enrollment. It passes the generation and Pod UID to `orbit run`, which sends both with every
+request (`src/runner-go/managed_instance.go`). The next generation's Pod brings its own credential;
+only `runnerToken` changes in the retained config.
+
+### Standalone enrollment (image smoke)
+
+Without `ORBIT_RUNNER_CREDENTIAL_FILE`, first start requires all of:
 
 - `ORBIT_RUNNER_SERVER_URL`: the explicitly authorized test Orbit HTTPS server, with no built-in
   hosted-server fallback. HTTP is accepted only for a loopback fake server.
@@ -80,7 +118,9 @@ existing registration ownership checks and recovery protocol, rather than creati
 The enrollment token passes through the existing CLI argument during registration; bootstrap logs
 and process inspection belong to the same isolated user's trust boundary.
 
-On rebuild, reuse the original PVC and supply `ORBIT_RUNNER_EXPECTED_ID` from the recorded mapping.
+On rebuild, reuse the original PVC and supply `ORBIT_RUNNER_EXPECTED_ID` from the recorded mapping:
+the runner UUID that `orbit register` printed and `orbit-container check` reports, not the public id
+the owner API shows for the same runner (that spelling is refused as a mismatch).
 Remove the enrollment Secret mount/reference and environment variable. The saved ID, token and config
 bytes are reused without calling register, forcing a registration or unregistering. Malformed or
 mismatched config fails closed. A populated repository/runtime home without config also fails; put
@@ -96,12 +136,14 @@ of Kubernetes single-writer admission, node cessation or Ceph fencing.
 
 ## Optional Kubernetes test template
 
-[runner-pod.yaml.example](runner-pod.yaml.example) is a bare Pod with `restartPolicy: Never`, an
-existing per-user PVC, immutable tools, no host namespaces/sockets, no service-account token and no
-Kubernetes/Ceph credentials in user processes. Its init container has only the filesystem capabilities
-needed for scoped ownership initialization. It installs no storage backend, PVC, manager or server.
-All placeholders must be replaced from the authorized environment record; resource amounts are not
-deployment defaults. A container `Running` state or a local filesystem lock is not readiness evidence.
+[runner-pod.yaml.example](runner-pod.yaml.example) is the bare Pod the manager creates for one
+generation: `restartPolicy: Never`, an existing per-user PVC, immutable tools, no host
+namespaces/sockets, no service-account token and no Kubernetes/Ceph credentials in user processes.
+Its init container has only the filesystem capabilities needed for scoped ownership initialization.
+It installs no storage backend, PVC, manager or server. All placeholders must be replaced from the
+authorized environment record; resource amounts are not deployment defaults. The admission guard
+refuses it unless the manager reserved its generation, so it is not applied by hand. A container
+`Running` state or a local filesystem lock is not readiness evidence.
 
 Before applying, the coordinator needs the exact context/API identity, namespace/node allowlists,
 original PVC/PV/RBD identity, Ceph/CSI/kernel versions, supported access mode, resource profile,
@@ -126,7 +168,9 @@ Do not run this until those resources and actions are explicitly authorized. Do 
 replacement or force-delete a predecessor. Stop claims through SIGTERM/SIGINT, await the original
 drain, prove process cessation/unmount, then recreate the fixed Pod against the same PVC. The template
 gives **240 seconds** termination grace for the existing 100-second turn drain and 170-second
-supervisor/lease/event envelope. It has no preStop sleep. Tini forwards the signal to the foreground
+supervisor/lease/event envelope, which also bounds the work the heartbeat started: a landing still
+checking after 100 seconds is stopped and handed back for immediate re-dispatch, and the heartbeat
+keeps beating until then. It has no preStop sleep. Tini forwards the signal to the foreground
 runner, which owns signaling/draining its engine children; do not broadcast a signal to the whole
 process group and prematurely kill active turns. Budget expiry or uncertain old-node status requires
 operator reconciliation/fencing, not a second writer. Keep the original PVC on sleep or failure.
@@ -138,16 +182,124 @@ An apiserver with `ORBIT_MANAGED_RUNNERS_ENABLED=true` reconciles only in the en
 [manager-profile.example.json](manager-profile.example.json). The example is refused as it stands
 (`valueKind: example`, placeholders). An actual profile names the JSON kubeconfig file, context,
 expected API server and namespace, the storage class and capacity, a digest-pinned image, the runner's
-Orbit URL, the resource amounts of this Pod template and every lifecycle budget. Without a valid
+Orbit URL, the resource amounts of this Pod template and every lifecycle budget. Its `capacity`
+section is the environment's fixed budget — CPU and memory requests, ephemeral storage, Pod and attach
+slots, managed users active at once, and the storage pool's safe usable bytes and headroom — which
+admission reserves from; the lifecycle budgets include the idle interval before a runner drains to
+sleep, how often an intent waiting for capacity looks again, and how long a stop for sleep may take
+before the delay is reported. The test owner supplies every value. Without a valid
 profile the feature reports itself unavailable and nothing is reconciled. Only the authorized isolated
-test apiserver may set these variables; no default entry point does.
+test apiserver may set these variables; no default entry point does. The optional `backend` field
+names the run backend: absent or `kubernetes` is this Kubernetes environment; `docker` is one host's
+Docker, reached only through the restricted Docker channel — its profile shape is
+[docker-channel/manager-profile.example.json](docker-channel/manager-profile.example.json), and the
+channel, its rules and the disk limit are described in [docker-channel/README.md](docker-channel/README.md).
+A Docker profile builds nothing for Kubernetes, and a Kubernetes one nothing for Docker.
 
-The manager creates the PVC above from `storage/pvc.template.json` and this Pod template, by the
-fixed names `mr-data-<runner-uuid>` and `mr-<runner-uuid>`. One difference: the runner row already
-exists, so its credential arrives in Secret `mr-boot-<runner-uuid>`, mounted at `/run/orbit-bootstrap`
-and named by `ORBIT_RUNNER_CREDENTIAL_FILE`, instead of an enrollment token. The image entrypoint above
-does not consume it yet and stops before registering. See the implementation record in
-[the design](../../docs/managed-runner-design.md#implementation-record-manager-core).
+The manager creates the PVC above from `storage/pvc.template.json` and the Pod above, by the fixed
+names `mr-data-<runner-uuid>` and `mr-<runner-uuid>`, with the runner credential of the Pod's
+generation in Secret `mr-boot-<runner-uuid>`. The profile's `admission` section names the manager's
+Kubernetes username (the only identity allowed to create a Pod that uses a managed volume) and the
+SHA-256 of the bearer token the API server presents to the admission webhook. See the implementation
+records in [the design](../../docs/managed-runner-design.md#implementation-record-single-writer-protection).
+
+## Single-writer protection
+
+ReadWriteOnce lets two Pods on one node mount the same claim, and RBD `exclusive-lock` passes between
+clients cooperatively; neither is the protection here. Three pieces are, together, and none alone:
+
+1. **Single-Pod admission guard.** [admission/pod-admission-webhook.template.json](admission/pod-admission-webhook.template.json)
+   is a `ValidatingWebhookConfiguration` with `failurePolicy: Fail` for every Pod create and update
+   (and `pods/ephemeralcontainers`) in the managed namespace, selected by namespace, never by labels.
+   The Orbit apiserver answers it at `POST /api/managed-runner/admission` and decides from the
+   database: a Pod that refers to a managed claim is admitted only if the mapping owns that claim,
+   the manager's identity creates it, it has the fixed name, the owner/runner/PVC annotations and the
+   generation the manager reserved (STARTING, no Pod recorded, a CREATE_POD pending), the pinned
+   image and the runner template. Other names, unlabelled Pods, Jobs, read-only mounts, other nodes
+   and stale generations are refused; concurrent creates under the fixed name are left to the API
+   server's one-object-per-name rule. A webhook is used rather than a ValidatingAdmissionPolicy
+   because the reservation lives in PostgreSQL under the mapping's compare-and-set: CEL would need a
+   copy of it in the cluster that could lag or go backwards. Off (404), unavailable (503), without
+   its token (401), timing out or with its database down, the webhook fails and the API server
+   refuses the Pod. Before it creates a Pod the manager proves the guard is in force with a dry-run
+   create the guard must refuse; admitted, it creates nothing (`ADMISSION_GUARD_MISSING`).
+
+   Installing it needs the cluster operator: replace the placeholders (`__AUTHORIZED_TEST_NAMESPACE__`,
+   the Orbit host and its CA bundle — drop `caBundle` for a publicly trusted certificate), and
+   configure the API server to present the webhook token, through its admission configuration:
+
+   ```yaml
+   # --admission-control-config-file
+   apiVersion: apiserver.config.k8s.io/v1
+   kind: AdmissionConfiguration
+   plugins:
+     - name: ValidatingAdmissionWebhook
+       configuration:
+         apiVersion: apiserver.config.k8s.io/v1
+         kind: WebhookAdmissionConfiguration
+         kubeConfigFile: /etc/kubernetes/orbit-webhook-kubeconfig.yaml
+   ```
+
+   where that kubeconfig has a `users` entry named after the Orbit host carrying `token:` — the
+   token whose SHA-256 the manager profile holds. A cluster whose API server cannot present it
+   cannot run managed Pods: every create is refused.
+
+2. **Generation-bound runner authentication.** Every request a managed runner makes with its
+   credential names its generation and Pod UID (`X-Orbit-Managed-Runner-Generation`,
+   `X-Orbit-Managed-Runner-Pod-Uid`) and declares `managed-runner-instance-v1`; the runner guards
+   accept it only from the recorded instance and refuse a predecessor (403
+   `MANAGED_RUNNER_INSTANCE_SUPERSEDED`), another Pod, a fenced mapping, or no instance at all;
+   claims and inbox polls re-check it where work is handed out. Self-managed runners are unaffected.
+   The owner cannot rotate a managed runner's credential (409 `MANAGED_RUNNER_ROTATE_REFUSED`).
+
+3. **Stop or fencing proof before another generation.** The manager issues generation N+1's
+   credential, Secret and Pod only after generation N's Pod was reported stopped by its kubelet,
+   its object is gone and no VolumeAttachment holds the volume — or after an operator's fencing
+   receipt bound to that instance and volume, with the object gone and the volume detached.
+   Otherwise the mapping is FENCING: the predecessor's credential is replaced at once, the disk and
+   Secret stay, and nothing starts. A stale heartbeat, an expired lease or an owner's retry never
+   opens it. Every Pod the manager creates carries its finalizer `orbit.dev/managed-runner-stop-report`,
+   so a Pod deleted by anyone — `kubectl delete`, an eviction, `kubectl drain` — stays, terminal,
+   with its kubelet's report until the manager has recorded it; the manager then takes the
+   finalizer off and starts the next generation by itself. Without it the kubelet's final delete
+   would remove the report before the manager's next look, and a routine deletion would fence.
+
+### Fencing receipt
+
+After fencing the old node (power-off through its BMC or hypervisor, kept quarantined) or its Ceph
+clients (a tested, persistent blocklist), the operator records it for the manager as ConfigMap
+`mr-fence-<runner-uuid>` in the managed namespace, key `receipt.json`, shaped like
+[fencing-receipt.example.json](fencing-receipt.example.json):
+
+```bash
+kubectl --context "$AUTHORIZED_TEST_CONTEXT" --namespace "$AUTHORIZED_TEST_NAMESPACE" \
+  create configmap "mr-fence-$RUNNER_UUID" --from-file=receipt.json="$REVIEWED_RECEIPT"
+```
+
+The receipt names the predecessor exactly as the mapping recorded it (runner, generation, Pod name
+and UID, node, PVC UID, CSI volume handle, RBD pool/image), the action (who, when, what, reference)
+and an independent observation that it took effect. `NODE_POWER_OFF` needs `POWERED_OFF` and a
+quarantined node; `STORAGE_FENCE` needs `CLIENTS_BLOCKLISTED`, the blocklisted addresses and nonces,
+the OSD map epoch and propagation time, a tested procedure reference, `persistent: true`,
+`expiresAt: null` and a rejoin policy. An incomplete or unbound receipt is reported on the mapping
+(`FENCING_RECEIPT_INVALID`) and opens nothing; an accepted one is recorded on the mapping. The
+manager can read ConfigMaps and cannot write them. The operator's runbook still has to remove the
+stale Pod object and attachment (`node.kubernetes.io/out-of-service`); the gate waits for both. A
+Pod whose node cannot report keeps the manager's finalizer, and so its object, however it is
+deleted: once the node is powered off or fenced and the receipt is in place, the operator takes the
+finalizer off as well, and the manager reads the receipt when the object is gone:
+
+```bash
+kubectl --context "$AUTHORIZED_TEST_CONTEXT" --namespace "$AUTHORIZED_TEST_NAMESPACE" patch pod "mr-$RUNNER_UUID" --type=json \
+  -p '[{"op":"test","path":"/metadata/finalizers/0","value":"orbit.dev/managed-runner-stop-report"},{"op":"remove","path":"/metadata/finalizers/0"}]'
+```
+
+### Manager permissions
+
+In the managed namespace: Pods get, create (including `dryRun`), delete, patch (only to take its own
+finalizer off a Pod whose stop it recorded); PVCs get, create; Secrets get, create, delete;
+ConfigMaps get. Cluster-scoped and read-only: PersistentVolumes get, VolumeAttachments list. Nothing
+on nodes, Ceph or the webhook configuration.
 
 ## Reproducible checks and pending acceptance
 
@@ -179,23 +331,16 @@ network access, fixture Git/worktree/attachment/engine files, actual nonroot ima
 container recreation. Fixture engine files are not a real session. Retain logs, image/package/runtime
 versions and artifact hashes; sanitise credentials before submitting evidence.
 
-The following acceptance items remain **unexecuted**, independently of any local/static success:
+What the local checks cannot show was run in the authorized lab
+([docs/managed-runner-lab.md](../../docs/managed-runner-lab.md#runner-image-t03), task T03):
+- the actual image build with its version record and digest;
+- the image in Kubernetes on an RBD volume, enrolled standalone and as the manager's Pod;
+- recreations on the original claim keeping the runner ID and token, worktrees, attachments and the
+  engine session;
+- a first real engine session on the owner's DeepSeek key, and its continuation after recreation;
+- stops during real active work: a model turn, and a landing's merge check.
 
-1. Actual image build and isolated image smoke, including actual runtime manifest/image digest.
-2. Kubernetes/Ceph-CSI mount, single-Pod protection and original-PVC rebuild/cross-node restore on the
-   approved version tuple, with Pod/PVC/PV/volume/node identities and storage evidence.
-3. First real engine session, using an explicitly authorized test model and credential/account;
-   record provider/model/runtime versions and successful execution. No approved test supply is given
-   by this task; current session credentials or host account homes are not a test supply.
-4. Actual Git worktree and uploaded attachment created by that session, persisted through recreation;
-   compare stable workspace/worktree paths and content hashes.
-5. A continuation of the same real engine session after recreation, with unchanged runner ID/token,
-   retained engine thread/session ID, metadata and SQLite integrity. Merely finding fixture files
-   or comparing runner config is insufficient.
-6. SIGTERM during real active work: prove claims stop, heartbeats/draining remain valid, the turn
-   finishes/releases/flushes normally and the runner exits within the approved window.
-
-Local check results and commits are a phase report for the coordinator. They do not complete the
-project criterion requiring Kubernetes operation and real session recovery. The coordinator must
-arrange these external prerequisites and resume the same task for final independent acceptance;
-production deployment remains outside the project scope.
+Cross-node mounting, migration and takeover are recorded by T02 and T08x on the lab's two nodes.
+`image-smoke.py` (Docker) has not been run end to end: it needs an isolated Docker endpoint, not the
+host's default socket. Only its git-identity step was run against the image. Production deployment
+remains outside the project scope.

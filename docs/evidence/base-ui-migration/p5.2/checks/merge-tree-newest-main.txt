@@ -1,0 +1,71 @@
+# Before the evidence commit: has origin/main or the project line moved past what P5.2 merged? 2026-10-10T05:22:45Z
+
+$ git ls-remote origin refs/heads/main refs/heads/project/34ZZeq0e3IR65GVm2kAs7
+23bdaa967e4e4a0f722a6e7a13a3b1ba874acad7	refs/heads/main
+951882866f3227a8bd5c1040ba544fa1e08bf661	refs/heads/project/34ZZeq0e3IR65GVm2kAs7
+
+$ git rev-parse --short HEAD
+211949ed8
+
+$ git merge-base --is-ancestor origin/main HEAD
+exit=1   # 0: already in the delivery
+
+$ git merge-base --is-ancestor origin/project/34ZZeq0e3IR65GVm2kAs7 HEAD
+exit=0   # 0: already in the delivery
+
+$ git merge-tree --write-tree HEAD origin/main; git rev-parse HEAD^{tree}   # the dry run
+9df176de11e4d4417a8a7d0bf53818368a049e64
+exit=0
+d248bbeb50b5642b4528fb1fab46e9566a7adad4
+
+$ git merge-tree --write-tree HEAD origin/project/34ZZeq0e3IR65GVm2kAs7; git rev-parse HEAD^{tree}   # the dry run
+d248bbeb50b5642b4528fb1fab46e9566a7adad4
+exit=0
+d248bbeb50b5642b4528fb1fab46e9566a7adad4
+
+# origin/main moved (the project line's promotion and another project's), so: what did main change since its merge base with the delivery?
+$ git log -1 --format="%h %p %s" bcf00ab95; git rev-parse bcf00ab95^{tree} 951882866^{tree}   # the promotion of this project line: the project tip's own tree
+bcf00ab95 9498167b9 951882866 Merge refs/heads/project/34ZZeq0e3IR65GVm2kAs7 into refs/heads/main
+fdf88a8355c8e870be56add4937572ac47fa1a10
+fdf88a8355c8e870be56add4937572ac47fa1a10
+
+$ git merge-base HEAD origin/main
+951882866
+
+$ git diff --name-only HEAD...origin/main | sed -E "s|^(docs/evidence/[^/]*\|src/[^/]*)/.*|\1|" | sort | uniq -c   # main since the merge base, by area
+     15 docs/evidence/ask-question-card
+     22 src/android
+      3 src/macos
+
+$ comm -12 <(git diff --name-only 951882866 HEAD | sort) <(git diff --name-only HEAD...origin/main | sort)   # of them P5.2's own files: none
+(end)
+
+# The dry run above merges cleanly and main changed none of P5.2's files (nothing under src/web or src/shared): by the
+# project's rule there is no further sync; this file is the record of that dry run.
+
+# 2026-10-10T05:25:37Z, just before the evidence: origin/main moved once more, the project line did not.
+$ git ls-remote origin refs/heads/main refs/heads/project/34ZZeq0e3IR65GVm2kAs7
+cc16cb2141dff9997d0673975ae90342969675c2	refs/heads/main
+951882866f3227a8bd5c1040ba544fa1e08bf661	refs/heads/project/34ZZeq0e3IR65GVm2kAs7
+
+$ git log --oneline 23bdaa967..origin/main
+cc16cb214 docs(evidence): the README's list of findings is three items, two of them fixed
+abef7c2ba docs(evidence): the answered question card on iPhone, Mac and web, before and after
+a4ecef670 fix(clients): an opened tool card on the Mac is measured again
+05fa69fe3 docs(evidence): the answered question card's checks, and the probe that finds the Mac row
+010e59792 fix(clients): the question replay keeps every option's whole description
+
+$ git diff --name-only 211949ed8...origin/main | sed -E "s|^(docs/evidence/[^/]*\|src/[^/]*)/.*|\1|" | sort | uniq -c
+     15 docs/evidence/ask-question-card
+     22 src/android
+      3 src/macos
+
+$ comm -12 <(git diff --name-only 951882866 211949ed8 | sort) <(git diff --name-only 211949ed8...origin/main | sort)   # P5.2's own files among them: none
+(end)
+
+$ git merge-tree --write-tree 211949ed8 origin/main
+24d6b858c6bfbce4880384dd7af743580fa3a011
+exit=0
+
+# Still clean, still none of P5.2's files and nothing under src/web or src/shared (main's src/macos changes read no web
+# source): no further sync.

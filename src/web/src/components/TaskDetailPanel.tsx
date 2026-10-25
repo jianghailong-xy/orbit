@@ -15,7 +15,7 @@ import { MentionDeliveryNotes } from './MentionDeliveryNotes';
 import { TaskInputs } from './TaskInputs';
 import { LandTaskStatus, landingBadge, landingIsLive } from './LandTaskStatus';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import type { RunnerModelCatalog } from '@orbit/shared';
+import { AgentProvider, ALL_ENGINES, ENGINE_CLI_NAMES, isEngine, type RunnerModelCatalog } from '@orbit/shared';
 import { Alert } from './ui/Alert';
 import { Avatar } from './ui/Avatar';
 import { Button } from './ui/Button';
@@ -36,20 +36,29 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { api, getShareLink, type ModelHintLevel, type ModelHintOption, type TaskRunRoute } from '../api';
 import { copyText } from '../lib/clipboard';
+import { webShowsEngine } from '../lib/runnerEngines';
+import { mainBranchName } from '../lib/projectStart';
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import { reportTaskRunConflict, type TaskRunConflictToast } from './TaskRunHandoffNotice';
 import { taskRunEntry } from '../lib/taskRunHandoff';
 import {
-  modelOptionsForProvider,
+  defaultEngineOf,
+  isLoginProvider,
+  modelOptionsFor,
+  providerEngines,
+  sessionEngineOf,
   type ConfiguredProvider,
 } from '../lib/workspaceDefaults';
-import { currentProviderChoice, providerChoices } from '../lib/sessionProviderChoices';
+import { currentProviderChoice, engineProviders, engineTitleFor, type ChoiceSources } from '../lib/sessionProviderChoices';
+import { BrandMark } from './NewSessionProviderHero';
 import { encodeId } from '../lib/idCodec';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { supersessionNote, taskOutcomeChip } from '../lib/taskOutcome';
 import { taskStartOwnedByCompletionDeclaration, type FilterableTask } from '../lib/taskFilters';
 import type { ProjectTaskVerificationState } from '../lib/projectDependencyGraph';
 import { meQuery, ownerConfirmationQuery, providersQuery, runnersQuery } from '../lib/queries';
+import { poolsAsProviders, providerPoolsQuery } from '../lib/providerPools';
+import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
 import {
@@ -72,6 +81,7 @@ import {
 import { QUEUED_LABEL } from '../lib/runnerSlots';
 import { refreshTaskScheduleViews, scheduledStart } from '../lib/taskSchedule';
 import { MD } from './Transcript';
+import { LandingLink } from './LandingLink';
 import { TaskAttributionCard } from './TaskAttributionCard';
 import { TaskDependencyList } from './TaskDependencyList';
 import { TaskScheduleEditor, type WriteToast } from './TaskScheduleEditor';
@@ -428,6 +438,12 @@ export function ownerConfirmedTask(
  * loses the appointment they set. Saying so is cheaper than a confirmation dialog, and it is the
  * same sentence the Start at editor carries, so the two cannot disagree.
  *
+ * The fifth is not a gate either: it is the task this button is the only start for. Auto-run never
+ * picks up an OPEN task in no project that has no prerequisites — the dependency sweep wants a
+ * prerequisite, the independent release a project (independent-task-release.pg.spec.ts (11)) — so
+ * it looks ready and waits until somebody presses this. After the schedule, because a schedule does
+ * start it by itself.
+ *
  * '' means no tooltip at all — the Tooltip renders nothing for empty content, which is right for an
  * unscheduled task with nothing standing in its way.
  *
@@ -443,10 +459,13 @@ export function runNowHint({
   canExecute,
   running,
   scheduledLocal,
+  projectId,
+  prerequisites,
 }: {
   /** This row is owned by a check or an aggregate and has no task_start work of its own. */
   completionOwned?: boolean;
-  /** On such a row, which sentence it gets — see `verificationSubjectAction`. */
+  /** On such a row, which sentence it gets — see `verificationSubjectAction`; on any other, an OPEN
+   *  task is one that may be waiting for this press. */
   status?: string | null;
   verificationState?: ProjectTaskVerificationState | null;
   blocked: boolean;
@@ -455,6 +474,10 @@ export function runNowHint({
   running: boolean;
   /** The scheduled start in the viewer's own wall clock, absent on an unscheduled task. */
   scheduledLocal?: string | null;
+  /** The project the task is filed under; null or absent for a task in no project. */
+  projectId?: string | null;
+  /** How many prerequisites the task has, satisfied or not. */
+  prerequisites?: number;
 }): string {
   if (completionOwned) return verificationSubjectAction(status, verificationState).hint;
   if (blocked) {
@@ -465,6 +488,9 @@ export function runNowHint({
   if (!canExecute) return 'Assign a workspace first';
   if (running) return 'Task running…';
   if (scheduledLocal) return `Starts immediately and clears the start scheduled for ${scheduledLocal}.`;
+  if (status === 'OPEN' && !projectId && prerequisites === 0) {
+    return 'Nothing starts this task by itself: auto-run needs a prerequisite or a project, and it has neither.';
+  }
   return '';
 }
 
@@ -587,7 +613,10 @@ interface WorkspaceRow {
   name: string;
   runnerId?: string | null;
   antigravityKeyAvailableByRunner?: Record<string, boolean>;
-  /** The workspace's own provider — what a task with no pin of its own inherits. */
+  /** What a task with no pin of its own inherits: the engine and the provider its project last ran
+   *  (workspace-provider.ts). `provider` is the deprecated alias of `lastProvider`. */
+  lastEngine?: string | null;
+  lastProvider?: string | null;
   provider?: string | null;
   /** Smart model selection: its task runs get a model and effort picked per run. */
   modelRouting?: boolean;
@@ -776,39 +805,85 @@ export function TaskDetailPanel({
     queryFn: () => api<{ id: string; title: string }[]>('/task-lists'),
   });
 
-  // The provider/model override pickers below need the same two sources the workspace and New
-  // Session pickers use: the owner's configured (BYOK) providers, and the model catalogue the
-  // assignee's runner reported — model ids are per-machine, so they come from that runner.
+  // The engine/provider/model pins below need the same sources the New Session pickers use: the
+  // owner's keys and account pools — the shared pools they are in first, as the composer lists them —
+  // and the model catalogue the assignee's runner reported — model ids are per-machine, so they come
+  // from that runner.
   const providersQ = useQuery(providersQuery());
+  const accountPoolsQ = useQuery(providerPoolsQuery());
+  const sharedPoolsQ = useQuery(sharedPoolsQuery());
   const runnersQ = useQuery(runnersQuery());
-  const configuredProviders: ConfiguredProvider[] = providersQ.data ?? [];
+  const accountPools = useMemo(
+    () => [...(sharedPoolsQ.data ?? []).map(sharedPoolAsProviderPool), ...(accountPoolsQ.data ?? [])],
+    [sharedPoolsQ.data, accountPoolsQ.data],
+  );
+  const configuredProviders: ConfiguredProvider[] = useMemo(
+    () => [...(providersQ.data ?? []), ...poolsAsProviders(accountPools)],
+    [providersQ.data, accountPools],
+  );
   const assigneeWorkspace = workspaceList.find((a) => a.id === task?.assignee?.id);
   const assigneeRunner = (runnersQ.data ?? []).find((r) => r.id === assigneeWorkspace?.runnerId);
   const navigate = useNavigate();
-  const runProviderChoices = providerChoices(
-    configuredProviders,
-    assigneeRunner?.modelCatalog,
-    assigneeRunner?.runtimeDefaultModels,
-    undefined,
-    [],
-    assigneeRunner?.planUsage,
-    assigneeRunner?.antigravity,
-    assigneeWorkspace
+  // What an unpinned task runs on: what its assignee's project last ran, engine and provider both.
+  const assigneeProvider = assigneeWorkspace?.lastProvider ?? assigneeWorkspace?.provider ?? AgentProvider.CLAUDE;
+  const assigneeEngine = sessionEngineOf(assigneeWorkspace?.lastEngine, assigneeProvider, configuredProviders);
+  // The task's own pins (docs/provider-engine-contract.md §1.2): an engine, a credential it runs, a
+  // model. A provider pinned alone — by an older client — runs on its default engine.
+  const pinnedProvider: string | null = q.data?.provider ?? null;
+  const pinnedEngine: AgentProvider | null = isEngine(q.data?.engine) ? q.data.engine : null;
+  const runEngine: AgentProvider =
+    pinnedEngine ?? (pinnedProvider ? (defaultEngineOf(pinnedProvider, configuredProviders) ?? assigneeEngine) : assigneeEngine);
+  // This panel judges no engine health (it has none to), only what the assignee's runner says about
+  // DeepSeek Harness and Antigravity — the two the server admits on the runner's own word.
+  const choiceSources: ChoiceSources = {
+    configured: configuredProviders,
+    modelCatalog: assigneeRunner?.modelCatalog,
+    runtimeDefaultModels: assigneeRunner?.runtimeDefaultModels,
+    pools: accountPools,
+    antigravity: assigneeRunner?.antigravity,
+    antigravityKeyAvailable: assigneeWorkspace
       ? assigneeWorkspace.antigravityKeyAvailableByRunner?.[assigneeRunner?.id] === true
       : assigneeRunner?.antigravity?.envKeyAvailable === true,
-    assigneeRunner,
-  );
-  // Task pins already offer OpenCode; preserve it while applying Gemini's admission state.
-  runProviderChoices.splice(3, 0, currentProviderChoice('opencode', runProviderChoices, assigneeRunner?.modelCatalog, configuredProviders));
-  if (q.data?.provider && !runProviderChoices.some((choice) => choice.slug === q.data.provider)) {
-    runProviderChoices.unshift(currentProviderChoice(q.data.provider, runProviderChoices, assigneeRunner?.modelCatalog, configuredProviders, assigneeRunner?.runtimeDefaultModels, assigneeRunner?.antigravity));
-  }
-  // The provider whose model space the Model picker lists: the task's own pin when it has one,
-  // otherwise the assignee workspace's — so the models offered always match what the run will use.
-  const effectiveProvider = q.data?.provider ?? assigneeWorkspace?.provider ?? null;
+    dshRunner: assigneeRunner,
+  };
+  // Past the engine's default credential — its own sign-in on the runner, OpenCode's own configuration,
+  // DeepSeek Harness's first DeepSeek key, which "Engine default" stands for — the account pools and
+  // the keys the engine runs. A pinned provider it does not list is kept on top, so the box still says
+  // what is pinned.
+  const engineDefaultKey = engineProviders(AgentProvider.DSH, choiceSources).find((c) => c.kind === 'key') ?? null;
+  const pinCredentials = engineProviders(runEngine, choiceSources).filter((c) => c.kind === 'pool' || c.kind === 'key');
+  const pinnedOffList =
+    pinnedProvider && !pinCredentials.some((c) => c.slug === pinnedProvider)
+      ? currentProviderChoice(runEngine, pinnedProvider, pinCredentials, choiceSources)
+      : null;
+  const assigneeRunnerName = assigneeRunner?.displayName || assigneeRunner?.name;
+  /** What "Engine default" runs a task on (§3.2, only an engine named): the runner's own sign-in, OpenCode's own configuration, the first DeepSeek key. */
+  const engineDefaultLabel =
+    runEngine === AgentProvider.DSH
+      ? (engineDefaultKey?.label ?? 'first DeepSeek key')
+      : runEngine === AgentProvider.OPENCODE
+        ? "OpenCode's own sign-in"
+        : assigneeRunnerName
+          ? `sign-in on ${assigneeRunnerName}`
+          : 'runner sign-in';
+  const pinLabelOf = (slug: string): string => {
+    const pin = pinCredentials.find((c) => c.slug === slug) ?? pinnedOffList;
+    if (pin?.kind === 'login' || isLoginProvider(slug)) return assigneeRunnerName ? `Sign-in on ${assigneeRunnerName}` : 'Runner sign-in';
+    if (pin?.kind === 'opencode') return pin.label;
+    return pin?.label ?? slug;
+  };
+  // The credential whose model space the Model picker lists: the task's own pin, the engine's default
+  // credential under an engine pinned alone, else the assignee's.
+  const runProvider: string =
+    pinnedProvider ??
+    (pinnedEngine
+      ? pinnedEngine === AgentProvider.DSH
+        ? (engineDefaultKey?.slug ?? AgentProvider.DSH)
+        : pinnedEngine
+      : assigneeProvider);
   const modelOptions = useMemo(
-    () => modelOptionsForProvider(effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders),
-    [effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders],
+    () => modelOptionsFor(runEngine, runProvider, assigneeRunner?.modelCatalog, configuredProviders),
+    [runEngine, runProvider, assigneeRunner?.modelCatalog, configuredProviders],
   );
   // The account's switch for smart model selection. Off (the default), none of it is drawn here:
   // no Suggested, no ✦ placeholder, and runs read as they did before routing.
@@ -872,20 +947,49 @@ export function TaskDetailPanel({
     onError: (e: Error) => message.error("Couldn't change the assignee", e.message),
   });
 
-  // Pin (or clear, when null) the provider/model this task's runs use instead of the assignee
-  // workspace's. Clearing the provider clears the model with it: a model id only means anything
-  // inside one provider's model space, so leaving it behind would pin a stale id.
+  // Pin (or clear, when null) the engine/provider/model this task's runs use instead of the assignee
+  // workspace's. Moving either clears the model with it: a model id only means anything inside one
+  // engine and provider's model space, so leaving it behind would pin a stale id.
   const updateRunTarget = useMutation({
-    mutationFn: (body: { provider?: string | null; model?: string | null }) =>
+    mutationFn: (body: { engine?: string | null; provider?: string | null; model?: string | null }) =>
       api(`/tasks/${taskId}`, { method: 'PATCH', body }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       qc.invalidateQueries({ queryKey: ['tasks'] });
     },
-    // Only the Provider field's write carries `provider`; the Model field's carries `model` alone.
+    // Each field's write says which it was: the Engine field's carries `engine`, the Provider field's
+    // `provider` alone, the Model field's `model` alone.
     onError: (e: Error, body) =>
-      message.error('provider' in body ? "Couldn't change the provider" : "Couldn't change the model", e.message),
+      message.error(
+        'engine' in body ? "Couldn't change the engine" : 'provider' in body ? "Couldn't change the provider" : "Couldn't change the model",
+        e.message,
+      ),
   });
+  // A pinned credential the new engine does not run gives way to that engine's default, and a model
+  // never survives the move (board 6 ③). Back on the assignee's, nothing stays pinned.
+  const pinEngine = (engine: AgentProvider | null): void => {
+    if (engine === pinnedEngine) return;
+    if (!engine) {
+      updateRunTarget.mutate({ engine: null, provider: null, model: null });
+      return;
+    }
+    const keep = !!pinnedProvider && providerEngines(pinnedProvider, configuredProviders).includes(engine);
+    updateRunTarget.mutate({ engine, ...(pinnedProvider && !keep ? { provider: null } : {}), model: null });
+  };
+  // A credential is pinned with the engine it runs on — the shown one — so a task names the pair
+  // (§3.5); "Engine default" takes the credential pin back.
+  const pinProvider = (slug: string | null): void => {
+    if (!slug) {
+      if (pinnedProvider) updateRunTarget.mutate({ provider: null, model: null });
+      return;
+    }
+    const choice = pinCredentials.find((row) => row.slug === slug);
+    if (choice?.unavailable) {
+      navigate(choice.fixHref ?? `/infrastructure?runner=${encodeId(assigneeRunner?.id ?? '')}&engine=${choice.fixEngine ?? runEngine}`);
+      return;
+    }
+    if (slug !== pinnedProvider) updateRunTarget.mutate({ engine: runEngine, provider: slug, model: null });
+  };
 
   // The tier this task's runs are routed at (model routing §3.1). A pick here is the person's own,
   // so it clears the coordinator's reason along with the tier that reason argued for; No suggestion
@@ -1100,7 +1204,11 @@ export function TaskDetailPanel({
   // §13.6: the chip says how the task ENDED, not only what its status column holds. A cancelled
   // attempt that was re-run reads as Superseded, in amber, because the work is still happening.
   const status = taskOutcomeChip(task);
-  const landing = landingBadge(q.data?.integration);
+  // Named by the project's main branch, which the task read carries beside its landing.
+  const mainBranch = mainBranchName(q.data?.integration?.mainBranch);
+  const landing = landingBadge(q.data?.integration, mainBranch);
+  // The landing session of the task's newest generation (§2.9 LS6), which its Landing section opens.
+  const landingSessionId = q.data?.integration?.landTask?.landingSessionId ?? null;
   const supersession = supersessionNote(task);
   const comments = q.data?.comments ?? [];
   const sessions = q.data?.sessions ?? [];
@@ -1192,6 +1300,8 @@ export function TaskDetailPanel({
     canExecute,
     running,
     scheduledLocal: scheduled?.local,
+    projectId: q.data?.projectId,
+    prerequisites: dependsOn.length,
   });
   // OWNER_CONFIRMED: the account owner settles this task, and it has one place to do that at a
   // time. While a run of it is waiting on them, that place is the confirmation card in the run's own
@@ -1428,11 +1538,18 @@ export function TaskDetailPanel({
       ) : (
         <div className="tdp-body">
           {/* Where the task's work stands after DONE (§2.7a): the newest landing attempt and why it
-              waits or where it stopped, apart from the status above. Nothing to press here. */}
+              waits or where it stopped, apart from the status above. The one press is the way into
+              that segment's landing session — one link, because the task's read gives the newest
+              generation and the same segment's attempts share one session (§2.9 LS6, board v4 06). */}
           {landing ? (
             <section className="tdp-section" aria-label="Task landing">
               <div className="tdp-section-title">Landing</div>
-              <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} />
+              <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} main={mainBranch} />
+              {landingSessionId ? (
+                <div className="tdp-landing-open">
+                  <LandingLink className="tdp-landing-link" sessionId={landingSessionId} />
+                </div>
+              ) : null}
             </section>
           ) : null}
           {/* The check that settles this row, under the row it checks — the relation the database
@@ -1519,36 +1636,105 @@ export function TaskDetailPanel({
               </div>
             )}
             <div className="tdp-field">
+              <span className="tdp-field-label">Engine</span>
+              <Combobox
+                className="tdp-assignee-select"
+                variant="borderless"
+                value={pinnedEngine as string | null}
+                // Unpinned is the normal case, so say what it actually does rather than "None": the
+                // assignee's engine — or, under a provider an older client pinned alone, that provider's.
+                placeholder={pinnedProvider ? ENGINE_CLI_NAMES[runEngine] : `Assignee's · ${ENGINE_CLI_NAMES[assigneeEngine]}`}
+                clearable
+                loading={updateRunTarget.isPending}
+                disabled={updateRunTarget.isPending}
+                matchTriggerWidth={false}
+                options={[
+                  { value: '', label: "Assignee's" },
+                  {
+                    label: '',
+                    // Cursor CLI once a runner of the account knows it (webShowsEngine).
+                    options: ALL_ENGINES.filter((engine) => webShowsEngine(engine, runnersQ.data)).map((engine) => ({
+                      value: engine,
+                      label: ENGINE_CLI_NAMES[engine],
+                    })),
+                  },
+                ]}
+                renderOption={(option) =>
+                  option.value ? (
+                    <span className="tdp-pin-option">
+                      <BrandMark choice={engineTitleFor(option.value as AgentProvider)} size={16} />
+                      {option.label}
+                    </span>
+                  ) : (
+                    <span className="tdp-pin-option">
+                      {option.label}
+                      <span className="tdp-pin-detail">{ENGINE_CLI_NAMES[assigneeEngine]}</span>
+                    </span>
+                  )
+                }
+                renderValue={(value, option) => (
+                  <span className="tdp-pin-option">
+                    {isEngine(value) && <BrandMark choice={engineTitleFor(value)} size={16} />}
+                    {option?.label ?? value}
+                  </span>
+                )}
+                onValueChange={(val) => pinEngine(isEngine(val) ? val : null)}
+              />
+            </div>
+            <div className="tdp-field">
               <span className="tdp-field-label">Provider</span>
               <Combobox
                 className="tdp-assignee-select"
                 variant="borderless"
-                value={q.data?.provider ?? null}
-                // Unpinned is the normal case, so say what it actually does rather than "None".
-                placeholder={
-                  assigneeWorkspace ? `Assignee's (${assigneeWorkspace.provider ?? 'claude'})` : "Assignee's"
-                }
+                value={pinnedProvider}
+                placeholder={`Engine default · ${engineDefaultLabel}`}
                 clearable
                 loading={providersQ.isLoading || updateRunTarget.isPending}
                 disabled={updateRunTarget.isPending}
                 matchTriggerWidth={false}
-                options={runProviderChoices.map((choice) => ({ value: choice.slug, label: choice.label }))}
+                // Only what the engine runs (board 6 ②): "Engine default" first, then its pools and keys.
+                options={[
+                  { value: '', label: 'Engine default' },
+                  ...(pinnedOffList ? [{ value: pinnedOffList.slug, label: pinLabelOf(pinnedOffList.slug) }] : []),
+                  ...[
+                    { label: 'Account pools', rows: pinCredentials.filter((c) => c.kind === 'pool') },
+                    { label: runEngine === AgentProvider.DSH ? 'Your DeepSeek keys' : 'Your keys', rows: pinCredentials.filter((c) => c.kind === 'key') },
+                  ]
+                    .filter((group) => group.rows.length > 0)
+                    .map((group) => ({ label: group.label, options: group.rows.map((c) => ({ value: c.slug, label: c.label })) })),
+                ]}
                 renderOption={(option) => {
-                  const choice = runProviderChoices.find((row) => row.slug === option.value)!;
-                  return <span>{choice.label}{choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}{choice.unavailable && <small className="np-label-detail">{choice.unavailable} →</small>}</span>;
-                }}
-                renderValue={(value, option) => {
-                  const choice = runProviderChoices.find((row) => row.slug === value);
-                  return <span>{option?.label ?? value}{choice?.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}</span>;
-                }}
-                onValueChange={(val) => {
-                  const choice = runProviderChoices.find((row) => row.slug === val);
-                  if (choice?.unavailable) {
-                    navigate(choice.fixHref ?? `/providers?runner=${encodeId(assigneeRunner?.id ?? '')}&engine=${choice.fixEngine ?? choice.slug}`);
-                    return;
+                  if (!option.value) {
+                    return (
+                      <span className="tdp-pin-option">
+                        {option.label}
+                        <span className="tdp-pin-detail">
+                          {runEngine === AgentProvider.DSH ? 'first DeepSeek key' : runEngine === AgentProvider.OPENCODE ? 'own sign-in' : 'runner sign-in'}
+                        </span>
+                      </span>
+                    );
                   }
-                  updateRunTarget.mutate({ provider: val ?? null, model: null });
+                  const choice = pinCredentials.find((row) => row.slug === option.value) ?? pinnedOffList;
+                  return (
+                    <span className="tdp-pin-option">
+                      {choice && (choice.kind === 'pool' || choice.kind === 'key') && <BrandMark choice={choice} size={16} />}
+                      {option.label}
+                      {choice?.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
+                      {choice?.unavailable && <span className="tdp-pin-detail">{choice.unavailable} →</span>}
+                    </span>
+                  );
                 }}
+                renderValue={(value) => {
+                  const choice = pinCredentials.find((row) => row.slug === value) ?? pinnedOffList;
+                  return (
+                    <span className="tdp-pin-option">
+                      {choice && (choice.kind === 'pool' || choice.kind === 'key') && <BrandMark choice={choice} size={16} />}
+                      {pinLabelOf(value)}
+                      {choice?.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
+                    </span>
+                  );
+                }}
+                onValueChange={(val) => pinProvider(val || null)}
               />
             </div>
             <div className="tdp-field">

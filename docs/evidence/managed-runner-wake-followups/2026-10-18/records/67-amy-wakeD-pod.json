@@ -1,0 +1,405 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "annotations": {
+            "orbit.dev/generation": "6",
+            "orbit.dev/owner-id": "01a14d26-afe6-73ac-b9f1-b672f7e2fc2b",
+            "orbit.dev/pvc-uid": "4a06a82f-fcfd-4b7e-a32c-aea44e40d388",
+            "orbit.dev/runner-id": "01a14d26-b010-71ec-bb22-0cf65c7614e5"
+        },
+        "creationTimestamp": "2026-10-18T04:21:08Z",
+        "finalizers": [
+            "orbit.dev/managed-runner-stop-report"
+        ],
+        "generation": 1,
+        "labels": {
+            "app.kubernetes.io/name": "orbit-managed-runner",
+            "orbit-test-environment": "orbit-mr-lab"
+        },
+        "name": "mr-01a14d26-b010-71ec-bb22-0cf65c7614e5",
+        "namespace": "orbit-mr-test",
+        "resourceVersion": "27373",
+        "uid": "f30e95f2-db89-4c11-826a-5d87740bbaa8"
+    },
+    "spec": {
+        "automountServiceAccountToken": false,
+        "containers": [
+            {
+                "args": [
+                    "run"
+                ],
+                "env": [
+                    {
+                        "name": "ORBIT_RUNNER_SERVER_URL",
+                        "value": "https://10.0.2.2:13711"
+                    },
+                    {
+                        "name": "ORBIT_RUNNER_NAME",
+                        "value": "orbit-managed"
+                    },
+                    {
+                        "name": "ORBIT_RUNNER_MAX_CONCURRENT",
+                        "value": "2"
+                    },
+                    {
+                        "name": "ORBIT_RUNNER_EXPECTED_ID",
+                        "value": "01a14d26-b010-71ec-bb22-0cf65c7614e5"
+                    },
+                    {
+                        "name": "ORBIT_RUNNER_CREDENTIAL_FILE",
+                        "value": "/run/orbit-bootstrap/token"
+                    },
+                    {
+                        "name": "ORBIT_MANAGED_RUNNER_GENERATION",
+                        "valueFrom": {
+                            "fieldRef": {
+                                "apiVersion": "v1",
+                                "fieldPath": "metadata.annotations['orbit.dev/generation']"
+                            }
+                        }
+                    },
+                    {
+                        "name": "ORBIT_MANAGED_RUNNER_POD_UID",
+                        "valueFrom": {
+                            "fieldRef": {
+                                "apiVersion": "v1",
+                                "fieldPath": "metadata.uid"
+                            }
+                        }
+                    }
+                ],
+                "image": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+                "imagePullPolicy": "IfNotPresent",
+                "name": "runner",
+                "resources": {
+                    "limits": {
+                        "cpu": "2",
+                        "memory": "2Gi"
+                    },
+                    "requests": {
+                        "cpu": "500m",
+                        "memory": "768Mi"
+                    }
+                },
+                "securityContext": {
+                    "allowPrivilegeEscalation": false,
+                    "capabilities": {
+                        "drop": [
+                            "ALL"
+                        ]
+                    },
+                    "readOnlyRootFilesystem": true,
+                    "runAsGroup": 10001,
+                    "runAsNonRoot": true,
+                    "runAsUser": 10001
+                },
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/var/lib/orbit",
+                        "name": "user-state"
+                    },
+                    {
+                        "mountPath": "/tmp",
+                        "name": "temporary"
+                    },
+                    {
+                        "mountPath": "/run/orbit-bootstrap",
+                        "name": "bootstrap",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "enableServiceLinks": false,
+        "initContainers": [
+            {
+                "args": [
+                    "init-volume"
+                ],
+                "image": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+                "imagePullPolicy": "IfNotPresent",
+                "name": "private-volume-directories",
+                "resources": {
+                    "limits": {
+                        "cpu": "200m",
+                        "memory": "128Mi"
+                    },
+                    "requests": {
+                        "cpu": "50m",
+                        "memory": "64Mi"
+                    }
+                },
+                "securityContext": {
+                    "allowPrivilegeEscalation": false,
+                    "capabilities": {
+                        "add": [
+                            "CHOWN",
+                            "FOWNER",
+                            "DAC_OVERRIDE"
+                        ],
+                        "drop": [
+                            "ALL"
+                        ]
+                    },
+                    "readOnlyRootFilesystem": true,
+                    "runAsGroup": 0,
+                    "runAsNonRoot": false,
+                    "runAsUser": 0
+                },
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/var/lib/orbit",
+                        "name": "user-state"
+                    },
+                    {
+                        "mountPath": "/tmp",
+                        "name": "temporary"
+                    }
+                ]
+            }
+        ],
+        "nodeName": "orbit-mr-lab",
+        "preemptionPolicy": "PreemptLowerPriority",
+        "priority": 0,
+        "restartPolicy": "Never",
+        "schedulerName": "default-scheduler",
+        "securityContext": {
+            "seccompProfile": {
+                "type": "RuntimeDefault"
+            }
+        },
+        "serviceAccount": "default",
+        "serviceAccountName": "default",
+        "terminationGracePeriodSeconds": 240,
+        "tolerations": [
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            }
+        ],
+        "volumes": [
+            {
+                "name": "user-state",
+                "persistentVolumeClaim": {
+                    "claimName": "mr-data-01a14d26-b010-71ec-bb22-0cf65c7614e5"
+                }
+            },
+            {
+                "emptyDir": {
+                    "sizeLimit": "1Gi"
+                },
+                "name": "temporary"
+            },
+            {
+                "name": "bootstrap",
+                "secret": {
+                    "defaultMode": 292,
+                    "items": [
+                        {
+                            "key": "token",
+                            "path": "token"
+                        },
+                        {
+                            "key": "generation",
+                            "path": "generation"
+                        }
+                    ],
+                    "secretName": "mr-boot-01a14d26-b010-71ec-bb22-0cf65c7614e5"
+                }
+            }
+        ]
+    },
+    "status": {
+        "allocatedResources": {
+            "cpu": "500m",
+            "memory": "768Mi"
+        },
+        "conditions": [
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-10-18T04:21:15Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodReadyToStartContainers"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-10-18T04:21:17Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "Initialized"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-10-18T04:21:17Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "Ready"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-10-18T04:21:17Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "ContainersReady"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-10-18T04:21:08Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodScheduled"
+            }
+        ],
+        "containerStatuses": [
+            {
+                "allocatedResources": {
+                    "cpu": "500m",
+                    "memory": "768Mi"
+                },
+                "containerID": "containerd://416e9deb4e7cbb562922af9779aaa0be70e30745a2beaab97ca4389359510dcf",
+                "image": "docker.io/library/orbit-managed-runner-lab:t06b-ebf54ab8d",
+                "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+                "lastState": {},
+                "name": "runner",
+                "ready": true,
+                "resources": {
+                    "limits": {
+                        "cpu": "2",
+                        "memory": "2Gi"
+                    },
+                    "requests": {
+                        "cpu": "500m",
+                        "memory": "768Mi"
+                    }
+                },
+                "restartCount": 0,
+                "started": true,
+                "state": {
+                    "running": {
+                        "startedAt": "2026-10-18T04:21:17Z"
+                    }
+                },
+                "user": {
+                    "linux": {
+                        "gid": 10001,
+                        "supplementalGroups": [
+                            10001
+                        ],
+                        "uid": 10001
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "mountPath": "/var/lib/orbit",
+                        "name": "user-state"
+                    },
+                    {
+                        "mountPath": "/tmp",
+                        "name": "temporary"
+                    },
+                    {
+                        "mountPath": "/run/orbit-bootstrap",
+                        "name": "bootstrap",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    }
+                ]
+            }
+        ],
+        "hostIP": "10.0.2.15",
+        "hostIPs": [
+            {
+                "ip": "10.0.2.15"
+            }
+        ],
+        "initContainerStatuses": [
+            {
+                "allocatedResources": {
+                    "cpu": "50m",
+                    "memory": "64Mi"
+                },
+                "containerID": "containerd://a3ea7a673e186f81189937cc6e25cae3dcf99b6527b36b58225e9d2b749b81e2",
+                "image": "docker.io/library/orbit-managed-runner-lab:t06b-ebf54ab8d",
+                "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+                "lastState": {},
+                "name": "private-volume-directories",
+                "ready": true,
+                "resources": {
+                    "limits": {
+                        "cpu": "200m",
+                        "memory": "128Mi"
+                    },
+                    "requests": {
+                        "cpu": "50m",
+                        "memory": "64Mi"
+                    }
+                },
+                "restartCount": 0,
+                "started": false,
+                "state": {
+                    "terminated": {
+                        "containerID": "containerd://a3ea7a673e186f81189937cc6e25cae3dcf99b6527b36b58225e9d2b749b81e2",
+                        "exitCode": 0,
+                        "finishedAt": "2026-10-18T04:21:17Z",
+                        "reason": "Completed",
+                        "startedAt": "2026-10-18T04:21:16Z"
+                    }
+                },
+                "user": {
+                    "linux": {
+                        "gid": 0,
+                        "supplementalGroups": [
+                            0
+                        ],
+                        "uid": 0
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "mountPath": "/var/lib/orbit",
+                        "name": "user-state"
+                    },
+                    {
+                        "mountPath": "/tmp",
+                        "name": "temporary"
+                    }
+                ]
+            }
+        ],
+        "observedGeneration": 1,
+        "phase": "Running",
+        "podIP": "10.42.0.12",
+        "podIPs": [
+            {
+                "ip": "10.42.0.12"
+            }
+        ],
+        "qosClass": "Burstable",
+        "resources": {
+            "limits": {
+                "cpu": "2",
+                "memory": "2Gi"
+            },
+            "requests": {
+                "cpu": "500m",
+                "memory": "768Mi"
+            }
+        },
+        "startTime": "2026-10-18T04:21:08Z"
+    }
+}

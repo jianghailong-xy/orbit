@@ -665,7 +665,7 @@ struct TasksListView: View {
     private func runConflictBanner(_ conflict: TaskRunHandoff.Conflict,
                                    tasks: TasksModel) -> some View {
         let clearPin: (() -> Void)? = conflict.taskID.map { id in
-            { Task { await tasks.setProvider(id, nil) } }
+            { Task { await tasks.clearRunPin(id) } }
         }
         return TaskRunHandoffCard(conflict: conflict,
                                   onOpenRun: { model.route(to: .session($0)) },
@@ -1234,6 +1234,7 @@ private struct TaskDetailContent: View {
             await model.watches?.load()
         }
         .task(id: detailPollKey) { await pollBusyDetail() }
+        .task(id: landingPollKey) { await pollLanding() }
         .task(id: taskID) {
             guard let baseURL = model.baseURL else { return }
             // Nil when it could not be read: the menu then says nothing rather than guessing.
@@ -1293,6 +1294,27 @@ private struct TaskDetailContent: View {
         return "\(taskID)|\(busy)"
     }
 
+    /// §2.7a's cadence for the Landing section: a landing that RUNS is read every 4 s, a queued one
+    /// every 15 s. The key changes when the attempt's state does, restarting the loop at the new
+    /// pace — and the loop stops once the landing settles.
+    private var landingPollKey: String {
+        let pace = TaskLandingCopy.refetchInterval(tasks.detail?.id == taskID
+            ? tasks.detail?.integration : nil)
+        return "\(taskID)|\(pace.map { String($0) } ?? "none")"
+    }
+
+    private func pollLanding() async {
+        while !Task.isCancelled {
+            guard tasks.detail?.id == taskID,
+                  let interval = TaskLandingCopy.refetchInterval(tasks.detail?.integration)
+            else { return }
+            do { try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000)) }
+            catch { return }
+            guard tasks.detail?.id == taskID else { return }
+            _ = await tasks.loadDetail(taskID)
+        }
+    }
+
     private func loadDetail() async {
         let loaded = await tasks.loadDetail(taskID)
         if !loaded, tasks.detailMissing, model.selectedTaskID == taskID {
@@ -1340,6 +1362,11 @@ private struct TaskDetailContent: View {
             }
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
+            // Where the task's work stands after DONE (§2.7a): the newest landing attempt and why
+            // it waits or where it stopped, apart from the status above — the web's first block.
+            if let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue) {
+                landingSection(landing)
+            }
             // A row settled by a check always gets the card — with the check, or with the fact that
             // there isn't one. That empty state is where a reader otherwise reads the header hint's
             // sentence and finds nothing behind it.
@@ -1435,6 +1462,77 @@ private struct TaskDetailContent: View {
         .background(chip.isGate ? Color.orange.opacity(0.1) : Color.clear, in: Capsule())
     }
 
+    /// The task's Landing section, in the web's `LandTaskStatus` words: the badge, the generation,
+    /// the step it is on or stopped at, the reason, and the six facts — then the one way into the
+    /// segment's landing session.
+    private func landingSection(_ status: TaskLandingStatus) -> some View {
+        Section(TaskLandingCopy.landingSection) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    if let badge = status.badge {
+                        Text(badge.label)
+                            .font(.orbitLabel.weight(.semibold))
+                            .foregroundStyle(ink(badge.tone))
+                            .padding(.horizontal, 8).padding(.vertical, 2)
+                            .background(ink(badge.tone).opacity(0.14), in: Capsule())
+                    }
+                    if let generation = status.generation {
+                        Text("\(TaskLandingCopy.generation) \(generation)")
+                            .font(.orbitMeta).foregroundStyle(.secondary)
+                    }
+                    if let step = status.step {
+                        Text(step).font(.orbitMeta).foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+                if let legacy = status.legacy {
+                    Text(legacy).font(.orbitMeta).foregroundStyle(.secondary)
+                }
+                if let noReport = status.noReport {
+                    Text(noReport).font(.orbitMeta.weight(.semibold)).foregroundStyle(.orange)
+                }
+                if let reason = status.reason {
+                    Text(reason).font(.orbitMeta).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let receipt = status.receipt {
+                    Text(receipt).font(.orbitMeta).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !status.facts.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(status.facts, id: \.label) { fact in
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(fact.label)
+                                    .font(.orbitMeta).foregroundStyle(.secondary)
+                                    .frame(width: 92, alignment: .leading)
+                                Text(fact.value)
+                                    .font(.orbitMeta.monospacedDigit())
+                                    .lineLimit(1).truncationMode(.middle)
+                            }
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+                if let sessionID = status.landingSessionId, !sessionID.isEmpty {
+                    LandingEntryLink(entry: .link(sessionID), compact: false)
+                        .padding(.top, 2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func ink(_ tone: String) -> Color {
+        switch tone {
+        case "amber": return .orange
+        case "blue": return .blue
+        case "green": return .green
+        case "red": return .red
+        default: return .secondary
+        }
+    }
+
     /// What went wrong the last time, above the presses it is about.
     @ViewBuilder
     private func banners(_ task: TaskItem) -> some View {
@@ -1446,7 +1544,7 @@ private struct TaskDetailContent: View {
             // Offered only when the refusal named the task — clearing a pin edits the TASK, so
             // without one there is nothing for the button to act on.
             let clearPin: (() -> Void)? = conflict.taskID.map { id in
-                { Task { await tasks.setProvider(id, nil) } }
+                { Task { await tasks.clearRunPin(id) } }
             }
             TaskRunHandoffCard(conflict: conflict,
                                onOpenRun: { model.route(to: .session($0)) },
@@ -1487,9 +1585,10 @@ private struct TaskDetailContent: View {
                         if let trailing = row.trailing { trailingButton(trailing, task, prominent: true) }
                     }
                 }
-                // Said only when the press cannot be taken: a live run's button already says where it goes.
-                if let trailing = row.trailing, !isOpenRun(trailing), !canStart(task),
-                   let hint = runDisabledHint(task) {
+                // Why the press cannot be taken, or — when it can — that it is the task's only start; a
+                // live run's button already says where it goes.
+                if let trailing = row.trailing, !isOpenRun(trailing),
+                   let hint = canStart(task) ? TaskDetailLogic.runNowHint(task) : runDisabledHint(task) {
                     Text(hint).font(.orbitLabel).foregroundStyle(.secondary)
                 }
             }
@@ -1669,6 +1768,7 @@ private struct TaskDetailContent: View {
         Section {
             assigneePicker(task)
             if smartSelection { suggestedPicker(task) }
+            enginePicker(task)
             providerPicker(task)
             modelPicker(task)
             listPicker(task)
@@ -1801,27 +1901,108 @@ private struct TaskDetailContent: View {
         return model.agents?.items.first { $0.id == id }
     }
 
-    /// The provider whose model space the Model menu lists: this task's pin, else the assignee's.
-    private func effectiveProvider(_ task: TaskItem) -> String {
-        task.provider ?? assigneeAgent(task)?.provider ?? "claude"
+    /// The keys and the account pools — the shared ones first — as the pins read them, a pool resolved
+    /// like a key (web's `configuredProviders` in TaskDetailPanel).
+    private var pinConfigured: [ConfiguredProvider] {
+        (model.agents?.configuredProviders ?? []) + ProviderPools.asProviders(model.agents?.allPools ?? [])
     }
 
-    private func providerPicker(_ task: TaskItem) -> some View {
-        let configured = model.agents?.configuredProviders
-        let inherited = assigneeAgent(task).map {
-            AgentDefaults.providerName($0.provider ?? "claude", configured: configured)
+    /// The machine the task's assignee runs on — where its models, its sign-in and DeepSeek Harness are.
+    private func assigneeRunner(_ task: TaskItem) -> Runner? {
+        assigneeAgent(task)?.runnerId.flatMap { model.runners?.runner($0) }
+    }
+
+    /// What the pins judge the engine's credentials by: the account's keys and pools, and what the
+    /// assignee's runner says about DeepSeek Harness and Antigravity — the two the server admits on the
+    /// runner's own word. No engine health: this panel has none to judge (web parity).
+    private func pinSources(_ task: TaskItem) -> ChoiceSources {
+        let runner = assigneeRunner(task)
+        return ChoiceSources(configured: pinConfigured,
+                             catalog: model.agents?.modelCatalog(for: assigneeAgent(task)?.runnerId),
+                             runtimeDefaults: runner?.runtimeDefaultModels, pools: model.agents?.allPools ?? [],
+                             antigravity: runner?.antigravity,
+                             antigravityKeyAvailable: SessionProviderChoices.antigravityKeyAvailable(
+                                workspace: assigneeAgent(task), runner: runner),
+                             dshState: runner.map { DshRuntime.state(of: $0) },
+                             cursorState: runner.map { CursorRuntime.state(of: $0) },
+                             showsCursor: ProviderEngines.appleShowsEngine(CursorRuntime.engine,
+                                                                           runners: model.runners?.runners))
+    }
+
+    /// The pins as the task holds them, with the account's runners in view: Cursor CLI is an Engine choice
+    /// once one of them knows it (`ProviderEngines.appleShowsEngine`).
+    private func runPin(_ task: TaskItem) -> TaskRunPin {
+        TaskRunPin(task: task, assignee: assigneeAgent(task), configured: pinConfigured, runners: model.runners?.runners)
+    }
+
+    /// The engine this task's runs use (board 6 ①): the assignee's, or one of the six by its CLI's
+    /// name. Moving it clears a pinned credential the new engine does not run, and the model with it.
+    private func enginePicker(_ task: TaskItem) -> some View {
+        let pin = runPin(task)
+        return Picker(TaskDetailCopy.engineLabel, selection: Binding(
+            get: { pin.pinnedEngine },
+            set: { engine in
+                guard let request = pin.engineRequest(engine, configured: pinConfigured) else { return }
+                Task { await tasks.pinRun(task.id, request) }
+            }
+        )) {
+            Text(pin.inheritedEngine).tag(String?.none)
+            ForEach(pin.engineChoices, id: \.self) { engine in
+                Text(ProviderEngines.cliName(engine)).tag(Optional(engine))
+            }
         }
-        let options = AgentDefaults.providers(configured: configured)
+        .pickerStyle(.menu)
+        .disabled(tasks.isMutating(task.id))
+    }
+
+    /// The credential of that engine its runs spend (board 6 ②): Engine default — the runner's own
+    /// sign-in, OpenCode's own configuration, DeepSeek Harness's first DeepSeek key — then the account
+    /// pools and the keys the engine runs, and nothing it does not. A pin it does not list is kept, so
+    /// the field still says what is pinned.
+    private func providerPicker(_ task: TaskItem) -> some View {
+        let pin = runPin(task)
+        let sources = pinSources(task)
+        let rows = SessionProviderChoices.providers(for: pin.runEngine, sources: sources)
+            .filter { $0.kind == .pool || $0.kind == .key }
+        let firstDeepSeekKey = SessionProviderChoices.providers(for: "dsh", sources: sources).first { $0.kind == .key }
+        let runner = assigneeRunner(task)
+        let runnerName = runner.map { RunnerPageFormat.displayName($0) }
+        let engineDefault = TaskRunPin.engineDefaultLabel(engine: pin.runEngine, firstDeepSeekKey: firstDeepSeekKey?.label,
+                                                          runnerName: runnerName)
+        let pools = rows.filter { $0.kind == .pool }
+        let keys = rows.filter { $0.kind == .key }
         return Picker(TaskDetailCopy.providerLabel, selection: Binding(
             get: { task.provider },
-            set: { provider in Task { await tasks.setProvider(task.id, provider) } }
-        )) {
-            Text(inherited.map { "Assignee's (\($0))" } ?? "Assignee's").tag(String?.none)
-            ForEach(options) { option in
-                Text(option.name).tag(Optional(option.id))
+            set: { slug in
+                // A credential this machine can't run isn't a pin — it's a request for the install or the
+                // sign-in that would make it one, so go to that engine's page on the runner.
+                if let slug, let row = rows.first(where: { $0.slug == slug }), row.unavailable != nil {
+                    if let rid = runner?.id, let engine = row.fixEngine { model.openRunnerEngine(rid, engine: engine) }
+                    return
+                }
+                guard let request = pin.providerRequest(slug) else { return }
+                Task { await tasks.pinRun(task.id, request) }
             }
-            if let pinned = task.provider, !options.contains(where: { $0.id == pinned }) {
-                Text(AgentDefaults.providerName(pinned, configured: configured)).tag(Optional(pinned))
+        )) {
+            Text("\(TaskDetailCopy.engineDefault) · \(engineDefault)").tag(String?.none)
+            if !pools.isEmpty {
+                Section("Account pools") {
+                    ForEach(pools) { row in Text(row.label).tag(Optional(row.slug)) }
+                }
+            }
+            if !keys.isEmpty {
+                Section(pin.runEngine == "dsh" ? "Your DeepSeek keys" : "Your keys") {
+                    ForEach(keys) { row in
+                        Text(row.unavailable.map { "\(row.label) — \($0) →" } ?? row.label).tag(Optional(row.slug))
+                    }
+                }
+            }
+            if let pinned = task.provider, !rows.contains(where: { $0.slug == pinned }) {
+                Text(ProviderEngines.isLoginProvider(pinned)
+                     ? runnerName.map { "Sign-in on \($0)" } ?? "Runner sign-in"
+                     : SessionProviderChoices.current(engine: pin.runEngine, provider: pinned, in: rows,
+                                                      sources: sources).label)
+                    .tag(Optional(pinned))
             }
         }
         .pickerStyle(.menu)
@@ -1829,11 +2010,13 @@ private struct TaskDetailContent: View {
     }
 
     private func modelPicker(_ task: TaskItem) -> some View {
-        let provider = effectiveProvider(task)
+        let pin = runPin(task)
+        let sources = pinSources(task)
+        let firstDeepSeekKey = SessionProviderChoices.providers(for: "dsh", sources: sources).first { $0.kind == .key }
         let options = AgentDefaults.models(
-            for: provider,
+            engine: pin.runEngine, provider: pin.runProvider(firstDeepSeekKey: firstDeepSeekKey?.slug),
             catalog: model.agents?.modelCatalog(for: assigneeAgent(task)?.runnerId),
-            configured: model.agents?.configuredProviders)
+            configured: pinConfigured)
         // Unpinned on an assignee with smart selection on, each run's model is picked for it.
         let unpinned = smartSelection && assigneeAgent(task)?.modelRouting == true
             ? TaskDetailCopy.smartSelectionPlaceholder : "Provider default"

@@ -1,0 +1,139 @@
+00e6a8c6b docs(web): register the Popconfirm baseline's antd import in the inventory (2026-10-07d.json)
+HEAD 00e6a8c6b34355f45c20327e14b98a2ad2992a4f, record scan 37efe24903bbd8bc969abfbc0bed4a3c1b67a089, origin/main c7efa24cbbdd30628f25fbae8fa48f008db8b071
+$ git diff --quiet 37efe24903bbd8bc969abfbc0bed4a3c1b67a089 HEAD -- src/web/src src/web/package.json package-lock.json
+exit 0
+scan audit 1a1bdc959b14335113a913fcfb0a45e62b676d88f217206458ea1be1e5d33335
+$ bash -c python3 -B '/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/build-inventory-record.py' '/var/tmp/kw2-246921c8/scratch/inv-check-audit.json' docs/evidence/base-ui-migration/inventory-delta/2026-10-07.json | cmp - docs/evidence/base-ui-migration/inventory-delta/2026-10-07d.json
+exit 0
+$ node docs/evidence/base-ui-migration/inventory-delta/verify-record.mjs /var/tmp/kw2-246921c8/scratch/inv-check-audit.json 2026-10-07d.json (expected to fail)
+node:internal/modules/run_main:111
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: use points without an owner
++ actual - expected
+
++ [
++   'src/web/src/components/DeepSeekBalance.tsx',
++   'src/web/src/components/ProjectDoneConversation.test.tsx',
++   'src/web/src/components/RunnerEngines.accountFold.test.tsx',
++   'src/web/src/components/StartProjectCard.test.tsx',
++   'src/web/src/components/WorkspaceView.neverStarted.test.tsx',
++   'src/web/src/index.css:6624',
++   'src/web/src/index.css:6625',
++   'src/web/src/index.css:10626'
++ ]
+- []
+
+    at file:///var/tmp/kw2-246921c8/scratch/inv-check/docs/evidence/base-ui-migration/inventory-delta/verify-record.mjs:62:8
+    at ModuleJob.run (node:internal/modules/esm/module_job:569:25)
+    at async node:internal/modules/esm/loader:650:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:105:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: [
+    'src/web/src/components/DeepSeekBalance.tsx',
+    'src/web/src/components/ProjectDoneConversation.test.tsx',
+    'src/web/src/components/RunnerEngines.accountFold.test.tsx',
+    'src/web/src/components/StartProjectCard.test.tsx',
+    'src/web/src/components/WorkspaceView.neverStarted.test.tsx',
+    'src/web/src/index.css:6624',
+    'src/web/src/index.css:6625',
+    'src/web/src/index.css:10626'
+  ],
+  expected: [],
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v26.10.0
+exit 1
+Ownership gaps: 8 use points have no owner. Migrate them in this batch if in scope, otherwise report them to the coordinator.
+stand-in record: 5 files and 3 index.css lines, owner P4.2 (stand-in):
+   src/web/src/components/DeepSeekBalance.tsx
+   src/web/src/components/ProjectDoneConversation.test.tsx
+   src/web/src/components/RunnerEngines.accountFold.test.tsx
+   src/web/src/components/StartProjectCard.test.tsx
+   src/web/src/components/WorkspaceView.neverStarted.test.tsx
+   src/web/src/index.css:6624 ant-class .ant-dropdown-menu-item.composer-engine-title,
+   src/web/src/index.css:6625 ant-class .ant-dropdown-menu-item.composer-engine-title:hover {
+   src/web/src/index.css:10626 ant-class `.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. */
+$ node docs/evidence/base-ui-migration/inventory-delta/verify-record.mjs /var/tmp/kw2-246921c8/scratch/inv-check-audit.json 2026-10-07d.json
+Record 2026-10-07d.json verified: 1 file entries and 0 index.css entries match the audit; read after 3 earlier record(s), 0 points need its new/changed entries and 0 change standing without its reassignments; it leaves 0 points pending (0 questions); with all 4 records: 0 unowned, 0 pending; P0.1 baseline clean.
+exit 0
+$ node src/web/scripts/audit-antd.mjs --check-owners (expected to fail)
+{
+  "baseline": {
+    "commit": "00e6a8c6b34355f45c20327e14b98a2ad2992a4f",
+    "scopeHash": "29efda1ac37dbdae21e9c92b0de74a3130c2842277fc7c5bcd6bccf9c8d7a58b"
+  },
+  "records": [
+    "2026-10-07.json",
+    "2026-10-07b.json",
+    "2026-10-07d.json"
+  ],
+  "unowned": [
+    {
+      "path": "src/web/src/components/DeepSeekBalance.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/components/ProjectDoneConversation.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/components/RunnerEngines.accountFold.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/components/StartProjectCard.test.tsx",
+      "reason": "new since P0.1, not in a delta record: antd-reference, ant-selector, ant-class"
+    },
+    {
+      "path": "src/web/src/components/WorkspaceView.neverStarted.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/index.css",
+      "line": 6624,
+      "kind": "ant-class",
+      "text": ".ant-dropdown-menu-item.composer-engine-title,",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/index.css",
+      "line": 6625,
+      "kind": "ant-class",
+      "text": ".ant-dropdown-menu-item.composer-engine-title:hover {",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/index.css",
+      "line": 10626,
+      "kind": "ant-class",
+      "text": "`.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. */",
+      "reason": "no owner"
+    }
+  ],
+  "pending": [],
+  "owners": {
+    "KEEP": 1,
+    "P4.2": 81,
+    "P4.3a": 82,
+    "P4.3b": 30,
+    "P4.4": 50,
+    "P5.1": 28,
+    "P5.2": 11,
+    "P5.3": 90,
+    "P6": 36
+  }
+}
+Ownership gaps: 8 use points have no owner. Migrate them in this batch if in scope, otherwise report them to the coordinator.
+exit 1
+$ node src/web/scripts/audit-antd-selfcheck.mjs
+audit-antd self-check passed: imports, aliases, types, mocks, selectors, refs, deterministic output and icon-safe retirement gate.
+audit-antd owner self-check passed: P0.1 owners, growth since P0.1, delta records, pending and inactive owners, index.css by text.
+exit 0
+$ node src/web/scripts/verify-antd-inventory.mjs
+Inventory coverage passed: 149 source owners, 37 import contracts, 287 tests, 187 CSS hits on 182 lines; source reproduction not requested.
+exit 0

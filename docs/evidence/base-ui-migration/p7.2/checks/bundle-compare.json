@@ -1,0 +1,110 @@
+{
+ "baseline": {
+  "commit": "f4d47e853877fdfddbb5cc7f15cace4d25e27b1e",
+  "capturedAt": "2026-10-03T19:22:32.844026+00:00",
+  "initialTotals": {
+   "js": {
+    "bytes": 3141917,
+    "gzipBytes": 955947
+   },
+   "css": {
+    "bytes": 357333,
+    "gzipBytes": 58590
+   }
+  },
+  "allAssetTotals": {
+   "js": {
+    "bytes": 4135696,
+    "gzipBytes": 1211828
+   },
+   "css": {
+    "bytes": 372746,
+    "gzipBytes": 61126
+   }
+  }
+ },
+ "candidate": {
+  "commit": "09d94a12f",
+  "initialTotals": {
+   "js": {
+    "bytes": 2805773,
+    "gzipBytes": 846462
+   },
+   "css": {
+    "bytes": 496850,
+    "gzipBytes": 81346
+   }
+  },
+  "allAssetTotals": {
+   "js": {
+    "bytes": 3906942,
+    "gzipBytes": 1126700
+   },
+   "css": {
+    "bytes": 512263,
+    "gzipBytes": 83882
+   }
+  }
+ },
+ "delta": {
+  "initialTotals.js.bytes": {
+   "before": 3141917,
+   "after": 2805773,
+   "delta": -336144,
+   "pct": -10.7
+  },
+  "initialTotals.js.gzipBytes": {
+   "before": 955947,
+   "after": 846462,
+   "delta": -109485,
+   "pct": -11.5
+  },
+  "initialTotals.css.bytes": {
+   "before": 357333,
+   "after": 496850,
+   "delta": 139517,
+   "pct": 39
+  },
+  "initialTotals.css.gzipBytes": {
+   "before": 58590,
+   "after": 81346,
+   "delta": 22756,
+   "pct": 38.8
+  },
+  "allAssetTotals.js.bytes": {
+   "before": 4135696,
+   "after": 3906942,
+   "delta": -228754,
+   "pct": -5.5
+  },
+  "allAssetTotals.js.gzipBytes": {
+   "before": 1211828,
+   "after": 1126700,
+   "delta": -85128,
+   "pct": -7
+  },
+  "allAssetTotals.css.bytes": {
+   "before": 372746,
+   "after": 512263,
+   "delta": 139517,
+   "pct": 37.4
+  },
+  "allAssetTotals.css.gzipBytes": {
+   "before": 61126,
+   "after": 83882,
+   "delta": 22756,
+   "pct": 37.2
+  }
+ },
+ "p6SameProduct": {
+  "note": "P6 README: 构建产物 gzip 总量与 index.js，起点 f78e93f61（仍带 antd）→ 交付 6879542dc",
+  "gzipTotal": {
+   "before": 1302288,
+   "after": 1215092
+  },
+  "indexJs": {
+   "before": 592912,
+   "after": 506310
+  }
+ }
+}

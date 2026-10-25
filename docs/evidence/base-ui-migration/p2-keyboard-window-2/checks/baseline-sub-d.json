@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep '\"'\"' (sub-right-shift-tab) (burst|paced) sample'\"'\"''",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "0594f6d2c33ee60179eae2784ad781491e275e30",
+ "webTree": "b12625256d13a586b91846f64d759f384a90d8ca",
+ "dirtyWeb": "?? src/web/src/components/kw2scratch/",
+ "startedAt": "2026-10-07T13:04:01.679613+00:00",
+ "endedAt": "2026-10-07T13:14:14.243216+00:00",
+ "loadAverage": {
+  "start": [
+   13.6416015625,
+   14.00830078125,
+   13.580078125
+  ],
+  "end": [
+   17.71142578125,
+   26.7421875,
+   20.60693359375
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "e1a6a3f443f9aa06d0ff475f6852de2c155961e50169895aa1331e6318f3272f",
+ "outputBytes": 38552,
+ "raw": "/var/tmp/kw2-246921c8/runs/baseline-sub-d",
+ "stats": {
+  "expected": 200,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 611986.9040000001,
+  "samples": 200
+ }
+}

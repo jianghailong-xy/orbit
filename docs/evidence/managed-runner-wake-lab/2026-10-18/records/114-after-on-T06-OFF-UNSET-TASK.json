@@ -1,0 +1,39 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T02:28:11.543",
+    "ingested_at": "2026-10-18T02:28:11.763277+00:00",
+    "ingested_by_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "seq": 8,
+    "session_id": "1b669192-5206-534f-bd8e-d7eb772a8637",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-OFF-UNSET-TASK",
+  "modelRequests": [],
+  "owner": "ben",
+  "session": {
+    "assigned_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "created_at": "2026-10-18T02:14:32.931",
+    "engine": "claude",
+    "id": "1b669192-5206-534f-bd8e-d7eb772a8637",
+    "provider": "deepseek-2",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": "01a14cca-0ea3-76ce-bcee-2ef7246a0348",
+    "title": "Task: T06-OFF-UNSET-TASK a task run while the switch is unset"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T02:28:11.788",
+      "client_turn_id": "initial-1b669192-5206-534f-bd8e-d7eb772a8637",
+      "content": "Start the task \u201cT06-OFF-UNSET-TASK a task run while the switch is unset\u201d.\n\nTask description:\nT06-OFF-UNSET-TASK a task run while the switch is unset\n\nAcceptance",
+      "created_at": "2026-10-18T02:28:09.845",
+      "delivered_at": "2026-10-18T02:28:11.381",
+      "id": "01a14cd6-85f5-77fb-9c17-dd1252f4373d",
+      "kind": "message",
+      "seq": 1,
+      "status": "ANSWERED"
+    }
+  ]
+}

@@ -13,7 +13,8 @@ import {
 import { QueueService } from './queue.service';
 
 const runner = { id: '11111111-1111-4111-8111-111111111111', ownerId: '22222222-2222-4222-8222-222222222222' };
-const header = 'claude,codex,kimi,opencode,antigravity,dsh';
+// Every runtime declared, Cursor CLI's included (migration 0426): only dsh's install state is in question.
+const header = 'claude,codex,kimi,opencode,antigravity,dsh,cursor';
 const health = { credentialPresent: false, modelCatalogReadable: true, requestValidation: 'unknown', sandboxEnforcement: 'unknown' };
 const INSTALLED = [{ engine: 'dsh', installed: true, version: '0.2.0-rc.2', auth: 'unknown', dsh: { versionCompatible: true, ...health } }];
 const NOT_INSTALLED = [{ engine: 'dsh', installed: false, auth: 'unknown', installationError: 'DSH_NOT_INSTALLED' }];
@@ -49,6 +50,17 @@ test('dsh install gate: the engine report decides whether a declaring runner can
   for (const notice of [DSH_NOT_INSTALLED_ERROR, DSH_PLATFORM_UNSUPPORTED_ERROR, DSH_VERSION_INCOMPATIBLE_ERROR]) {
     assert.ok(!notice.startsWith('DeepSeek Harness requires a newer Orbit runner'), notice);
   }
+  // The install is where the clients' runner-state hints send it (web DSH_STATE_HINT, OrbitKit DshRuntime): Infrastructure.
+  assert.equal(
+    DSH_NOT_INSTALLED_ERROR,
+    'DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; ' +
+      'install it from Infrastructure, then try again',
+  );
+  assert.equal(
+    DSH_VERSION_INCOMPATIBLE_ERROR,
+    'DSH_VERSION_INCOMPATIBLE: this runner has a DeepSeek Harness version Orbit does not support; ' +
+      'reinstall it from Infrastructure, then try again',
+  );
 });
 
 function claimController(snapshot: unknown) {
@@ -79,7 +91,7 @@ test('dsh install gate: a declaring runner without the CLI keeps its declaration
     [[{ engine: 'dsh', installed: false, auth: 'unknown', installationError: 'DSH_PLATFORM_UNSUPPORTED' }], DSH_PLATFORM_UNSUPPORTED_ERROR],
     [[{ ...INSTALLED[0], dsh: { ...INSTALLED[0].dsh, versionCompatible: false } }], DSH_VERSION_INCOMPATIBLE_ERROR],
   ] as const) {
-    const f = claimController({ capabilities: ['provider:dsh'], capabilitiesReportedAt: new Date(), engines });
+    const f = claimController({ capabilities: ['provider:dsh', 'provider:cursor'], capabilitiesReportedAt: new Date(), engines });
     await f.api.claim(runner, SESSION_SOURCE_PIN_V1, header);
     assert.equal(f.handed.length, 1);
     assert.ok(f.handed[0].supportedProviders.includes(AgentProvider.DSH), 'the protocol declaration was rewritten');
@@ -89,15 +101,15 @@ test('dsh install gate: a declaring runner without the CLI keeps its declaration
 });
 
 test('dsh install gate: an installed CLI is handed dsh rows, and a runner without the declaration still waits for an upgrade', async () => {
-  const ready = claimController({ capabilities: ['provider:dsh'], capabilitiesReportedAt: new Date(), engines: INSTALLED });
+  const ready = claimController({ capabilities: ['provider:dsh', 'provider:cursor'], capabilitiesReportedAt: new Date(), engines: INSTALLED });
   await ready.api.claim(runner, SESSION_SOURCE_PIN_V1, header);
   assert.ok(ready.handed[0].supportedProviders.includes(AgentProvider.DSH));
   assert.ok(!('dshUnavailable' in ready.handed[0]), 'a ready runner was handed a reason');
   assert.equal(ready.marked.length, 0, 'a ready runner stamped a notice');
 
   for (const [request, snapshot] of [
-    [header, { capabilities: [], capabilitiesReportedAt: new Date(), engines: INSTALLED }],
-    ['claude,codex,opencode,antigravity', { capabilities: ['provider:dsh'], capabilitiesReportedAt: new Date(), engines: NOT_INSTALLED }],
+    [header, { capabilities: ['provider:cursor'], capabilitiesReportedAt: new Date(), engines: INSTALLED }],
+    ['claude,codex,opencode,antigravity,cursor', { capabilities: ['provider:dsh', 'provider:cursor'], capabilitiesReportedAt: new Date(), engines: NOT_INSTALLED }],
   ] as const) {
     const f = claimController(snapshot);
     await f.api.claim(runner, SESSION_SOURCE_PIN_V1, request);

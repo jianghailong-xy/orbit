@@ -1,0 +1,49 @@
+pre-stop 2026-10-17T20:00:26.903Z
+{"committedRows": 876}
+c99d2b99-30b5-4b90-af52-00d2bd3a23fa Running generation=2
+stop.sh 2026-10-17T20:00:26.990Z
+unit orbit-mr-lab: memory.current 3688 MiB, memory.peak 4560 MiB, swap 0 MiB, memory.max 6979321856
+host: MemAvailable 7096 MiB, SwapFree 34031 MiB
+20:00:27Z ACPI shutdown requested; waiting up to 600 s
+20:00:42Z orbit-mr-lab stopped after 15 s
+host: MemAvailable 10716 MiB
+stop-exit=0 2026-10-17T20:00:42.084Z
+start.sh 2026-10-17T20:01:02.088Z
+20:01:02Z host MemAvailable 10728 MiB (floor 2048 MiB): booting
+20:01:02Z started orbit-mr-lab.service (cgroup /system.slice/orbit-mr-lab.service)
+20:01:30Z SSH is up: 7.0.0-34-generic
+host kernel modules rbd/nbd/ceph/libceph loaded: none
+VM: running, qemu pid 104839, cgroup /system.slice/orbit-mr-lab.service
+qemu listens on: 127.0.0.1:16222 127.0.0.1:16443
+unit orbit-mr-lab: memory.current 1154 MiB, memory.peak 1154 MiB, swap 0 MiB, memory.max 6979321856
+host: MemAvailable 9641 MiB, SwapFree 34031 MiB
+guest (virtio-balloon): {"guestMiB": {"stat-available-memory": 5266, "stat-free-memory": 4985, "stat-total-memory": 5920, "stat-disk-caches": 481}, "lastUpdate": 1792267292}
+guest: {"cephHealth":"HEALTH_WARN","osdsUp":1,"osdsIn":3,"pgStates":[{"state_name":"active+clean","count":33}],"problems":["k3s is not active","orbit-lab-rbd-release is not active","Ceph is HEALTH_WARN","not every OSD is up"]}
+k3s node orbit-mr-lab Ready: unknown (null)
+deployment/ceph-csi-operator-controller-manager: 0/0 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 0/0 available
+daemonset/rbd.csi.ceph.com-nodeplugin: 0/0 available
+not healthy: k3s is not active;orbit-lab-rbd-release is not active;Ceph is HEALTH_WARN;not every OSD is up;node not Ready;deployment/ceph-csi-operator-controller-manager not available;deployment/rbd.csi.ceph.com-ctrlplugin not available;daemonset/rbd.csi.ceph.com-nodeplugin not available;no StorageClass runner-data;no namespace orbit-mr-test
+guest: {"cephHealth":"HEALTH_WARN","osdsUp":1,"osdsIn":3,"pgStates":[{"state_name":"active+clean","count":33}],"problems":["Ceph is HEALTH_WARN","not every OSD is up"]}
+k3s node orbit-mr-lab Ready: True (v1.36.5+k3s1)
+deployment/ceph-csi-operator-controller-manager: 1/1 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 1/1 available
+daemonset/rbd.csi.ceph.com-nodeplugin: 1/1 available
+not healthy: Ceph is HEALTH_WARN;not every OSD is up
+guest: {"cephHealth":"HEALTH_WARN","osdsUp":3,"osdsIn":3,"pgStates":[{"state_name":"peering","count":21},{"state_name":"active+clean","count":12}],"problems":["Ceph is HEALTH_WARN"]}
+k3s node orbit-mr-lab Ready: True (v1.36.5+k3s1)
+deployment/ceph-csi-operator-controller-manager: 1/1 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 1/1 available
+daemonset/rbd.csi.ceph.com-nodeplugin: 1/1 available
+not healthy: Ceph is HEALTH_WARN
+guest: {"cephHealth":"HEALTH_OK","osdsUp":3,"osdsIn":3,"pgStates":[{"state_name":"active+clean","count":33}],"problems":[]}
+k3s node orbit-mr-lab Ready: True (v1.36.5+k3s1)
+deployment/ceph-csi-operator-controller-manager: 1/1 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 1/1 available
+daemonset/rbd.csi.ceph.com-nodeplugin: 1/1 available
+healthy: k3s, Ceph (3 OSDs, HEALTH_OK), Ceph-CSI, StorageClass runner-data, namespace orbit-mr-test
+20:02:48Z [trim] page cache dropped; 1343 MiB used, 759 MiB cache, 4055 MiB free
+unit orbit-mr-lab: memory.current 3259 MiB, memory.peak 3260 MiB, swap 0 MiB, memory.max 6979321856
+host: MemAvailable 7498 MiB, SwapFree 34032 MiB
+start-exit=0 2026-10-17T20:02:48.559Z
+done 2026-10-17T20:02:53.611Z wait-exit=0

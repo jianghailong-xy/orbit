@@ -1,0 +1,1 @@
+{"scene": "08-nia-first-session", "violations": [{"at": 57.9, "what": "key fields differ", "request": "POST /api/sessions", "fields": {"model": {"app": "claude-opus-5", "recorded": "deepseek-v4-pro"}}}], "notes": [], "requests": 177, "actionsLeft": []}

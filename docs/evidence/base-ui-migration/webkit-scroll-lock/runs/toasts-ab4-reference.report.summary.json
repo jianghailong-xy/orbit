@@ -1,0 +1,4510 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/var/tmp/34cBi-ref/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/toasts.config.mjs",
+   "--grep",
+   "exit keeps its own native progress",
+   "--project=webkit-light-desktop",
+   "--project=webkit-dark-desktop",
+   "--repeat-each=25"
+  ],
+  "configFile": "/var/tmp/34cBi-ref/src/web/ui-migration/toasts.config.mjs",
+  "rootDir": "/var/tmp/34cBi-ref/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/var/tmp/34cBi-ref/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/var/tmp/34cBi-ref/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/var/tmp/34cBi-ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/34cBi-ref/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/var/tmp/34cBi-ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/34cBi-ref/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/var/tmp/34cBi-ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/34cBi-ref/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/var/tmp/34cBi-ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/34cBi-ref/src/web/.toasts-results",
+    "repeatEach": 25,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/var/tmp/34cBi-ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/34cBi-ref/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/var/tmp/34cBi-ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/34cBi-ref/src/web/.toasts-results",
+    "repeatEach": 25,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/var/tmp/34cBi-ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/34cBi-ref/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/var/tmp/34cBi-ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/var/tmp/34cBi-ref/src/web/.toasts-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 14377 --strictPort",
+   "cwd": "/var/tmp/34cBi-ref/src/web/",
+   "url": "http://127.0.0.1:14377",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "toasts-promotion.browser.mjs",
+   "file": "toasts-promotion.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2069,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:26.971Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-560429bdf4615a6eee6f",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1516,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:29.136Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-ecd9268ebc69296bb76a",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1880,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:31.027Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-3b6d9df1fd2c3f3af0ba",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1487,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:32.986Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-10a9a291d3eaa7c7604d",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1946,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:34.786Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-6502490c78c94cc1a0f6",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1461,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:36.804Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-4c498dfe46beca4f00b1",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1978,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:38.554Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-812ab1b7a97f8c9af189",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1459,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:40.608Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-71e6d8e19a3dffd495cf",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2063,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:42.414Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-f5a7a7ee853a9cad6408",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1767,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:44.563Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-457936cb4a953e787c9e",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2162,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:46.730Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-8475bbb8d5d47c8e1a6d",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1625,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:48.980Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-f2f9e7bab76d183163b2",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2069,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:50.971Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-3219433f0c421599426b",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1501,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:53.125Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-e91a768dc94f390c40bb",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1979,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:55.013Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-91a664b0fef68bb49c24",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1605,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:57.071Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-3ebf2529660f60acd75f",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 8,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1968,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:13:59.091Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-945f68e7f9d726f3ac16",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 8,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1452,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:01.145Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-cb1972c7a06f0827d5e1",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 9,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2221,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:02.947Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-85301c1f01a821a626e1",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 9,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1636,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:05.266Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-9eac985b631cd6588743",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 10,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1954,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:07.265Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-863c7bdbd28dc5ff1959",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 10,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1476,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:09.302Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-571a6b849669e8138be8",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 11,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1933,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:11.160Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-1b989d85c126afb816db",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 11,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1684,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:13.186Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-4c992ca4243cadbd1781",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 12,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2138,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:15.238Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-b1871c5c33a6d81a5349",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 12,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1637,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:17.469Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-4456b077c68e47dcbc8e",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 13,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2023,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:19.454Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-1678952a7869578a4c98",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 13,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1571,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:21.563Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-01586b63366337334116",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 14,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2136,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:23.438Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-73fe2f4b17a9b6d50440",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 14,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1621,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:25.660Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-b1b0992886bd7c047813",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 15,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2045,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:27.621Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-b66a63e3ad170730c31b",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 15,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1543,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:29.760Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-20e654cb47fe7d902c40",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 16,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1954,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:31.607Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-2047e633fc256b7c580e",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 16,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1492,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:33.637Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-61144c553a6690267d15",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 17,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1952,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:35.422Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-baee19e2fa2b360f3db4",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 17,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1444,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:37.452Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-4046c5ef32c46b2c93b5",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 18,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1910,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:39.199Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-de92d3eada766fe29e66",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 18,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1434,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:41.190Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-b9315e0572acf73fc0ff",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 19,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1974,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:42.926Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-5cee94844791e8f889d9",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 19,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1508,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:44.992Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-e37ecbfdad9039eaf81f",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 20,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1978,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:46.848Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-2f20c5d4f54074e92921",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 20,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1547,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:48.916Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-3646e441b89c413edf4f",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 21,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1950,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:50.815Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-3298ddd9accd15e0c650",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 21,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1422,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:52.842Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-e68c4418e383a3719519",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 22,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1961,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:54.567Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-e013e4abbecc33aef2ee",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 22,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1474,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:56.606Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-656a42bb070512964286",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 23,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1945,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:14:58.405Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-d87e91f541be192d6238",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 23,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1627,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:00.422Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-b42e65a649c8a66fc6cd",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 24,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1983,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:02.382Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-696dffa7123faf38cced",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 24,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1529,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:04.455Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-926fa7812531c4259a88",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 25,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1909,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:06.355Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-dc0105d75ba82cf0c1a7",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 25,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1478,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:08.371Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-40da1388ee69272a1690",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 26,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2021,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:10.225Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-9ecfdf5c5d4283c2ec34",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 26,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1478,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:12.337Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-00e8988ed6cb5c000abd",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 27,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2016,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:14.140Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-64e55e75a8eb5e12ad72",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 27,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1484,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:16.228Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-5f93407f47301e9a6c4e",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 28,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2022,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:18.083Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-47f2e1bbb5f48aa49d69",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 28,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1431,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:20.186Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-f9ce23079f3170a38584",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 29,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1897,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:21.933Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-a7a070676cab522b6424",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 29,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1482,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:23.914Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-cc93582c0706951d1280",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 30,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1983,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:25.674Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-1324bc686cc32c7535bb",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 30,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1624,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:27.748Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-a65697bfed1bc93e99bd",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 31,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1841,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:29.719Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-23147e54e3536246a335",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 31,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1461,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:31.648Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-920cfd670cf64caa1293",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 32,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1860,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:33.439Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-e4a2cc9f3fe992e30654",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 32,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1504,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:35.365Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-c7ca44acc688ed29ee57",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 33,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1952,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:37.138Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-1a209d081d0aa00ca1f6",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 33,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1424,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:39.172Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-a99165f4eafc084331ff",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 34,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1920,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:40.889Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-b8be66cb4d79b5709fec",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 34,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1518,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:42.882Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-7d7f3ac06e5c5630dd8e",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 35,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1914,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:44.800Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-546fb712d4b933ac1fd6",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 35,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1531,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:46.792Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-ac1d3e27c1d431a3865a",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 36,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3599,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:48.742Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-83be419eb91f41104967",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 36,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1932,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:52.428Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-9ac4011773af82a95fa8",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 37,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1977,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:54.678Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-74304c38e81f0600abd4",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 37,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1514,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:56.728Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-58502d532fd2c66a1e19",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 38,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2079,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:15:58.638Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-a973c2ea71df313d04e4",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 38,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1541,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:00.815Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-08e38188d17ebeb8a0c3",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 39,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1864,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:02.718Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-19224fabaa0b19f9fd7f",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 39,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1414,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:04.664Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-65ccfbacc1fa26a6e79a",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 40,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1957,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:06.359Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-8bab1b53d42f93af5007",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 40,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1436,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:08.389Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-496016ac1343ec84d16d",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 41,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1917,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:10.140Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-50c5d24433f94feb9aee",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 41,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1412,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:12.131Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-7885df06db3284130611",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 42,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2341,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:13.896Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-bdd47adbd07a860a922b",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 42,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1470,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:16.324Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-1d5af0ff8a1f05f99979",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 43,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2049,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:18.157Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-4ddee6506b55fe03a3cc",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 43,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1367,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:20.281Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-e97728b159dc246d0ef0",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 44,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1907,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:21.941Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-9d71b94cb35481778b31",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 44,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1406,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:23.924Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-0d07966de088bbc7f5b0",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 45,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1880,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:25.631Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-9cb5d157237556177eda",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 45,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1350,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:27.584Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-3e00534ddb7cfed26596",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 46,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1896,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:29.257Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-296b1f99bbb035fc77af",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 46,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1447,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:31.233Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-0fc5feb6b166320b22e1",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 47,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1943,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:32.977Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-f207f661ced3d15fe427",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 47,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1488,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:34.999Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-0d4778c0e5a7fc1b7fca",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 48,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1967,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:36.779Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-3f47c493e2660d9d641c",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 48,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1455,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:38.826Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-6af3d9c838f91132e25e",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with no-preference motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 49,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1923,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:40.614Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-5b10c734a0930b76848a",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    },
+    {
+     "title": "exit keeps its own native progress through modal transfers with reduce motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 49,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1477,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:16:42.607Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "before-exit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "native-exit",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "c8974e28da3a44f14753-38ea3aab36f7d42f9228",
+     "file": "toasts-promotion.browser.mjs",
+     "line": 18,
+     "column": 3
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-09T01:13:24.842Z",
+  "duration": 199382.21800000002,
+  "expected": 100,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

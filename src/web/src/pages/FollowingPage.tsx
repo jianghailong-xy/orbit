@@ -1,9 +1,10 @@
 import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Spin } from 'antd';
 import { useSearchParams } from 'react-router-dom';
 import type { WatchState, WatchView } from '@orbit/shared';
 import { WatchCard } from '../components/WatchCard';
+import { Button } from '../components/ui/Button';
+import { Spinner } from '../components/ui/Spinner';
 import { watchQuery, watchesQuery } from '../lib/queries';
 import {
   groupWatches,
@@ -123,7 +124,7 @@ export function FollowingPage() {
       <div role="tabpanel" className="following-panel">
         {watchesQ.isPending ? (
           <div className="following-empty">
-            <Spin />
+            <Spinner aria-busy="true" />
           </div>
         ) : watchesQ.isError ? (
           <div className="following-empty">

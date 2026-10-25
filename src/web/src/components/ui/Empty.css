@@ -1,0 +1,31 @@
+/* The replaced empty state as measured: 8px side margins, centred 14px text; a 100px illustration
+   (40px for `simple`, which also sits 32px from its neighbours in muted text) 8px above the
+   description, the footer 16px below it. */
+.orbit-empty {
+  margin-inline: 8px;
+  font-size: var(--orbit-font-size);
+  line-height: 1.5714285714285714;
+  text-align: center;
+}
+.orbit-empty-image {
+  height: 100px;
+  margin-bottom: 8px;
+}
+.orbit-empty-image svg {
+  max-width: 100%;
+  height: 100%;
+  margin: auto;
+}
+.orbit-empty-description {
+  color: var(--text-3);
+}
+.orbit-empty-footer {
+  margin-top: 16px;
+}
+.orbit-empty-simple {
+  margin-block: 32px;
+  color: var(--text-3);
+}
+.orbit-empty-simple .orbit-empty-image {
+  height: 40px;
+}

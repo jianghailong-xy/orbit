@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370 && git log --oneline -1 && cd src/web && NO_COLOR=1 npx vitest run src/lib/theme.test.tsx src/components/ui/boundary.test.ts src/components/ui/Menu.test.tsx src/components/ui/keyboardWindow.test.tsx src/components/ShareModal.test.tsx src/components/TaskDetailPanel.test.tsx src/components/TaskDetailPanel.share.test.tsx src/components/TaskDetailPanel.reopen.test.tsx src/components/TaskDetailPanel.modelRouting.test.tsx src/components/ReviewCard.test.tsx src/components/TaskInputs.test.tsx src/components/StartProjectCard.test.tsx src/pages/AdminUsersPage.accessTokens.test.tsx src/pages/AdminUsersPage.signIn.test.tsx src/pages/ProfilePage.signInMethods.test.tsx src/components/WorkspaceView.composerMenu.test.tsx",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_af901fcd1518",
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "commit": "069601b67",
+ "webTree": "34ebe07972ab9680cad0775ad5f4169c39b5f98b",
+ "outputLastWritten": "2026-10-07T15:01:26.602660+00:00",
+ "exitCode": 0,
+ "outputSha256": "86f9f53ad384f8317ed145213cdd6bb5c5e6375e475d3b0b3d2429e6cad93ea0",
+ "outputBytes": 131271,
+ "note": "Fixed tree (069601b67): 16 files / 260 tests passed. The P2.2 unit set (theme, ui boundary, ShareModal, composer menu), Menu.test.tsx and keyboardWindow.test.tsx, and the tests of the production users of the changed parts: the task panel (More menu, delete Popconfirm, Dialogs, Selects) and its share/reopen/model-routing tests, ReviewCard (Dialog), TaskInputs (Popconfirm), StartProjectCard (Drawer), AdminUsersPage (useConfirm) and the profile sign-in methods (useConfirm). The boundary test still finds Base UI only inside Orbit components and the public components free of AntD."
+}

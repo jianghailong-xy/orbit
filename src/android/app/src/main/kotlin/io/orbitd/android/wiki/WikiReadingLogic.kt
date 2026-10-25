@@ -428,6 +428,46 @@ internal object WikiDocLogic {
     }
     /** Whether a space reads by its documents (a plan is confirmed), or still by topic (`wikiReadsByDocs`). */
     fun readsByDocs(directory: WikiDocsDirectory?) = directory?.plan != null
+
+    // MARK: the home, by the confirmed plan (design §12.3.1, mocks 30 ③, 31 ① ③ ⑥)
+
+    /** The line under the home's head (`wikiHomeLine`): the confirmed plan's documents and how many are written; before a
+     * plan, the topic articles the home lists in its place; with neither, `No documents yet`. */
+    fun homeLine(directory: WikiDocsDirectory?, articles: Int): String {
+        if (directory != null && readsByDocs(directory)) {
+            val docs = directory.categories.flatMap { it.docs.orEmpty() }
+            return WikiDocCopy.docsWritten(directory.docs?.total ?: docs.size, directory.docs?.written ?: docs.count { it.written == true })
+        }
+        return if (articles > 0) WikiArticleCopy.articleCount(articles) else WikiCopy.noDocuments
+    }
+
+    /** A written document on the home: its number, title and lead, and whether it is new to the reader. */
+    data class HomeDoc(val slug: String, val number: String, val title: String, val lead: String?, val fresh: Boolean)
+    /** A document not written yet, as its category's folded row opens to it: its number and title, in grey. */
+    data class HomeTodo(val slug: String, val number: String, val title: String)
+    /** One category of the home: its written documents, then the ones not written yet, which fold into one row. */
+    data class HomeCategory(val key: String, val number: Int, val title: String, val written: List<HomeDoc>, val notWritten: List<HomeTodo>)
+
+    /** The home's documents (`wikiHomeCategories`): the confirmed plan's categories in its order — a category with no
+     * document left out — each with its documents in the plan's order, the written ones first. [seen] is when the reader
+     * last looked at the home ([WikiSeenLog]): a document written after it is new, and every written one is to a reader who
+     * has not looked before; null, before the stamp is read, marks none. */
+    fun homeCategories(directory: WikiDocsDirectory, seen: Double?): List<HomeCategory> = directory.categories.mapNotNull { category ->
+        val docs = category.docs.orEmpty()
+        if (docs.isEmpty()) null else HomeCategory(category.key, category.number ?: 0, category.title.ifEmpty { category.key },
+            docs.filter { it.written == true }.map { doc ->
+                HomeDoc(doc.slug, doc.number ?: "", doc.title.ifEmpty { doc.slug }, doc.lead, seen?.let { WikiSeenLog.isNew(doc.updatedAt, it) } ?: false)
+            },
+            docs.filter { it.written != true }.map { doc -> HomeTodo(doc.slug, doc.number ?: "", doc.title.ifEmpty { doc.slug }) })
+    }
+
+    /** A category's folded row (`wikiNotWrittenRow`): `+3 not written yet` under written ones, `3 documents · Not written
+     * yet` alone; none when all are written. */
+    fun notWrittenRow(category: HomeCategory): String? = when {
+        category.notWritten.isEmpty() -> null
+        category.written.isEmpty() -> WikiDocCopy.docsNotWrittenYet(category.notWritten.size)
+        else -> WikiDocCopy.notWrittenYet(category.notWritten.size)
+    }
     private fun sectionCount(docs: List<WikiDocsDirectory.Doc>) = docs.sumOf { it.sections.orEmpty().size }
     fun browseSummary(directory: WikiDocsDirectory): List<String> {
         val categories = directory.categories.filter { it.docs.orEmpty().isNotEmpty() }

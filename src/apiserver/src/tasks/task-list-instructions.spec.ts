@@ -72,26 +72,31 @@ function promptFor(task: {
 
 // The template, verbatim. Any edit to it has to break this test — every task run in the
 // deployment is assembled from it, and a silent change would reach hundreds of runs before anyone
-// read one. It last changed when the executor stopped writing its own DONE: steps 3 and 4 are the
-// instruction half of that boundary, and they have to arrive in the same release as the refusal in
-// `update()` (`task-self-done-boundary.spec.ts`) or every run in flight hits a wall it was never
-// told about.
+// read one. It last changed when it became English (2026-10-10, AGENTS.md §5). Before that it changed
+// when the executor stopped writing its own DONE: steps 3 and 4 are the instruction half of that
+// boundary, and they have to arrive in the same release as the refusal in `update()`
+// (`task-self-done-boundary.spec.ts`) or every run in flight hits a wall it was never told about.
 const PROMPT_WITHOUT_INSTRUCTIONS =
-  '请开始执行任务「Ship it」。\n\n' +
-  '任务描述：\n下载 000_00008.parquet\n\n' +
-  '请按以下步骤进行：\n' +
-  '1. 先用 task_get 查看该任务的完整信息与历史评论。\n' +
-  '2. 执行任务。\n' +
-  '3. 完成后，用 task_evidence_submit 提交完成证据信封，四个字段缺一不可：claim（你主张完成了什么）、' +
-  'criterion（{key, text}，抄自 project_get 的验收条目）、checks（每条 {kind, ref}，kind 取 ' +
-  'TOOL_CALL / COMMIT / ARTIFACT，ref 指向本任务会话下已有的行；至少一条必须解析成功，否则整次提交被拒）、' +
-  'gaps（本次证据没能确立的部分，没有就给空数组）。TOOL_CALL 可再写 command/succeeded，服务端会拿它' +
-  '和被引 tool_call 逐字节核对。不要把命令原始输出抄进证据——Orbit 已经存了它；只由退出码回答的工作' +
-  '属于 EXECUTABLE 验收，不属于这里。不要用 task_comment 代替证据提交，也不要写 status——DONE 是' +
-  '解锁下游任务的授权，只能由任务声明的 completionCriterion 求值产生；服务端会拒绝任何主体直接写 DONE。\n' +
-  '4. 如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将' +
-  '状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游' +
-  '当成普通等待一直等下去，FAILED 才会把下游标成需要人介入。';
+  'Start the task “Ship it”.\n\n' +
+  'Task description:\n下载 000_00008.parquet\n\n' +
+  'Follow these steps:\n' +
+  '1. First use task_get to read the task in full with its comment history.\n' +
+  '2. Do the task.\n' +
+  '3. When you are done, submit the completion evidence envelope with task_evidence_submit. All four ' +
+  'fields are required: claim (what you claim to have completed), criterion ({key, text}, copied from the ' +
+  'acceptance criteria project_get returns), checks (each {kind, ref}, kind one of ' +
+  "TOOL_CALL / COMMIT / ARTIFACT, ref pointing at a row already recorded under this task's sessions; at " +
+  'least one must resolve, or the whole submission is refused), and gaps (what this evidence could not ' +
+  'establish; an empty array if nothing). A TOOL_CALL may also carry command/succeeded, which the server ' +
+  "checks byte for byte against the cited tool_call. Do not copy a command's raw output into the evidence " +
+  '— Orbit has stored it already; work answered by an exit code alone belongs to EXECUTABLE acceptance, ' +
+  'not here. Do not use task_comment in place of submitting evidence, and do not write status — DONE is ' +
+  'the authorization that unlocks downstream tasks, and only evaluating the completionCriterion the task ' +
+  'declares can produce it; the server refuses a direct DONE from anyone.\n' +
+  '4. If the work failed or could not be finished, first explain why with task_comment, then use task_update ' +
+  'to set the status to FAILED. Do not set it to DONE, and do not set it to IN_PROGRESS — downstream treats ' +
+  'IN_PROGRESS as an ordinary wait and keeps waiting forever, while only FAILED marks downstream as needing ' +
+  'a person to step in.';
 
 test('a list with no instructions assembles the prompt exactly as it did before the layer existed', async () => {
   const prompt = await promptFor({
@@ -113,22 +118,27 @@ test('instructions are spliced between the task description and the reporting pr
   });
   assert.equal(
     await prompt(),
-    '请开始执行任务「Ship it」。\n\n' +
-      '任务描述：\n下载 000_00008.parquet\n\n' +
-      '作业指导（本任务列表通用）：\n须去重、断点续传，并按 Content-Length 校验；不得删除数据。\n\n' +
-      '请按以下步骤进行：\n' +
-      '1. 先用 task_get 查看该任务的完整信息与历史评论。\n' +
-      '2. 执行任务。\n' +
-      '3. 完成后，用 task_evidence_submit 提交完成证据信封，四个字段缺一不可：claim（你主张完成了什么）、' +
-      'criterion（{key, text}，抄自 project_get 的验收条目）、checks（每条 {kind, ref}，kind 取 ' +
-      'TOOL_CALL / COMMIT / ARTIFACT，ref 指向本任务会话下已有的行；至少一条必须解析成功，否则整次提交被拒）、' +
-      'gaps（本次证据没能确立的部分，没有就给空数组）。TOOL_CALL 可再写 command/succeeded，服务端会拿它' +
-      '和被引 tool_call 逐字节核对。不要把命令原始输出抄进证据——Orbit 已经存了它；只由退出码回答的工作' +
-      '属于 EXECUTABLE 验收，不属于这里。不要用 task_comment 代替证据提交，也不要写 status——DONE 是' +
-      '解锁下游任务的授权，只能由任务声明的 completionCriterion 求值产生；服务端会拒绝任何主体直接写 DONE。\n' +
-      '4. 如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将' +
-      '状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游' +
-      '当成普通等待一直等下去，FAILED 才会把下游标成需要人介入。',
+    'Start the task “Ship it”.\n\n' +
+      'Task description:\n下载 000_00008.parquet\n\n' +
+      'List instructions (the same for every task in this list):\n须去重、断点续传，并按 Content-Length 校验；不得删除数据。\n\n' +
+      'Follow these steps:\n' +
+      '1. First use task_get to read the task in full with its comment history.\n' +
+      '2. Do the task.\n' +
+      '3. When you are done, submit the completion evidence envelope with task_evidence_submit. All four ' +
+      'fields are required: claim (what you claim to have completed), criterion ({key, text}, copied from the ' +
+      'acceptance criteria project_get returns), checks (each {kind, ref}, kind one of ' +
+      "TOOL_CALL / COMMIT / ARTIFACT, ref pointing at a row already recorded under this task's sessions; at " +
+      'least one must resolve, or the whole submission is refused), and gaps (what this evidence could not ' +
+      'establish; an empty array if nothing). A TOOL_CALL may also carry command/succeeded, which the server ' +
+      "checks byte for byte against the cited tool_call. Do not copy a command's raw output into the evidence " +
+      '— Orbit has stored it already; work answered by an exit code alone belongs to EXECUTABLE acceptance, ' +
+      'not here. Do not use task_comment in place of submitting evidence, and do not write status — DONE is ' +
+      'the authorization that unlocks downstream tasks, and only evaluating the completionCriterion the task ' +
+      'declares can produce it; the server refuses a direct DONE from anyone.\n' +
+      '4. If the work failed or could not be finished, first explain why with task_comment, then use task_update ' +
+      'to set the status to FAILED. Do not set it to DONE, and do not set it to IN_PROGRESS — downstream treats ' +
+      'IN_PROGRESS as an ordinary wait and keeps waiting forever, while only FAILED marks downstream as needing ' +
+      'a person to step in.',
   );
 });
 
@@ -150,8 +160,8 @@ test('instructions reach a task that has no description of its own', async () =>
     list: { instructions: '按 manifest 逐个下载。' },
   });
   const text = await prompt();
-  assert.ok(!text.includes('任务描述：'), text);
-  assert.ok(text.includes('作业指导（本任务列表通用）：\n按 manifest 逐个下载。'), text);
+  assert.ok(!text.includes('Task description:'), text);
+  assert.ok(text.includes('List instructions (the same for every task in this list):\n按 manifest 逐个下载。'), text);
 });
 
 test('a foreman task is not given the list instructions', async () => {
@@ -164,7 +174,7 @@ test('a foreman task is not given the list instructions', async () => {
     list: { instructions: '须去重、断点续传，并按 Content-Length 校验。' },
   });
   const text = await prompt();
-  assert.ok(!text.includes('作业指导'), text);
+  assert.ok(!text.includes('List instructions'), text);
   assert.ok(text.includes('列表已停滞 30 分钟。'), text);
 });
 
@@ -179,7 +189,7 @@ test('a verification task is not given the list instructions either', async () =
     list: { instructions: '须去重、断点续传，并按 Content-Length 校验。' },
   });
   const text = await prompt();
-  assert.ok(!text.includes('作业指导'), text);
+  assert.ok(!text.includes('List instructions'), text);
   assert.ok(text.includes('核实任务 X 是否真的完成。'), text);
 });
 
@@ -198,13 +208,13 @@ test('the acceptance criteria are in the prompt, between the description and the
   const text = await prompt();
   assert.ok(
     text.includes(
-      '验收标准（判定本任务是否完成的依据）：\n'
+      'Acceptance criteria (what decides whether this task is done):\n'
         + '1. 文件存在且 sha256 与 manifest 一致。\n2. `npm test` 退出码为 0。',
     ),
     text,
   );
-  assert.ok(text.indexOf('任务描述：') < text.indexOf('验收标准'), text);
-  assert.ok(text.indexOf('验收标准') < text.indexOf('请按以下步骤进行：'), text);
+  assert.ok(text.indexOf('Task description:') < text.indexOf('Acceptance criteria'), text);
+  assert.ok(text.indexOf('Acceptance criteria') < text.indexOf('Follow these steps:'), text);
 });
 
 test('a task with no acceptance criteria gets no empty heading', async () => {
@@ -231,8 +241,8 @@ test('a verifier is given its own acceptance criteria, unlike the list instructi
     list: { instructions: '须去重、断点续传。' },
   });
   const text = await prompt();
-  assert.ok(!text.includes('作业指导'), text);
-  assert.ok(text.includes('验收标准（判定本任务是否完成的依据）：\n贴出 X 主张的命令的重跑输出。'), text);
+  assert.ok(!text.includes('List instructions'), text);
+  assert.ok(text.includes('Acceptance criteria (what decides whether this task is done):\n贴出 X 主张的命令的重跑输出。'), text);
 });
 
 test('step 3 asks for the evidence envelope and forbids writing status', async () => {
@@ -243,15 +253,15 @@ test('step 3 asks for the evidence envelope and forbids writing status', async (
   const text = await (await promptFor({ description: 'x', list: null }))();
   const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
   assert.match(step3, /task_evidence_submit/);
-  assert.match(step3, /不要用 task_comment 代替证据提交/);
+  assert.match(step3, /Do not use task_comment in place of submitting evidence/);
   for (const field of ['claim', 'criterion', 'checks', 'gaps']) {
     assert.match(step3, new RegExp(field), step3);
   }
   assert.match(step3, /TOOL_CALL \/ COMMIT \/ ARTIFACT/);
-  assert.match(step3, /至少一条必须解析成功/);
-  assert.match(step3, /不要把命令原始输出抄进证据/);
-  assert.match(step3, /不要写 status/);
-  assert.equal(/置为 DONE/.test(step3), false, step3);
+  assert.match(step3, /least one must resolve/);
+  assert.match(step3, /Do not copy a command's raw output into the evidence/);
+  assert.match(step3, /do not write status/);
+  assert.equal(/set (?:it|the status|this task's status) to DONE/.test(step3), false, step3);
 });
 
 test('step 4 says FAILED, and says it instead of IN_PROGRESS', async () => {
@@ -262,12 +272,13 @@ test('step 4 says FAILED, and says it instead of IN_PROGRESS', async () => {
   const text = await (await promptFor({ description: 'x', list: null }))();
   const step4 = text.split('\n').find((line) => line.startsWith('4. '))!;
   // The status it tells you to WRITE...
-  assert.match(step4, /task_update 将状态（status）置为 FAILED/);
+  assert.match(step4, /use task_update to set the status to FAILED/);
   // ...and the one it now tells you not to. IN_PROGRESS still appears in the line, which is why
   // this asks about the instruction rather than about the word: the old template's imperative
-  // ('再将状态置为 IN_PROGRESS') is what must be gone, and it is now a prohibition instead.
-  assert.match(step4, /不要置为 IN_PROGRESS/);
-  assert.equal(/再将状态置为 IN_PROGRESS/.test(step4), false, step4);
+  // ('再将状态置为 IN_PROGRESS', then set the status to IN_PROGRESS) is what must be gone, and it is
+  // now a prohibition instead.
+  assert.match(step4, /do not set it to IN_PROGRESS/);
+  assert.equal(/set the status to IN_PROGRESS/.test(step4), false, step4);
 });
 
 test('an EXECUTABLE task delegates its terminal status to the one declared command', async () => {
@@ -278,24 +289,25 @@ test('an EXECUTABLE task delegates its terminal status to the one declared comma
     list: null,
   }))();
   const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
-  assert.match(step3, /系统会在本执行会话的工作区自动运行/);
-  assert.match(step3, /唯一 EXECUTABLE 验收命令/);
-  assert.match(step3, /期望退出码 0/);
+  assert.match(step3, /Orbit automatically runs the task's one declared EXECUTABLE acceptance command/);
+  assert.match(step3, /in this run session's workspace/);
+  assert.match(step3, /expected exit code 0/);
   // Where the result is recorded, in the spellings of the code that records it. The comparison
   // writes task.status and nothing else (executable-exit-code-judgment.spec.ts), so the brief may
   // not promise the comment it used to: no comment carries the output or the actual exit code.
-  assert.match(step3, /原始输出和实际退出码不会写入任务评论/);
-  assert.equal(/原始输出和实际退出码写入任务评论/.test(step3), false, step3);
-  assert.match(step3, /推导出的状态写在任务上（task_get 可见）/);
-  assert.match(step3, /命令和原始输出在本会话的记录里，是其中一次 Bash 调用/);
-  assert.ok(step3.includes(executableAcceptanceFailureReason(4242, 0).replace('4242', '<实际退出码>')), step3);
-  assert.match(step3, /session_get 读本会话，会话 id 在环境变量 ORBIT_SESSION_ID 里/);
-  assert.match(step3, /TASK_FAILED 异常/);
-  assert.ok(step3.includes(`写一条任务评论（${EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE}）`), step3);
-  assert.match(step3, /相等则推导 DONE，否则推导 FAILED/);
-  assert.match(step3, /不要自行写 status/);
-  assert.match(step3, /不要让 coordinator 审批/);
-  assert.equal(/task_update 将本任务状态（status）置为 DONE/.test(step3), false, step3);
+  assert.match(step3, /The raw output and the actual exit code are not written to a task comment/);
+  // The old promise ('并把命令、原始输出和实际退出码写入任务评论'), in the brief's English.
+  assert.equal(/actual exit code to a task comment/.test(step3), false, step3);
+  assert.match(step3, /the derived status is on the task \(task_get shows it\)/);
+  assert.match(step3, /the command and its raw output are in this session's record, as one of its Bash calls/);
+  assert.ok(step3.includes(executableAcceptanceFailureReason(4242, 0).replace('4242', '<actual exit code>')), step3);
+  assert.match(step3, /read this session with session_get; its id is in the environment variable ORBIT_SESSION_ID/);
+  assert.match(step3, /TASK_FAILED exception/);
+  assert.ok(step3.includes(`writes a task comment only when the command could not return a result to compare (${EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE})`), step3);
+  assert.match(step3, /a matching exit code derives DONE, anything else derives FAILED/);
+  assert.match(step3, /Do not write status yourself/);
+  assert.match(step3, /do not ask the coordinator to approve/);
+  assert.equal(/set (?:this task's|the) status to DONE/.test(step3), false, step3);
 });
 
 test('an OWNER_CONFIRMED task declares its work finished and reports in its session, instead of submitting evidence', async () => {
@@ -310,17 +322,17 @@ test('an OWNER_CONFIRMED task declares its work finished and reports in its sess
     list: null,
   }))();
   const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
-  assert.match(step3, /先用 task_request_confirmation/);
-  assert.match(step3, /只有这条声明才会让账户所有者收到确认卡/);
-  assert.match(step3, /在本会话里用一两句话说明做了什么，然后结束本轮/);
-  assert.match(step3, /由账户所有者在 Orbit app 里确认（Confirm done）或退回（Send back…）/);
-  assert.match(step3, /退回的理由会作为下一条消息进入本会话，收到后按理由继续/);
-  assert.match(step3, /不要写 status/);
+  assert.match(step3, /first declare with task_request_confirmation/);
+  assert.match(step3, /Only that declaration puts a confirmation card in front of the account owner/);
+  assert.match(step3, /then say in a sentence or two in this session what you did, and end the turn/);
+  assert.match(step3, /the account owner confirms it in the Orbit app \(Confirm done\) or sends it back \(Send back…\)/);
+  assert.match(step3, /the reason for a send-back arrives in this session as the next message — when it does, carry on as it says/);
+  assert.match(step3, /do not write status/);
   // Nothing in the prompt asks for the envelope, and the tool is named only to be refused.
-  assert.equal(/证据信封|claim|checks|gaps|project_get/.test(text), false, text);
-  assert.equal(text.replace('不要调用 task_evidence_submit', '').includes('task_evidence_submit'), false, text);
+  assert.equal(/evidence envelope|claim|checks|gaps|project_get/.test(text), false, text);
+  assert.equal(text.replace('Do not call task_evidence_submit', '').includes('task_evidence_submit'), false, text);
   const step4 = text.split('\n').find((line) => line.startsWith('4. '))!;
-  assert.match(step4, /task_update 将状态（status）置为 FAILED/);
+  assert.match(step4, /use task_update to set the status to FAILED/);
 });
 
 test('an EVIDENCE_JUDGMENT task, and a verifier, still get the evidence envelope word for word', async () => {
@@ -346,15 +358,18 @@ test('a task declaring EXECUTABLE keeps its step 3 word for word', async () => {
   const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
   assert.equal(
     step3,
-    '3. 完成本次回复后，系统会在本执行会话的工作区自动运行任务声明的唯一 EXECUTABLE 验收命令' +
-      '（期望退出码 0）；退出码相等则推导 DONE，否则推导 FAILED。' +
-      '原始输出和实际退出码不会写入任务评论，结果记在这几处：推导出的状态写在任务上（task_get 可见）；' +
-      '命令和原始输出在本会话的记录里，是其中一次 Bash 调用（要再看输出，就在工作区重跑同一条命令）；' +
-      'FAILED 时本会话以失败结束，error 写着 `acceptance command exited <实际退出码>; expected 0`' +
-      '（可用 session_get 读本会话，会话 id 在环境变量 ORBIT_SESSION_ID 里），' +
-      '任务若属于项目，项目里还会多一条记下这两个退出码的 TASK_FAILED 异常。' +
-      '验收本身只在命令没能返回可比较的结果时写一条任务评论（EXECUTABLE_ACCEPTANCE_UNAVAILABLE），任务状态保持不变。' +
-      '不要自行写 status，也不要让 coordinator 审批这个机械结论。',
+    "3. Once this reply ends, Orbit automatically runs the task's one declared EXECUTABLE acceptance command " +
+      "in this run session's workspace (expected exit code 0): a matching exit code derives DONE, anything " +
+      'else derives FAILED. The raw output and the actual exit code are not written to a task comment; the ' +
+      'result is recorded in these places: the derived status is on the task (task_get shows it); the command ' +
+      "and its raw output are in this session's record, as one of its Bash calls (to see the output again, " +
+      'rerun the same command in the workspace); on FAILED this session ends failed, its error reading ' +
+      '`acceptance command exited <actual exit code>; expected 0` (read this session with session_get; its id ' +
+      'is in the environment variable ORBIT_SESSION_ID), and if the task belongs to a project, the project ' +
+      'also gets a TASK_FAILED exception recording both exit codes. The acceptance itself writes a task ' +
+      'comment only when the command could not return a result to compare (EXECUTABLE_ACCEPTANCE_UNAVAILABLE), ' +
+      "and the task's status then stays as it was. Do not write status yourself, and do not ask the " +
+      'coordinator to approve this mechanical verdict.',
   );
 });
 
@@ -362,10 +377,10 @@ test('foreman and verifier runs are told that their criterion, not their session
   for (const task of [{ isForeman: true }, { verifiesTaskId: 'subject-task' }]) {
     const text = await (await promptFor({ description: 'x', list: null, ...task }))();
     const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
-    assert.match(step3, /completionCriterion 求值产生/);
-    assert.match(step3, /不要写 status/);
-    assert.equal(/task_update 将本任务状态（status）置为 DONE/.test(step3), false, step3);
+    assert.match(step3, /only evaluating the completionCriterion the task declares can produce it/);
+    assert.match(step3, /do not write status/);
+    assert.equal(/set (?:this task's|the) status to DONE/.test(step3), false, step3);
     const step4 = text.split('\n').find((line) => line.startsWith('4. '))!;
-    assert.match(step4, /task_update 将状态（status）置为 FAILED/);
+    assert.match(step4, /use task_update to set the status to FAILED/);
   }
 });

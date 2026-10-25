@@ -58,6 +58,37 @@ final class SessionUpsertTests: XCTestCase {
         XCTAssertEqual(merged.capabilities?.canSend, true)
     }
 
+    /// The rolling recap (0418) rides the summary, and its field is the server's outright: the
+    /// recap a settle just wrote lands on an already-open row, a null clears it — how a manual
+    /// refresh's drop reaches the other clients — and an older control plane that never sends the
+    /// keys leaves the row's own recap alone.
+    func testTheSummaryCarriesTheRecapAndItsNullClearsIt() throws {
+        var row = try loadedRow()
+        XCTAssertNil(row.recapText)
+
+        let written = try summary("""
+        {"id":"s1","title":"Fix bug","status":"AWAITING_INPUT","pendingApprovals":0,
+         "recapText":"Landed the drawer fix; the suite is green.","recapAt":"2026-08-01T12:00:00.000Z"}
+        """)
+        row = row.applying(written)
+        XCTAssertEqual(row.recapText, "Landed the drawer fix; the suite is green.")
+        XCTAssertEqual(row.recapAt, "2026-08-01T12:00:00.000Z")
+
+        // An older control plane — neither key — preserves the loaded row's recap.
+        let silent = try summary(#"{"id":"s1","title":"Fix bug","status":"RUNNING","pendingApprovals":0}"#)
+        row = row.applying(silent)
+        XCTAssertEqual(row.recapText, "Landed the drawer fix; the suite is green.")
+        XCTAssertEqual(row.recapAt, "2026-08-01T12:00:00.000Z")
+
+        // Null is a value: this server saying the session has none.
+        let cleared = try summary("""
+        {"id":"s1","title":"Fix bug","status":"RUNNING","pendingApprovals":0,"recapText":null,"recapAt":null}
+        """)
+        row = row.applying(cleared)
+        XCTAssertNil(row.recapText)
+        XCTAssertNil(row.recapAt)
+    }
+
     /// Coordinator relation updates need all three wire states: value binds/renames, explicit null
     /// clears after rotation/delete, and absence from an older server preserves the loaded row.
     func testTracksProjectRelationValueNullAndAbsence() throws {

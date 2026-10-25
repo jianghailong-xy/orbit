@@ -4,38 +4,61 @@ import type { ProjectPromotionView } from '@orbit/shared';
 import { api } from '../api';
 import { Dialog } from './ui/Dialog';
 import { LandingJobsSheet } from './LandingJobsSheet';
-import { LandingRow, LandingRowButton, landingLine } from './ProjectPanoramaHeader';
+import { LandingLink } from './LandingLink';
+import {
+  LANDING_ALL_JOBS,
+  LandingHead,
+  landingHead,
+  landingJobLines,
+  landingLine,
+} from './ProjectPanoramaHeader';
 import {
   CANCEL_MERGE,
-  MERGE_TO_MAIN,
   NOT_NOW,
   OPEN_COORDINATOR,
   ProjectPromotion,
   ProjectPromotionReceipt,
   decidePromotion,
+  mergeTo,
   promotionCriteriaLine,
   promotionHeading,
+  promotionItem,
   resolvingPress,
   type PromotionProjectView,
 } from './ProjectPromotionCard';
 import {
+  ABANDON,
+  CANCEL_MAY_STILL_MERGE,
+  CANCEL_REQUESTED,
+  CANCEL_STOPS_SOON,
+  CANCELLING_THE_MERGE,
   DETAILS,
   NEEDS_YOU,
   PAGE_NOTHING_TO_DO,
+  RERUN_THE_CHECK,
+  STOP_REQUESTED,
+  TOO_LATE_TO_CANCEL,
+  abandonJob,
   isMergeJob,
   mergeCardShape,
+  moreJobsQueued,
   moreTasks,
+  promotionBlockedBy,
   promotionBlockedLine,
   promotionBranchLine,
   promotionChecksSummary,
+  promotionLandingSessionId,
   promotionMergingStatus,
+  promotionOnPassLine,
   promotionPageCounts,
   promotionPageTitle,
   promotionTaskTitles,
   promotionTimelineDetail,
   promotionTimelineTitle,
+  recheckPromotion,
 } from '../lib/projectMerge';
 import { projectIntegrationQuery, projectOpenItemsQuery, projectPromotionQuery } from '../lib/queries';
+import { mainBranchName } from '../lib/projectStart';
 import { ago } from '../lib/watches';
 
 /** A read the page can draw from: the door answers a candidate or `null`, and anything else is no
@@ -126,22 +149,118 @@ export function ProjectMergeStrip({
   const jobs = listed || jobsOpen
     ? <LandingJobsSheet projectId={projectId} open={jobsOpen} onClose={() => setJobsOpen(false)} />
     : null;
+  // The round's landing session (contract §2.9 LS6): the candidate's own, or the merge job's while
+  // the candidate row does not carry one. The whole merge row is this round's way in.
+  const roundLanding = promotionLandingSessionId(current, integration.data);
+  const mergeJob = (integration.data?.inFlightJobs ?? []).find((job) => isMergeJob(job)) ?? null;
+  const mergeJobDetail = integration.data && mergeJob
+    ? landingJobLines(integration.data, now, {
+        updatedAt: integration.dataUpdatedAt, failed: integration.isError,
+      }).find((job) => job.jobId === mergeJob.jobId)?.detail ?? null
+    : null;
+  // How many jobs this round stands for: the merge's own plus everything queued beside it. The card
+  // keeps the others out of sight, so their way in is its foot — "+N job queued · All jobs ›".
+  const jobCount = integration.data
+    ? integration.data.integratingCount + integration.data.queuedCount
+    : 0;
+  const queuedLine = listed ? moreJobsQueued(jobCount) : null;
+  // §3.3 M-T10: a stop has been asked for and the job has not answered, or the ask came after the
+  // push boundary. Both are the card's own facts, never read off the job's phase here.
+  const cancelling = current?.cancelRequested === true;
+  const tooLate = current?.pushBoundaryPassed === true;
+  const abandon = useMutation({
+    mutationFn: (jobId: string) => abandonJob(projectId, jobId),
+    // The job is over: the card, the item holding it and the round all read again.
+    onSettled: () => Promise.all([
+      qc.invalidateQueries({ queryKey: projectIntegrationQuery(projectId).queryKey }),
+      qc.invalidateQueries({ queryKey: projectOpenItemsQuery(projectId).queryKey }),
+      qc.invalidateQueries({ queryKey: projectPromotionQuery(projectId).queryKey }),
+      qc.invalidateQueries({ queryKey: ['project', projectId] }),
+    ]).then(() => undefined),
+  });
+  const recheck = useMutation({
+    mutationFn: (candidate: ProjectPromotionView) => recheckPromotion(projectId, candidate.promotionId),
+    onSettled: () => Promise.all([
+      qc.invalidateQueries({ queryKey: projectIntegrationQuery(projectId).queryKey }),
+      qc.invalidateQueries({ queryKey: projectOpenItemsQuery(projectId).queryKey }),
+      qc.invalidateQueries({ queryKey: projectPromotionQuery(projectId).queryKey }),
+      qc.invalidateQueries({ queryKey: ['project', projectId] }),
+    ]).then(() => undefined),
+  });
   if (shape === null) return <>{null}{jobs}</>;
   const line = integration.data && isMergeJob(inFlight)
     ? landingLine(integration.data, now, { updatedAt: integration.dataUpdatedAt, failed: integration.isError })
     : null;
-  const landing = line
-    ? listed ? <LandingRowButton line={line} onPress={() => setJobsOpen(true)} /> : <LandingRow line={line} />
+  // The merge job's live row, in the merged line's own anatomy (owner decision 2026-10-11, board
+  // docs/mocks/project-merge-check-row): the head, and — where the server lists the jobs — the whole
+  // row as a press. Since 2026-10-19 (方案 A, board v4 04) that press opens THIS ROUND's landing
+  // session; a server that names none keeps main's press, the jobs list. No chevron either way.
+  const headShape = line ? landingHead(line) : null;
+  const head = line && headShape
+    ? <LandingHead title={line.word}
+        head={cancelling ? { ...headShape, detail: `${headShape.detail} · ${STOP_REQUESTED}` } : headShape}
+        running={line.running} timedOut={line.timedOut} />
     : null;
-  const rows = [...(items.data?.needsYou ?? []), ...(items.data?.withCoordinator ?? [])];
-  const item = current ? rows.find((row) => row.promotionId === current.promotionId) ?? null : null;
+  const landing = line
+    ? roundLanding
+      ? <LandingLink className="landing-head-press" sessionId={roundLanding}>{head}</LandingLink>
+      : listed ? <button type="button" className="landing-head-press" aria-haspopup="dialog"
+          onClick={() => setJobsOpen(true)}>{head}</button> : head
+    : null;
+  const openLanding = roundLanding
+    ? <LandingLink className="session-project-merge-link" sessionId={roundLanding} />
+    : null;
+  // The two doors a TIMED-OUT round offers (board v4 04 c5, c6): a check can be run again — the
+  // candidate re-check door, J-T9 through revision 16 — while a merge that stopped at the push has
+  // no retry, only the end (J-T10). Both are the owner's; neither is drawn on a live card.
+  const timedOut = line?.timedOut === true;
+  const timedOutDoors = timedOut ? (
+    <div className="session-project-merge-foot">
+      {mergeJob?.kind === 'CHECK_PROMOTION' && current ? (
+        <button type="button" className="session-project-merge-rerun" disabled={recheck.isPending}
+          onClick={() => recheck.mutate(current)}>
+          {RERUN_THE_CHECK}
+        </button>
+      ) : null}
+      <span className="spl-spacer" />
+      <button type="button" className="session-project-merge-abandon" disabled={abandon.isPending}
+        onClick={() => { if (mergeJob) abandon.mutate(mergeJob.jobId); }}>
+        {ABANDON}
+      </button>
+    </div>
+  ) : null;
+  const item = current ? promotionItem(items.data, current.promotionId) : undefined;
+  // Who has it, or null when the read came back and nobody does — then there is no press to draw.
+  const resolving = resolvingPress(item, now);
+  const inFront = current ? promotionBlockedBy(current, integration.data?.landTasks ?? null) : null;
   const press = (door: 'confirm' | 'decline' | 'cancel'): void => {
     if (current) decide.mutate({ door, candidate: current });
   };
+  // What the check running now leads to: the Automatic setting's merge, or the asking card.
+  const onPass = shape === 'checking' ? promotionOnPassLine(current) : null;
 
   return (
-    <div className={`session-project-merge is-${shape}`} data-shape={shape}>
+    <div className={`session-project-merge is-${shape}${line?.timedOut ? ' is-timed-out' : ''}`} data-shape={shape}>
       {shape === 'checking' ? landing : null}
+      {shape === 'checking' && timedOut ? (
+        <>
+          {/* Where the runner stopped, and — for a check — that nothing could have been pushed. */}
+          {mergeJobDetail ? <div className="session-project-merge-note">{mergeJobDetail}</div> : null}
+          {timedOutDoors}
+        </>
+      ) : null}
+      {onPass && !(shape === 'checking' && timedOut) ? (
+        <div className="session-project-merge-note">{onPass}</div>
+      ) : null}
+      {shape === 'checking' && !timedOut && queuedLine ? (
+        <div className="session-project-merge-foot">
+          <span className="session-project-merge-queued">{queuedLine}</span>
+          <span className="spl-spacer" />
+          <button type="button" className="session-project-merge-link" onClick={() => setJobsOpen(true)}>
+            {`${LANDING_ALL_JOBS} ›`}
+          </button>
+        </div>
+      ) : null}
       {shape === 'asking' && current ? (
         <>
           <div className="session-project-merge-head">
@@ -159,7 +278,7 @@ export function ProjectMergeStrip({
           {criteriaLine ? <div className="session-project-merge-criteria">{criteriaLine}</div> : null}
           <div className="session-project-merge-actions">
             <button type="button" className="session-project-merge-primary" disabled={decide.isPending}
-              onClick={() => press('confirm')}>{MERGE_TO_MAIN}</button>
+              onClick={() => press('confirm')}>{mergeTo(mainBranchName(current.upstreamRef))}</button>
             <button type="button" disabled={decide.isPending} onClick={() => press('decline')}>{NOT_NOW}</button>
           </div>
           <div className="session-project-merge-foot">
@@ -174,18 +293,57 @@ export function ProjectMergeStrip({
         <>
           <div className="session-project-merge-head">
             <span className="session-project-merge-tile"><MergeGlyph /></span>
-            <span className="session-project-merge-title">{promotionPageTitle(current)}</span>
+            <span className="session-project-merge-title">
+              {cancelling ? (tooLate ? TOO_LATE_TO_CANCEL : CANCELLING_THE_MERGE) : promotionPageTitle(current)}
+            </span>
           </div>
-          <div className="session-project-merge-status">{promotionMergingStatus(current)}</div>
+          <div className="session-project-merge-status">
+            {cancelling && !tooLate ? CANCEL_STOPS_SOON : promotionMergingStatus(current)}
+          </div>
           {landing}
-          <div className="session-project-merge-note">{PAGE_NOTHING_TO_DO}</div>
-          <div className="session-project-merge-foot">
-            <button type="button" className="session-project-merge-link" onClick={() => setDetailsOpen(true)}>
-              {`${DETAILS} ›`}
-            </button>
-            <button type="button" disabled={decide.isPending || current.execution?.phase === 'PUSH'}
-              onClick={() => press('cancel')}>{CANCEL_MERGE}</button>
-          </div>
+          {timedOut ? (
+            <>
+              {mergeJobDetail ? <div className="session-project-merge-note">{mergeJobDetail}</div> : null}
+              {timedOutDoors}
+            </>
+          ) : (
+            <>
+              <div className="session-project-merge-note">
+                {cancelling ? CANCEL_MAY_STILL_MERGE : PAGE_NOTHING_TO_DO}
+              </div>
+              {/* While a merge job leads, the Landing card is not drawn (it is the merge's own):
+                  the landings queued behind it keep their way in here, the same line the checking
+                  card uses. */}
+              {!cancelling && queuedLine ? (
+                <div className="session-project-merge-foot">
+                  <span className="session-project-merge-queued">{queuedLine}</span>
+                  <span className="spl-spacer" />
+                  <button type="button" className="session-project-merge-link" onClick={() => setJobsOpen(true)}>
+                    {`${LANDING_ALL_JOBS} ›`}
+                  </button>
+                </div>
+              ) : null}
+              <div className="session-project-merge-foot">
+                {cancelling ? (
+                  <>
+                    {openLanding}
+                    <span className="spl-spacer" />
+                    <button type="button" disabled>{CANCEL_REQUESTED}</button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" className="session-project-merge-link" onClick={() => setDetailsOpen(true)}>
+                      {`${DETAILS} ›`}
+                    </button>
+                    {openLanding}
+                    <span className="spl-spacer" />
+                    <button type="button" disabled={decide.isPending || current.execution?.phase === 'PUSH'}
+                      onClick={() => press('cancel')}>{CANCEL_MERGE}</button>
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </>
       ) : null}
       {shape === 'blocked' && current ? (
@@ -194,10 +352,14 @@ export function ProjectMergeStrip({
             <span className="session-project-merge-title">{promotionPageTitle(current)}</span>
           </div>
           <div className="session-project-merge-status">{promotionBlockedLine(current)}</div>
-          <div className={`session-project-merge-press${item && item.assignee !== 'COORDINATOR' ? ' is-yours' : ''}`}>
-            {resolvingPress(item, now).spinning ? <span className="promotion-spin" aria-hidden="true" /> : null}
-            {resolvingPress(item, now).label}
-          </div>
+          {/* Who is in front of it, off the same project read this strip already holds. */}
+          {inFront ? <div className="session-project-merge-blocked-by">{inFront}</div> : null}
+          {resolving ? (
+            <div className={`session-project-merge-press${item && item.assignee !== 'COORDINATOR' ? ' is-yours' : ''}`}>
+              {resolving.spinning ? <span className="promotion-spin" aria-hidden="true" /> : null}
+              {resolving.label}
+            </div>
+          ) : null}
           <div className="session-project-merge-foot">
             <button type="button" className="session-project-merge-link" onClick={() => setDetailsOpen(true)}>
               {`${DETAILS} ›`}
@@ -213,6 +375,16 @@ export function ProjectMergeStrip({
       {decide.isError && current ? (
         <div className="session-project-merge-error" role="alert">
           {`${current.sourceRef.replace(/^refs\/heads\//, '')} was not merged — ${(decide.error as Error).message}`}
+        </div>
+      ) : null}
+      {abandon.isError ? (
+        <div className="session-project-merge-error" role="alert">
+          {`The attempt was not ended — ${(abandon.error as Error).message}`}
+        </div>
+      ) : null}
+      {recheck.isError ? (
+        <div className="session-project-merge-error" role="alert">
+          {`The check was not re-run — ${(recheck.error as Error).message}`}
         </div>
       ) : null}
       {current ? (

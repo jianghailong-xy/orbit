@@ -104,6 +104,16 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'handlingSessionId',
   'handlingUserId',
   'resolvedByJobId',
+  // Who caused a landing-timeline fact (migration 0438): the coordinator conversation or the owner
+  // a line is signed with — the same two addresses a rerun and a handling row carry. A reader
+  // follows them to the conversation or the person; nothing fences on them.
+  'actorSessionId',
+  'actorUserId',
+  // The landing-timeline facts' own addresses (migration 0438's structured `data`): the attempt a
+  // moved main queued next, and the person whose yes a skipped check carries. Both are rows a
+  // reader follows, never fences.
+  'nextJobId',
+  'approvedByUserId',
   // What a promotion is made of (migration 0285). Every one of them is an address a reader of the
   // card follows: the tasks the merge would carry, the two jobs that checked and landed it, the
   // account owner who confirmed it, the card itself, and the receipts it wrote. None is a fence —
@@ -112,6 +122,10 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'includedTaskIds',
   'checkJobId',
   'landJobId',
+  // The landing subject an attempt belongs to (migration 0436): an address a reader follows from
+  // the attempt to the session and its record. Not a fence — a job's own claim is fenced by
+  // `claimGeneration` and `claimLeaseOwner`.
+  'landingId',
   'confirmedByUserId',
   'openItemId',
   'receiptIds',
@@ -411,8 +425,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'createdById',
   'approvedById',
   'decidedById',
-  // The administrator who last saved a sign-in provider (`sign_in_provider`, migration 0390): a user,
-  // named the way `createdById` names one.
+  // The administrator who last saved a sign-in provider (`sign_in_provider`, migration 0390), or who last
+  // switched the runner dispatch pause (`dispatch_pause`, migration 0442) or the runner link's cut-over
+  // switch (`runner_link_switch`, migration 0446): a user, named the way `createdById` names one.
   'updatedById',
   // The signed-in user a Google LINK flow would link to (`oauth_login_flow`, migration 0391).
   'linkUserId',
@@ -566,6 +581,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // one (a history reference with no foreign key). Addresses a reader follows — never a fence.
   'jobId',
   'requestedByUserId',
+  // A plan version the wiki-worker's plan job drafted (migration 0404): the wiki_job that wrote it, where a
+  // session's draft names its session. A history reference with no foreign key — an address, never a fence.
+  'authorJobId',
   // A confirmation request's review (migration 0370, docs/owner-confirmation-review-contract.md
   // §3.4): the review row, the REVIEW record a decision was made against, the run the request came
   // from and the session that reviews it. Addresses a reader follows; the request itself keeps its
@@ -646,4 +664,11 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'claimLeaseOwner',
   'heartbeatLeaseOwner',
   'operationId',
+  // The process that beat, on a runner's presence row (`runner_presence.process_id`, migration 0444):
+  // the heartbeat's lease owner, stored as sent. A process fence like the two above, in no response.
+  'processId',
+  // The login session a refresh token and a push registration belong to (migration 0425,
+  // docs/push-login-session-design.md). No row of its own and in no request or response: the access
+  // JWT carries it, and the push path compares the two columns byte-for-byte.
+  'loginSessionId',
 ]);

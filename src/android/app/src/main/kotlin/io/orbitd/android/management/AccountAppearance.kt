@@ -16,15 +16,42 @@ import io.orbitd.android.ui.OrbitTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 
 val LocalAppearanceChanged = staticCompositionLocalOf<(String) -> Unit> { {} }
+/** The account's smart model selection switch (`preferences.modelRouting`; off unless the owner turned it on, iOS
+ * UserPreferences.smartModelSelection), read with the theme from the same `users/me`. While it is off no page draws smart selection:
+ * the composer's ✦ (OrbitKit `ComposerLogic.smartRoute`), the task page's Suggested and tier tags, the workspace form's Task runs.
+ * Settings' switch sets it the moment the server has taken the change. */
+val LocalSmartSelection = compositionLocalOf { false }
+val LocalSmartSelectionChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
+/** The account's Session recaps switch (`preferences.recaps`; on unless the owner turned it off, iOS UserPreferences.showRecaps),
+ * read with the theme from the same `users/me`. While it is off no session list draws the server's rolling recap: a row falls back
+ * to the raw last reply it showed before the recap existed — on this page and on a project's. Settings' switch sets it the moment
+ * the server has taken the change. */
+val LocalSessionRecaps = compositionLocalOf { true }
+val LocalSessionRecapsChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
+/** The model last picked for each engine and credential (`preferences.defaultModels`, keyed `<engine>:<provider>`; A07-19 (e), iOS
+ * AppModel `defaultModels`), read with the theme from the same `users/me` — with this device's picks the server has not taken yet
+ * over it. A new session starts on its engine and credential's. */
+val LocalDefaultModels = compositionLocalOf { emptyMap<String, String>() }
+/** Remembers a model picked for an engine and a credential (iOS `rememberDefaultModel`): the next new session has it at once, and
+ * every device once the server has taken it. */
+val LocalRememberModel = staticCompositionLocalOf<(engine: String, provider: String, model: String) -> Unit> { { _, _, _ -> } }
 
 // androidx.activity's own defaults for the navigation bar's scrim (EdgeToEdge.kt).
 private val LightScrim = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
 private val DarkScrim = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
 
-/** The server owns the preference. A new login cannot inherit the previous account's theme. */
+/** The server owns the preferences. A new login cannot inherit the previous account's theme, or its smart model selection. */
 @Composable
 fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     val auth by app.session.state.collectAsState()
@@ -33,7 +60,14 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
         .collectAsState(null to 0L)
     val revision = if (live.first === handle) live.second else 0L
     var theme by remember(handle) { mutableStateOf("system") }
+    var smartSelection by remember(handle) { mutableStateOf(false) }
+    var sessionRecaps by remember(handle) { mutableStateOf(true) }
     var appearanceVersion by remember(handle) { mutableLongStateOf(0L) }
+    var smartSelectionVersion by remember(handle) { mutableLongStateOf(0L) }
+    var sessionRecapsVersion by remember(handle) { mutableLongStateOf(0L) }
+    var savedModels by remember(handle) { mutableStateOf(emptyMap<String, String>()) }
+    var pendingModels by remember(handle) { mutableStateOf(emptyMap<String, String>()) }
+    var modelsVersion by remember(handle) { mutableLongStateOf(0L) }
     var resume by remember { mutableIntStateOf(0) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
@@ -44,13 +78,38 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     LaunchedEffect(handle, resume, revision) {
         if (handle != null) {
             val version = appearanceVersion
+            val smartVersion = smartSelectionVersion
+            val recapsVersion = sessionRecapsVersion
+            val modelVersion = modelsVersion
             try {
                 val user = ManagementApi(app.session, handle).get("users/me") as JsonObject
                 if (version == appearanceVersion) theme = (user["preferences"] as? JsonObject)?.text("theme") ?: "system"
+                // A read that left before the switch was pressed does not take its answer back.
+                if (smartVersion == smartSelectionVersion) smartSelection = smartModelSelection(user["preferences"] as? JsonObject)
+                if (recapsVersion == sessionRecapsVersion) sessionRecaps = sessionRecapsEnabled(user["preferences"] as? JsonObject)
+                if (modelVersion == modelsVersion) savedModels = defaultModels(user["preferences"] as? JsonObject)
             } catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { /* Keep this account's last known preference until the next refresh. */ }
         }
     }
+    val scope = rememberCoroutineScope()
+    val modelWrites = remember(handle) { Mutex() }
+    val rememberModel: (String, String, String) -> Unit = remember(handle) { { engine, provider, model ->
+        val key = "$engine:$provider"
+        if (handle != null && (savedModels + pendingModels)[key] != model) {
+            pendingModels = pendingModels + (key to model)
+            // One write after another, so two quick picks cannot leave the account remembering the older one.
+            scope.launch { modelWrites.withLock {
+                try {
+                    val user = ManagementApi(app.session, handle).patch("users/me/preferences",
+                        buildJsonObject { putJsonObject("defaultModels") { put(key, model) } }) as? JsonObject
+                    (user?.get("preferences") as? JsonObject)?.let { modelsVersion++; savedModels = defaultModels(it) }
+                } catch (cancel: CancellationException) { throw cancel }
+                catch (_: Exception) { /* The pick stays this device's until the next one, or the next read, says otherwise. */ }
+                if (savedModels[key] == model && pendingModels[key] == model) pendingModels = pendingModels - key
+            } }
+        }
+    } }
     val dark = when (theme) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
     // enableEdgeToEdge() sized the bars' icons for the system's mode; the account's own appearance decides them,
     // or a dark app under a light system keeps dark icons on a dark bar. Same transparent bars and scrims as before.
@@ -61,7 +120,14 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
             navigationBarStyle = SystemBarStyle.auto(LightScrim, DarkScrim) { dark })
         onDispose { }
     }
-    CompositionLocalProvider(LocalAppearanceChanged provides { appearanceVersion++; theme = it }) {
+    CompositionLocalProvider(LocalAppearanceChanged provides { appearanceVersion++; theme = it }, LocalSmartSelection provides smartSelection,
+        LocalSmartSelectionChanged provides { smartSelectionVersion++; smartSelection = it },
+        LocalSessionRecaps provides sessionRecaps, LocalSessionRecapsChanged provides { sessionRecapsVersion++; sessionRecaps = it },
+        LocalDefaultModels provides savedModels + pendingModels, LocalRememberModel provides rememberModel) {
         OrbitTheme(darkTheme = dark, content = content)
     }
 }
+
+/** `preferences.defaultModels` as the strings it maps. */
+private fun defaultModels(preferences: JsonObject?): Map<String, String> =
+    (preferences?.get("defaultModels") as? JsonObject).orEmpty().mapNotNull { (key, value) -> (value as? JsonPrimitive)?.contentOrNull?.let { key to it } }.toMap()

@@ -1,0 +1,12 @@
+179b1ff183d57b3c6cdedd3c76ed9e5acf506f459fa69130b482af8dd8a1cf18  ./pages.browser.mjs-session-chromium-dark-phone/session-attachment-menu-actual.png
+1b99d9c3fbd3f110d68e03a31882b849937d9727cd982762023e186508a0ebd8  ./pages.browser.mjs-session-chromium-dark-phone/session-attachment-menu-diff.png
+0921253df97e6c6e3275afa6b3029689c661b710d2fd7d4e867fe346de133696  ./pages.browser.mjs-session-chromium-dark-phone/session-attachment-menu-expected.png
+ee42c762c6e5d4f0c1a76ca94eee3f99a2f40b2399295175d7bca104acb662b3  ./pages.browser.mjs-session-chromium-light-phone/session-attachment-menu-actual.png
+9ee82aec9209e69c7779a58654fad3a0612f3631bc0fc3985108172235e6e549  ./pages.browser.mjs-session-chromium-light-phone/session-attachment-menu-diff.png
+5cfed3f46f4944b259724be51a14341dafc24f14c020a22aa4d906b79f157e4f  ./pages.browser.mjs-session-chromium-light-phone/session-attachment-menu-expected.png
+a4e04276c5e3f9d364106faaae404b2ef344795e05f13d3f98c49434b5169135  ./pages.browser.mjs-session-webkit-dark-phone/session-attachment-menu-actual.png
+f8e91c945594b4345226ba3c4b70320d42bae91a245c0184d1364407e0de8e7f  ./pages.browser.mjs-session-webkit-dark-phone/session-attachment-menu-diff.png
+db9c6e93c467b0d2ac0b73e2a83c753e4ed1ee26c0a73c25b4db4a851e6aa3dc  ./pages.browser.mjs-session-webkit-dark-phone/session-attachment-menu-expected.png
+70be22394625d3c16516698619735ab99de93630874e65f5cdc2fd105dbe3d17  ./pages.browser.mjs-session-webkit-light-phone/session-attachment-menu-actual.png
+2b44d9b0c6a1eb2b878a8d9a56af363405b8049d4efb1cdb203ee50e836ddce0  ./pages.browser.mjs-session-webkit-light-phone/session-attachment-menu-diff.png
+9022ef0fb13c7f1b1f05bddead0ad3120b388e9e0b3a92bf443e415123e84bb4  ./pages.browser.mjs-session-webkit-light-phone/session-attachment-menu-expected.png

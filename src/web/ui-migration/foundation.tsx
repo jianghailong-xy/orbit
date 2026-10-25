@@ -1,4 +1,5 @@
-import 'antd/dist/reset.css';
+import '../src/components/ui/root.css';
+import '../src/components/ui/reset.css';
 import '../src/index.css';
 import '../src/components/ui/foundation.css';
 import { createRoot } from 'react-dom/client';

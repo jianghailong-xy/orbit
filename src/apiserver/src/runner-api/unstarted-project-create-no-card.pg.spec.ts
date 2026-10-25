@@ -26,6 +26,13 @@
  *      the Automatic rule's own message, and the tasks are written.
  *   8. The Automatic project, but from a conversation that does not coordinate it, or with one
  *      item in another project: asked.
+ *   9. A single create whose own write is refused — the acceptance prose reads like a mechanically
+ *      decided result under a declaration that says nothing about why — is refused at the card with
+ *      that write's own body, and no card is raised: the answer to it is the CALLER's, and a person
+ *      pressing a button cannot give it. The write is sent too, and answers the same 409.
+ *  10. A single create that names its assignee the way the runner does — the base62 public id — is
+ *      carded with the server's preview of it. The ids a runner sends are public ids, and the card
+ *      door reads them through the DTO that decodes them rather than handing base62 to Prisma.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/unstarted-project-create-no-card.pg.spec.ts
  *
@@ -63,6 +70,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { ListEventsService } from '../task-lists/list-events.service';
 import { TaskListsService } from '../task-lists/task-lists.service';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
+import { TASK_CRITERION_SHAPE_ADVICE_CODE } from '../tasks/task-criterion-shape-advice';
 import { TasksService } from '../tasks/tasks.service';
 import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -291,6 +299,16 @@ test('a coordinator’s creates in a project nobody has started, or one that is 
     return ask(sessionId, 'orbit_task_batch', { tasks: bodies, preview: preview.json });
   }
 
+  /** The input a card was stored with: what the clients render, and what its pill is read from. */
+  async function storedInput(id: string): Promise<Record<string, any>> {
+    const { rows } = await sql.query<{ input: Record<string, any> }>(
+      `SELECT "input" FROM "approval" WHERE "id" = $1::uuid`,
+      [toUuid(id)],
+    );
+    assert.equal(rows.length, 1, `approval ${id} was not written`);
+    return rows[0].input;
+  }
+
   async function approvalRow(id: string) {
     const { rows } = await sql.query<{
       status: string;
@@ -510,5 +528,83 @@ test('a coordinator’s creates in a project nobody has started, or one that is 
       taskBody('and there', elsewhere),
     ]);
     await assertAsked(coordinator, straddling);
+  });
+
+  // ── 9 ────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('a create the write would refuse is refused at the card, and no card is raised', async () => {
+    const someone = await conversation('普通会话：注定被拒的单张 create');
+    // One body the write itself refuses: prose that reads like a mechanically decided result
+    // (a `typecheck`) under a declaration that is not EXECUTABLE and says nothing about why. What
+    // the server has to say about it is a question for the CALLER — use the suggested criterion, or
+    // record the reason — and only the model is in a position to answer it.
+    const refused = {
+      title: 'a task the write refuses',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
+      acceptanceCriteria: 'typecheck passes',
+    };
+
+    const cardAnswer = await send('POST', `/runner/sessions/${uuidToBase62(someone)}/approvals`, {
+      toolName: 'orbit_task_create',
+      input: refused,
+      toolUseId: `call-${randomUUID()}`,
+    });
+    assert.equal(cardAnswer.status, 409, cardAnswer.text);
+    assert.equal(cardAnswer.json.code, TASK_CRITERION_SHAPE_ADVICE_CODE);
+    assert.equal(cardAnswer.json.kind, 'ADVISORY');
+    assert.equal(cardAnswer.json.declaredCriterion, 'EVIDENCE_JUDGMENT');
+    assert.equal(cardAnswer.json.suggestedCriterion, 'EXECUTABLE');
+    assert.equal(cardAnswer.json.requiredAction, 'USE_SUGGESTED_CRITERION_OR_EXPLAIN_OVERRIDE');
+    assert.equal(cardAnswer.json.overrideReasonField, 'completionCriterionOverrideReason');
+
+    // The premise of the case, from the other door: this body's write is refused too, with the same
+    // answer. That is what makes the card pointless — a person pressing it can only be turned away.
+    const writeAnswer = await send('POST', '/runner/tasks', refused, {
+      'x-orbit-session-id': uuidToBase62(someone),
+      'x-orbit-workspace-id': uuidToBase62(workspaceId),
+    });
+    assert.equal(writeAnswer.status, 409, writeAnswer.text);
+    assert.equal(writeAnswer.json.code, cardAnswer.json.code);
+    assert.equal(writeAnswer.json.requiredAction, cardAnswer.json.requiredAction);
+    assert.equal(writeAnswer.json.suggestedCriterion, cardAnswer.json.suggestedCriterion);
+
+    // And the card itself was never raised: no row at all for the session list to count, no card on
+    // the conversation, no phone buzzed.
+    const { rows } = await sql.query<{ n: number }>(
+      `SELECT count(*)::int AS "n" FROM "approval" WHERE "session_id" = $1::uuid`,
+      [someone],
+    );
+    assert.equal(rows[0].n, 0, 'a refused create filed an approval row');
+    assert.deepEqual(await raised(someone), { cards: 0, pushes: 0, pending: 0 });
+
+    // The control: the same create once the caller has answered that question is carded as usual —
+    // what the door refused was the silence, not the shape.
+    const answered = {
+      ...refused,
+      completionCriterionOverrideReason: 'the run is judged by a session; the suite is evidence',
+    };
+    const card = await ask(someone, 'orbit_task_create', answered);
+    await assertAsked(someone, card);
+  });
+
+  // ── 10 ───────────────────────────────────────────────────────────────────────────────────────
+  await t.test('a single create names its ids the way the runner does, and is carded with its preview', async () => {
+    const someone = await conversation('普通会话：单张 create 的预览');
+    const assigneeId = uuidToBase62(workspaceId);
+    const body = taskBody('an ordinary create', null, { assigneeId });
+
+    const card = await ask(someone, 'orbit_task_create', body);
+    const stored = await storedInput(card.id);
+
+    // The reading the card leads with, computed over the body the runner actually sent: a task
+    // assigned to a workspace on a live runner, filed in no project, has nothing that would start
+    // it by itself. Before the DTO was applied at this door the first query of this preview threw
+    // `invalid input syntax for type uuid` — the ids a runner sends are base62 — and the card was
+    // filed without a preview, which is how every one of these cards was filed.
+    assert.equal(stored.preview.taskCount, 1);
+    assert.equal(stored.preview.needsManualStart, 1);
+    assert.equal(stored.preview.startingNow, 0);
+    // Stored as sent: the card renders the body the runner spelled, public id and all.
+    assert.equal(stored.assigneeId, assigneeId);
+    assert.equal(stored.title, 'an ordinary create');
   });
 });

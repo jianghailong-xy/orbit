@@ -1,0 +1,2 @@
+ready: in view after 0 move(s) at (79.3333333333333, 514.6666666666667, 154.33333333333331, 15.666666666666515)
+ready: result line mark ✓, check line mark ✓

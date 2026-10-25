@@ -53,7 +53,7 @@ class WikiPlanPageTest {
             if (shown?.status == WikiPlanLogic.ShownStatus.FAILED) failed else null, inForce, if (state.confirmed != null) WikiPlanFixture.directory else null)
         show {
             WikiPlanPage(route, state, shown, shown?.let { WikiPlanLogic.base(it, state) }, versions, card, if (state.confirmed != null) 3 to 5 else null,
-                "orbit · wikova", "local-vllm", WikiPlanFixture.now, busy, refused, actions)
+                WikiPlanFixture.now, busy, refused, actions = actions)
         }
     }
     private fun scrollTo(tag: String) = compose.onNodeWithTag("wiki-plan-page").performScrollToNode(hasTestTag(tag))
@@ -132,13 +132,14 @@ class WikiPlanPageTest {
     @Test fun theJobCardSaysQueuedDraftingHeldAndWritingAndItsLinkGoesWhereItSays() {
         page("noneQueued")
         compose.onNodeWithTag("wiki-plan-meta").assertTextEquals("First draft · asked when the space was made")
-        says("wiki-plan-job", WikiPlanCopy.queued, "starts after the Wiki maintenance run that’s going now (started 4m ago)")
+        says("wiki-plan-job", WikiPlanCopy.queued, WikiPlanCopy.queuedText)
         compose.onAllNodesWithTag("wiki-plan-empty").assertCountEquals(0)
         compose.onAllNodesWithTag("wiki-plan-redraft").assertCountEquals(0)
-        compose.onNodeWithTag("wiki-plan-job-link").assertTextEquals(WikiPlanCopy.viewRun).performClick()
+        // A queued job has no run of its own yet: nothing to open.
+        compose.onAllNodesWithTag("wiki-plan-job-link").assertCountEquals(0)
         page("noneDrafting")
-        says("wiki-plan-job", "local-vllm · attempt 1 of 3 · started 12m ago")
-        compose.onNodeWithTag("wiki-plan-job-link").performClick()
+        says("wiki-plan-job", "${WikiPlanCopy.drafterServer} · attempt 1 of 3 · started 12m ago")
+        compose.onNodeWithTag("wiki-plan-job-link").assertTextEquals(WikiPlanCopy.viewRun).performClick()
         page("noneHeld")
         says("wiki-plan-job", WikiPlanCopy.held, "No maintenance workspace is set up — a draft runs where maintenance runs.")
         compose.onNodeWithTag("wiki-plan-job-link").assertTextEquals(WikiPlanCopy.setUp).performClick()
@@ -147,13 +148,15 @@ class WikiPlanPageTest {
         page("writing")
         says("wiki-plan-job", WikiPlanCopy.writing, "2 of 5 written · started 40m ago", "${WikiPlanCopy.writingNow} 3.2 会话状态生命周期")
         compose.onNodeWithTag("wiki-plan-job-progress").assertExists()
-        assertEquals(listOf("run se-maint", "run se-job", "settings", "runners"), calls)
+        assertEquals(listOf("run se-job", "settings", "runners"), calls)
     }
 
+    /** No plan: what a plan is, with the System model as who drafts it, Draft plan, and where and how long it runs. */
     @Test fun noPlanSaysSoAndOffersDraftPlan() {
         page("none")
         compose.onNodeWithTag("wiki-plan-meta").assertTextEquals(WikiPlanCopy.none)
-        says("wiki-plan-empty", WikiPlanCopy.emptyTitle, WikiPlanCopy.emptyText("local-vllm"), WikiPlanCopy.emptyNote("orbit · wikova", "local-vllm"))
+        says("wiki-plan-empty", WikiPlanCopy.emptyTitle, WikiPlanCopy.emptyText, WikiPlanCopy.emptyNoteServer)
+        compose.onNodeWithText(WikiPlanCopy.emptyText).assertExists()
         compose.onAllNodesWithTag("wiki-plan-version-menu").assertCountEquals(0)
         compose.onNodeWithTag("wiki-plan-draft").assertIsEnabled().performClick()
         assertEquals(listOf("draft"), calls)
@@ -249,9 +252,9 @@ class WikiPlanPageTest {
         var closed = 0
         var answer = false
         show {
-            WikiPlanRedraftSheet(WikiPlanCopy.redraftNote("local-vllm", 1 to true), listOf("2.1"), close = { closed++ }) { words -> sent += words; answer }
+            WikiPlanRedraftSheet(WikiPlanCopy.redraftNote(1 to true), listOf("2.1"), close = { closed++ }) { words -> sent += words; answer }
         }
-        compose.onNodeWithText(WikiPlanCopy.redraftNote("local-vllm", 1 to true)).assertExists()
+        compose.onNodeWithText(WikiPlanCopy.redraftNote(1 to true)).assertExists()
         compose.onNodeWithText(WikiPlanCopy.protectedKept(listOf("2.1"))).assertExists()
         compose.onNodeWithTag("wiki-plan-redraft-words").performTextInput("merge 2.1 and 2.2")
         compose.onNodeWithTag("wiki-plan-redraft-go").performClick()

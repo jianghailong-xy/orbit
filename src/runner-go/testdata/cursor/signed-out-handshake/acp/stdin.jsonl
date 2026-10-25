@@ -1,0 +1,5 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false},"clientInfo":{"name":"orbit-p0","version":"0"}}}
+{"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"<RUN>/work","mcpServers":[]}}
+{"jsonrpc":"2.0","id":3,"method":"session/list","params":{}}
+{"jsonrpc":"2.0","id":4,"method":"authenticate","params":{"methodId":"cursor_login"}}
+{"jsonrpc":"2.0","id":5,"method":"authenticate","params":{"methodId":"bogus"}}

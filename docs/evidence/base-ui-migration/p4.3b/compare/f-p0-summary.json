@@ -1,0 +1,273 @@
+{
+ "beyond": [
+  {
+   "clusters": [
+    [
+     [
+      18,
+      21
+     ],
+     [
+      192,
+      193
+     ],
+     3,
+     2
+    ],
+    [
+     [
+      18,
+      21
+     ],
+     [
+      222,
+      223
+     ],
+     4,
+     4
+    ]
+   ],
+   "max": 4,
+   "pixels": 7,
+   "shot": "chromium-dark-desktop/breakpoint-639-projects.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      18,
+      21
+     ],
+     [
+      149,
+      153
+     ],
+     6,
+     3
+    ],
+    [
+     [
+      18,
+      21
+     ],
+     [
+      192,
+      193
+     ],
+     3,
+     2
+    ],
+    [
+     [
+      18,
+      21
+     ],
+     [
+      222,
+      223
+     ],
+     4,
+     4
+    ]
+   ],
+   "max": 4,
+   "pixels": 13,
+   "shot": "chromium-dark-phone/projects-search-empty.png"
+  }
+ ],
+ "missing": [],
+ "screenshots": {
+  "antialias": 11,
+  "beyond": 2,
+  "identical": 239,
+  "missing": 0
+ },
+ "styleDeltas": {
+  "chromium-dark-desktop/project-graph-fullscreen": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-dark-phone/project-graph-fullscreen": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-light-desktop/project-graph-fullscreen": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-light-phone/project-graph-fullscreen": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/project-graph-fullscreen": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/project-graph-fullscreen": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/project-graph-fullscreen": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/project-graph-fullscreen": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  }
+ },
+ "tests": {
+  "notPassedDel": [
+   "chromium-dark-desktop :: record browser performance baseline",
+   "chromium-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-dark-phone :: record browser performance baseline",
+   "chromium-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-light-phone :: record browser performance baseline",
+   "webkit-dark-desktop :: record browser performance baseline",
+   "webkit-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-dark-phone :: record browser performance baseline",
+   "webkit-light-desktop :: record browser performance baseline",
+   "webkit-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-light-phone :: record browser performance baseline"
+  ],
+  "notPassedRef": [
+   "chromium-dark-desktop :: record browser performance baseline",
+   "chromium-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-dark-phone :: record browser performance baseline",
+   "chromium-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-light-phone :: record browser performance baseline",
+   "webkit-dark-desktop :: record browser performance baseline",
+   "webkit-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-dark-phone :: record browser performance baseline",
+   "webkit-light-desktop :: record browser performance baseline",
+   "webkit-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-light-phone :: record browser performance baseline"
+  ],
+  "total": 112
+ },
+ "traces": {
+  "differing": {},
+  "equal": 0,
+  "total": 0
+ }
+}

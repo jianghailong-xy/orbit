@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-18T01:17:11.516+00:00",
+  "kind": "task",
+  "owner": "amy",
+  "runAt": "2026-10-18T01:25:31Z",
+  "status": 201,
+  "task": {
+    "assigneeId": "34hlwBX3PDHoZvmmu6hPq",
+    "code": null,
+    "id": "34hmobWsgVaoswy8te4C9",
+    "message": null,
+    "runAt": "2026-10-18T01:25:31.000Z",
+    "status": "OPEN"
+  }
+}

@@ -1,0 +1,24 @@
+[orbit-runner 2026-10-20T23:33:27.471Z] managed runner instance identity read; it is sent with every request
+[orbit-runner 2026-10-20T23:33:27.471Z] volume check: 0 checkouts in 0 repositories after start; 0 stale lock files removed, 0 branches restored, 0 checkouts damaged
+[orbit-runner 2026-10-20T23:33:27.472Z] volume syncs: before reports only; the volume is a directory of /dev/nvme0n1p3 (ext4), which it shares, so a sync behind every tool would write back the whole filesystem
+[orbit-runner 2026-10-20T23:33:27.472Z] runner "orbit-managed" online -> http://172.18.0.1:2714 (max 2 concurrent)
+[orbit-runner 2026-10-20T23:33:28.501Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:30.503Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:32.505Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:34.506Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:36.507Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:38.508Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:40.510Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:42.512Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:44.514Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:46.515Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:48.517Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:50.518Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:52.520Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:54.522Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:56.523Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:57.473Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:34:27.483Z] heartbeat failed: POST /runner/heartbeat -> 503
+  refused: MANAGED_RUNNER_INSTANCE_PENDING
+  what:    The manager has not recorded this instance yet; try again shortly.
+{"code":"MANAGED_RUNNER_INSTANCE_PENDING","message":"The manager has not recorded this instance yet; try again shortly.","retryable":true}

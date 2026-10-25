@@ -1,5 +1,5 @@
 /** Retains the existing empty-state illustration. Adapted from Ant Design's
- * MIT-licensed Empty/simple; attribution and license: ./antd-empty.LICENSE. */
+ * MIT-licensed Empty/simple; attribution and license: the Ant Design license file in this directory. */
 export function SelectEmpty() {
   return <div className="orbit-select-empty-content">
     <div className="orbit-select-empty-image" aria-hidden>

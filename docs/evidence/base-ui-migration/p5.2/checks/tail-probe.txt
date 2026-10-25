@@ -1,0 +1,13 @@
+# tail-probe.mjs (scripts/): the P5.2 conversation loaded N times per tree, every byte served at once (the viewer case's first step);
+# the scroller's gap to the end once every picture has decoded and the scroller has stopped. Chromium, light, desktop.
+# reference 5116ff9fe (on :4361) and delivery 001220037 (on :4362), 2026-10-10 ~03:05Z, load ~40.
+
+$ node scripts/tail-probe.mjs 8
+{"ref":[0,0,0,0,0,1053,0,0],"del":[0,0,0,0,0,0,0,0]}
+at the tail (gap 0): { ref: '7/8', del: '8/8' }
+
+$ node scripts/tail-probe.mjs 14
+{"ref":[0,0,0,0,0,0,0,0,0,0,0,0,0,0],"del":[0,0,0,0,1053,0,0,0,0,0,0,0,0,0]}
+at the tail (gap 0): { ref: '14/14', del: '13/14' }
+
+# together: reference 21/22, delivery 21/22 at the tail; the one miss in each tree is the same 1053px.

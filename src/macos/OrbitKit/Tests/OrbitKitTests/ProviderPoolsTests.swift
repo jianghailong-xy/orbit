@@ -370,9 +370,12 @@ final class ProviderPoolsTests: XCTestCase {
     func testAPoolRunsOnClaudeWithTheClaudeCLIsOwnModels() {
         let providers = ProviderPools.asProviders([claude])
         XCTAssertEqual(AgentDefaults.runtime(for: "claude-accounts", configured: providers), "claude")
-        XCTAssertEqual(AgentDefaults.models(for: "claude-accounts", catalog: catalog, configured: providers).map(\.id),
+        XCTAssertEqual(ProviderEngines.engines(ofProvider: "claude-accounts", configured: providers), ["claude"])
+        XCTAssertEqual(AgentDefaults.models(engine: "claude", provider: "claude-accounts", catalog: catalog,
+                                            configured: providers).map(\.id),
                        ["claude-opus-5", "claude-sonnet-5"])
-        XCTAssertEqual(AgentDefaults.defaultModel(for: "claude-accounts", catalog: catalog, configured: providers),
+        XCTAssertEqual(AgentDefaults.defaultModel(engine: "claude", provider: "claude-accounts", catalog: catalog,
+                                                  configured: providers),
                        "claude-opus-5")
         XCTAssertEqual(AgentDefaults.providerName("claude-accounts", configured: providers), "Claude accounts")
     }
@@ -381,7 +384,7 @@ final class ProviderPoolsTests: XCTestCase {
     func testAPoolCarriesNoQuotaOfItsOwn() {
         let providers = ProviderPools.asProviders([claude])
         XCTAssertNil(providers.first?.planUsage)
-        XCTAssertNil(AgentDefaults.planUsage(for: "claude-accounts",
+        XCTAssertNil(AgentDefaults.planUsage(engine: "claude", provider: "claude-accounts",
                                              runner: PlanUsage(claude: PlanUsageSnapshot(fiveHour: PlanUsageWindow(utilization: 55))),
                                              configured: providers))
     }

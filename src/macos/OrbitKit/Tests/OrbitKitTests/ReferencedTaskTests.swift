@@ -6,7 +6,8 @@ import XCTest
 /// Held to the wording the apiserver writes (tasks/reference-expansion.ts `describeTask`) and proved
 /// against this deployment's own notes, copied out of `run_event` (`ReferencedTaskFixtures`) —
 /// including the note that carries eight of them and the one that shares a note with the inventory a
-/// returning engine was handed.
+/// returning engine was handed. Those are all Chinese, as every transcript from before 2026-10 is; the
+/// English the block is written in now is `inEnglish`, which the apiserver's own spec writes.
 ///
 /// The browser proves the same notes with the same expectations (referencedTask.test.ts); two ends
 /// reading one block differently is exactly what `ReferencedTaskCopyParityTests` is for.
@@ -66,6 +67,33 @@ final class ReferencedTaskTests: XCTestCase {
         XCTAssertEqual(parsed?.tasks[7].suffixes, ["验收任务"])
     }
 
+    func testReadsTheEnglishTheBlockIsWrittenInNowAsItReadsTheChinese() {
+        let parsed = ReferencedTaskText.parse(ReferencedTaskFixtures.inEnglish)
+
+        XCTAssertEqual(parsed?.tasks, [
+            ReferencedTask(id: "34DH29mTc7OQ6AwxAFIJu",
+                           title: "Claude QA: verify the Watch core backend and its recovery semantics",
+                           status: "DONE",
+                           suffixes: ["verification task"],
+                           list: "(no list)",
+                           assignee: "orbit",
+                           runs: 1,
+                           executed: 1,
+                           lastRun: "SUCCEEDED, 144 turns"),
+            ReferencedTask(id: "349vy0HknpSjHwdwJ31O1",
+                           title: "P0 | Review and publish the docs and the community baseline",
+                           status: "OPEN",
+                           suffixes: [],
+                           list: "(no list)",
+                           assignee: "(unassigned)",
+                           runs: 0,
+                           executed: 0,
+                           lastRun: "never run"),
+        ])
+        // The sentence addressed to the agent is no field, and nothing of the note is left over.
+        XCTAssertEqual(parsed?.rest, "")
+    }
+
     func testHandsAnotherBlockInTheSameNoteBackUntouched() {
         let parsed = ReferencedTaskText.parse(ReferencedTaskFixtures.withBackgroundJobs)
 
@@ -89,6 +117,11 @@ final class ReferencedTaskTests: XCTestCase {
         // A list reference is a shape this deployment has never sent one of, and nobody guesses.
         XCTAssertNil(ReferencedTaskText.parse(
             "<referenced-list id=\"34OEE9MQXMEm0h0Ptm1GG\">\n  标题   x\n</referenced-list>"))
+        XCTAssertNil(ReferencedTaskText.parse(
+            "<referenced-list id=\"34OEE9MQXMEm0h0Ptm1GG\">\n  Title       x\n</referenced-list>"))
+        // The English is read word for word too: a reworded label is no field.
+        XCTAssertNil(ReferencedTaskText.parse(ReferencedTaskFixtures.inEnglish
+            .replacingOccurrences(of: "  Status   ", with: "  State    ")))
     }
 
     func testDrawsTheBlocksItCanReadAndLeavesBesideThemTheOneItCannot() {
@@ -113,6 +146,7 @@ final class ReferencedTaskTests: XCTestCase {
         XCTAssertEqual(summary(ReferencedTaskFixtures.neverRan), "OPEN")
         XCTAssertEqual(summary(ReferencedTaskFixtures.eightTasks), "7 DONE, 1 OPEN")
         XCTAssertEqual(summary(ReferencedTaskFixtures.twoTasks), "1 DONE, 1 OPEN")
+        XCTAssertEqual(summary(ReferencedTaskFixtures.inEnglish), "1 DONE, 1 OPEN")
     }
 
     // MARK: what a card says

@@ -20,9 +20,9 @@ import kotlinx.serialization.json.JsonObject
 import java.time.Duration
 import java.time.Instant
 
-/** OrbitKit `SharePanel`/`SharePanelCopy`: the ⋯ menu's words and the Share dialog of a task and a project (A05 owns the
- * session's). The panel inside is A13's `ShareResourcePanel`, the one every Share uses; the server's answer replaces each change. */
-enum class ShareRootKind(val segment: String) { TASK("tasks"), PROJECT("projects") }
+/** OrbitKit `SharePanel`/`SharePanelCopy`: the ⋯ menu's words and the Share dialog of a task, a project and a wiki space (A05
+ * owns the session's). The panel inside is A13's `ShareResourcePanel`, the one every Share uses; the server's answer replaces each change. */
+enum class ShareRootKind(val segment: String) { TASK("tasks"), PROJECT("projects"), WIKI("wiki/spaces") }
 
 object SharePanelCopy {
     const val onlyYou = "Only you"
@@ -33,7 +33,11 @@ object SharePanelCopy {
     const val linkCopied = "Link copied"
     const val markdownCopied = "Markdown copied"
     const val done = "Done"
-    fun title(kind: ShareRootKind) = if (kind == ShareRootKind.TASK) "Share task" else "Share project"
+    fun title(kind: ShareRootKind) = when (kind) {
+        ShareRootKind.TASK -> "Share task"
+        ShareRootKind.PROJECT -> "Share project"
+        ShareRootKind.WIKI -> "Share wiki"
+    }
     /** The web's `ago`: "just now" under ten seconds, then a span such as "3h 20m ago". */
     fun ago(iso: String, now: Instant = Instant.now()): String? {
         val date = runCatching { Instant.parse(iso) }.getOrNull() ?: return null
@@ -57,7 +61,7 @@ object SharePanel {
     fun menuStatus(read: JsonObject?): String? = read?.let { if (open(it) == null) SharePanelCopy.onlyYou else SharePanelCopy.liveLink }
 }
 
-/** The Share dialog of one task or project. [changed] hears the server's answer to every read and change of its link. */
+/** The Share dialog of one task, project or wiki space. [changed] hears the server's answer to every read and change of its link. */
 @Composable
 fun ShareSheet(app: OrbitApplication, handle: SessionHandle, kind: ShareRootKind, rootId: String, close: () -> Unit, changed: (JsonObject) -> Unit = {}) {
     val api = remember(handle) { ManagementApi(app.session, handle, app.processScope) }

@@ -3,16 +3,18 @@ import XCTest
 
 /// A message sent while a turn is already running is written INTO that turn (a steer) instead of
 /// queued behind it. The two are different promises to the person who sent one, and the console
-/// has to keep them apart: a queued message is waiting and withdrawable, a steer is already on its
-/// way and cannot be taken back. These cover what the clients show for one, and prove the queued
-/// behaviour they sit next to still works exactly as it did.
+/// has to keep them apart: a queued message is waiting and can be cancelled, a steer is already on
+/// its way and can be taken back only until the engine reads it. These cover what the clients show
+/// for one, and prove the queued behaviour they sit next to still works exactly as it did.
 final class SteerDeliveryTests: XCTestCase {
 
     private func userEvent(_ seq: Int, turn: String, text: String,
-                           delivery: String? = "enqueued", steer: Bool = false) -> RunEvent {
+                           delivery: String? = "enqueued", steer: Bool = false,
+                           withdrawable: Bool = false) -> RunEvent {
         var payload: [String: JSONValue] = ["text": .string(text)]
         if let delivery { payload["delivery"] = .string(delivery) }
         if steer { payload["steer"] = .bool(true) }
+        if withdrawable { payload["withdrawable"] = .bool(true) }
         return RunEvent(seq: seq, type: .user, turnId: turn, payload: .object(payload))
     }
 
@@ -26,8 +28,11 @@ final class SteerDeliveryTests: XCTestCase {
         return RunEvent(seq: seq, type: .userDelivery, payload: .object(payload))
     }
 
+    /// Every user message wherever it is drawn: the conversation, or — a steer of the reader's that
+    /// nothing has read yet — the tray above the composer (`unreadSteers`, `PendingTrayTests`).
     private func bubbles(_ r: TranscriptReducer) -> [UserBubble] {
         r.state.items.compactMap { if case .user(let b) = $0 { return b } else { return nil } }
+            + r.state.unreadSteers
     }
 
     // MARK: - the states themselves
@@ -37,9 +42,14 @@ final class SteerDeliveryTests: XCTestCase {
         // as the runner's own acceptance: both are a promise it will be offered to the engine.
         XCTAssertEqual(SteerDelivery.state(nil).label, "Sending…")
         XCTAssertEqual(SteerDelivery.state("enqueued").label, "Sending…")
-        XCTAssertEqual(SteerDelivery.state("written").label, "Delivering…")
-        XCTAssertEqual(SteerDelivery.state("acknowledged").label, "Sent into this turn")
+        // The read receipts people know from chat: it has arrived, and waits for the engine to
+        // read it — then it is read.
+        XCTAssertEqual(SteerDelivery.state("written").label, "Waiting to be read")
+        XCTAssertEqual(SteerDelivery.state("acknowledged").label, "Read in this turn")
         XCTAssertEqual(SteerDelivery.state("failed").label, "Not delivered")
+        // Reached the engine, and nobody can say whether it was read: said as exactly that, not
+        // left reading "Sending…" for a message that is long past being sent.
+        XCTAssertEqual(SteerDelivery.state("unconfirmed").label, "Couldn't confirm it was read")
         // Same vocabulary as web: a message re-filed as its own turn is on its way, not lost.
         XCTAssertEqual(SteerDelivery.state("requeued").label, "Queued for next turn instead")
         XCTAssertEqual(SteerDelivery.state("requeued").tone, .progress)
@@ -49,6 +59,7 @@ final class SteerDeliveryTests: XCTestCase {
         XCTAssertEqual(SteerDelivery.state("written").tone, .progress)
         XCTAssertEqual(SteerDelivery.state("acknowledged").tone, .delivered)
         XCTAssertEqual(SteerDelivery.state("failed").tone, .failed)
+        XCTAssertEqual(SteerDelivery.state("unconfirmed").tone, .failed)
         // A stage a newer runner reports and this client has never heard of is still in flight.
         // Reading it as arrived would claim the engine has a message that may still be queued.
         XCTAssertEqual(SteerDelivery.state("teleported").tone, .progress)
@@ -78,7 +89,7 @@ final class SteerDeliveryTests: XCTestCase {
         XCTAssertEqual(all.count, 2)
         XCTAssertFalse(all[0].steer, "an ordinary message is not a steer")
         XCTAssertTrue(all[1].steer)
-        XCTAssertEqual(SteerDelivery.state(all[1].delivery).label, "Sent into this turn")
+        XCTAssertEqual(SteerDelivery.state(all[1].delivery).label, "Read in this turn")
     }
 
     func testAdvancesOneMessageWithoutTouchingTheOther() {
@@ -262,7 +273,7 @@ final class SteerDeliveryTests: XCTestCase {
         written.apply(userEvent(1, turn: "t1", text: "use the other endpoint",
                                 delivery: "written", steer: true))
 
-        XCTAssertEqual(SteerDelivery.state(bubbles(written)[0].delivery).label, "Delivering…")
+        XCTAssertEqual(SteerDelivery.state(bubbles(written)[0].delivery).label, "Waiting to be read")
         XCTAssertFalse(bubbles(written)[0].undelivered)
 
         // …and the other way round: codex has been seen echoing a steer back before the response
@@ -271,7 +282,7 @@ final class SteerDeliveryTests: XCTestCase {
         echoed.apply(userEvent(1, turn: "t1", text: "use the other endpoint",
                                delivery: "acknowledged", steer: true))
 
-        XCTAssertEqual(SteerDelivery.state(bubbles(echoed)[0].delivery).label, "Sent into this turn")
+        XCTAssertEqual(SteerDelivery.state(bubbles(echoed)[0].delivery).label, "Read in this turn")
         XCTAssertFalse(bubbles(echoed)[0].undelivered)
     }
 
@@ -386,5 +397,93 @@ final class SteerDeliveryTests: XCTestCase {
         XCTAssertEqual(r.state.queued.count, 1)
         XCTAssertTrue(r.state.queued[0].undelivered)
         XCTAssertFalse(r.state.queued[0].pending)
+    }
+
+    // MARK: - taking a steer back
+
+    func testOffersAWithdrawOnlyWhileNothingHasReadIt() {
+        // The runner said its engine can drop it unread (claude), and nothing has read it yet: from
+        // the window before any event exists to the engine holding it unread.
+        for delivery in [nil, "enqueued", "written"] as [String?] {
+            XCTAssertTrue(SteerDelivery.offersWithdraw(delivery: delivery, withdrawable: true),
+                          "\(delivery ?? "none") is still unread")
+        }
+        // Read, re-filed as a message of its own, never arrived, nobody knows, or already taken
+        // back: there is nothing left to withdraw.
+        for delivery in ["acknowledged", "requeued", "failed", "unconfirmed", SteerDelivery.withdrawn] {
+            XCTAssertFalse(SteerDelivery.offersWithdraw(delivery: delivery, withdrawable: true),
+                           "\(delivery) still offers a withdraw")
+        }
+        // An engine that cannot give a message back (codex), or a runner that predates the flag,
+        // never offers one: it would be a button that only ever fails.
+        for delivery in [nil, "enqueued", "written"] as [String?] {
+            XCTAssertFalse(SteerDelivery.offersWithdraw(delivery: delivery, withdrawable: false))
+        }
+    }
+
+    func testABubbleOffersItsWithdrawOnlyForWordsSomebodyTypedThatNothingHasRead() {
+        // What the console draws the Withdraw off: a steer a runner holds unread, on an engine that
+        // can drop it, holding the words a withdrawal hands back to the composer.
+        func held(_ text: String = "use the other endpoint", delivery: String? = "written",
+                  withdrawable: Bool = true) -> UserBubble {
+            UserBubble(id: "u1", text: text, turnId: "t1", pending: false, steer: true,
+                       delivery: delivery, withdrawable: withdrawable)
+        }
+        XCTAssertTrue(SteerDelivery.offersWithdraw(held()))
+        XCTAssertFalse(SteerDelivery.offersWithdraw(held(withdrawable: false)),
+                       "an engine that cannot drop it unread is offered no withdraw")
+        XCTAssertFalse(SteerDelivery.offersWithdraw(held(delivery: "acknowledged")), "it has been read")
+
+        var undelivered = held()
+        undelivered.undelivered = true
+        XCTAssertFalse(SteerDelivery.offersWithdraw(undelivered), "it never arrived: nothing to take back")
+        var untagged = held()
+        untagged.turnId = nil
+        XCTAssertFalse(SteerDelivery.offersWithdraw(untagged), "the DELETE keys on the server's turn id")
+        var message = held()
+        message.steer = false
+        XCTAssertFalse(SteerDelivery.offersWithdraw(message), "a queued message has the queue's Cancel instead")
+
+        // Nobody typed it, so nothing would go back to the composer: not the reader's to take back.
+        XCTAssertFalse(SteerDelivery.offersWithdraw(held("  \n ")), "a steer with no words to hand back")
+        var orbits = held()
+        orbits.authoredByOrbit = true
+        XCTAssertFalse(SteerDelivery.offersWithdraw(orbits), "a turn the control plane wrote")
+    }
+
+    func testASteerTheServerStillHoldsIsWithdrawableWhateverTheEngine() {
+        // Until a runner takes it the server simply deletes it — no engine is asked, so no runner's
+        // word is needed. Once one holds it, that runner's word is all there is.
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "use the other endpoint", queued: true)
+        XCTAssertFalse(SteerDelivery.offersWithdraw(r.state.queued[0]), "not before the server filed it")
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1", steer: true)
+        XCTAssertFalse(r.state.queued[0].withdrawable, "no runner has said anything about it yet")
+        XCTAssertTrue(SteerDelivery.offersWithdraw(r.state.queued[0]))
+
+        // A codex runner takes it: written into the turn, with no way to give it back.
+        var codex = r
+        codex.apply(userEvent(1, turn: "t1", text: "use the other endpoint",
+                              delivery: "written", steer: true))
+        XCTAssertFalse(SteerDelivery.offersWithdraw(bubbles(codex)[0]))
+
+        // A claude runner takes it, and says its engine can drop it until it is read.
+        var claude = r
+        claude.apply(userEvent(1, turn: "t1", text: "use the other endpoint",
+                               delivery: "written", steer: true, withdrawable: true))
+        XCTAssertTrue(SteerDelivery.offersWithdraw(bubbles(claude)[0]))
+        claude.apply(deliveryEvent(2, turn: "t1", "acknowledged"))
+        XCTAssertFalse(SteerDelivery.offersWithdraw(bubbles(claude)[0]), "read: it is part of the turn")
+
+        // Restored from the queue listing, as a reopened console sees it — and settled there once it
+        // is known never to arrive.
+        var listed = TranscriptReducer()
+        listed.reconcileQueuedTurns([
+            QueuedTurnInfo(turnId: "t1", kind: "steer", content: "use the other endpoint",
+                           attachments: nil),
+        ], knownBefore: [])
+        XCTAssertTrue(SteerDelivery.offersWithdraw(listed.state.queued[0]))
+        listed.apply(deliveryEvent(1, turn: "t1", "failed", reason: "no turn is running"))
+        XCTAssertFalse(SteerDelivery.offersWithdraw(listed.state.queued[0]))
     }
 }

@@ -1,6 +1,7 @@
 import { withEnginePlanUsage, type LoginEngine, type RunnerEngineAccount } from '@orbit/shared';
 import { accountDir, accountNameOf, accountPlanUsage, runsOnEnvKey } from '../lib/engineAccounts';
-import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows, cursorUsageLimit } from '../lib/planUsage';
+import { ACCOUNT_SELECT_DEFAULT_REMOVED, ACCOUNT_SELECT_GONE_AUTOMATIC } from '../lib/runnerAccountCopy';
 import { tildePath } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
 import { Select } from './ui/Select';
@@ -52,6 +53,11 @@ function accountStatus(
   // The window that stops it, not the first one: a 5-hour window at 6% says nothing of a spent week.
   // Antigravity's is the bucket with the least left, by agy's own name for it, in what is left.
   const quota = account.auth === 'yes' && snapshot ? bindingPlanUsageRow(currentPlanUsageRows(snapshot)) : undefined;
+  // A Cursor CLI account is spent when a turn on it met Cursor's limit; its 0% is no reading (§11).
+  if (engine === 'cursor' && account.auth === 'yes') {
+    if (cursorUsageLimit(snapshot)) return `spent · ${signIn}`;
+    if (!quota) return `${snapshot?.planName ? `${snapshot.planName} plan · ` : ''}usage unavailable · ${signIn}`;
+  }
   if (!quota) return signIn;
   return quota.remaining
     ? `${quota.groupLabel ?? quota.label} ${quota.percent}% left · ${signIn}`
@@ -65,11 +71,15 @@ interface AccountOption {
 }
 
 /** What one engine's account field calls itself and the variable it replaces. */
-const ENGINE_COPY: Record<string, { label: string; envVar: string; sessions: string }> = {
+const ENGINE_COPY: Record<string, { label: string; envVar: string; sessions: string; staysPut?: boolean }> = {
   codex: { label: 'Codex account', envVar: 'CODEX_HOME', sessions: 'Codex' },
   claude: { label: 'Claude account', envVar: 'CLAUDE_CONFIG_DIR', sessions: 'Claude' },
   // agy takes no variable for it: the runner's own, which picks the sign-in a session runs on.
   antigravity: { label: 'Antigravity account', envVar: 'ORBIT_ANTIGRAVITY_GOOGLE_DIR', sessions: 'Antigravity' },
+  kimi: { label: 'Kimi account', envVar: 'KIMI_CODE_HOME', sessions: 'Kimi' },
+  // The runner's own dispatch variable: Cursor CLI reads no config-directory variable of its own here.
+  // A Cursor conversation that has started stays on its account (D5): Automatic only picks where one starts.
+  cursor: { label: 'Cursor CLI account', envVar: 'ORBIT_CURSOR_ACCOUNT_DIR', sessions: 'Cursor CLI', staysPut: true },
 };
 
 /**
@@ -81,6 +91,10 @@ const ENGINE_COPY: Record<string, { label: string; envVar: string; sessions: str
  * the account whose quota resets soonest, and moves when that account's usage limit stops it
  * (automaticAccount on the server), so Default is saved as `default` there, a choice of its own. With
  * one account `null` is Default.
+ *
+ * While Default is removed from Orbit (`removedDefault`) it is no choice: its sessions, and those on an
+ * account the runner no longer reports, run on Automatic's pick among the accounts that remain, however
+ * many there are, so `null` is Automatic. A workspace already set to Default says so.
  *
  * `envDir` is the engine's own config-directory variable typed into the same form's environment:
  * until an account is picked here that is where the sessions run, and a picked account replaces it.
@@ -102,7 +116,8 @@ export function AccountSelect({
   const copy = ENGINE_COPY[engine] ?? { label: 'Account', envVar: '', sessions: engine };
   const health = runner.engines?.find((entry) => entry.engine === engine);
   const accounts = accountsOf(runner, engine);
-  const automatic = accounts.length >= 2;
+  const removed = health?.removedDefault;
+  const automatic = accounts.length >= 2 || !!removed;
   // Default renamed in Orbit goes by its name, with what it is — the machine's own login — under it.
   const options: AccountOption[] = accounts.map((account) => ({
     value: account.id,
@@ -116,7 +131,7 @@ export function AccountSelect({
         : accountStatus(runner, engine, account),
   }));
   // A runner that lists no accounts still has Default: the engine's own sign-in is its.
-  if (!accounts.some((account) => account.id === DEFAULT)) {
+  if (!removed && !accounts.some((account) => account.id === DEFAULT)) {
     const auth = health?.installed ? health.auth : 'unknown';
     options.unshift({
       value: DEFAULT,
@@ -124,12 +139,16 @@ export function AccountSelect({
       status: accountStatus(runner, engine, { id: DEFAULT, auth }),
     });
   }
-  if (value !== null && value !== DEFAULT && !accounts.some((account) => account.id === value)) {
-    options.push({
-      value,
-      label: `Account ${value}`,
-      status: 'not on this runner — sessions run on Default',
-    });
+  if (value !== null && !accounts.some((account) => account.id === value) && (value !== DEFAULT || removed)) {
+    options.push(
+      value === DEFAULT
+        ? { value, label: accountNameOf({ id: DEFAULT, name: removed?.name }), status: ACCOUNT_SELECT_DEFAULT_REMOVED }
+        : {
+            value,
+            label: `Account ${value}`,
+            status: removed ? ACCOUNT_SELECT_GONE_AUTOMATIC : 'not on this runner — sessions run on Default',
+          },
+    );
   }
   if (automatic) {
     options.unshift({
@@ -162,8 +181,10 @@ export function AccountSelect({
       <div className="rd-path-hint rd-path-muted">
         {automatic
           ? `Only applies to sessions that run ${copy.sessions} on this machine. Automatic starts each new ` +
-            'session on the account whose quota resets soonest, so none of it goes unused, and moves it ' +
-            'when that account hits its limit.'
+            (copy.staysPut
+              ? 'session on the account whose quota resets soonest, so none of it goes unused.'
+              : 'session on the account whose quota resets soonest, so none of it goes unused, and moves it ' +
+                'when that account hits its limit.')
           : `Only applies to sessions that run ${copy.sessions} on this machine. Leave it on Default unless ` +
             'this repo needs the other account.'}
       </div>

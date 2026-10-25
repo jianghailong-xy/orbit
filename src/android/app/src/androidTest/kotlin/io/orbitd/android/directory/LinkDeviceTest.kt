@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.AuthState
@@ -74,10 +75,10 @@ class LinkDeviceTest {
                 try {
                     compose.onNodeWithText("Email").assertIsDisplayed()
                     scenario.recreate()
-                    compose.onNodeWithText("Instance address").performTextReplacement(server.url("/").toString())
-                    compose.onNodeWithText("Email").performTextInput("a05@example.test")
-                    compose.onNodeWithText("Password").performTextInput("a05-fixture-password")
-                    compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
+                    compose.chooseServer(server.url("/").toString())
+                    compose.onNodeWithText("Email").performTextReplacement("a05@example.test")
+                    compose.onNodeWithText("Password").performTextReplacement("a05-fixture-password")
+                    compose.onNodeWithText("Sign In").performScrollTo().performClick()
                     compose.waitUntil(10_000) { compose.onAllNodesWithText(coldTitle).fetchSemanticsNodes().isNotEmpty() }
                     compose.onNodeWithText(coldTitle).assertIsDisplayed()
                     if (coldKind == "session") compose.waitUntil(10_000) { app.realtime.state.value.session?.id == firstId }

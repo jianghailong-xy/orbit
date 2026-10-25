@@ -318,7 +318,7 @@ final class AntigravityAccountsTests: XCTestCase {
                                     defaultBuckets: defaultBuckets, others: [work: workBuckets]))
         let google = RunnerAntigravityState(supported: true, installed: true, envKeyAvailable: true,
                                             authSource: "google", googleLogin: .available)
-        XCTAssertEqual(SessionProviderChoices.choices(configured: [], engines: hpc.engines, antigravity: google)
+        XCTAssertEqual(SessionProviderChoices.providers(for: "antigravity", sources: ChoiceSources(configured: [], engines: hpc.engines, antigravity: google))
                         .first { $0.slug == "antigravity" }?.accounts, [
             AccountChoice(id: "default", label: "Default", quota: "3p-weekly 98% left"),
             AccountChoice(id: work, label: "Work", quota: "gemini-5h 4% left", nearLimit: true),
@@ -327,7 +327,7 @@ final class AntigravityAccountsTests: XCTestCase {
                                       others: [work: workBuckets]))
         let key = RunnerAntigravityState(supported: true, installed: true, envKeyAvailable: true,
                                          authSource: "env_key", googleLogin: .available)
-        XCTAssertEqual(SessionProviderChoices.choices(configured: [], engines: keyed.engines, antigravity: key)
+        XCTAssertEqual(SessionProviderChoices.providers(for: "antigravity", sources: ChoiceSources(configured: [], engines: keyed.engines, antigravity: key))
                         .first { $0.slug == "antigravity" }?.accounts, [
             AccountChoice(id: "default", label: "Default", quota: "env key"),
             AccountChoice(id: work, label: "Work", quota: "gemini-5h 4% left", nearLimit: true),

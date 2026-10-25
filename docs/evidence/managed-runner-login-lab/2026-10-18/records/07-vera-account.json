@@ -1,0 +1,18 @@
+{
+  "created": true,
+  "owner": "vera",
+  "signIn": {
+    "at": "2026-10-17T23:08:35.175+00:00",
+    "ms": 32.7,
+    "port": 13710,
+    "status": 201
+  },
+  "user": {
+    "email": "t05-vera@lab.invalid",
+    "id": "34hjevQ3Zt1PpcMaStfzg"
+  },
+  "usersMe": {
+    "id": "34hjevQ3Zt1PpcMaStfzg",
+    "status": 200
+  }
+}

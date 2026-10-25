@@ -1,0 +1,1383 @@
+{
+ "f-p43b": {
+  "summary": {
+   "stepsWithLayerDifferenceBefore": 31,
+   "agreeAfter": 15,
+   "stillDifferAfter": [
+    "P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen | Escape closed the full screen",
+    "P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened | Escape closed the full screen"
+   ],
+   "missingAfter": 0
+  },
+  "rows": [
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "remove asked",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Remove Capture browser baselines as a prerequisite"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Remove prerequisite?This task will no longer wait for this prerequisite.CancelRemove"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Remove prerequisite?"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [
+       "Remove prerequisite?This task will no longer wait for this prerequisite.CancelRemove"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Remove Capture browser baselines as a prerequisite"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Remove prerequisite?This task will no longer wait for this prerequisite.CancelRemove"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Remove prerequisite?"
+      }
+     },
+     "layersAgree": true
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "Escape closed the full screen",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open dependency graph full screen"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open dependency graph full screen"
+      }
+     },
+     "layersAgree": false
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "full-screen button hovered",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": "body"
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": "body"
+     },
+     "layersAgree": true
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "motif opened",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Compare one page, 4 instances, 8 tasks folded"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Compare one page"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Compare one page, 4 instances, 8 tasks folded"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Compare one page"
+      }
+     },
+     "layersAgree": true
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "Escape closed the full screen",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "layersAgree": false
+    }
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "remove asked",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Remove Capture browser baselines as a prerequisite"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Remove prerequisite?This task will no longer wait for this prerequisite.CancelRemove"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Remove prerequisite?"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [
+       "Remove prerequisite?This task will no longer wait for this prerequisite.CancelRemove"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Remove Capture browser baselines as a prerequisite"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Remove prerequisite?This task will no longer wait for this prerequisite.CancelRemove"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Remove prerequisite?"
+      }
+     },
+     "layersAgree": true
+    }
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "Escape closed the full screen",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open dependency graph full screen"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open dependency graph full screen"
+      }
+     },
+     "layersAgree": false
+    }
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "motif opened in full screen",
+    "before": {
+     "reference": {
+      "dialogs": [
+       "Task graphDecision cardsRunning2 doneFinished · click to openShared overlays×42 done · 1 running · 1 openCompare one page×85 done · 1 running · 1 failed · 1 ope"
+      ],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Compare one page, 4 instances, 8 tasks folded"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Task graphDecision cardsRunning2 doneFinished · click to openShared overlays×42 done · 1 running · 1 openCompare one page×85 done · 1 running · 1 failed · 1 ope",
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Compare one page"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [
+       "Task graphDecision cardsRunning2 doneFinished · click to openShared overlays×42 done · 1 running · 1 openCompare one page×85 done · 1 running · 1 failed · 1 ope"
+      ],
+      "popups": [
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Compare one page, 4 instances, 8 tasks folded"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Task graphDecision cardsRunning2 doneFinished · click to openShared overlays×42 done · 1 running · 1 openCompare one page×85 done · 1 running · 1 failed · 1 ope",
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Compare one page"
+      }
+     },
+     "layersAgree": true
+    }
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "Escape closed the full screen",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "layersAgree": false
+    }
+   },
+   {
+    "test": "chromium-light-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "remove asked",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Remove Capture browser baselines as a prerequisite"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Remove prerequisite?This task will no longer wait for this prerequisite.CancelRemove"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Remove prerequisite?"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [
+       "Remove prerequisite?This task will no longer wait for this prerequisite.CancelRemove"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Remove Capture browser baselines as a prerequisite"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Remove prerequisite?This task will no longer wait for this prerequisite.CancelRemove"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Remove prerequisite?"
+      }
+     },
+     "layersAgree": true
+    }
+   },
+   {
+    "test": "chromium-light-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "Escape closed the full screen",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open dependency graph full screen"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open dependency graph full screen"
+      }
+     },
+     "layersAgree": false
+    }
+   },
+   {
+    "test": "chromium-light-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "full-screen button hovered",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": "body"
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": "body"
+     },
+     "layersAgree": true
+    }
+   },
+   {
+    "test": "chromium-light-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "motif opened",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Compare one page, 4 instances, 8 tasks folded"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Compare one page"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Compare one page, 4 instances, 8 tasks folded"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Compare one page"
+      }
+     },
+     "layersAgree": true
+    }
+   },
+   {
+    "test": "chromium-light-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "Escape closed the full screen",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "layersAgree": false
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "remove asked",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Remove Capture browser baselines as a prerequisite"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Remove prerequisite?This task will no longer wait for this prerequisite.CancelRemove"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Remove prerequisite?"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [
+       "Remove prerequisite?This task will no longer wait for this prerequisite.CancelRemove"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Remove Capture browser baselines as a prerequisite"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Remove prerequisite?This task will no longer wait for this prerequisite.CancelRemove"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Remove prerequisite?"
+      }
+     },
+     "layersAgree": true
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "Escape closed the full screen",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open dependency graph full screen"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open dependency graph full screen"
+      }
+     },
+     "layersAgree": false
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "motif opened",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Compare one page, 4 instances, 8 tasks folded"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Compare one page"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Compare one page, 4 instances, 8 tasks folded"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Compare one page"
+      }
+     },
+     "layersAgree": true
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "motif opened in full screen",
+    "before": {
+     "reference": {
+      "dialogs": [
+       "Task graphDecision cardsRunning2 doneFinished · click to openShared overlays×42 done · 1 running · 1 openCompare one page×85 done · 1 running · 1 failed · 1 ope"
+      ],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Compare one page, 4 instances, 8 tasks folded"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Task graphDecision cardsRunning2 doneFinished · click to openShared overlays×42 done · 1 running · 1 openCompare one page×85 done · 1 running · 1 failed · 1 ope",
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Compare one page"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [
+       "Task graphDecision cardsRunning2 doneFinished · click to openShared overlays×42 done · 1 running · 1 openCompare one page×85 done · 1 running · 1 failed · 1 ope"
+      ],
+      "popups": [
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Compare one page, 4 instances, 8 tasks folded"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Task graphDecision cardsRunning2 doneFinished · click to openShared overlays×42 done · 1 running · 1 openCompare one page×85 done · 1 running · 1 failed · 1 ope",
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Compare one page"
+      }
+     },
+     "layersAgree": true
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "Escape closed the full screen",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "layersAgree": false
+    }
+   },
+   {
+    "test": "webkit-dark-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "Escape closed the full screen",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open dependency graph full screen"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open dependency graph full screen"
+      }
+     },
+     "layersAgree": false
+    }
+   },
+   {
+    "test": "webkit-dark-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "Escape closed the full screen",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "layersAgree": false
+    }
+   },
+   {
+    "test": "webkit-dark-phone :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "Escape closed the full screen",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open dependency graph full screen"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open dependency graph full screen"
+      }
+     },
+     "layersAgree": false
+    }
+   },
+   {
+    "test": "webkit-dark-phone :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "motif opened",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Compare one page, 4 instances, 8 tasks folded"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Compare one page"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Compare one page, 4 instances, 8 tasks folded"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Compare one page"
+      }
+     },
+     "layersAgree": true
+    }
+   },
+   {
+    "test": "webkit-dark-phone :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "Escape closed the full screen",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "layersAgree": false
+    }
+   },
+   {
+    "test": "webkit-light-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "full-screen button hovered",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": "body"
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": "body"
+     },
+     "layersAgree": true
+    }
+   },
+   {
+    "test": "webkit-light-desktop :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "Escape closed the full screen",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open dependency graph full screen"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open dependency graph full screen"
+      }
+     },
+     "layersAgree": false
+    }
+   },
+   {
+    "test": "webkit-light-desktop :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "Escape closed the full screen",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "layersAgree": false
+    }
+   },
+   {
+    "test": "webkit-light-desktop :: P4.3b project decision cards › the done question: not yet with a note, refused; record as done, refused; closed and opened again",
+    "step": "opened again",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Close"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Is this project done?FROM ORBITOrbit UI migration · asked by the coordinator · waiting 25mCoordinator’s callEvery batch landed and the final regression passed; "
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Is this project done?FROM ORBITOrbit UI migration · asked by the coordinator · w"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [
+       "Is this project done?FROM ORBITOrbit UI migration · asked by the coordinator · waiting 25mCoordinator’s callEvery batch landed and the final regression passed; "
+      ],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Close"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Is this project done?FROM ORBITOrbit UI migration · asked by the coordinator · waiting 25mCoordinator’s callEvery batch landed and the final regression passed; "
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Is this project done?FROM ORBITOrbit UI migration · asked by the coordinator · w"
+      }
+     },
+     "layersAgree": true
+    }
+   },
+   {
+    "test": "webkit-light-phone :: P4.3b dependency graphs › a task’s graph: the full-screen button, the remove question, the full screen",
+    "step": "Escape closed the full screen",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open dependency graph full screen"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": "body"
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open dependency graph full screen"
+      }
+     },
+     "layersAgree": false
+    }
+   },
+   {
+    "test": "webkit-light-phone :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "motif opened in full screen",
+    "before": {
+     "reference": {
+      "dialogs": [
+       "Task graphDecision cardsRunning2 doneFinished · click to openShared overlays×42 done · 1 running · 1 openCompare one page×85 done · 1 running · 1 failed · 1 ope"
+      ],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Compare one page, 4 instances, 8 tasks folded"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Task graphDecision cardsRunning2 doneFinished · click to openShared overlays×42 done · 1 running · 1 openCompare one page×85 done · 1 running · 1 failed · 1 ope",
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Compare one page"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [
+       "Task graphDecision cardsRunning2 doneFinished · click to openShared overlays×42 done · 1 running · 1 openCompare one page×85 done · 1 running · 1 failed · 1 ope"
+      ],
+      "popups": [
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Compare one page, 4 instances, 8 tasks folded"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Task graphDecision cardsRunning2 doneFinished · click to openShared overlays×42 done · 1 running · 1 openCompare one page×85 done · 1 running · 1 failed · 1 ope",
+       "Compare one page4 instances · 8 tasksCompare the settings pageFailedCompare the wiki pageRunningCompare the runner pageDone"
+      ],
+      "focus": {
+       "role": "dialog",
+       "name": "Compare one page"
+      }
+     },
+     "layersAgree": true
+    }
+   },
+   {
+    "test": "webkit-light-phone :: P4.3b dependency graphs › the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened",
+    "step": "Escape closed the full screen",
+    "before": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     }
+    },
+    "after": {
+     "reference": {
+      "dialogs": [],
+      "popups": [],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "delivery": {
+      "dialogs": [],
+      "popups": [
+       "Open full-screen graph"
+      ],
+      "focus": {
+       "role": "button",
+       "name": "Open project task graph full screen"
+      }
+     },
+     "layersAgree": false
+    }
+   }
+  ]
+ },
+ "f-cards": {
+  "summary": {
+   "stepsWithLayerDifferenceBefore": 0,
+   "agreeAfter": 0,
+   "stillDifferAfter": [],
+   "missingAfter": 0
+  },
+  "rows": []
+ }
+}

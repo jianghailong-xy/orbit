@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "instanceId": "orbit-example-deployment",
+  "listen": { "unixSocket": "/run/orbit-docker-channel/channel.sock" },
+  "tokenFile": "/etc/orbit-docker-channel/token",
+  "dockerSocket": "/var/run/docker.sock",
+  "stateDir": "/var/lib/orbit-docker-channel",
+  "image": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "network": "orbit-managed-runners",
+  "limits": {
+    "maxCpuMillis": 4000,
+    "maxMemoryBytes": 8589934592,
+    "maxPids": 4096,
+    "maxTmpBytes": 2147483648,
+    "maxVolumeBytes": 107374182400,
+    "maxConcurrent": 8
+  },
+  "stopGraceSeconds": 240,
+  "diskCheckSeconds": 120
+}

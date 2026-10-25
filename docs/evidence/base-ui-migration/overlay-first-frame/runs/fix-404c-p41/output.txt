@@ -1,0 +1,392 @@
+[WebServer] (node:3304641) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 88 P0.2 originals, 150 main drift references, 14 accepted migration differences.
+
+Running 96 tests using 1 worker
+
+(node:3304878) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-setup-required.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-setup-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-setup-valid.png, writing actual.
+  ✓   1 [chromium-light-desktop] › ui-migration/p41.browser.mjs:85:3 › P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-login.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-login-error.png, writing actual.
+  ✓   2 [chromium-light-desktop] › ui-migration/p41.browser.mjs:161:3 › P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-profile-mismatch.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-profile-ready.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-profile-reset.png, writing actual.
+  ✓   3 [chromium-light-desktop] › ui-migration/p41.browser.mjs:190:3 › P4.1 profile › password form: each check, the linked confirmation and the reset (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-profile-photo.png, writing actual.
+  ✓   4 [chromium-light-desktop] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (760ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-profile-signin.png, writing actual.
+  ✓   5 [chromium-light-desktop] › ui-migration/p41.browser.mjs:259:3 › P4.1 profile › sign-in methods card beside the replaced ones (660ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-settings-mode-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-settings-saving.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-settings-theme.png, writing actual.
+  ✓   6 [chromium-light-desktop] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens (5.0s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-tokens-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-tokens-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-tokens-revoke.png, writing actual.
+  ✓   7 [chromium-light-desktop] › ui-migration/p41.browser.mjs:343:3 › P4.1 access tokens › list, tabs and the revoke question (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-tokens-new.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-tokens-new-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-tokens-new-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-tokens-new-never.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-tokens-issued.png, writing actual.
+  ✓   8 [chromium-light-desktop] › ui-migration/p41.browser.mjs:384:3 › P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-tokens-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-tokens-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-tokens-error.png, writing actual.
+  ✓   9 [chromium-light-desktop] › ui-migration/p41.browser.mjs:447:3 › P4.1 access tokens › loading, empty and a failed read (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-admin-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-admin-revoke.png, writing actual.
+  ✓  10 [chromium-light-desktop] › ui-migration/p41.browser.mjs:480:3 › P4.1 access tokens › an administrator: a user's tokens in the users page dialog (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-cli.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-cli-approved.png, writing actual.
+  ✓  11 [chromium-light-desktop] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-desktop/p41-cli-error.png, writing actual.
+  ✓  12 [chromium-light-desktop] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.6s)
+(node:3306903) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-setup-required.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-setup-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-setup-valid.png, writing actual.
+  ✓  13 [chromium-light-phone] › ui-migration/p41.browser.mjs:85:3 › P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-login.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-login-error.png, writing actual.
+  ✓  14 [chromium-light-phone] › ui-migration/p41.browser.mjs:161:3 › P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-profile-mismatch.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-profile-ready.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-profile-reset.png, writing actual.
+  ✓  15 [chromium-light-phone] › ui-migration/p41.browser.mjs:190:3 › P4.1 profile › password form: each check, the linked confirmation and the reset (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-profile-photo.png, writing actual.
+  ✓  16 [chromium-light-phone] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (725ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-profile-signin.png, writing actual.
+  ✓  17 [chromium-light-phone] › ui-migration/p41.browser.mjs:259:3 › P4.1 profile › sign-in methods card beside the replaced ones (606ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-settings-mode-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-settings-saving.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-settings-theme.png, writing actual.
+  ✓  18 [chromium-light-phone] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens (4.8s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-tokens-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-tokens-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-tokens-revoke.png, writing actual.
+  ✓  19 [chromium-light-phone] › ui-migration/p41.browser.mjs:343:3 › P4.1 access tokens › list, tabs and the revoke question (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-tokens-new.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-tokens-new-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-tokens-new-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-tokens-new-never.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-tokens-issued.png, writing actual.
+  ✓  20 [chromium-light-phone] › ui-migration/p41.browser.mjs:384:3 › P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-tokens-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-tokens-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-tokens-error.png, writing actual.
+  ✓  21 [chromium-light-phone] › ui-migration/p41.browser.mjs:447:3 › P4.1 access tokens › loading, empty and a failed read (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-admin-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-admin-revoke.png, writing actual.
+  ✓  22 [chromium-light-phone] › ui-migration/p41.browser.mjs:480:3 › P4.1 access tokens › an administrator: a user's tokens in the users page dialog (1.0s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-cli.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-cli-approved.png, writing actual.
+  ✓  23 [chromium-light-phone] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (826ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-light-phone/p41-cli-error.png, writing actual.
+  ✓  24 [chromium-light-phone] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.1s)
+(node:3309070) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-setup-required.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-setup-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-setup-valid.png, writing actual.
+  ✓  25 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:85:3 › P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-login.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-login-error.png, writing actual.
+  ✓  26 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:161:3 › P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-profile-mismatch.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-profile-ready.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-profile-reset.png, writing actual.
+  ✓  27 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:190:3 › P4.1 profile › password form: each check, the linked confirmation and the reset (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-profile-photo.png, writing actual.
+  ✓  28 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (712ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-profile-signin.png, writing actual.
+  ✓  29 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:259:3 › P4.1 profile › sign-in methods card beside the replaced ones (637ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-settings-mode-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-settings-saving.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-settings-theme.png, writing actual.
+  ✓  30 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens (4.9s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-tokens-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-tokens-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-tokens-revoke.png, writing actual.
+  ✓  31 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:343:3 › P4.1 access tokens › list, tabs and the revoke question (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-tokens-new.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-tokens-new-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-tokens-new-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-tokens-new-never.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-tokens-issued.png, writing actual.
+  ✓  32 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:384:3 › P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-tokens-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-tokens-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-tokens-error.png, writing actual.
+  ✓  33 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:447:3 › P4.1 access tokens › loading, empty and a failed read (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-admin-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-admin-revoke.png, writing actual.
+  ✓  34 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:480:3 › P4.1 access tokens › an administrator: a user's tokens in the users page dialog (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-cli.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-cli-approved.png, writing actual.
+  ✓  35 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-desktop/p41-cli-error.png, writing actual.
+  ✓  36 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.6s)
+(node:3312074) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-setup-required.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-setup-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-setup-valid.png, writing actual.
+  ✓  37 [chromium-dark-phone] › ui-migration/p41.browser.mjs:85:3 › P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-login.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-login-error.png, writing actual.
+  ✓  38 [chromium-dark-phone] › ui-migration/p41.browser.mjs:161:3 › P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-profile-mismatch.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-profile-ready.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-profile-reset.png, writing actual.
+  ✓  39 [chromium-dark-phone] › ui-migration/p41.browser.mjs:190:3 › P4.1 profile › password form: each check, the linked confirmation and the reset (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-profile-photo.png, writing actual.
+  ✓  40 [chromium-dark-phone] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (707ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-profile-signin.png, writing actual.
+  ✓  41 [chromium-dark-phone] › ui-migration/p41.browser.mjs:259:3 › P4.1 profile › sign-in methods card beside the replaced ones (586ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-settings-mode-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-settings-saving.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-settings-theme.png, writing actual.
+  ✓  42 [chromium-dark-phone] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens (4.8s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-tokens-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-tokens-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-tokens-revoke.png, writing actual.
+  ✓  43 [chromium-dark-phone] › ui-migration/p41.browser.mjs:343:3 › P4.1 access tokens › list, tabs and the revoke question (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-tokens-new.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-tokens-new-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-tokens-new-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-tokens-new-never.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-tokens-issued.png, writing actual.
+  ✓  44 [chromium-dark-phone] › ui-migration/p41.browser.mjs:384:3 › P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-tokens-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-tokens-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-tokens-error.png, writing actual.
+  ✓  45 [chromium-dark-phone] › ui-migration/p41.browser.mjs:447:3 › P4.1 access tokens › loading, empty and a failed read (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-admin-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-admin-revoke.png, writing actual.
+  ✓  46 [chromium-dark-phone] › ui-migration/p41.browser.mjs:480:3 › P4.1 access tokens › an administrator: a user's tokens in the users page dialog (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-cli.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-cli-approved.png, writing actual.
+  ✓  47 [chromium-dark-phone] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (817ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/chromium-dark-phone/p41-cli-error.png, writing actual.
+  ✓  48 [chromium-dark-phone] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.2s)
+(node:3314791) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-setup-required.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-setup-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-setup-valid.png, writing actual.
+  ✓  49 [webkit-light-desktop] › ui-migration/p41.browser.mjs:85:3 › P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-login.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-login-error.png, writing actual.
+  ✓  50 [webkit-light-desktop] › ui-migration/p41.browser.mjs:161:3 › P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-profile-mismatch.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-profile-ready.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-profile-reset.png, writing actual.
+  ✓  51 [webkit-light-desktop] › ui-migration/p41.browser.mjs:190:3 › P4.1 profile › password form: each check, the linked confirmation and the reset (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-profile-photo.png, writing actual.
+  ✓  52 [webkit-light-desktop] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-profile-signin.png, writing actual.
+  ✓  53 [webkit-light-desktop] › ui-migration/p41.browser.mjs:259:3 › P4.1 profile › sign-in methods card beside the replaced ones (928ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-settings-mode-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-settings-saving.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-settings-theme.png, writing actual.
+  ✓  54 [webkit-light-desktop] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens (5.5s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-tokens-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-tokens-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-tokens-revoke.png, writing actual.
+  ✓  55 [webkit-light-desktop] › ui-migration/p41.browser.mjs:343:3 › P4.1 access tokens › list, tabs and the revoke question (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-tokens-new.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-tokens-new-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-tokens-new-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-tokens-new-never.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-tokens-issued.png, writing actual.
+  ✓  56 [webkit-light-desktop] › ui-migration/p41.browser.mjs:384:3 › P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once (3.5s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-tokens-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-tokens-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-tokens-error.png, writing actual.
+  ✓  57 [webkit-light-desktop] › ui-migration/p41.browser.mjs:447:3 › P4.1 access tokens › loading, empty and a failed read (3.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-admin-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-admin-revoke.png, writing actual.
+  ✓  58 [webkit-light-desktop] › ui-migration/p41.browser.mjs:480:3 › P4.1 access tokens › an administrator: a user's tokens in the users page dialog (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-cli.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-cli-approved.png, writing actual.
+  ✓  59 [webkit-light-desktop] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-desktop/p41-cli-error.png, writing actual.
+  ✓  60 [webkit-light-desktop] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.9s)
+(node:3319106) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-setup-required.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-setup-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-setup-valid.png, writing actual.
+  ✓  61 [webkit-light-phone] › ui-migration/p41.browser.mjs:85:3 › P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-login.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-login-error.png, writing actual.
+  ✓  62 [webkit-light-phone] › ui-migration/p41.browser.mjs:161:3 › P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-profile-mismatch.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-profile-ready.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-profile-reset.png, writing actual.
+  ✓  63 [webkit-light-phone] › ui-migration/p41.browser.mjs:190:3 › P4.1 profile › password form: each check, the linked confirmation and the reset (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-profile-photo.png, writing actual.
+  ✓  64 [webkit-light-phone] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (940ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-profile-signin.png, writing actual.
+  ✓  65 [webkit-light-phone] › ui-migration/p41.browser.mjs:259:3 › P4.1 profile › sign-in methods card beside the replaced ones (801ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-settings-mode-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-settings-saving.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-settings-theme.png, writing actual.
+  ✓  66 [webkit-light-phone] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens (5.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-tokens-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-tokens-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-tokens-revoke.png, writing actual.
+  ✓  67 [webkit-light-phone] › ui-migration/p41.browser.mjs:343:3 › P4.1 access tokens › list, tabs and the revoke question (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-tokens-new.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-tokens-new-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-tokens-new-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-tokens-new-never.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-tokens-issued.png, writing actual.
+  ✓  68 [webkit-light-phone] › ui-migration/p41.browser.mjs:384:3 › P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-tokens-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-tokens-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-tokens-error.png, writing actual.
+  ✓  69 [webkit-light-phone] › ui-migration/p41.browser.mjs:447:3 › P4.1 access tokens › loading, empty and a failed read (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-admin-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-admin-revoke.png, writing actual.
+  ✓  70 [webkit-light-phone] › ui-migration/p41.browser.mjs:480:3 › P4.1 access tokens › an administrator: a user's tokens in the users page dialog (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-cli.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-cli-approved.png, writing actual.
+  ✓  71 [webkit-light-phone] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-light-phone/p41-cli-error.png, writing actual.
+  ✓  72 [webkit-light-phone] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.6s)
+(node:3322006) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-setup-required.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-setup-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-setup-valid.png, writing actual.
+  ✓  73 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:85:3 › P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal (3.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-login.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-login-error.png, writing actual.
+  ✓  74 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:161:3 › P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-profile-mismatch.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-profile-ready.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-profile-reset.png, writing actual.
+  ✓  75 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:190:3 › P4.1 profile › password form: each check, the linked confirmation and the reset (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-profile-photo.png, writing actual.
+  ✓  76 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (957ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-profile-signin.png, writing actual.
+  ✓  77 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:259:3 › P4.1 profile › sign-in methods card beside the replaced ones (823ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-settings-mode-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-settings-saving.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-settings-theme.png, writing actual.
+  ✓  78 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens (5.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-tokens-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-tokens-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-tokens-revoke.png, writing actual.
+  ✓  79 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:343:3 › P4.1 access tokens › list, tabs and the revoke question (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-tokens-new.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-tokens-new-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-tokens-new-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-tokens-new-never.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-tokens-issued.png, writing actual.
+  ✓  80 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:384:3 › P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once (2.8s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-tokens-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-tokens-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-tokens-error.png, writing actual.
+  ✓  81 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:447:3 › P4.1 access tokens › loading, empty and a failed read (3.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-admin-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-admin-revoke.png, writing actual.
+  ✓  82 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:480:3 › P4.1 access tokens › an administrator: a user's tokens in the users page dialog (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-cli.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-cli-approved.png, writing actual.
+  ✓  83 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-desktop/p41-cli-error.png, writing actual.
+  ✓  84 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.8s)
+(node:3328282) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-setup-required.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-setup-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-setup-valid.png, writing actual.
+  ✓  85 [webkit-dark-phone] › ui-migration/p41.browser.mjs:85:3 › P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-login.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-login-error.png, writing actual.
+  ✓  86 [webkit-dark-phone] › ui-migration/p41.browser.mjs:161:3 › P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-profile-mismatch.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-profile-ready.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-profile-reset.png, writing actual.
+  ✓  87 [webkit-dark-phone] › ui-migration/p41.browser.mjs:190:3 › P4.1 profile › password form: each check, the linked confirmation and the reset (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-profile-photo.png, writing actual.
+  ✓  88 [webkit-dark-phone] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (879ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-profile-signin.png, writing actual.
+  ✓  89 [webkit-dark-phone] › ui-migration/p41.browser.mjs:259:3 › P4.1 profile › sign-in methods card beside the replaced ones (762ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-settings-mode-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-settings-saving.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-settings-theme.png, writing actual.
+  ✓  90 [webkit-dark-phone] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens (5.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-tokens-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-tokens-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-tokens-revoke.png, writing actual.
+  ✓  91 [webkit-dark-phone] › ui-migration/p41.browser.mjs:343:3 › P4.1 access tokens › list, tabs and the revoke question (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-tokens-new.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-tokens-new-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-tokens-new-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-tokens-new-never.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-tokens-issued.png, writing actual.
+  ✓  92 [webkit-dark-phone] › ui-migration/p41.browser.mjs:384:3 › P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-tokens-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-tokens-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-tokens-error.png, writing actual.
+  ✓  93 [webkit-dark-phone] › ui-migration/p41.browser.mjs:447:3 › P4.1 access tokens › loading, empty and a failed read (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-admin-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-admin-revoke.png, writing actual.
+  ✓  94 [webkit-dark-phone] › ui-migration/p41.browser.mjs:480:3 › P4.1 access tokens › an administrator: a user's tokens in the users page dialog (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-cli.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-cli-approved.png, writing actual.
+  ✓  95 [webkit-dark-phone] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-p41/shots/webkit-dark-phone/p41-cli-error.png, writing actual.
+  ✓  96 [webkit-dark-phone] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.6s)
+
+  96 passed (3.4m)

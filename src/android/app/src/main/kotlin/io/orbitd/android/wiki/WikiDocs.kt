@@ -29,7 +29,7 @@ internal fun WikiDocScreen(store: WikiStore, route: OrbitRoute, data: DirectoryD
     val scope = rememberCoroutineScope()
     var contentsShown by rememberSaveable { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
-    LaunchedEffect(slug) { store.loadDoc(slug); store.loadDocsDirectory() }
+    LaunchedEffect(slug) { store.loadDoc(slug); store.loadDocsDirectory(); if (store.state.value.entries.isEmpty()) store.loadEntries() }
     val doc = state.docs[slug]
     val actions = WikiDocActions(
         openEntry = nav::entry,
@@ -60,9 +60,9 @@ internal fun WikiDocScreen(store: WikiStore, route: OrbitRoute, data: DirectoryD
 internal fun wikiDocsWritten(state: WikiState): Pair<Int, Int>? =
     state.docsDirectory?.takeIf { it.plan != null }?.docs?.let { it.written to it.total }
 
-/** The space's entries the home read, by id: the summaries under the entries the quotes came through. */
+/** The space's newest entries, by id: the summaries under the entries the quotes came through. */
 internal fun wikiEntrySummaries(state: WikiState): Map<String, String> =
-    state.home?.entries.orEmpty().mapNotNull { entry -> entry.summary?.let { wikiKey(entry.id) to it } }.toMap()
+    state.entries.mapNotNull { entry -> entry.summary?.let { wikiKey(entry.id) to it } }.toMap()
 
 /** A footnote's one button (iOS `WikiDocScreen.open`): the session at the quoted record — the deep link criterion 10
  * rests on — the task, the session, the project, or the repository's host at the commit the run read it at. */

@@ -2,17 +2,20 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// Settings on iOS says what the web's Settings, Profile, Shared links, Access tokens and Providers
-/// pages say. `SettingsCopy`, `SharedLinksList`, `AccessTokensList` and `ProvidersOverview` carry
-/// those pages' words over to the phone (and Access tokens' to the Mac's form too), and nothing in
-/// either build notices a word changed at one end only — so each one is looked up in the web source
-/// it came from. A missing counterpart is a FAILURE, never an `XCTSkip`.
+/// Settings on iOS says what the web's Settings, Profile, Shared links, Access tokens and Infrastructure
+/// pages say. `SettingsCopy`, `SharedLinksList`, `AccessTokensList`, `ProvidersOverview` and
+/// `Infrastructure` carry those pages' words over to the phone (and Access tokens' and
+/// Infrastructure's to the Mac too), and nothing in either build notices a word changed at one end
+/// only — so each one is looked up in the web source it came from. A missing counterpart is a
+/// FAILURE, never an `XCTSkip`.
 ///
 /// Deliberately not compared: the group headers of Settings' list (Sessions, Machines & models,
 /// Preferences, Account), which regroup the web's cards for a phone; "Default permission", the
 /// web's "Default permission mode" shortened to leave its row room for a value; and the words only a
 /// phone has to say — this device's own switch, the alerts that are always sent, the card shown
-/// while alerts are off, and the sign-out confirmation.
+/// while alerts are off, the sign-out confirmation, and Infrastructure's "Needs you" heading, its
+/// row's "1 needs you" and a machine's "1 engine signed out" (03-ios.png's own; the web draws Needs
+/// attention with no heading, and its machine card no such count).
 final class SettingsCopyParityTests: XCTestCase {
 
     private static let settings = "src/web/src/pages/SettingsPage.tsx"
@@ -21,9 +24,12 @@ final class SettingsCopyParityTests: XCTestCase {
     private static let accessTokens = "src/web/src/pages/AccessTokensPage.tsx"
     private static let accessTokenTable = "src/web/src/components/AccessTokenTable.tsx"
     private static let accessTokenWords = "src/web/src/lib/accessTokens.ts"
-    private static let providers = "src/web/src/pages/ProvidersPage.tsx"
+    private static let infrastructure = "src/web/src/pages/InfrastructurePage.tsx"
+    private static let keyCards = "src/web/src/components/ProviderKeyCards.tsx"
+    private static let overview = "src/web/src/components/InfrastructureOverview.tsx"
     private static let engines = "src/web/src/components/RunnerEngines.tsx"
     private static let pools = "src/web/src/components/AccountPools.tsx"
+    private static let engineNames = "src/shared/src/providerEngines.ts"
 
     private enum ParityError: Error, CustomStringConvertible {
         case missing(String)
@@ -95,6 +101,17 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "checked={prefs.modelRouting === true}", in: Self.settings)
         assertSays(page, "save.mutate({ modelRouting: v })", in: Self.settings)
         XCTAssertEqual(SettingsHome.title(.modelRouting), SettingsCopy.smartModelSelection)
+    }
+
+    /// Session recaps (0418): the Session defaults card's switch, with its label and hint — the same
+    /// three words on the web page, the phone and (via `SettingsCopyParityTest`) the Android list.
+    func testSessionRecapsSaysWhatTheWebPageSays() throws {
+        let page = try web(Self.settings)
+        assertSays(page, "label=\"\(SettingsCopy.sessionRecaps)\"", in: Self.settings)
+        assertSays(page, "hint=\"\(SettingsCopy.sessionRecapsHint)\"", in: Self.settings)
+        assertSays(page, "checked={prefs.recaps ?? true}", in: Self.settings)
+        assertSays(page, "save.mutate({ recaps: v })", in: Self.settings)
+        XCTAssertEqual(SettingsHome.title(.recaps), SettingsCopy.sessionRecaps)
     }
 
     /// The edit-profile card's field is called what the web Profile page calls the same value.
@@ -199,25 +216,110 @@ final class SettingsCopyParityTests: XCTestCase {
                    in: Self.accessTokenWords)
     }
 
-    /// Providers: the web page's three groups, their lines, and a runner card's summary.
-    func testProvidersSayWhatTheWebPageSays() throws {
-        let engines = try web(Self.engines)
-        assertSays(engines, "<h3>\(ProvidersOverview.onYourRunners)</h3>", in: Self.engines)
-        assertSays(engines, "re-sec-sub\"> \(ProvidersOverview.onYourRunnersDetail)", in: Self.engines)
-        assertSays(engines, "return '\(ProvidersOverview.runnerSummary(try runner(engines: nil)))'", in: Self.engines)
-        assertSays(engines, "'All signed in' : `${ready} of ${engines.length} signed in`", in: Self.engines)
+    /// Infrastructure: the web page's line under its title — Machines & models' footer here — its
+    /// Machines, API keys and Account pools sections, their lines, and a key switched off.
+    func testInfrastructuresSectionsSayWhatTheWebPageSays() throws {
+        let page = try web(Self.infrastructure)
+        assertSays(page, "> \(Infrastructure.subtitle) </div>", in: Self.infrastructure)
+        XCTAssertEqual(SettingsHome.footer(.machines), Infrastructure.subtitle)
+        assertSays(page, "<h3>\(Infrastructure.machines)</h3>", in: Self.infrastructure)
+        assertSays(page, "re-sec-sub\"> \(Infrastructure.machinesDetail)", in: Self.infrastructure)
+        assertSays(page, "{machines.length} machine{machines.length === 1 ? '' : 's'} · {busySlots} / {allSlots} slots busy",
+                   in: Self.infrastructure)
+        assertSays(page, "<h3>\(ProvidersOverview.apiKeys)</h3>", in: Self.infrastructure)
+        assertSays(page, "re-sec-sub\"> \(ProvidersOverview.apiKeysDetail)", in: Self.infrastructure)
+        assertSays(page, "<h3>\(ProvidersOverview.noKeys)</h3>", in: Self.infrastructure)
+        // A key's row is on its vendor's card since docs/mocks/infrastructure-focus.
+        assertSays(try web(Self.keyCards), "{row.enabled ? 'Enabled' : '\(Infrastructure.disabled)'}", in: Self.keyCards)
 
         let pools = try web(Self.pools)
         assertSays(pools, "<h3>\(ProvidersOverview.accountPools)</h3>", in: Self.pools)
         assertSays(pools, "re-sec-sub\"> \(ProvidersOverview.accountPoolsDetail)", in: Self.pools)
-
-        let page = try web(Self.providers)
-        assertSays(page, "<h3>\(ProvidersOverview.apiKeys)</h3>", in: Self.providers)
-        assertSays(page, "re-sec-sub\"> \(ProvidersOverview.apiKeysDetail)", in: Self.providers)
-        assertSays(page, "<h3>\(ProvidersOverview.noKeys)</h3>", in: Self.providers)
     }
 
-    private func runner(engines: String?) throws -> Runner {
+    /// A machine's line: the slots the web card's head counts, and the summary its folded card gives
+    /// (`summaryOf`), word for word. Since docs/mocks/infrastructure-focus the web card's head names each
+    /// engine signed in on a chip of its own, and counts them in words only for a machine with no chip to
+    /// draw; iOS's row still sums every machine up in one line, All signed in included.
+    func testAMachinesLineSaysWhatTheWebCardSays() throws {
+        let engines = try web(Self.engines)
+        assertSays(engines, "busy && `${active} / ${max} running`", in: Self.engines)
+        XCTAssertEqual(Infrastructure.running(active: 2, max: 4), "2 / 4 running")
+        assertSays(engines, "return updating ? 'Update failed' : 'Install failed';", in: Self.engines)
+        assertSays(engines, "return updating ? 'Updating…' : 'Installing…';", in: Self.engines)
+        assertSays(engines, "if (!runner.engines) return '\(Infrastructure.summary(try runner(nil)))';", in: Self.engines)
+        assertSays(engines, "return stale === 1 ? '1 engine not updating' : `${stale} engines not updating`;",
+                   in: Self.engines)
+        assertSays(engines, "return `${shown.filter(signedIn).length} of ${engines.length} signed in`;", in: Self.engines)
+        let all = #"[{"engine":"claude","installed":true,"auth":"yes"},{"engine":"codex","installed":true,"auth":"yes"},{"engine":"kimi","installed":true,"auth":"yes"}]"#
+        XCTAssertEqual(Infrastructure.summary(try runner(all)), "All signed in")
+    }
+
+    /// Needs you: each line and what it means, and the press at its end. The web drew the same lines in
+    /// `NeedsAttention` until docs/mocks/infrastructure-focus (2026-10-25), which moved a signed-out engine
+    /// onto its machine's card — an amber chip with its Sign in — and left an offline machine and an
+    /// unavailable pool to their own cards; iOS keeps the block until its own page is redrawn. What is
+    /// still the web's: the press, and the machine named as the web names it.
+    func testNeedsYouSaysWhatTheWebSays() throws {
+        XCTAssertEqual(Infrastructure.signedOutLine(engine: .codex, machine: "Mac Studio"), "Codex is signed out on Mac Studio")
+        XCTAssertEqual(Infrastructure.signedOutLine(engine: .antigravity, machine: "HPC"), "Antigravity CLI is signed out on HPC")
+        XCTAssertEqual(Infrastructure.offlineLine(machine: "ThinkPad"), "ThinkPad is offline")
+        XCTAssertEqual(Infrastructure.offlineDetail(lastHeartbeatAt: nil, nowMs: 0),
+                       "Never checked in · its subscriptions are unavailable until it’s back")
+        XCTAssertEqual(Infrastructure.poolLine(pool: "Claude keys"), "Claude keys is unavailable")
+        XCTAssertEqual(Infrastructure.poolDetail(reason: "No account can run"),
+                       "No account can run · no session can start on it")
+        // A signed-out engine's chip signs it in with the same word.
+        assertSays(try web(Self.engines), "> \(Infrastructure.signIn) </Button>", in: Self.engines)
+        // The machine named as the web names it: its alias, else its own name.
+        let overview = try web(Self.overview)
+        assertSays(overview, "const machineName = (runner: Runner) => runner.displayName || runner.name;", in: Self.overview)
+    }
+
+    /// What your agents can run on: each card's state, its sources' names and how they are joined, and
+    /// what an engine with none says — the web's `EngineOverview`. Its heading and line are iOS's own since
+    /// docs/mocks/infrastructure-focus moved the web's to the end of its page as "By engine".
+    func testWhatYourAgentsCanRunOnSaysWhatTheWebSays() throws {
+        let overview = try web(Self.overview)
+        XCTAssertEqual(Infrastructure.enginesTitle, "What your agents can run on")
+        assertSays(overview, "{ready ? '\(Infrastructure.ready)' : '\(Infrastructure.notSetUp)'}", in: Self.overview)
+        assertSays(overview,
+                   "<b>{engine === AgentProvider.OPENCODE ? '\(Infrastructure.ownSignIn)' : '\(Infrastructure.subscription)'}</b> · {machines.join(', ')}",
+                   in: Self.overview)
+        XCTAssertEqual(Infrastructure.engineCards(runners: [], keys: [], pools: []).map(\.machinesLabel),
+                       ["Subscription", "Subscription", "Subscription", "Subscription", "Own sign-in", "Subscription"])
+        assertSays(overview, "logins > 1 ? `${machineName(runner)} ×${logins}` : machineName(runner)", in: Self.overview)
+        assertSays(overview, "<b>\(Infrastructure.apiKey)</b> ·{' '}", in: Self.overview)
+        assertSays(overview, "{index > 0 && ', '}", in: Self.overview)
+        assertSays(overview, "<b>\(Infrastructure.pool)</b> · {enginePools.map((pool) => pool.label).join(', ')}",
+                   in: Self.overview)
+        assertSays(overview, "\(Infrastructure.nothingCanPay) <Link to={installOn(engine)}>\(Infrastructure.installOnAMachine)</Link>",
+                   in: Self.overview)
+        // Every engine a session can run on, a card each in the pickers' order, by its CLI's name — the
+        // shared table every list on the page names them by.
+        assertSays(overview, "{ALL_ENGINES.map((engine) => {", in: Self.overview)
+        assertSays(overview, "<div className=\"infra-engine-name\"> {ENGINE_CLI_NAMES[engine]}", in: Self.overview)
+        let shared = try web(Self.engineNames)
+        assertSays(shared, "export const ALL_ENGINES: readonly AgentProvider[] = [ "
+                       + ProviderEngines.names.map { "AgentProvider.\($0.engine.uppercased())," }.joined(separator: " "),
+                   in: Self.engineNames)
+        assertSays(shared, ProviderEngines.names.map { "[AgentProvider.\($0.engine.uppercased())]: '\($0.name)'," }
+                       .joined(separator: " "),
+                   in: Self.engineNames)
+        XCTAssertEqual(Infrastructure.engineCards(runners: [], keys: [], pools: []).map(\.name),
+                       ["Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness"])
+        // A machine's sign-in names the engines it signs in as the web's sign-in does — Cursor CLI by the
+        // shared table's name, which the web reads from it rather than writing it out.
+        let names = LoginEngine.allCases.filter { $0 != .cursor }.map { "\($0.rawValue): '\($0.displayName)'" }
+            .joined(separator: ", ") + ", cursor: ENGINE_CLI_NAMES[AgentProvider.CURSOR],"
+        assertSays(try web("src/web/src/components/RunnerSignIn.tsx"), names, in: "src/web/src/components/RunnerSignIn.tsx")
+        XCTAssertEqual(LoginEngine.cursor.displayName, ProviderEngines.cliName("cursor"))
+        // A key keeps the name its owner gave it — a Gemini key's too — under every engine it runs on.
+        assertSays(overview, "{index > 0 && ', '} {key.label}", in: Self.overview)
+        XCTAssertEqual(Infrastructure.keyLabel("Gemini", presetSlug: "gemini"), "Gemini")
+    }
+
+    private func runner(_ engines: String?) throws -> Runner {
         let json = engines.map { #"{"id":"r","name":"r","online":true,"engines":\#($0)}"# }
             ?? #"{"id":"r","name":"r","online":true}"#
         return try JSONDecoder().decode(Runner.self, from: Data(json.utf8))

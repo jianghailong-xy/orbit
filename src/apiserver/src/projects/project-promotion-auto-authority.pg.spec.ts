@@ -19,6 +19,7 @@ import {
   IntegrationJobResultRequest,
   RunEventType,
   RunStatus as SharedRunStatus,
+  UpstreamMovedCommitsEnriched,
 } from '@orbit/shared';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -44,9 +45,11 @@ import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND } from './project-integ
 import { configureProjectIntegration } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import {
+  AUTOMATIC_MERGE_ATTEMPTS,
   AutomaticConfirmationFacts,
   automaticConfirmationRefusal,
   promotionDedupeKey,
+  promotionOnPass,
 } from './project-promotion';
 import { ProjectPromotionService } from './project-promotion.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
@@ -60,9 +63,14 @@ import { WakeDispositionService } from './wake-disposition.service';
  *
  * A project branch whose project has Automatic on, and whose promotion check came back clean, is
  * merged into main by the platform — no card, and a receipt that says so. Anything else gets the
- * card, exactly as before: a MAIN line, Automatic off, a red check, a conflict, main moving after
- * the check, an integration exception still open, a runner that would re-check a moved main — and
- * an authorization taken back between the check and the moment its landing is handed out.
+ * card, exactly as before: a MAIN line, Automatic off, a red check, a conflict, an exception still
+ * open on the project's merge into main, a runner that would re-check a moved main — and an
+ * authorization taken back between the check and the moment its landing is handed out.
+ *
+ * The owner's decision of 2026-10-15 narrowed two of those. Main moving after the check lands
+ * nothing and the candidate is checked again on the new main, so the card waits for main to move
+ * under `AUTOMATIC_MERGE_ATTEMPTS` landings in a row; and a task that failed to land on the project
+ * branch no longer keeps the project's merge into main in front of the owner.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/project-promotion-auto-authority.pg.spec.ts
  *
@@ -116,6 +124,13 @@ const CHECKED_TREE = '3'.repeat(40);
 const MERGE_COMMIT = '4'.repeat(40);
 /** main after somebody else landed first, between the check and the landing. */
 const MAIN_MOVED = '5'.repeat(40);
+/** The combined tree, and its merge, a check run again on MAIN_MOVED passed on. */
+const RECHECKED_TREE = '8'.repeat(40);
+const RECHECK_MERGE = '9'.repeat(40);
+/** main after `n` more merges landed first — one per landing in a case that races several. */
+function movedMain(n: number): string {
+  return String(n).padStart(40, '6');
+}
 
 const GREEN_CHECK: IntegrationCheckResult = {
   name: 'MERGE_CHECK',
@@ -201,6 +216,7 @@ interface World {
   projectId: string;
   /** What this world's runner declares on every heartbeat. */
   capabilities: string[];
+  repoUrl: string;
 }
 
 /**
@@ -211,7 +227,13 @@ interface World {
 async function world(
   stack: Stack,
   label: string,
-  options: { line: 'PROJECT_BRANCH' | 'MAIN'; automatic: boolean; capabilities?: string[] },
+  options: {
+    line: 'PROJECT_BRANCH' | 'MAIN';
+    automatic: boolean;
+    capabilities?: string[];
+    /** Two worlds sharing one repository and ref are one integration queue (J1). */
+    repoUrl?: string;
+  },
 ): Promise<World> {
   const db = stack.db;
   const ownerId = randomUUID();
@@ -242,7 +264,7 @@ async function world(
       runnerId,
       name: `${label}-workspace`,
       enabled: true,
-      repoUrl: `https://git.invalid/orbit/${label}.git`,
+      repoUrl: options.repoUrl ?? `https://git.invalid/orbit/${label}.git`,
       workDir: `/srv/${label}`,
     },
   });
@@ -291,7 +313,10 @@ async function world(
     projectId,
     settings: { line: options.line },
   }));
-  return { label, ownerId, runnerId, workspaceId, projectId, capabilities };
+  return {
+    label, ownerId, runnerId, workspaceId, projectId, capabilities,
+    repoUrl: options.repoUrl ?? `https://git.invalid/orbit/${label}.git`,
+  };
 }
 
 /**
@@ -454,6 +479,7 @@ function promotionOf(db: PrismaClient, projectId: string) {
       id: true, state: true, sourceKind: true, sourceSha: true, upstreamShaChecked: true,
       mergeTreeSha: true, confirmedByUserId: true, confirmedAutomatically: true, confirmedAt: true,
       landJobId: true, openItemId: true, mergedSha: true, mergedAt: true, receiptIds: true,
+      blockedReason: true,
     },
   });
 }
@@ -574,6 +600,26 @@ test('the rule: a project branch + Automatic + clean, and nothing less', () => {
   }
 });
 
+test('the checking card says the project\'s half of the rule before the check has answered', () => {
+  const merging: Parameters<typeof promotionOnPass>[0] = {
+    sourceKind: 'PROJECT_BRANCH',
+    line: 'PROJECT_BRANCH',
+    coordinatorEnabled: true,
+    projectPaused: false,
+    openIntegrationItems: 0,
+  };
+  assert.equal(promotionOnPass(merging), 'MERGE', 'a pass merges by itself');
+  const asking: Array<[string, Partial<typeof merging>]> = [
+    ['a MAIN-line candidate', { sourceKind: 'TASK_BRANCH', line: 'MAIN' }],
+    ['Automatic off', { coordinatorEnabled: false }],
+    ['the project paused', { projectPaused: true }],
+    ['an exception open on the merge into main', { openIntegrationItems: 1 }],
+  ];
+  for (const [what, change] of asking) {
+    assert.equal(promotionOnPass({ ...merging, ...change }), 'ASK', `${what}: a pass asks the owner`);
+  }
+});
+
 test('the runner declares the exact capability the claim fence and the decision look for', () => {
   // Two codebases that never compile together agree on one word, and on a promise: a runner that
   // says it hands a moved main back must be one that does. `TestAutomaticPromotionHandsBackAMovedUpstream`
@@ -623,6 +669,8 @@ test('(a) a project branch with Automatic on and a clean check is merged without
     try {
       const w = await world(stack, 'auto-clean', { line: 'PROJECT_BRANCH', automatic: true });
       const { taskId, check } = await checkInHand(stack, w);
+      assert.equal((await stack.promotions.readCurrent(w.ownerId, w.projectId))?.onPass, 'MERGE',
+        'while it is checked, the card says a pass merges by itself');
       const checked = await report(stack, w, check, cleanCheck());
       assert.equal(checked.accepted, true);
       assert.equal(checked.openItemId, null, 'the check opened nothing for anybody');
@@ -636,6 +684,8 @@ test('(a) a project branch with Automatic on and a clean check is merged without
       assert.ok(confirmed.confirmedAt, 'when it was confirmed is recorded all the same');
       assert.equal(confirmed.upstreamShaChecked, MAIN_CHECKED);
       assert.equal(confirmed.mergeTreeSha, CHECKED_TREE);
+      assert.equal((await stack.promotions.readCurrent(w.ownerId, w.projectId))?.onPass, null,
+        'a candidate past its check has nothing left to say about one');
       const [queued] = await landingsOf(stack.db, w.projectId);
       assert.ok(queued, `the confirmation queued no landing — ${await jobsOf(stack.db, w.projectId)}`);
       assert.equal(queued.state, 'QUEUED');
@@ -699,6 +749,58 @@ test('(a) a project branch with Automatic on and a clean check is merged without
     }
   });
 
+test('(a) a task that failed to land on the project branch does not keep the project\'s merge into main in front of the owner',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'auto-task-item', { line: 'PROJECT_BRANCH', automatic: true });
+      // Task one lands on the project branch; task two's landing conflicts and is left open.
+      await doneCodeTask(stack, w, `${w.label}-one`);
+      await doneCodeTask(stack, w, `${w.label}-two`);
+      const first = await onlyClaim(stack, w, 'LAND_TASK');
+      await report(stack, w, first, {
+        state: 'LANDED',
+        phase: 'VERIFY',
+        sourceSha: TASK_BRANCH_TIP,
+        targetShaBefore: LINE_BEFORE,
+        testedSha: LANDED_ON_LINE,
+        testedTreeSha: LANDED_TREE,
+        landedSha: LANDED_ON_LINE,
+        landedTreeSha: LANDED_TREE,
+      });
+      const second = await onlyClaim(stack, w, 'LAND_TASK');
+      await report(stack, w, second, {
+        state: 'CONFLICT',
+        phase: 'REBASE',
+        sourceSha: 'b'.repeat(40),
+        targetShaBefore: LANDED_ON_LINE,
+        conflicts: ['src/web/src/pages/ProjectsPage.tsx'],
+      });
+      const conflicts = () => stack.db.projectOpenItem.count({
+        where: { projectId: w.projectId, kind: 'INTEGRATION_CONFLICT', state: 'OPEN' },
+      });
+      assert.equal(await conflicts(), 1, 'the second task\'s conflict is open');
+
+      // The queue is empty now, so the landing that finished last made the candidate. Task two's
+      // work is not on the branch, so it is in nothing this merge carries, and its conflict holds the
+      // merge back no longer (owner decision 2026-10-15): the checking card says so, and a clean
+      // check is the setting's to confirm.
+      assert.equal((await stack.promotions.readCurrent(w.ownerId, w.projectId))?.onPass, 'MERGE',
+        'the checking card says a pass merges by itself');
+      const check = await onlyClaim(stack, w, 'CHECK_PROMOTION');
+      await report(stack, w, check, cleanCheck());
+      const confirmed = await promotionOf(stack.db, w.projectId);
+      assert.equal(confirmed.state, 'CONFIRMED');
+      assert.equal(confirmed.confirmedAutomatically, true, 'the setting confirmed it');
+      assert.deepEqual(await approvalCards(stack.db, w.projectId), [], 'no card was put in front of the owner');
+      const land = await onlyClaim(stack, w, 'LAND_PROMOTION');
+      assert.equal(land.automatic, true, 'and its landing is handed out under the setting');
+      assert.equal(await conflicts(), 1, 'task two\'s conflict is still the coordinator\'s to repair');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 // ── (b) project branch + Automatic off: the card ────────────────────────────────────────────────
 
 test('(b) a project branch with Automatic off is put in front of the owner, exactly as before',
@@ -707,6 +809,8 @@ test('(b) a project branch with Automatic off is put in front of the owner, exac
     try {
       const w = await world(stack, 'auto-off', { line: 'PROJECT_BRANCH', automatic: false });
       const { check } = await checkInHand(stack, w);
+      assert.equal((await stack.promotions.readCurrent(w.ownerId, w.projectId))?.onPass, 'ASK',
+        'while it is checked, the card says a pass asks the owner');
       const checked = await report(stack, w, check, cleanCheck());
       assert.equal(checked.accepted, true);
       await assertAskedAsBefore(stack, w, 'Automatic off');
@@ -729,6 +833,8 @@ test('(c) a MAIN-line project asks for every merge into main, Automatic on or no
       await doneCodeTask(stack, w, w.label);
       const check = await onlyClaim(stack, w, 'CHECK_PROMOTION');
       assert.equal(check.promotionSourceKind, 'TASK_BRANCH');
+      assert.equal((await stack.promotions.readCurrent(w.ownerId, w.projectId))?.onPass, 'ASK',
+        'a MAIN line asks, and its checking card says so with Automatic on');
       const checked = await report(stack, w, check, cleanCheck({ sourceSha: TASK_BRANCH_TIP }));
       assert.equal(checked.accepted, true);
       await assertAskedAsBefore(stack, w, 'a MAIN line with Automatic on');
@@ -806,7 +912,7 @@ test('(d) a conflict does not merge by itself: blocked for the coordinator as be
     }
   });
 
-test('(d) main moving after the check hands the merge back to the owner — nothing re-checked, nothing merged',
+test('(d) main moving after the check lands nothing: the candidate is checked again on the new main and merged by itself, no card',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
@@ -819,60 +925,173 @@ test('(d) main moving after the check hands the merge back to the owner — noth
 
       // The runner found main at MAIN_MOVED, not MAIN_CHECKED: it merges nothing, checks nothing,
       // and says READY (TestAutomaticPromotionHandsBackAMovedUpstream).
-      const handedBack = await report(stack, w, land, {
+      const cameBack = await report(stack, w, land, {
         state: 'READY',
         phase: 'MERGE',
         sourceSha: LANDED_ON_LINE,
         targetShaBefore: MAIN_MOVED,
         upstreamSha: MAIN_MOVED,
       });
-      assert.equal(handedBack.accepted, true);
+      assert.equal(cameBack.accepted, true);
+      assert.equal(cameBack.openItemId, null, 'a moved main opened nothing for anybody');
 
-      const promotion = await promotionOf(stack.db, w.projectId);
-      assert.equal(promotion.state, 'READY', 'the candidate is a question again');
-      assert.equal(promotion.confirmedAutomatically, false);
-      assert.equal(promotion.confirmedByUserId, null);
-      assert.equal(promotion.mergedSha, null, 'nothing was merged');
-      assert.equal(promotion.landJobId, null, 'no landing is in flight');
-      assert.equal(promotion.upstreamShaChecked, MAIN_CHECKED, 'the check it has is the one it had');
-      assert.equal(promotion.mergeTreeSha, CHECKED_TREE);
-      const cards = await approvalCards(stack.db, w.projectId);
-      assert.equal(cards.length, 1, `main moved, so the owner is asked — ${await jobsOf(stack.db, w.projectId)}`);
-      assert.equal(cards[0]!.state, 'OPEN');
-      assert.equal(cards[0]!.assignee, 'OWNER');
-      assert.equal(handedBack.openItemId, cards[0]!.id, 'the hand-back names the card it opened');
-      assert.equal(promotion.openItemId, cards[0]!.id);
-      assert.equal((cards[0]!.payload as { upstreamShaChecked?: string }).upstreamShaChecked, MAIN_CHECKED,
-        'the card is about the main the check ran against, not the one the landing found');
-      assert.deepEqual(await mainReceipts(stack.db, taskId), [], 'no receipt says the work is on main');
+      // Owner decision 2026-10-15: the authorization still stands, so the candidate is checked again
+      // on the main the landing found instead of being put in front of the owner.
+      const rechecking = await promotionOf(stack.db, w.projectId);
+      assert.equal(rechecking.state, 'CHECKING', 'the candidate is checked again');
+      assert.equal(rechecking.confirmedAutomatically, false, 'nothing stands confirmed while it is');
+      assert.equal(rechecking.confirmedAt, null);
+      assert.equal(rechecking.landJobId, null, 'no landing is in flight');
+      assert.equal(rechecking.mergedSha, null, 'nothing was merged');
+      assert.equal(rechecking.sourceSha, LANDED_ON_LINE, 'the same source: only main has moved');
+      assert.deepEqual(await approvalCards(stack.db, w.projectId), [], 'no card for a moved main');
+      assert.equal(await stack.db.projectOpenItem.count({
+        where: { projectId: w.projectId, kind: { in: ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR'] } },
+      }), 0, 'and no failure for the coordinator either');
       const [attempted] = await landingsOf(stack.db, w.projectId);
       assert.equal(attempted!.state, 'READY', 'the automatic landing ended without landing');
       assert.equal(attempted!.confirmedAutomatically, true, 'and its record still says whose it was');
       assert.equal(attempted!.landedSha, null);
-      const exceptions = await stack.db.projectOpenItem.count({
-        where: { projectId: w.projectId, kind: { in: ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR'] } },
+      assert.equal((await stack.promotions.readCurrent(w.ownerId, w.projectId))?.onPass, 'MERGE',
+        'the checking card says a pass still merges by itself');
+      assert.deepEqual(await mainReceipts(stack.db, taskId), [], 'no receipt says the work is on main yet');
+
+      // The check again, on the main the landing found — the same frozen source. Clean, so the
+      // setting confirms it as it confirmed the first one, bound to the new main and the new tree.
+      const recheck = await onlyClaim(stack, w, 'CHECK_PROMOTION');
+      assert.equal(recheck.sourceSha, LANDED_ON_LINE);
+      await report(stack, w, recheck, cleanCheck({
+        targetShaBefore: MAIN_MOVED,
+        upstreamSha: MAIN_MOVED,
+        testedSha: RECHECK_MERGE,
+        testedTreeSha: RECHECKED_TREE,
+      }));
+      const reconfirmed = await promotionOf(stack.db, w.projectId);
+      assert.equal(reconfirmed.state, 'CONFIRMED');
+      assert.equal(reconfirmed.confirmedAutomatically, true);
+      assert.equal(reconfirmed.upstreamShaChecked, MAIN_MOVED, 'bound to the main the second check ran against');
+      assert.equal(reconfirmed.mergeTreeSha, RECHECKED_TREE);
+      const second = await onlyClaim(stack, w, 'LAND_PROMOTION');
+      assert.equal(second.automatic, true);
+      assert.equal(second.upstreamShaChecked, MAIN_MOVED);
+      assert.equal(second.mergeTreeSha, RECHECKED_TREE);
+      await report(stack, w, second, {
+        state: 'LANDED',
+        phase: 'VERIFY',
+        sourceSha: LANDED_ON_LINE,
+        targetShaBefore: MAIN_MOVED,
+        upstreamSha: MAIN_MOVED,
+        testedSha: MERGE_COMMIT,
+        testedTreeSha: RECHECKED_TREE,
+        landedSha: MERGE_COMMIT,
+        landedTreeSha: RECHECKED_TREE,
       });
-      assert.equal(exceptions, 0, 'a moved main is the owner\'s question, not a failure for the coordinator');
+      const merged = await promotionOf(stack.db, w.projectId);
+      assert.equal(merged.state, 'MERGED');
+      assert.equal(merged.mergedSha, MERGE_COMMIT);
+      assert.equal(merged.confirmedAutomatically, true, 'merged by the setting, as the first check would have been');
+      assert.deepEqual(await approvalCards(stack.db, w.projectId), [], 'and the owner was never asked');
+      assert.equal((await mainReceipts(stack.db, taskId)).length, 1, 'the task\'s work is on main');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test(`(d) main moving under ${AUTOMATIC_MERGE_ATTEMPTS} automatic landings in a row puts the candidate in front of the owner, whose press re-checks and merges`,
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'auto-main-racing', { line: 'PROJECT_BRANCH', automatic: true });
+      const { taskId, check } = await checkInHand(stack, w);
+      await report(stack, w, check, cleanCheck());
+      // Landing n finds main one merge further on than its check left it: the first check ran on
+      // MAIN_CHECKED, and every check after it on the main the landing before it found.
+      const checkedOn = (n: number): string => (n === 1 ? MAIN_CHECKED : movedMain(n - 1));
+      for (let attempt = 1; attempt <= AUTOMATIC_MERGE_ATTEMPTS; attempt += 1) {
+        const land = await onlyClaim(stack, w, 'LAND_PROMOTION');
+        assert.equal(land.automatic, true, `landing ${attempt} is the setting's`);
+        assert.equal(land.upstreamShaChecked, checkedOn(attempt), `landing ${attempt} is bound to its check's main`);
+        const cameBack = await report(stack, w, land, {
+          state: 'READY',
+          phase: 'MERGE',
+          sourceSha: LANDED_ON_LINE,
+          targetShaBefore: movedMain(attempt),
+          upstreamSha: movedMain(attempt),
+          // J-T13: an automatic landing reports the move like any other, and the row keeps it even
+          // though the answer is READY (the candidate is checked again, not re-queued).
+          upstreamMovedCommits: { total: 1, commits: [{ sha: movedMain(attempt), subject: `moved ${attempt}` }] },
+        });
+        const carried = await landingRow(stack.db, land.jobId);
+        assert.equal(
+          (carried.upstreamMovedCommits as unknown as UpstreamMovedCommitsEnriched).commits[0]!.sha,
+          movedMain(attempt),
+          `landing ${attempt}: the row carries the commits the runner measured`,
+        );
+        if (attempt === AUTOMATIC_MERGE_ATTEMPTS) {
+          assert.ok(cameBack.openItemId, `landing ${attempt} found main moved again: the owner is asked`);
+          break;
+        }
+        assert.equal(cameBack.openItemId, null, `landing ${attempt}: no card yet`);
+        assert.equal((await promotionOf(stack.db, w.projectId)).state, 'CHECKING', `landing ${attempt}: checked again`);
+        const recheck = await onlyClaim(stack, w, 'CHECK_PROMOTION');
+        await report(stack, w, recheck, cleanCheck({
+          targetShaBefore: movedMain(attempt),
+          upstreamSha: movedMain(attempt),
+        }));
+        assert.equal((await promotionOf(stack.db, w.projectId)).confirmedAutomatically, true,
+          `check ${attempt + 1} on the new main is clean, and the setting confirms it again`);
+      }
+
+      const lastChecked = checkedOn(AUTOMATIC_MERGE_ATTEMPTS);
+      const promotion = await promotionOf(stack.db, w.projectId);
+      assert.equal(promotion.state, 'READY', 'the candidate is the owner\'s question now');
+      assert.equal(promotion.confirmedAutomatically, false);
+      assert.equal(promotion.confirmedByUserId, null);
+      assert.equal(promotion.landJobId, null, 'no landing is in flight');
+      assert.equal(promotion.mergedSha, null, 'nothing was merged');
+      assert.equal(promotion.upstreamShaChecked, lastChecked, 'the check it has is the last one it got');
+      const cards = await approvalCards(stack.db, w.projectId);
+      assert.equal(cards.length, 1, `one card — ${await jobsOf(stack.db, w.projectId)}`);
+      assert.equal(cards[0]!.state, 'OPEN');
+      assert.equal(cards[0]!.assignee, 'OWNER');
+      assert.equal(promotion.openItemId, cards[0]!.id, 'the candidate names its card');
+      assert.equal((cards[0]!.payload as { upstreamShaChecked?: string }).upstreamShaChecked, lastChecked,
+        'the card is about the main the last check ran against, not the one the landing found');
+      const landings = await landingsOf(stack.db, w.projectId);
+      assert.equal(landings.length, AUTOMATIC_MERGE_ATTEMPTS, 'one automatic landing per attempt, and no more');
+      for (const landing of landings) {
+        assert.equal(landing.state, 'READY', 'each ended without landing');
+        assert.equal(landing.confirmedAutomatically, true, 'and each record says whose it was');
+        assert.equal(landing.landedSha, null);
+      }
+      assert.equal(await stack.db.projectIntegrationJob.count({
+        where: { projectId: w.projectId, kind: 'CHECK_PROMOTION' },
+      }), AUTOMATIC_MERGE_ATTEMPTS, 'the first check and one more per landing that found main moved');
+      assert.equal(await stack.db.projectOpenItem.count({
+        where: { projectId: w.projectId, kind: { in: ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR'] } },
+      }), 0, 'a moving main is the owner\'s question, not a failure for the coordinator');
+      assert.deepEqual(await mainReceipts(stack.db, taskId), [], 'no receipt says the work is on main');
 
       // The owner presses the card, and from here it is the landing it always was: not the
       // setting's, bound to nothing tighter than M5, re-checked on the new main and merged.
       await stack.promotions.confirm({ userId: w.ownerId }, w.projectId, promotion.id, LANDED_ON_LINE);
       const pressed = await onlyClaim(stack, w, 'LAND_PROMOTION');
       assert.equal(pressed.automatic, undefined, 'the owner\'s landing carries no automatic mark');
-      assert.equal(pressed.upstreamShaChecked, MAIN_CHECKED);
+      assert.equal(pressed.upstreamShaChecked, lastChecked);
+      const now = movedMain(AUTOMATIC_MERGE_ATTEMPTS);
       await stack.jobs.progress(w.runnerId, pressed.jobId, {
         claimGeneration: pressed.claimGeneration,
         leaseOwner: pressed.leaseOwner,
         phase: 'MERGE',
-        upstreamMoved: { from: MAIN_CHECKED, to: MAIN_MOVED, commits: 1 },
+        upstreamMoved: { from: lastChecked, to: now, commits: 1 },
       });
       assert.equal((await promotionOf(stack.db, w.projectId)).state, 'RECHECKING', 'M5: re-checked, not asked again');
       await report(stack, w, pressed, {
         state: 'LANDED',
         phase: 'VERIFY',
         sourceSha: LANDED_ON_LINE,
-        targetShaBefore: MAIN_MOVED,
-        upstreamSha: MAIN_MOVED,
+        targetShaBefore: now,
+        upstreamSha: now,
         testedSha: MERGE_COMMIT,
         testedTreeSha: CHECKED_TREE,
         landedSha: MERGE_COMMIT,
@@ -891,47 +1110,6 @@ test('(d) main moving after the check hands the merge back to the owner — noth
     }
   });
 
-test('(d) an integration exception still open on the project keeps its next merge in front of the owner',
-  { skip, timeout: 180_000 }, async () => {
-    const stack = await connect();
-    try {
-      const w = await world(stack, 'auto-open-item', { line: 'PROJECT_BRANCH', automatic: true });
-      // Task one lands on the project branch; task two's landing conflicts and is left open.
-      await doneCodeTask(stack, w, `${w.label}-one`);
-      await doneCodeTask(stack, w, `${w.label}-two`);
-      const first = await onlyClaim(stack, w, 'LAND_TASK');
-      await report(stack, w, first, {
-        state: 'LANDED',
-        phase: 'VERIFY',
-        sourceSha: TASK_BRANCH_TIP,
-        targetShaBefore: LINE_BEFORE,
-        testedSha: LANDED_ON_LINE,
-        testedTreeSha: LANDED_TREE,
-        landedSha: LANDED_ON_LINE,
-        landedTreeSha: LANDED_TREE,
-      });
-      const second = await onlyClaim(stack, w, 'LAND_TASK');
-      await report(stack, w, second, {
-        state: 'CONFLICT',
-        phase: 'REBASE',
-        sourceSha: 'b'.repeat(40),
-        targetShaBefore: LANDED_ON_LINE,
-        conflicts: ['src/web/src/pages/ProjectsPage.tsx'],
-      });
-      const open = await stack.db.projectOpenItem.count({
-        where: { projectId: w.projectId, kind: 'INTEGRATION_CONFLICT', state: 'OPEN' },
-      });
-      assert.equal(open, 1, 'the second task\'s conflict is open');
-
-      // The queue is empty now, so the landing that finished last made the candidate; its check is clean.
-      const check = await onlyClaim(stack, w, 'CHECK_PROMOTION');
-      await report(stack, w, check, cleanCheck());
-      await assertAskedAsBefore(stack, w, 'an integration exception still open');
-    } finally {
-      await stack.db.$disconnect();
-    }
-  });
-
 test('(d) a runner that would re-check a moved main and merge it is never trusted with an automatic merge',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
@@ -945,7 +1123,7 @@ test('(d) a runner that would re-check a moved main and merge it is never truste
     }
   });
 
-test('(d) the authorization is read again when the landing is handed out: taken back since the check, the owner is asked and nothing lands',
+test('(d) the authorization is read again when the landing is handed out: taken back since the check, the owner is asked and nothing lands; a task failing to land since then takes nothing back',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
@@ -967,7 +1145,9 @@ test('(d) the authorization is read again when the landing is handed out: taken 
 
       // An integration exception opened on the project in the same interval — a later task's landing
       // on the project branch conflicted. Its landing is claimed by a process that is never handed an
-      // automatic one, so it is the only job that moves before the one under test is claimed.
+      // automatic one, so it is the only job that moves before the one under test is claimed. That
+      // task's work is not on the branch, so it is in nothing this merge carries, and the yes the
+      // landing was queued under still stands (owner decision 2026-10-15): the landing goes out.
       const since = await world(stack, 'auto-item-since', { line: 'PROJECT_BRANCH', automatic: true });
       const second = await checkInHand(stack, since);
       await report(stack, since, second.check, cleanCheck());
@@ -981,8 +1161,11 @@ test('(d) the authorization is read again when the landing is handed out: taken 
         targetShaBefore: LANDED_ON_LINE,
         conflicts: ['src/web/src/pages/ProjectsPage.tsx'],
       });
-      assert.deepEqual(await heartbeat(stack, since), [], 'a landing an open exception now stands against was handed out');
-      await assertHandedBack(stack, since, second.taskId, 'an integration exception opened after the check');
+      const handedOut = await heartbeat(stack, since);
+      assert.equal(handedOut.length, 1, `the automatic landing was not handed out — ${await jobsOf(stack.db, since.projectId)}`);
+      assert.equal(handedOut[0]!.kind, 'LAND_PROMOTION');
+      assert.equal(handedOut[0]!.automatic, true, 'still the setting\'s');
+      assert.deepEqual(await approvalCards(stack.db, since.projectId), [], 'and nobody was asked');
     } finally {
       await stack.db.$disconnect();
     }
@@ -1041,6 +1224,321 @@ test('(e) the owner\'s confirmation still merges and leaves the receipt it alway
       assert.equal(record?.merged?.sha, MERGE_COMMIT);
       assert.equal(record?.merged?.byUserId, w.ownerId);
       assert.equal(record?.merged?.automatic, false);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ── (f) J-T13: the first refused push ends the landing, not the confirmation ─────────────────────
+
+/** One owner-confirmed landing whose push lost the race, as the runner reports it (J-T13): the
+ *  commits that moved main, which every further assertion reads off the job row. */
+async function refusedPush(
+  stack: Stack,
+  w: World,
+  land: IntegrationJobCommand,
+  commits: Array<{ sha: string; subject: string }>,
+) {
+  return report(stack, w, land, {
+    state: 'ERROR',
+    phase: 'PUSH',
+    errorCode: 'TARGET_MOVED',
+    upstreamMovedCommits: { total: commits.length, commits },
+  });
+}
+
+function integrationErrorItems(db: PrismaClient, projectId: string) {
+  return db.projectOpenItem.findMany({
+    where: { projectId, kind: 'INTEGRATION_ERROR' },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, state: true, payload: true },
+  });
+}
+
+function landingRow(db: PrismaClient, jobId: string) {
+  return db.projectIntegrationJob.findUniqueOrThrow({
+    where: { id: jobId },
+    select: {
+      id: true, generation: true, state: true, errorCode: true, confirmedAutomatically: true,
+      sourceSha: true, landedSha: true, upstreamMovedCommits: true, claimGeneration: true,
+    },
+  });
+}
+
+test('(f) J-T13: a refused push ends the landing only — the confirmation stands, the next generation is queued, and Cancel is available again',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'owner-stolen-push', { line: 'PROJECT_BRANCH', automatic: false });
+      const { check } = await checkInHand(stack, w);
+      await report(stack, w, check, cleanCheck());
+      const promotion = await promotionOf(stack.db, w.projectId);
+      await stack.promotions.confirm({ userId: w.ownerId }, w.projectId, promotion.id, LANDED_ON_LINE);
+
+      const land = await onlyClaim(stack, w, 'LAND_PROMOTION');
+      const moved = movedMain(1);
+      const taken = await refusedPush(stack, w, land, [{ sha: moved, subject: 'somebody else landed first' }]);
+      assert.equal(taken.accepted, true);
+
+      // The candidate is still the owner's confirmation, and the landing it points at is a new one.
+      const still = await promotionOf(stack.db, w.projectId);
+      assert.equal(still.state, 'CONFIRMED', 'the owner is not asked again');
+      assert.equal(still.confirmedByUserId, w.ownerId);
+      assert.ok(still.confirmedAt, 'the confirmation it was already given is kept');
+      assert.ok(still.landJobId);
+      // §3.6 / §2.9 LS1: while it is confirmed, the card's check line opens the landing it is on.
+      const confirmed = await stack.promotions.readCurrent(w.ownerId, w.projectId);
+      const round = await stack.db.projectLanding.findFirstOrThrow({
+        where: { projectId: w.projectId, subject: 'PROMOTION' },
+        select: { sessionId: true },
+      });
+      assert.equal(confirmed?.landingSessionId, round.sessionId,
+        'the confirmed candidate names the landing session of its round');
+      assert.notEqual(still.landJobId, land.jobId, 'a new generation was queued');
+      assert.equal((await approvalCards(stack.db, w.projectId)).length, 1,
+        'the card answered when the owner confirmed is the only one');
+      assert.deepEqual(await integrationErrorItems(stack.db, w.projectId), [],
+        'a steal that was re-queued is nobody\'s todo');
+
+      // The ending row carries the move, with the control plane's own reading of each commit.
+      const ended = await landingRow(stack.db, land.jobId);
+      assert.equal(ended.state, 'ERROR');
+      assert.equal(ended.errorCode, 'TARGET_MOVED');
+      assert.equal(ended.landedSha, null);
+      const list = ended.upstreamMovedCommits as unknown as UpstreamMovedCommitsEnriched;
+      assert.equal(list.total, 1);
+      assert.equal(list.commits.length, 1);
+      assert.equal(list.commits[0]!.sha, moved);
+      assert.equal(list.commits[0]!.subject, 'somebody else landed first');
+      assert.equal(list.commits[0]!.outsideQueue, true, 'no LAND_PROMOTION on this queue landed it');
+      assert.equal('landedBy' in list.commits[0]!, false);
+
+      // The next generation: the same frozen source, still bound to the check it has so main moving
+      // is what it must re-check against (M5), and not the setting's. Not claimed yet — a QUEUED row
+      // is the whole of a fresh lease.
+      const nextRow = await landingRow(stack.db, still.landJobId!);
+      assert.equal(nextRow.generation, 2);
+      assert.equal(nextRow.confirmedAutomatically, false);
+      assert.equal(nextRow.state, 'QUEUED');
+      assert.equal(nextRow.sourceSha, LANDED_ON_LINE, 'the same frozen source');
+
+      // A new claim generation resets the push boundary (§2.2 J-T4), so the owner's Cancel is
+      // available again for the whole of the next attempt: no "already being pushed" refusal, and a
+      // QUEUED row ends cancelled on the spot.
+      const cancelled = await stack.promotions.cancel({ userId: w.ownerId }, w.projectId, still.id);
+      assert.equal(cancelled.state, 'CANCELLED');
+      assert.equal((await landingRow(stack.db, still.landJobId!)).state, 'CANCELLED',
+        'a queued landing the owner called back ends cancelled on the spot');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(f) J-T13: the generation queued under the same confirmation checks the new main and lands there, with its receipt',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'owner-stolen-then-lands', { line: 'PROJECT_BRANCH', automatic: false });
+      const { taskId, check } = await checkInHand(stack, w);
+      await report(stack, w, check, cleanCheck());
+      const promotion = await promotionOf(stack.db, w.projectId);
+      await stack.promotions.confirm({ userId: w.ownerId }, w.projectId, promotion.id, LANDED_ON_LINE);
+
+      const first = await onlyClaim(stack, w, 'LAND_PROMOTION');
+      const moved = movedMain(1);
+      await refusedPush(stack, w, first, [{ sha: moved, subject: 'somebody else landed first' }]);
+      const next = await onlyClaim(stack, w, 'LAND_PROMOTION');
+      assert.equal(next.upstreamShaChecked, MAIN_CHECKED, 'the check it has, not the main the steal found');
+      assert.equal(next.sourceSha, LANDED_ON_LINE, 'the same frozen source');
+
+      // What the runner of the next generation does with a moved main (M5): re-merge, re-check,
+      // land. The result says so.
+      await report(stack, w, next, {
+        state: 'LANDED',
+        phase: 'VERIFY',
+        sourceSha: LANDED_ON_LINE,
+        targetShaBefore: moved,
+        upstreamSha: moved,
+        testedSha: MERGE_COMMIT,
+        testedTreeSha: CHECKED_TREE,
+        landedSha: MERGE_COMMIT,
+        landedTreeSha: CHECKED_TREE,
+        checks: [GREEN_CHECK],
+      });
+      const merged = await promotionOf(stack.db, w.projectId);
+      assert.equal(merged.state, 'MERGED');
+      assert.equal(merged.mergedSha, MERGE_COMMIT);
+      assert.equal(merged.confirmedByUserId, w.ownerId, 'merged under the owner\'s own press');
+      assert.equal(merged.confirmedAutomatically, false);
+      // §3.6 / §2.9 LS1: the merge's receipt opens the landing session that made it.
+      const [receiptView] = await stack.promotions.readMerged(w.ownerId, w.projectId);
+      const round = await stack.db.projectLanding.findFirstOrThrow({
+        where: { projectId: w.projectId, subject: 'PROMOTION' },
+        select: { sessionId: true },
+      });
+      assert.equal(receiptView?.landingSessionId, round.sessionId,
+        'the merged receipt names the landing session that merged it');
+      assert.deepEqual(await integrationErrorItems(stack.db, w.projectId), [],
+        'nothing about the steal was anybody\'s todo');
+      const receipts = await mainReceipts(stack.db, taskId);
+      assert.equal(receipts.length, 1, 'the work is on main, and the ledger says so');
+      assert.equal(receipts[0]!.result, 'MERGED');
+      assert.equal(receipts[0]!.targetShaAfter, MERGE_COMMIT);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(f) J-T13: the third consecutive refused push blocks the candidate, and its INTEGRATION_ERROR carries the commits',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'owner-three-steals', { line: 'PROJECT_BRANCH', automatic: false });
+      const { check } = await checkInHand(stack, w);
+      await report(stack, w, check, cleanCheck());
+      const promotion = await promotionOf(stack.db, w.projectId);
+      await stack.promotions.confirm({ userId: w.ownerId }, w.projectId, promotion.id, LANDED_ON_LINE);
+
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        const land = await onlyClaim(stack, w, 'LAND_PROMOTION');
+        const moved = movedMain(attempt);
+        await refusedPush(stack, w, land, [{ sha: moved, subject: `move ${attempt}` }]);
+        if (attempt < 3) {
+          const waiting = await promotionOf(stack.db, w.projectId);
+          assert.equal(waiting.state, 'CONFIRMED', `steal ${attempt}: still the owner's`);
+          assert.deepEqual(await integrationErrorItems(stack.db, w.projectId), [],
+            `steal ${attempt}: re-queued, so nobody's todo`);
+          continue;
+        }
+        const blocked = await promotionOf(stack.db, w.projectId);
+        assert.equal(blocked.state, 'BLOCKED', 'three in a row is a main a check cannot keep up with');
+        assert.equal(blocked.blockedReason, 'ERROR');
+        const items = await integrationErrorItems(stack.db, w.projectId);
+        assert.equal(items.length, 1, 'the coordinator is given the failure once');
+        assert.equal(items[0]!.state, 'OPEN');
+        const payload = items[0]!.payload as { upstreamMovedCommits?: UpstreamMovedCommitsEnriched };
+        assert.equal(payload.upstreamMovedCommits?.total, 1);
+        assert.equal(payload.upstreamMovedCommits?.commits[0]?.sha, moved,
+          'the item carries the list that ended it, at the payload\'s top level');
+      }
+      const landings = await landingsOf(stack.db, w.projectId);
+      assert.equal(landings.length, 3, 'one landing per attempt, and no more');
+      for (const landing of landings) {
+        assert.equal(landing.state, 'ERROR');
+        assert.equal(landing.confirmedAutomatically, false);
+      }
+      assert.equal(await stack.db.projectIntegrationJob.count({
+        where: { projectId: w.projectId, kind: 'LAND_PROMOTION', state: { in: ['QUEUED', 'RUNNING'] } },
+      }), 0, 'a blocked candidate queues nothing');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(f) an old runner\'s TARGET_MOVED keeps today\'s path: no commits reported, the candidate is blocked as before',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'owner-old-runner', { line: 'PROJECT_BRANCH', automatic: false });
+      const { check } = await checkInHand(stack, w);
+      await report(stack, w, check, cleanCheck());
+      const promotion = await promotionOf(stack.db, w.projectId);
+      await stack.promotions.confirm({ userId: w.ownerId }, w.projectId, promotion.id, LANDED_ON_LINE);
+      const land = await onlyClaim(stack, w, 'LAND_PROMOTION');
+      // No upstreamMovedCommits: a runner that predates J-T13.
+      await report(stack, w, land, { state: 'ERROR', phase: 'PUSH', errorCode: 'TARGET_MOVED' });
+      const blocked = await promotionOf(stack.db, w.projectId);
+      assert.equal(blocked.state, 'BLOCKED', 'a result the build cannot read the move from is not re-queued');
+      assert.equal(await stack.db.projectIntegrationJob.count({
+        where: { projectId: w.projectId, kind: 'LAND_PROMOTION' },
+      }), 1, 'no next generation was queued');
+      const ended = await landingRow(stack.db, land.jobId);
+      assert.equal(ended.upstreamMovedCommits, null);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(f) upstreamMovedCommits: outsideQueue for what the queue did not land, this account\'s ids, and only the reason for another account\'s',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      // This account's own promotion lands a merge commit on main.
+      const owner = await world(stack, 'enrich-owner', { line: 'PROJECT_BRANCH', automatic: true });
+      const { check: ownerCheck } = await checkInHand(stack, owner);
+      await report(stack, owner, ownerCheck, cleanCheck());
+      const ownerPromotion = await promotionOf(stack.db, owner.projectId);
+      const ownerLand = await onlyClaim(stack, owner, 'LAND_PROMOTION');
+      await report(stack, owner, ownerLand, {
+        state: 'LANDED',
+        phase: 'VERIFY',
+        sourceSha: LANDED_ON_LINE,
+        targetShaBefore: MAIN_CHECKED,
+        upstreamSha: MAIN_CHECKED,
+        testedSha: MERGE_COMMIT,
+        testedTreeSha: CHECKED_TREE,
+        landedSha: MERGE_COMMIT,
+        landedTreeSha: CHECKED_TREE,
+      });
+      assert.equal((await promotionOf(stack.db, owner.projectId)).state, 'MERGED');
+
+      // Another account's project, same repository and main: the same serial key (J1).
+      const other = await world(stack, 'enrich-other', {
+        line: 'PROJECT_BRANCH', automatic: false, repoUrl: owner.repoUrl,
+      });
+      const { check: otherCheck } = await checkInHand(stack, other);
+      await report(stack, other, otherCheck, cleanCheck());
+      const otherPromotion = await promotionOf(stack.db, other.projectId);
+      await stack.promotions.confirm({ userId: other.ownerId }, other.projectId, otherPromotion.id, LANDED_ON_LINE);
+      const otherLand = await onlyClaim(stack, other, 'LAND_PROMOTION');
+      const claimed = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: otherLand.jobId },
+      });
+
+      // A landing of the other account's own queue that put a commit on main, written as the row a
+      // real one leaves (its own result path is covered by the tests above).
+      const ownSha = '7'.repeat(40);
+      const ownLanding = await stack.db.projectIntegrationJob.create({
+        data: {
+          ownerId: other.ownerId,
+          projectId: other.projectId,
+          codebaseId: claimed.codebaseId,
+          kind: 'LAND_PROMOTION',
+          generation: 9,
+          promotionId: otherPromotion.id,
+          sessionId: claimed.sessionId,
+          serialKey: claimed.serialKey,
+          targetRef: claimed.targetRef,
+          upstreamRef: claimed.upstreamRef,
+          sourceRef: claimed.sourceRef,
+          runnerId: other.runnerId,
+          state: 'LANDED',
+          testedSha: ownSha,
+          testedTreeSha: CHECKED_TREE,
+          landedSha: ownSha,
+          landedTreeSha: CHECKED_TREE,
+          idempotencyKey: `ij:v1:LAND_PROMOTION:${otherPromotion.id}:9`,
+        },
+      });
+      const outsideSha = '8'.repeat(40);
+      await refusedPush(stack, other, otherLand, [
+        { sha: MERGE_COMMIT, subject: 'this account landed it' },
+        { sha: ownSha, subject: 'the other account landed it' },
+        { sha: outsideSha, subject: 'nobody here landed it' },
+      ]);
+
+      const row = await landingRow(stack.db, otherLand.jobId);
+      const list = row.upstreamMovedCommits as unknown as UpstreamMovedCommitsEnriched;
+      assert.equal(list.total, 3);
+      const [anotherAccounts, mine, outside] = list.commits;
+      assert.equal(anotherAccounts!.outsideQueue, false, 'another account\'s landing did put it there');
+      assert.deepEqual(anotherAccounts!.landedBy, { reason: 'ANOTHER_ACCOUNT' },
+        'another account is named by reason only — never its job, its candidate or its title');
+      assert.equal(mine!.outsideQueue, false);
+      assert.deepEqual(mine!.landedBy, { jobId: ownLanding.id, promotionId: otherPromotion.id },
+        'this account\'s own landing names the job and the candidate');
+      assert.equal(outside!.outsideQueue, true, 'nothing on this queue landed it');
+      assert.equal('landedBy' in outside!, false);
     } finally {
       await stack.db.$disconnect();
     }

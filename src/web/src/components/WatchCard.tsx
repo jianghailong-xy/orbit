@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Button, Popconfirm } from 'antd';
 import type { WatchDeliveryView, WatchSnapshot, WatchView } from '@orbit/shared';
 import { watchesQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
+import { Button } from './ui/Button';
+import { Popconfirm } from './ui/Popconfirm';
 import {
   SHOWN_TARGETS,
   ago,
@@ -231,7 +232,7 @@ export function WatchControls({ watch }: { watch: WatchView }) {
       {watch.state === 'PAUSED' ? (
         <Button
           size="small"
-          type="primary"
+          variant="primary"
           loading={pending === 'resume'}
           disabled={control.isPending && pending !== 'resume'}
           onClick={() => control.mutate('resume')}
@@ -251,20 +252,21 @@ export function WatchControls({ watch }: { watch: WatchView }) {
       <Popconfirm
         title="Stop this watch?"
         description={watch.action === 'NOTIFY_USER' ? STOP_WARNING_NOTIFY : STOP_WARNING_RESUME}
-        okText="Stop watching"
-        okButtonProps={{ danger: true }}
+        confirmText="Stop watching"
+        danger
         cancelText="Keep watching"
         onConfirm={() => control.mutate('cancel')}
-      >
-        <Button
-          size="small"
-          danger
-          loading={pending === 'cancel'}
-          disabled={control.isPending && pending !== 'cancel'}
-        >
-          Stop
-        </Button>
-      </Popconfirm>
+        trigger={
+          <Button
+            size="small"
+            danger
+            loading={pending === 'cancel'}
+            disabled={control.isPending && pending !== 'cancel'}
+          >
+            Stop
+          </Button>
+        }
+      />
     </>
   );
 }

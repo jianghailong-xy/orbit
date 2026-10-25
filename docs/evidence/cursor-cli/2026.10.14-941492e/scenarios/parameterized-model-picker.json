@@ -1,0 +1,214 @@
+{
+ "name": "parameterized-model-picker",
+ "runId": "2026-10-16T17-56-34-043Z",
+ "startedAt": "2026-10-16T17:57:59.461Z",
+ "finishedAt": "2026-10-16T17:58:39.208Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/parameterized-model-picker.ndjson",
+ "protocolLines": 19,
+ "fixtures": [
+  "parameterized-model-picker/acp"
+ ],
+ "checks": [
+  {
+   "name": "clientCapabilities._meta.subagents adds sessionCapabilities.subagents",
+   "ok": true
+  },
+  {
+   "name": "with parameterizedModelPicker, model values are bare names and Auto is \"default\"",
+   "ok": true
+  },
+  {
+   "name": "choosing a model adds its variant parameters as separate select options (thought_level / model_config)",
+   "ok": true
+  },
+  {
+   "name": "setting context works",
+   "ok": true
+  },
+  {
+   "name": "an invalid parameter value -> -32602 Invalid value for <id>",
+   "ok": true,
+   "detail": {
+    "code": -32602,
+    "message": "Invalid params",
+    "data": {
+     "message": "Invalid value for context: not-a-value"
+    }
+   }
+  },
+  {
+   "name": "extension method cursor/list_available_models lists models with their configOptions",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "config options after choosing claude-opus-5-5": [
+   {
+    "id": "context",
+    "category": "model_config",
+    "current": "300k",
+    "options": [
+     "300k (300K)",
+     "1m (1M)"
+    ]
+   },
+   {
+    "id": "effort",
+    "category": "thought_level",
+    "current": "medium",
+    "options": [
+     "low (Low)",
+     "medium (Medium)",
+     "high (High)",
+     "xhigh (Extra High)",
+     "max (Max)"
+    ]
+   },
+   {
+    "id": "fast",
+    "category": "model_config",
+    "current": "false",
+    "options": [
+     "false (Off)",
+     "true (Fast)"
+    ]
+   }
+  ],
+  "cursor/list_available_models": {
+   "count": 46,
+   "sample": [
+    {
+     "value": "default",
+     "name": "Auto",
+     "configOptions": []
+    },
+    {
+     "value": "grok-4.7",
+     "name": "Grok 4.7",
+     "configOptions": [
+      {
+       "id": "context",
+       "name": "Context",
+       "description": "Context size the model has available.",
+       "category": "model_config",
+       "type": "select",
+       "currentValue": "256k",
+       "options": [
+        {
+         "value": "256k",
+         "name": "256K"
+        },
+        {
+         "value": "500k",
+         "name": "500K"
+        }
+       ]
+      },
+      {
+       "id": "reasoning_effort",
+       "name": "Effort",
+       "description": "Controls how much reasoning effort the model uses before responding.",
+       "category": "thought_level",
+       "type": "select",
+       "currentValue": "high",
+       "options": [
+        {
+         "value": "low",
+         "name": "Low"
+        },
+        {
+         "value": "medium",
+         "name": "Medium"
+        },
+        {
+         "value": "high",
+         "name": "High"
+        },
+        {
+         "value": "xhigh",
+         "name": "Extra High"
+        }
+       ]
+      },
+      {
+       "id": "fast",
+       "name": "Fast",
+       "description": "Significantly faster but consumes more usage",
+       "category": "model_config",
+       "type": "select",
+       "currentValue": "true",
+       "options": [
+        {
+         "value": "false",
+         "name": "Off"
+        },
+        {
+         "value": "true",
+         "name": "Fast​​"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "value": "grok-4.6",
+     "name": "Grok 4.6",
+     "configOptions": [
+      {
+       "id": "effort",
+       "name": "Effort",
+       "description": "Effort the model uses to generate its response.",
+       "category": "thought_level",
+       "type": "select",
+       "currentValue": "high",
+       "options": [
+        {
+         "value": "low",
+         "name": "Low"
+        },
+        {
+         "value": "medium",
+         "name": "Medium"
+        },
+        {
+         "value": "high",
+         "name": "High"
+        },
+        {
+         "value": "xhigh",
+         "name": "Extra High"
+        }
+       ]
+      },
+      {
+       "id": "fast",
+       "name": "Fast",
+       "description": "Significantly faster but consumes more usage",
+       "category": "model_config",
+       "type": "select",
+       "currentValue": "true",
+       "options": [
+        {
+         "value": "false",
+         "name": "Off"
+        },
+        {
+         "value": "true",
+         "name": "Fast​​"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

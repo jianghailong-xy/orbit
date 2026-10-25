@@ -19,12 +19,13 @@ final class ProjectMergeCardTests: XCTestCase {
     private func candidate(_ state: PromotionState, conflicts: [String] = [], taskIds: [String] = ["t1", "t2"],
                            merged: ProjectPromotionView.Merged? = nil,
                            execution: ProjectPromotionView.Execution? = nil,
-                           files: Int? = 10, commits: Int? = 5) -> ProjectPromotionView {
+                           files: Int? = 10, commits: Int? = 5,
+                           onPass: String? = nil) -> ProjectPromotionView {
         ProjectPromotionView(promotionId: "pr-1", state: state,
                              sourceRef: "refs/heads/project/34ZurCP3bv9yLXGVyUGnx", sourceSha: "5e5bfca23aa1",
                              upstreamRef: "refs/heads/main", commitsAhead: commits, filesChanged: files,
                              taskIds: taskIds, conflicts: conflicts, askedAt: "2026-10-06T03:31:00Z",
-                             merged: merged, execution: execution)
+                             merged: merged, execution: execution, onPass: onPass)
     }
 
     private func merge(_ id: String, at: String, automatic: Bool? = nil) -> PromotionCards.Receipt {
@@ -66,20 +67,49 @@ final class ProjectMergeCardTests: XCTestCase {
         XCTAssertNil(ProjectMergeCard.shape(promotion: nil, integration: nil))
     }
 
-    func testTheMergeJobsLineMovesFromTheProgressCardIntoTheMergeCard() {
+    /// The page's two cards split the kinds between them: a task landing on the project branch is
+    /// the landing card's (owner decision 2026-10-11), a job about main is the merge card's.
+    func testTheMergeJobsMoveFromTheLandingCardIntoTheMergeCard() {
         let now = date("2026-10-06T03:24:00Z")
         for kind in ["CHECK_PROMOTION", "LAND_PROMOTION"] {
             let view = integration(kind: kind)
-            XCTAssertNil(ProjectMergeCard.progressLandingLine(view, now: now, updatedAt: now), kind)
+            XCTAssertNil(ProjectMergeCard.taskLandingCard(view, now: now, updatedAt: now), kind)
             XCTAssertEqual(ProjectMergeCard.mergeLandingLine(view, now: now, updatedAt: now),
                            ProjectPage.landingLine(view, now: now, updatedAt: now), kind)
         }
         let task = integration(kind: "LAND_TASK")
-        XCTAssertEqual(ProjectMergeCard.progressLandingLine(task, now: now, updatedAt: now),
-                       ProjectPage.landingLine(task, now: now, updatedAt: now))
+        XCTAssertEqual(ProjectMergeCard.taskLandingCard(task, now: now, updatedAt: now),
+                       ProjectPage.landingCard(task, now: now, updatedAt: now))
         XCTAssertNil(ProjectMergeCard.mergeLandingLine(task, now: now, updatedAt: now))
-        // An older server names no kind: the line stays where it always was.
-        XCTAssertNotNil(ProjectMergeCard.progressLandingLine(integration(kind: nil), now: now, updatedAt: now))
+        // An older server names no kind: the card stays where it always was.
+        XCTAssertNotNil(ProjectMergeCard.taskLandingCard(integration(kind: nil), now: now, updatedAt: now))
+    }
+
+    /// The checking card's last line (owner decision 2026-10-15, board
+    /// docs/mocks/project-merge-sessions-page/02-card-states.html): whether a passing check merges on
+    /// its own under the Automatic setting or comes back as the card that asks.
+    func testTheCheckingCardSaysWhatAPassingCheckLeadsTo() {
+        XCTAssertEqual(PromotionCards.onPassLine(candidate(.checking, onPass: "MERGE")),
+                       "Merges on its own when it passes.")
+        XCTAssertEqual(PromotionCards.onPassLine(candidate(.checking, onPass: "ASK")),
+                       "Asks you when it passes.")
+        // A server older than the field, or a word this client does not know, says nothing.
+        XCTAssertNil(PromotionCards.onPassLine(candidate(.checking)))
+        XCTAssertNil(PromotionCards.onPassLine(candidate(.checking, onPass: "LATER")))
+        // Only while the check runs: once it passed, the card is the question itself.
+        XCTAssertNil(PromotionCards.onPassLine(candidate(.ready, onPass: "MERGE")))
+        XCTAssertNil(PromotionCards.onPassLine(nil))
+    }
+
+    func testOnPassIsReadOffTheWireAndAbsentFromAnOlderServer() throws {
+        func decode(_ wire: String) throws -> ProjectPromotionView {
+            try JSONDecoder().decode(ProjectPromotionView.self, from: Data(wire.utf8))
+        }
+        let checking = try decode(#"{"promotionId":"pr","state":"CHECKING","sourceRef":"p","sourceSha":"s","upstreamRef":"main","onPass":"MERGE"}"#)
+        XCTAssertEqual(checking.onPass, "MERGE")
+        XCTAssertEqual(PromotionCards.onPassLine(checking), PromotionCards.onPassMerges)
+        XCTAssertNil(try decode(#"{"promotionId":"pr","state":"CHECKING","sourceRef":"p","sourceSha":"s","upstreamRef":"main"}"#).onPass)
+        XCTAssertNil(try decode(#"{"promotionId":"pr","state":"READY","sourceRef":"p","sourceSha":"s","upstreamRef":"main","onPass":null}"#).onPass)
     }
 
     func testThePageCardSaysWhatIsAskedOfMainWithTheBranchUnderIt() {
@@ -116,6 +146,76 @@ final class ProjectMergeCardTests: XCTestCase {
         let wire = #"{"promotionId":"pr","state":"READY","sourceRef":"p","sourceSha":"s","upstreamRef":"main","taskIds":["t1"],"tasks":[{"taskId":"t1","title":"修复 D1"}]}"#
         let decoded = try JSONDecoder().decode(ProjectPromotionView.self, from: Data(wire.utf8))
         XCTAssertEqual(decoded.tasks, [PromotionTask(taskId: "t1", title: "修复 D1")])
+    }
+
+    // MARK: who is in front of a blocked merge
+
+    /// One of the project's current landings, as `ProjectIntegrationView.landTasks` serves it.
+    private func landing(_ title: String = "同步项目线与 main：解开迁移台账冲突",
+                         state: String = "QUEUED", phase: String? = nil,
+                         targetRef: String = "refs/heads/project/34ZurCP3bv9yLXGVyUGnx",
+                         reason: LandTaskBlockingReason? = LandTaskBlockingReason(
+                            code: "WAITING_SERIAL_SLOT",
+                            summary: "Waiting to land: the landing of “修合并树上的 11 个 Swift 失败” "
+                                + "is running on this branch first")) -> ProjectLandTask {
+        ProjectLandTask(taskId: "t9", taskTitle: title, landTask: LandTaskIntegrationView(
+            jobId: "job-9", state: state, phase: phase, targetRef: targetRef, blockingReason: reason))
+    }
+
+    /// The owner's report of 2026-10-08: the card said "1 file conflict" and "Coordinator is
+    /// resolving it", and never what the merge was behind — a landing on the project branch, itself
+    /// queued behind another task's landing. Both links are in the project's own read.
+    func testTheBlockedCardNamesTheLandingHoldingTheBranchAndWhatHoldsIt() {
+        let blocked = candidate(.blocked, conflicts: ["a.go"])
+        XCTAssertEqual(PromotionCards.blockedByLine(blocked, landings: [landing()]),
+                       "“同步项目线与 main：解开迁移台账冲突” is landing on the project line · queued · "
+                       + "Waiting to land: the landing of “修合并树上的 11 个 Swift 失败” is running on this branch first")
+        // Running says which step the runner reported, in the same words the landing row uses.
+        XCTAssertEqual(PromotionCards.blockedByLine(blocked, landings: [landing(state: "RUNNING", phase: "MAIN_SYNC")]),
+                       "“同步项目线与 main：解开迁移台账冲突” is landing on the project line · syncing main · "
+                       + "Waiting to land: the landing of “修合并树上的 11 个 Swift 失败” is running on this branch first")
+        // With no reason from the server the sentence stops at what it does know.
+        XCTAssertEqual(PromotionCards.blockedByLine(blocked, landings: [landing(reason: nil)]),
+                       "“同步项目线与 main：解开迁移台账冲突” is landing on the project line · queued")
+    }
+
+    /// Nothing to name is said as nothing: an invented step would be worse than the sentence the
+    /// card already had, which is at least true.
+    func testTheBlockedCardSaysNothingWhenTheLineIsDoingNothingOnItsBranches() {
+        let blocked = candidate(.blocked, conflicts: ["a.go"])
+        XCTAssertNil(PromotionCards.blockedByLine(blocked, landings: []))
+        XCTAssertNil(PromotionCards.blockedByLine(blocked, landings: [landing(targetRef: "refs/heads/orbit/elsewhere")]))
+        // A landing that has stopped holds nothing: the line is idle, and this row is not the place
+        // its failure is reported (the landing's own card and the exception item say that).
+        XCTAssertNil(PromotionCards.blockedByLine(blocked, landings: [landing(state: "CONFLICT")]))
+        // And the upstream is one of the branches this merge goes through: a landing on main counts.
+        XCTAssertNotNil(PromotionCards.blockedByLine(candidate(.blocked),
+                                                     landings: [landing(targetRef: "refs/heads/main")]))
+    }
+
+    /// The pair the owner could not tell apart: a runner that has stopped reporting, and a check
+    /// that ran out of its budget. They are different facts — one about the reports, one the job's
+    /// own verdict — and each is worded where it lives: the landing row says how long the silence
+    /// has run, and the check the runner killed at its budget says it timed out.
+    func testASilentLandingAndAJobThatTimedOutAreWordedDifferently() {
+        let now = date("2026-10-08T06:00:00Z")
+        let silent = ProjectIntegrationView(integratingCount: 1, inFlight: .init(
+            taskTitle: "C5", state: "RUNNING", startedAt: "2026-10-08T05:30:00Z", kind: "LAND_TASK",
+            phase: "FETCH", heartbeatAt: "2026-10-08T05:44:00Z"))
+        let line = ProjectPage.landingLine(silent, now: now, updatedAt: now)!
+        XCTAssertEqual(line.state, "No report")
+        XCTAssertEqual(line.updated, "No report for 16m")
+        XCTAssertFalse("\(line.state) \(line.updated ?? "")".lowercased().contains("timed out"))
+
+        let killed = ProjectPromotionView(
+            promotionId: "pr-1", state: .blocked, sourceRef: "refs/heads/project/p", sourceSha: "s",
+            upstreamRef: "refs/heads/main", checks: [IntegrationCheckResult(
+                name: "MERGE_CHECK", command: "npm test", exitCode: nil, timedOut: true)])
+        XCTAssertEqual(PromotionCards.previewChecks(killed), "Checks timed out")
+        XCTAssertTrue(PromotionCards.checksLine(killed).contains("✕ Timed out on the combined tree"))
+        // Not two spellings of one fact: the job's own verdict says nothing about reports, and the
+        // landing row's silence says nothing about the job.
+        XCTAssertFalse(PromotionCards.checksLine(killed).contains(ProjectPage.landingNoReport))
     }
 
     // MARK: the conversation's one line

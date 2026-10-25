@@ -1,0 +1,1362 @@
+{
+ "beyond": [],
+ "missing": [],
+ "screenshots": {
+  "antialias": 37,
+  "beyond": 0,
+  "identical": 603,
+  "missing": 0
+ },
+ "styleDeltas": {},
+ "tests": {
+  "notPassedDel": [],
+  "notPassedRef": [
+   "webkit-dark-phone :: P4.3a the Tasks page › keys with a task open: Space checks it whichever checkbox has focus, and the title passes the arrows on",
+   "webkit-light-desktop :: P4.3a the Tasks page › keys with a task open: Space checks it whichever checkbox has focus, and the title passes the arrows on"
+  ],
+  "total": 112
+ },
+ "traces": {
+  "differing": {
+   "chromium-dark-desktop :: P4.3a a project page › open items and the run queue: run, and resuming a paused list": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "triggerId": "7eR3H9Q1XWhXIRx9MHmT3N"
+        },
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tUY/execute"
+       }
+      ],
+      "step": "run started",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "triggerId": "4X5jk1yLRIDjAAphqQ1yqc"
+        },
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tUY/execute"
+       }
+      ],
+      "step": "run started",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "step": "run started"
+    }
+   ],
+   "chromium-dark-desktop :: P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tasks",
+       "",
+       "All6",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "maxConcurrent": 1,
+         "taskIds": [
+          "2zwQZ2hd93IvLb59t6tWN",
+          "2zwQZ2hd93IvLb59t6tWP",
+          "2zwQZ2hd93IvLb59t6tWO"
+         ],
+         "triggerId": "4EwTSNbdYyWRtoLKKzIyut"
+        },
+        "method": "POST",
+        "path": "/api/tasks/batch-execute"
+       }
+      ],
+      "step": "run",
+      "url": "/tasks"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tasks",
+       "",
+       "All6",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "maxConcurrent": 1,
+         "taskIds": [
+          "2zwQZ2hd93IvLb59t6tWN",
+          "2zwQZ2hd93IvLb59t6tWP",
+          "2zwQZ2hd93IvLb59t6tWO"
+         ],
+         "triggerId": "zAojAAE2Cvs59jqd9KBsW"
+        },
+        "method": "POST",
+        "path": "/api/tasks/batch-execute"
+       }
+      ],
+      "step": "run",
+      "url": "/tasks"
+     },
+     "step": "run"
+    }
+   ],
+   "chromium-dark-phone :: P4.3a a project page › open items and the run queue: run, and resuming a paused list": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "triggerId": "4VkPfo7T9xYIpTXoFyb695"
+        },
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tUY/execute"
+       }
+      ],
+      "step": "run started",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "triggerId": "3O3TGR3xPioyORAxq7trg7"
+        },
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tUY/execute"
+       }
+      ],
+      "step": "run started",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "step": "run started"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "note": "Resumed from the project Run queue",
+         "paused": false
+        },
+        "method": "PATCH",
+        "path": "/api/task-lists/2zwQZ2hd93IvLb59t6tVJ"
+       }
+      ],
+      "step": "list resumed",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Resume list Accessibility for Record keyboard focus",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "note": "Resumed from the project Run queue",
+         "paused": false
+        },
+        "method": "PATCH",
+        "path": "/api/task-lists/2zwQZ2hd93IvLb59t6tVJ"
+       }
+      ],
+      "step": "list resumed",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "step": "list resumed"
+    }
+   ],
+   "chromium-dark-phone :: P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "More project actions",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "status": "DONE"
+        },
+        "method": "PATCH",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6p9d"
+       }
+      ],
+      "step": "recorded as done",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "status": "DONE"
+        },
+        "method": "PATCH",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6p9d"
+       }
+      ],
+      "step": "recorded as done",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "step": "recorded as done"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "More project actions",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "status": "OPEN"
+        },
+        "method": "PATCH",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6p9d"
+       }
+      ],
+      "step": "reopened",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "status": "OPEN"
+        },
+        "method": "PATCH",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6p9d"
+       }
+      ],
+      "step": "reopened",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "step": "reopened"
+    }
+   ],
+   "chromium-dark-phone :: P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tasks",
+       "",
+       "All6",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "maxConcurrent": 1,
+         "taskIds": [
+          "2zwQZ2hd93IvLb59t6tWN",
+          "2zwQZ2hd93IvLb59t6tWP",
+          "2zwQZ2hd93IvLb59t6tWO"
+         ],
+         "triggerId": "4iRrMxkvOuoPyyai62cag2"
+        },
+        "method": "POST",
+        "path": "/api/tasks/batch-execute"
+       }
+      ],
+      "step": "run",
+      "url": "/tasks"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tasks",
+       "",
+       "All6",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "maxConcurrent": 1,
+         "taskIds": [
+          "2zwQZ2hd93IvLb59t6tWN",
+          "2zwQZ2hd93IvLb59t6tWP",
+          "2zwQZ2hd93IvLb59t6tWO"
+         ],
+         "triggerId": "2kiYTDcxPR77hDoWRllZ5Q"
+        },
+        "method": "POST",
+        "path": "/api/tasks/batch-execute"
+       }
+      ],
+      "step": "run",
+      "url": "/tasks"
+     },
+     "step": "run"
+    }
+   ],
+   "chromium-light-desktop :: P4.3a a project page › open items and the run queue: run, and resuming a paused list": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "triggerId": "4tuhuJQFkN9gKLg2erUTBt"
+        },
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tUY/execute"
+       }
+      ],
+      "step": "run started",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "triggerId": "4yzRguZimOxg2lWoMIDevH"
+        },
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tUY/execute"
+       }
+      ],
+      "step": "run started",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "step": "run started"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Resume list Accessibility for Record keyboard focus",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "note": "Resumed from the project Run queue",
+         "paused": false
+        },
+        "method": "PATCH",
+        "path": "/api/task-lists/2zwQZ2hd93IvLb59t6tVJ"
+       }
+      ],
+      "step": "list resumed",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "note": "Resumed from the project Run queue",
+         "paused": false
+        },
+        "method": "PATCH",
+        "path": "/api/task-lists/2zwQZ2hd93IvLb59t6tVJ"
+       }
+      ],
+      "step": "list resumed",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "step": "list resumed"
+    }
+   ],
+   "chromium-light-desktop :: P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tasks",
+       "",
+       "All6",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "maxConcurrent": 1,
+         "taskIds": [
+          "2zwQZ2hd93IvLb59t6tWN",
+          "2zwQZ2hd93IvLb59t6tWP",
+          "2zwQZ2hd93IvLb59t6tWO"
+         ],
+         "triggerId": "5uepYM2eu8mtAgzPDWfI7h"
+        },
+        "method": "POST",
+        "path": "/api/tasks/batch-execute"
+       }
+      ],
+      "step": "run",
+      "url": "/tasks"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tasks",
+       "",
+       "All6",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "maxConcurrent": 1,
+         "taskIds": [
+          "2zwQZ2hd93IvLb59t6tWN",
+          "2zwQZ2hd93IvLb59t6tWP",
+          "2zwQZ2hd93IvLb59t6tWO"
+         ],
+         "triggerId": "3svRXZ0P4UZmEDDwfmfQqt"
+        },
+        "method": "POST",
+        "path": "/api/tasks/batch-execute"
+       }
+      ],
+      "step": "run",
+      "url": "/tasks"
+     },
+     "step": "run"
+    }
+   ],
+   "chromium-light-phone :: P4.3a a project page › open items and the run queue: run, and resuming a paused list": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "triggerId": "JA6Zh960zOYuIsZHA6vsZ"
+        },
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tUY/execute"
+       }
+      ],
+      "step": "run started",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "triggerId": "r9JStcUu7gLwM0NXzGWst"
+        },
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tUY/execute"
+       }
+      ],
+      "step": "run started",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "step": "run started"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Resume list Accessibility for Record keyboard focus",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "note": "Resumed from the project Run queue",
+         "paused": false
+        },
+        "method": "PATCH",
+        "path": "/api/task-lists/2zwQZ2hd93IvLb59t6tVJ"
+       }
+      ],
+      "step": "list resumed",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "note": "Resumed from the project Run queue",
+         "paused": false
+        },
+        "method": "PATCH",
+        "path": "/api/task-lists/2zwQZ2hd93IvLb59t6tVJ"
+       }
+      ],
+      "step": "list resumed",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "step": "list resumed"
+    }
+   ],
+   "chromium-light-phone :: P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tasks",
+       "",
+       "All6",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "maxConcurrent": 1,
+         "taskIds": [
+          "2zwQZ2hd93IvLb59t6tWN",
+          "2zwQZ2hd93IvLb59t6tWP",
+          "2zwQZ2hd93IvLb59t6tWO"
+         ],
+         "triggerId": "613F5URXuRWROIvq6z9WvD"
+        },
+        "method": "POST",
+        "path": "/api/tasks/batch-execute"
+       }
+      ],
+      "step": "run",
+      "url": "/tasks"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tasks",
+       "",
+       "All6",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "maxConcurrent": 1,
+         "taskIds": [
+          "2zwQZ2hd93IvLb59t6tWN",
+          "2zwQZ2hd93IvLb59t6tWP",
+          "2zwQZ2hd93IvLb59t6tWO"
+         ],
+         "triggerId": "5D7pqdMYUg5i6O1QNIhkhR"
+        },
+        "method": "POST",
+        "path": "/api/tasks/batch-execute"
+       }
+      ],
+      "step": "run",
+      "url": "/tasks"
+     },
+     "step": "run"
+    }
+   ],
+   "webkit-dark-desktop :: P4.3a a project page › open items and the run queue: run, and resuming a paused list": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Run Restyle the toast stack",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "triggerId": "7hkdRi9xH1MTZhgKvFoDhO"
+        },
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tUY/execute"
+       }
+      ],
+      "step": "run started",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "triggerId": "5Un0tEVpPFeD2lpvSeuR4b"
+        },
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tUY/execute"
+       }
+      ],
+      "step": "run started",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "step": "run started"
+    }
+   ],
+   "webkit-dark-desktop :: P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tasks",
+       "",
+       "All6",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "maxConcurrent": 1,
+         "taskIds": [
+          "2zwQZ2hd93IvLb59t6tWN",
+          "2zwQZ2hd93IvLb59t6tWP",
+          "2zwQZ2hd93IvLb59t6tWO"
+         ],
+         "triggerId": "2Mc7s9idnnoWHS5OtguDTW"
+        },
+        "method": "POST",
+        "path": "/api/tasks/batch-execute"
+       }
+      ],
+      "step": "run",
+      "url": "/tasks"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tasks",
+       "",
+       "All6",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "maxConcurrent": 1,
+         "taskIds": [
+          "2zwQZ2hd93IvLb59t6tWN",
+          "2zwQZ2hd93IvLb59t6tWP",
+          "2zwQZ2hd93IvLb59t6tWO"
+         ],
+         "triggerId": "7UZUAAcmDeNnApYc7wmmom"
+        },
+        "method": "POST",
+        "path": "/api/tasks/batch-execute"
+       }
+      ],
+      "step": "run",
+      "url": "/tasks"
+     },
+     "step": "run"
+    }
+   ],
+   "webkit-dark-phone :: P4.3a a project page › open items and the run queue: run, and resuming a paused list": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "triggerId": "2EpJZoeeitkHnN3eiWeoyP"
+        },
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tUY/execute"
+       }
+      ],
+      "step": "run started",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "triggerId": "2JeuUnOAdeytU7mRkDh11N"
+        },
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tUY/execute"
+       }
+      ],
+      "step": "run started",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "step": "run started"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Resume list Accessibility for Record keyboard focus",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "note": "Resumed from the project Run queue",
+         "paused": false
+        },
+        "method": "PATCH",
+        "path": "/api/task-lists/2zwQZ2hd93IvLb59t6tVJ"
+       }
+      ],
+      "step": "list resumed",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "note": "Resumed from the project Run queue",
+         "paused": false
+        },
+        "method": "PATCH",
+        "path": "/api/task-lists/2zwQZ2hd93IvLb59t6tVJ"
+       }
+      ],
+      "step": "list resumed",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "step": "list resumed"
+    }
+   ],
+   "webkit-dark-phone :: P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tasks",
+       "",
+       "All6",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "maxConcurrent": 1,
+         "taskIds": [
+          "2zwQZ2hd93IvLb59t6tWN",
+          "2zwQZ2hd93IvLb59t6tWP",
+          "2zwQZ2hd93IvLb59t6tWO"
+         ],
+         "triggerId": "OPAE1KEwKatQLx16H9OTv"
+        },
+        "method": "POST",
+        "path": "/api/tasks/batch-execute"
+       }
+      ],
+      "step": "run",
+      "url": "/tasks"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tasks",
+       "",
+       "All6",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "maxConcurrent": 1,
+         "taskIds": [
+          "2zwQZ2hd93IvLb59t6tWN",
+          "2zwQZ2hd93IvLb59t6tWP",
+          "2zwQZ2hd93IvLb59t6tWO"
+         ],
+         "triggerId": "2Vg4qj33P8ITChKLtONfEd"
+        },
+        "method": "POST",
+        "path": "/api/tasks/batch-execute"
+       }
+      ],
+      "step": "run",
+      "url": "/tasks"
+     },
+     "step": "run"
+    }
+   ],
+   "webkit-light-desktop :: P4.3a a project page › open items and the run queue: run, and resuming a paused list": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "triggerId": "b6GunjaXIY6bs5gSfq0Em"
+        },
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tUY/execute"
+       }
+      ],
+      "step": "run started",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "triggerId": "2VG6ND2IbniFvSx2hAkSCn"
+        },
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tUY/execute"
+       }
+      ],
+      "step": "run started",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "step": "run started"
+    }
+   ],
+   "webkit-light-desktop :: P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tasks",
+       "",
+       "All6",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "maxConcurrent": 1,
+         "taskIds": [
+          "2zwQZ2hd93IvLb59t6tWN",
+          "2zwQZ2hd93IvLb59t6tWP",
+          "2zwQZ2hd93IvLb59t6tWO"
+         ],
+         "triggerId": "5tBgnQryKVnsMfm6yIGyNa"
+        },
+        "method": "POST",
+        "path": "/api/tasks/batch-execute"
+       }
+      ],
+      "step": "run",
+      "url": "/tasks"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tasks",
+       "",
+       "All6",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "maxConcurrent": 1,
+         "taskIds": [
+          "2zwQZ2hd93IvLb59t6tWN",
+          "2zwQZ2hd93IvLb59t6tWP",
+          "2zwQZ2hd93IvLb59t6tWO"
+         ],
+         "triggerId": "2960i9DL8g630dfTPWnr9R"
+        },
+        "method": "POST",
+        "path": "/api/tasks/batch-execute"
+       }
+      ],
+      "step": "run",
+      "url": "/tasks"
+     },
+     "step": "run"
+    }
+   ],
+   "webkit-light-phone :: P4.3a a project page › open items and the run queue: run, and resuming a paused list": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "triggerId": "6QjrenLFWVnILq1021RwSv"
+        },
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tUY/execute"
+       }
+      ],
+      "step": "run started",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "triggerId": "4qZk2Boe0yk2b2LbG1seOw"
+        },
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tUY/execute"
+       }
+      ],
+      "step": "run started",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "step": "run started"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Resume list Accessibility for Record keyboard focus",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "note": "Resumed from the project Run queue",
+         "paused": false
+        },
+        "method": "PATCH",
+        "path": "/api/task-lists/2zwQZ2hd93IvLb59t6tVJ"
+       }
+      ],
+      "step": "list resumed",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "A project branch · project/ui-mi…Recommended when tasks depe",
+       "Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "note": "Resumed from the project Run queue",
+         "paused": false
+        },
+        "method": "PATCH",
+        "path": "/api/task-lists/2zwQZ2hd93IvLb59t6tVJ"
+       }
+      ],
+      "step": "list resumed",
+      "url": "/projects/2zwQZ2hd93IvLb59t6p9d"
+     },
+     "step": "list resumed"
+    }
+   ],
+   "webkit-light-phone :: P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tasks",
+       "",
+       "All6",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "maxConcurrent": 1,
+         "taskIds": [
+          "2zwQZ2hd93IvLb59t6tWN",
+          "2zwQZ2hd93IvLb59t6tWP",
+          "2zwQZ2hd93IvLb59t6tWO"
+         ],
+         "triggerId": "5kFbZH0xYIUajhufuro4KW"
+        },
+        "method": "POST",
+        "path": "/api/tasks/batch-execute"
+       }
+      ],
+      "step": "run",
+      "url": "/tasks"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tasks",
+       "",
+       "All6",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "maxConcurrent": 1,
+         "taskIds": [
+          "2zwQZ2hd93IvLb59t6tWN",
+          "2zwQZ2hd93IvLb59t6tWP",
+          "2zwQZ2hd93IvLb59t6tWO"
+         ],
+         "triggerId": "6QffULHFRnd8WYp81duzUK"
+        },
+        "method": "POST",
+        "path": "/api/tasks/batch-execute"
+       }
+      ],
+      "step": "run",
+      "url": "/tasks"
+     },
+     "step": "run"
+    }
+   ]
+  },
+  "equal": 95,
+  "total": 112
+ }
+}

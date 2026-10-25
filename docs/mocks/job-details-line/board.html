@@ -1,0 +1,247 @@
+<!doctype html>
+<!-- DESIGN MOCK (2026-10-10) — web transcript, BackgroundWakeCard line: "Job details ›" moved out of the
+     far right. Real class names + the real src/web/src/index.css draw every product row; only
+     what a pane needs beyond the shipped sheet lives in mock.css. Rendered by render.mjs (playwright-core,
+     chromium).
+
+     方案 A shipped on 2026-10-16 (src/web/src/index.css: `margin-left:auto` dropped from
+     `.bgwake-details-label`, `.bgwake-row:hover .bgwake-details-label` added). So ② and ④'s left pane now
+     draw the live sheet — the board's own geometry proof: measured gap from the time to the label is 6px
+     (the row's flex gap) at 2000, 920 and 443 px. ① pins the old rule in mock.css and stays the record of
+     what it looked like; ③ is the option not taken.
+
+     The finding the board is built on: the native row already hugs the content — BackgroundWakeCardView's
+     `line` is an HStack { mark, title, name, closing } with no Spacer, so "Job details ›" sits right after
+     the time there. Only the web pushes it to the trailing edge (`.bgwake-details-label { margin-left:auto }`).
+     So 方案 A is "make the web match the clients", and 方案 B is the bolder web-only unification with the
+     tool row and the thinking row. -->
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>后台作业行：Job details 挪出最右侧 — 设计图</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="mock.css">
+<body>
+<div class="board" id="board">
+
+  <h1>后台作业行：「Job details」挪出最右侧</h1>
+  <p class="lede">
+    你截图里那行（<code>BackgroundWakeCard</code> — 会话流里 agent 的一行事件）。现在 <b>Job details ›</b> 被
+    <code>margin-left:auto</code> 顶到整行最右侧：内容在 <b>just now</b> 就结束了，跟着是一千多像素的空档，读起来像另一列按钮。
+    <b>iOS / Android / macOS 的同一行不是这样的</b>——它们的 <code>HStack</code> 里没有 Spacer，Job details 紧跟时间；
+    只有 web 把它推到了最右。方案 A 就是把 web 改回其他两端已有的样子；方案 B 是更进一步的 web 内部统一（和工具行、思考行一样，行首一个箭头、去掉字样）。
+  </p>
+
+  <!-- ① 现状 -->
+  <div class="section">
+    <h2><span class="tag now">① 改动前</span>宽窗口下 Job details 孤零零挂在最右</h2>
+    <div class="pane" id="pane-now" style="width:2000px">
+      <div class="pane-bar"><span class="pane-title">session · 窗宽 2000px（示意一个宽窗口）</span><span class="pane-hint">真实 markup 与 CSS</span></div>
+      <div class="stream mock-before" id="stream-now"></div>
+      <div class="measure" id="measure-now"></div>
+    </div>
+    <p class="cap">橙色虚线是量出来的空档：内容在 <b>just now</b> 结束，之后一路空到行尾才出现 Job details。窗口越宽，这个空档越大——它不随内容走。</p>
+  </div>
+
+  <!-- ② 方案 A（推荐） -->
+  <div class="section">
+    <h2><span class="tag rec">② 已采用：方案 A</span>字样留着，贴住内容：改回 iOS / Android 的写法</h2>
+    <div class="pane" id="pane-inline" style="width:2000px">
+      <div class="pane-bar"><span class="pane-title">session · 窗宽 2000px · 收起 / 悬停</span></div>
+      <div class="stream">
+        <div id="i-closed"></div>
+        <div id="i-hover"></div>
+      </div>
+    </div>
+    <div class="pane" style="width:920px; margin-top:14px">
+      <div class="pane-bar"><span class="pane-title">session · 窗宽 920px · 收起</span></div>
+      <div class="stream">
+        <div id="i-narrow"></div>
+      </div>
+    </div>
+    <p class="cap">改的就是这两块 CSS：删掉 <code>margin-left:auto</code>，加一条悬停提亮。<b>Job details ›</b> 紧跟 just now，窗口再宽也贴着内容。
+      iOS / Android 的同一行本来就是这样，web 改完三端一致（连词带位置都一样）。<br>
+      悬停时字样提亮一档（下面第二行就是悬停的样子）。</p>
+  </div>
+
+  <!-- ③ 方案 B -->
+  <div class="section">
+    <h2><span class="tag alt">③ 方案 B</span>行首箭头：与 web 的「工具行 / 思考行」同一套折叠语法</h2>
+    <div class="pane" id="pane-caret" style="width:2000px">
+      <div class="pane-bar"><span class="pane-title">session · 窗宽 2000px · 四种状态</span></div>
+      <div class="stream mock-caret">
+        <div class="row-note">收起</div>
+        <div id="c-closed"></div>
+        <div class="row-note">悬停（箭头提亮一档，整行底色）</div>
+        <div id="c-hover"></div>
+        <div class="row-note">展开</div>
+        <div id="c-open"></div>
+        <div class="row-note">失败（标题转红，输出尾巴仍然露在外面）</div>
+        <div id="c-failed"></div>
+      </div>
+    </div>
+    <p class="cap"><b>Job details 四个字不再需要</b>——箭头本身就是「点开有东西」，和工具行一模一样：点整行展开，箭头朝下。折里的一切（job id、命令、输出、agent 收到的原文）不变。</p>
+
+    <div class="pane" id="pane-grammar" style="width:1180px; margin-top:14px">
+      <div class="pane-bar"><span class="pane-title">语法对照：三行共用一个箭头列（虚线为箭头列）</span></div>
+      <div class="stream mock-caret" id="grammar">
+        <div class="g-row" id="g-tool"></div>
+        <div class="g-row" id="g-wake"></div>
+        <div class="g-row" id="g-think"></div>
+      </div>
+    </div>
+    <p class="cap">箭头列对齐后，唤醒行和工具行、思考行读成同一种行：<b>箭头 · 记号 · 文字</b>。<br>
+      代价：web 会与 iOS / Android 分家——那两端的行里仍写着 Job details，web 只剩一个箭头；要么三端一起换，要么接受不一致。</p>
+  </div>
+
+  <!-- ④ 手机 -->
+  <div class="section">
+    <h2><span class="tag">④ 手机 443px</span>两个方案在窄屏上的样子</h2>
+    <div class="phone-row">
+      <div class="pane mock-phone" id="pane-phone" style="width:443px">
+        <div class="pane-bar"><span class="pane-title">方案 A · 收起 / 展开</span></div>
+        <div class="stream">
+          <div id="p-closed"></div>
+          <div id="p-open"></div>
+        </div>
+      </div>
+      <div class="pane mock-phone" id="pane-phone-caret" style="width:443px">
+        <div class="pane-bar"><span class="pane-title">方案 B · 收起 / 展开</span></div>
+        <div class="stream mock-caret">
+          <div id="q-closed"></div>
+          <div id="q-open"></div>
+        </div>
+      </div>
+    </div>
+    <p class="cap">窄屏本来就把名字折到第二行（<code>≤600px</code> 规则）。方案 A 的第二行缩进不变；方案 B 因为多了箭头列，缩进随标题走。</p>
+  </div>
+
+  <p class="foot">
+    同一条行也画 Watch 唤醒（<code>WatchWakeCard</code>，同样的行 + 「Details」字样）：两处一起改，三种醒来读成一套。<br>
+    静态导出 / 分享页不变（原生 <code>&lt;details&gt;</code>）；板上思考行的气泡是画出来的（这台机器没有 emoji 字体），产品里是 💭。
+  </p>
+</div>
+
+<script>
+const ICON = {
+  check: '<svg viewBox="64 64 896 896" width="1em" height="1em" fill="currentColor"><path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm193.5 301.7l-210.6 292a31.8 31.8 0 01-51.7 0L318.5 484.9c-3.8-5.3 0-12.7 6.5-12.7h46.9c10.2 0 19.9 4.9 25.9 13.3l71.2 98.8 157.2-218c6-8.3 15.6-13.3 25.9-13.3H699c6.5 0 10.3 7.4 6.5 12.7z"/></svg>',
+  cross: '<svg viewBox="64 64 896 896" width="1em" height="1em" fill="currentColor"><path d="M512 64c247.4 0 448 200.6 448 448S759.4 960 512 960 64 759.4 64 512 264.6 64 512 64zm127.98 274.82h-.04l-.08.06L512 466.75 384.14 338.88c-.04-.05-.06-.06-.08-.06a.12.12 0 00-.07 0c-.03 0-.05.01-.09.05l-45.02 45.02a.2.2 0 00-.05.09.12.12 0 000 .07v.02a.27.27 0 00.06.06L466.75 512 338.88 639.86c-.05.04-.06.06-.06.08a.12.12 0 000 .07c0 .03.01.05.05.09l45.02 45.02a.2.2 0 00.09.05.12.12 0 000 .07c0 .02 0 .04-.01.08-.05L512 557.25l127.86 127.87c.04.04.06.05.08.05a.12.12 0 00.07 0c.03 0 .05-.01.09-.05l45.02-45.02a.2.2 0 00.05-.09.12.12 0 000-.07v-.02a.27.27 0 00-.05-.06L557.25 512l127.87-127.86c.04-.04.05-.06.05-.08a.12.12 0 000-.07c0-.03-.01-.05-.05-.09l-45.02-45.02a.2.2 0 00-.09-.05.12.12 0 00-.07 0z"/></svg>',
+  right: '<svg viewBox="64 64 896 896" width="1em" height="1em" fill="currentColor"><path d="M765.7 486.8L314.9 134.7A7.97 7.97 0 00302 141v77.3c0 4.9 2.3 9.6 6.1 12.6l360 281.1-360 281.1c-3.9 3-6.1 7.7-6.1 12.6V883c0 6.7 7.7 10.4 12.9 6.3l450.8-352.1a31.96 31.96 0 000-50.4z"/></svg>',
+  down: '<svg viewBox="64 64 896 896" width="1em" height="1em" fill="currentColor"><path d="M884 256h-75c-5.1 0-9.9 2.5-12.9 6.6L512 654.2 227.9 262.6c-3-4.1-7.8-6.6-12.9-6.6h-75c-6.5 0-10.3 7.4-6.5 12.7l352.6 486.1c12.8 17.6 39 17.6 51.7 0l352.6-486.1c3.9-5.3.1-12.7-6.4-12.7z"/></svg>',
+};
+const BUBBLE = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#8f959e" stroke-width="1.5" style="vertical-align:-1.5px"><path d="M9 17.4c-3.1-.3-5.5-2.3-5.5-4.9 0-2.7 2.6-4.9 5.8-4.9.5-1.8 2.4-3.1 4.7-3.1 2.3 0 4.2 1.3 4.7 3.1 2.5.4 4.3 2 4.3 4.1 0 1.5-1 2.9-2.6 3.7"/><circle cx="6.6" cy="19.2" r="1.1"/><circle cx="10.6" cy="20.8" r=".8"/></svg>';
+
+const JOB = {
+  name: 'adhoc: measure device_id zero ratio in Hive',
+  cmd: 'hive -e "select count(*) from events where device_id is null"',
+  jobid: 'bg_7c4f2a91',
+  time: 'just now',
+};
+
+// mode: 'now' | 'inline' | 'caret'   state: closed | hover | open | failed
+function wakeRow(mode, state) {
+  const failed = state === 'failed';
+  const open = state === 'open';
+  const hover = state === 'hover';
+  const tail = failed
+    ? '<div class="bgwake-tail"><details class="bgwake-output"><summary><span class="bgwake-output-label">Output tail</span>'
+      + '<span class="chat-pre bgwake-output-preview">FAILED: SemanticException [Error 10001]: Table not found events_raw</span>'
+      + '<span class="bgwake-output-action"><span class="bgwake-output-expand">Show full output</span><span class="bgwake-output-collapse">Show less</span>'
+      + `<span class="bc">${ICON.down}</span></span></summary>`
+      + '<pre class="chat-pre bgwake-output-full">FAILED: SemanticException [Error 10001]: Table not found events_raw</pre></details></div>'
+    : '';
+  const lead = mode === 'caret' ? `<span class="bgwake-caret">${open ? ICON.down : ICON.right}</span>` : '';
+  const trail =
+    mode === 'now' ? `<span class="bgwake-details-label">Job details<span class="bgwake-caret">${ICON.right}</span></span>`
+    : mode === 'inline' ? `<span class="bgwake-details-label">Job details<span class="bgwake-caret">${ICON.right}</span></span>`
+    : '';
+  return `
+  <div class="bgwake ${failed ? 'is-failed' : 'is-ok'}">
+    <details class="bgwake-fold"${open ? ' open' : ''}>
+      <summary class="bgwake-row${hover ? ' mock-hover' : ''}">
+        ${lead}
+        <span class="bgwake-mark">${failed ? ICON.cross : ICON.check}</span>
+        <span class="bgwake-title">${failed ? 'Background job failed' : 'Background job finished'}</span>
+        <span class="bgwake-name">${JOB.name}</span>
+        <span class="bgwake-status">${failed ? 'exit 1' : 'exit 0'}</span>
+        <span class="bgwake-time">${JOB.time}</span>
+        ${trail}
+      </summary>
+      <div class="bgwake-body">
+        <ul class="bgwake-jobs"><li class="bgwake-job">
+          <div class="bgwake-job-cmd">${JOB.cmd}</div>
+          <div class="bgwake-job-meta">${JOB.jobid} · 1.2 KB of output</div>
+        </li></ul>
+        <div class="bgwake-meta">Queued by a background job, not typed by you</div>
+        <details class="bgwake-raw"><summary>What the agent received</summary>
+          <pre>[bg_run wake] "adhoc: measure device_id zero ratio in Hive" exited 0. Output tail:
+rows=0  sessions=48213  window=2026-10-03..2026-10-10</pre>
+        </details>
+      </div>
+    </details>
+    ${tail}
+  </div>`;
+}
+
+const THINK = `<div class="chat-think"><div class="chat-think-head"><span class="bc">${ICON.down}</span> ${BUBBLE} Thought for 10s <span class="chat-think-meta">· 8.3k chars</span></div></div>`;
+const TOOL = `<div class="chat-tool-card"><div class="chat-tool-row">
+  <span class="chat-tool-caret">${ICON.right}</span>
+  <span class="chat-tool-icon">$</span>
+  <span class="chat-tool-name">Bash</span>
+  <span class="chat-tool-summary mono">hive -e "describe events"</span>
+</div></div>`;
+const HEAD = '<div class="chat-turn-head">Working for 30s</div>';
+
+const put = (id, html) => { document.getElementById(id).innerHTML = html; };
+
+put('stream-now', HEAD + wakeRow('now', 'closed') + THINK);
+put('i-closed', HEAD + wakeRow('inline', 'closed'));
+put('i-hover', wakeRow('inline', 'hover'));
+put('i-narrow', wakeRow('inline', 'closed'));
+put('c-closed', HEAD + wakeRow('caret', 'closed'));
+put('c-hover', wakeRow('caret', 'hover'));
+put('c-open', wakeRow('caret', 'open'));
+put('c-failed', wakeRow('caret', 'failed'));
+put('g-tool', TOOL);
+put('g-wake', wakeRow('caret', 'closed'));
+put('g-think', THINK);
+put('p-closed', wakeRow('inline', 'closed'));
+put('p-open', wakeRow('inline', 'open'));
+put('q-closed', wakeRow('caret', 'closed'));
+put('q-open', wakeRow('caret', 'open'));
+
+for (const el of document.querySelectorAll('.bc')) el.innerHTML = ICON.down;
+
+// ── measure the 现状 gap with the browser's own layout, and draw it ──
+{
+  const stream = document.getElementById('stream-now');
+  const m = document.getElementById('measure-now');
+  const origin = m.getBoundingClientRect().left;
+  const time = stream.querySelector('.bgwake-time').getBoundingClientRect();
+  const label = stream.querySelector('.bgwake-details-label').getBoundingClientRect();
+  const px = (n) => Math.round(n);
+  const gap = px(label.left - time.right);
+  const from = time.right - origin;
+  const to = label.left - origin;
+  m.innerHTML =
+    `<div class="measure-seg" style="left:${from}px; width:${to - from}px"></div>` +
+    `<div class="measure-end" style="left:${to}px"></div>` +
+    `<div class="measure-label" style="left:${from + (to - from) / 2}px">空档 ${gap}px → Job details</div>` +
+    `<div class="measure-left" style="left:0; width:${from}px">内容在这里结束（just now）</div>`;
+}
+
+// ── grammar strip: a dashed guide down the caret column ──
+{
+  const strip = document.getElementById('grammar');
+  const rows = [...strip.querySelectorAll('.chat-tool-row, .bgwake-row, .chat-think-head')];
+  const stripBox = strip.getBoundingClientRect();
+  const xs = rows.map((el) => {
+    const caret = el.querySelector('.chat-tool-caret, .bgwake-caret, .bc');
+    return caret.getBoundingClientRect().left - stripBox.left + 3;
+  });
+  const x = xs.reduce((a, b) => a + b, 0) / xs.length;
+  strip.insertAdjacentHTML('beforeend', `<div class="guide" style="left:${x}px; height:${stripBox.height - 8}px"></div>`);
+  strip.dataset.caretX = xs.join(',');
+}
+</script>
+</body>
+</html>

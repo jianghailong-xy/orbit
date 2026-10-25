@@ -5,6 +5,7 @@ import { Client } from 'pg';
 import { RunStatus } from '@prisma/client';
 import {
   AgentProvider,
+  SESSION_CLAUDE_STEER_WITHDRAW_V1,
   SESSION_CODEX_STEER_V1,
   SESSION_CURRENT_WORK_ROUTING_V1,
 } from '@orbit/shared';
@@ -55,6 +56,9 @@ before(async () => {
   await client.query(`SET search_path TO steer_dequeue_test, public`);
   // Only the columns the predicate reads. Deliberately not the application schema: this is a
   // test of one WHERE clause, and pulling in migrations would make it a test of those too.
+  // `engine` is the recorded engine (migration 0414): the claim reads it to decide whether this
+  // poller may be handed a steer, and a NULL one is derived from the provider slug exactly as
+  // before the split (providers/session-engine.ts) — which is what every case below sets.
   await client.query(`
     DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn";
     DROP TABLE IF EXISTS steer_dequeue_test."session";
@@ -66,6 +70,7 @@ before(async () => {
       inbox_lease_owner uuid,
       provider text NOT NULL DEFAULT 'claude',
       provider_builtin boolean NOT NULL DEFAULT true,
+      engine text,
       task_id uuid,
       status text NOT NULL,
       cancel_requested_at timestamptz
@@ -84,7 +89,8 @@ before(async () => {
       send_intent text,
       target_turn_id uuid,
       coordinator_context_key text,
-      sender_session_id uuid
+      sender_session_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now()
     );
   `);
 });
@@ -554,4 +560,43 @@ pgTest('an interrupt still overtakes a setconfig', async () => {
   await addTurn(3, 'interrupt', 'PENDING', '');
 
   assert.equal((await dequeue())?.kind, 'interrupt');
+});
+
+/** A runner whose claude loop has the arm a withdraw needs (runner-go/claude_withdraw.go). */
+const DECLARES_WITHDRAW = [...DECLARES_ROUTING, SESSION_CLAUDE_STEER_WITHDRAW_V1];
+
+/** The running message, the steer the runner holds inside it, and a withdraw filed for that steer
+ *  `ageMs` ago. */
+async function steerAwaitingWithdrawal(ageMs = 0) {
+  await addTurn(1, 'message', 'IN_FLIGHT', 'build it', 60_000);
+  await addTurn(2, 'steer', 'IN_FLIGHT', 'then push it to main', 60_000);
+  const steer = await client.query(`SELECT id FROM "conversation_turn" WHERE content = 'then push it to main'`);
+  await client.query(
+    `INSERT INTO "conversation_turn"(session_id, seq, kind, status, content, created_at)
+     VALUES ($1::uuid, 3, 'withdraw', 'PENDING', $2, now() - ($3::int * interval '1 millisecond'))`,
+    [SESSION_ID, JSON.stringify({ turnId: steer.rows[0].id }), ageMs],
+  );
+  return steer.rows[0].id as string;
+}
+
+pgTest('a withdraw lands mid-turn, at once, for a poller that has the arm for it', async () => {
+  const steerId = await steerAwaitingWithdrawal();
+
+  const handed = await dequeue(true, DECLARES_WITHDRAW);
+  assert.equal(handed?.kind, 'withdraw');
+  assert.deepEqual(JSON.parse(String(handed?.content)), { turnId: steerId });
+});
+
+pgTest('a withdraw is never handed to a poller without that arm, nor for codex', async () => {
+  await steerAwaitingWithdrawal();
+  assert.equal(await dequeue(true, DECLARES_ROUTING), null, 'a runner that predates withdraw');
+
+  await session(AgentProvider.CODEX);
+  assert.equal(await dequeue(true, DECLARES_WITHDRAW), null, 'a codex session');
+});
+
+pgTest('a withdraw past its window is never handed over: nobody is waiting on it any more', async () => {
+  await steerAwaitingWithdrawal(9_000);
+
+  assert.equal(await dequeue(true, DECLARES_WITHDRAW), null);
 });

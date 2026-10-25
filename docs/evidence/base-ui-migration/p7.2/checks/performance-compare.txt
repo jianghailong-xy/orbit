@@ -1,0 +1,13 @@
+project: chromium-light-desktop observedAt: 2026-10-11T03:54:21.637Z
+hostStart load: [21.78,12.79,10.32] freeMB: 5997
+hostEnd   load: [19.81,12.67,10.3] freeMB: 5938
+observation	P0.2 med	now med	delta	P0.2 p95	now p95	delta	n
+task	422.8	318.8	-104.0	438.6	356.3	-82.3	5
+project	694.7	580.9	-113.8	702.2	619.7	-82.5	5
+session	374.6	337	-37.6	376.3	339.5	-36.8	5
+composer-fill	45.4	47.8	+2.4	49.7	55.1	+5.4	10
+attachment-menu-open	431.1	98.5	-332.6	447.1	123.6	-323.5	10
+attachment-menu-close	348.9	80.6	-268.3	350.6	96.9	-253.7	10
+load task: navigation entries 1, paint entries 2 (first sample)
+load project: navigation entries 1, paint entries 2 (first sample)
+load session: navigation entries 1, paint entries 2 (first sample)

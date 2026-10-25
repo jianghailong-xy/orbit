@@ -1,0 +1,140 @@
+<!doctype html>
+<!-- Design mock: a multi-account engine row on the Providers page ("On your runners") folds from a
+     press anywhere on its line, not only on its name. 01a–01i are screenshots of the real web console
+     (vite dev, synthetic runner data shaped like the owner's HPC machine, 2026-10-08 14:35
+     Asia/Shanghai): "today" from main def134095, the proposal from the same tree with the change built
+     in; 01j/01k (the runner and pool card heads after) from the implementation itself. The coloured
+     areas and labels are drawn over that real page. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Providers · fold a multi-account row from anywhere on it</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1900px; }
+  .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .row2 + .row2 { margin-top: 22px; }
+  .shot { display: block; width: 100%; border-radius: 12px; box-shadow: 0 1px 3px rgba(15, 23, 42, .08); }
+  .phones { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .ph-l { font-size: 12px; font-weight: 600; color: var(--text-3); margin: 0 0 6px 2px; }
+  .m-cap { font-size: 12.5px; line-height: 1.75; color: var(--text-2); margin: 10px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .legend { display: flex; gap: 18px; margin: 0 0 16px; font-size: 12.5px; color: var(--text-2); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .legend i { display: inline-block; width: 26px; height: 14px; border-radius: 4px; }
+  .legend .yes { background: rgba(22,119,255,.14); box-shadow: inset 0 0 0 2px #1677ff; }
+  .legend .no { background: repeating-linear-gradient(135deg, rgba(245,34,45,.18) 0 4px, rgba(245,34,45,.04) 4px 8px); box-shadow: inset 0 0 0 2px rgba(245,34,45,.6); }
+  .legend .own { box-shadow: inset 0 0 0 2px #8c8c8c; }
+  .rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.65; width: 100%; }
+  .rules th, .rules td { border: 1px solid #dde0e6; padding: 8px 11px; text-align: left; vertical-align: top; }
+  .rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules td:first-child { white-space: nowrap; font-weight: 600; color: var(--text-1); }
+  .rules td.same { color: var(--text-3); }
+  .rules td.chg { color: #0958d9; font-weight: 600; }
+  .rules code, .files code { font-size: 11.5px; }
+  .grid-bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .files { margin: 0; padding: 12px 16px; list-style: none; background: #f5f6f8; border-radius: 8px;
+           font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .files li + li { margin-top: 6px; }
+  .files b { color: var(--text-1); }
+  .ask { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e;
+         font-size: 12.5px; line-height: 1.75; color: #5c4210; }
+  .ask b { color: #3d2b08; }
+  .ask .shot { margin: 8px 0 4px; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet">
+  <h1 class="m-h1 zh">Providers · 多账号那一行：点整行展开 / 收起</h1>
+  <p class="m-sub zh">你问「这里为什么不是点击整行展开」。原因是 10-07 那张图（providers-account-fold）照机器卡片标题的做法，只把「图标 + 名字 + 版本行」做成展开按钮：这一行里还有「Add account」按钮，按钮里不能再套按钮。但这条只限制<b>按钮元素</b>有多大，不限制<b>能点的范围</b>。结果是收起时只有左边一块能点，状态、额度、空白处点了都没反应；展开后同一个按钮却几乎占满整行。所以恰恰是收起、最想点开的时候最难点中。下面是真实页面（vite + 模拟数据，2026-10-08 14:35）：「现在」取自 main def134095，「改后」是同一份代码加上这次的改动跑出来的，色块和标签是画在页面上的。</p>
+
+  <div class="legend zh"><span><i class="yes"></i>点了展开 / 收起</span><span><i class="no"></i>点了没反应</span><span><i class="own"></i>自己的按钮，点了做它自己的事</span></div>
+
+  <div class="m-stage">
+    <div class="row2">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">现在</span>收起时：只有左边那一块</div>
+        <img class="shot" src="01a-today-folded.png" alt="">
+        <p class="m-cap zh">一整行里大约只有三分之一能点；点「Available」、点额度、点中间空白都没反应。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">现在</span>展开时：几乎整行</div>
+        <img class="shot" src="01b-today-open.png" alt="">
+        <p class="m-cap zh">展开后引擎这一行只剩名字和 Add account 两列，按钮撑满第一列，只剩一圈边点了没反应。同一行，收起和展开时能点的范围差这么多。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="row2">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">改后</span>收起时：整行</div>
+        <img class="shot" src="01c-folded.png" alt="">
+        <p class="m-cap zh">点图标、名字、状态、额度、空白处都会展开。<b>Add account 还是它自己</b>：点它照旧打开添加账号的面板（收起时顺带展开），展开时点它也不会把这一组收起来。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">改后</span>展开时：整行</div>
+        <img class="shot" src="01e-open.png" alt="">
+        <p class="m-cap zh">展开时同样整行可点，再点一下就收起。下面的账号行不受影响：点账号行还是账号行自己的事（改名、⋯ 菜单），不会把这一组收起来。</p>
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">改后</span>悬停：整行都是手型</div>
+        <img class="shot" src="01d-hover.png" alt="">
+        <p class="m-cap zh">鼠标停在这一行任何地方（图里停在额度条上），光标都是手型，名字后的 › 变蓝。这就是今天鼠标停在名字那块时的样子，只是现在整行都这样。<b>不加底色</b>，和机器卡片标题的悬停一样。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">手机</span>390pt 收起：现在 / 改后</div>
+        <div class="phones">
+          <div><div class="ph-l">现在</div><img class="shot" src="01f-phone-today.png" alt=""></div>
+          <div><div class="ph-l">改后</div><img class="shot" src="01g-phone.png" alt=""></div>
+        </div>
+        <p class="m-cap zh">手机上这一行分三行（名字和 Add account、状态、额度），现在只有左上角那一块能点。改后整块都能点，布局一点不变。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="grid-bottom">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">规则</span>点哪里，发生什么</div>
+        <table class="rules zh">
+          <tr><th>点哪里</th><th>现在</th><th>改后</th></tr>
+          <tr><td>图标、名字、版本行、›</td><td>展开 / 收起</td><td class="same">不变</td></tr>
+          <tr><td>状态（Available）、额度（Next: …）、空白处</td><td>没反应</td><td class="chg">展开 / 收起</td></tr>
+          <tr><td>Add account</td><td>打开添加账号面板；收起时顺带展开</td><td class="same">不变，也不会把展开的这组收起</td></tr>
+          <tr><td>拖选文字（比如复制 Next 的邮箱）</td><td>只是选中</td><td class="same">不变：拖选完松手不会展开 / 收起</td></tr>
+          <tr><td>这一行下面打开的面板、提示（添加账号、安装、更新失败）</td><td>没反应</td><td class="same">不变：面板里的字、输入框都不触发</td></tr>
+          <tr><td>下面的账号行</td><td>账号行自己的事</td><td class="same">不变</td></tr>
+          <tr><td>键盘、读屏</td><td>Tab 到名字那块，Enter / Space；读「Claude Code, collapsed / expanded」</td><td class="same">不变</td></tr>
+          <tr><td>悬停</td><td>只有名字那块：手型、› 变蓝</td><td class="chg">整行：手型、› 变蓝</td></tr>
+          <tr><td>只有一个账号的行（Codex、Kimi…）</td><td>不能展开</td><td class="same">不变</td></tr>
+        </table>
+        <p class="m-cap zh">这些都在改后那份页面上实际点过：状态、额度、中间空隙、名字各点一次都正好切换一次；Enter、Space 各切换一次（没有重复触发）；Add account、面板里的字和输入框、拖选邮箱、账号行，都不会触发展开 / 收起。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">改动</span>只改 web</div>
+        <ul class="files zh">
+          <li><b><code>src/web/src/lib/foldHead.ts</code></b>（新）：<code>foldFromAnywhere</code>，三种折叠标题共用的一条规则：点标题上任何地方等于点那个按钮。按钮本身不动（键盘、读屏照旧）。标题里自己的按钮、链接、输入框，弹到页面上的对话框，拖选文字松手，都不触发。</li>
+          <li><b><code>src/web/src/components/RunnerEngines.tsx</code></b>：多账号那一行（<code>EngineRow</code>，另外排除下面打开的面板和提示）、机器卡片标题（<code>RunnerEngineCard</code>）接上这条规则。</li>
+          <li><b><code>src/web/src/components/AccountPools.tsx</code></b>：账号池卡片标题（<code>PoolCard</code>）接上这条规则。</li>
+          <li><b><code>src/web/src/index.css</code></b>：三种标题整块 <code>cursor: pointer</code>（面板除外）；机器卡片、多账号那一行整块悬停时箭头变蓝（悬停在 Manage →、Add account 上时不变蓝）。</li>
+          <li><b>测试</b>：<code>lib/foldHead.test.ts</code>（规则本身）；<code>RunnerEngines.accountFold.test.tsx</code>（多账号那一行、机器卡片标题）；<code>ProvidersPage.pools.test.tsx</code>（账号池卡片标题）。三个新用例在 main 上是红的，改后是绿的。</li>
+        </ul>
+        <div class="ask zh">
+          <b>已定（2026-10-08）：三处一起改。</b>同一页三种折叠标题用同一条规则：整行可点，Manage → 和按钮各管各的。改前 / 改后：
+          <img class="shot" src="01h-runner-head.png" alt="">
+          <img class="shot" src="01j-runner-head-after.png" alt="">
+          机器卡片标题：原来只有右边的摘要（「1 of 4 signed in」）点了没反应，现在整块都能点。
+          <img class="shot" src="01i-pool-head.png" alt="">
+          <img class="shot" src="01k-pool-head-after.png" alt="">
+          账号池卡片标题：原来只有左边一块能点，现在中间空白和「Next: … 额度条」也能点。悬停只变手型，箭头不变色（原来就没有悬停变色，这次不加）。
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

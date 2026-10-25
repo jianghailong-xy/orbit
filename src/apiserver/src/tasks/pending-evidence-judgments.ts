@@ -1,7 +1,6 @@
 import { TaskStatus } from '@prisma/client';
 import type { CreatorType, Prisma as PrismaTypes, TaskEvidenceDecisionValue } from '@prisma/client';
-import { completionEvidenceWakeKey } from '../projects/completion-input';
-import { SESSION_ENDING_SELECT, sessionHasEnded } from '../projects/project-open-item';
+import { type CoordinatorEvidencePlace, coordinatorHolds } from '../projects/coordinator-evidence-queue';
 import { ownerEvidenceCard, reviewerHolds, type OwnerEvidenceCard } from './evidence-review';
 import {
   CRITERION_MOVED_ACTION,
@@ -55,10 +54,20 @@ import {
  * In a project whose coordinator switch is on, a revision that conversation can decide is
  * delivered to it to decide (`CompletionEvidenceProducer`), and the owner's card is the fallback:
  * such a revision is not placed in `pending`, and not counted, while the coordinator holds it
- * (`coordinatorHolds` below says exactly when that is). Nothing is written to take it back — the
- * hold is read off the delivery's own ledger row and the project's clock, so it ends by itself.
+ * (`coordinatorHolds`, projects/coordinator-evidence-queue.ts, says exactly when that is). Nothing
+ * is written to take it back — the hold is read off the delivery's own ledger row and the project's
+ * clock, so it ends by itself.
  * It decides only where the question is ASKED: the decision door takes the owner's answer at any
  * moment, held or not.
+ *
+ * AND WHILE THAT COORDINATOR IS PAUSED, IT WAITS FOR IT (2026-10-09)
+ * ------------------------------------------------------------------
+ * A coordinator whose run failed on a usage limit, a 429 or a sign-in, or that is parked on a retry,
+ * has not ended. A revision owed to it is not the owner's question either: it is listed for the
+ * coordinator's conversation in `waitingOnCoordinator`, counted nowhere, and delivered to it once it
+ * is back (`projects/coordinator-evidence-queue.ts` says which revisions are owed;
+ * `CoordinatorEvidenceQueueService` delivers them). One that was delivered after waiting is listed in
+ * `sentToCoordinator` while the coordinator holds it, so the owner sees it went.
  *
  * AND OUTSIDE A PROJECT, WHILE THE SESSION THAT DISPATCHED THE TASK IS DECIDING IT (2026-10-03)
  * -------------------------------------------------------------------------------------------
@@ -189,6 +198,12 @@ export interface PendingEvidenceJudgment {
  *    every OTHER session was the same broadcast this read was scoped to stop, one grey heading
  *    further down: a reader chasing the stalled population wants the report of stalled tasks, not
  *    a notice pinned to every screen in the account.
+ *
+ * Two more groups are read for the conversation an Automatic project is coordinated from, and for no
+ * other reader: the revisions waiting for that coordinator (`waitingOnCoordinator`), and the ones
+ * that waited and have since been handed to it (`sentToCoordinator`). Neither is a question this
+ * reader is asked, so neither is counted; both are where the owner's own card for the revision is
+ * drawn, because "Decide it myself" is still the owner's at any moment.
  */
 export interface PendingEvidenceJudgmentQueue {
   readAt: Date;
@@ -202,10 +217,30 @@ export interface PendingEvidenceJudgmentQueue {
   pending: PendingEvidenceJudgment[];
   /** Rows waiting on a revision THIS session is the one to file. */
   waitingOnYou: PendingEvidenceJudgment[];
+  /**
+   * Revisions of the project THIS session coordinates that are waiting for it — it is paused, or it
+   * has not been handed them yet — oldest submission first, each shaped as a `pending` row. Read for
+   * the project's coordinator conversation only; empty for every other reader.
+   */
+  waitingOnCoordinator: PendingEvidenceJudgment[];
+  /** Revisions that waited and have since been delivered to THIS session, which still holds them:
+   *  neither decided nor replaced by a later revision. Earliest delivery first. */
+  sentToCoordinator: SentToCoordinator[];
   /** What THIS session has already decided, oldest first: the receipts its conversation keeps
    *  after a card's question is gone. Read off the decision rows, so a reload or another device
    *  shows the same ones. */
   decided: RecordedEvidenceDecision[];
+}
+
+/** One revision that waited for its coordinator and was then delivered to it. */
+export interface SentToCoordinator {
+  taskId: string;
+  title: string;
+  projectId: string | null;
+  /** The revision delivered, in the decimal spelling a pending row uses. */
+  evidenceRevision: string;
+  /** When it was delivered: the moment the coordinator's hold runs from. */
+  deliveredAt: Date;
 }
 
 /** One decision recorded FROM the reading session. Small on purpose — this rides every poll of
@@ -244,81 +279,12 @@ function ageSeconds(readAt: Date, submittedAt: Date): number {
 }
 
 /**
- * The tasks whose latest revision the project's coordinator is deciding right now, by task id.
- *
- * A revision is held while ALL of these are true when it is read:
- *
- *   * its wake was DELIVERED — the revision the task's latest evidence row names, by the fact's own
- *     key or by the key a confirmed move handed it over under, under the project the task is filed
- *     under now (a delivery to the project it was moved out of holds nothing);
- *   * that project is still Automatic: switched off, it is the owner's card again, as it is for
- *     every project that is not (2026-09-10's behaviour, kept for them unchanged);
- *   * the conversation it was delivered to has not ended (`sessionHasEnded`, the line the delivery
- *     itself refuses on): a conversation that is over will not decide anything;
- *   * and the project's `exceptionEscalationSeconds` have not run out since the delivery was
- *     bound. `updatedAt` is that moment: the compare-and-set that writes DELIVERED is the row's
- *     last write.
- *
- * A delivery that was refused has no DELIVERED row, and a revision that was only recorded has none
- * either, so both are the owner's from the start.
- */
-async function coordinatorHolds(
-  tx: PrismaTypes.TransactionClient,
-  latest: ReadonlyArray<{
-    taskId: string;
-    projectId: string | null;
-    revision: bigint;
-    criterionRevision: string;
-    evidenceDigest: string;
-  }>,
-  readAt: Date,
-): Promise<Set<string>> {
-  const subjects = new Map<string, { taskId: string; projectId: string }>();
-  for (const row of latest) {
-    if (row.projectId == null) continue;
-    const revision = {
-      revision: row.revision.toString(),
-      criterionRevision: row.criterionRevision,
-      evidenceDigest: row.evidenceDigest,
-    };
-    const subject = { taskId: row.taskId, projectId: row.projectId };
-    // Two keys a delivery to the project the task is in now can carry: the revision's own, when it
-    // was submitted there, and the one a confirmed move handed it over under when the task was
-    // moved there with it undecided (`completionEvidenceRevisedFact`'s `movedFromProjectId`).
-    subjects.set(completionEvidenceWakeKey(row.taskId, revision), subject);
-    subjects.set(completionEvidenceWakeKey(row.taskId, revision, row.projectId), subject);
-  }
-  const held = new Set<string>();
-  if (subjects.size === 0) return held;
-
-  const delivered = await tx.projectCoordinatorWake.findMany({
-    where: { idempotencyKey: { in: [...subjects.keys()] }, status: 'DELIVERED' },
-    select: {
-      idempotencyKey: true,
-      projectId: true,
-      updatedAt: true,
-      project: { select: { coordinatorEnabled: true, exceptionEscalationSeconds: true } },
-      session: { select: SESSION_ENDING_SELECT },
-    },
-  });
-  for (const wake of delivered) {
-    const subject = subjects.get(wake.idempotencyKey);
-    if (!subject || wake.projectId !== subject.projectId) continue;
-    if (!wake.project.coordinatorEnabled) continue;
-    if (!wake.session || sessionHasEnded(wake.session)) continue;
-    const escalatesAt = wake.updatedAt.getTime() + wake.project.exceptionEscalationSeconds * 1_000;
-    if (readAt.getTime() < escalatesAt) held.add(subject.taskId);
-  }
-  return held;
-}
-
-/**
  * The tasks whose LATEST evidence revision carries no decision yet, each with that revision and
- * whether the project's coordinator holds it (`coordinatorHolds`) — the population both the queue
- * and the badge's count (`countPendingEvidenceJudgments`) place, read by one query so the two
- * cannot come to disagree about it. `projectIds` narrows it to those projects, and
- * `outsideProjects` to the tasks in none — further, when it names `creatorSessionIds`, to tasks the
- * given conversations could draw a card for (`countEvidenceCardsOutsideProjects`).
+ * whether the project's coordinator holds it or it waits for that coordinator (`coordinatorHolds`)
+ * — the population both the queue and the badge's count (`countPendingEvidenceJudgments`) place,
+ * read by one query so the two cannot come to disagree about it. `projectIds` narrows it to those
+ * projects, and `outsideProjects` to the tasks in none — further, when it names `creatorSessionIds`,
+ * to tasks the given conversations could draw a card for (`countEvidenceCardsOutsideProjects`).
  *
  * A row in no project also carries its dispatching session, if it still has one, whether that
  * session holds it (`reviewerHolds`), and where the owner's card for it is drawn and in whose name it
@@ -384,17 +350,7 @@ async function unansweredLatestEvidence(
     const [latest] = task.completionEvidence;
     return latest && latest.decisions.length === 0 ? [{ task, latest }] : [];
   });
-  const held = await coordinatorHolds(
-    tx,
-    unanswered.map(({ task, latest }) => ({
-      taskId: task.id,
-      projectId: task.projectId,
-      revision: latest.revision,
-      criterionRevision: latest.criterionRevision,
-      evidenceDigest: latest.evidenceDigest,
-    })),
-    readAt,
-  );
+  const placed = await coordinatorHolds(tx, ownerId, unanswered, readAt);
   const dispatched = unanswered.flatMap(({ task, latest }) => (
     task.projectId === null && task.creatorSession
       ? [{ taskId: task.id, evidenceId: latest.id, dispatchingSessionId: task.creatorSession.id }]
@@ -415,9 +371,12 @@ async function unansweredLatestEvidence(
   return unanswered.map((row) => {
     const outsideProjects = row.task.projectId === null;
     const dispatching = outsideProjects ? row.task.creatorSession : null;
+    const coordinatorPlace = placed.get(row.task.id) ?? null;
     return {
       ...row,
-      heldByCoordinator: held.has(row.task.id),
+      // Held, or waiting for the coordinator: either way nobody else is asked about it.
+      heldByCoordinator: coordinatorPlace !== null,
+      coordinatorPlace,
       dispatching,
       heldByReviewer: heldByReviewer.has(row.task.id),
       ownerCard: outsideProjects
@@ -466,11 +425,15 @@ export async function readPendingEvidenceJudgments(
 ): Promise<PendingEvidenceJudgmentQueue> {
   const pending: PendingEvidenceJudgment[] = [];
   const waitingOnYou: PendingEvidenceJudgment[] = [];
+  const waitingOnCoordinator: PendingEvidenceJudgment[] = [];
+  const sentToCoordinator: SentToCoordinator[] = [];
   const unanswered = await unansweredLatestEvidence(tx, ownerId, readAt);
   // The project this reader acts for, read once: the door refuses it a task filed under another
   // (`assertDecidingSessionInTaskProject`) — a task moved away included — so this read does too.
   const actsFor = await decidingSessionProject(tx, ownerId, decidingSession.id);
-  for (const { task, latest, heldByCoordinator, dispatching, heldByReviewer, ownerCard } of unanswered) {
+  for (const {
+    task, latest, heldByCoordinator, coordinatorPlace, dispatching, heldByReviewer, ownerCard,
+  } of unanswered) {
     const envelope = storedEnvelope(latest.evidence);
     const disqualification = await decidingSessionDisqualification(
       tx,
@@ -549,8 +512,29 @@ export async function readPendingEvidenceJudgments(
       continue;
     }
     // A row of another project's task is that project's to decide, and is not asked of this reader.
+    // One its project's coordinator holds, or that waits for it, is asked of nobody; the
+    // conversation that coordinator IS is shown which of the two it is, and nobody else.
     if (standing === null) {
       if (disqualification === null && elsewhere === null && !heldByCoordinator) pending.push(row);
+      else if (
+        coordinatorPlace?.place === 'WAITING'
+        && coordinatorPlace.coordinatorSessionId === decidingSession.id
+      ) {
+        waitingOnCoordinator.push(row);
+      } else if (
+        coordinatorPlace?.place === 'HELD'
+        && coordinatorPlace.waited
+        && coordinatorPlace.sessionId === decidingSession.id
+        && coordinatorPlace.coordinatorSessionId === decidingSession.id
+      ) {
+        sentToCoordinator.push({
+          taskId: task.id,
+          title: task.title,
+          projectId: task.projectId,
+          evidenceRevision: row.evidenceRevision,
+          deliveredAt: coordinatorPlace.deliveredAt,
+        });
+      }
     } else if (disqualification !== null) {
       waitingOnYou.push(row);
     }
@@ -564,6 +548,11 @@ export async function readPendingEvidenceJudgments(
   );
   pending.sort(oldestFirst);
   waitingOnYou.sort(oldestFirst);
+  // Submission order is the order they are delivered in, too (`CoordinatorEvidenceQueueService`).
+  waitingOnCoordinator.sort(oldestFirst);
+  sentToCoordinator.sort((left, right) => (
+    left.deliveredAt.getTime() - right.deliveredAt.getTime() || left.taskId.localeCompare(right.taskId)
+  ));
 
   // Found by the session that recorded them and nothing else: a decision's receipt belongs to the
   // conversation it was given in, however many other sessions could have given it.
@@ -587,6 +576,8 @@ export async function readPendingEvidenceJudgments(
     oldestAgeSeconds: pending.length === 0 ? null : pending[0].ageSeconds,
     pending,
     waitingOnYou,
+    waitingOnCoordinator,
+    sentToCoordinator,
     decided: recorded.map((row) => ({
       taskId: row.task.id,
       title: row.task.title,
@@ -633,6 +624,45 @@ export async function countPendingEvidenceJudgments(
     counts.set(projectId, (counts.get(projectId) ?? 0) + 1);
   }
   return counts;
+}
+
+/** One revision waiting for its project's coordinator, as the delivery that hands it over needs it. */
+export interface EvidenceWaitingForCoordinator {
+  taskId: string;
+  /** The revision's three immutable columns, which are the fact's identity. */
+  revision: string;
+  criterionRevision: string;
+  evidenceDigest: string;
+  submittedAt: Date;
+  place: Extract<CoordinatorEvidencePlace, { place: 'WAITING' }>;
+}
+
+/**
+ * The revisions of one project that wait for its coordinator, oldest submission first — the order
+ * they are handed to it in (`CoordinatorEvidenceQueueService`). The same reading the pending read
+ * lists in `waitingOnCoordinator`, so what the owner is shown waiting is exactly what is delivered.
+ */
+export async function readEvidenceWaitingForCoordinator(
+  tx: PrismaTypes.TransactionClient,
+  ownerId: string,
+  projectId: string,
+  readAt: Date = new Date(),
+): Promise<EvidenceWaitingForCoordinator[]> {
+  const unanswered = await unansweredLatestEvidence(tx, ownerId, readAt, { projectIds: [projectId] });
+  return unanswered
+    .flatMap(({ task, latest, coordinatorPlace }) => (coordinatorPlace?.place === 'WAITING'
+      ? [{
+          taskId: task.id,
+          revision: latest.revision.toString(),
+          criterionRevision: latest.criterionRevision,
+          evidenceDigest: latest.evidenceDigest,
+          submittedAt: latest.submittedAt,
+          place: coordinatorPlace,
+        }]
+      : []))
+    .sort((left, right) => (
+      left.submittedAt.getTime() - right.submittedAt.getTime() || left.taskId.localeCompare(right.taskId)
+    ));
 }
 
 /**

@@ -1,0 +1,52 @@
+{
+  "at": "2026-10-17T20:04:37.150+00:00",
+  "generation": 3,
+  "pod": "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+  "podUid": "e8bc0c13-e7ae-4064-8ecc-105e45b48d6e",
+  "randomSHA256": "27003188a7100933bb586296012072780eee164cb2ff2905f14fa512406e3b88",
+  "runId": "t02a-1",
+  "runnerVolume": {
+    "config": {
+      "maxConcurrent": 2,
+      "name": "orbit-managed",
+      "runnerId": "01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "serverUrl": "https://10.0.2.2:13711",
+      "workDir": "/var/lib/orbit/home/orbit-repos/default"
+    },
+    "containerIdentity": {
+      "layoutVersion": 1,
+      "runnerId": "01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "serverUrl": "https://10.0.2.2:13711",
+      "workDir": "/var/lib/orbit/home/orbit-repos/default"
+    },
+    "managedInstance": {
+      "generation": 3,
+      "podUid": "e8bc0c13-e7ae-4064-8ecc-105e45b48d6e",
+      "runnerId": "01a14b6a-bbb3-703c-9da2-52e164ebf799"
+    }
+  },
+  "snapshot": {
+    "acknowledgedRows": 877,
+    "acknowledgedSHA256": "98273364ff544f5c0167edd5ed994b7cf0a55be8f9ade9bf191d106dbefff1dc",
+    "committedRows": 877,
+    "gitCommit": "195ffdfa622a5aca08ba0b79edc28d9df0b680ca",
+    "gitFsck": "",
+    "gitStatus": "",
+    "kernel": "7.0.0-34-generic",
+    "mountInfo": [
+      "1648 1633 251:16 / /var/lib/orbit rw,relatime - ext4 /dev/rbd1 rw,stripe=1024"
+    ],
+    "ordinarySHA256": "69741060cca9dde2f7de354ed445c02828e30d2b87c3043ca14e4b0cbf379a62",
+    "prefixRows": 876,
+    "prefixSHA256": "1aa0baab32819ff12e258c2c9e4cbea8f30271e493c226da509c916c2136673d",
+    "quiesced": false,
+    "rowSHA256": "98273364ff544f5c0167edd5ed994b7cf0a55be8f9ade9bf191d106dbefff1dc",
+    "runID": "t02a-1",
+    "sqliteIntegrity": [
+      "ok"
+    ],
+    "sqliteJournalMode": "wal",
+    "walBytes": 1133032,
+    "walExists": true
+  }
+}

@@ -6,6 +6,7 @@ import io.orbitd.android.core.net.*
 import io.orbitd.android.core.realtime.EventTransport
 import io.orbitd.android.core.realtime.SseFrame
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.serialization.json.*
 import java.io.IOException
@@ -21,14 +22,37 @@ object ManagementFixture {
     const val ME = "0198f3a2-5555-7000-8000-000000000005"
     const val OTHER = "0198f3a2-6666-7000-8000-000000000006"
     const val RUNNER_TWO = "0198f3a2-7777-7000-8000-000000000007"
+    const val TASK = "0198f3a2-8888-7000-8000-000000000008"
+    const val KEY_DEEPSEEK = "0198f3a2-9999-7000-8000-000000000009"
+    const val KEY_HARNESS = "0198f3a2-aaaa-7000-8000-00000000000a"
+    const val KEY_OPENAI = "0198f3a2-bbbb-7000-8000-00000000000b"
 
     val calls = CopyOnWriteArrayList<String>()
+    /** The calls that carried a query, with it: "GET providers/mine/<id>/balance?refresh=1". */
+    val queries = CopyOnWriteArrayList<String>()
+    /** The account's switch for smart model selection as users/me's preferences carry it; null leaves it out, as before it was written. */
+    @Volatile var modelRouting: Boolean? = null
+    /** The account's Session recaps switch as users/me's preferences carry it; null leaves it out, as before it was written. */
+    @Volatile var recaps: Boolean? = null
+    /** GET access-tokens' tokens, newest first; DELETE access-tokens/:id revokes one (REVOKED, by its USER). */
+    @Volatile var accessTokens: List<JsonObject> = emptyList()
+    @Volatile var accessTokensFail = false
+    /** GET providers (the pickers' catalogue, no ids) and GET providers/mine (the account's own, with ids, endpoints and hasApiKey). */
+    @Volatile var providerCatalog = "[]"
+    @Volatile var providersMine = "[]"
+    /** Each DeepSeek key's balance answer by provider id, and a gate that holds a key's read until it completes. */
+    val balances = java.util.concurrent.ConcurrentHashMap<String, String>()
+    val balanceGates = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<Unit>>()
+    /** GET tasks/:id for [TASK]. */
+    @Volatile var task = "{}"
     @Volatile var workspaceName = "Alpha"
     @Volatile var runnerAlias = "Old alias"
     @Volatile var runnerCapacity = 2
     @Volatile var poolLabel = "Team Codex"
     @Volatile var theme = "system"
     @Volatile var shareFails = false
+    /** The account also has a wiki space's link, which GET share-links lists only to a client that names WIKI. */
+    @Volatile var wikiLinks = false
     @Volatile var accessFails = false
     /** The viewer's place in the pool: ADMIN and creator (its owner), ADMIN, or MEMBER. */
     @Volatile var viewerRole = "ADMIN"
@@ -37,23 +61,63 @@ object ManagementFixture {
     @Volatile var membersCanAddAccounts = false
     @Volatile var loginState = "ACTIVE"
     @Volatile var secondRunner = false
+    /** Whether each runner is online; offline, it last checked in yesterday. */
+    @Volatile var runnerOnline = true
+    @Volatile var runnerTwoOnline = true
     @Volatile var runnerOrder = listOf(RUNNER, RUNNER_TWO)
     @Volatile var removedRunners = emptySet<String>()
     /** The runner's selfUpdate report's state; null is a runner too old to report one. */
     @Volatile var selfUpdate: String? = null
+    /** The runner's engines as GET /runners reports them, and more of its members (`,"capabilities":[…],"antigravity":{…}`). */
+    @Volatile var runnerEngines = "[]"
+    @Volatile var runnerExtra = ""
+    /** More of the second runner's members, as [runnerExtra] is the first's: its engines and capabilities among them. */
+    @Volatile var runnerTwoExtra = ""
+    /** The sign-in relay as GET runners/:id/login reads it. POST login answers [loginStarted] and POST login/code [codeSent],
+     * each of which it then reads; DELETE cancels it. The bodies sent are kept, in order. */
+    @Volatile var loginRelay = """{"status":null}"""
+    @Volatile var loginStarted = """{"status":"pending"}"""
+    @Volatile var codeSent = """{"status":"done"}"""
+    /** Run when a code is sent, as a runner reports the account it signed in on its next check-in. */
+    @Volatile var onCode: () -> Unit = {}
+    val loginBodies = CopyOnWriteArrayList<JsonObject>()
+    val pauseBodies = CopyOnWriteArrayList<String>()
+    /** DELETE runners/:id/accounts/:engine/default answers done at once, as the server records Default's removal from Orbit without the
+     * runner — or, given a sentence, refuses it in those words, as the server does with no other account of the engine. POST
+     * …/default/restore answers ok, or fails while [restoreFails]. Each that goes through runs [onAccountWrite] with its path, as what
+     * GET runners serves then changes. */
+    @Volatile var defaultRemoveRefusal: String? = null
+    @Volatile var restoreFails = false
+    @Volatile var onAccountWrite: (String) -> Unit = {}
+    /** POST runners/:id/install's bodies, in order; each answers the relay as pending for its engine. */
+    val installBodies = CopyOnWriteArrayList<JsonObject>()
+    /** A Cursor key's Check Again (POST providers/mine/:id/key-check): what it answers, and what it does to GET providers/mine first —
+     * as a runner's answer kept on the key would. */
+    @Volatile var keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
+    @Volatile var onKeyCheck: () -> Unit = {}
     /** Completing it drops the control stream; a reconnect then never opens. */
     @Volatile var drop = CompletableDeferred<Unit>()
     @Volatile private var opened = 0
 
     fun reset() {
         calls.clear(); workspaceName = "Alpha"; runnerAlias = "Old alias"; runnerCapacity = 2; poolLabel = "Team Codex"; theme = "system"; shareFails = false; accessFails = false
+        wikiLinks = false
         viewerRole = "ADMIN"; viewerCreates = true; membersCanAdd = false; membersCanAddAccounts = false; loginState = "ACTIVE"
-        secondRunner = false; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
+        secondRunner = false; runnerOnline = true; runnerTwoOnline = true; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
+        runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
+        codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear()
+        defaultRemoveRefusal = null; restoreFails = false; onAccountWrite = {}
         drop = CompletableDeferred(); opened = 0
+        queries.clear(); modelRouting = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; providerCatalog = "[]"; providersMine = "[]"
+        balances.clear(); balanceGates.clear(); task = "{}"
+        keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
+        onKeyCheck = {}
     }
 
     fun writes(path: String) = calls.filter { it.endsWith(" $path") && !it.startsWith("GET ") }
 
+    /** Requests answer on the caller's thread, as WatchFixture's do. On IO a page's load resumed on the IO worker under the Compose
+     *  rule's unconfined effects and wrote its state there, racing the first composition (an NPE in addPendingInvalidationsLocked). */
     fun session() = AuthSession(transport, object : CredentialStore {
         private var value: StoredSession? = null
         override suspend fun load() = value
@@ -66,25 +130,34 @@ object ManagementFixture {
         override suspend fun read(account: AccountKey, kind: DataKind, key: String): ByteArray? = null
         override suspend fun write(account: AccountKey, kind: DataKind, key: String, bytes: ByteArray) = Unit
         override suspend fun clearAll() = Unit
-    }, "a13-test", eventTransport = events)
+    }, "a13-test", dispatcher = Dispatchers.Unconfined, eventTransport = events)
 
     suspend fun signIn(session: AuthSession) = session.login(ServerAddress.parse("https://example.test"), "a13@example.test", "fixture")
 
     private val now get() = Instant.now()
     private fun user() = """{"id":"$ME","email":"a13@example.test","name":"Fixture","role":"MEMBER","avatarUpdatedAt":null,
-        "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true}}"""
+        "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}${recaps?.let { ",\"recaps\":$it" }.orEmpty()}}}"""
     private fun workspace() = """{"id":"$WORKSPACE","name":"$workspaceName","runnerId":"$RUNNER","enabled":true,"workDir":"/srv/alpha",
         "lastProvider":"claude","effort":"","modelRouting":false,"env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"}"""
     private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") { if (it == RUNNER) runner() else runnerTwo() }
-    private fun runnerTwo() = """{"id":"$RUNNER_TWO","name":"spare","displayName":"Spare box","hostname":"spare-01","version":"0.1.200","online":true,
-        "status":"ONLINE","lastHeartbeatAt":"$now","maxConcurrent":1,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,"engines":[],"enrolledAt":"2026-09-02T00:00:00Z"}"""
-    private fun runner() = """{"id":"$RUNNER","name":"box","displayName":"$runnerAlias","hostname":"box-01","version":"0.1.200","online":true,
-        "status":"ONLINE","lastHeartbeatAt":"$now","maxConcurrent":$runnerCapacity,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,
-        "selfUpdate":${selfUpdate?.let { """{"state":"$it"}""" } ?: "null"},"engines":[],"enrolledAt":"2026-09-01T00:00:00Z"}"""
+    private fun runnerTwo() = """{"id":"$RUNNER_TWO","name":"spare","displayName":"Spare box","hostname":"spare-01","version":"0.1.200","online":$runnerTwoOnline,
+        "status":"${if (runnerTwoOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${if (runnerTwoOnline) now else now.minusSeconds(86_400)}","maxConcurrent":1,
+        "activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,"engines":[],"enrolledAt":"2026-09-02T00:00:00Z"$runnerTwoExtra}"""
+    private fun runner() = """{"id":"$RUNNER","name":"box","displayName":"$runnerAlias","hostname":"box-01","version":"0.1.200","online":$runnerOnline,
+        "status":"${if (runnerOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${if (runnerOnline) now else now.minusSeconds(86_400)}","maxConcurrent":$runnerCapacity,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,
+        "selfUpdate":${selfUpdate?.let { """{"state":"$it"}""" } ?: "null"},"engines":$runnerEngines$runnerExtra,"enrolledAt":"2026-09-01T00:00:00Z"}"""
     private fun sessionRow() = """{"id":"$SESSION","title":"Fixture session","status":"SUCCEEDED","lifecycleState":"OPEN","workspaceId":"$WORKSPACE",
         "agentId":"$WORKSPACE","createdAt":"${now.minusSeconds(600)}","lastTurnAt":"${now.minusSeconds(300)}","pendingApprovals":0}"""
     private fun link() = """{"id":"L1","token":"fixture-token","kind":"SESSION","state":"ACTIVE","root":{"id":"$SESSION","title":"Fixture session"},
         "include":{"toolOutput":true},"viewCount":0}"""
+    /** A wiki space's link as the server's owner view lists it: its root has a slug and no status. */
+    private fun wikiLink() = """{"id":"L5","token":"wiki-token","kind":"WIKI","state":"ACTIVE","root":{"id":"w1","title":"orbit wiki","slug":"orbit"},
+        "include":{"footnotes":false},"viewCount":3}"""
+    /** `share-links.service.ts` list: the kinds named in `kind`, else the three every shipped client knows. */
+    private fun links(query: List<Pair<String, String>>): String {
+        val kinds = query.firstOrNull { it.first == "kind" }?.second?.split(",") ?: listOf("SESSION", "TASK", "PROJECT")
+        return listOfNotNull(link().takeIf { "SESSION" in kinds }, wikiLink().takeIf { wikiLinks && "WIKI" in kinds }).joinToString(",", """{"links":[""", "]}")
+    }
     private fun login() = """{"state":"$loginState","email":"me@example.test","plan":"plus","fingerprint":"…AB12","userId":"$ME","next":true}"""
     private fun pools() = """[{"id":"$POOL","slug":"team-codex","label":"$poolLabel","engine":"codex","logins":[${login()}]}]"""
     private fun access() = """{"id":"$POOL","slug":"team-codex","label":"$poolLabel","engine":"codex","shared":false,"logins":[${login()}],
@@ -101,12 +174,22 @@ object ManagementFixture {
         val api = request.api
         val path = api.path.joinToString("/")
         calls += "${api.method} $path"
+        if (api.query.isNotEmpty()) queries += "${api.method} $path?" + api.query.joinToString("&") { (k, v) -> "$k=$v" }
         fun body() = Json.parseToJsonElement(api.body!!.decodeToString()).jsonObject
         when (path) {
             "auth/login" -> ok("""{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":${user()}}""")
             "auth/logout" -> ok("{}")
             "users/me" -> ok(user())
-            "users/me/preferences" -> { body()["theme"]?.let { theme = it.jsonPrimitive.content }; ok(user()) }
+            "users/me/preferences" -> {
+                body()["theme"]?.let { theme = it.jsonPrimitive.content }
+                body()["modelRouting"]?.let { modelRouting = it.jsonPrimitive.boolean }
+                body()["recaps"]?.let { recaps = it.jsonPrimitive.boolean }
+                ok(user())
+            }
+            "access-tokens" -> if (accessTokensFail) fail(503, "token list failed") else ok("""{"tokens":${JsonArray(accessTokens)}}""")
+            "providers" -> ok(providerCatalog)
+            "providers/mine" -> ok(providersMine)
+            "tasks/$TASK" -> ok(task)
             "users/me/avatar" -> fail(404, "no avatar")
             "workspaces" -> ok("[${workspace()}]")
             "workspaces/$WORKSPACE" -> { if (api.method == HttpMethod.PATCH) workspaceName = body()["name"]!!.jsonPrimitive.content; ok(workspace()) }
@@ -121,8 +204,14 @@ object ManagementFixture {
                 }
                 ok(runner())
             }
-            "runners/$RUNNER/login" -> ok("""{"status":null}""")
+            "runners/$RUNNER/login" -> when (api.method) {
+                HttpMethod.POST -> { loginBodies += body(); loginRelay = loginStarted; ok(loginRelay) }
+                HttpMethod.DELETE -> { loginRelay = """{"status":"cancelled"}"""; ok(loginRelay) }
+                else -> ok(loginRelay)
+            }
+            "runners/$RUNNER/login/code" -> { loginBodies += body(); loginRelay = codeSent; onCode(); ok(loginRelay) }
             "runners/$RUNNER/self-update" -> ok("""{"requestedAt":"$now"}""")
+            "runners/$RUNNER/install" -> { installBodies += body(); ok("""{"status":"pending","engine":${body()["engine"]},"mode":"install"}""") }
             "sessions" -> ok(if (api.query.contains("view" to "open")) "[${sessionRow()}]" else "[]")
             "sessions/$SESSION/share" -> when {
                 shareFails -> fail(503, "share read failed")
@@ -131,10 +220,30 @@ object ManagementFixture {
                 else -> ok(link())
             }
             "providers/pools" -> ok(pools())
-            "share-links" -> ok("""{"links":[${link()}]}""")
+            "share-links" -> ok(links(api.query))
             "providers/shared-pools" -> ok("[]")
             "providers/shared-pools/$POOL" -> if (accessFails) fail(503, "pool read failed") else ok(access())
-            else -> ok("[]")
+            else -> when {
+                path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/pause") -> { pauseBodies += "$path ${api.body!!.decodeToString()}"; ok("{}") }
+                path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default/restore") ->
+                    if (restoreFails) fail(404, "runner not found") else { onAccountWrite(path); ok("""{"ok":true}""") }
+                path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default") && api.method == HttpMethod.DELETE ->
+                    defaultRemoveRefusal?.let { fail(400, it) }
+                        ?: run { onAccountWrite(path); ok("""{"engine":"${path.split('/')[3]}","account":"default","status":"done","message":null}""") }
+                path.startsWith("access-tokens/") && api.method == HttpMethod.DELETE -> {
+                    val id = path.removePrefix("access-tokens/")
+                    accessTokens = accessTokens.map { if (it["id"]?.jsonPrimitive?.content == id) JsonObject(it + mapOf("state" to JsonPrimitive("REVOKED"),
+                        "revokedAt" to JsonPrimitive(now.toString()), "revokedReason" to JsonPrimitive("USER"))) else it }
+                    ok("""{"id":"$id","revokedAt":"$now","revokedReason":"USER"}""")
+                }
+                path.startsWith("providers/mine/") && path.endsWith("/key-check") && api.method == HttpMethod.POST -> { onKeyCheck(); ok(keyCheckAnswer) }
+                path.startsWith("providers/mine/") && path.endsWith("/balance") -> {
+                    val id = path.removePrefix("providers/mine/").removeSuffix("/balance")
+                    balanceGates[id]?.await()
+                    balances[id]?.let(::ok) ?: fail(404, "Not Found")
+                }
+                else -> ok("[]")
+            }
         }
     }
 

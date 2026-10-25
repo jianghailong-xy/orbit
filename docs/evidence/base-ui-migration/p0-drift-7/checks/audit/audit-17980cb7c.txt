@@ -1,0 +1,27 @@
+{
+  "baseline": {
+    "commit": "17980cb7cec9db1e006f02f56df976505b6090f1",
+    "scopeHash": "d676e3f1b2cf8ec81dafba4584127bd3113b8f6ed9c088fbdf1f3fa4ee33bd29"
+  },
+  "records": [
+    "2026-10-07.json",
+    "2026-10-07b.json",
+    "2026-10-07c.json",
+    "2026-10-07d.json",
+    "2026-10-08.json",
+    "2026-10-08b.json",
+    "2026-10-09.json",
+    "2026-10-09b.json"
+  ],
+  "unowned": [],
+  "pending": [],
+  "owners": {
+    "KEEP": 1,
+    "P4.4": 55,
+    "P5.1": 28,
+    "P5.2": 11,
+    "P5.3": 94,
+    "P6": 42
+  }
+}
+exit 0

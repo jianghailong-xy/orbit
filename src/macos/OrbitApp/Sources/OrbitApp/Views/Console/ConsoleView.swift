@@ -22,20 +22,28 @@ struct ConsoleView: View {
     @State private var imagePreviewPages: [PreviewImage] = []
     @State private var fetchedToolImages = FetchedToolImages()
     // Routes to the run a message followed (`handedOverSessionID`) and to the one a refusal names
-    // — both platforms. On iOS it also builds the nav-bar title (session name + "state · when"),
-    // mirroring how web's console header reads `selected` off the cached session list; macOS shows
-    // that status in the in-transcript `statusBar` instead.
+    // — both platforms — and, on iOS, the session the ⋯ menu acts on.
     @Environment(AppModel.self) private var appModel
     /// The public read-only link's sheet — opened from the nav bar on iOS, the window toolbar on macOS.
     @State private var showShare = false
     @State private var promotionReview: PromotionReviewTarget?
     @State private var promotionReceipt: PromotionReceiptTarget?
+    @State private var ownerAnswerTold: OwnerAnswerTold?
     @State private var approvalReview: ApprovalReviewTarget?
     @State private var approvalReviewDrafts = ApprovalReviewDrafts()
+    /// Whether the reader has gone back far enough through the history for a phone's composer band to
+    /// fold to its bar (`foldsBand`): written by the transcript's scroll tracker, off the same reading
+    /// as the pin (`TailPinning.foldsBand`). Never set on the Mac.
+    @State private var readingBack = false
+    /// The band was opened where the reader is — its folded bar tapped, or the keyboard put away —
+    /// and stays open until their next drag.
+    @State private var bandOpened = false
+    /// Bumped by the folded bar's ↓, which the transcript answers with the floating disc's jump.
+    @State private var jumpRequest = 0
     #if os(iOS)
-    /// Tapping the nav-bar title renames the session (web double-clicks its header title). Seeded
-    /// from the session's own title — not `SessionHeader.title`, whose agent-name fallback would
-    /// otherwise be typed in as if it were the name.
+    /// The ⋯ menu's Rename… (web double-clicks its header title). Seeded from the session's own
+    /// title — not `SessionHeader.title`, whose agent-name fallback would otherwise be typed in as if
+    /// it were the name.
     @State private var renaming = false
     @State private var renameDraft = ""
     @State private var taggingSession: Session?
@@ -44,7 +52,7 @@ struct ConsoleView: View {
     @State private var confirmPurge = false
     /// Gates the "needs you" banner to the compact shell — see the `safeAreaInset` below.
     @Environment(\.horizontalSizeClass) private var hSize
-    /// A phone's stack: the project a coordinator's title opens goes over this console, so the back
+    /// A phone's stack: the task or project the ⋯ menu opens goes over this console, so the back
     /// swipe returns here (`opensPagesOverConsole`).
     @Environment(\.opensPagesOverConsole) private var opensPagesOverConsole
     #endif
@@ -53,9 +61,10 @@ struct ConsoleView: View {
         #if os(iOS)
         // A custom `.principal` toolbar item is measured at its ideal width instead of being given
         // the space left between the navigation buttons. Measure the actual detail column here so
-        // the title gets a finite proposal on iPhone, after rotation, and in an iPad split view.
-        // Reserve 80 points on each side for navigation chrome; 260 keeps it title-like in wide
-        // columns instead of turning the navigation bar into another content row.
+        // the sticky question's capsule (`TranscriptView.stickyQuestion`) gets a finite proposal on
+        // iPhone, after rotation, and in an iPad split view. Reserve 80 points on each side for
+        // navigation chrome; 260 keeps it a capsule in wide columns instead of turning the
+        // navigation bar into another content row.
         GeometryReader { geometry in
             consoleBody(navTitleWidth: min(max(geometry.size.width - 160, 0), 260))
         }
@@ -120,98 +129,197 @@ struct ConsoleView: View {
         #endif
     }
 
+    /// Whether a phone's composer band folds to its one-line bar (`FoldedBandBar`; the owner,
+    /// 2026-10-16): the reader has gone back through the history — far enough that the folded band
+    /// leaves them clear of the tail (`readingBack`), or into a window opened at a record — the
+    /// composer doesn't hold the keyboard, and the reader hasn't just opened the band (`bandOpened`).
+    /// Only where the band floats over the transcript, iOS 26 at a compact width; the wide shells and
+    /// the Mac never fold.
+    private func foldsBand(_ console: ConsoleModel) -> Bool {
+        #if os(iOS)
+        guard #available(iOS 26.0, *), hSize == .compact else { return false }
+        return !console.composerEditing && !bandOpened && (readingBack || console.detached)
+        #else
+        false
+        #endif
+    }
+
+    /// The transcript and the composer band. Pending approvals (incl. the AskUserQuestion form)
+    /// render inline at the tail of the transcript — as the agent's latest turn, web-style — not in a
+    /// fixed panel here. See TranscriptView.
+    ///
+    /// On iOS 26 the band floats over the transcript instead of standing below it (the owner,
+    /// 2026-10-16: the bottom as clear as the top). The transcript runs on under it, the system's
+    /// scroll-edge effect softens what passes beneath, and the band's cards are glass
+    /// (`composerBandCard`). It is a safe-area bar, so the list's content is inset by its height:
+    /// the tail and every follow stop above it, the pin reads the list net of it, and the follow
+    /// hears it grow — the keyboard, a composer growing a line (`ScrollTracker`,
+    /// `TailPinning.followsGeometry`).
+    @ViewBuilder
+    private func transcriptAndBand(_ console: ConsoleModel, navTitleWidth: CGFloat) -> some View {
+        let transcript = TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console),
+                                        reviewingCard: approvalReview != nil || promotionReview != nil,
+                                        questionWidth: navTitleWidth,
+                                        readingBack: $readingBack, bandFolded: foldsBand(console),
+                                        bandOpened: $bandOpened, jumpRequest: jumpRequest)
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            transcript.safeAreaBar(edge: .bottom, spacing: 0) {
+                composerBand(console).environment(\.floatsOverTranscript, true)
+            }
+        } else {
+            VStack(spacing: 0) {
+                transcript
+                composerBand(console)
+            }
+        }
+        #else
+        VStack(spacing: 0) {
+            transcript
+            composerBand(console)
+        }
+        #endif
+    }
+
+    /// The band under the transcript: its members, or — folded while the reader goes back through the
+    /// history (`foldsBand`) — the one bar they stand behind (`ComposerBandFold`), in the band's gutter
+    /// and on its foot. A tap on the bar opens the band where the reader is.
+    private func composerBand(_ console: ConsoleModel) -> some View {
+        let folded = foldsBand(console)
+        return ZStack(alignment: .bottom) {
+            bandMembers(console)
+                .modifier(ComposerBandFold(folded: folded))
+            #if os(iOS)
+            if #available(iOS 26.0, *), folded {
+                FoldedBandBar(console: console, open: { bandOpened = true }, jump: { jumpRequest &+= 1 })
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, .composerBandFoot)
+                    .transition(.opacity.combined(with: .scale(scale: 0.94, anchor: .bottom)))
+            }
+            #endif
+        }
+        .animation(.smooth(duration: 0.3), value: folded)
+        // Putting the keyboard away leaves the band open where the reader is, as a tap on its bar
+        // does, until their next drag. A drag is how the keyboard goes, and a fold in the same breath
+        // landed in the middle of the keyboard's own layout: the list read as at its tail for a frame,
+        // the band opened again, and the reader was carried back down (measured on the simulator).
+        .onChange(of: console.composerEditing) { _, editing in
+            if !editing { bandOpened = true }
+        }
+    }
+
+    private func bandMembers(_ console: ConsoleModel) -> some View {
+        // Error, background tray, git bar, composer — web's order (`workspace-composer`).
+        // Staged attachments are not a member: they sit inside the composer's card, above
+        // the text they go out with. The band owns the gutter and the gaps; members only
+        // say whether they are on screen.
+        ComposerBand {
+            // The managed runner's state while it is anything but ready, when this
+            // console's runner is it (docs/managed-runner-design.md): about the runner the
+            // message goes to, so it stays in sight while you type.
+            if let managed = console.managed, managed.showsBanner {
+                ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
+                    .padding(.bottom, .composerBandGap)
+            }
+            // Errors only, and sticky until the ✕ — this row is in flow, so anything that
+            // comes and goes on a timer here shoves the composer around while the user is
+            // typing in it. Confirmations belong in the toast host (see `showToast`).
+            // Why this run produced nothing at all. Drawn first because it is about the
+            // run itself rather than the message being sent, and drawn INSTEAD of the
+            // two engine-repair cards below when it has something to say — one fact,
+            // one card (an engine reason it does not claim is theirs, and the reverse).
+            if let runStart = console.runStart {
+                SessionRunStartCardView(console: console, card: runStart)
+                    .padding(.bottom, .composerBandGap)
+            } else if let repair = console.queuedDshRepair {
+                DshRepairCardView(console: console, repair: repair)
+                    .padding(.bottom, .composerBandGap)
+            } else if let repair = console.queuedAntigravityRepair {
+                AntigravityRepairCardView(console: console, repair: repair)
+                    .padding(.bottom, .composerBandGap)
+            }
+            if let msg = console.statusMessage {
+                HStack {
+                    Text(msg).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(6)
+                    Spacer()
+                    Button { console.statusMessage = nil } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+                .padding(.bottom, .composerBandGap)
+            }
+            // The message went somewhere — it just isn't here. Above the composer
+            // because that is where the send was made from, and it carries the one
+            // press that follows it.
+            if let routed = console.handedOverSessionID {
+                TaskRunHandedOverCard(
+                    sessionID: routed,
+                    onOpenRun: { appModel.route(to: .session($0)) },
+                    onDismiss: { console.dismissRunConflict() })
+                    .padding(.bottom, .composerBandGap)
+            }
+            // …and the refusals that used to be the server's English sentence in the
+            // row above. Shown here rather than as a status line because each one
+            // carries a way out that has to stay pressable.
+            if let conflict = console.composerRunConflict {
+                // A question is not dismissible into silence: `Keep it running` IS the
+                // way to decline it, and an ✕ beside that would be a third answer that
+                // leaves the message unsent with nothing on screen about why.
+                let dismiss: (() -> Void)? = conflict.kind == .confirmSwitch
+                    ? nil : { console.dismissRunConflict() }
+                TaskRunHandoffCard(
+                    conflict: conflict,
+                    onOpenRun: { appModel.route(to: .session($0)) },
+                    onStopAndContinue: { Task { await console.stopAndContinue() } },
+                    onKeepRunning: { console.keepRunning() },
+                    onDismiss: dismiss)
+                    .padding(.bottom, .composerBandGap)
+            }
+            // The session's cards, which a phone folds while you type (`TypingFold`). The
+            // one-off cards above stay: each is about the message being sent.
+            VStack(spacing: 0) {
+                // What this session waits on — a watch, not a process — above the real shells.
+                WatchingCardStack(sessionID: console.sessionID)
+                BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress)
+                // The tasks this session's agent created, beside the code the bar below
+                // carries — the session's two kinds of output, together.
+                CreatedTasksCard(console: console)
+                WorktreeBar(console: console)
+            }
+            .modifier(TypingFold(folded: foldsChrome(console)))
+            // The reader's messages nothing has read yet, on the composer they were sent from —
+            // not folded while typing: they are about the message flow being typed into.
+            PendingTrayView(console: console, rows: console.pendingTrayRows(
+                turnRunning: (appModel.session(id: console.sessionID)?.effectiveRunStatus ?? console.state.status) == .running),
+                            // Why none of them goes into the turn running now: Cursor CLI's would stop it.
+                            note: console.engine == CursorRuntime.engine ? CursorRuntime.queueNote : nil)
+            // The landing this conversation's work fed, at the session's own bottom (owner
+            // 2026-10-19, board v4 06 e): absent from a session that produced no landing work.
+            SourceLandingChip(console: console)
+            ComposerView(console: console)
+            // What the provider pick standing in the composer will do, and WHEN — the
+            // part that matters, because a run keeps its provider for its whole life.
+            // In flow under the composer, and it stays for as long as the pick does.
+            if let note = console.providerSwitchNote {
+                Text(note).font(.orbitMeta).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+            }
+        }
+    }
+
     private func consoleBody(navTitleWidth: CGFloat) -> some View {
         Group {
-            if let console = registry.peek(sessionID) {
-                VStack(spacing: 0) {
-                    TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console),
-                                   reviewingCard: approvalReview != nil || promotionReview != nil)
-                    // Pending approvals (incl. the AskUserQuestion form) render inline at the tail of
-                    // the transcript now — as the agent's latest turn, web-style — not in a fixed panel
-                    // here. See TranscriptView.
-                    // Error, background tray, git bar, composer — web's order (`workspace-composer`).
-                    // Staged attachments are not a member: they sit inside the composer's card, above
-                    // the text they go out with. The band owns the gutter and the gaps; members only
-                    // say whether they are on screen.
-                    ComposerBand {
-                        // Errors only, and sticky until the ✕ — this row is in flow, so anything that
-                        // comes and goes on a timer here shoves the composer around while the user is
-                        // typing in it. Confirmations belong in the toast host (see `showToast`).
-                        // Why this run produced nothing at all. Drawn first because it is about the
-                        // run itself rather than the message being sent, and drawn INSTEAD of the
-                        // two engine-repair cards below when it has something to say — one fact,
-                        // one card (an engine reason it does not claim is theirs, and the reverse).
-                        if let runStart = console.runStart {
-                            SessionRunStartCardView(console: console, card: runStart)
-                                .padding(.bottom, .composerBandGap)
-                        } else if let repair = console.queuedDshRepair {
-                            DshRepairCardView(console: console, repair: repair)
-                                .padding(.bottom, .composerBandGap)
-                        } else if let repair = console.queuedAntigravityRepair {
-                            AntigravityRepairCardView(console: console, repair: repair)
-                                .padding(.bottom, .composerBandGap)
-                        }
-                        if let msg = console.statusMessage {
-                            HStack {
-                                Text(msg).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(6)
-                                Spacer()
-                                Button { console.statusMessage = nil } label: { Image(systemName: "xmark") }
-                                    .buttonStyle(.plain).foregroundStyle(.secondary)
-                            }
-                            .padding(.bottom, .composerBandGap)
-                        }
-                        // The message went somewhere — it just isn't here. Above the composer
-                        // because that is where the send was made from, and it carries the one
-                        // press that follows it.
-                        if let routed = console.handedOverSessionID {
-                            TaskRunHandedOverCard(
-                                sessionID: routed,
-                                onOpenRun: { appModel.route(to: .session($0)) },
-                                onDismiss: { console.dismissRunConflict() })
-                                .padding(.bottom, .composerBandGap)
-                        }
-                        // …and the refusals that used to be the server's English sentence in the
-                        // row above. Shown here rather than as a status line because each one
-                        // carries a way out that has to stay pressable.
-                        if let conflict = console.composerRunConflict {
-                            // A question is not dismissible into silence: `Keep it running` IS the
-                            // way to decline it, and an ✕ beside that would be a third answer that
-                            // leaves the message unsent with nothing on screen about why.
-                            let dismiss: (() -> Void)? = conflict.kind == .confirmSwitch
-                                ? nil : { console.dismissRunConflict() }
-                            TaskRunHandoffCard(
-                                conflict: conflict,
-                                onOpenRun: { appModel.route(to: .session($0)) },
-                                onStopAndContinue: { Task { await console.stopAndContinue() } },
-                                onKeepRunning: { console.keepRunning() },
-                                onDismiss: dismiss)
-                                .padding(.bottom, .composerBandGap)
-                        }
-                        // The session's cards, which a phone folds while you type (`TypingFold`). The
-                        // one-off cards above stay: each is about the message being sent.
-                        VStack(spacing: 0) {
-                            // What this session waits on — a watch, not a process — above the real shells.
-                            WatchingCardStack(sessionID: console.sessionID)
-                            BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress)
-                            // The tasks this session's agent created, beside the code the bar below
-                            // carries — the session's two kinds of output, together.
-                            CreatedTasksCard(console: console)
-                            WorktreeBar(console: console)
-                        }
-                        .modifier(TypingFold(folded: foldsChrome(console)))
-                        ComposerView(console: console)
-                        // What the provider pick standing in the composer will do, and WHEN — the
-                        // part that matters, because a run keeps its provider for its whole life.
-                        // In flow under the composer, and it stays for as long as the pick does.
-                        if let note = console.providerSwitchNote {
-                            Text(note).font(.orbitMeta).foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.top, 4)
-                        }
-                    }
-                }
+            // A LANDING session is platform work, not a conversation (§2.9 LS6): the same frame
+            // (`.console`, so every push and `/sessions/<id>` link still lands here) draws the
+            // landing page instead of a transcript, and nothing ever creates a console model for it.
+            if appModel.session(id: sessionID)?.isLanding == true {
+                LandingSessionPageView(sessionID: sessionID)
+            } else if let console = registry.peek(sessionID) {
+                transcriptAndBand(console, navTitleWidth: navTitleWidth)
                 // Image cache for user-turn attachments, read by `UserBubbleView` down the tree.
                 .environment(registry.attachments)
+                // The tasks this conversation filed, which a watch's wake line names its targets by.
+                .environment(console.createdTasks)
                 // One full-screen viewer for the whole transcript: a thumbnail anywhere in it opens here
                 // and pages across every image in the session, in transcript order (web parity).
                 .environment(\.sessionImagePreview, sessionImagePreview(console))
@@ -228,6 +336,14 @@ struct ConsoleView: View {
                 })
                 .sheet(item: $promotionReceipt) { target in
                     PromotionReceiptSheet(promotion: target.promotion)
+                }
+                // The words an answer's line stands for (`OwnerAnswerLineView`), hosted here for the
+                // reason the receipt is: a recycled row cannot dismiss it.
+                .environment(\.openOwnerAnswer, { told in
+                    ownerAnswerTold = told
+                })
+                .sheet(item: $ownerAnswerTold) { told in
+                    OwnerAnswerSheet(told: told)
                 }
                 .environment(approvalReviewDrafts)
                 .environment(\.openApprovalReview, { target in
@@ -248,13 +364,19 @@ struct ConsoleView: View {
         // view's lifecycle) — so backing out to the list reliably drops the connection even if SwiftUI
         // keeps this off-screen view cached, and at most one session ever streams.
         .task(id: sessionID) {
+            // Platform work has no transcript to hydrate, and a console model for one would write
+            // an empty store beside a page that never shows it.
+            guard appModel.session(id: sessionID)?.isLanding != true else { return }
             _ = registry.model(for: sessionID, agentID: agentID)
         }
         .onChange(of: sessionID) { _, _ in
             promotionReview = nil
             promotionReceipt = nil
+            ownerAnswerTold = nil
             approvalReview = nil
             approvalReviewDrafts = ApprovalReviewDrafts()
+            readingBack = false
+            bandOpened = false
         }
         #if os(iOS)
         // "Another session needs you", below the nav bar and above the transcript. Compact only:
@@ -264,7 +386,9 @@ struct ConsoleView: View {
         // bar pointing down into this transcript instead of away from it. See `NeedsYouBannerView`.
         // While you type the bar folds away with the nav bar (`foldsChrome`), and a backdrop takes the
         // nav bar's place behind the status bar so the transcript doesn't scroll under the clock.
-        .safeAreaInset(edge: .top, spacing: 0) {
+        // On iOS 26 it floats over the transcript as the composer band does at the bottom
+        // (`needsYouTop`).
+        .needsYouTop {
             if hSize == .compact {
                 let console = registry.peek(sessionID)
                 if foldsChrome(console) {
@@ -284,54 +408,27 @@ struct ConsoleView: View {
         // console reverts to the large bar the moment the session is created — the reported gap.)
         .navigationBarTitleDisplayMode(.inline)
         // …and none at all while a phone's composer holds the keyboard (`foldsChrome`): back, the
-        // title and session menu come back when the keyboard goes.
+        // question and session menu come back when the keyboard goes.
         .toolbar(foldsChrome(registry.peek(sessionID)) ? .hidden : .automatic, for: .navigationBar)
-        // Inline title: the session name over a "state · when" subtitle, matching the web Agent
-        // console header (`AgentView.tsx`). Centered/two-line — the system convention (Messages/Phone)
-        // — rather than web's left-aligned bar. The status word lived in the transcript's `statusBar`
-        // band before; on iOS that band is now retired in favour of this.
+        // No title: back, the ⋯ menu and, between them, the question the top of the screen answers —
+        // a capsule the transcript puts there, as only it knows where the reader is
+        // (`TranscriptView.stickyQuestion`). The session's name and its "state · when" line gave way
+        // to reading space (the owner, 2026-10-15: the title is not needed). Rename… and the project
+        // or task a session belongs to are in the menu; whether it runs, the composer's stop button
+        // says.
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                let session = appModel.session(id: sessionID)
-                let title = ConsoleNavTitle(
-                    session: session,
-                    console: registry.peek(sessionID),
-                    availableWidth: navTitleWidth
-                )
-                // A coordinator conversation's title is its project's — the server keeps the two in
-                // step — so its tap opens that project, the way a Messages header opens what the
-                // conversation is about; the › beside the badge says so. Every other title is tap to
-                // rename, matching web's double-click-the-header-title. A trashed session is not
-                // renamable there either, and a row we haven't loaded yet has no title to seed the
-                // field with — both fall back to the plain, non-interactive title.
-                if let session, let projectID = session.projectId {
-                    Button {
-                        appModel.openProjectFromConversation(projectID, overConsole: opensPagesOverConsole)
-                    } label: {
-                        title
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Opens the project this conversation coordinates")
-                } else if let session, session.effectiveLifecycleState != .trash {
-                    Button {
-                        renameDraft = session.title ?? ""
-                        renaming = true
-                    } label: {
-                        title
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Renames this session")
-                } else {
-                    title
-                }
-            }
             ToolbarItem(placement: .topBarTrailing) {
-                if let session = appModel.session(id: sessionID) {
-                    sessionMenu(session)
-                } else {
-                    Button {} label: { Image(systemName: "ellipsis") }
-                        .disabled(true)
-                        .accessibilityLabel("Session actions")
+                // A landing session is platform work (LS6): its page carries the ⋯ menu the design
+                // gives it, and none of the conversation's own actions — no rename, share, pin,
+                // move or complete. The frame still shows Back, which is how a reader leaves.
+                if appModel.session(id: sessionID)?.isLanding != true {
+                    if let session = appModel.session(id: sessionID) {
+                        sessionMenu(session)
+                    } else {
+                        Button {} label: { Image(systemName: "ellipsis") }
+                            .disabled(true)
+                            .accessibilityLabel("Session actions")
+                    }
                 }
             }
         }
@@ -362,10 +459,14 @@ struct ConsoleView: View {
         // `.primaryAction` there, as the project and task pages' menus do.
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { showShare = true } label: {
-                    Label("Share session", systemImage: "square.and.arrow.up")
+                // No Share on a landing session (LS6): it is platform work, not a conversation,
+                // and its page's own ⋯ menu is the whole of what it offers.
+                if appModel.session(id: sessionID)?.isLanding != true {
+                    Button { showShare = true } label: {
+                        Label("Share session", systemImage: "square.and.arrow.up")
+                    }
+                    .help("Share a read-only link to this session")
                 }
-                .help("Share a read-only link to this session")
             }
         }
         #endif
@@ -491,14 +592,22 @@ struct ConsoleView: View {
 /// height, not removed, so an open list, the branch bar's sheet host and a "View tasks ›" press made
 /// meanwhile all keep their state, and the cards come back as they were when the keyboard goes.
 /// The wide shells never fold, and macOS doesn't take the modifier at all.
+///
+/// The stack is cut to its own frame only while it folds and while it is folded. Open, the cut
+/// stands `glassBleed` clear of it. On iOS 26 the cards are glass, which draws its rim and its
+/// shadow past its own edge. A cut at the frame sheared both off: the tray and the git bar lost
+/// their rim along the sides and the top, and the tray's shadow was left in the gap below it as a
+/// grey slab with square ends (the owner, 2026-10-16).
 private struct TypingFold: ViewModifier {
     let folded: Bool
+    /// Clear of the deepest shadow a card's glass casts, which is an open tray's: the tallest card.
+    private static let glassBleed: CGFloat = 40
 
     func body(content: Content) -> some View {
         #if os(iOS)
         content
             .frame(height: folded ? 0 : nil, alignment: .top)
-            .clipped()
+            .clipShape(Rectangle().inset(by: folded ? 0 : -Self.glassBleed))
             .opacity(folded ? 0 : 1)
             .allowsHitTesting(!folded)
             .accessibilityHidden(folded)
@@ -507,63 +616,6 @@ private struct TypingFold: ViewModifier {
         #endif
     }
 }
-
-#if os(iOS)
-/// The pushed console's inline nav-bar title: the session name over a "state · when" subtitle,
-/// mirroring the web Agent console header (see OrbitKit `SessionHeader`). The session (with its
-/// title + timestamps) comes from the app's cached list; when it isn't loaded yet the title falls
-/// back to the live stream's agent name and the subtitle to its current status word.
-private struct ConsoleNavTitle: View {
-    @Environment(AppModel.self) private var appModel
-    let session: Session?
-    let console: ConsoleModel?
-    /// The navigation bar's centre budget, derived from the current detail-column width. Unlike a
-    /// plain `lineLimit`, this gives both text rows a finite proposal they can actually truncate in.
-    let availableWidth: CGFloat
-
-    var body: some View {
-        VStack(spacing: 1) {
-            HStack(spacing: 6) {
-                Text(SessionHeader.title(for: session, fallbackAgent: console?.agentName))
-                    .font(.headline)
-                    .lineLimit(1).truncationMode(.tail)
-                if let session {
-                    SessionCoordinatorBadge(session: session)
-                        .layoutPriority(1)
-                    // The tap opens the project (see the title's button in `ConsoleView`).
-                    if session.projectId != nil {
-                        Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .layoutPriority(1)
-                            .accessibilityHidden(true)
-                    }
-                }
-            }
-            Text(subtitle)
-                .font(.caption2).foregroundStyle(.secondary)
-                .lineLimit(1).truncationMode(.tail)
-        }
-        .frame(width: availableWidth)
-        // SwiftUI views do not clip to their layout frame by default. Keep a fixed-size badge (or a
-        // future title child) from ever painting over the trailing Share button again.
-        .clipped()
-    }
-
-    private var subtitle: String {
-        // Waiting on a watch, the subtitle says so — targets, progress, last look — instead of
-        // "Background process running · 3m ago".
-        let watching = session.flatMap { appModel.watches?.summary(for: $0.id) }
-        if let s = SessionHeader.subtitle(for: session, watching: watching) { return s }
-        // No cached session yet (fresh deep link): show the live stream's status, prettified like
-        // the old band did (AWAITING_INPUT -> "Awaiting Input").
-        if let status = console?.state.status {
-            return status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
-        }
-        return ""
-    }
-}
-#endif
 
 struct TranscriptView: View {
     @Environment(AppModel.self) private var app
@@ -575,7 +627,26 @@ struct TranscriptView: View {
     var hidesStickyQuestion = false
     /// Keep the preview's place while its sheet refreshes or the conversation keeps streaming.
     var reviewingCard = false
+    /// The nav bar's centre slot on iOS, which the sticky question's capsule truncates within — a
+    /// `.principal` item is otherwise sized to its ideal width (`ConsoleView.body`). Unused on macOS.
+    var questionWidth: CGFloat = 0
+    /// Written for `ConsoleView.foldsBand`: whether the reader has gone back far enough through the
+    /// history for a phone's composer band to fold to its bar (`TailPinning.foldsBand`).
+    var readingBack: Binding<Bool> = .constant(false)
+    /// The band is folded to its bar (`FoldedBandBar`), which carries the jump to the latest in the
+    /// floating disc's place.
+    var bandFolded = false
+    /// The bar was tapped open; the reader's next drag folds the band again.
+    var bandOpened: Binding<Bool> = .constant(false)
+    /// Bumped by the bar's ↓: the floating disc's jump (`jumpToLatest`).
+    var jumpRequest = 0
     @State private var reviewSessionID: String?
+    /// Which session's Recap card has stepped aside for this visit. It is set once that conversation
+    /// starts a new turn, because the reader is in it now and a card arriving under each answer
+    /// would push the answer up. It is cleared when this view opens another session: the Mac and
+    /// iPad split keep one console view across sessions (`AgentsView`), so a plain flag would carry
+    /// one conversation's choice into the next.
+    @State private var recapAsideFor: String?
     private let bottomID = TranscriptRow.bottom.id
     // Mirrors web's `atBottom` (AgentView.tsx): flips false once the user scrolls up off the live
     // tail. Drives the floating jump-to-latest button AND gates the auto-follow below, so reading
@@ -624,17 +695,21 @@ struct TranscriptView: View {
     private func tracker(ruler: QuestionRuler) -> some ViewModifier {
         #if os(iOS)
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
-                             recompute: recomputeStuck, scroll: transcriptScroll)
+                             recompute: recomputeStuck, follow: repinAfterResize, scroll: transcriptScroll,
+                             readingBack: readingBack,
+                             dragged: { if bandOpened.wrappedValue { bandOpened.wrappedValue = false } })
         #else
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
-                             recompute: recomputeStuck)
+                             recompute: recomputeStuck, follow: repinAfterResize)
         #endif
     }
 
     /// The viewport changed size under a pinned transcript — the keyboard rising, the composer
-    /// growing a line, the chrome folding away — and the tail is asked for, the way a tap on the
-    /// jump-to-latest disc asks for it (`heldScroll`: this arrives off a layout report, so the rows
-    /// it names are the ones the next update has, not whatever this frame holds).
+    /// growing a line, the chrome folding away — or the scroll geometry moved its tail without
+    /// anybody scrolling (`ScrollTracker`: rows measured to a new height, the sticky header pushing
+    /// them down), and the tail is asked for, the way a tap on the jump-to-latest disc asks for it
+    /// (`heldScroll`: this arrives off a layout report, so the rows it names are the ones the next
+    /// update has, not whatever this frame holds).
     private func repinAfterResize() {
         // A window opened at a record ends at a gap, and a preview's place is held while its sheet
         // is up: neither follows the tail, so neither follows a resize to it.
@@ -680,8 +755,8 @@ struct TranscriptView: View {
         ScrollViewReader { proxy in
             chrome(follows(rowsList, proxy), proxy)
         }
-        // macOS shows the session state in this band; iOS carries it in the nav-bar subtitle
-        // (`ConsoleNavTitle`) instead, matching the web header, so the band is retired there.
+        // macOS shows the session state in this band. iOS gave the state up with the nav-bar title,
+        // for reading space (see `ConsoleView`'s toolbar), so the band is retired there.
         #if os(macOS)
         .safeAreaInset(edge: .top, spacing: 0) { statusBar }
         #endif
@@ -739,6 +814,9 @@ struct TranscriptView: View {
                 Color.clear.onChange(of: g.frame(in: .global).minY, initial: true) { _, y in ruler.viewportTop = y }
             }
         }
+        // On the list alone, under `chrome`, so the jump-to-latest disc floating over it stays solid.
+        .meetsComposerBand()
+        .softTopEdge()
         // Follow new/streaming content only while pinned at the bottom (web's smart auto-scroll):
         // if the user has scrolled up to read, don't drag them back. A session switch always
         // re-pins. One-shot, non-animated scrollTo — never the per-frame animated scroll that froze
@@ -882,10 +960,19 @@ struct TranscriptView: View {
         // Floating jump-to-latest button (web's `.scroll-to-bottom`): shown while scrolled up, and
         // while the tail is out of view for any other reason (`stranded`).
         .overlay(alignment: .bottom) {
-            if !atBottom || console.detached || stranded {
+            // While the composer band is folded its bar carries the jump, at its right end.
+            if !bandFolded, !atBottom || console.detached || stranded {
                 scrollToBottomButton(proxy: proxy)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
+        }
+        // The folded band's ↓, pressed: the disc's jump.
+        .onChange(of: jumpRequest) { jumpToLatest(proxy) }
+        // One observer for both, so a switch to a session that is already working is decided in one
+        // step: the card is back for a newly opened session, and away once it starts a turn.
+        .onChange(of: RecapVisit(sessionID: console.sessionID, rests: recapRests), initial: true) { old, new in
+            if old.sessionID != new.sessionID { recapAsideFor = nil }
+            if !new.rests { recapAsideFor = new.sessionID }
         }
         // Whether a pinned transcript is stranded off its tail, decided once it has sat that way for
         // a moment. A publish restarts the wait: the follow it triggers lands a frame or two after
@@ -900,17 +987,35 @@ struct TranscriptView: View {
         // Sticky "↑ Your question" header (web's `.chat-sticky-question`): pin the newest question
         // *above the fold* to the top so it stays in view during a long reply, and tap it to jump
         // back; it steps back through earlier questions as you scroll up (see `recomputeStuck`) and
-        // hides only at the very top where no question is above. Shown whenever such a question
-        // exists — including at the bottom — exactly like web, not gated on `atBottom`. In-flow inset
-        // (not an overlay) so it pushes content down like web: a `scrollTo(anchor: .top)` then lands
-        // the target just *below* the header, not hidden under it. iOS 18+/macOS 15+ (needs the
+        // hides only at the very top where no question is above. iOS 18+/macOS 15+ (needs the
         // scroll/row geometry); on the earlier floor `stuckID` never updates, so this stays hidden.
+        #if os(iOS)
+        // On iOS it is the nav bar's centre piece, not a band under the bar (the owner, 2026-10-15:
+        // the band and the title above it took too much of the screen). Up there it moves nothing,
+        // and a `scrollTo(anchor: .top)` lands the target just under the bar. It shows only while
+        // the reader is off the live tail — scrolled up into the history, or reading a window opened
+        // at a record — the same "off the tail" the jump-to-latest disc answers to: at the tail the
+        // reader is following the answer to what they just asked (the owner, the same day).
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                if #available(iOS 18, macOS 15, *), !hidesStickyQuestion, !atBottom || console.detached,
+                   let q = stuckBubble {
+                    stickyQuestion(q, proxy: proxy)
+                        .frame(idealWidth: questionWidth, maxWidth: questionWidth)
+                }
+            }
+        }
+        #else
+        // Shown whenever such a question exists — including at the bottom — exactly like web, not
+        // gated on `atBottom`. In-flow inset (not an overlay) so it pushes content down like web: a
+        // `scrollTo(anchor: .top)` then lands the target just *below* the header, not hidden under it.
         .safeAreaInset(edge: .top, spacing: 0) {
             if #available(iOS 18, macOS 15, *), !hidesStickyQuestion, let q = stuckBubble {
                 stickyQuestion(q, proxy: proxy)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        #endif
         .animation(.easeOut(duration: 0.15), value: atBottom)
         .animation(.easeOut(duration: 0.15), value: stranded)
         // Only fires when the header appears/disappears (not on every text swap), so animating it
@@ -926,8 +1031,9 @@ struct TranscriptView: View {
     // top yet (freshly opened, before the first geometry callback) but we're scrolled below the top, fall
     // back to naming the last question so the header shows at once; at the very top / short transcripts it
     // stays nil. Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet — and
-    // so is a background job's news or a wakeup coming due, a line inside an answer rather than the head
-    // of one (`StickySummary.isAnchor`; web's line carries no `data-sticky-label`).
+    // so is a watch's wake, a background job's news, a wakeup coming due or the owner's answer handed to
+    // the coordinator, a line inside an answer rather than the head of one (`StickySummary.isAnchor`;
+    // web's line carries no `data-sticky-label`).
     //
     // Which turns are questions is read once per published state (`StickyQuestions`, kept on the
     // ruler), so a scroll is a lookup rather than a walk re-reading every turn's text.
@@ -954,7 +1060,7 @@ struct TranscriptView: View {
     private func namesAQuestion(_ b: UserBubble) -> Bool {
         !b.queued && StickySummary.isAnchor(text: b.text, note: b.note, itemCard: b.itemCard,
                                             taskStart: b.taskStart, startedCard: b.startedCard,
-                                            sessionMessage: b.sessionMessage)
+                                            sessionMessage: b.sessionMessage, ownerAnswer: b.ownerAnswer)
     }
 
     private var stuckBubble: UserBubble? {
@@ -974,16 +1080,38 @@ struct TranscriptView: View {
                              canPageOlder: canPageOlder,
                              showWorkingIndicator: console.showWorkingIndicator,
                              decisionCards: console.decisionCards,
-                             clocks: console.receiptClocks)
+                             clocks: console.receiptClocks,
+                             recap: recapCard)
     }
 
-    /// Only the load-earlier spinner and the zero-height tail row differ from the chat-flow insets.
+    /// The conversation's last row while it is at rest (`RecapCard`), unless it stepped aside for
+    /// this visit. Read off the session the list and the header read, under the account's Session
+    /// recaps switch, which governs the list row's recap too.
+    private var recapCard: RecapCard? {
+        guard recapAsideFor != console.sessionID, let session = app.session(id: console.sessionID) else { return nil }
+        return RecapCard.make(for: session, recaps: app.user?.preferences?.showRecaps ?? true)
+    }
+
+    /// Whether this conversation is at rest for its card right now (`RecapCard.rests`); a session
+    /// not loaded yet counts as at rest, so nothing steps aside before there is a session.
+    private var recapRests: Bool {
+        app.session(id: console.sessionID).map(RecapCard.rests) ?? true
+    }
+
+    /// Only the load-earlier spinner and the tail row differ from the chat-flow insets.
     private func rowInsets(_ row: TranscriptRow) -> EdgeInsets {
         switch row {
         case .loadOlder: return EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
         case .bottom:    return EdgeInsets()
         default:         return EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16)
         }
+    }
+
+    /// The words of a message at the tail that never reached the engine, back in the composer
+    /// (`ConsoleModel.putBack`): the row goes, and a receipt is discarded with it.
+    private func putBack(_ bubble: UserBubble) -> (() -> Void)? {
+        guard SteerDelivery.offersPutBack(bubble) else { return nil }
+        return { Task { await console.putBack(bubble) } }
     }
 
     @ViewBuilder
@@ -1015,6 +1143,9 @@ struct TranscriptView: View {
         case .approval(let approval):
             // No `AnchorRow`: an approval isn't a "Your question" the sticky header names.
             ApprovalCard(console: console, approval: approval)
+        case .recap(let card):
+            // No `AnchorRow`: the recap sums the conversation up; it asks nothing.
+            RecapCardView(card: card, sessionID: console.sessionID)
         case .working:
             WorkingIndicatorView()
         case .queued(let bubble):
@@ -1024,11 +1155,17 @@ struct TranscriptView: View {
             // Drawn by the row the transcript draws the same turn with once a runner takes it, so a
             // turn that is a card is that card from the moment it is queued — off the cards the
             // projection carried (`QueuedTurnInfo.cards`), never out of its words — and keeps its
-            // shape when it lands; the queue adds only its own controls.
+            // shape when it lands; the queue adds only its own controls. A steer the server still
+            // holds is taken back by its own Withdraw instead, as it is once a runner has it.
             UserTurnRow(bubble: bubble, queued: QueuedControls(bubble: bubble) {
                 Task { await console.cancelQueued(bubble) }
-            })
+            }, steer: SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {
+                Task { await console.withdrawSteer(bubble) }
+            }, putBack: putBack(bubble))
         case .bottom:
+            // Both shapes end in the room the list's fade lies over (`fadesIntoComposerBand`), so a list
+            // at its tail has nothing in the fade. In the row's content, not its insets: every follow and
+            // jump lands on this row (`bottomID`), and room held in its insets would stay below the fold.
             if console.detached {
                 // A window opened at a record ends at a gap: reaching its bottom pulls in the newer page.
                 HStack {
@@ -1037,10 +1174,11 @@ struct TranscriptView: View {
                     Spacer()
                 }
                 .padding(.vertical, 8)
+                .padding(.bottom, .composerBandFade)
                 .accessibilityLabel(SessionRecordLink.Copy.loadingNewer)
                 .onAppear { Task { await console.loadNewer() } }
             } else {
-                Color.clear.frame(height: 1)
+                Color.clear.frame(height: CGFloat.composerBandFade + 1)
             }
         }
     }
@@ -1067,14 +1205,15 @@ struct TranscriptView: View {
     }
 
     // Sticky header that names the turn above the fold and scrolls back to it — web's
-    // `.chat-sticky-question` (muted label + a single ellipsized line, both from `StickySummary`).
-    // `anchor: .top` lands the bubble just under this header (it's a safe-area inset, so the scroll
-    // region starts below it).
+    // `.chat-sticky-question` (muted label + a single ellipsized line, both from `StickySummary`):
+    // a band under the toolbar on macOS, a capsule in the nav bar on iOS (see `chrome`).
+    // `anchor: .top` lands the bubble just under either (the band is a safe-area inset, so the
+    // scroll region starts below it).
     private func stickyQuestion(_ bubble: UserBubble, proxy: ScrollViewProxy) -> some View {
-        // What this turn was and what it said. A watch's wake — or an exception item's delivery — is
-        // still the turn the bar points back at, but it is not the person's question: it gets its
-        // card's own title and line (`StickySummary`), so the bar can't say "your question" above a
-        // card reading "not typed by you".
+        // What this turn was and what it said. An exception item's delivery — or another card the
+        // control plane draws — is still the turn the bar points back at, but it is not the person's
+        // question: it gets its card's own title and line (`StickySummary`), so the bar can't say
+        // "your question" above a card reading otherwise. A wake is no such turn (`isAnchor`).
         let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
                                        taskStart: bubble.taskStart,
                                        startedCard: bubble.startedCard,
@@ -1095,10 +1234,13 @@ struct TranscriptView: View {
             withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bubble.id, anchor: .top) }
             #endif
         } label: { _ in
+            #if os(iOS)
+            questionCapsule(summary)
+            #else
             HStack(spacing: 8) {
                 // Priority, not `fixedSize()`: the label is served first, so the line beside it is
-                // what gives way — but a label as long as "Watch stopped: every target is gone"
-                // truncates itself rather than pushing the line off the row entirely.
+                // what gives way — but a card's label too long for the row truncates itself rather
+                // than pushing the line off the row entirely.
                 Text(summary.label)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.tail).layoutPriority(1)
@@ -1114,36 +1256,40 @@ struct TranscriptView: View {
             // in an overlay has no stack axis and instead renders as a vertical line down the row's center.
             .overlay(alignment: .bottom) { VStack(spacing: 0) { Divider() } }
             .contentShape(Rectangle())
+            #endif
         }
         .accessibilityLabel("Jump to your last question")
         .help("Jump to your last question")
     }
 
+    #if os(iOS)
+    /// The sticky question in the nav bar: the turn's words in a capsule between back and the ⋯ menu,
+    /// their height and their glass. The label and line are the band's, and give way the same way,
+    /// except that the person's own question is labelled by the arrow alone
+    /// (`StickySummary.compactLabel`).
+    private func questionCapsule(_ summary: (label: String, text: String)) -> some View {
+        HStack(spacing: 6) {
+            Text(StickySummary.compactLabel(summary.label))
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .lineLimit(1).truncationMode(.tail).layoutPriority(1)
+            Text(summary.text)
+                .font(.orbitSubtext).foregroundStyle(.primary)
+                .lineLimit(1).truncationMode(.tail)
+        }
+        .padding(.horizontal, 14)
+        .questionGlass()
+        .contentShape(Capsule())
+    }
+    #endif
+
     // Circular "scroll to latest" control (ChatGPT parity). Wrapped in `CoastingButton` so the tap lands
     // even while the List is still coasting, and so a press springs the disc ~1.2× larger (ChatGPT's
     // feel — the shadow deepens with it). The disc rests at 40pt inside a 44pt hit target
-    // (near-filling it, with a hair of margin); bottom padding is 6, so it floats just above the composer.
+    // (near-filling it, with a hair of margin); it sits 6 above the list's fade, so it floats just above
+    // the composer.
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
         CoastingButton {
-            // A window opened at a record ends at a gap: the latest message is past it, so reaching it
-            // re-seeds the window from the tail (`jumpToLatest`), after which the follow pins the bottom.
-            if console.detached {
-                atBottom = true
-                Task { await console.jumpToLatest() }
-                return
-            }
-            #if os(iOS)
-            // Two steps, because neither alone reaches the true bottom while coasting: (1) cancel the
-            // momentum in place via UIKit — otherwise `proxy.scrollTo` is swallowed by the deceleration —
-            // then (2) on the next runloop scroll to the real bottom *row*. Target `bottomID`, not a
-            // computed offset: a lazy List's `contentSize` is only an estimate, so an offset undershoots
-            // the end (it scrolled, but stopped short of the bottom).
-            transcriptScroll.halt()
-            DispatchQueue.main.async { holdScroll(to: bottomID, anchor: .bottom) }
-            #else
-            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bottomID, anchor: .bottom) }
-            #endif
-            atBottom = true
+            jumpToLatest(proxy)
         } label: { pressed in
             Image(systemName: "arrow.down")
                 // A 15pt arrow, close in weight to web's `ArrowDownOutlined`. Fixed size (like
@@ -1168,9 +1314,33 @@ struct TranscriptView: View {
                 .contentShape(Circle())
                 .animation(.spring(response: 0.28, dampingFraction: 0.6), value: pressed)
         }
-        .padding(.bottom, 6)
+        // 6 above the room the tail row keeps under the list, which ends at the composer.
+        .padding(.bottom, CGFloat.composerBandFade + 6)
         .accessibilityLabel(console.detached ? SessionRecordLink.Copy.jumpToLatest : "Scroll to latest")
         .help(console.detached ? SessionRecordLink.Copy.jumpToLatest : "Scroll to latest")
+    }
+
+    /// The jump to the latest: the floating disc's, and the folded composer band's ↓ (`jumpRequest`).
+    private func jumpToLatest(_ proxy: ScrollViewProxy) {
+        // A window opened at a record ends at a gap: the latest message is past it, so reaching it
+        // re-seeds the window from the tail (`jumpToLatest`), after which the follow pins the bottom.
+        if console.detached {
+            atBottom = true
+            Task { await console.jumpToLatest() }
+            return
+        }
+        #if os(iOS)
+        // Two steps, because neither alone reaches the true bottom while coasting: (1) cancel the
+        // momentum in place via UIKit — otherwise `proxy.scrollTo` is swallowed by the deceleration —
+        // then (2) on the next runloop scroll to the real bottom *row*. Target `bottomID`, not a
+        // computed offset: a lazy List's `contentSize` is only an estimate, so an offset undershoots
+        // the end (it scrolled, but stopped short of the bottom).
+        transcriptScroll.halt()
+        DispatchQueue.main.async { holdScroll(to: bottomID, anchor: .bottom) }
+        #else
+        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bottomID, anchor: .bottom) }
+        #endif
+        atBottom = true
     }
 
     #if os(macOS)
@@ -1205,6 +1375,61 @@ struct TranscriptView: View {
     }
     #endif
 }
+
+private extension View {
+    /// The top edge held to iOS 26's soft scroll-edge effect, capsule or not. With the question's
+    /// capsule in the nav bar's centre the phone chose the hard style on its own — a frosted strip
+    /// down to the bar's lower edge, a hairline under it, the rows behind it gone (the owner's
+    /// screenshot, 2026-10-16) — where without the capsule the transcript runs on up behind the bar,
+    /// as the owner asked it to. They asked for that with the capsule too.
+    @ViewBuilder func softTopEdge() -> some View {
+        #if os(iOS)
+        if #available(iOS 26.0, *) { scrollEdgeEffectStyle(.soft, for: .top) } else { self }
+        #else
+        self
+        #endif
+    }
+
+    /// How the transcript meets the composer band: it ends at the band and fades into it — except
+    /// where the band floats over it (iOS 26, `ConsoleView.transcriptAndBand`), and the list runs on
+    /// under the band, where the system's scroll-edge effect is the fade.
+    @ViewBuilder func meetsComposerBand() -> some View {
+        #if os(iOS)
+        if #available(iOS 26.0, *) { self } else { fadesIntoComposerBand() }
+        #else
+        fadesIntoComposerBand()
+        #endif
+    }
+}
+
+#if os(iOS)
+private extension View {
+    /// Where the needs-you bar stands: on iOS 26 a safe-area BAR, so the transcript runs on under
+    /// its capsule and the scroll-edge effect softens what passes there, as under the nav bar above
+    /// it and the composer band below (the owner, 2026-10-16: the bottom as clear as the top; and
+    /// 2026-10-21: the bar a capsule, not a band). Before it, the inset it always was, the bar
+    /// standing on the page's colour.
+    @ViewBuilder func needsYouTop<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View {
+        if #available(iOS 26.0, *) {
+            let content = bar()
+            safeAreaBar(edge: .top, spacing: 0) { content.environment(\.floatsOverTranscript, true) }
+        } else {
+            safeAreaInset(edge: .top, spacing: 0, content: bar)
+        }
+    }
+
+    /// The sticky question's capsule: iOS 26's Liquid Glass at the height of the back and ⋯ buttons
+    /// beside it. Earlier systems draw those as bare glyphs in a 44-point bar, so there it is a
+    /// smaller capsule of system fill, as a search field is.
+    @ViewBuilder func questionGlass() -> some View {
+        if #available(iOS 26.0, *) {
+            frame(height: 44).glassEffect(.regular.interactive(), in: .capsule)
+        } else {
+            frame(height: 32).background(Color(uiColor: .tertiarySystemFill), in: Capsule())
+        }
+    }
+}
+#endif
 
 /// A tap target that still fires while the enclosing `List` is coasting (momentum scroll) — the whole
 /// reason these controls aren't plain `Button`s. On iOS the scroll view's stop-on-tap arbitration eats
@@ -1484,8 +1709,9 @@ private struct ViewportResize: ViewModifier {
 }
 
 /// The single scroll observer: drives the jump-to-latest button's `atBottom` and `tailOutOfView`,
-/// AND feeds the sticky header by stashing the live content offset into `ruler` and asking for a
-/// recompute each frame.
+/// carries a pinned transcript back to its tail when the geometry moves the tail out of view
+/// (`follow`), AND feeds the sticky header by stashing the live content offset into `ruler` and
+/// asking for a recompute each frame.
 /// `onScrollGeometryChange` (macOS 15+/iOS 18+) is read-only — unlike `scrollPosition(id:)` +
 /// `scrollTargetLayout()` it registers no per-row scroll targets, so it won't re-break `List`
 /// virtualization (see the transcript-freeze history). On the earlier floor it's a no-op, leaving
@@ -1498,16 +1724,29 @@ private struct ScrollTracker: ViewModifier {
     @Binding var tailOutOfView: Bool
     let ruler: QuestionRuler
     let recompute: () -> Void
+    /// Asks the transcript for its tail (`TranscriptView.repinAfterResize`): the geometry moved it
+    /// out of view under a pinned reader — the sticky header pushing the rows down as it arrives,
+    /// rows measured taller than they were estimated. See `TailPinning.followsGeometry`.
+    let follow: () -> Void
     #if os(iOS)
     /// The List's own `UIScrollView`, for the one fact UIKit knows better than any geometry: whether
     /// a finger is on it. See `readerIsMoving`.
     let scroll: TranscriptScroll
+    /// Whether the reader has gone back far enough for a phone's composer band to fold to its bar
+    /// (`TailPinning.foldsBand`), decided off the same reading as the pin.
+    var readingBack: Binding<Bool> = .constant(false)
+    /// A finger put on the list: a band its bar opened folds again.
+    var dragged: () -> Void = {}
     #endif
     /// Whether the reader is the one moving the list: a finger on it, or the momentum of one.
     /// `.animating` is SwiftUI moving it (a jump-to-latest, the sticky header) and `.idle` is it
     /// sitting still while content is re-laid-out underneath — neither is a reader. `TailPinning`
     /// needs the difference to tell a drag up from the clamp a row that shrank forces.
     @State private var readerDriven = false
+    /// Whether the platform reports anything moving the list, SwiftUI's own animated scrolls included
+    /// where it reports them (a List's animated `scrollTo` read `idle` throughout on iOS 26): the
+    /// geometry is followed only under a list at rest. See `TailPinning.followsGeometry`.
+    @State private var scrolling = false
 
     /// What the platform can say about that — see `TailPinning.ReaderEvidence`. iOS reports drags,
     /// measured with a synthesized one on the simulator: `interacting` for the finger and
@@ -1537,18 +1776,44 @@ private struct ScrollTracker: ViewModifier {
             content
                 .onScrollPhaseChange { _, phase in
                     readerDriven = phase != .idle && phase != .animating
+                    scrolling = phase != .idle
+                    #if os(iOS)
+                    if phase == .interacting { dragged() }
+                    #endif
                 }
                 .onScrollGeometryChange(for: TailScrollSample.self) { geo in
+                    // The gap is to the bottom of what the reader can see, net of the content's
+                    // bottom inset: where the composer band floats over the list (iOS 26) the list
+                    // runs on under it, and counting that strip as "in view" would pin a reader who
+                    // had scrolled up by less than the band is tall. The inset itself is read too:
+                    // the keyboard and a growing composer lift it, and the follow has to hear that
+                    // (`TailPinning.followsGeometry`). Zero where the list ends at its band.
                     TailScrollSample(offset: Double(geo.contentOffset.y),
                                      contentHeight: Double(geo.contentSize.height),
-                                     bottomGap: Double(geo.contentSize.height - geo.visibleRect.maxY))
+                                     bottomGap: Double(geo.contentSize.height + geo.contentInsets.bottom
+                                                       - geo.visibleRect.maxY),
+                                     topInset: Double(geo.contentInsets.top),
+                                     bottomInset: Double(geo.contentInsets.bottom))
                 } action: { was, now in
-                    atBottom = TailPinning.pinned(wasPinned: atBottom, from: was, to: now,
-                                                  readerDriven: readerIsMoving,
-                                                  evidence: Self.evidence)
+                    let pinned = TailPinning.pinned(wasPinned: atBottom, from: was, to: now,
+                                                    readerDriven: readerIsMoving,
+                                                    evidence: Self.evidence)
+                    atBottom = pinned
                     tailOutOfView = now.bottomGap > TailPinning.nearBottom
+                    #if os(iOS)
+                    // What the folded band keeps over the list: its bar and its foot, over the screen's
+                    // own bottom inset — the window's, which no bar or keyboard moves.
+                    let foldedInset = CGFloat.foldedBandBar + .composerBandFoot
+                        + (scroll.view?.window?.safeAreaInsets.bottom ?? 0)
+                    let back = TailPinning.foldsBand(pinned: pinned, sample: now, foldedInset: Double(foldedInset))
+                    if readingBack.wrappedValue != back { readingBack.wrappedValue = back }
+                    #endif
                     ruler.contentOffset = CGFloat(now.offset)
                     recompute()
+                    if TailPinning.followsGeometry(pinned: pinned, from: was, to: now,
+                                                   moving: scrolling || readerIsMoving) {
+                        follow()
+                    }
                 }
         } else {
             content
@@ -1619,12 +1884,14 @@ struct TranscriptItemView: View {
         case .user(let b):
             // Which card a user turn is — or the owner's bubble — is decided in one place, for the
             // transcript and the queued tail alike (`UserTurnRow`).
-            UserTurnRow(bubble: b)
+            UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):  ToolCardView(card: c, fullPayload: fullPayload)
-        case .interrupt:
-            Label("Interrupted", systemImage: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
+        case .interrupt(_, _, let runnerRestart):
+            // Nobody pressed Stop on a turn the runner's restart cut off: the row says what did (web parity).
+            Label(runnerRestart ? "Interrupted — the runner restarted" : "Interrupted", systemImage: "stop.circle")
+                .font(.orbitLabel).foregroundStyle(.secondary)
         case .error(_, let message):
             if let console, console.executesDsh, let repair = DshRuntime.repair(message) {
                 DshRepairCardView(console: console, repair: repair)
@@ -1661,4 +1928,27 @@ struct TranscriptItemView: View {
                 .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
         }
     }
+
+    /// A steer the reader typed offers to take it back while nothing has read it, through the
+    /// console — which a list drawn without one (a sub-agent's) has none of.
+    private func steerControls(_ bubble: UserBubble) -> SteerControls? {
+        guard let console else { return nil }
+        return SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {
+            Task { await console.withdrawSteer(bubble) }
+        }
+    }
+
+    /// The words of a message in the conversation that never reached the engine, back in the
+    /// composer (`ConsoleModel.putBack`); the bubble itself stays.
+    private func putBack(_ bubble: UserBubble) -> (() -> Void)? {
+        guard let console, SteerDelivery.offersPutBack(bubble) else { return nil }
+        return { Task { await console.putBack(bubble) } }
+    }
+}
+
+/// What `TranscriptView` watches to decide its Recap card's step-aside: which session it shows, and
+/// whether that conversation is at rest for the card.
+private struct RecapVisit: Equatable {
+    let sessionID: String
+    let rests: Bool
 }

@@ -26,6 +26,7 @@ import {
 import {
   criterionLanding,
   readLandingBranches,
+  readLandingJobsByTask,
   taskHasNothingToLand,
   taskLanding,
   type CriterionLanding,
@@ -156,13 +157,25 @@ export async function readDoneState(
       },
     },
   });
-  const stated = criteriaFromDefinitions(definitions);
+  // The line's answers about these branches, beside the tasks rather than below them: 0423 made
+  // `task_id` a history reference, so there is no relation for Prisma to nest. Attached before the
+  // two folds below read them, so a reason is never about a landing the fold did not see.
+  const jobsByTask = await readLandingJobsByTask(
+    tx, definitions.flatMap((definition) => definition.servingTasks.map((task) => task.id)),
+  );
+  const served = definitions.map((definition) => ({
+    ...definition,
+    servingTasks: definition.servingTasks.map((task) => ({
+      ...task, integrationJobs: jobsByTask.get(task.id) ?? [],
+    })),
+  }));
+  const stated = criteriaFromDefinitions(served);
   const satisfaction = new Map(
     (await readCriterionSatisfaction(tx, ownerId, projectId)).map((row) => [row.definitionId, row]),
   );
   const branches = await readLandingBranches(tx, projectId);
   const landing = new Map(
-    criterionLanding(definitions, branches).map((row) => [row.definitionId, row.landing]),
+    criterionLanding(served, branches).map((row) => [row.definitionId, row.landing]),
   );
   const jobs = (await tx.projectIntegrationJob.findMany({
     where: {
@@ -181,7 +194,7 @@ export async function readDoneState(
   }));
 
   const criteria = stated.map((criterion): DoneStateCriterion => {
-    const definition = definitions.find((row) => row.id === criterion.definitionId)!;
+    const definition = served.find((row) => row.id === criterion.definitionId)!;
     const met = satisfaction.get(criterion.definitionId);
     const landed = landing.get(criterion.definitionId) ?? ('UNKNOWN' satisfies CriterionLanding);
     const heldUpBy = new Map<string, string>();
@@ -220,6 +233,9 @@ export async function readDoneState(
     where: {
       ownerId,
       status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
+      // "Nothing is still running" counts engine runs; the landing container is the platform's
+      // own and is never one (§2.9 LS6).
+      sessionKind: 'CONVERSATION',
       task: { projectId },
       ...(askingSessionId ? { id: { not: askingSessionId } } : {}),
     },

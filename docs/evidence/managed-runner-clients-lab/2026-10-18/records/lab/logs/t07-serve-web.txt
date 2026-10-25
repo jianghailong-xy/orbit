@@ -1,0 +1,2 @@
+web /root/.orbit/worktrees/7ddda73b-7127-5859-a253-c2d61bb5aa40/src/web/dist on http://127.0.0.1:5873 -> api 127.0.0.1:13710
+web /root/.orbit/worktrees/7ddda73b-7127-5859-a253-c2d61bb5aa40/src/web/dist on http://127.0.0.1:5873 -> api 127.0.0.1:13710

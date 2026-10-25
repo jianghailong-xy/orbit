@@ -1,0 +1,796 @@
+{
+ "beyond": [
+  {
+   "clusters": [
+    [
+     [
+      109,
+      240
+     ],
+     [
+      634,
+      648
+     ],
+     344,
+     1
+    ],
+    [
+     [
+      146,
+      146
+     ],
+     [
+      634,
+      634
+     ],
+     1,
+     1
+    ],
+    [
+     [
+      195,
+      222
+     ],
+     [
+      634,
+      640
+     ],
+     41,
+     1
+    ],
+    [
+     [
+      214,
+      239
+     ],
+     [
+      634,
+      640
+     ],
+     36,
+     1
+    ],
+    [
+     [
+      228,
+      239
+     ],
+     [
+      634,
+      637
+     ],
+     15,
+     1
+    ],
+    [
+     [
+      311,
+      345
+     ],
+     [
+      634,
+      648
+     ],
+     120,
+     1
+    ]
+   ],
+   "max": 7,
+   "pixels": 1958,
+   "shot": "chromium-light-phone/p44-doc-footnote-44.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      0,
+      329
+     ],
+     [
+      457,
+      621
+     ],
+     49475,
+     249
+    ],
+    [
+     [
+      34,
+      84
+     ],
+     [
+      458,
+      466
+     ],
+     122,
+     1
+    ],
+    [
+     [
+      53,
+      60
+     ],
+     [
+      459,
+      460
+     ],
+     4,
+     1
+    ],
+    [
+     [
+      187,
+      187
+     ],
+     [
+      691,
+      691
+     ],
+     1,
+     1
+    ]
+   ],
+   "max": 249,
+   "pixels": 49602,
+   "shot": "chromium-light-phone/p44-doc-mark-footnote.png"
+  }
+ ],
+ "missing": [],
+ "screenshots": {
+  "antialias": 3,
+  "beyond": 2,
+  "identical": 9,
+  "missing": 0
+ },
+ "styleDeltas": {
+  "chromium-light-phone/p44-doc-footnote-44": {
+   "sheet": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ]
+   }
+  },
+  "chromium-light-phone/p44-doc-footnote-9": {
+   "sheet": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ]
+   }
+  },
+  "chromium-light-phone/p44-doc-mark": {
+   "tip": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgba(0, 0, 0, 0.85)"
+    ],
+    "border": [
+     "0px none rgb(31, 35, 41)",
+     "0px none rgb(255, 255, 255)"
+    ],
+    "color": [
+     "rgb(31, 35, 41)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "6px"
+    ]
+   }
+  },
+  "chromium-light-phone/p44-shared-wiki-footnote": {
+   "sheet": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ]
+   }
+  }
+ },
+ "tests": {
+  "notPassedDel": [],
+  "notPassedRef": [],
+  "total": 3
+ },
+ "traces": {
+  "differing": {
+   "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "cards": 5,
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "active",
+      "url": "/following"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid"
+      ],
+      "cards": 5,
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "active",
+      "url": "/following"
+     },
+     "step": "active"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "Stop this watch?You won't be notified when the condition holds.Keep watchingStop watching"
+      ],
+      "focus": {
+       "name": "Stop this watch?",
+       "role": "dialog"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "stop question",
+      "url": "/following"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-popconfirm-buttons",
+       "ant-popconfirm-description",
+       "ant-popconfirm-inner-content",
+       "ant-popconfirm-message",
+       "ant-popconfirm-message-icon",
+       "ant-popconfirm-message-text",
+       "ant-popconfirm-title",
+       "ant-popover-arrow",
+       "ant-popover-container",
+       "ant-popover-content",
+       "ant-popover-open"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Stop",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "stop question",
+      "url": "/following"
+     },
+     "step": "stop question"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Resume",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/watches/2zwQZ2hd93IvLb59t6tZx/pause"
+       }
+      ],
+      "step": "paused",
+      "url": "/following"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Resume",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/watches/2zwQZ2hd93IvLb59t6tZx/pause"
+       }
+      ],
+      "step": "paused",
+      "url": "/following"
+     },
+     "step": "paused"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Needs attention1",
+       "role": "tab"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "Needs attention",
+      "url": "/following?tab=attention"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Needs attention1",
+       "role": "tab"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "Needs attention",
+      "url": "/following?tab=attention"
+     },
+     "step": "Needs attention"
+    }
+   ],
+   "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "document",
+      "url": "/wiki/orbit/d/session-runtime"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-variant-outlined"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "document",
+      "url": "/wiki/orbit/d/session-runtime"
+     },
+     "step": "document"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "claimRetryDelayAfter 函数根据连续失败次数计算延迟，每次翻倍但不超过 claimRetryMaxDelay。",
+       "role": "span"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "mark explained",
+      "tip": "Not verified. Its footnote cites code without quoting it, so the sentence couldn’t be checked. See footnote [10]",
+      "url": "/wiki/orbit/d/session-runtime"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-variant-outlined",
+       "ant-tooltip",
+       "ant-tooltip-arrow",
+       "ant-tooltip-container",
+       "ant-tooltip-css-var",
+       "ant-tooltip-open",
+       "ant-tooltip-placement-bottomLeft"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "claimRetryDelayAfter 函数根据连续失败次数计算延迟，每次翻倍但不超过 claimRetryMaxDelay。",
+       "role": "span"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "mark explained",
+      "tip": "Not verified. Its footnote cites code without quoting it, so the sentence couldn’t be checked. See footnote [10]",
+      "url": "/wiki/orbit/d/session-runtime"
+     },
+     "step": "mark explained"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "card": "[10]Code✗ no quote given",
+      "dialogs": [
+       "[10]Code✗ no quote givenThe sentence cites this code without quoting it, so it couldn’t be checked.src/runner-go/runloop"
+      ],
+      "focus": {
+       "name": "[10]Code✗ no quote givenThe sentence cites this code without quoting it, so it c",
+       "role": "dialog"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "footnote from the mark",
+      "url": "/wiki/orbit/d/session-runtime"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-block",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-lg",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-drawer",
+       "ant-drawer-body",
+       "ant-drawer-bottom",
+       "ant-drawer-content-wrapper",
+       "ant-drawer-mask",
+       "ant-drawer-open",
+       "ant-drawer-panel-motion-bottom",
+       "ant-drawer-panel-motion-bottom-appear",
+       "ant-drawer-panel-motion-bottom-appear-active",
+       "ant-drawer-section",
+       "ant-tooltip",
+       "ant-tooltip-arrow",
+       "ant-tooltip-container",
+       "ant-tooltip-css-var",
+       "ant-tooltip-open",
+       "ant-tooltip-placement-bottomLeft"
+      ],
+      "card": "[10]Code✗ no quote given",
+      "dialogs": [
+       "[10]Code✗ no quote givenThe sentence cites this code without quoting it, so it couldn’t be checked.src/runner-go/runloop"
+      ],
+      "focus": {
+       "name": "[10]Code✗ no quote givenThe sentence cites this code without quoting it, so it c",
+       "role": "div"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "footnote from the mark",
+      "url": "/wiki/orbit/d/session-runtime"
+     },
+     "step": "footnote from the mark"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "card": "[44]Session· User messagequote verified ✓",
+      "dialogs": [
+       "[44]Session· User messagequote verified ✓“runner — drain 就会把作业杀掉，唤醒不一定送到，你这次就是这么停了六小时”执行任务：例外待办：模型、FAILED 全路径来源 · 项目推进可靠"
+      ],
+      "focus": {
+       "name": "[44]Session· User messagequote verified ✓“runner — drain 就会把作业杀掉，唤醒不一定送到，你这次就是这么",
+       "role": "dialog"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "open": [
+       "Open at this turn"
+      ],
+      "requests": [],
+      "step": "footnote 44",
+      "url": "/wiki/orbit/d/session-runtime"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-block",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-lg",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-drawer",
+       "ant-drawer-body",
+       "ant-drawer-bottom",
+       "ant-drawer-content-wrapper",
+       "ant-drawer-mask",
+       "ant-drawer-open",
+       "ant-drawer-panel-motion-bottom",
+       "ant-drawer-panel-motion-bottom-enter",
+       "ant-drawer-panel-motion-bottom-enter-active",
+       "ant-drawer-section"
+      ],
+      "card": "[44]Session· User messagequote verified ✓",
+      "dialogs": [
+       "[44]Session· User messagequote verified ✓“runner — drain 就会把作业杀掉，唤醒不一定送到，你这次就是这么停了六小时”执行任务：例外待办：模型、FAILED 全路径来源 · 项目推进可靠"
+      ],
+      "focus": {
+       "name": "[44]Session· User messagequote verified ✓“runner — drain 就会把作业杀掉，唤醒不一定送到，你这次就是这么",
+       "role": "div"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "open": [
+       "Open at this turn"
+      ],
+      "requests": [],
+      "step": "footnote 44",
+      "url": "/wiki/orbit/d/session-runtime"
+     },
+     "step": "footnote 44"
+    }
+   ],
+   "chromium-light-phone :: P4.4 public pages › a shared project and a shared wiki": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "rows": [
+       "Port the dialog primitives IN_PROGRESSRunningblocks 10 subtasks",
+       "Migrate settings forms OPENBlockedwaits 12 subtasks",
+       "Inventory components DONEOn the project branchblocks 10 subtasks"
+      ],
+      "step": "shared project",
+      "url": "/s/uiMigrationP43aProject20260928"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-list",
+       "ant-list-container",
+       "ant-list-item",
+       "ant-list-item-meta",
+       "ant-list-item-meta-content",
+       "ant-list-item-meta-title",
+       "ant-list-items",
+       "ant-list-split",
+       "ant-spin",
+       "ant-spin-container",
+       "ant-tag",
+       "ant-tag-blue",
+       "ant-tag-default",
+       "ant-tag-filled",
+       "ant-tag-gold",
+       "ant-tag-green",
+       "ant-tag-processing",
+       "ant-typography"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "rows": [
+       "Port the dialog primitives IN_PROGRESSRunningblocks 10 subtasks",
+       "Migrate settings forms OPENBlockedwaits 12 subtasks",
+       "Inventory components DONEOn the project branchblocks 10 subtasks"
+      ],
+      "step": "shared project",
+      "url": "/s/uiMigrationP43aProject20260928"
+     },
+     "step": "shared project"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "card": "[1]Codequote verified ✓",
+      "dialogs": [
+       "[1]Codequote verified ✓10function claim() {11 claimTurn(next);12}src/runner/loop.ts · RunLoop.claim · L10–12"
+      ],
+      "focus": {
+       "name": "[1]Codequote verified ✓10function claim() {11 claimTurn(next);12}src/runner/loop",
+       "role": "dialog"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "shared footnote",
+      "url": "/s/uiMigrationP44Wiki20260928/d/session-runtime"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-drawer",
+       "ant-drawer-body",
+       "ant-drawer-bottom",
+       "ant-drawer-content-wrapper",
+       "ant-drawer-mask",
+       "ant-drawer-open",
+       "ant-drawer-panel-motion-bottom",
+       "ant-drawer-panel-motion-bottom-appear",
+       "ant-drawer-panel-motion-bottom-appear-active",
+       "ant-drawer-section"
+      ],
+      "card": "[1]Codequote verified ✓",
+      "dialogs": [
+       "[1]Codequote verified ✓10function claim() {11 claimTurn(next);12}src/runner/loop.ts · RunLoop.claim · L10–12"
+      ],
+      "focus": {
+       "name": "[1]Codequote verified ✓10function claim() {11 claimTurn(next);12}src/runner/loop",
+       "role": "div"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "shared footnote",
+      "url": "/s/uiMigrationP44Wiki20260928/d/session-runtime"
+     },
+     "step": "shared footnote"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Footnote 1",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "closed",
+      "url": "/s/uiMigrationP44Wiki20260928/d/session-runtime"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-drawer",
+       "ant-drawer-bottom"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Footnote 1",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "closed",
+      "url": "/s/uiMigrationP44Wiki20260928/d/session-runtime"
+     },
+     "step": "closed"
+    }
+   ]
+  },
+  "equal": 0,
+  "total": 3
+ }
+}

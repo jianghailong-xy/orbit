@@ -1,0 +1,132 @@
+{
+ "checks": [
+  {
+   "check": "the self-managed runner reported its engines",
+   "ok": true,
+   "value": {
+    "capabilities_reported_at": "2026-10-18T12:32:21.278+00:00",
+    "last_heartbeat_at": "2026-10-18T12:32:21.275",
+    "status": "ONLINE"
+   }
+  },
+  {
+   "check": "Claude Code is installed on it",
+   "ok": true,
+   "value": [
+    {
+     "auth": "no",
+     "engine": "claude",
+     "installed": true,
+     "version": "2.1.302 (Claude Code)"
+    },
+    {
+     "auth": "no",
+     "engine": "codex",
+     "installed": true,
+     "version": "codex-cli 0.163.0"
+    },
+    {
+     "auth": "no",
+     "engine": "kimi",
+     "installed": true,
+     "version": "2.2.0"
+    },
+    {
+     "auth": "unknown",
+     "engine": "opencode",
+     "installed": true,
+     "version": "1.19.3"
+    },
+    {
+     "auth": "no",
+     "engine": "antigravity",
+     "installed": true,
+     "version": "1.4.2"
+    },
+    {
+     "auth": "unknown",
+     "engine": "dsh",
+     "installed": false,
+     "version": null
+    },
+    {
+     "auth": "unknown",
+     "engine": "cursor",
+     "installed": false,
+     "version": null
+    }
+   ]
+  }
+ ],
+ "endedAt": "2026-10-18T12:32:21.988+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "off-unset",
+ "result": {
+  "engines": [
+   {
+    "auth": "no",
+    "engine": "claude",
+    "installed": true,
+    "version": "2.1.302 (Claude Code)"
+   },
+   {
+    "auth": "no",
+    "engine": "codex",
+    "installed": true,
+    "version": "codex-cli 0.163.0"
+   },
+   {
+    "auth": "no",
+    "engine": "kimi",
+    "installed": true,
+    "version": "2.2.0"
+   },
+   {
+    "auth": "unknown",
+    "engine": "opencode",
+    "installed": true,
+    "version": "1.19.3"
+   },
+   {
+    "auth": "no",
+    "engine": "antigravity",
+    "installed": true,
+    "version": "1.4.2"
+   },
+   {
+    "auth": "unknown",
+    "engine": "dsh",
+    "installed": false,
+    "version": null
+   },
+   {
+    "auth": "unknown",
+    "engine": "cursor",
+    "installed": false,
+    "version": null
+   }
+  ],
+  "provider": "deepseek",
+  "row": {
+   "capabilities_reported_at": "2026-10-18T12:32:21.278+00:00",
+   "last_heartbeat_at": "2026-10-18T12:32:21.275",
+   "status": "ONLINE"
+  },
+  "runner": {
+   "id": "34i3N83EBpSh37jfGV0Kl",
+   "name": "t08-selfhost",
+   "status": "ONLINE"
+  },
+  "unit": "active",
+  "workspace": {
+   "id": "34i3N84yzeNMT1r9t6jxf",
+   "name": "t08 self-managed",
+   "runnerId": "34i3N83EBpSh37jfGV0Kl",
+   "workDir": "/mnt/data/tmp/t08sh/work/repo"
+  }
+ },
+ "seconds": 30.8,
+ "startedAt": "2026-10-18T12:31:51.151+00:00",
+ "step": "selfhost"
+}

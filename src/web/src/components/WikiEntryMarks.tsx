@@ -1,7 +1,7 @@
 import { CheckCircleOutlined, CheckOutlined, GlobalOutlined, InfoCircleOutlined } from '@ant-design/icons';
-import { Button } from 'antd';
 import { relTime } from './Transcript';
 import { WikiRejectButton, useRejectEntry } from './WikiRunPage';
+import { Button } from './ui/Button';
 import {
   WIKI_HISTORY_CONFIRMED_BY,
   WIKI_HISTORY_MAINTENANCE,
@@ -35,7 +35,7 @@ export function WikiEntryAnswers({ entry }: { entry: WikiEntryDetail }) {
     <>
       {wikiCanConfirm(entry) && (
         <Button
-          type="primary"
+          variant="primary"
           icon={<CheckOutlined />}
           loading={confirm.isPending}
           onClick={async () => {

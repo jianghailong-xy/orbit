@@ -65,6 +65,8 @@ interface Reads {
   /** How many times the whole read asked the task table, for a history that must ask it once. */
   taskQueries?: number;
   merged?: Record<string, unknown>;
+  /** The count of exceptions open on the merge into main, as the checking card's answer asked it. */
+  openOnMain?: { sql: string };
 }
 
 /**
@@ -82,20 +84,53 @@ function prismaStub(
     /** The finished checks of this project, newest first, as how long each one took in ms. */
     runs?: number[];
     execution?: { state: string; phase: string | null; startedAt: Date | null; createdAt: Date } | null;
+    /** What a candidate being checked reads its `onPass` from: the project, its binding, and how many
+     *  exceptions are open on its merge into main. Defaults: Automatic on, not paused, its own branch,
+     *  nothing open. */
+    facts?: {
+      coordinatorEnabled?: boolean;
+      pausedAt?: Date | null;
+      integrationRef?: string;
+      openOnMain?: number;
+    };
+    /** The landing each candidate's newest job names, by promotion id (§2.9 LS1's read). A candidate
+     *  the fixture gives none answers no job, and reads as no session. */
+    landingOf?: Record<string, string>;
     reads?: Reads;
   } = {},
 ): PrismaService {
   const reads: Reads = over.reads ?? {};
   const tx = {
+    // The generation the candidate's next job takes: raw SQL, read under this client
+    // (see queuePromotionJob's comment).
+    $queryRaw: async () => [{ generation: 0 }],
+    // The enqueue's timeline fact (migration 0438); this read-model spec does not draw the ledger.
+    $executeRaw: async () => 1,
     projectPromotion: {
       findFirst: async () => row(over.promotion),
       updateMany: async () => ({ count: 1 }),
       update: async () => row(over.promotion),
     },
-    projectCodebase: { findUnique: async () => ({ canonicalRepoUrl: 'git@example.com:repo.git' }) },
+    projectCodebase: {
+      findUnique: async () => ({
+        canonicalRepoUrl: 'git@example.com:repo.git',
+        integrationRef: 'refs/heads/project/bg-jobs',
+        upstreamRef: 'refs/heads/main',
+      }),
+    },
     projectIntegrationJob: {
-      aggregate: async () => ({ _max: { generation: 0 } }),
       createManyAndReturn: async () => [{ id: 'job-1' }],
+      // The enqueue's idempotency pre-check and its inheritance of a subject from an earlier
+      // generation of the same candidate (migration 0436).
+      findUnique: async () => null,
+      findFirst: async () => null,
+    },
+    // A PROJECT_BRANCH promotion opens or joins its merge round; this read-model spec is not about
+    // the round's row, so it lets the enqueue open one.
+    projectLanding: {
+      findFirst: async () => null,
+      aggregate: async () => ({ _max: { episode: null } }),
+      createManyAndReturn: async () => [{ id: 'landing-1', sessionId: 'landing-session-1' }],
     },
     projectOpenItem: { updateMany: async () => ({ count: 0 }) },
   };
@@ -126,6 +161,16 @@ function prismaStub(
           : { finishedAt: over.syncAt };
       },
       findMany: async (args: Record<string, unknown>) => {
+        const where = args.where as Record<string, unknown>;
+        // The landing-session read (§2.9 LS1): the newest job of each candidate that names a
+        // landing. A candidate the fixture gives none answers no job, and reads as no session.
+        if (where.landingId) {
+          const promotions = (where.promotionId as { in: string[] }).in;
+          return promotions.flatMap((promotionId) => {
+            const landingId = over.landingOf?.[promotionId];
+            return landingId ? [{ promotionId, landingId }] : [];
+          });
+        }
         reads.runs = args;
         const base = Date.parse('2026-09-13T09:00:00.000Z');
         return (over.runs ?? []).map((durationMs, index) => ({
@@ -134,7 +179,29 @@ function prismaStub(
         }));
       },
     },
-    project: { findFirst: async () => ({ ownerId: 'owner-1' }) },
+    projectLanding: {
+      findMany: async (args: Record<string, unknown>) => {
+        const ids = ((args.where as Record<string, unknown>).id as { in: string[] }).in;
+        return ids.map((id) => ({ id, sessionId: `session-of-${id}` }));
+      },
+    },
+    project: {
+      findFirst: async () => ({ ownerId: 'owner-1' }),
+      findUnique: async () => ({
+        coordinatorEnabled: over.facts?.coordinatorEnabled ?? true,
+        pausedAt: over.facts?.pausedAt ?? null,
+      }),
+    },
+    projectCodebase: {
+      findUnique: async () => ({
+        integrationRef: over.facts?.integrationRef ?? 'refs/heads/project/bg-jobs',
+        upstreamRef: 'refs/heads/main',
+      }),
+    },
+    $queryRaw: async (query: { sql: string }) => {
+      reads.openOnMain = query;
+      return [{ open: over.facts?.openOnMain ?? 0 }];
+    },
     $transaction: async (work: (client: unknown) => Promise<unknown>) => work(tx),
   } as unknown as PrismaService;
 }
@@ -418,4 +485,62 @@ test('a project that has merged nothing is answered without reading a task table
 
   assert.deepEqual(view, []);
   assert.equal(reads.taskQueries, undefined);
+});
+
+test('a candidate being checked says what a pass leads to, read off the project as it stands', async () => {
+  const reads: Reads = {};
+  const checking = { state: 'CHECKING', upstreamShaChecked: null, mergeTreeSha: null };
+  assert.equal((await current({ promotion: checking, reads }))?.onPass, 'MERGE',
+    'its own branch, Automatic on, not paused, nothing open on the merge into main: merged by itself');
+  // Only the exceptions on the merge into main are counted: a task that failed to land on the
+  // project branch is in nothing a candidate carries (owner decision 2026-10-15).
+  assert.match(reads.openOnMain?.sql ?? '', /"promotion_id" IS NOT NULL/);
+
+  const asking: Array<[string, NonNullable<Parameters<typeof prismaStub>[0]>['facts']]> = [
+    ['Automatic off', { coordinatorEnabled: false }],
+    ['the project paused', { pausedAt: new Date('2026-10-15T08:00:00.000Z') }],
+    ['an exception open on the merge into main', { openOnMain: 1 }],
+    ['the project integrating on main itself', { integrationRef: 'refs/heads/main' }],
+  ];
+  for (const [what, facts] of asking) {
+    assert.equal((await current({ promotion: checking, facts }))?.onPass, 'ASK', `${what}: a pass asks the owner`);
+  }
+
+  assert.equal((await current({ promotion: { state: 'READY' } }))?.onPass, null,
+    'a candidate past its check says nothing about one');
+});
+
+/**
+ * §2.9 LS1 / §3.6: the check line and the receipt open the landing their round belongs to. The
+ * field is read from the candidate's own job and its landing row — never from
+ * `project_landing.promotion_id`, which names only the round's first candidate.
+ */
+test('the card names the round’s landing session exactly while one is there to open', async () => {
+  const candidate = '3fFMHLbE7JTsr3vHFOzIDM';
+  for (const state of ['CHECKING', 'CONFIRMED', 'RECHECKING']) {
+    const view = await current({ promotion: { state }, landingOf: { [candidate]: 'landing-1' } });
+    assert.equal(view?.landingSessionId, 'session-of-landing-1',
+      `${state}: the card lost the landing its attempt belongs to`);
+  }
+  // A candidate waiting on somebody, one a check blocked and ones that ended are waiting on no
+  // landing to open, whatever their earlier jobs named.
+  for (const state of ['READY', 'BLOCKED', 'DECLINED', 'CANCELLED', 'SUPERSEDED']) {
+    const view = await current({ promotion: { state }, landingOf: { [candidate]: 'landing-1' } });
+    assert.equal(view?.landingSessionId, null, `${state}: opened a landing nobody is waiting on`);
+  }
+  assert.equal((await current({ promotion: { state: 'CHECKING' } }))?.landingSessionId, null,
+    'a round that recorded no landing reads as no session rather than an invented one');
+});
+
+test('a merged receipt carries the landing session of the round that merged it', async () => {
+  const mergedAt = new Date('2026-09-13T12:00:00.000Z');
+  const [view] = await merged({
+    mergedRows: [{
+      id: 'promo-merged', state: 'MERGED', mergedSha: 'd'.repeat(40), mergedAt,
+      includedTaskIds: [],
+    }],
+    landingOf: { 'promo-merged': 'landing-9' },
+  });
+  assert.equal(view?.landingSessionId, 'session-of-landing-9',
+    'the receipt’s "Open landing ›" would have nothing to open');
 });

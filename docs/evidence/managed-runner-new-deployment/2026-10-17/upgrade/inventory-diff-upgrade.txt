@@ -1,0 +1,2 @@
+volumes and networks: identical before and after the upgrade
+container names: identical before and after the upgrade

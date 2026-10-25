@@ -1,5 +1,6 @@
 import { uuidToBase62 } from '@orbit/shared';
 import path from 'path';
+import type { PrismaService } from '../prisma/prisma.service';
 
 // Agents commonly cite a source file as `/path/file.ts:123` (or a small line range). The suffix
 // is a location hint, not part of the file name the runner can read.
@@ -52,4 +53,26 @@ export function resolveLegacyArtifactPath(
   if (marker < 0 || parts.length <= marker + 3) return null;
   const root = path.join(path.sep, ...parts.slice(0, marker + 3));
   return { original: decoded, file: normalized, root };
+}
+
+/**
+ * Whether any event of this session has `text` somewhere in its payload — the check the artifact
+ * door makes before it serves a legacy path, asked in the database rather than by pulling the whole
+ * transcript into Node (which is what it did: every event's payload of the session, ~6.7 MB on a
+ * 5125-event one, each `JSON.stringify`d to look for a substring, all to answer one boolean).
+ *
+ * `strpos` over jsonb's own rendering is the same substring test the JS made, and the argument is a
+ * literal rather than a pattern: no `%` or `_` in a path can widen the match the way a `LIKE` would.
+ */
+export async function runEventPayloadMentions(
+  db: Pick<PrismaService, '$queryRaw'>,
+  sessionId: string,
+  text: string,
+): Promise<boolean> {
+  const [hit] = await db.$queryRaw<Array<{ one: number }>>`
+    SELECT 1 AS "one" FROM "run_event"
+     WHERE "session_id" = ${sessionId}::uuid AND strpos("payload"::text, ${text}) > 0
+     LIMIT 1
+  `;
+  return hit != null;
 }

@@ -48,12 +48,16 @@ function codexInput(provider = 'codex'): ModelRoutingInput {
   return value;
 }
 
+/** The decision as `expected` states it. Its engine is checked where the case names one: elsewhere it is the
+ *  engine the credential runs on, which every case below that moves a run names. */
 function assertDecision(
   actual: ModelRoutingDecision,
-  expected: ModelRoutingSelection & { level: ModelRoutingLevel | null },
+  expected: ModelRoutingSelection & { level: ModelRoutingLevel | null; engine?: string },
 ): void {
-  const { reasons, ...selection } = actual;
-  assert.deepEqual(selection, { policyVersion: 1, ...expected });
+  const { reasons, engine, ...selection } = actual;
+  const { engine: expectedEngine, ...rest } = expected;
+  assert.deepEqual(selection, { policyVersion: 1, ...rest });
+  if (expectedEngine !== undefined) assert.equal(engine, expectedEngine);
   assert.ok(reasons.length > 0);
   assert.ok(reasons.every((reason) => typeof reason === 'string' && reason.length > 0));
 }
@@ -115,7 +119,9 @@ test('a provider pin fixes the engine and still routes model and effort', () => 
   value.task = { provider: 'claude-pool', modelHint: 'S' };
   const result = routeTaskRun(value);
   assertDecision(result, { level: 'S', provider: 'claude-pool', model: SONNET, effort: 'low' });
-  assert.ok(result.reasons.some((reason) => /Engine claude-pool: pinned on the task/.test(reason)));
+  // The reason names the engine, not the credential pinned on it (docs/provider-engine-contract.md §4.4).
+  assert.ok(result.reasons.some((reason) => /Engine claude: pinned on the task/.test(reason)));
+  assert.equal(result.engine, 'claude');
 });
 
 test('family matching uses value prefixes and minimum priority, returning exact ids', () => {
@@ -396,6 +402,27 @@ test('quota failures neither add escalation nor interrupt the preceding failure 
   assertDecision(routeTaskRun(value), { ...value.baseline, level: null });
 });
 
+test('a Codex run that found the model at capacity keeps the tier; a genuine failure still raises it', () => {
+  const value = codexInput();
+  const prior: ModelRoutingRun = {
+    ordinal: 1, status: 'FAILED', quotaFailure: false, model: 'gpt-default', effort: 'low', runtime: 'codex',
+  };
+  value.history = [
+    { ordinal: 2, status: 'FAILED', quotaFailure: false, capacityFailure: true, model: 'gpt-default', effort: 'medium', runtime: 'codex' },
+  ];
+  const kept = routeTaskRun(value);
+  assert.equal(kept.level, null);
+  assert.equal(kept.effort, value.baseline.effort);
+  assert.ok(kept.reasons.some((reason) => /Run 2 found the model at capacity — not counted/.test(reason)));
+
+  // Behind it, the run before still decides: one genuine failure at S (effort low) raises to M, once.
+  value.history = [...value.history, prior];
+  const raised = routeTaskRun(value);
+  assert.equal(raised.level, 'M');
+  assert.equal(raised.effort, 'medium');
+  assert.match(raised.reasons[0], /run 1 \(S\)/);
+});
+
 function freeze<T>(value: T): T {
   if (value && typeof value === 'object') {
     Object.values(value).forEach(freeze);
@@ -460,7 +487,7 @@ for (const utilization of [89.9, 90, 100]) {
       assert.ok(result.reasons.includes("Engine claude: this agent's own engine"));
     } else {
       // Same tier, on the other engine's tier table.
-      assertDecision(result, { level: 'M', provider: 'codex', model: 'gpt-default', effort: 'medium' });
+      assertDecision(result, { level: 'M', engine: 'codex', provider: 'codex', model: 'gpt-default', effort: 'medium' });
       assert.ok(result.reasons.includes(`Engine codex: claude is at ${utilization}% of its weekly quota`));
     }
   });
@@ -471,7 +498,7 @@ test('an agent\'s own engine signed out on the runner moves the run to an allowe
   value.task = { modelHint: 'XL' };
   setState(value, 'claude', { signedOut: true });
   const result = routeTaskRun(value);
-  assertDecision(result, { level: 'XL', provider: 'codex', model: 'gpt-default', effort: 'xhigh' });
+  assertDecision(result, { level: 'XL', engine: 'codex', provider: 'codex', model: 'gpt-default', effort: 'xhigh' });
   assert.deepEqual(result.reasons, [
     'Tier XL: suggested by the coordinator', 'Engine codex: claude is signed out on this runner',
   ]);
@@ -483,7 +510,7 @@ test('a run moves from Codex to Claude on the same tier, mapped onto Claude\'s t
   value.environment.modelCatalog!.claude = input().environment.modelCatalog!.claude;
   value.engines = { allowed: ['claude'], states: { codex: { quota: { utilization: 97, window: '5-hour' } }, claude: {} } };
   const result = routeTaskRun(value);
-  assertDecision(result, { level: 'L', provider: 'claude', model: OPUS, effort: 'high' });
+  assertDecision(result, { level: 'L', engine: 'claude', provider: 'claude', model: OPUS, effort: 'high' });
   assert.ok(result.reasons.includes('Engine claude: codex is at 97% of its 5-hour quota'));
 });
 
@@ -566,5 +593,5 @@ test('an engine with no tier table is never a candidate, nor the same runtime un
   pool.engines!.states = { 'claude-pool': { signedOut: true }, claude: {} };
   const pooled = routeTaskRun(pool);
   assert.equal(pooled.provider, 'claude-pool');
-  assert.ok(pooled.reasons.includes("Engine claude-pool: this agent's own engine"));
+  assert.ok(pooled.reasons.includes("Engine claude: this agent's own engine"));
 });

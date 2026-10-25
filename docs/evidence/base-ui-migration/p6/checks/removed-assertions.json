@@ -1,0 +1,907 @@
+{
+ "commit": "c4396e776",
+ "removed": 128,
+ "counts": {
+  "comparison": 39,
+  "kept": 51,
+  "coexistence": 38
+ },
+ "assertions": [
+  {
+   "file": "choices-first-frame.browser.mjs",
+   "oldLine": 198,
+   "test": "`${name} is drawn where it settles from its first frame, at the replaced popup's place`",
+   "line": "expect.soft(antd.settled.shown, `${place.name}: AntD shown`).toBe(true);",
+   "class": "comparison"
+  },
+  {
+   "file": "choices-first-frame.browser.mjs",
+   "oldLine": 205,
+   "test": "`${name} is drawn where it settles from its first frame, at the replaced popup's place`",
+   "line": "expect.soft(within(fromAnchor(settled, kind.compared), expected), `${place.name}, ${opening}: AntD's box`).toEqual(expected);",
+   "class": "comparison"
+  },
+  {
+   "file": "choices-first-option.browser.mjs",
+   "oldLine": 44,
+   "test": "`opened by ${opener} with ${sample.name}, the list is on the option the old select was on and Enter picks it`",
+   "line": "await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);",
+   "class": "kept"
+  },
+  {
+   "file": "choices-first-option.browser.mjs",
+   "oldLine": 62,
+   "test": "`opened by ${opener} with ${sample.name}, the list is on the option the old select was on and Enter picks it`",
+   "line": "await expect(choice).toHaveAttribute('aria-expanded', 'false', { timeout: 5_000 }).catch(() => {});",
+   "class": "kept"
+  },
+  {
+   "file": "choices-first-option.browser.mjs",
+   "oldLine": 63,
+   "test": "`opened by ${opener} with ${sample.name}, the list is on the option the old select was on and Enter picks it`",
+   "line": "await expect(choice).toBeFocused({ timeout: 5_000 }).catch(() => {});",
+   "class": "kept"
+  },
+  {
+   "file": "choices-first-option.browser.mjs",
+   "oldLine": 69,
+   "test": "`opened by ${opener} with ${sample.name}, the list is on the option the old select was on and Enter picks it`",
+   "line": "expect(results.antd.highlighted).toEqual([sample.opensOn]);",
+   "class": "comparison"
+  },
+  {
+   "file": "choices-first-option.browser.mjs",
+   "oldLine": 70,
+   "test": "`opened by ${opener} with ${sample.name}, the list is on the option the old select was on and Enter picks it`",
+   "line": "expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });",
+   "class": "comparison"
+  },
+  {
+   "file": "choices-first-option.browser.mjs",
+   "oldLine": 71,
+   "test": "`opened by ${opener} with ${sample.name}, the list is on the option the old select was on and Enter picks it`",
+   "line": "expect(results.orbit).toEqual(results.antd);",
+   "class": "comparison"
+  },
+  {
+   "file": "choices-motion.browser.mjs",
+   "oldLine": 93,
+   "test": null,
+   "line": "expect(samples.orbit[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })))",
+   "class": "comparison"
+  },
+  {
+   "file": "choices-motion.browser.mjs",
+   "oldLine": 112,
+   "test": "`normal ${direction.name} entrance and exit motion matches ${kind}`",
+   "line": "await expect(page.locator(`${surface}:visible`)).toBeVisible();",
+   "class": "kept"
+  },
+  {
+   "file": "choices-motion.browser.mjs",
+   "oldLine": 115,
+   "test": "`normal ${direction.name} entrance and exit motion matches ${kind}`",
+   "line": "await expect(page.locator(`${surface}:visible`)).toBeVisible();",
+   "class": "kept"
+  },
+  {
+   "file": "choices-motion.browser.mjs",
+   "oldLine": 116,
+   "test": "`normal ${direction.name} entrance and exit motion matches ${kind}`",
+   "line": "if (system === 'orbit') await expect(page.locator(surface)).toHaveAttribute('data-side', direction.side);",
+   "class": "kept"
+  },
+  {
+   "file": "choices-motion.browser.mjs",
+   "oldLine": 122,
+   "test": "`normal ${direction.name} entrance and exit motion matches ${kind}`",
+   "line": "await expect(page.locator(`${surface}:visible`)).toHaveCount(0);",
+   "class": "kept"
+  },
+  {
+   "file": "choices-motion.browser.mjs",
+   "oldLine": 128,
+   "test": "`normal ${direction.name} entrance and exit motion matches ${kind}`",
+   "line": "expect(midpoint(samples.orbit[phase][0].samples[0])).toEqual(midpoint(samples.antd[phase][0].samples[0]));",
+   "class": "comparison"
+  },
+  {
+   "file": "choices-motion.browser.mjs",
+   "oldLine": 154,
+   "test": "`${kind} ${align} zoom origin matches`",
+   "line": "await expect(page.locator(`${surface}:visible`)).toHaveCount(0);",
+   "class": "kept"
+  },
+  {
+   "file": "choices-motion.browser.mjs",
+   "oldLine": 172,
+   "test": "`submenu ${anchor} edge zoom matches and stays in view`",
+   "line": "await expect(page.getByRole('menuitem', { name: 'Codex' })).toBeVisible();",
+   "class": "kept"
+  },
+  {
+   "file": "choices-motion.browser.mjs",
+   "oldLine": 176,
+   "test": "`submenu ${anchor} edge zoom matches and stays in view`",
+   "line": "expect(box.x).toBeGreaterThanOrEqual(0);",
+   "class": "kept"
+  },
+  {
+   "file": "choices-motion.browser.mjs",
+   "oldLine": 177,
+   "test": "`submenu ${anchor} edge zoom matches and stays in view`",
+   "line": "expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize().width);",
+   "class": "kept"
+  },
+  {
+   "file": "choices-motion.browser.mjs",
+   "oldLine": 178,
+   "test": "`submenu ${anchor} edge zoom matches and stays in view`",
+   "line": "await expect(page.locator(selector)).toHaveAttribute('data-side', anchor === 'right' ? 'left' : 'right');",
+   "class": "kept"
+  },
+  {
+   "file": "choices-motion.browser.mjs",
+   "oldLine": 183,
+   "test": "`submenu ${anchor} edge zoom matches and stays in view`",
+   "line": "await expect(page.getByRole('menuitem', { name: 'Codex' })).toHaveCount(0);",
+   "class": "kept"
+  },
+  {
+   "file": "choices-open-value.browser.mjs",
+   "oldLine": 37,
+   "test": "`${kind} dims the current value while open and restores it on Escape`",
+   "line": "await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);",
+   "class": "kept"
+  },
+  {
+   "file": "choices-open-value.browser.mjs",
+   "oldLine": 48,
+   "test": "`${kind} dims the current value while open and restores it on Escape`",
+   "line": "await expect(popup).toBeVisible();",
+   "class": "kept"
+  },
+  {
+   "file": "choices-open-value.browser.mjs",
+   "oldLine": 50,
+   "test": "`${kind} dims the current value while open and restores it on Escape`",
+   "line": "await expect.poll(() => popup.evaluate((node) => {",
+   "class": "kept"
+  },
+  {
+   "file": "choices-open-value.browser.mjs",
+   "oldLine": 62,
+   "test": "`${kind} dims the current value while open and restores it on Escape`",
+   "line": "await expect(choice).toHaveAttribute('aria-expanded', 'false');",
+   "class": "kept"
+  },
+  {
+   "file": "choices-open-value.browser.mjs",
+   "oldLine": 63,
+   "test": "`${kind} dims the current value while open and restores it on Escape`",
+   "line": "await expect(choice).toBeFocused();",
+   "class": "kept"
+  },
+  {
+   "file": "choices-open-value.browser.mjs",
+   "oldLine": 68,
+   "test": "`${kind} dims the current value while open and restores it on Escape`",
+   "line": "expect(samples.orbit).toEqual(samples.antd);",
+   "class": "comparison"
+  },
+  {
+   "file": "choices-submenu-geometry.browser.mjs",
+   "oldLine": 63,
+   "test": null,
+   "line": "await expect(page.locator(surfaces[system])).toBeVisible();",
+   "class": "kept"
+  },
+  {
+   "file": "choices-submenu-geometry.browser.mjs",
+   "oldLine": 96,
+   "test": "`submenu at the ${place.name} settles where the replaced submenu does`",
+   "line": "if (antd.viewport[1] === orbit.viewport[1]) expect.soft(orbit.item, `${name}: the item`).toEqual(antd.item);",
+   "class": "comparison"
+  },
+  {
+   "file": "choices-submenu-geometry.browser.mjs",
+   "oldLine": 98,
+   "test": "`submenu at the ${place.name} settles where the replaced submenu does`",
+   "line": "if (place.antdSide) expect.soft(shape(antd).side, `${name}: the replaced submenu's side`).toBe(place.antdSide);",
+   "class": "comparison"
+  },
+  {
+   "file": "choices-submenu-geometry.browser.mjs",
+   "oldLine": 99,
+   "test": "`submenu at the ${place.name} settles where the replaced submenu does`",
+   "line": "expect.soft(shape(orbit), `${name}: the replaced submenu's box`).toEqual(shape(antd));",
+   "class": "comparison"
+  },
+  {
+   "file": "choices.browser.mjs",
+   "oldLine": 88,
+   "test": "`${kind} matches the current surface, density and option states`",
+   "line": "await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);",
+   "class": "kept"
+  },
+  {
+   "file": "choices.browser.mjs",
+   "oldLine": 143,
+   "test": "`${kind} matches the current surface, density and option states`",
+   "line": "expect(glyphs.orbit).toEqual(glyphs.antd);",
+   "class": "comparison"
+  },
+  {
+   "file": "choices.browser.mjs",
+   "oldLine": 153,
+   "test": "`${kind} matches the current surface, density and option states`",
+   "line": "expect(measurements.orbit).toEqual(expected);",
+   "class": "comparison"
+  },
+  {
+   "file": "choices.browser.mjs",
+   "oldLine": 154,
+   "test": "`${kind} matches the current surface, density and option states`",
+   "line": "} else expect(measurements.orbit).toEqual(measurements.antd);",
+   "class": "comparison"
+  },
+  {
+   "file": "choices.browser.mjs",
+   "oldLine": 164,
+   "test": "'empty, disabled, hover and focus choice surfaces match the existing states'",
+   "line": "await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);",
+   "class": "kept"
+  },
+  {
+   "file": "choices.browser.mjs",
+   "oldLine": 172,
+   "test": "'empty, disabled, hover and focus choice surfaces match the existing states'",
+   "line": "await expect(input).toBeDisabled();",
+   "class": "kept"
+  },
+  {
+   "file": "choices.browser.mjs",
+   "oldLine": 178,
+   "test": "'empty, disabled, hover and focus choice surfaces match the existing states'",
+   "line": "await expect(surface.getByText('No data', { exact: true }).and(surface.locator('div'))).toBeVisible();",
+   "class": "kept"
+  },
+  {
+   "file": "choices.browser.mjs",
+   "oldLine": 195,
+   "test": "'empty, disabled, hover and focus choice surfaces match the existing states'",
+   "line": "for (const values of Object.values(measurements)) expect(values.orbit).toEqual(values.antd);",
+   "class": "comparison"
+  },
+  {
+   "file": "choices.browser.mjs",
+   "oldLine": 371,
+   "test": "`${legacy ? 'legacy Modal' : 'Dialog'} owns choices, top-layer Escape, Tab and theme`",
+   "line": "await expect.poll(() => focusOwner.evaluate((el) => el.contains(document.activeElement))).toBe(true);",
+   "class": "kept"
+  },
+  {
+   "file": "choices.browser.mjs",
+   "oldLine": 394,
+   "test": "'legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary'",
+   "line": "await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toBeFocused();",
+   "class": "coexistence"
+  },
+  {
+   "file": "choices.browser.mjs",
+   "oldLine": 397,
+   "test": "'legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary'",
+   "line": "expect(results.orbit).toEqual(results.antd);",
+   "class": "coexistence"
+  },
+  {
+   "file": "choices.browser.mjs",
+   "oldLine": 492,
+   "test": "`${kind} chip appearance matches current labels and email fields`",
+   "line": "await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);",
+   "class": "kept"
+  },
+  {
+   "file": "choices.browser.mjs",
+   "oldLine": 499,
+   "test": "`${kind} chip appearance matches current labels and email fields`",
+   "line": "if (state === 'disabled') await expect(control.getByRole('combobox')).toBeDisabled();",
+   "class": "kept"
+  },
+  {
+   "file": "choices.browser.mjs",
+   "oldLine": 512,
+   "test": "`${kind} chip appearance matches current labels and email fields`",
+   "line": "for (const values of Object.values(all)) expect(values.orbit).toEqual(values.antd);",
+   "class": "comparison"
+  },
+  {
+   "file": "composer-cost.browser.mjs",
+   "oldLine": 35,
+   "test": "'records per-keystroke cost of the session field with short and long drafts'",
+   "line": "expect(await field.evaluate((element) => element.value.endsWith('x'.repeat(30)))).toBe(true);",
+   "class": "kept"
+  },
+  {
+   "file": "composer-cost.browser.mjs",
+   "oldLine": 37,
+   "test": "'records per-keystroke cost of the session field with short and long drafts'",
+   "line": "expect(work).toHaveLength(30);",
+   "class": "kept"
+  },
+  {
+   "file": "composer-input.browser.mjs",
+   "oldLine": 52,
+   "test": null,
+   "line": "expect(runs.orbit).toEqual(runs.ant);",
+   "class": "comparison"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 27,
+   "test": null,
+   "line": "expect(runs.orbit.map((entry) => entry.name)).toEqual(runs.ant.map((entry) => entry.name));",
+   "class": "comparison"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 36,
+   "test": null,
+   "line": "expect(orbitTextareas, `${ant.name}: no stray textarea`).toBe(1);",
+   "class": "kept"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 37,
+   "test": null,
+   "line": "expect(antTextareas).toBe(2);",
+   "class": "comparison"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 49,
+   "test": null,
+   "line": "expect(found).toEqual([]);",
+   "class": "comparison"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 56,
+   "test": null,
+   "line": "expect(result[capture].sameSize, `${name}: ${capture} size`).toBe(true);",
+   "class": "comparison"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 57,
+   "test": null,
+   "line": "expect(result[capture].maxChannelDelta, `${name}: ${capture} pixels`).toBeLessThanOrEqual(2);",
+   "class": "comparison"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 126,
+   "test": "'session composer grows, caps, scrolls and draws exactly like the AntD field'",
+   "line": "expect(state.mirror.scrollTop, `${impl} ${name}: mirror scroll`).toBe(state.scroll.scrollTop);",
+   "class": "kept"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 127,
+   "test": "'session composer grows, caps, scrolls and draws exactly like the AntD field'",
+   "line": "expect(state.mirror.computed.paddingLeft).toBe(state.computed.paddingLeft);",
+   "class": "kept"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 128,
+   "test": "'session composer grows, caps, scrolls and draws exactly like the AntD field'",
+   "line": "expect(state.mirror.computed.fontSize).toBe(state.computed.fontSize);",
+   "class": "kept"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 129,
+   "test": "'session composer grows, caps, scrolls and draws exactly like the AntD field'",
+   "line": "expect(state.mirror.computed.lineHeight).toBe(state.computed.lineHeight);",
+   "class": "kept"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 143,
+   "test": "'session composer with staged attachments and while disabled matches the AntD field'",
+   "line": "expect(state.thumbnails[0].x - state.box.x, `${impl} ${name}: thumbnail inset`).toBe(24);",
+   "class": "kept"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 144,
+   "test": "'session composer with staged attachments and while disabled matches the AntD field'",
+   "line": "expect(state.content.left - state.box.x, `${impl} ${name}: text inset`).toBe(24);",
+   "class": "kept"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 145,
+   "test": "'session composer with staged attachments and while disabled matches the AntD field'",
+   "line": "expect(state.field.y, `${impl} ${name}: text below attachments`).toBe(state.attachments.y + state.attachments.height);",
+   "class": "kept"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 244,
+   "test": "'manual height: drag the handle, clamp it, and double-click back to auto-size'",
+   "line": "expect(byName['dragged-taller'].field.height).toBe(402);",
+   "class": "kept"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 245,
+   "test": "'manual height: drag the handle, clamp it, and double-click back to auto-size'",
+   "line": "expect(byName['clamped-minimum'].field.height).toBe(44);",
+   "class": "kept"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 246,
+   "test": "'manual height: drag the handle, clamp it, and double-click back to auto-size'",
+   "line": "expect(byName['clamped-maximum'].field.height).toBe(640);",
+   "class": "kept"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 248,
+   "test": "'manual height: drag the handle, clamp it, and double-click back to auto-size'",
+   "line": "expect(byName['dragged-taller'].inline).toMatchObject({ height: '402px', minHeight: '', maxHeight: '' });",
+   "class": "kept"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 249,
+   "test": "'manual height: drag the handle, clamp it, and double-click back to auto-size'",
+   "line": "expect(byName['manual-height-kept-for-short-text'].field.height).toBe(640);",
+   "class": "kept"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 250,
+   "test": "'manual height: drag the handle, clamp it, and double-click back to auto-size'",
+   "line": "expect(byName['reset-to-auto'].inline).toMatchObject({ height: '38px', minHeight: '38px', maxHeight: '302px', overflowY: 'hidden' });",
+   "class": "kept"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 251,
+   "test": "'manual height: drag the handle, clamp it, and double-click back to auto-size'",
+   "line": "expect(byName['auto-size-resumed'].field.height).toBe(byName['capped-handle-shown'].field.height);",
+   "class": "kept"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 312,
+   "test": "'the mirror paints its glyphs exactly where the field lays out its own text'",
+   "line": "expect(results.orbit[name]).toEqual(results.ant[name]);",
+   "class": "comparison"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 313,
+   "test": "'the mirror paints its glyphs exactly where the field lays out its own text'",
+   "line": "expect(results.orbit[name].scroll[0]).toBe(results.orbit[name].scroll[1]);",
+   "class": "kept"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 370,
+   "test": "'auto-size transitions match AntD; reduced motion drops them as other Orbit controls do'",
+   "line": "expect(results.orbit).toEqual(results.ant);",
+   "class": "comparison"
+  },
+  {
+   "file": "composer.browser.mjs",
+   "oldLine": 386,
+   "test": "'records the one intended difference: Orbit text fields stop transitioning'",
+   "line": "expect(recorded).toEqual({ ant: '0.3s', orbit: '0s' });",
+   "class": "comparison"
+  },
+  {
+   "file": "controls.browser.mjs",
+   "oldLine": 210,
+   "test": "'fixed control states match AntD geometry, typography and surfaces'",
+   "line": "expect(differences).toEqual([]);",
+   "class": "comparison"
+  },
+  {
+   "file": "controls.browser.mjs",
+   "oldLine": 229,
+   "test": "'hover and keyboard focus preserve visible control feedback'",
+   "line": "expect(actual, `${name} hover`).toEqual(reference);",
+   "class": "comparison"
+  },
+  {
+   "file": "controls.browser.mjs",
+   "oldLine": 242,
+   "test": "'hover and keyboard focus preserve visible control feedback'",
+   "line": "await expect.poll(() => focusStyle(ant)).toEqual(actual);",
+   "class": "comparison"
+  },
+  {
+   "file": "controls.browser.mjs",
+   "oldLine": 351,
+   "test": "'a focused field under the pointer and the 601–960px font size match AntD'",
+   "line": "expect(measured[`${name} orbit`], `${name} focused under the pointer`).toEqual(measured[`${name} ant`]);",
+   "class": "comparison"
+  },
+  {
+   "file": "controls.browser.mjs",
+   "oldLine": 364,
+   "test": "'a focused field under the pointer and the 601–960px font size match AntD'",
+   "line": "expect(measured[`${name} ${width}px`].orbit, `${name} at ${width}px`).toEqual(measured[`${name} ${width}px`].ant);",
+   "class": "comparison"
+  },
+  {
+   "file": "foundation.browser.mjs",
+   "oldLine": 50,
+   "test": "'foundation states match current AntD and the frozen P0 palette'",
+   "line": "expect(actual, `${name} computed styles`).toEqual(reference);",
+   "class": "comparison"
+  },
+  {
+   "file": "foundation.browser.mjs",
+   "oldLine": 66,
+   "test": "'foundation states match current AntD and the frozen P0 palette'",
+   "line": "await expect.poll(async () => (await style(reference)).backgroundColor).toBe(hovered.backgroundColor);",
+   "class": "comparison"
+  },
+  {
+   "file": "foundation.browser.mjs",
+   "oldLine": 67,
+   "test": "'foundation states match current AntD and the frozen P0 palette'",
+   "line": "expect(await style(reference)).toEqual(hovered);",
+   "class": "comparison"
+  },
+  {
+   "file": "foundation.browser.mjs",
+   "oldLine": 80,
+   "test": "'foundation states match current AntD and the frozen P0 palette'",
+   "line": "expect(await focusStyle(ant.getByRole('button', { name: 'Primary', exact: true }))).toEqual(focused);",
+   "class": "comparison"
+  },
+  {
+   "file": "foundation.browser.mjs",
+   "oldLine": 105,
+   "test": "'body and nested portals inherit theme and preserve focus ownership'",
+   "line": "await expect(outer).toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "foundation.browser.mjs",
+   "oldLine": 107,
+   "test": "'body and nested portals inherit theme and preserve focus ownership'",
+   "line": "await expect.poll(() => outer.evaluate((el) => {",
+   "class": "coexistence"
+  },
+  {
+   "file": "foundation.browser.mjs",
+   "oldLine": 114,
+   "test": "'body and nested portals inherit theme and preserve focus ownership'",
+   "line": "await expect(nested).toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "foundation.browser.mjs",
+   "oldLine": 116,
+   "test": "'body and nested portals inherit theme and preserve focus ownership'",
+   "line": "expect(await style(nested)).toMatchObject({ backgroundColor: surface.backgroundColor, borderRadius: surface.borderRadius, boxShadow: surface.boxShadow });",
+   "class": "coexistence"
+  },
+  {
+   "file": "foundation.browser.mjs",
+   "oldLine": 117,
+   "test": "'body and nested portals inherit theme and preserve focus ownership'",
+   "line": "expect(await nested.evaluate((el) => {",
+   "class": "coexistence"
+  },
+  {
+   "file": "foundation.browser.mjs",
+   "oldLine": 124,
+   "test": "'body and nested portals inherit theme and preserve focus ownership'",
+   "line": "await expect(nested).not.toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "foundation.browser.mjs",
+   "oldLine": 125,
+   "test": "'body and nested portals inherit theme and preserve focus ownership'",
+   "line": "await expect(outer).toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "foundation.browser.mjs",
+   "oldLine": 126,
+   "test": "'body and nested portals inherit theme and preserve focus ownership'",
+   "line": "await expect(nestedTrigger).toBeFocused();",
+   "class": "coexistence"
+  },
+  {
+   "file": "foundation.browser.mjs",
+   "oldLine": 128,
+   "test": "'body and nested portals inherit theme and preserve focus ownership'",
+   "line": "await expect(outer).not.toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "foundation.browser.mjs",
+   "oldLine": 129,
+   "test": "'body and nested portals inherit theme and preserve focus ownership'",
+   "line": "await expect(page.getByRole('button', { name: 'Open AntD dialog', exact: true })).toBeFocused();",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays-app-frame.browser.mjs",
+   "oldLine": 76,
+   "test": "`${system} ${kind} leaves the page where it was scrolled, before and after a notice`",
+   "line": "expect.soft(open.pageScrollTop, `${system} ${kind} open ${when}`).toBe(scrolled);",
+   "class": "kept"
+  },
+  {
+   "file": "overlays-app-frame.browser.mjs",
+   "oldLine": 82,
+   "test": "`${system} ${kind} leaves the page where it was scrolled, before and after a notice`",
+   "line": "expect.soft(closed.pageScrollTop, `${system} ${kind} closed ${when}`).toBe(scrolled);",
+   "class": "kept"
+  },
+  {
+   "file": "overlays-close-hover.browser.mjs",
+   "oldLine": 54,
+   "test": "'the dialog Close takes the replaced modal Close hover background'",
+   "line": "await expect(dialog).not.toBeVisible();",
+   "class": "kept"
+  },
+  {
+   "file": "overlays-close-hover.browser.mjs",
+   "oldLine": 57,
+   "test": "'the dialog Close takes the replaced modal Close hover background'",
+   "line": "expect(results.AntD.rest.hovered).toBe(false);",
+   "class": "comparison"
+  },
+  {
+   "file": "overlays-close-hover.browser.mjs",
+   "oldLine": 58,
+   "test": "'the dialog Close takes the replaced modal Close hover background'",
+   "line": "expect(results.AntD.hover.hovered).toBe(true);",
+   "class": "comparison"
+  },
+  {
+   "file": "overlays-close-hover.browser.mjs",
+   "oldLine": 59,
+   "test": "'the dialog Close takes the replaced modal Close hover background'",
+   "line": "expect(results.AntD.hover.background).toBe(info.project.use.colorScheme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.06)');",
+   "class": "comparison"
+  },
+  {
+   "file": "overlays-close-hover.browser.mjs",
+   "oldLine": 60,
+   "test": "'the dialog Close takes the replaced modal Close hover background'",
+   "line": "expect(results.Orbit).toEqual(results.AntD);",
+   "class": "comparison"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 78,
+   "test": "'dialog and drawers match current surfaces, geometry, typography and actions'",
+   "line": "await expect(focusRoot).toBeFocused();",
+   "class": "kept"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 107,
+   "test": "'dialog and drawers match current surfaces, geometry, typography and actions'",
+   "line": "expect(control.hovered, `${system} ${kind}: ${control.name} is not hovered`).toBe(false);",
+   "class": "kept"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 108,
+   "test": "'dialog and drawers match current surfaces, geometry, typography and actions'",
+   "line": "expect(control.focused, `${system} ${kind}: ${control.name} is not focused`).toBe(false);",
+   "class": "kept"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 109,
+   "test": "'dialog and drawers match current surfaces, geometry, typography and actions'",
+   "line": "expect(control.focusVisible, `${system} ${kind}: ${control.name} has no focus ring`).toBe(false);",
+   "class": "kept"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 140,
+   "test": "'dialog and drawers match current surfaces, geometry, typography and actions'",
+   "line": "for (const [kind, { ant, orbit }] of Object.entries(measurements)) expect(orbit, kind).toEqual(ant);",
+   "class": "comparison"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 227,
+   "test": "`actual legacy modal, Popconfirm and Select work inside Orbit ${kind.toLowerCase()}`",
+   "line": "await expect(child).not.toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 228,
+   "test": "`actual legacy modal, Popconfirm and Select work inside Orbit ${kind.toLowerCase()}`",
+   "line": "await expect(parent).toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 229,
+   "test": "`actual legacy modal, Popconfirm and Select work inside Orbit ${kind.toLowerCase()}`",
+   "line": "await expect(trigger).toBeFocused();",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 237,
+   "test": "`actual legacy modal, Popconfirm and Select work inside Orbit ${kind.toLowerCase()}`",
+   "line": "await expect(popup).not.toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 238,
+   "test": "`actual legacy modal, Popconfirm and Select work inside Orbit ${kind.toLowerCase()}`",
+   "line": "await expect(parent).toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 241,
+   "test": "`actual legacy modal, Popconfirm and Select work inside Orbit ${kind.toLowerCase()}`",
+   "line": "await expect(select).toHaveAttribute('aria-expanded', 'true');",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 244,
+   "test": "`actual legacy modal, Popconfirm and Select work inside Orbit ${kind.toLowerCase()}`",
+   "line": "await expect(parent.getByRole('status', { name: 'Expiry' })).toHaveText('7 days');",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 245,
+   "test": "`actual legacy modal, Popconfirm and Select work inside Orbit ${kind.toLowerCase()}`",
+   "line": "await expect(select).toHaveAttribute('aria-expanded', 'false');",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 247,
+   "test": "`actual legacy modal, Popconfirm and Select work inside Orbit ${kind.toLowerCase()}`",
+   "line": "await expect(select).toHaveAttribute('aria-expanded', 'true');",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 249,
+   "test": "`actual legacy modal, Popconfirm and Select work inside Orbit ${kind.toLowerCase()}`",
+   "line": "await expect(select).toHaveAttribute('aria-expanded', 'false');",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 250,
+   "test": "`actual legacy modal, Popconfirm and Select work inside Orbit ${kind.toLowerCase()}`",
+   "line": "await expect(parent).toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 252,
+   "test": "`actual legacy modal, Popconfirm and Select work inside Orbit ${kind.toLowerCase()}`",
+   "line": "await expect(parent).not.toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 264,
+   "test": "`Orbit dialog and nested confirmation work inside a legacy ${kind === 'parent' ? 'modal' : 'drawer'}`",
+   "line": "await expect(parent.getByRole('status', { name: 'Legacy field blurred' })).toHaveText('true');",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 278,
+   "test": "`Orbit dialog and nested confirmation work inside a legacy ${kind === 'parent' ? 'modal' : 'drawer'}`",
+   "line": "await expect(confirmation).not.toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 279,
+   "test": "`Orbit dialog and nested confirmation work inside a legacy ${kind === 'parent' ? 'modal' : 'drawer'}`",
+   "line": "await expect(confirmTrigger).toBeFocused();",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 281,
+   "test": "`Orbit dialog and nested confirmation work inside a legacy ${kind === 'parent' ? 'modal' : 'drawer'}`",
+   "line": "await expect(child).not.toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 282,
+   "test": "`Orbit dialog and nested confirmation work inside a legacy ${kind === 'parent' ? 'modal' : 'drawer'}`",
+   "line": "await expect(parent).toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 283,
+   "test": "`Orbit dialog and nested confirmation work inside a legacy ${kind === 'parent' ? 'modal' : 'drawer'}`",
+   "line": "await expect(childTrigger).toBeFocused();",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 286,
+   "test": "`Orbit dialog and nested confirmation work inside a legacy ${kind === 'parent' ? 'modal' : 'drawer'}`",
+   "line": "await expect(parent).not.toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 287,
+   "test": "`Orbit dialog and nested confirmation work inside a legacy ${kind === 'parent' ? 'modal' : 'drawer'}`",
+   "line": "await expect(trigger).toBeFocused();",
+   "class": "coexistence"
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "oldLine": 288,
+   "test": "`Orbit dialog and nested confirmation work inside a legacy ${kind === 'parent' ? 'modal' : 'drawer'}`",
+   "line": "await expect.poll(() => pageScroll(page)).toEqual(before);",
+   "class": "coexistence"
+  },
+  {
+   "file": "toasts.browser.mjs",
+   "oldLine": 245,
+   "test": "'legacy AntApp confirmation still works with the same notification service'",
+   "line": "await expect(legacy).toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "toasts.browser.mjs",
+   "oldLine": 248,
+   "test": "'legacy AntApp confirmation still works with the same notification service'",
+   "line": "await expect(legacy).toHaveCSS('opacity', '1');",
+   "class": "coexistence"
+  },
+  {
+   "file": "toasts.browser.mjs",
+   "oldLine": 249,
+   "test": "'legacy AntApp confirmation still works with the same notification service'",
+   "line": "await expect(legacy).toHaveCSS('transform', 'none');",
+   "class": "coexistence"
+  },
+  {
+   "file": "toasts.browser.mjs",
+   "oldLine": 251,
+   "test": "'legacy AntApp confirmation still works with the same notification service'",
+   "line": "await expect(legacy).not.toBeVisible();",
+   "class": "coexistence"
+  },
+  {
+   "file": "toasts.browser.mjs",
+   "oldLine": 252,
+   "test": "'legacy AntApp confirmation still works with the same notification service'",
+   "line": "await expect(notices(page).getByText('Legacy confirmed', { exact: true })).toBeVisible();",
+   "class": "coexistence"
+  }
+ ]
+}

@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { Runner } from '@prisma/client';
-import { CreateModelProviderDto, UpdateModelProviderDto } from '../providers/dto';
+import { PublicIdPipe } from '../common/public-id';
+import { CreateModelProviderDto, CursorKeyCheckDto, CursorKeyCheckResultDto, UpdateModelProviderDto } from '../providers/dto';
 import { ProvidersService } from '../providers/providers.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -43,5 +44,32 @@ export class RunnerProvidersController {
   @Delete('providers/:slug')
   async remove(@CurrentRunner() runner: Runner, @Param('slug') slug: string) {
     return this.providers.remove(runner.ownerId, await this.providers.idOfMine(runner.ownerId, slug));
+  }
+
+  /**
+   * What Cursor CLI on this runner answered `agent models` with, asked with the Cursor API key the
+   * session was dispatched on (docs/cursor-runtime-contract.md §9): the key's last check, which a
+   * person sees on the key (ProvidersService.recordCursorKeyCheck). Only for a session of this runner's.
+   */
+  @Post('sessions/:id/cursor-key-check')
+  @HttpCode(200)
+  cursorKeyCheck(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Body() dto: CursorKeyCheckDto,
+  ) {
+    return this.providers.recordCursorKeyCheck(runner.id, sessionId, dto, runner.ownerId);
+  }
+
+  /**
+   * What Cursor CLI on this runner answered `agent models` with, asked with a Cursor key the runner was
+   * handed on a heartbeat to check (`cursorKeyChecks`): settles the check somebody is waiting on — a key
+   * being connected, or a saved one checked again (ProvidersService.answerCursorKeyCheck). Only a check
+   * handed to this runner, about the key it was handed, and once: anything else is `accepted: false`.
+   */
+  @Post('cursor-key-check-result')
+  @HttpCode(200)
+  cursorKeyCheckResult(@CurrentRunner() runner: Runner, @Body() dto: CursorKeyCheckResultDto) {
+    return this.providers.answerCursorKeyCheck(runner.id, dto);
   }
 }

@@ -1,0 +1,184 @@
+<!doctype html>
+<!-- Design mock: copy · time at the end of each turn on the web session page, placed where Codex puts its row (under the
+     reply's left edge). Every frame is a screenshot of the real session page (WorkspaceView + Transcript + index.css on
+     vite, Chromium, 1280-wide desktop / 390-wide phone, 3x, shown at 2x), fed by src/web/ui-migration's fixtures plus a
+     conversation shaped like the owner's screenshot. "现在" is main 62b7009ca; "改后" is the same tree with the proposal in
+     it (Transcript.tsx + index.css). Dashed outlines and letters/numbers are drawn on top. Kit: /var/tmp/turn-foot-mock
+     (patch/apply.py = the proposal as code; capture.mjs inside run-ns.sh; gen.py; render.mjs). Decided 2026-10-09
+     (按推荐落地: all four recommendations) and implemented; the implementation's frames, shot from the worktree on
+     main, are pixel-identical to the 改后 frames. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Web · 回答末尾加「复制 · 时间」</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1500px; }
+  .head { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 30px; align-items: start; }
+  .ref { background: #f5f6f8; border-radius: 10px; padding: 12px 14px 10px; }
+  .ref img { display: block; width: 100%; border-radius: 6px; background: #fff; }
+  .cols2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .states { display: grid; grid-template-columns: 300px 300px minmax(0, 1fr); gap: 26px; align-items: start; }
+  .phones { display: grid; grid-template-columns: 290px 290px minmax(0, 1fr); gap: 26px; align-items: start; }
+  .edge { display: grid; grid-template-columns: 760px minmax(0, 1fr); gap: 26px; align-items: start; }
+  .fig { position: relative; }
+  .shot { display: block; width: 100%; border-radius: 10px; box-shadow: 0 0 0 1px rgba(15, 23, 42, .09), 0 1px 3px rgba(15, 23, 42, .06); }
+  .m-cap { font-size: 12.5px; line-height: 1.75; color: var(--text-2); margin: 10px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .ui { font-family: -apple-system, "Inter", sans-serif; font-size: 12px; padding: 0 5px; border-radius: 4px; background: #f0f2f5; color: var(--text-1); white-space: nowrap; }
+  .mk { position: absolute; border: 1.5px dashed var(--warning-solid); border-radius: 7px; pointer-events: none; }
+  .mk > .m-n { position: absolute; top: -10px; right: -10px; margin: 0; box-shadow: 0 0 0 2px #fff; }
+  .mk-l { position: absolute; top: 50%; transform: translateY(-50%); white-space: nowrap; font-size: 12px; font-weight: 700;
+          color: #fff; background: var(--warning-solid); border-radius: 5px; padding: 1px 7px; }
+  .mk-l-right { left: calc(100% + 16px); }
+  .m-k.rec { background: #e8f7ee; color: #16833a; }
+  .m-k.alt { background: #fff1e8; color: #c2410c; }
+  .cases { margin: 0; padding: 0; list-style: none; font-size: 12.5px; line-height: 1.75; color: var(--text-2); }
+  .cases li + li { margin-top: 10px; }
+  .cases b { color: var(--text-1); }
+  .cases .m-n { margin-right: 6px; }
+  .rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.65; width: 100%; }
+  .rules th, .rules td { border: 1px solid #dde0e6; padding: 7px 11px; text-align: left; vertical-align: top; }
+  .rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules td:first-child { font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules code, .files code, .ask code, .m-sub code, .m-cap code, .cases code { font-size: 11.5px; }
+  .bottom { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .files { margin: 0; padding: 12px 16px; list-style: none; background: #f5f6f8; border-radius: 8px;
+           font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .files li + li { margin-top: 6px; }
+  .files b { color: var(--text-1); }
+  .ask { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e;
+         font-size: 12.5px; line-height: 1.8; color: #5c4210; }
+  .ask b { color: #3d2b08; }
+  .ask ol { margin: 6px 0 0; padding-left: 20px; }
+  .ask li + li { margin-top: 4px; }
+  .ask .rec { color: #16833a; font-weight: 700; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet">
+  <div class="head">
+    <div>
+      <h1 class="m-h1 zh">Web · 回答末尾加「复制 · 时间」（参考 Codex）</h1>
+      <p class="m-sub zh" style="line-height:1.8">你要在回答结尾「加个时间点和复制 icon，参考 Codex」。现在 Web 每一轮回答结束的地方只有一段 12px 的空白；用户气泡下面倒是有「复制 · 时间」，但要鼠标停上去才出现，回答这边什么都没有。
+      Codex 在每轮最后一段回答的左下方放一行：复制 · 反馈 · 分叉 · 时间。这里<b>只取复制和时间</b>（你要的两样），<b>位置照 Codex</b>：回答文字左边缘的正下方；图标沿用 Web 现有的复制图标（用户气泡、代码块用的同一个），不换成 Codex 的样子。
+      下面每一张都是真实页面的截图（vite + 仓库里 ui-migration 的 fixture，对话照你的截图造的）：「现在」取自 main <code>62b7009ca</code>，「改后」是同一份代码按方案改了 <code>Transcript.tsx</code> 和 <code>index.css</code> 跑出来的，不是画的。虚线和编号是标注。<b>只改 Web，服务器不用动</b>：时间用回合结束事件自带的时间。</p>
+    </div>
+    <div class="ref">
+      <div class="m-stage-l zh" style="margin-bottom:8px"><span class="m-k">参考</span>你的 Codex 截图</div>
+      <img src="00-codex-ref.png" alt="">
+      <p class="m-cap zh" style="margin-top:8px">最后一段回答下面一行：复制 · 反馈 · 分叉 · <span class="ui">3:21 PM</span>，左边和回答文字对齐。</p>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">桌面 Web</span>你截图里箭头指的位置</div>
+    <div class="cols2">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">现在</span>① 回答结束处什么都没有</div>
+        <div class="fig"><img class="shot" src="01a-today.png" alt=""></div>
+        <p class="m-cap zh">回答最后一句下面直接就是下一轮你发的「确认」。想复制这段回答只能手动拖选；也看不出它是几点答完的。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">改后</span>② 回答左下方：复制 · 结束时间 <span class="m-k rec">推荐</span></div>
+        <div class="fig"><img class="shot" src="01b-new.png" alt=""><span class="mk" style="left:2.683%;top:52.128%;width:11.617%;height:5.957%"><span class="m-n">1</span><span class="mk-l mk-l-right zh">新增</span></span></div>
+        <p class="m-cap zh">复制图标的左边和回答文字对齐；离上面的回答近（约 17px）、离下一轮远（约 26px），读起来属于上面这段回答。<b>一直显示，不用悬停</b>；灰色小字，和用户气泡下面的时间是同一个样式。每一轮多出约 40px 高。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">桌面 Web</span>复制按钮和时间</div>
+    <div class="states">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">状态</span>③ 鼠标停在复制上</div>
+        <div class="fig"><img class="shot" src="01c-hover.png" alt=""></div>
+        <p class="m-cap zh">变深、带浅灰底，提示 <span class="ui">Copy reply</span>。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">状态</span>④ 点了之后</div>
+        <div class="fig"><img class="shot" src="01d-copied.png" alt=""></div>
+        <p class="m-cap zh">变成 ✓，提示 <span class="ui">Copied</span>，1.6 秒后复原。复制的是这段回答的 <b>Markdown 原文</b>（表格、加粗都是原文），和用户气泡的复制一样；在真实浏览器里读过剪贴板，和原文逐字相同。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">状态</span>⑤ 不是今天答完的</div>
+        <div class="fig"><img class="shot" src="01e-older-day.png" alt=""><span class="mk" style="left:3.953%;top:56.098%;width:23.039%;height:13.659%"><span class="m-n">5</span><span class="mk-l mk-l-right zh">非今天带日期</span></span></div>
+        <p class="m-cap zh">今天只写 <span class="ui">3:21 PM</span>；更早的带上日期 <span class="ui">Sun, Sep 27, 4:05 PM</span>（只写几点会让人以为是今天）。和额度卡上 <span class="ui">Resets …</span> 用同一个格式函数，按浏览器的语言和时区显示。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">手机 Web · 深色</span>同一行</div>
+    <div class="phones">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">现在</span>⑥ 手机</div>
+        <div class="fig"><img class="shot" src="01f-phone-today.png" alt=""></div>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">改后</span>⑦ 手机</div>
+        <div class="fig"><img class="shot" src="01g-phone-new.png" alt=""><span class="mk" style="left:4.359%;top:63.737%;width:23.077%;height:3.318%"><span class="m-n">7</span></span></div>
+        <p class="m-cap zh">一样常驻。手机没有悬停，「停上去才出现」的按钮在手机上很难点到，这也是推荐常驻的原因之一。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">改后</span>⑧ 深色</div>
+        <div class="fig"><img class="shot" src="01h-dark.png" alt=""><span class="mk" style="left:2.683%;top:52.128%;width:11.617%;height:5.957%"><span class="m-n">8</span></span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">边界情况</span>不是每一轮都有完整的回答</div>
+    <div class="edge">
+      <div class="fig"><img class="shot" src="01i-edge.png" alt=""><span class="mk" style="left:3.807%;top:29.489%;width:12.495%;height:4.651%"><span class="m-n">a</span><span class="mk-l mk-l-right zh">中断：照样有</span></span><span class="mk" style="left:2.635%;top:46.449%;width:64.641%;height:8.837%"><span class="m-n">b</span><span class="mk-l mk-l-right zh">失败无回复：不加</span></span><span class="mk" style="left:4.392%;top:72.091%;width:8.295%;height:3.721%"><span class="m-n">c</span><span class="mk-l mk-l-right zh">只用了工具：只有时间</span></span><span class="mk" style="left:3.807%;top:93.297%;width:12.116%;height:4.651%"><span class="m-n">d</span><span class="mk-l mk-l-right zh">正常</span></span></div>
+      <ul class="cases zh">
+        <li><span class="m-n">a</span><b>中断的回合</b>（⊘ interrupted）：照样有这一行；复制的是这一轮最后写出的那段话（这里是「先跑 web 的单测。」）。</li>
+        <li><span class="m-n">b</span><b>失败、没有回复</b>：不加这一行，红色的 <span class="ui">This turn ended without a reply…</span> 原样。</li>
+        <li><span class="m-n">c</span><b>只调用了工具、没写字</b>：只有时间，没有复制按钮（没有可复制的）；时间照样和回答文字对齐。</li>
+        <li><span class="m-n">d</span><b>正常回答</b>：复制 · 时间。</li>
+        <li><b>还在进行的回合</b>：不显示；回合结束的那一刻出现（流式输出时不会跳动）。</li>
+        <li><b>导出成 HTML</b>：导出本来就隐藏所有复制按钮，只留时间。<b>分享页</b>：一样显示。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="bottom">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">规则</span>这一行怎么定</div>
+        <table class="rules zh">
+          <tr><th>情况</th><th>改后</th></tr>
+          <tr><td>放在哪</td><td>每一轮结束处（回合结束事件 <code>turn_end</code>），取代原来回合之间 12px 的空白；回答文字左边缘下方</td></tr>
+          <tr><td>复制什么</td><td>这一轮<b>最后一段回答</b>的 Markdown 原文。夹在工具调用之间的过程话（「我先看一下…」）会被后面的话覆盖，不算；子代理（Task）里的话也不算</td></tr>
+          <tr><td>什么时间</td><td>这一轮结束的时间；今天 <span class="ui">3:21 PM</span>，更早 <span class="ui">Sun, Sep 27, 4:05 PM</span></td></tr>
+          <tr><td>显示方式</td><td>常驻；复制按钮悬停变深加灰底，点后 ✓ 1.6 秒</td></tr>
+          <tr><td>进行中</td><td>不显示，结束时出现</td></tr>
+          <tr><td>没写字 / 失败</td><td>只有时间 / 不显示</td></tr>
+          <tr><td>导出、分享页</td><td>导出隐藏复制、保留时间；分享页同样显示</td></tr>
+          <tr><td>⌘F、顶部 ↑ Your question</td><td>不受影响：这一行沿用原来分隔的位置标记，不是吸顶条的锚点</td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">改动</span>只改 Web</div>
+        <ul class="files zh">
+          <li><b><code>src/web/src/components/Transcript.tsx</code></b>：回合结束节点带上结束时间和这一轮最后一段回答；新组件 <code>TurnFoot</code> 画这一行（复制的写法和用户气泡一样）；额度卡的时间格式函数 <code>formatResetAt</code> 改名 <code>formatClock</code>，两处共用。约 +45 行。</li>
+          <li><b><code>src/web/src/index.css</code></b>：<code>.chat-turn-foot</code> 两条，约 +15 行；按钮和时间直接用用户气泡的 <code>.chat-copy</code> / <code>.chat-time</code>。</li>
+          <li><b>测试</b>：新增 <code>Transcript.turnFoot.test.tsx</code>：复制的是最后一段回答的原文；今天 / 更早的时间格式；中断、只用工具、进行中、导出。现有的 turnEnd 测试不受影响；<code>Transcript.settledReply.test.tsx</code> 原来写着「回答下面没有任何一行」，改成：回答本身仍只有文字，回合末尾是这一行（复制 · 时间），依旧没有「加入 Wiki」。</li>
+          <li><b>不改</b>：服务器；iOS / macOS / Android（原生端的回答下面也没有复制和时间，见第 4 项）。</li>
+        </ul>
+        <div class="ask zh">
+          <b>已定（2026-10-09）：按推荐落地。</b>四项都取绿色那一项，已照此实现；实现跑出来的画面和上面「改后」各帧逐像素一致。
+          <ol>
+            <li>显示方式：<span class="rec">常驻（②，同 Codex 截图；手机也点得到）</span>／鼠标停上去才出现（同用户气泡）</li>
+            <li>时间格式：<span class="rec">几点几分 3:21 PM，非今天带日期（同 Codex）</span>／相对时间 5m ago（同用户气泡）</li>
+            <li>复制范围：<span class="rec">这一轮最后一段回答（最终答复）</span>／这一轮所有回答文字连在一起</li>
+            <li>原生端：<span class="rec">先只做 Web</span>／iOS / macOS 一起做（Android 另议）</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

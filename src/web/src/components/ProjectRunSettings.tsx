@@ -1,9 +1,9 @@
 import { useEffect, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Input, InputNumber, Radio, Select, Spin, Switch } from 'antd';
 import type { IntegrationLine, ProjectIntegrationView, ProjectPauseState } from '@orbit/shared';
 import { api } from '../api';
 import {
+  DEFAULT_MAIN_BRANCH,
   RUN_APPLIES_FROM_NEXT_TASK,
   RUN_AT_MOST,
   RUN_AUTOMATIC,
@@ -11,35 +11,50 @@ import {
   RUN_ESCALATE_AFTER,
   RUN_ESCALATE_HINT,
   RUN_INTEGRATION,
-  RUN_LINE_MAIN,
-  RUN_LINE_MAIN_HINT,
   RUN_LINE_PROJECT_BRANCH,
   RUN_LINE_PROJECT_BRANCH_HINT,
+  RUN_MAIN_BRANCH,
+  RUN_MAIN_BRANCH_HINT,
   RUN_MERGE_CHECK,
-  RUN_MERGE_CHECK_HINT,
   RUN_MERGE_CHECK_PLACEHOLDER,
-  RUN_NO_MERGE_CHECK_WARNING,
   RUN_NOT_PAUSED,
   RUN_NOT_RESUMED,
   RUN_NOT_SAVED,
   RUN_PAUSE,
-  RUN_PAUSE_HINT,
   RUN_RESUME,
   RUN_SAVE,
   RUN_SWITCH_OFF,
   RUN_SWITCH_ON,
   RUN_TASKS_LAND_ON,
   START_HOW_IT_RUNS,
+  mainBranchName,
+  mainBranchRef,
   runAutomaticHint,
   runLineLocked,
+  runLineMain,
+  runLineMainHint,
+  runMainBranchLocked,
+  runMainBranchRemembers,
+  runMergeCheckHint,
   runMergeCheckMissing,
+  runNoMergeCheckWarning,
+  runPauseHint,
   runPausedSince,
   runTasksAtATime,
   shortBranch,
 } from '../lib/projectStart';
 import { projectIntegrationQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
+import { MainBranchSelect } from './MainBranchSelect';
 import { START_MAX_CONCURRENT_TASKS } from './StartProjectCard';
+import { Alert } from './ui/Alert';
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
+import { NumberInput } from './ui/NumberInput';
+import { Radio, RadioGroup } from './ui/Radio';
+import { Select } from './ui/Select';
+import { Spinner } from './ui/Spinner';
+import { Switch } from './ui/Switch';
 
 /**
  * "How it runs" — every setting the start card set, in one block on the project page once the
@@ -96,6 +111,8 @@ function escalationLabel(seconds: number): string {
  */
 interface IntegrationSettingsBody {
   line?: IntegrationLine;
+  /** The main branch as a full ref; sent only while the line can still move (L4 locks both). */
+  upstreamRef?: string;
   mergeCheckCommand?: string | null;
   exceptionEscalationSeconds?: number;
 }
@@ -140,16 +157,28 @@ export interface RunSettingsProject {
  *  and a line nobody has decided is no line until somebody picks one. */
 interface RunSettingsDraft {
   line: IntegrationLine | null;
+  /** The main branch by name; null for a project with no repository, which has none to choose. */
+  upstream: string | null;
   automatic: boolean;
   maxConcurrentTasks: number | null;
   mergeCheckCommand: string;
   escalationSeconds: number;
 }
 
+/** The main branch the project stands on, by name — before it is bound to its repository, the one
+ *  binding gives it: the owner's last choice there, else main (L6) — and null for a project with no
+ *  repository. */
+function storedUpstream(
+  view: Pick<ProjectIntegrationView, 'repository' | 'upstreamRef' | 'lastMainBranch'>,
+): string | null {
+  return view.repository ? mainBranchName(view.upstreamRef ?? view.lastMainBranch?.branch) : null;
+}
+
 /** What is stored, as a draft: where the edits are measured from. */
 function storedDraft(view: ProjectIntegrationView, project: RunSettingsProject): RunSettingsDraft {
   return {
     line: view.line,
+    upstream: storedUpstream(view),
     automatic: project.coordinatorEnabled,
     maxConcurrentTasks: project.maxConcurrentTasks,
     mergeCheckCommand: view.mergeCheckCommand ?? '',
@@ -158,16 +187,23 @@ function storedDraft(view: ProjectIntegrationView, project: RunSettingsProject):
 }
 
 /** The two writes a Save makes, each holding only what changed; null for a door with nothing to
- *  say. The line only while it can still move: sending the value a locked line already holds is
- *  refused 409 by the trigger. */
+ *  say. The line and the main branch only while they can still move: sending the value a locked
+ *  line already holds is refused 409 by the trigger. A main branch saved here is the owner's choice,
+ *  and the one their next project in the repository starts with. */
 function runSettingsWrites(
-  view: Pick<ProjectIntegrationView, 'line' | 'locked' | 'mergeCheckCommand' | 'escalationSeconds'>,
+  view: Pick<
+    ProjectIntegrationView,
+    'line' | 'repository' | 'upstreamRef' | 'lastMainBranch' | 'locked' | 'mergeCheckCommand' | 'escalationSeconds'
+  >,
   project: RunSettingsProject,
   draft: RunSettingsDraft,
 ): { integration: IntegrationSettingsBody | null; authorization: AuthorizationBody | null } {
   const check = draft.mergeCheckCommand.trim() === '' ? null : draft.mergeCheckCommand;
   const integration: IntegrationSettingsBody = {
     ...(!view.locked && draft.line !== null && draft.line !== view.line ? { line: draft.line } : {}),
+    ...(!view.locked && draft.upstream !== null && draft.upstream !== storedUpstream(view)
+      ? { upstreamRef: mainBranchRef(draft.upstream) }
+      : {}),
     ...(check !== (view.mergeCheckCommand ?? null) ? { mergeCheckCommand: check } : {}),
     ...(draft.escalationSeconds !== view.escalationSeconds
       ? { exceptionEscalationSeconds: draft.escalationSeconds }
@@ -237,13 +273,12 @@ export function ProjectRunSettings({
         {integration.isError ? (
           <Alert
             type="error"
-            showIcon
-            message="How it runs could not be loaded"
+            title="How it runs could not be loaded"
             description={integration.error instanceof Error ? integration.error.message : undefined}
           />
         ) : (
           <div className="project-run-settings-loading">
-            <Spin size="small" />
+            <Spinner size="small" aria-busy="true" />
           </div>
         )}
       </section>
@@ -259,6 +294,10 @@ export function ProjectRunSettings({
   const missingCheck = draft.line !== null && runMergeCheckMissing({ ...draft, line: draft.line });
   const branch = view.line === 'PROJECT_BRANCH' && view.ref ? view.ref : `project/${projectId}`;
   const now = Date.now();
+  // The branch the sentences about where work goes name: the one being chosen, or main for a project
+  // with no repository. Pausing is about the project as it stands, so its sentence names that one.
+  const main = draft.upstream ?? DEFAULT_MAIN_BRANCH;
+  const repository = view.repository || null;
 
   return (
     <section className="project-open-items project-run-settings" aria-label={START_HOW_IT_RUNS}>
@@ -272,7 +311,7 @@ export function ProjectRunSettings({
             {draft.line === null
               ? ''
               : draft.line === 'MAIN'
-                ? RUN_LINE_MAIN
+                ? runLineMain(main)
                 : `${RUN_LINE_PROJECT_BRANCH} · ${shortBranch(branch)}`}
             {draft.line !== null && draft.maxConcurrentTasks !== null
               ? ` · ${draft.maxConcurrentTasks} ${runTasksAtATime(draft.maxConcurrentTasks)}`
@@ -288,35 +327,61 @@ export function ProjectRunSettings({
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_TASKS_LAND_ON}</div>
             <div>
-              <Radio.Group
+              {/* An empty value checks neither line: the project has not decided one. */}
+              <RadioGroup<IntegrationLine | ''>
                 className="project-run-lines"
                 aria-label={RUN_TASKS_LAND_ON}
-                value={draft.line}
+                value={draft.line ?? ''}
                 disabled={view.locked}
-                onChange={(event) => set({ line: event.target.value })}
+                onValueChange={(line) => set({ line: line || null })}
               >
                 <Radio value="PROJECT_BRANCH">
                   <b>{RUN_LINE_PROJECT_BRANCH}</b> · <code className="start-card-branch" title={branch}>{shortBranch(branch)}</code>
                   {/* What each line means, while it can still be chosen. Once it is locked the choice
-                      is history, and the sentence under the two says why it cannot move. */}
+                      is history, and the sentence under the two — or under Main branch, on a project
+                      that shows one — says why it cannot move. */}
                   {view.locked ? null : (
                     <div className="project-integration-setting-hint">{RUN_LINE_PROJECT_BRANCH_HINT}</div>
                   )}
                 </Radio>
                 <Radio value="MAIN">
-                  <b>{RUN_LINE_MAIN}</b>
+                  <b>{runLineMain(main)}</b>
                   {view.locked ? null : (
-                    <div className="project-integration-setting-hint">{RUN_LINE_MAIN_HINT}</div>
+                    <div className="project-integration-setting-hint">{runLineMainHint(main)}</div>
                   )}
                 </Radio>
-              </Radio.Group>
-              {view.locked ? (
+              </RadioGroup>
+              {view.locked && repository === null ? (
                 <div className="project-integration-setting-hint">
                   {runLineLocked(view.startedAt ? ago(view.startedAt, now) : null)}
                 </div>
               ) : null}
             </div>
           </div>
+
+          {/* Which branch "main" is for this project: where its tasks start and its work ends up. It
+              locks with the line — both are what landed work stands on — so once they lock, the
+              sentence saying why sits under the second of the two. A project with no repository has
+              no branch to name, and no row. */}
+          {repository !== null && draft.upstream !== null ? (
+            <div className="project-integration-setting">
+              <div className="project-integration-setting-label">{RUN_MAIN_BRANCH}</div>
+              <div>
+                <MainBranchSelect
+                  value={draft.upstream}
+                  branches={view.branches ?? null}
+                  remembered={view.lastMainBranch?.branch ?? null}
+                  disabled={view.locked}
+                  onChange={(upstream) => set({ upstream })}
+                />
+                <div className="project-integration-setting-hint">
+                  {view.locked
+                    ? runMainBranchLocked(view.startedAt ? ago(view.startedAt, now) : null, main)
+                    : `${RUN_MAIN_BRANCH_HINT} ${runMainBranchRemembers(repository)}`}
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_AUTOMATIC}</div>
@@ -325,27 +390,27 @@ export function ProjectRunSettings({
                 <Switch
                   checked={draft.automatic}
                   aria-label={RUN_AUTOMATIC}
-                  onChange={(automatic) => set({ automatic })}
+                  onCheckedChange={(automatic) => set({ automatic })}
                 />
                 <span>{draft.automatic ? RUN_SWITCH_ON : RUN_SWITCH_OFF}</span>
               </div>
               {/* The start card's sentence, for the line the project is on — or the one being chosen:
                   what Automatic does with a merge into main depends on it. */}
-              <div className="project-integration-setting-hint">{runAutomaticHint(draft.line ?? 'PROJECT_BRANCH')}</div>
+              <div className="project-integration-setting-hint">{runAutomaticHint(draft.line ?? 'PROJECT_BRANCH', main)}</div>
             </div>
           </div>
 
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_AT_MOST}</div>
             <div className="start-card-inline">
-              <InputNumber
+              <NumberInput
                 className="start-card-count"
                 min={1}
                 max={START_MAX_CONCURRENT_TASKS}
                 precision={0}
                 value={draft.maxConcurrentTasks}
                 aria-label={RUN_AT_MOST}
-                onChange={(value) => set({ maxConcurrentTasks: typeof value === 'number' ? value : null })}
+                onValueChange={(value) => set({ maxConcurrentTasks: value })}
               />
               <span>{runTasksAtATime(draft.maxConcurrentTasks)}</span>
             </div>
@@ -363,11 +428,11 @@ export function ProjectRunSettings({
                 value={draft.mergeCheckCommand}
                 placeholder={RUN_MERGE_CHECK_PLACEHOLDER}
                 aria-label={RUN_MERGE_CHECK}
-                status={missingCheck ? 'warning' : undefined}
+                warning={missingCheck}
                 onChange={(event) => set({ mergeCheckCommand: event.target.value })}
               />
-              <div className="project-integration-setting-hint">{RUN_MERGE_CHECK_HINT}</div>
-              {missingCheck ? <div className="start-card-warn">{RUN_NO_MERGE_CHECK_WARNING}</div> : null}
+              <div className="project-integration-setting-hint">{runMergeCheckHint(main)}</div>
+              {missingCheck ? <div className="start-card-warn">{runNoMergeCheckWarning(main)}</div> : null}
             </div>
           </div>
 
@@ -375,14 +440,14 @@ export function ProjectRunSettings({
             <div className="project-integration-setting-label">{RUN_ESCALATE_AFTER}</div>
             <div>
               <Select
-                value={draft.escalationSeconds}
+                value={String(draft.escalationSeconds)}
                 style={{ width: 140 }}
                 aria-label={RUN_ESCALATE_AFTER}
-                onChange={(escalationSeconds) => set({ escalationSeconds })}
+                onValueChange={(seconds) => { if (seconds !== null) set({ escalationSeconds: Number(seconds) }); }}
                 options={(ESCALATION_CHOICES.some((choice) => choice.seconds === draft.escalationSeconds)
                   ? ESCALATION_CHOICES
                   : [...ESCALATION_CHOICES, { seconds: draft.escalationSeconds, label: escalationLabel(draft.escalationSeconds) }]
-                ).map((choice) => ({ value: choice.seconds, label: choice.label }))}
+                ).map((choice) => ({ value: String(choice.seconds), label: choice.label }))}
               />
               <div className="project-integration-setting-hint">{RUN_ESCALATE_HINT}</div>
             </div>
@@ -392,7 +457,7 @@ export function ProjectRunSettings({
 
       <div className="project-integration-setting-actions">
         <Button
-          type="primary"
+          variant="primary"
           size="small"
           disabled={!dirty || !complete}
           loading={save.isPending}
@@ -411,8 +476,8 @@ export function ProjectRunSettings({
       </div>
       <div className="project-integration-setting-hint project-run-pause-hint">
         {paused && project.pausedAt
-          ? `${runPausedSince(ago(project.pausedAt, now))} ${RUN_PAUSE_HINT}`
-          : RUN_PAUSE_HINT}
+          ? `${runPausedSince(ago(project.pausedAt, now))} ${runPauseHint(stored.upstream ?? DEFAULT_MAIN_BRANCH)}`
+          : runPauseHint(stored.upstream ?? DEFAULT_MAIN_BRANCH)}
       </div>
 
       {/* A refused press, in the door's own words: a 409 STALE_CONFIG_REVISION is not a Retry —
@@ -421,8 +486,7 @@ export function ProjectRunSettings({
         <Alert
           className="project-run-settings-error"
           type="error"
-          showIcon
-          message={RUN_NOT_SAVED}
+          title={RUN_NOT_SAVED}
           description={save.error.message}
         />
       ) : null}
@@ -430,8 +494,7 @@ export function ProjectRunSettings({
         <Alert
           className="project-run-settings-error"
           type="error"
-          showIcon
-          message={move.variables === 'resume' ? RUN_NOT_RESUMED : RUN_NOT_PAUSED}
+          title={move.variables === 'resume' ? RUN_NOT_RESUMED : RUN_NOT_PAUSED}
           description={move.error.message}
         />
       ) : null}

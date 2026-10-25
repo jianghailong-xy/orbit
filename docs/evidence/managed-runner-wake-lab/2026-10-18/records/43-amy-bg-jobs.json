@@ -1,0 +1,19 @@
+{
+  "at": "2026-10-18T01:16:52.054+00:00",
+  "owner": "amy",
+  "sessions": [],
+  "wakes": [
+    {
+      "command": "sleep 180",
+      "created_at": "2026-10-18T01:14:42.883+00:00",
+      "exit_code": 0,
+      "job_id": "bgj_d8df1d37b5ac",
+      "kind": "job",
+      "reason": null,
+      "session": "01a14c90",
+      "status": "completed",
+      "trigger": "exit",
+      "updated_at": "2026-10-18T01:14:42.883+00:00"
+    }
+  ]
+}

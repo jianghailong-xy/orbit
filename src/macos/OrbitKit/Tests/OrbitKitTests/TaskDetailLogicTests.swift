@@ -111,6 +111,29 @@ final class TaskDetailLogicTests: XCTestCase {
         XCTAssertFalse(plain.isEmpty)
     }
 
+    func testARunThatIsTheTasksOnlyStartSaysNothingElseStartsIt() {
+        // Auto-run never picks up an OPEN task in no project that has no prerequisites — the
+        // dependency sweep wants a prerequisite, the independent release a project — so it looks ready
+        // and waits for this press, which is what the line under it says.
+        let unfiled = task(#"{"id":"T","title":"t","status":"OPEN","projectId":null,"runAt":null,"dependsOn":[]}"#)
+        XCTAssertEqual(TaskDetailLogic.runNowHint(unfiled),
+                       "Nothing starts this task by itself: auto-run needs a prerequisite or a project, and it has neither.")
+        // A project or a prerequisite is something that can start it, and so is a schedule.
+        XCTAssertNil(TaskDetailLogic.runNowHint(task(#"{"id":"T","title":"t","status":"OPEN","projectId":"P","dependsOn":[]}"#)))
+        XCTAssertNil(TaskDetailLogic.runNowHint(task("""
+        {"id":"T","title":"t","status":"OPEN","dependsOn":[{"dependsOnTask":{"id":"A","title":"a","status":"DONE"}}]}
+        """)))
+        XCTAssertNil(TaskDetailLogic.runNowHint(task(
+            #"{"id":"T","title":"t","status":"OPEN","runAt":"2026-10-18T09:00:00.000Z","dependsOn":[]}"#)))
+        // A task that is not OPEN is waiting for no press.
+        for status in ["IN_PROGRESS", "DONE", "FAILED", "CANCELLED"] {
+            XCTAssertNil(TaskDetailLogic.runNowHint(task(#"{"id":"T","title":"t","status":"\#(status)","dependsOn":[]}"#)),
+                         status)
+        }
+        // A payload that does not carry the task's prerequisites is told nothing new.
+        XCTAssertNil(TaskDetailLogic.runNowHint(task(#"{"id":"T","title":"t","status":"OPEN"}"#)))
+    }
+
     // MARK: details
 
     func testTheFootnoteSaysWhoMadeTheTaskAndWhen() {

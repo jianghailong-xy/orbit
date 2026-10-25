@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
@@ -128,16 +127,14 @@ async function visit(path: string): Promise<void> {
   await act(async () => {
     root!.render(
       <QueryClientProvider client={qc}>
-        <AntApp>
-          <BrowserRouter>
-            <Routes>
-              {/* The three routes the app draws this view at: a list, one task, all tasks. */}
-              <Route path="/tasks" element={<TaskListView />} />
-              <Route path="/tasks/:id" element={<TaskListView />} />
-              <Route path="/lists/:key" element={<TaskListView />} />
-            </Routes>
-          </BrowserRouter>
-        </AntApp>
+        <BrowserRouter>
+          <Routes>
+            {/* The three routes the app draws this view at: a list, one task, all tasks. */}
+            <Route path="/tasks" element={<TaskListView />} />
+            <Route path="/tasks/:id" element={<TaskListView />} />
+            <Route path="/lists/:key" element={<TaskListView />} />
+          </Routes>
+        </BrowserRouter>
       </QueryClientProvider>,
     );
   });
@@ -267,5 +264,70 @@ describe('stepping down the list with the arrow keys', () => {
 
     expect(address()).toBe(`/tasks/${FIRST.id}?list=${LIST_KEY}`);
     expect(container.querySelectorAll('.task-row.checked').length).toBe(2);
+  });
+});
+
+describe('the list’s keys while one of its controls has focus', () => {
+  /** A key as a browser delivers it to the focused element: keydown, then keyup, both bubbling. */
+  const pressOn = async (el: HTMLElement, key: string): Promise<void> => {
+    await act(async () => {
+      el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      el.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true, cancelable: true }));
+    });
+    await settle();
+  };
+  const checkbox = (row: HTMLElement): HTMLElement => row.querySelector<HTMLElement>('[role="checkbox"]')!;
+  const checked = (): boolean[] => taskRows().map((r) => r.classList.contains('checked'));
+
+  it('Space with a task open checks that task, not the row whose checkbox has focus', async () => {
+    // A native checkbox did not act on a Space whose keydown the list had taken; the checkbox drawn
+    // as a span acts on the keyup, which would also check (or uncheck) the focused row.
+    await visit(`/lists/${LIST_KEY}`);
+    await click(taskRows()[0]);
+    expect(address()).toBe(`/tasks/${FIRST.id}?list=${LIST_KEY}`);
+    checkbox(taskRows()[1]).focus();
+
+    await pressOn(checkbox(taskRows()[1]), ' ');
+
+    expect(checked()).toEqual([true, false]);
+    await pressOn(checkbox(taskRows()[1]), ' ');
+    expect(checked()).toEqual([false, false]);
+  });
+
+  it('Space on the open task’s own checkbox checks it once', async () => {
+    await visit(`/lists/${LIST_KEY}`);
+    await click(taskRows()[0]);
+    checkbox(taskRows()[0]).focus();
+
+    await pressOn(checkbox(taskRows()[0]), ' ');
+
+    expect(checked()).toEqual([true, false]);
+    expect(checkbox(taskRows()[0]).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('Space with no task open is the focused checkbox’s own', async () => {
+    await visit(`/lists/${LIST_KEY}`);
+    checkbox(taskRows()[1]).focus();
+
+    await pressOn(checkbox(taskRows()[1]), ' ');
+
+    expect(checked()).toEqual([false, true]);
+  });
+
+  it('↓ on the list’s title steps to the first task, and its menu stays shut', async () => {
+    // The title keeps focus after a list is picked from its menu; the replaced dropdown's title had no
+    // arrow keys, so they stepped through the tasks from there.
+    await visit(`/lists/${LIST_KEY}`);
+    const title = container.querySelector<HTMLElement>('.tasks-scope-trigger')!;
+    title.focus();
+
+    await pressOn(title, 'ArrowDown');
+
+    expect(address()).toBe(`/tasks/${FIRST.id}?list=${LIST_KEY}`);
+    expect(title.getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    await pressOn(title, 'ArrowDown');
+    expect(address()).toBe(`/tasks/${SECOND.id}?list=${LIST_KEY}`);
+    expect(document.querySelector('[role="menu"]')).toBeNull();
   });
 });

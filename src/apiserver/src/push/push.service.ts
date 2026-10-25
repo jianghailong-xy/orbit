@@ -4,7 +4,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { RunStatus, type DeviceToken } from '@prisma/client';
-import type { LoginEngine } from '@orbit/shared';
+import { AgentProvider, ENGINE_CLI_NAMES, type LoginEngine } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
 import { openItemsNoLongerOwed } from '../projects/project-open-item';
@@ -31,6 +31,7 @@ const ENGINE_LABELS: Record<LoginEngine, string> = {
   codex: 'Codex',
   kimi: 'Kimi Code',
   antigravity: 'Antigravity',
+  cursor: ENGINE_CLI_NAMES[AgentProvider.CURSOR],
 };
 
 /** What became of an agent's own `notify` call — the answer handed straight back to the agent. */
@@ -86,13 +87,29 @@ export class PushService {
     return this.apnsEnabled || this.fcm.enabled;
   }
 
-  private targets(ownerId: string): Promise<DeviceToken[]> {
-    return this.prisma.deviceToken.findMany({ where: { userId: ownerId, OR: [
+  private async targets(ownerId: string): Promise<DeviceToken[]> {
+    return this.withLiveSession(await this.prisma.deviceToken.findMany({ where: { userId: ownerId, OR: [
       ...(this.apnsEnabled ? [{ platform: 'ios', bundleId: this.bundleId,
         environment: { in: ['production', 'sandbox'] } }] : []),
       ...(this.fcm.enabled ? [{ platform: 'android', bundleId: this.fcm.packageName,
         environment: 'production' }] : []),
-    ] } });
+    ] } }));
+  }
+
+  /**
+   * The registrations whose login session has not ended (docs/push-login-session-design.md): one of
+   * its refresh tokens is unrevoked and unexpired. A sign-out, reuse detection or 30 days without a
+   * refresh ends it, whether or not the device got its unregister through. A row that names no
+   * session predates them and stays.
+   */
+  private async withLiveSession(rows: DeviceToken[]): Promise<DeviceToken[]> {
+    const named = [...new Set(rows.flatMap((row) => (row.loginSessionId ? [row.loginSessionId] : [])))];
+    if (named.length === 0) return rows;
+    const live = new Set((await this.prisma.refreshToken.findMany({
+      where: { loginSessionId: { in: named }, revokedAt: null, expiresAt: { gt: new Date() } },
+      select: { loginSessionId: true },
+    })).map((token) => token.loginSessionId));
+    return rows.filter((row) => !row.loginSessionId || live.has(row.loginSessionId));
   }
 
   /**
@@ -210,6 +227,9 @@ export class PushService {
    *
    * Deliberately narrow, because the interrupt budget is per-person while the number of agents
    * running is not: `settleAlert` announces only what happened on its own and is really over.
+   * The alert says what the session's recap says whenever one has been written — read at this
+   * moment, off the row, so it reflects whichever pass had landed by the time the settlement
+   * fired; that decision is `settleAlert`'s, not this method's.
    * Called on the STATUS event the runner/reaper mark `final` — the one signal that fires
    * exactly once per finalization — and again when auto-retry gives up, which settles a
    * failure without moving the row's status.
@@ -229,6 +249,9 @@ export class PushService {
           completedAt: true,
           deletedAt: true,
           error: true,
+          // The rolling recap, when one has been written: `settleAlert` prefers it over the
+          // rules line, and falls back to that line when it is null.
+          recapText: true,
           owner: { select: { preferences: true } },
         },
       });
@@ -688,6 +711,8 @@ export class PushService {
         where: {
           ownerId,
           status: RunStatus.RUNNING,
+          // A LANDING row is never RUNNING; named anyway, so no status scan can ever count one.
+          sessionKind: 'CONVERSATION',
           completedAt: null,
           archivedAt: null,
           deletedAt: null,
@@ -741,7 +766,10 @@ export class PushService {
     await this.deliver(tokens, body, 'background', '5');
   }
 
-  /** Route only eligible registrations; stale failures cannot prune a newer token/account binding. */
+  /**
+   * Route only eligible registrations; stale failures cannot prune a newer token/account binding.
+   * Each send (and FCM retry) first checks the row is unchanged and its login session still live.
+   */
   private async deliver(
     tokens: DeviceToken[],
     body: string,
@@ -753,7 +781,8 @@ export class PushService {
     const results = await Promise.all(tokens.map(async (t) => {
       const where = { id: t.id, token: t.token, userId: t.userId, updatedAt: t.updatedAt,
         platform: t.platform, bundleId: t.bundleId, environment: t.environment };
-      const isCurrent = async () => Boolean(await this.prisma.deviceToken.findFirst({ where, select: { id: true } }));
+      const isCurrent = async () => Boolean(await this.prisma.deviceToken.findFirst({ where, select: { id: true } }))
+        && (await this.withLiveSession([t])).length === 1;
       try {
         if (t.platform === 'android' && this.fcm.enabled && t.bundleId === this.fcm.packageName
           && t.environment === 'production') {

@@ -1,0 +1,14 @@
+argv: env P43A_SNAPSHOTS=/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs/p43a-base-shots P43A_OUTPUT=/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs/p43a-base-out npx playwright test --config ui-migration/p43a.config.mjs --update-snapshots=all
+tree: base
+head: 9c86b3dfec35ffac4575ec9f73319aa9947a65be
+uncommitted:
+load: 58.53 53.05 45.45 30/4211 2306153
+memory: 3484 MB available
+disk: / 20766M available, TMPDIR /mnt/data/tmp/34coPBqt8gi229cVNds0E/tmp
+started: 2026-10-10T01:49:03Z
+
+Error: Timed out waiting 30000ms from config.webServer.
+
+exit=1
+load: 55.06 53.36 46.17 11/3999 2319122
+ended: 2026-10-10T01:50:16Z

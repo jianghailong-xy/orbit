@@ -177,9 +177,9 @@ struct ToolApprovalCard: View {
     @State private var criteriaOpen = false
 
     private var rememberRules: [PermissionRule] {
-        // A runtime that drops remember rules (Harness) gets Allow / Deny only.
-        guard Approvals.rememberOffered(runtime: SessionProviderChoices.executingRuntime(
-            console.provider, configured: console.configuredProviders)) else { return [] }
+        // An engine that drops remember rules (Harness) gets Allow / Deny only — asked of the session's
+        // engine, whichever DeepSeek key it runs on.
+        guard Approvals.rememberOffered(runtime: console.engine) else { return [] }
         return approval.input.map { Approvals.rememberRules(toolName: approval.toolName ?? "", input: $0) } ?? []
     }
     /// A shell line is shown as the command itself — never the model's prose `description`, since
@@ -524,6 +524,8 @@ struct QuestionCard: View {
     let approval: PendingApproval
     @Environment(ApprovalReviewDrafts.self) private var drafts
     @Environment(\.dismissApprovalReview) private var dismissReview
+    /// Answered in this review: the question is drawn as its record, with what it sent ticked.
+    @Environment(\.reviewRecord) private var record
     private var draft: QuestionReviewDraft { drafts.question(approval.id) }
 
     private var questions: [AskQuestion] {
@@ -559,12 +561,33 @@ struct QuestionCard: View {
                 }
             }
             Text(q.question).font(.orbitProse.bold())
-            ForEach(q.options) { opt in
-                OptionRow(option: opt,
-                          picked: isSelected(q, opt.label),
-                          multiSelect: q.multiSelect) { toggle(q, opt.label) }
+            if let answers = record?.answers {
+                answeredOptions(q, answers)
+            } else {
+                ForEach(q.options) { opt in
+                    OptionRow(option: opt,
+                              picked: isSelected(q, opt.label),
+                              multiSelect: q.multiSelect) { toggle(q, opt.label) }
+                }
+                customField(q)
             }
-            customField(q)
+        }
+    }
+
+    /// The options as they were offered, the ones sent ticked and the rest grey — and the words
+    /// typed instead of an option, under their own label (`ReviewRecords.answer`).
+    @ViewBuilder
+    private func answeredOptions(_ q: AskQuestion, _ answers: [String: [String]]) -> some View {
+        let sent = ReviewRecords.answer(to: q, in: answers)
+        ForEach(q.options) { opt in
+            AnsweredOptionRow(label: opt.label, description: nonEmpty(opt.description),
+                              picked: sent.picked.contains(opt.label))
+        }
+        if let typed = sent.typed {
+            Text(ReviewRecords.yourAnswer)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            AnsweredOptionRow(label: "“\(typed)”", description: nil, picked: true)
         }
     }
 
@@ -684,6 +707,36 @@ private struct OptionRow: View {
     }
 }
 
+/// One option of an answered question, as the record shows it: ticked on a light wash when it was
+/// sent, grey but readable when it was not — the coordinator question's record rows.
+private struct AnsweredOptionRow: View {
+    let label: String
+    let description: String?
+    let picked: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: picked ? "checkmark.circle.fill" : "circle")
+                .font(.orbitGlyph)
+                .foregroundStyle(picked ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).font(.orbitProse.weight(picked ? .semibold : .regular))
+                    .foregroundStyle(picked ? Color.primary : Color.secondary)
+                if let description {
+                    Text(description).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: ApprovalMetrics.rowMinHeight, alignment: .leading)
+        .background(picked ? Color.accentColor.opacity(0.10) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(picked ? .isSelected : [])
+    }
+}
+
 // MARK: - the completion decision
 
 /// The card a person answers "is this work finished" on — drawn by Orbit from the pending read and
@@ -694,7 +747,15 @@ private struct OptionRow: View {
 /// is re-derived from the console's read on every body pass, which is what makes a disabled button
 /// honest rather than a guess. Every word it shows comes from `EvidenceDecisions`, so macOS, iOS and
 /// the browser cannot come apart on it.
+///
+/// It is also the one card a version keeps while its project's coordinator is paused
+/// (`docs/evidence-waits-for-coordinator-design.md`): folded while the version waits for the
+/// coordinator (`QueuedEvidenceCard`), whose Decide it myself opens this card in the review sheet;
+/// one line once it is handed over (`SentToCoordinatorLine`); this card if it becomes the reader's
+/// question after all — in the same place throughout.
 private struct EvidenceDecisionCard: View {
+    @Environment(\.inApprovalReview) private var inReview
+    @Environment(\.dismissApprovalReview) private var dismissReview
     let console: ConsoleModel
     let taskID: String
     let evidenceRevision: String
@@ -706,6 +767,18 @@ private struct EvidenceDecisionCard: View {
 
     var body: some View {
         let standing = self.standing
+        switch standing.state {
+        case .sent(let sent) where !inReview:
+            SentToCoordinatorLine(sent: sent)
+        case .waiting(let row) where !inReview:
+            QueuedEvidenceCard(console: console, row: row)
+        default:
+            if inReview { review(standing) } else { card(standing) }
+        }
+    }
+
+    /// The card in the conversation.
+    private func card(_ standing: EvidenceDecisionStanding) -> some View {
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
             ApprovalHeader(symbol: "checkmark.seal.fill",
                            title: EvidenceDecisions.heading(standing), tone: .blue)
@@ -715,25 +788,7 @@ private struct EvidenceDecisionCard: View {
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            if let row = standing.row {
-                EvidenceDecisionFacts(row: row)
-            } else {
-                // The address and nothing else: a revision that has left the read is not published
-                // any more, and this card kept no copy of what it said.
-                Text(EvidenceDecisions.addressLine(standing))
-                    .font(.orbitMonoFine).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            // Above the dead buttons, so it reads as the reason they are dead.
-            if let stale = EvidenceDecisions.staleExplanation(standing) {
-                Text(stale)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-                    .padding(.horizontal, 10).padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.blue.opacity(0.08),
-                                in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
-            }
+            facts(standing)
 
             ApprovalActions {
                 confirmButton(standing)
@@ -746,6 +801,79 @@ private struct EvidenceDecisionCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .approvalChrome(.blue)
+    }
+
+    /// The same card in the review sheet the folded card's Decide it myself opens
+    /// (`phone-sheet.png`): scrolling, with its two answers pinned under it, and — while the version
+    /// still waits for the coordinator — why, and what deciding here means, above everything else.
+    /// Whatever becomes of the version while the sheet is open, the sheet says it in the card's own
+    /// words: the question it became, the line it left once handed over, or why it is gone.
+    private func review(_ standing: EvidenceDecisionStanding) -> some View {
+        ApprovalReviewLayout(title: standing.waitsForCoordinator ? EvidenceDecisions.queuedHeading
+                                                                 : EvidenceDecisions.heading(standing),
+                             symbol: "checkmark.seal.fill", tone: .blue,
+                             summary: EvidenceDecisions.heading(standing)) {
+            Text(CriteriaDecisions.provenanceLabel)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if standing.waitsForCoordinator {
+                VStack(alignment: .leading, spacing: 4) {
+                    CoordinatorPauseStatus(pause: console.coordinatorPause)
+                    Text(EvidenceDecisions.queuedOpenNote)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.10),
+                            in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+                .overlay {
+                    RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius)
+                        .strokeBorder(Color.orange.opacity(0.28))
+                }
+                // The question itself, under why it is not the coordinator's answer yet: the
+                // sheet's title is the folded card's.
+                Text(EvidenceDecisions.heading(standing))
+                    .font(.orbitProse.bold())
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            facts(standing)
+            if case .sent(let sent) = standing.state {
+                SentToCoordinatorLine(sent: sent)
+            }
+        } actions: {
+            ApprovalActions {
+                confirmButton(standing)
+                sendBackButton(standing)
+            }
+            Text(EvidenceDecisions.sendBackHint)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// The card's body: the row, or — once the read no longer publishes one — its address and why
+    /// it can no longer be answered.
+    @ViewBuilder private func facts(_ standing: EvidenceDecisionStanding) -> some View {
+        if let row = standing.row {
+            EvidenceDecisionFacts(row: row)
+        } else {
+            // The address and nothing else: a revision that has left the read is not published
+            // any more, and this card kept no copy of what it said.
+            Text(EvidenceDecisions.addressLine(standing))
+                .font(.orbitMonoFine).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
+        // Above the dead buttons, so it reads as the reason they are dead.
+        if let stale = EvidenceDecisions.staleExplanation(standing) {
+            Text(stale)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.blue.opacity(0.08),
+                            in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+        }
     }
 
     // MARK: actions
@@ -770,6 +898,8 @@ private struct EvidenceDecisionCard: View {
         Button {
             guard let row = standing.row else { return }
             PlatformHaptics.tap()
+            // Pressed in the review sheet, the sheet makes way for the composer it arms.
+            dismissReview()
             console.startEvidenceSendBackReply(row)
         } label: {
             Text(Approvals.chatAction).approvalActionLabel()
@@ -893,7 +1023,7 @@ private struct EvidenceDecisionFacts: View {
             }
             if !gaps.rest.isEmpty {
                 DisclosureToggle(open: gapsOpen,
-                                 label: gapsOpen ? "收起"
+                                 label: gapsOpen ? "Show less"
                                                  : EvidenceDecisions.gapsMore(gaps.rest.count)) {
                     gapsOpen.toggle()
                 }
@@ -976,6 +1106,114 @@ private struct DisclosureToggle: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isButton)
+    }
+}
+
+// MARK: - while the coordinator is paused
+
+/// A version waiting for this conversation's coordinator, folded
+/// (`docs/mocks/evidence-waits-for-coordinator/phone-queued.png`): the heading and when the version
+/// was submitted, the task, why the coordinator does not have it, what that means, and Decide it
+/// myself — which opens the evidence card in the review sheet, pressed as that card is. Web's
+/// `QueuedEvidenceCard`, in its words (`EvidenceDecisionCopyParityTests`).
+///
+/// Grey, because nobody is being asked anything yet: the bar over the transcript does not count it
+/// (`EvidenceDecisions.isOpen`), and the folded card has no answer of its own to press.
+private struct QueuedEvidenceCard: View {
+    @Environment(\.approvalReviewTarget) private var target
+    @Environment(\.openApprovalReview) private var openReview
+    let console: ConsoleModel
+    let row: EvidenceDecisionRow
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            HStack(spacing: 8) {
+                Image(systemName: "hourglass")
+                    .font(.orbitMeta)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .background(Color.secondary.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
+                Text(EvidenceDecisions.queuedHeading)
+                    .font(.orbitProse.bold())
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                Spacer(minLength: 4)
+                if let submitted = row.submittedAt {
+                    Text(EvidenceDecisions.receiptTime(submitted))
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Text(row.title)
+                .font(.orbitProse.bold())
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 4) {
+                CoordinatorPauseStatus(pause: console.coordinatorPause)
+                Text(EvidenceDecisions.queuedNote)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Divider()
+            Button {
+                PlatformHaptics.tap()
+                console.openedEvidence(row.taskId, row.evidenceRevision)
+                if let target { openReview(target) }
+            } label: {
+                HStack {
+                    Text(EvidenceDecisions.decideMyselfAction)
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right").accessibilityHidden(true)
+                }
+                .font(.orbitLabel.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(maxWidth: .infinity, minHeight: ApprovalMetrics.rowMinHeight, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .approvalChrome(.gray)
+    }
+}
+
+/// Why a version waits: amber while the coordinator is paused, quiet once it is back — the line
+/// under the folded card's title, and the first line of the card it opens into (web's
+/// `CoordinatorPauseStatus`).
+private struct CoordinatorPauseStatus: View {
+    let pause: CoordinatorPause
+
+    var body: some View {
+        let paused = pause != .back
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: paused ? "pause.circle" : "clock").accessibilityHidden(true)
+            Text(EvidenceDecisions.pauseLine(pause))
+        }
+        .font(.orbitLabel)
+        .foregroundStyle(paused ? Color.orange : Color.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A version that waited, once it is handed to the coordinator: one line where its card was, in the
+/// pill a merge's record is drawn as (`PromotionReceiptLine`). Nothing to press — the coordinator
+/// holds it, and what it decides arrives as the receipt (web's `SentToCoordinatorLine`).
+private struct SentToCoordinatorLine: View {
+    let sent: SentToCoordinatorRow
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.right").accessibilityHidden(true)
+            Text(EvidenceDecisions.sentLine(sent.deliveredAt))
+                .lineLimit(2).multilineTextAlignment(.leading)
+        }
+        .font(.orbitLabel)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.secondary.opacity(0.1), in: Capsule())
+        .frame(maxWidth: .infinity)
+        .help(sent.title)
     }
 }
 
@@ -1856,6 +2094,10 @@ struct DeliveredDecisionCardView: View {
                 EvidenceDecisionReceiptCard(decided: decided)
             case .coordinatorQuestion(let itemID):
                 CoordinatorQuestionCardView(console: console, itemID: itemID)
+            case .coordinatorQuestionRecord(let record):
+                // The read's newest copy of it, when it has one: a sheet opened on the copy this
+                // console drew from its own press goes on to show the server's.
+                CoordinatorQuestionRecordView(record: console.questionRecord(record.itemId) ?? record)
             case .escalatedItem(let itemID):
                 OwnerItemCardView(console: console, itemID: itemID, isPause: false)
             case .fusePause(let itemID):
@@ -1881,6 +2123,138 @@ struct DeliveredDecisionCardView: View {
     }
 }
 
+/// A decision card this review answered, drawn as its record: the card as it was asked when the
+/// press went in (`ConsoleModel.answeredDecisions`), read-only, with who answered and when where
+/// its buttons were. The owner's boards of 2026-10-15, ④–⑧.
+struct AnsweredDecisionView: View {
+    let console: ConsoleModel
+    let answered: ConsoleModel.AnsweredDecision
+
+    var body: some View {
+        switch answered {
+        case .evidence(let row, let at):
+            ApprovalReviewLayout(title: EvidenceDecisions.askHeading, symbol: "checkmark.seal.fill",
+                                 tone: .blue, summary: row.title) {
+                Text(CriteriaDecisions.provenanceLabel)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                EvidenceDecisionFacts(row: row)
+            } actions: {
+                EmptyView()
+            }
+            .environment(\.reviewRecord, ReviewRecord(
+                title: ReviewRecords.decisionTitle,
+                footer: ReviewRecords.evidence(revision: row.evidenceRevision, at: at)))
+
+        case .criteria(let row, let answer, let resultingSeal, let at):
+            CriteriaDecisionCard(console: console, intentID: row.intentId, asked: row)
+                .environment(\.reviewRecord, ReviewRecord(
+                    title: ReviewRecords.decisionTitle,
+                    footer: ReviewRecords.criteriaDecision(approved: answer == .approve,
+                                                           baseSeal: row.baselineSeal,
+                                                           resultingSeal: resultingSeal, at: at)))
+
+        case .ownerConfirmed(let view, let waiting, let at):
+            OwnerConfirmedRecordView(view: view, waiting: waiting)
+                .environment(\.reviewRecord, ReviewRecord(
+                    title: OwnerConfirmations.confirmedHeading,
+                    footer: ReviewRecords.ownerConfirmed(at: at, reportedAt: waiting.report?.reportedAt)))
+
+        case .acceptance(let standing, let criteria, let started, let at):
+            let version = standing.currentVersion
+            ApprovalReviewLayout(title: AcceptanceConfirmations.title, symbol: "checkmark.seal.fill",
+                                 tone: .blue, summary: "\(console.projectTitle) · \(criteria.count) criteria") {
+                StartSectionHead(title: StartProject.doneWhenHead(criteria.count))
+                ForEach(criteria) { item in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("\(item.ordinal)")
+                            .font(.orbitMonoFine).foregroundStyle(.secondary)
+                            .frame(minWidth: 14, alignment: .trailing)
+                        Text(item.text).font(.orbitProse)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } actions: {
+                EmptyView()
+            }
+            .environment(\.reviewRecord, ReviewRecord(
+                title: ReviewRecords.decisionTitle,
+                footer: started
+                    ? ReviewRecords.started(criteria: version.material.count, seal: version.digest, at: at)
+                    : ReviewRecords.confirmed(criteria: version.material.count, seal: version.digest,
+                                              changes: nil, at: at)))
+
+        case .criteriaChange(let standing, _, let changes, let at):
+            CriteriaChangeCardView(console: console, asked: standing)
+                .environment(\.reviewRecord, ReviewRecord(
+                    title: ReviewRecords.decisionTitle,
+                    footer: ReviewRecords.confirmed(criteria: standing.currentVersion.material.count,
+                                                    seal: standing.currentVersion.digest,
+                                                    changes: changes, at: at)))
+
+        case .started(let asked, let at):
+            StartProjectCard(
+                projectID: console.projectID ?? "",
+                projectTitle: asked.projectTitle,
+                askedAt: asked.askedAt,
+                request: asked.request,
+                criteria: asked.criteria,
+                plan: asked.plan,
+                escalationSeconds: asked.escalationSeconds,
+                branches: asked.branches,
+                lastMainBranch: asked.lastMainBranch,
+                draft: asked.draft,
+                standing: .live,
+                onDraft: { _ in },
+                onStart: {},
+                onViewTasks: { _ = console.openCreatedTasks() },
+                graph: asked.graph,
+                recordSettings: console.acceptanceConfirmation?.confirmation?.startedWith)
+                .environment(\.reviewRecord, ReviewRecord(
+                    title: ReviewRecords.decisionTitle,
+                    footer: ReviewRecords.started(criteria: asked.criteria.count,
+                                                  seal: asked.request.criteriaDigest, at: at)))
+        }
+    }
+}
+
+/// A task confirmed done in this review, as its record: what was asked — the task, what counts as
+/// done, what the agent said, its review — without what confirming would set off, which it now has.
+private struct OwnerConfirmedRecordView: View {
+    let view: OwnerConfirmationView?
+    let waiting: OwnerConfirmationWaiting
+
+    var body: some View {
+        ApprovalReviewLayout(title: OwnerConfirmations.heading, symbol: "checkmark.seal.fill", tone: .blue,
+                             summary: view?.title ?? "") {
+            Text(CriteriaDecisions.provenanceLabel)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let view {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(view.title)
+                        .font(.orbitProse.bold())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(OwnerConfirmations.yours).font(.orbitLabel)
+                        Text(view.taskId).font(.orbitMonoFine)
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundStyle(.secondary)
+                }
+                OwnerConfirmationBoxes(acceptanceCriteria: view.acceptanceCriteria,
+                                       report: waiting.report, foldsCriteria: true)
+            }
+            if let review = waiting.review {
+                OwnerConfirmationReviewBarView(review: review, place: .receipt)
+            }
+        } actions: {
+            EmptyView()
+        }
+    }
+}
+
 /// The held loosening proposal: what an agent asked for, and the two answers only the account
 /// owner can give.
 ///
@@ -1891,12 +2265,32 @@ struct DeliveredDecisionCardView: View {
 private struct CriteriaDecisionCard: View {
     let console: ConsoleModel
     let intentID: String
+    /// Set when this review answered it: the proposal as it was asked, drawn as its record.
+    var asked: PendingCriteriaDecisionRow? = nil
     @State private var deciding = false
     @State private var proposalOpen = false
 
     private var standing: CriteriaDecisionStanding { console.criteriaStanding(intentID) }
 
     var body: some View {
+        if let asked {
+            // What it was while it waited — the badge, the seal it was composed against, "nothing
+            // is on hold" — is over; what was proposed is the record.
+            ApprovalReviewLayout(title: CriteriaDecisions.title, symbol: "exclamationmark.triangle.fill",
+                                 tone: .orange, summary: CriteriaDecisions.changeSummary(asked.diff)) {
+                Text("\(CriteriaDecisions.provenanceLabel) — \(CriteriaDecisions.provenanceNote).")
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                proposal(asked)
+            } actions: {
+                EmptyView()
+            }
+        } else {
+            live
+        }
+    }
+
+    @ViewBuilder private var live: some View {
         let standing = self.standing
         ApprovalReviewLayout(title: CriteriaDecisions.title, symbol: "exclamationmark.triangle.fill", tone: .orange,
                              summary: standing.row.map { CriteriaDecisions.changeSummary($0.diff) } ?? CriteriaDecisions.heading(standing),
@@ -2357,6 +2751,8 @@ private struct StartProjectCardView: View {
                 plan: StartProject.planView(graph: console.projectGraph,
                                             fallbackCount: console.projectTaskCount),
                 escalationSeconds: console.projectEscalationSeconds,
+                branches: console.startIntegration?.branches,
+                lastMainBranch: console.startIntegration?.lastMainBranch,
                 draft: console.startDraft(for: row),
                 standing: standing,
                 onDraft: { console.setStartDraft($0, for: itemID) },
@@ -2369,7 +2765,8 @@ private struct StartProjectCardView: View {
                 // Start stays live.
                 onChatAbout: {
                     console.startPlanChangeReply(criteriaDigest: request.criteriaDigest, question: .start)
-                })
+                },
+                graph: console.projectGraph)
         } else {
             VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
                 ApprovalHeader(symbol: "play.fill", title: StartProject.title, tone: .blue)
@@ -2467,6 +2864,12 @@ struct StartProjectCard: View {
     var hasCoordinator: Bool = true
     /// How long a problem waits on the coordinator before it reaches the owner.
     var escalationSeconds: Int = StartProject.defaultEscalationSeconds
+    /// What the Main branch picker offers: the branches the runner reported for the coordination
+    /// workspace's checkout, or nil for none.
+    var branches: ProjectBranchCandidates? = nil
+    /// The branch the owner last chose for this repository, which the picker tags and the row says
+    /// it came from.
+    var lastMainBranch: ProjectLastMainBranch? = nil
     /// The settings as the owner has left them.
     let draft: StartSettingsDraft
     let standing: StartProject.Standing
@@ -2478,11 +2881,28 @@ struct StartProjectCard: View {
     var onChatAbout: (() -> Void)? = nil
     /// A press the door did not take, in its own words.
     var error: String? = nil
+    /// The dependency graph `plan` was read off, which the Plan draws while the whole of it fits.
+    var graph: ProjectDependencyGraph? = nil
+    /// Opens one task of the plan; where there is no such press, a task opens the way View tasks
+    /// does.
+    var onOpenTask: ((String) -> Void)? = nil
+    /// Started in this review: the settings the start recorded, drawn as one line in place of the
+    /// rows that chose them (`RunSettingsSummaryText`) — nil until the read that follows has them.
+    var recordSettings: ProjectStartRecord? = nil
     @Environment(\.dismissApprovalReview) private var dismissReview
+    @Environment(\.reviewRecord) private var record
     @State private var starting = false
     @State private var criteriaOpen = false
     @State private var whyOpen = false
     @State private var mergeCheckOpen = false
+    /// Whether the clamps hide anything: More and Read all are drawn only while they do (or once
+    /// opened), since a toggle for words already in full would open nothing.
+    @State private var whyCut = false
+    @State private var cutCriteria: Set<String> = []
+    @State private var planWidth: CGFloat = 0
+    @State private var graphOpen = false
+    @State private var graphExpanded: Set<String> = []
+    @State private var mainBranchPickerOpen = false
 
     /// Whether a coordinator asked for this card.
     private var asked: Bool { askedAt != nil }
@@ -2510,9 +2930,9 @@ struct StartProjectCard: View {
 
     @ViewBuilder
     private var content: some View {
-        let editable = standing == .live && !starting
+        let editable = standing == .live && !starting && record == nil
         header
-        if let stale = StartProject.staleExplanation(standing) {
+        if record == nil, let stale = StartProject.staleExplanation(standing) {
             Text(stale)
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .padding(.horizontal, 10).padding(.vertical, 8)
@@ -2523,12 +2943,24 @@ struct StartProjectCard: View {
 
         StartSectionHead(title: StartProject.doneWhenHead(criteria.count))
         criteriaList
-        Text(StartProject.explanation(criteria.count))
-            .font(.orbitLabel).foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        howItRunsSection(editable: editable)
+        // What the start would commit the project to — said before the press, not on its record.
+        if record == nil {
+            Text(StartProject.explanation(criteria.count))
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        if record != nil, let started = recordSettings {
+            StartSectionHead(title: StartProject.howItRuns)
+            StartPanel {
+                RunSettingsSummaryText(settings: started.settings, differs: started.differsFromRequest)
+                    .font(.orbitLabel)
+                    .startRow()
+            }
+        } else {
+            howItRunsSection(editable: editable)
+        }
         planSection
-        if let error {
+        if record == nil, let error {
             Text(error)
                 .font(.orbitLabel).foregroundStyle(Color.red)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -2550,24 +2982,26 @@ struct StartProjectCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Label(StartProject.coordinator, systemImage: "bubble.left.fill")
                         .font(.orbitLabel).foregroundStyle(.secondary)
-                    Text(request.why).font(.orbitSubtext).lineLimit(whyOpen ? nil : 3)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Button {
-                        PlatformHaptics.tap()
-                        whyOpen.toggle()
-                    } label: {
-                        Text(whyOpen ? StartProject.less : StartProject.more)
-                            .font(.orbitLabel).foregroundStyle(Color.blue)
+                    ClampedText(text: request.why, font: .orbitSubtext, lineLimit: whyOpen ? nil : 3) { whyCut = $0 }
+                    if whyOpen || whyCut {
+                        Button {
+                            PlatformHaptics.tap()
+                            whyOpen.toggle()
+                        } label: {
+                            Text(whyOpen ? StartProject.less : StartProject.more)
+                                .font(.orbitLabel).foregroundStyle(Color.blue)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
                 .startRow()
             }
         }
     }
 
-    /// The criteria, open, each clamped to two lines, the toggle taking the clamp off — the
-    /// confirmation card's rule, for its reason: a folded list is an invitation to sign unread.
+    /// The criteria, open, each clamped to two lines, the toggle taking the clamp off while the clamp
+    /// hides anything — the confirmation card's rule, for its reason: a folded list is an invitation
+    /// to sign unread.
     @ViewBuilder private var criteriaList: some View {
         if !criteria.isEmpty {
             ForEach(criteria) { item in
@@ -2575,22 +3009,25 @@ struct StartProjectCard: View {
                     Text("\(item.ordinal)")
                         .font(.orbitMonoFine).foregroundStyle(.secondary)
                         .frame(minWidth: 14, alignment: .trailing)
-                    Text(item.text).font(.orbitProse).lineLimit(criteriaOpen ? nil : 2)
-                    Spacer(minLength: 0)
+                    ClampedText(text: item.text, font: .orbitProse, lineLimit: criteriaOpen ? nil : 2) { cut in
+                        cutCriteria = cut ? cutCriteria.union([item.id]) : cutCriteria.subtracting([item.id])
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Button {
-                PlatformHaptics.tap()
-                criteriaOpen.toggle()
-            } label: {
-                Text(criteriaOpen ? AcceptanceConfirmations.showLessLabel
-                                  : AcceptanceConfirmations.readLabel(count: criteria.count))
-                    .font(.orbitLabel)
-                    .foregroundStyle(Color.blue)
+            if criteriaOpen || !cutCriteria.isEmpty {
+                Button {
+                    PlatformHaptics.tap()
+                    criteriaOpen.toggle()
+                } label: {
+                    Text(criteriaOpen ? AcceptanceConfirmations.showLessLabel
+                                      : AcceptanceConfirmations.readLabel(count: criteria.count))
+                        .font(.orbitLabel)
+                        .foregroundStyle(Color.blue)
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -2606,6 +3043,11 @@ struct StartProjectCard: View {
             automaticRow(editable: editable)
             Divider()
             lineRow(editable: editable)
+            // A project with no repository has no branch to name, and no row.
+            if let upstream = draft.upstream {
+                Divider()
+                mainBranchRow(upstream, editable: editable)
+            }
             Divider()
             mergeCheckRow(editable: editable)
             Divider()
@@ -2639,7 +3081,7 @@ struct StartProjectCard: View {
                     .disabled(!editable)
             }
             Text(RunSettings.automaticSays(automatic: draft.automatic, line: draft.line,
-                                           hasMergeCheck: draft.hasMergeCheck))
+                                           hasMergeCheck: draft.hasMergeCheck, main: draft.main))
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if opensCoordinator {
@@ -2657,7 +3099,7 @@ struct StartProjectCard: View {
         let items = StartProject.comesToYou(automatic: draft.automatic, line: draft.line,
                                             ownerConfirmed: plan.ownerConfirmed,
                                             evidenceJudged: plan.evidenceJudged,
-                                            escalationSeconds: escalationSeconds)
+                                            escalationSeconds: escalationSeconds, main: draft.main)
         return VStack(alignment: .leading, spacing: 5) {
             Text(StartProject.comesToYou)
                 .font(.orbitMeta.weight(.semibold)).foregroundStyle(Color.blue)
@@ -2692,12 +3134,12 @@ struct StartProjectCard: View {
                     Text("\(StartProject.branch(request, projectID: projectID)) — \(RunSettings.lineProjectBranchHint)")
                 }
                 Toggle(isOn: lineBinding(.main, draft)) {
-                    Text(RunSettings.lineMain)
-                    Text(RunSettings.lineMainHint)
+                    Text(RunSettings.lineMain(draft.main))
+                    Text(RunSettings.lineMainHint(draft.main))
                 }
             } label: {
                 HStack(spacing: 4) {
-                    Text(draft.line == .main ? RunSettings.lineMain : RunSettings.lineProjectBranch)
+                    Text(draft.line == .main ? RunSettings.lineMain(draft.main) : RunSettings.lineProjectBranch)
                         .lineLimit(1)
                     // macOS draws its own disclosure mark beside a borderless menu's title.
                     #if os(iOS)
@@ -2716,6 +3158,45 @@ struct StartProjectCard: View {
             .disabled(!editable)
         }
         .startRow()
+    }
+
+    /// Which branch "main" is for this project: where its tasks start from and its work ends up.
+    /// Under the line, because the two are one decision and lock together. Picked on a sheet — the
+    /// Merge into picker's shape — and, while it shows the branch the owner chose last for this
+    /// repository, said where it came from.
+    private func mainBranchRow(_ upstream: String, editable: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                PlatformHaptics.tap()
+                mainBranchPickerOpen = true
+            } label: {
+                HStack(spacing: 8) {
+                    Text(RunSettings.mainBranch).font(.orbitProse).foregroundStyle(.primary)
+                    Spacer(minLength: 8)
+                    Text(upstream)
+                        .font(.orbitProse.monospaced())
+                        .foregroundStyle(editable ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Image(systemName: "chevron.right").font(.orbitMeta).foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!editable)
+            if let note = RunSettings.lastChoiceNote(upstream: upstream, lastMainBranch: lastMainBranch) {
+                Text(note)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .startRow()
+        .sheet(isPresented: $mainBranchPickerOpen) {
+            MainBranchPicker(current: upstream, branches: branches,
+                             remembered: lastMainBranch?.branch) { name in
+                update { $0.upstream = name }
+            }
+        }
     }
 
     private func lineBinding(_ line: IntegrationLine, _ draft: StartSettingsDraft) -> Binding<Bool> {
@@ -2758,7 +3239,7 @@ struct StartProjectCard: View {
                     .textInputAutocapitalization(.never)
                     #endif
                     .disabled(!editable)
-                Text(RunSettings.mergeCheckHint)
+                Text(RunSettings.mergeCheckHint(draft.main))
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if !draft.hasMergeCheck {
@@ -2789,31 +3270,81 @@ struct StartProjectCard: View {
         .startRow()
     }
 
-    // MARK: the plan, by level
+    // MARK: the plan, as the task graph or by level
 
-    /// The plan by level — what starts now, what runs side by side, and the task that needs the
-    /// owner — the batch-create review's rule; the tasks themselves are one press away.
+    /// The plan: the project page's task graph while the whole of it fits the card at
+    /// `StartProject.planGraphMinFit` or better — what waits on what, task by task — and otherwise
+    /// by level (what starts now, what runs side by side, the task that needs the owner, the
+    /// batch-create review's rule) with the graph a press away. A drawn graph's rows are its
+    /// layout's, so its head counts tasks only (docs/mocks/start-card-web-width, board 02).
     @ViewBuilder
     private var planSection: some View {
-        StartSectionHead(title: StartProject.planHead(plan.count, levels: plan.levels?.count ?? 1))
+        let drawn = StartProject.planGraph(graph, availableWidth: Double(planWidth))
+        StartSectionHead(title: StartProject.planHead(plan.count, levels: drawn == nil ? (plan.levels?.count ?? 1) : 1))
         StartPanel {
             VStack(alignment: .leading, spacing: 8) {
-                if let levels = plan.levels {
+                if let drawn {
+                    let scale = CGFloat(drawn.scale)
+                    ProjectGraphCanvas(layout: drawn.layout, edges: drawn.edges) { mark in
+                        if mark.kind == .task { openTask(mark.taskId ?? mark.id) }
+                    }
+                    .scaleEffect(scale, anchor: .topLeading)
+                    .frame(width: CGFloat(drawn.layout.width) * scale, height: CGFloat(drawn.layout.height) * scale,
+                           alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                } else if let levels = plan.levels {
                     ForEach(Array(levels.enumerated()), id: \.offset) { at, level in
                         planLevel(at + 1, level)
                     }
                 }
-                Button {
-                    PlatformHaptics.tap()
-                    dismissReview()
-                    onViewTasks()
-                } label: {
-                    Text(StartProject.viewTasks).font(.orbitSubtext).foregroundStyle(Color.blue)
+                HStack(spacing: 14) {
+                    Button {
+                        PlatformHaptics.tap()
+                        dismissReview()
+                        onViewTasks()
+                    } label: {
+                        Text(StartProject.viewTasks).font(.orbitSubtext).foregroundStyle(Color.blue)
+                    }
+                    .buttonStyle(.plain)
+                    if graph != nil, drawn == nil {
+                        Button {
+                            PlatformHaptics.tap()
+                            graphOpen = true
+                        } label: {
+                            Label(StartProject.taskGraph, systemImage: "arrow.up.left.and.arrow.down.right")
+                                .font(.orbitSubtext).foregroundStyle(Color.blue)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .buttonStyle(.plain)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                GeometryReader { geo in
+                    Color.clear.onChange(of: geo.size.width, initial: true) { _, width in planWidth = width }
+                }
             }
             .startRow()
         }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $graphOpen) { graphFullScreen }
+        #else
+        .sheet(isPresented: $graphOpen) { graphFullScreen.frame(minWidth: 720, minHeight: 520) }
+        #endif
+    }
+
+    /// The project page's task graph full screen, for a plan the card lists by level.
+    @ViewBuilder private var graphFullScreen: some View {
+        if let graph {
+            ProjectGraphFullScreen(graph: graph, expanded: $graphExpanded, onOpenTask: openTask)
+        }
+    }
+
+    /// One task of the plan, opened: by the page's own press where there is one, otherwise the way
+    /// View tasks opens the plan's tasks.
+    private func openTask(_ taskID: String) {
+        dismissReview()
+        if let onOpenTask { onOpenTask(taskID) } else { onViewTasks() }
     }
 
     private func planLevel(_ number: Int, _ level: [StartPlanLevelTask]) -> some View {
@@ -2873,6 +3404,48 @@ struct StartProjectCard: View {
     }
 }
 
+/// Text clamped to `lineLimit` lines that says whether the clamp hides any of it: the same words,
+/// laid out unclamped at the same width and never shown, measured against what is drawn. The start
+/// card draws its More and Read all only while this says so — a toggle for words already shown in
+/// full would open nothing (docs/mocks/start-card-web-width, the browser's `useClampHides`).
+private struct ClampedText: View {
+    let text: String
+    let font: Font
+    let lineLimit: Int?
+    let onCut: (Bool) -> Void
+
+    @State private var drawn: CGFloat = 0
+    @State private var whole: CGFloat = 0
+
+    var body: some View {
+        Text(text).font(font).lineLimit(lineLimit)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                GeometryReader { geo in
+                    Color.clear.onChange(of: geo.size.height, initial: true) { _, height in
+                        drawn = height
+                        onCut(whole > height + 1)
+                    }
+                }
+            }
+            .background(alignment: .topLeading) {
+                Text(text).font(font)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .hidden()
+                    .background {
+                        GeometryReader { geo in
+                            Color.clear.onChange(of: geo.size.height, initial: true) { _, height in
+                                whole = height
+                                onCut(height > drawn + 1)
+                            }
+                        }
+                    }
+                    .accessibilityHidden(true)
+            }
+    }
+}
+
 /// "Now" and "You" beside a task of the plan.
 private struct StartPlanPill: View {
     let text: String
@@ -2899,10 +3472,14 @@ private struct StartPlanPill: View {
 private struct CriteriaChangeCardView: View {
     @Environment(\.dismissApprovalReview) private var dismissReview
     let console: ConsoleModel
+    /// Set when this review confirmed it: the change as it was asked, drawn as its record — the read
+    /// says only the new seal once the set is confirmed.
+    var asked: StandardSetConfirmationStanding? = nil
+    @Environment(\.reviewRecord) private var record
     @State private var confirming = false
     @State private var showAll = false
 
-    private var standing: StandardSetConfirmationStanding? { console.acceptanceConfirmation }
+    private var standing: StandardSetConfirmationStanding? { asked ?? console.acceptanceConfirmation }
 
     var body: some View {
         let standing = self.standing
@@ -2914,7 +3491,7 @@ private struct CriteriaChangeCardView: View {
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            if !CriteriaChanges.answerable(standing),
+            if record == nil, !CriteriaChanges.answerable(standing),
                let stale = AcceptanceConfirmations.staleExplanation(standing) {
                 Text(stale)
                     .font(.orbitLabel).foregroundStyle(.secondary)
@@ -2926,9 +3503,12 @@ private struct CriteriaChangeCardView: View {
             if let changes = standing?.changesSinceConfirmed {
                 changeList(changes)
             }
-            Text(CriteriaChanges.explains)
-                .font(.orbitProse)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // What happens until they are confirmed — over once they are.
+            if record == nil {
+                Text(CriteriaChanges.explains)
+                    .font(.orbitProse)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         } actions: {
             ApprovalActions {
                 confirmButton(standing)
@@ -3132,7 +3712,8 @@ struct RunSettingsSummaryText: View {
 /// Every word here is `CoordinatorQuestions`, which is the browser's own copy
 /// (`CoordinatorQuestionCard.tsx`) held to it by `OwnerItemCardsTests`. The card keeps nothing but
 /// the address and what this window typed: the standing is re-derived from the read on every body
-/// pass, so a question answered in a browser goes stale in place here instead of staying pressable.
+/// pass, so a question answered in a browser goes stale in place here instead of staying pressable —
+/// and once it has ended, the card is the record it became (`CoordinatorQuestionRecordView`).
 private struct CoordinatorQuestionCardView: View {
     let console: ConsoleModel
     let itemID: String
@@ -3144,20 +3725,28 @@ private struct CoordinatorQuestionCardView: View {
     private var standing: CoordinatorQuestionStanding { console.questionStanding(itemID) }
 
     var body: some View {
+        // Answered — here, which the console draws from the press until the read has it, or at
+        // another end — or withdrawn: what is left to show is the record, in the review sheet that
+        // stayed open through the answer as much as in the conversation.
+        if let record = console.questionRecord(itemID) {
+            CoordinatorQuestionRecordView(record: record)
+        } else {
+            questionCard
+        }
+    }
+
+    private var questionCard: some View {
         let standing = self.standing
-        ApprovalReviewLayout(title: draft.receipt == nil
-                                ? CoordinatorQuestions.heading : CoordinatorQuestions.answeredHeading,
+        return ApprovalReviewLayout(title: CoordinatorQuestions.heading,
                              symbol: "questionmark.bubble.fill", tone: .blue,
                              summary: previewSummary,
-                             dimmed: draft.receipt != nil || !CoordinatorQuestions.isOpen(standing)) {
+                             dimmed: !CoordinatorQuestions.isOpen(standing)) {
             Text(CoordinatorQuestions.provenance)
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .help(CoordinatorQuestions.provenanceTitle)
 
-            if let receipt = draft.receipt {
-                answered(receipt)
-            } else if case .open(let row) = standing, let question = row.question {
+            if case .open(let row) = standing, let question = row.question {
                 asked(row, question)
             } else if case .unread = standing {
                 Text(CoordinatorQuestions.unreadable)
@@ -3170,7 +3759,7 @@ private struct CoordinatorQuestionCardView: View {
             }
 
         } actions: {
-            if draft.receipt == nil, case .open(let row) = standing, let question = row.question {
+            if case .open(let row) = standing, let question = row.question {
                 ApprovalActions {
                     Button { send(row, question) } label: {
                         Text(CoordinatorQuestions.sendAnswer).approvalActionLabel()
@@ -3189,14 +3778,13 @@ private struct CoordinatorQuestionCardView: View {
         // recommendation nobody can see the shape of is not one.
         .task(id: itemID) {
             if draft.chosen == nil, draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               draft.receipt == nil, case .open(let row) = console.questionStanding(itemID) {
+               case .open(let row) = console.questionStanding(itemID) {
                 draft.chosen = row.question?.recommendedOption.map { .option($0) }
             }
         }
     }
 
     private var previewSummary: String {
-        if draft.receipt != nil { return "✓ \(draft.sent)" }
         if case .open(let row) = standing { return row.question?.question ?? row.detailLine }
         return CoordinatorQuestions.gone
     }
@@ -3204,8 +3792,9 @@ private struct CoordinatorQuestionCardView: View {
     /// The question, its options, the row that means "none of these", and a box to answer it in.
     private func asked(_ row: ProjectOpenItemRow, _ question: CoordinatorQuestion) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(question.question)
-                .font(.orbitProse)
+            // The question as the coordinator wrote it — Markdown, as the browser's card renders
+            // it (`CoordinatorQuestionCard`), so bullets and emphasis do not arrive raw.
+            MarkdownView(source: question.question).font(.orbitProse)
                 .frame(maxWidth: .infinity, alignment: .leading)
             ForEach(Array(question.options.enumerated()), id: \.offset) { index, option in
                 optionRow(index: index, option: option,
@@ -3290,34 +3879,238 @@ private struct CoordinatorQuestionCardView: View {
         .buttonStyle(.plain)
     }
 
-    /// The record this window drew: what was answered, and whether anybody has been told yet.
-    private func answered(_ receipt: OwnerAnswerReceipt) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("✓ \(draft.sent)")
-                .font(.orbitProse)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text(CoordinatorQuestions.receiptLine(delivered: receipt.delivery != nil))
-                .font(.orbitLabel).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
     /// The press re-reads what the button was rendered from, so a race between a render and a tap
-    /// cannot send an answer to a question that is no longer open.
+    /// cannot send an answer to a question that is no longer open. A press the door takes leaves the
+    /// card as the record of the answer (`ConsoleModel.answerQuestion`); a refusal leaves it
+    /// standing, with the reason in the console's status line.
     private func send(_ row: ProjectOpenItemRow, _ question: CoordinatorQuestion) {
         guard !sending, CoordinatorQuestions.sendable(question: question, chosen: draft.chosen, text: draft.text)
         else { return }
         PlatformHaptics.tap()
         sending = true
-        let words = CoordinatorQuestions.answerInWords(
-            question: question, option: CoordinatorQuestions.optionIndex(draft.chosen), text: draft.text)
         Task {
-            if let answered = await console.answerQuestion(row, chosen: draft.chosen, text: draft.text) {
-                draft.sent = words
-                draft.receipt = answered
-            }
+            _ = await console.answerQuestion(row, chosen: draft.chosen, text: draft.text)
             sending = false
         }
+    }
+}
+
+/// What a coordinator's question became once it ended — answered, here or at another end, or
+/// withdrawn (contract §5.2 R10, R12; `docs/mocks/coordinator-question-answered/`).
+///
+/// Drawn from the record the read publishes (`closedQuestions`) rather than from anything this
+/// window kept, so it is the same card after a relaunch, on a device that never saw the question
+/// open, and in the browser (`AnsweredQuestionCard`). Every word is `CoordinatorQuestions`, the
+/// browser's own copy, held to it by `OwnerItemCardsTests`.
+///
+/// The card in the conversation says what was asked and how it ended, in the question card's own
+/// dimmed blue; the sheet replays the question and every option as they were asked, with the answer
+/// ticked, and says who answered, when, and where the answer went where Send answer used to be.
+private struct CoordinatorQuestionRecordView: View {
+    @Environment(\.inApprovalReview) private var inReview
+    @Environment(\.approvalReviewTarget) private var target
+    @Environment(\.openApprovalReview) private var openReview
+    let record: ProjectClosedQuestion
+
+    var body: some View {
+        if inReview {
+            ApprovalReviewLayout(title: CoordinatorQuestions.recordHeading(record),
+                                 symbol: "questionmark.bubble.fill", tone: .blue,
+                                 summary: CoordinatorQuestions.lead(record.question), dimmed: true) {
+                details
+            } actions: {
+                footer
+            }
+        } else if let target {
+            Button { openReview(target) } label: { card }
+                .buttonStyle(.plain)
+        } else {
+            card
+        }
+    }
+
+    /// A withdrawn question's chip is grey: nothing was decided on it.
+    private var iconTone: Color { record.withdrawn ? Color.gray : Color.blue }
+
+    /// The card: what was asked, in its opening lines, and how it ended — the option chosen, or the
+    /// owner's own words; the note beside the option; an answer no coordinator has had yet; or who
+    /// withdrew it and why.
+    private var card: some View {
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            HStack(spacing: 8) {
+                Image(systemName: "questionmark.bubble.fill")
+                    .font(.orbitMeta)
+                    .foregroundStyle(iconTone)
+                    .frame(width: 22, height: 22)
+                    .background(iconTone.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
+                Text(CoordinatorQuestions.recordHeading(record))
+                    .font(.orbitProse.bold())
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if let time = CoordinatorQuestions.time(record) {
+                    Text(time).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+            }
+            cardLines
+            Divider()
+            HStack {
+                Text(CoordinatorQuestions.viewDetails)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+            }
+            .font(.orbitLabel.weight(.semibold)).foregroundStyle(Color.accentColor)
+        }
+        .approvalChrome(.blue, dimmed: true)
+        .contentShape(Rectangle())
+    }
+
+    /// The card's lines under its heading: the question's opening, cut at two lines, then how it
+    /// ended.
+    private var cardLines: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(CoordinatorQuestions.lead(record.question))
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let answer = CoordinatorQuestions.answerLine(record) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.orbitMeta).foregroundStyle(Color.blue)
+                    Text(answer).font(.orbitProse)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            if let note = CoordinatorQuestions.noteLine(record) {
+                Text(note)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .padding(.leading, 22)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let waiting = CoordinatorQuestions.waitingLine(record) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "clock")
+                    Text(waiting)
+                }
+                .font(.orbitLabel).foregroundStyle(Color.orange)
+            }
+            if let withdrew = CoordinatorQuestions.withdrewLine(record) {
+                Text(withdrew)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let reason = CoordinatorQuestions.withdrawReasonLine(record) {
+                Text(reason).font(.orbitProse)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// The sheet: the question as it was asked, and every option as it was offered — the one chosen
+    /// ticked on a light blue, the rest grey but readable — with the owner's note inside the chosen
+    /// one, the Other row ticked over their own words, or a read-only box for a question asked
+    /// without options. What the question blocked while it waited is not repeated: it waits no more.
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(CoordinatorQuestions.provenance)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .help(CoordinatorQuestions.provenanceTitle)
+                Spacer(minLength: 8)
+                if let asked = CoordinatorQuestions.askedAtLine(record) {
+                    Text(asked).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+            }
+            MarkdownView(source: record.question.question).font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(Array(record.question.options.enumerated()), id: \.offset) { index, option in
+                let chosen = CoordinatorQuestions.chosenOption(record) == index
+                optionRow(label: option.label, why: option.description,
+                          recommended: index == record.question.recommendedOption, chosen: chosen,
+                          words: chosen ? CoordinatorQuestions.note(record) : nil,
+                          wordsLabel: CoordinatorQuestions.yourNote)
+            }
+            if CoordinatorQuestions.choseOther(record) {
+                optionRow(label: CoordinatorQuestions.otherOption, why: nil, recommended: false,
+                          chosen: true, words: CoordinatorQuestions.ownWords(record), wordsLabel: nil)
+            }
+            if record.question.options.isEmpty, let words = CoordinatorQuestions.ownWords(record) {
+                wordsBox(label: CoordinatorQuestions.freeAnswerPrompt, words: words,
+                         background: Color.blue.opacity(0.08))
+            }
+        }
+    }
+
+    /// One option as it was offered, ticked when it is the answer.
+    private func optionRow(label: String, why: String?, recommended: Bool, chosen: Bool,
+                           words: String?, wordsLabel: String?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: chosen ? "checkmark.circle.fill" : "circle")
+                .font(.orbitMeta)
+                .foregroundStyle(chosen ? Color.blue : Color.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).font(.orbitProse)
+                    .foregroundStyle(chosen ? Color.primary : Color.secondary)
+                if recommended {
+                    Text(CoordinatorQuestions.recommended)
+                        .font(.orbitLabel).foregroundStyle(Color.blue)
+                }
+                if let why {
+                    Text(why).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+                if let words {
+                    wordsBox(label: wordsLabel, words: words, background: nil)
+                        .padding(.top, 4)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(chosen ? Color.blue.opacity(0.08) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+    }
+
+    /// The owner's own words, read-only: a note on the chosen option, the Other row's answer, or a
+    /// free answer.
+    private func wordsBox(label: String?, words: String, background: Color?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let label {
+                Text(label).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+            Text(words).font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            if let background {
+                RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius).fill(background)
+            } else {
+                RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius).fill(.background)
+            }
+        }
+    }
+
+    /// Where Send answer was: who ended it and when, then where the answer went — or the reason it
+    /// was withdrawn with.
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: record.withdrawn ? "arrow.uturn.backward" : "checkmark.circle.fill")
+                    .foregroundStyle(record.withdrawn ? Color.secondary : Color.green)
+                Text(CoordinatorQuestions.footerLine(record)).font(.orbitProse.weight(.semibold))
+            }
+            if let detail = CoordinatorQuestions.footerDetail(record) {
+                Text(detail)
+                    .font(.orbitLabel)
+                    .foregroundStyle(CoordinatorQuestions.waitingLine(record) != nil
+                                     ? Color.orange : Color.secondary)
+                    .padding(.leading, 22)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -3372,42 +4165,13 @@ private struct OwnerItemCardView: View {
                     .font(.orbitProse)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if case .open(let row) = standing {
-                item(row)
-                ApprovalActions {
-                    // The card's own presses, in the three weights of mock 7 方案 B and the order
-                    // the browser draws the same doors in. A pause is a card of its own on both
-                    // clients — one press, and not one of these weights.
-                    if isPause {
-                        if pressable(row) {
-                            Button { press(row) } label: {
-                                Text(ExceptionCards.resume).approvalActionLabel()
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(sending)
-                        }
-                    } else {
-                        ForEach(ExceptionCards.presses(row), id: \.action) { cardPress in
-                            cardPressButton(cardPress, row: row)
-                        }
-                    }
-                    // And the other way out, which is a sentence rather than a press: the card
-                    // hands the item to the composer, and the coordinator is told what to do about
-                    // it. The same control — and the same word — as the four other cards that do
-                    // this (`Approvals.chatAction`).
-                    Button {
-                        PlatformHaptics.tap()
-                        console.startOwnerItemReply(row, isPause: isPause)
-                    } label: {
-                        Text(Approvals.chatAction).approvalActionLabel()
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(sending)
-                    // The owner's own ending, drawn last and quietest (方案 B): it is for an
-                    // exception nobody has to act on any more, offered to the one reader who knows.
-                    if !isPause && ExceptionCards.markable(row) {
-                        markHandledButton()
-                    }
-                }
+                heading(row)
+                // What has to happen next, and the doors that do it — ahead of the facts, because
+                // it is the thing the reader came for (§7.5, T9), and in the browser's own order
+                // for the same reason.
+                nextBlock(row)
+                factBlock(row)
+                if askingToHandle { markHandledPanel() }
                 Text(ExceptionCards.ownerLine(row))
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -3422,29 +4186,122 @@ private struct OwnerItemCardView: View {
             }
         }
         .approvalChrome(.orange, dimmed: receipt != nil || !ExceptionCards.isOpen(standing))
-        .alert(ExceptionCards.markHandledTitle, isPresented: $askingToHandle) {
-            TextField(ExceptionCards.markHandledReason, text: $reason, axis: .vertical)
-            Button(ExceptionCards.markHandled) { markHandled() }
-            Button("Back", role: .cancel) {}
-        } message: {
-            Text(ExceptionCards.markHandledBody)
+    }
+
+    /// The decision block a card opens with (§7.5, T9): the server's one sentence about what has to
+    /// happen next, who is already fixing it, and the doors — each with the one line that says what
+    /// pressing it does. The browser draws the same three in one washed panel at the top of its
+    /// body (`project-open-item-next`), and reading order is the whole point of it: the reader knows
+    /// what is being asked before they are shown what happened.
+    @ViewBuilder private func nextBlock(_ row: ProjectOpenItemRow) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(ExceptionCards.requiredAction(row))
+                .font(.orbitProse.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let fixing = ExceptionCards.handledByLine(row) {
+                Text(fixing)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.tint)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            ApprovalActions {
+                // The card's own presses, in the three weights of mock 7 方案 B and the order the
+                // browser draws the same doors in — from the console's own read, which is what says
+                // whether the merge card a `Review` points at is on screen. A pause is a card of its
+                // own on both clients: one press, and not one of these weights.
+                if isPause {
+                    if pressable(row) {
+                        doorRow(ExceptionCards.actionConsequence(row, .resume)) {
+                            Button { press(row) } label: {
+                                Text(ExceptionCards.resume).approvalActionLabel()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(sending)
+                        }
+                    }
+                } else {
+                    ForEach(ExceptionCards.presses(row, mergeCard: console.mergeCardPromotionID),
+                            id: \.action) { cardPress in
+                        cardPressDoor(cardPress, row: row)
+                    }
+                }
+                // And the other way out, which is a sentence rather than a press: the card hands the
+                // item to the composer, and the coordinator is told what to do about it. The same
+                // control — and the same word — as the four other cards that do this
+                // (`Approvals.chatAction`).
+                Button {
+                    PlatformHaptics.tap()
+                    console.startOwnerItemReply(row, isPause: isPause)
+                } label: {
+                    Text(Approvals.chatAction).approvalActionLabel()
+                }
+                .buttonStyle(.bordered)
+                .disabled(sending)
+                // The owner's own ending, drawn last and quietest (方案 B): it is for an exception
+                // nobody has to act on any more, offered to the one reader who knows — and it is a
+                // door like every other one here, so it wears its own line saying what it ends
+                // (the browser draws it inside `CardActions` with the same consequence).
+                if !isPause && ExceptionCards.markable(row) {
+                    doorRow(ExceptionCards.markHandledConsequence) {
+                        markHandledButton()
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange.opacity(0.22))
         }
     }
 
+    /// One door and the line that says what pressing it does. On a phone the line goes UNDER the
+    /// press; on a Mac it sits beside it, in the browser's own two shapes for this row (its
+    /// `project-open-item-door` grid stacks under 600px and pairs them above it).
+    @ViewBuilder private func doorRow<Content: View>(_ consequence: String,
+                                                     @ViewBuilder _ button: () -> Content) -> some View {
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: 3) {
+            button()
+            Text(consequence)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        #else
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            button()
+                .layoutPriority(1)
+            Text(consequence)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        #endif
+    }
+
+    /// The card's heading slot: how it became the owner's, or the item's own title — the line the
+    /// browser draws in its head, above everything the body says.
+    @ViewBuilder private func heading(_ row: ProjectOpenItemRow) -> some View {
+        Text(ExceptionCards.headingLine(row))
+            .font(.orbitProse)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     /// What happened, in the rows of mock 5's fact block — or, for an item whose payload this build
-    /// cannot read, in the three lines it drew before the rows existed: how it became the owner's,
-    /// what escalated, and the fact that opened it.
+    /// cannot read, in the two lines it drew before the rows existed: what escalated, and the fact
+    /// that opened it.
     ///
     /// The rows are `ExceptionCards.facts`, which is the browser's `ItemFactRows` field for field,
     /// and the card draws the block INSTEAD of those lines — not above them. The block's first row
     /// is what the item is about, so the title beside it would print the same task twice.
-    @ViewBuilder private func item(_ row: ProjectOpenItemRow) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(ExceptionCards.headingLine(row))
-                .font(.orbitProse)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            switch ExceptionCards.facts(row) {
-            case .detailLine(let line):
+    @ViewBuilder private func factBlock(_ row: ProjectOpenItemRow) -> some View {
+        switch ExceptionCards.facts(row) {
+        case .detailLine(let line):
+            VStack(alignment: .leading, spacing: 4) {
                 if let subject = ExceptionCards.subject(row) {
                     Text(subject)
                         .font(.orbitProse)
@@ -3456,24 +4313,47 @@ private struct OwnerItemCardView: View {
                         .font(.orbitLabel).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-            case .rows(let block):
-                ForEach(block.rows, id: \.label) { fact in factRow(fact) }
-                if let tail = block.logTail { logTail(tail) }
+            }
+        case .rows(let block):
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(block.rows, id: \.label) { fact in
+                    factRow(fact)
+                    // The failed check's own log, directly under the row it belongs to — the
+                    // browser draws it inside the Check row's own fragment, and a block that drew
+                    // it after every row put the log under a fact it did not come from.
+                    if let tail = fact.logTail { logTail(tail) }
+                }
             }
         }
     }
 
-    /// One row of the fact block: the mock's label column and the value beside it.
+    /// One row of the fact block: the mock's label column and the value beside it, in the faces the
+    /// model gave each run — the browser's own two spans (`project-open-item-mono` on a command,
+    /// `project-open-item-bad` on a check's verdict). A row of one string could only be all one
+    /// font and one colour, which is how the check row used to be drawn.
     private func factRow(_ fact: ExceptionCards.FactRow) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(fact.label)
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(width: 62, alignment: .leading)
             VStack(alignment: .leading, spacing: 4) {
-                Text(fact.value)
-                    .font(fact.mono ? .orbitMono : .orbitLabel)
+                // Every run wears its own font rather than one font on the joined text: a modifier
+                // applied after the concatenation would set one face for the whole row, which is
+                // exactly what this row stopped being.
+                fact.runs.map { run in
+                    switch run.face {
+                    case .plain: return Text(run.text).font(.orbitLabel)
+                    case .mono:  return Text(run.text).font(.orbitMono)
+                    case .bad:   return Text(run.text).font(.orbitLabel).foregroundColor(.red)
+                    }
+                }.reduce(Text("")) { $0 + $1 }
                     .lineLimit((fact.value.count > 120 || fact.value.contains("\n"))
                                && !expandedFacts.contains(fact.label) ? 3 : nil)
+                    // The wrapped prose is the row's whole point — a sentence that ran off the
+                    // right edge and ended in "…" says less than the row it replaced did. Without
+                    // this the HStack lays the value out at its ideal (single-line) width and
+                    // truncates it, which is what the Check row did on the probe's own capture.
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
                 if fact.value.count > 120 || fact.value.contains("\n") {
@@ -3496,6 +4376,8 @@ private struct OwnerItemCardView: View {
                 .font(.orbitMono)
                 .lineLimit((tail.more != nil || tail.shown.joined(separator: "\n").count > 120)
                            && !expandedTail ? 6 : nil)
+                // A tail is lines: clipped to one, the fold told the reader nothing.
+                .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 8).padding(.vertical, 6)
@@ -3509,36 +4391,77 @@ private struct OwnerItemCardView: View {
         }
     }
 
-    /// One press, in the weight the card gave it (mock 7 方案 B). A door this client has no press
-    /// for — `Cancel task`, which this console stops by no door of its own — draws nothing at all,
+    /// One press, in the weight the card gave it (mock 7 方案 B) and under it the line the model
+    /// wrote about what pressing it does. A door this client has no press for — `Cancel task`, which
+    /// this console stops by no door of its own — draws nothing at all, consequence line included,
     /// which is the rule the card has always followed: a control that goes nowhere is worse than no
     /// control.
-    @ViewBuilder private func cardPressButton(_ cardPress: ExceptionCards.CardPress,
-                                              row: ProjectOpenItemRow) -> some View {
-        switch cardPress.action {
-        case .askCoordinatorAgain:
-            if pressable(row) {
-                weighted(cardPress.tier) {
-                    Button { press(row) } label: {
-                        Text(ExceptionCards.askCoordinatorAgain).approvalActionLabel()
+    @ViewBuilder private func cardPressDoor(_ cardPress: ExceptionCards.CardPress,
+                                            row: ProjectOpenItemRow) -> some View {
+        if let make = makePress(cardPress, row: row) {
+            doorRow(cardPress.consequence) {
+                weighted(cardPress.tier, tint: cardPress.action == .abandon ? .red : nil) {
+                    Button(action: make) {
+                        Text(cardPress.label).approvalActionLabel()
                     }
                 }
                 .disabled(sending)
             }
+        }
+    }
+
+    /// What one door's press does, or nil for a door this client cannot make from here — the
+    /// row's own addresses, re-read rather than the ones the press was rendered from, so a card
+    /// that raced a read cannot hand out an address the row no longer carries.
+    private func makePress(_ cardPress: ExceptionCards.CardPress,
+                           row: ProjectOpenItemRow) -> (() -> Void)? {
+        switch cardPress.action {
+        case .askCoordinatorAgain:
+            guard pressable(row) else { return nil }
+            return { press(row) }
         case .openTaskSession:
             // The way onto the work the item is about — the attempt that opened it, or the task
             // when that attempt has no session left. The app's own door for both ids, the one the
             // delivery card's links open and both shells route.
-            if let url = ExceptionCards.openTaskSessionLink(row) {
-                weighted(cardPress.tier) {
-                    Button { openURL(url) } label: {
-                        Text(ExceptionCards.openTaskSession).approvalActionLabel()
-                    }
-                }
-                .disabled(sending)
-            }
+            guard let url = ExceptionCards.openTaskSessionLink(row) else { return nil }
+            return { PlatformHaptics.tap(); openURL(url) }
+        case .retry:
+            // `Run it again` (§4.7 H1, T5): the owner's own route through the browser's same pair —
+            // a candidate's check re-run when the item names one, a failed landing's retry
+            // otherwise. The reason the door requires is the item's own sentence about the failure.
+            guard ExceptionCards.addressed(row, .retry) else { return nil }
+            return { retry(row) }
+        case .review:
+            // Only where the merge card is HERE: reviewing means reading that card, and a press
+            // that scrolled to a card which was never mounted is the dead link the account owner
+            // found (2026-10-02). `ExceptionCards.drawn` was told the same thing by the console, so
+            // a drawn Review is one whose card is on screen.
+            guard let promotionID = row.promotionId,
+                  console.mergeCardPromotionID == promotionID else { return nil }
+            return { PlatformHaptics.tap(); console.revealPromotionCard(promotionID) }
+        case .openLanding:
+            // A reading door: the landing this item is about, opened through the app's own
+            // `orbit-session:` route — the same door the delivery card's third link uses.
+            guard let url = ExceptionCards.landingLink(row) else { return nil }
+            return { PlatformHaptics.tap(); openURL(url) }
+        case .abandon:
+            // §4.6 X-E5's lead: end the attempt whose runner stopped reporting (J-T10).
+            guard ExceptionCards.addressed(row, .abandon) else { return nil }
+            return { abandon(row) }
         default:
-            EmptyView()
+            return nil
+        }
+    }
+
+    /// The Abandon press: no second press while it is on its way, and the console re-reads what
+    /// the card was drawn from.
+    private func abandon(_ row: ProjectOpenItemRow) {
+        guard !sending else { return }
+        PlatformHaptics.tap()
+        sending = true
+        Task {
+            await console.abandonIntegration(row)
+            sending = false
         }
     }
 
@@ -3546,9 +4469,12 @@ private struct OwnerItemCardView: View {
     /// style is the only thing the tier decides here: WHICH presses exist, and in what order, is
     /// `ExceptionCards.presses` — the browser's own rule, so the two cards cannot disagree.
     @ViewBuilder private func weighted<V: View>(_ tier: ExceptionCards.PressTier,
+                                                tint: Color? = nil,
                                                 @ViewBuilder _ button: () -> V) -> some View {
         if tier == .primary {
-            button().buttonStyle(.borderedProminent)
+            // Abandon leads X-E5 in the board's solid red; every other leading door wears the
+            // accent. The tint is the style's, not a second button.
+            button().buttonStyle(.borderedProminent).tint(tint ?? .accentColor)
         } else if tier == .link {
             button().buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.secondary)
         } else {
@@ -3557,10 +4483,13 @@ private struct OwnerItemCardView: View {
     }
 
     /// The owner's own ending: the press, and the reason it is not allowed to go without (§4.7).
+    ///
+    /// Opening the field keeps whatever reason is already in it: a press that was refused, or a
+    /// panel the reader closed to look at the card again, must not cost them the sentence they
+    /// typed. The draft is cleared where it is spent — on the door taking it — not here.
     private func markHandledButton() -> some View {
         Button {
             PlatformHaptics.tap()
-            reason = ""
             askingToHandle = true
         } label: {
             Text(ExceptionCards.markHandled).approvalActionLabel()
@@ -3569,6 +4498,59 @@ private struct OwnerItemCardView: View {
         .font(.orbitLabel)
         .foregroundStyle(.secondary)
         .disabled(sending)
+    }
+
+    /// The reason the ending requires, asked for in place (§4.7, mock 7 方案 B — the browser's
+    /// dialog, drawn here as the panel the sibling record-as-done card asks its own note in).
+    ///
+    /// The confirm waits for a reason: empty is not a press, and the door would refuse one. That is
+    /// a rule about what is sent as much as about the button, so `markHandled` holds the same line
+    /// — a disabled control is not a rule.
+    @ViewBuilder private func markHandledPanel() -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(ExceptionCards.markHandledTitle)
+                .font(.orbitProse.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(ExceptionCards.markHandledBody)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            TextField(ExceptionCards.markHandledReason, text: $reason, axis: .vertical)
+                .lineLimit(2...5)
+                .font(.orbitProse)
+                .textFieldStyle(.roundedBorder)
+                .disabled(sending)
+                // The door's own ceiling (`markHandledMaxLength`, the browser's `maxLength`): the
+                // field stops where the server's validation would, so nothing the reader types is
+                // taken and then refused for its length.
+                .onChange(of: reason) { _, typed in
+                    if typed.count > ExceptionCards.markHandledMaxLength {
+                        reason = String(typed.prefix(ExceptionCards.markHandledMaxLength))
+                    }
+                }
+            HStack(spacing: 8) {
+                Button {
+                    askingToHandle = false
+                } label: {
+                    Text("Back").approvalActionLabel()
+                }
+                .buttonStyle(.bordered)
+                .disabled(sending)
+                Button {
+                    markHandled()
+                } label: {
+                    Text(ExceptionCards.markHandled).approvalActionLabel()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(sending || ExceptionCards.markHandledRequest(reason) == nil)
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.12))
+        }
     }
 
     /// Whether the door would take the press from here. Both are the server's own list, so a
@@ -3580,6 +4562,10 @@ private struct OwnerItemCardView: View {
 
     /// The ending holds the same line the door does: a reason the server would refuse is not a press,
     /// so the field is what is on screen and nothing is sent (`markItemHandled` guards it too).
+    ///
+    /// The draft is cleared only when the door TOOK it — on success — and the panel closes with it.
+    /// A refusal leaves both the panel and the words where they were, which is where the reader can
+    /// read what the server said and answer it, rather than losing the sentence with the question.
     private func markHandled() {
         guard case .open(let row) = standing,
               ExceptionCards.markHandledRequest(reason) != nil else { return }
@@ -3588,7 +4574,23 @@ private struct OwnerItemCardView: View {
         Task {
             if await console.markItemHandled(row, note: reason) != nil {
                 receipt = ExceptionCards.handled
+                reason = ""
+                askingToHandle = false
             }
+            sending = false
+        }
+    }
+
+    /// Run the work the item is about again (§4.7 H1, T5) — through the console, which owns the
+    /// credential, chooses the route the row names (a candidate's check or a task's landing) and
+    /// re-reads the item list afterwards: what a rerun leaves is the item being handled, which is
+    /// that read's to say.
+    private func retry(_ row: ProjectOpenItemRow) {
+        guard !sending else { return }
+        PlatformHaptics.tap()
+        sending = true
+        Task {
+            await console.retryIntegration(row)
             sending = false
         }
     }
@@ -3659,8 +4661,13 @@ extension EnvironmentValues {
 @MainActor
 protocol PromotionReviewSource: AnyObject {
     func promotionStanding(_ promotionID: String) -> ProjectPromotionView?
-    /// The project's open items, both groups: a blocked candidate's holder is one of them.
-    var promotionItems: [ProjectOpenItemRow] { get }
+    /// The project's open items, or nil until the read has come back: a blocked candidate's holder
+    /// is one of them, and none is somebody too (`PromotionCards.holder`).
+    var promotionOpenItems: ProjectOpenItemsView? { get }
+    /// The project's current landings, for the row that names what is in front of a blocked
+    /// candidate (`PromotionCards.blockedByLine`). Empty where the host has not read them, and the
+    /// row is then absent rather than wrong.
+    var promotionLandings: [ProjectLandTask] { get }
     var criteriaMet: (met: Int, total: Int)? { get }
     func refreshPromotion() async
     func confirmMergeToMain(_ view: ProjectPromotionView) async -> String?
@@ -3669,9 +4676,7 @@ protocol PromotionReviewSource: AnyObject {
 }
 
 extension ConsoleModel: PromotionReviewSource {
-    var promotionItems: [ProjectOpenItemRow] {
-        (openItems?.needsYou ?? []) + (openItems?.withCoordinator ?? [])
-    }
+    var promotionOpenItems: ProjectOpenItemsView? { openItems }
 
     func refreshPromotion() async {
         await refreshRulerQuestions(force: true)
@@ -3740,11 +4745,12 @@ struct PromotionReviewSheet: View {
 
     private var view: ProjectPromotionView? { source.promotionStanding(promotionID) }
 
-    /// The open item filed for this candidate, when the project's read carries one: whose problem
-    /// the block is, and since when. Nil before that read lands — the card then says who state D
-    /// means and stops, which is what it did before the press carried the sentence at all.
-    private var item: ProjectOpenItemRow? {
-        source.promotionItems.first { $0.promotionId == promotionID }
+    /// Who holds this candidate, off the project's read: the item filed for it — whose problem the
+    /// block is, and since when — or nobody, once the read has come back without one. Unread before
+    /// that read lands, and the card then says who state D means and stops, which is what it did
+    /// before the press carried the sentence at all.
+    private var holder: OwnerItemStanding {
+        PromotionCards.holder(of: promotionID, in: source.promotionOpenItems)
     }
 
     var body: some View {
@@ -3818,7 +4824,7 @@ struct PromotionReviewSheet: View {
             PromotionTasksRow(label: "Tasks", summary: PromotionCards.tasksLine(view),
                               titles: view.tasks.map(\.title))
             CardRow(label: "Checks", value: PromotionCards.checksLine(view))
-            CardRow(label: PromotionCards.shortRef(view.upstreamRef),
+            CardRow(label: RunSettings.mainBranchName(view.upstreamRef),
                     value: PromotionCards.upstreamLine(view))
             if let met = source.criteriaMet,
                let line = PromotionCards.criteriaLine(met: met.met, of: met.total) {
@@ -3850,7 +4856,8 @@ struct PromotionReviewSheet: View {
     private func merged(_ view: ProjectPromotionView) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             CardRow(label: "Commit", value: PromotionCards.mergedLine(view))
-            PromotionTasksRow(label: "Now on main", summary: PromotionCards.nowOnMainLine(view),
+            PromotionTasksRow(label: PromotionCards.nowOnLabel(view),
+                              summary: PromotionCards.nowOnMainLine(view),
                               titles: view.tasks.map(\.title))
             if let undo = PromotionCards.revertLine(view) {
                 CardRow(label: "Undo", value: undo)
@@ -3861,9 +4868,15 @@ struct PromotionReviewSheet: View {
     /// D: it cannot land yet. Who has it is NOT a row here any more: it is on the press
     /// (`PromotionCards.resolvingLine`), which is the thing the reader looks at, and saying it
     /// twice was the whole of what this card got wrong (owner decision 2026-09-24).
+    ///
+    /// What IS a row is who is in FRONT of it, when the project's own line is busy: the same row the
+    /// sessions page's card draws, off the same read.
     private func blocked(_ view: ProjectPromotionView) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             CardRow(label: "Why", value: PromotionCards.blockedLine(view))
+            if let inFront = PromotionCards.blockedByLine(view, landings: source.promotionLandings) {
+                CardRow(label: PromotionCards.blockedByLabel, value: inFront)
+            }
         }
     }
 
@@ -3874,7 +4887,8 @@ struct PromotionReviewSheet: View {
         case .askingYou:
             ApprovalActions {
                 Button { act { await source.confirmMergeToMain(view) } } label: {
-                    Text(PromotionCards.mergeToMain).approvalActionLabel()
+                    Text(PromotionCards.mergeTo(RunSettings.mainBranchName(view.upstreamRef)))
+                        .approvalActionLabel()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(acting || !PromotionCards.confirmable(view))
@@ -3894,19 +4908,22 @@ struct PromotionReviewSheet: View {
             // The press reads rather than acts: who has the branch and how long they have had it,
             // over the same mark the merging card's own button carries. It stays disabled — the
             // door would refuse a confirm on a blocked candidate — so it is a state, not a press
-            // the reader is being told they may not make.
-            ApprovalActions {
-                Button {} label: {
-                    HStack(spacing: 6) {
-                        if PromotionCards.resolvingSpins(item) {
-                            ProgressView().controlSize(.mini)
+            // the reader is being told they may not make. With nobody holding it there is nothing
+            // to say, and nothing is drawn.
+            if let resolving = PromotionCards.resolvingLine(holder) {
+                ApprovalActions {
+                    Button {} label: {
+                        HStack(spacing: 6) {
+                            if PromotionCards.resolvingSpins(holder) {
+                                ProgressView().controlSize(.mini)
+                            }
+                            Text(resolving)
                         }
-                        Text(PromotionCards.resolvingLine(item))
+                        .approvalActionLabel()
                     }
-                    .approvalActionLabel()
+                    .buttonStyle(.borderedProminent)
+                    .disabled(true)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(true)
             }
         case .merging:
             ApprovalActions {
@@ -3983,7 +5000,8 @@ struct PromotionReceiptSheet: View {
                         .font(.orbitLabel).foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 6) {
                         CardRow(label: "Commit", value: PromotionCards.mergedLine(promotion))
-                        PromotionTasksRow(label: "Now on main", summary: PromotionCards.nowOnMainLine(promotion),
+                        PromotionTasksRow(label: PromotionCards.nowOnLabel(promotion),
+                                          summary: PromotionCards.nowOnMainLine(promotion),
                                           titles: promotion.tasks.map(\.title))
                         CardRow(label: "Checks", value: PromotionCards.checksLine(promotion))
                         CardRow(label: "Landed", value: PromotionCards.landsLine(promotion))
@@ -3993,6 +5011,11 @@ struct PromotionReceiptSheet: View {
                         if let undo = PromotionCards.revertLine(promotion) {
                             CardRow(label: "Undo", value: undo)
                         }
+                    }
+                    // The receipt's foot still opens the round's landing (方案 A): the merge
+                    // happened, and every attempt is still read there.
+                    if let landingID = ProjectMergeCard.receiptLandingSessionId(promotion) {
+                        LandingEntryLink(entry: .link(landingID), compact: false)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -1,0 +1,184 @@
+<!doctype html>
+<!-- Design board 00 (T0, Cursor engine): the overview — the boards, today against the proposal, the rules
+     every client follows, the files the clients change, and what the owner decides (display name and icon,
+     D1, D2, D4, D5, D6). Facts are the P0a runtime contract's (docs/cursor-runtime-contract.md, pinned CLI
+     2026.10.14-941492e). Not shipped code. Render: render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>00 · Cursor CLI engine: overview, rules, files, decisions</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<script src="kit.js"></script>
+<script src="shots/marks.js"></script>
+<style>
+  .boards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 26px; font-size: 13px; line-height: 1.7; color: var(--text-2); }
+  .boards b { color: var(--text-1); }
+  .boards code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-1); }
+  .tile-row { display: flex; align-items: center; gap: 14px; margin-top: 10px; flex-wrap: wrap; }
+  .tile-row .nm { font-size: 15px; font-weight: 600; color: var(--text-1); }
+  .tile-row .sm { font-size: 12px; color: var(--text-3); }
+  .chip-demo { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 7px; background: var(--fill-muted); font-size: 13px; color: var(--text-1); }
+  .two-shots { display: flex; gap: 22px; align-items: flex-start; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Cursor CLI 原生接入 · T0 设计总览：Web 与 iOS 各一套（明暗两版），今天 vs 提议、规则表、要改的文件、待你定的 6 项</h1>
+  <p class="m-sub zh">Cursor CLI 作为第 7 个 engine（内部名 <code>cursor</code>）进入每一处列 engine 的地方；它的三种凭据（runner 上登录的账号、同一台 runner 上的多个账号、存在 Orbit 里的 Cursor API key）都只跑 Cursor CLI，按 Cursor 套餐计费。和其他 engine 不一样的地方都来自 P0a 契约：<b>不能轮中插话</b>（轮中再发会取消当前轮，Orbit 改为排队）、<b>没有上下文读数</b>、<b>做不到「编辑前要问」</b>（Default 模式）、<b>Free 套餐的请求上限读不到</b>、<b>登录链接约 27 分钟失效</b>、<b>跨账号续聊还没验证</b>。Web 的每一帧都是真实页面截图（vite + 仓库自带的 ui-migration 假 API，「改后」是同一页面加上 <code>prototype.patch</code> 里的原型）；iOS 是按现有 SwiftUI 画的 393×852 手机。Android 跟 iOS 稿，不另出图。界面文案全部英文。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 板索引（docs/mocks/cursor-engine/，每块都有 -light.png 和 -dark.png）</div>
+    <div class="boards zh">
+      <div><b>web-1-new-session</b> · 新会话的 engine 列表：第 7 行 Cursor CLI；跑不了的四种写法</div>
+      <div><b>ios-1-new-session</b> · iOS 的 Engine 表、hero；跑不了的四种写法</div>
+      <div><b>web-2-infrastructure</b> · 概览卡片、机器卡片的 Cursor 行、账号与额度（Usage unavailable）、四种机器状态</div>
+      <div><b>ios-2-infrastructure</b> · Infrastructure 概览、机器页、Cursor CLI 引擎页（账号与额度）、四种状态</div>
+      <div><b>web-3-add-account</b> · Add account（登录链接、剩余时间、过期重拿）、Re-sign in、Remove 与拒绝</div>
+      <div><b>ios-3-add-account</b> · 同上，iPhone：长按菜单、左滑、确认表</div>
+      <div><b>web-4-api-key</b> · 厂商画廊的 Cursor 卡片、Connect Cursor 表单、无效 key / 连不上、表格里被拒的 key</div>
+      <div><b>ios-4-api-key</b> · API keys 列表、Cursor key 页（检查通过 / 被拒）；iOS 不加表单</div>
+      <div><b>web-5-session</b> · 模型 + 变体（effort / context / fast）、排到下一轮的说明、Context「Unavailable」、额度卡</div>
+      <div><b>ios-5-session</b> · 同上，iPhone</div>
+      <div><b>web-6-modes-and-switch</b> · 权限模式（D6 方案 A / B）、换账号（不能换 / 能换）</div>
+      <div><b>ios-6-modes-and-switch</b> · 同上，iPhone</div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 待你定 · 显示名与图标（契约 D3 建议「Cursor CLI」）</div>
+    <div class="ask zh" style="margin-top:0">
+      <div class="ab three">
+        <div class="ab-opt rec"><h5><span class="ab-k">A</span>「Cursor CLI」+ Cursor 立方体标（板上按此画）</h5>
+          <div class="ab-sub">CLI 自己就叫 Cursor CLI（<code>agent about</code> 的标题「About Cursor CLI」），和「Kimi Code」「Antigravity CLI」一样是 CLI 的产品名；和厂商名「Cursor」（画廊卡片、API keys 组名）分开，也不会被当成 Cursor 编辑器。标取自 LobeHub icons（MIT，和其他厂商标同一来源），黑底白标。</div>
+          <div class="tile-row" id="tA"></div></div>
+        <div class="ab-opt"><h5><span class="ab-k">B</span>「Cursor」+ 同一个标</h5>
+          <div class="ab-sub">更短；但 engine 名和厂商名重名（新会话里的「Cursor」和画廊里的「Cursor」是两种东西），也容易被理解成 Cursor 编辑器本身。</div>
+          <div class="tile-row" id="tB"></div></div>
+        <div class="ab-opt"><h5><span class="ab-k">C</span>「Cursor CLI」+ 中性字母标「C」</h5>
+          <div class="ab-sub">不用 Cursor 的商标图形，和 OpenCode 的灰色「O」一样。代价：和其他六个 engine 都用品牌标不一致，列表里不好认。</div>
+          <div class="tile-row" id="tC"></div></div>
+      </div>
+      <p class="m-cap zh" style="margin-top:10px">暗色下黑底标加一圈 1px 的白色描边（同 Antigravity 的做法）；菜单标题里 glyph 按品牌色上色的地方，Cursor 改用正文色，否则暗色下看不见（Web 5 ①）。</p>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 待你定 · D1、D2、D4、D5、D6（事实引自契约；推荐项绿框）</div>
+    <div class="ask zh" style="margin-top:0">
+      <h4><span class="tbd">D1</span>代码库索引默认开还是关（契约 §14.3、§16.7）</h4>
+      <ul class="facts"><li>索引只在 Cursor 账号的隐私模式为 4 时运行，每 5 分钟把<b>完整文件内容</b>上传到 Cursor（repo42.cursor.sh）；所有者的账号是模式 3，实测上传 0 字节。</li>
+        <li><code>--disable-indexing</code> 只关这条上传，不关 worker、不关 LSP，对功能没有可见影响。worker 另会 <code>npx -y typescript-language-server</code>（从 npm 下载运行），那是另一件事，交 P3 / P5c。</li>
+        <li>界面上没有开关（首版不做），只体现在 runner 的启动参数里。</li></ul>
+      <div class="ab"><div class="ab-opt rec"><h5><span class="ab-k">A</span>默认关（加 <code>--disable-indexing</code>）</h5><div class="ab-sub">任何隐私模式的账号都不上传完整文件。将来真需要，再给账号加一个开关。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">B</span>沿用 Cursor 的默认（隐私模式 4 的账号会上传）</h5><div class="ab-sub">和直接用 Cursor CLI 的行为一致；代价是代码出境与否取决于每个账号自己的隐私设置，Orbit 不管。</div></div></div>
+
+      <h4 style="margin-top:18px"><span class="tbd">D2</span>Cursor 提交时加不加它自己的署名（契约 §14.4）</h4>
+      <ul class="facts"><li>Cursor 默认在 agent 的提交里加一个 trailer（文本由服务端定，<b>还没实测到原文</b>，P8 冒烟时核对）。能按账号关掉：账号的 <code>cli-config.json</code> 写 <code>attribution.attributeCommitsToAgent=false</code>（PR 同理）。</li></ul>
+      <div class="ab"><div class="ab-opt rec"><h5><span class="ab-k">A</span>沿用 Cursor 默认（加署名）</h5><div class="ab-sub">契约的建议；和其他 engine 在提交里写自己的署名是一类事。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">B</span>关掉</h5><div class="ab-sub">提交里不出现 Cursor 的 trailer；Orbit 在建账号目录时写好这项配置。</div></div></div>
+
+      <h4 style="margin-top:18px"><span class="tbd">D4</span>多个账号怎么彼此隔离（契约 §8.4）</h4>
+      <ul class="facts"><li>只有 HOME 能挪走 Cursor 对 <code>~/.cursor</code> 的读写（<code>agent-cli-state.json</code>、按账号下发的 skills、AI 代码追踪库，以及读 <code>~/.cursor/mcp.json</code>、hooks、rules）；而 agent 跑的命令继承 CLI 的全部环境。</li>
+        <li>方案 A：CLI 用账号自己的 HOME，命令经一个 SHELL 包装拿回真 HOME——<b>待 P0c 用一次 prompt 补验</b>（上次的包装名不含 bash，CLI 没用它）。A 成立就用 A，界面无变化。</li></ul>
+      <div class="ab"><div class="ab-opt"><h5><span class="ab-k">B</span>真 HOME，接受副作用</h5><div class="ab-sub">多账号照常（板上画的就是这种界面）；代价：runner 用户自己的 <code>~/.cursor</code> 配置（含 mcp.json 里的服务器）会进入 Orbit 的 Cursor 会话，各账号共享这些文件，不满足项目判据 4「不写 runner 用户真实的 Cursor 配置」。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">D</span>这类机器只支持 Default 账号</h5><div class="ab-sub">机器卡片 / 引擎页上不出现 Add account，Accounts 标题回到「Sign-In」（同今天 Kimi 在旧 runner 上）；其余界面不变。只在 A 不成立时二选一。</div></div></div>
+
+      <h4 style="margin-top:18px"><span class="tbd">D5</span>说过话的会话能不能换账号或换 key（契约 §13）</h4>
+      <ul class="facts"><li>会话库 <code>acp-sessions/&lt;id&gt;/</code> 拷到另一个配置目录后能 load 并续聊——<b>只在同一身份下实测过</b>；跨账号、跨团队没测。会话本身不记账号。</li></ul>
+      <div class="ab"><div class="ab-opt rec"><h5><span class="ab-k">A</span>验证前：只有没说过话的会话能换（板上按此画）</h5><div class="ab-sub">说过话的会话在 Provider 菜单里列出其他账号和 key，但灰掉，写「Cursor CLI can’t carry a conversation to another account or key yet. Start a new session to use one of these.」；P6b 用两个真实账号验证后，runner 声明 <code>cursor-account-move/v1</code>，自动变成能换（Web 6 ②、iOS 6）。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">B</span>先放开，出错再说</h5><div class="ab-sub">不推荐：服务端是否因账号不同拒绝续聊不得而知，失败时会话卡在半路。</div></div></div>
+
+      <h4 style="margin-top:18px"><span class="tbd">D6</span>Default 权限模式（契约 §5.4、§16.5；P1 已先按「拒绝 default」实现）</h4>
+      <ul class="facts"><li>Cursor 在 ACP 下写工作区文件<b>从不发权限请求</b>，也没有开关能让它问——「编辑前要问」做不到。Plan 只挡写文件（命令和 MCP 由 Orbit 拒绝），Cursor 的 ask 模式不用。</li></ul>
+      <div class="ab"><div class="ab-opt rec"><h5><span class="ab-k">A</span>Cursor 不提供 Default；新会话默认 Accept Edits</h5><div class="ab-sub">Default 在下拉框里灰掉并写原因；账号默认是 Default 时，Cursor 会话落到 Accept Edits。同一个词在所有 engine 上意思一致。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">B</span>Default 作为 Accept Edits 的别名</h5><div class="ab-sub">可选，写明「Runs as Accept Edits — file edits don’t ask」。省一步，但「Default」在 Cursor 上不再问编辑，和其他 engine 不同。</div></div></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">④ 今天 vs 提议</div>
+    <table class="t-rules zh">
+      <tr><th>地方</th><th>今天（六个 engine）</th><th>提议（加 Cursor CLI）</th><th>板</th></tr>
+      <tr><td>新会话 engine 列表</td><td>Claude Code … DeepSeek Harness 六行</td><td>第 7 行 Cursor CLI，右边 Auto；跑不了时灰掉 + 原因</td><td>Web 1、iOS 1</td></tr>
+      <tr><td>Infrastructure 概览</td><td>六张卡</td><td>第 7 张：Subscription（登录的机器和账号）、API key（Cursor key）</td><td>Web 2、iOS 2</td></tr>
+      <tr><td>机器卡片 / 机器页</td><td>Claude…OpenCode，DeepSeek Harness 最后</td><td>最后加 Cursor CLI：版本「pinned」、多账号分组、NEXT、额度</td><td>Web 2、iOS 2</td></tr>
+      <tr><td>账号的额度</td><td>读不到写「No quota reported」</td><td>付费：Monthly limit N%、账期结束重置；<b>Free：「Usage unavailable」，不画 0%</b></td><td>Web 2、iOS 2</td></tr>
+      <tr><td>加账号</td><td>Kimi 设备码、Claude / Antigravity 回贴码，没有过期提示</td><td>Cursor 登录链接，不用回贴；写剩余分钟，过期「Get a new link」</td><td>Web 3、iOS 3</td></tr>
+      <tr><td>API key</td><td>九个厂商；表单检查失败一律可「Save anyway」；没有持久的「无效」状态</td><td>画廊加「Cursor」（只跑 Cursor CLI）；被拒不给 Save anyway；表格和 iOS 列表写「Rejected」</td><td>Web 4、iOS 4</td></tr>
+      <tr><td>模型菜单</td><td>模型 + Effort（+ Speed：Claude、Codex）</td><td>Auto 在前（无参数，一句说明）；带参数的模型有 Effort / Context / Speed</td><td>Web 5、iOS 5</td></tr>
+      <tr><td>轮中再发一条</td><td>不能插话的 engine 只写「Queued for next turn」</td><td>Cursor 托盘多一行原因，输入框也提示</td><td>Web 5、iOS 5</td></tr>
+      <tr><td>上下文读数</td><td>没报上来写「Not reported yet」</td><td>Cursor 永远「Unavailable」，虚线空环</td><td>Web 5、iOS 5</td></tr>
+      <tr><td>额度用尽</td><td>引擎报错 → 额度卡（Codex、Claude 的固定句子）</td><td>Cursor 的「Upgrade your plan to continue」也归为额度卡；用账号名，出路是新会话</td><td>Web 5、iOS 5</td></tr>
+      <tr><td>权限模式</td><td>DeepSeek Harness 不支持的灰掉；iOS 没有说明行</td><td>Cursor：Default 灰掉（D6）；Plan / Auto / Don’t Ask 带一句说明</td><td>Web 6、iOS 6</td></tr>
+      <tr><td>换账号</td><td>runner 没声明搬运能力时整组账号藏起来</td><td>Cursor：列出、灰掉、写原因；草稿照常换</td><td>Web 6、iOS 6</td></tr>
+    </table>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑤ 规则表（每端都照这张做）</div>
+    <table class="t-rules zh">
+      <tr><th>情况</th><th>显示（英文原文）</th><th>依据</th></tr>
+      <tr><td>runner 没声明 <code>provider:cursor</code></td><td><span class="ui">Update runner</span> + 「This runner predates Cursor CLI. It updates itself when no session is running on it.」；engine 列表这一行灰掉</td><td>契约 §16.1；同 DeepSeek Harness</td></tr>
+      <tr><td>没装</td><td><span class="ui">Not installed</span> / 「Not installed — Orbit can install it here」+ <span class="ui">Install</span></td><td>P3</td></tr>
+      <tr><td>装的不是固定版本</td><td><span class="ui">Unsupported version</span> + 「Orbit runs Cursor CLI 2026.10.14-941492e…」+ <span class="ui">Reinstall</span></td><td>契约 §1、§16.3</td></tr>
+      <tr><td>版本正常</td><td>「2026.10.14-941492e · pinned · checked 6m ago」（不自动更新，跟 runner 走）</td><td>契约 §1</td></tr>
+      <tr><td>Default 掉线</td><td><span class="ui">Signed out</span> + <span class="ui">Sign in</span>；「Needs you」一行；engine 列表「Not signed in」（有 Cursor key 时不显示）</td><td>同登录 engine</td></tr>
+      <tr><td>Add account / Re-sign in</td><td>链接面板：「Open cursor.com」「Copy sign-in link」「Waiting for you to sign in… · link expires in N min」；需要 <code>cursor-account-login/v1</code></td><td>契约 §9、§16.1</td></tr>
+      <tr><td>链接过期（约 27 分钟）</td><td>「The sign-in link expired before anyone signed in with it.」+ <span class="ui">Get a new link</span></td><td>契约 §9（1,632 / 1,636 s）</td></tr>
+      <tr><td>移除被拒</td><td>机器原话（有会话在用）+「… is untouched.」；Default 没有 Remove</td><td>契约 §16.1 <code>cursor-account-remove/v1</code></td></tr>
+      <tr><td>额度读得到</td><td>「Monthly limit N%」+ 账期结束重置；用尽「Spent · resets …」</td><td>契约 §11 <code>GetCurrentPeriodUsage</code></td></tr>
+      <tr><td>额度读不到（Free）</td><td>「Free plan · Usage unavailable」，不画条、不写 0%</td><td>契约 §11；项目判据 6、9</td></tr>
+      <tr><td>轮里收到「Upgrade your plan to continue」</td><td>额度卡「Usage limit reached」，引原话；说过话的会话出路是新会话（D5）</td><td>契约 §12；P5b 分类</td></tr>
+      <tr><td>API key：有效 / 被拒 / 连不上</td><td>检查通过；「Rejected by Cursor」（不给 Save anyway）；「Couldn’t reach Cursor…」（可先存）</td><td>契约 §9 <code>agent models</code></td></tr>
+      <tr><td>轮中再发一条</td><td>「Queued for next turn」+「Cursor CLI can’t take a message mid-turn — sending one would stop the turn…」；无 Steer</td><td>契约 §3.2</td></tr>
+      <tr><td>上下文读数</td><td>永远「Unavailable」（虚线空环 + 说明）</td><td>契约 §4.1 <code>usage_update</code> 从不发送</td></tr>
+      <tr><td>模型</td><td>Auto 默认、在前、无参数；其余按模型列 Effort / Context / Speed</td><td>契约 §10 参数化选择器</td></tr>
+      <tr><td>权限模式</td><td>Default：A 灰掉 / B 别名；Accept Edits、Bypass：可选；Plan、Auto、Don’t Ask：可选带说明；Auto 的分类器做不出来时也灰掉</td><td>契约 §5.4、§16.5；P1 协调说明</td></tr>
+      <tr><td>换账号 / 换 key</td><td>草稿：照常；说过话、没有 <code>cursor-account-move/v1</code>：列出、灰掉、说明；有了：照常换，对话随之搬</td><td>契约 §13.3、§16.1</td></tr>
+      <tr><td>会话标题</td><td>Cursor 自动起，可能晚于本轮结束才到；到之前列表显示首条消息</td><td>契约 §3.2</td></tr>
+    </table>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑥ 将改动的文件（P7a / P7b / P7c 按此动手；shared 的表由 P1 / P5 先改）</div>
+    <div class="two">
+      <ul class="files zh">
+        <li><b>shared</b>（多数在 P1、P2、P5c、P6a）：<code>enums.ts</code>、<code>providerEngines.ts</code>（<code>ALL_ENGINES</code>、<code>ENGINE_CLI_NAMES</code>、Cursor key 只跑 cursor）、<code>providerPresets.ts</code>（Cursor 厂商预设）、<code>providerTransport.ts</code>（json-rpc、<code>MID_TURN_STEER</code> NEVER）、<code>permissionSemantics.ts</code>（Cursor 各模式的说明、D6）、<code>models.ts</code>、<code>planUsage.ts</code>（<code>ACCOUNT_ENGINES</code>、<code>ORBIT_CURSOR_ACCOUNT_DIR</code>、套餐与「不可用」）、<code>dto.ts</code>（<code>LoginEngine</code>、<code>RunnerLoginState.expiresAt</code>、<code>PlanUsage.cursor</code>）。</li>
+        <li><b>Web</b>（P7a）：<code>lib/providerGlyphs.ts</code>（Cursor 标）、<code>lib/sessionProviderChoices.ts</code>、<code>lib/runnerEngines.ts</code>（pinned）、<code>lib/workspaceDefaults.ts</code>、<code>lib/runnerAttention.ts</code>、<code>lib/engineAccounts.ts</code>、<code>lib/planUsage.ts</code>、<code>components/RunnerSignIn.tsx</code>（链接卡片、过期）、<code>components/RunnerEngines.tsx</code>（Cursor 行与状态、Usage unavailable）、<code>components/WorkspaceView.tsx</code>（模型参数、模式、换账号、托盘说明、Context）、<code>components/PendingTray.tsx</code>、<code>components/Transcript.tsx</code>（额度卡文字）、<code>components/ProviderGallery.tsx</code>、<code>pages/ProviderConnectPage.tsx</code>、<code>pages/InfrastructurePage.tsx</code>、<code>index.css</code>。原型改动见 <code>prototype.patch</code>（只为出图）。</li>
+      </ul>
+      <ul class="files zh">
+        <li><b>iOS / macOS</b>（P7b）：OrbitKit <code>App/ProviderEngines.swift</code>、<code>EngineAuth.swift</code>、<code>RunnerPageFormat.swift</code>、<code>RunnerAttention.swift</code>、<code>SessionProviderChoices.swift</code>、<code>CodexAccounts.swift</code>、<code>AgentDefaults.swift</code>、<code>RunnerPageCopy.swift</code>、<code>Infrastructure.swift</code>、<code>Models/Runners.swift</code>；OrbitApp <code>Views/BrandMarks.swift</code>（路径转绝对命令）、<code>AgentIdentity.swift</code>、<code>RunnerEnginePage.swift</code>、<code>RunnerSignInView.swift</code>、<code>RunnerPageParts.swift</code>、<code>InfrastructureSections.swift</code>、<code>ProviderPoolViews.swift</code>（Cursor key 页）、<code>ComposerView.swift</code>、<code>Console/PendingTrayView.swift</code>、<code>Console/AutoRetryCard.swift</code>。会跟着改的测试：<code>SettingsCopyParityTests</code>、<code>ProviderEnginesTests</code>、<code>InfrastructureTests</code>、<code>AgentDefaultsTests</code>、<code>SessionProviderChoicesTests</code>（engine 从 6 个变 7 个，且对照 web 文件）。</li>
+        <li><b>Android</b>（P7c，跟 iOS 稿）：<code>management/RunnerPage.kt</code>、<code>RunnerScreens.kt</code>、<code>ProviderManagement.kt</code>、<code>composer/ComposerModel.kt</code>、<code>ComposerUsage.kt</code>、<code>SessionComposer.kt</code>，以及 Kotlin 侧的 engine 表与对照测试。</li>
+        <li><b>不在客户端</b>：额度文本分类（P5b）、登录链接的过期时间与过期原因（P4b）、key 检查（P2）、搬运能力 <code>cursor-account-move/v1</code>（P6b）。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑦ 交协调会话（不是所有者的决定，记在这里）</div>
+    <ul class="files zh">
+      <li><span class="tbd coord">fast</span> P1 的说明写「不声明 fast」；但契约 §10 的模型变体里有 <code>fast</code>（如 Opus 5.5 的 fast=false/true）。板上把它画成 Cursor 模型的参数、放在现有的 Speed 行（Web 5 ④）。若首版不提供，去掉这一行即可。</li>
+      <li><span class="tbd coord">iOS key</span> iOS 今天没有厂商画廊和 key 表单（加 key 在 Web 上），本板 iOS 只画列表和 key 页，不新增表单。</li>
+      <li><span class="tbd coord">待验</span> 在另一台设备上完成 Cursor 登录（契约 §9、§17.1-6）还没实测；Web 3 / iOS 3 的流程以它成立为前提，P4b 前补验。</li>
+      <li><span class="tbd coord">Auto</span> Auto 模式依赖 Orbit 自己的请求级分类器（P1 说明）；做不出来时 Auto 和 Default 一样灰掉，板上的说明行随之改成「not on Cursor CLI」。</li>
+    </ul>
+  </div>
+</section>
+<script>
+const sizes = (key, label, mono) => [56, 28, 20].map((s) => mono
+  ? `<span class="provider-tile" style="width:${s}px;height:${s}px;border-radius:${Math.round(s * 0.26)}px;background:linear-gradient(135deg,#9aa0a8,#6b7178);display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:${Math.round(s * 0.42)}px">C</span>`
+  : ptile(key, s).replace('<div class="provider-tile"', '<span class="provider-tile"').replace(/<\/div>$/, '</span>')).join('')
+  + `<span class="nm">${label}</span>`;
+document.getElementById('tA').innerHTML = sizes('cursor', 'Cursor CLI') + '<span class="chip-demo">' + ptile('cursor', 16) + 'Cursor CLI</span>';
+document.getElementById('tB').innerHTML = sizes('cursor', 'Cursor') + '<span class="chip-demo">' + ptile('cursor', 16) + 'Cursor</span>';
+document.getElementById('tC').innerHTML = sizes('cursor', 'Cursor CLI', true);
+document.querySelectorAll('.tile-row .provider-tile').forEach((t) => { t.style.display = 'inline-flex'; t.style.alignItems = 'center'; t.style.justifyContent = 'center'; t.style.flex = 'none'; });
+finish();
+</script>
+</body>
+</html>

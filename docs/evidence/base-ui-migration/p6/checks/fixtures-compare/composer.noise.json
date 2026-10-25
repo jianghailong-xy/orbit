@@ -1,0 +1,843 @@
+{
+ "tests": {
+  "composer-cost.browser.mjs › records per-keystroke cost of the session field with short and long drafts › chromium-dark-desktop": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer-cost.browser.mjs › records per-keystroke cost of the session field with short and long drafts › chromium-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer-cost.browser.mjs › records per-keystroke cost of the session field with short and long drafts › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "keystroke-cost": {
+     "differences": 136,
+     "sample": [
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.max",
+       "before": 9.600000023841858,
+       "after": 4.200000047683716
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.median",
+       "before": 4.200000047683716,
+       "after": 3.200000047683716
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.min",
+       "before": 3.600000023841858,
+       "after": 3
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.p95",
+       "before": 8.5,
+       "after": 3.5
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[0]",
+       "before": 4.899999976158142,
+       "after": 4.200000047683716
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[1]",
+       "before": 3.6999999284744263,
+       "after": 3.1999999284744263
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[2]",
+       "before": 4,
+       "after": 3.200000047683716
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[3]",
+       "before": 3.700000047683716,
+       "after": 3.5
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[4]",
+       "before": 3.799999952316284,
+       "after": 3.200000047683716
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[5]",
+       "before": 3.600000023841858,
+       "after": 3.100000023841858
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[6]",
+       "before": 3.899999976158142,
+       "after": 3
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[7]",
+       "before": 5.800000071525574,
+       "after": 3.1999999284744263
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[8]",
+       "before": 4.199999928474426,
+       "after": 3.0999999046325684
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[9]",
+       "before": 8.5,
+       "after": 3.200000047683716
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[10]",
+       "before": 4.799999952316284,
+       "after": 3.200000047683716
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[11]",
+       "before": 7.100000023841858,
+       "after": 3.100000023841858
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[12]",
+       "before": 9.600000023841858,
+       "after": 3.100000023841858
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[13]",
+       "before": 6.600000023841858,
+       "after": 3.1999999284744263
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[14]",
+       "before": 5.600000023841858,
+       "after": 3.100000023841858
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[15]",
+       "before": 4.599999904632568,
+       "after": 3.1999999284744263
+      }
+     ]
+    }
+   }
+  },
+  "composer-cost.browser.mjs › records per-keystroke cost of the session field with short and long drafts › chromium-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer-cost.browser.mjs › records per-keystroke cost of the session field with short and long drafts › webkit-dark-desktop": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer-cost.browser.mjs › records per-keystroke cost of the session field with short and long drafts › webkit-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer-cost.browser.mjs › records per-keystroke cost of the session field with short and long drafts › webkit-light-desktop": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer-cost.browser.mjs › records per-keystroke cost of the session field with short and long drafts › webkit-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment @-mention restores focus and the caret through the native ref › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment @-mention restores focus and the caret through the native ref › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment @-mention restores focus and the caret through the native ref › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment @-mention restores focus and the caret through the native ref › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment @-mention restores focus and the caret through the native ref › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment @-mention restores focus and the caret through the native ref › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment @-mention restores focus and the caret through the native ref › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment @-mention restores focus and the caret through the native ref › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › Orbit text fields stop transitioning › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › Orbit text fields stop transitioning › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › Orbit text fields stop transitioning › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › Orbit text fields stop transitioning › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › Orbit text fields stop transitioning › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › Orbit text fields stop transitioning › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › Orbit text fields stop transitioning › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › Orbit text fields stop transitioning › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 599px › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 599px › chromium-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 599px › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 599px › chromium-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 599px › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 599px › webkit-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 599px › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 599px › webkit-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 601px › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 601px › chromium-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 601px › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 601px › chromium-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 601px › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 601px › webkit-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 601px › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 601px › webkit-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 959px › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 959px › chromium-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 959px › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 959px › chromium-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 959px › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 959px › webkit-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 959px › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 959px › webkit-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 961px › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 961px › chromium-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 961px › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 961px › chromium-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 961px › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 961px › webkit-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 961px › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 961px › webkit-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › task comment field sizes from its placeholder, grows to four rows and keeps outlined states › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › task comment field sizes from its placeholder, grows to four rows and keeps outlined states › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › task comment field sizes from its placeholder, grows to four rows and keeps outlined states › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › task comment field sizes from its placeholder, grows to four rows and keeps outlined states › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › task comment field sizes from its placeholder, grows to four rows and keeps outlined states › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › task comment field sizes from its placeholder, grows to four rows and keeps outlined states › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › task comment field sizes from its placeholder, grows to four rows and keeps outlined states › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › task comment field sizes from its placeholder, grows to four rows and keeps outlined states › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  }
+ },
+ "totals": {
+  "tests": 144,
+  "bothPassed": 121,
+  "statusDiffers": 0,
+  "onlyBefore": 0,
+  "onlyAfter": 0,
+  "jsonAttachments": 161,
+  "jsonDiffering": 1,
+  "pngAttachments": 324,
+  "pngEqual": 324,
+  "pngDiffering": 0,
+  "sameStatusNotPassed": 23
+ }
+}

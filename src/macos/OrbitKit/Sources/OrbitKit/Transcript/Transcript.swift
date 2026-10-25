@@ -11,7 +11,9 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
     case assistant(AssistantBubble)
     case thinking(ThinkingBlock)
     case toolCall(ToolCard)
-    case interrupt(id: String, seq: Int)
+    /// A turn stopped short. `runnerRestart`: nobody pressed Stop — the runner restarted under the
+    /// turn and cut it off (`TranscriptReducer.cutByRunnerRestart`), so the row says that instead.
+    case interrupt(id: String, seq: Int, runnerRestart: Bool = false)
     case error(id: String, message: String)
     /// A sign-in failure, rendered as a remedy card rather than an error line: the runtime reports
     /// it as ordinary assistant text (or an `error` event, when the engine never got to spawn), but
@@ -33,7 +35,7 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
         case .assistant(let b): return b.id
         case .thinking(let b): return b.id
         case .toolCall(let c): return c.id
-        case .interrupt(let id, _): return id
+        case .interrupt(let id, _, _): return id
         case .error(let id, _): return id
         case .authError(let id, _): return id
         case .autoRetry(let n): return n.id
@@ -135,6 +137,12 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// written for the agent — folded inside it. Nil for every ordinary message, and for every
     /// delivery stored before the payload existed, which keeps the reading it has always had.
     public var itemCard: OpenItemDelivery?
+    /// The owner's answer handed to the coordinator, when the control plane recorded which item and
+    /// when this conversation was told beside the echo (`ownerAnswer`, see `OwnerAnswer.parse`). Nobody
+    /// typed it either: the console draws one line, "Sent to the coordinator · 08:29", that opens to
+    /// `text` — the words written for the agent. Nil for every other turn, and for every answer stored
+    /// before the payload existed, which keeps the reading it has always had.
+    public var ownerAnswer: OwnerAnswer?
     /// The turn that starts a task's run, when the control plane recorded the task its brief was built
     /// from beside the echo (`taskStart`, see `TaskStart.parse`). Nobody typed this turn either: the
     /// console draws the task as a card instead of the bubble, with `text` — the brief written for the
@@ -165,26 +173,49 @@ public struct UserBubble: Equatable, Sendable, Codable {
     public var authoredByOrbit: Bool
     /// Filed by the server as a steer: written into the turn that was already running rather than
     /// queued behind it. Not a variety of `queued` — the opposite of it: this message is not
-    /// waiting for anything and cannot be withdrawn. Since it is answered by the turn it joined
-    /// rather than by one of its own, `delivery` below is the only report it ever gets, so the
-    /// indicator is shown for a steer where an ordinary message shows nothing. Learned from the
-    /// POST response, and re-learned from the durable `user` event after a reload.
+    /// waiting for a turn of its own, and it can be taken back only until the engine reads it
+    /// (`withdrawable`). Since it is answered by the turn it joined rather than by one of its own,
+    /// `delivery` below is the only report it ever gets, so the indicator is shown for a steer
+    /// where an ordinary message shows nothing. Learned from the POST response, and re-learned from
+    /// the durable `user` event after a reload.
     public var steer: Bool
     /// How far this message got into the engine's conversation: the state its `user` event opened
     /// with, amended by each `user_delivery` after it (`SteerDelivery`). Nil for a transcript
     /// recorded before the runner reported delivery at all, and on every runtime that does not.
     public var delivery: String?
+    /// The runner's word, on a steer's own `user` event, that its engine can drop it unread
+    /// (claude's CLI can take a message back out of its queue and say whether it did) — so the
+    /// bubble may offer to take it back while it waits (`SteerDelivery.offersWithdraw`). False on
+    /// every other message, on an engine that cannot, and from a runner that predates it.
+    public var withdrawable: Bool
+    /// A `!cmd` still waiting on the queue (the send's own `shell`, or the listing's `kind`): it runs
+    /// on the runner beside the engine, so it has no turn to be sent into (`PendingTray`'s Steer).
+    /// False on every echo — the runner runs one as a Bash card, never as a user turn.
+    public var shell: Bool
+    /// All there is of this message is the server's durable receipt: written into a running turn, it
+    /// was refused or stranded before any runner echoed it, so GET …/turns?view=active lists how it
+    /// came out (`delivery`) and nothing in the transcript carries it. The queued tail draws it with
+    /// why it did not land, and putting its words back discards the receipt
+    /// (`ConsoleModel.putBack`). False on every other message.
+    public var receipt: Bool
+    /// The receipt's own code and reason, said in the sender's words by
+    /// `SteerDelivery.failureExplanation`.
+    public var deliveryCode: String?
+    public var deliveryReason: String?
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
                 clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false,
                 undelivered: Bool = false, note: String? = nil,
-                steer: Bool = false, delivery: String? = nil, itemCard: OpenItemDelivery? = nil,
-                taskStart: TaskStart? = nil,
+                steer: Bool = false, delivery: String? = nil, withdrawable: Bool = false,
+                itemCard: OpenItemDelivery? = nil,
+                ownerAnswer: OwnerAnswer? = nil, taskStart: TaskStart? = nil,
                 startedCard: ProjectStarted? = nil, sessionMessage: SessionMessage? = nil,
                 sessionReplies: [SessionReply]? = nil,
                 authoredByOrbit: Bool = false,
                 reviewRequest: ConfirmationReviewRequestCard? = nil,
-                reviewReturn: ConfirmationReturnCard? = nil) {
+                reviewReturn: ConfirmationReturnCard? = nil,
+                shell: Bool = false, receipt: Bool = false,
+                deliveryCode: String? = nil, deliveryReason: String? = nil) {
         self.id = id
         self.text = text
         self.attachments = attachments
@@ -197,7 +228,9 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.note = note
         self.steer = steer
         self.delivery = delivery
+        self.withdrawable = withdrawable
         self.itemCard = itemCard
+        self.ownerAnswer = ownerAnswer
         self.taskStart = taskStart
         self.startedCard = startedCard
         self.sessionMessage = sessionMessage
@@ -205,14 +238,19 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.authoredByOrbit = authoredByOrbit
         self.reviewRequest = reviewRequest
         self.reviewReturn = reviewReturn
+        self.shell = shell
+        self.receipt = receipt
+        self.deliveryCode = deliveryCode
+        self.deliveryReason = deliveryReason
     }
 
     // Tolerant decode so transcript snapshots written before `attachments`/`ts` existed still
     // rehydrate (those keys just default) instead of discarding the whole cached session.
     enum CodingKeys: String, CodingKey {
         case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
-        case note, steer, delivery, itemCard, taskStart, startedCard, sessionMessage, sessionReplies
-        case authoredByOrbit, reviewRequest, reviewReturn
+        case note, steer, delivery, itemCard, ownerAnswer, taskStart, startedCard, sessionMessage, sessionReplies
+        case authoredByOrbit, reviewRequest, reviewReturn, withdrawable, shell
+        case receipt, deliveryCode, deliveryReason
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -228,9 +266,13 @@ public struct UserBubble: Equatable, Sendable, Codable {
         note = try? c.decodeIfPresent(String.self, forKey: .note)
         steer = (try? c.decodeIfPresent(Bool.self, forKey: .steer)) ?? false
         delivery = try? c.decodeIfPresent(String.self, forKey: .delivery)
+        withdrawable = (try? c.decodeIfPresent(Bool.self, forKey: .withdrawable)) ?? false
         // A snapshot written before the delivery card existed has no such key, and its turns are
         // exactly the deliveries that keep their old reading — a bubble.
         itemCard = try? c.decodeIfPresent(OpenItemDelivery.self, forKey: .itemCard)
+        // And for the owner's answer handed to the coordinator: a snapshot from before it existed keeps
+        // the bubble.
+        ownerAnswer = try? c.decodeIfPresent(OwnerAnswer.self, forKey: .ownerAnswer)
         // Same for the task-start card: a snapshot from before it existed keeps the bubble.
         taskStart = try? c.decodeIfPresent(TaskStart.self, forKey: .taskStart)
         startedCard = try? c.decodeIfPresent(ProjectStarted.self, forKey: .startedCard)
@@ -242,6 +284,11 @@ public struct UserBubble: Equatable, Sendable, Codable {
         // And for a review's two turns: a snapshot from before they existed keeps its reading.
         reviewRequest = try? c.decodeIfPresent(ConfirmationReviewRequestCard.self, forKey: .reviewRequest)
         reviewReturn = try? c.decodeIfPresent(ConfirmationReturnCard.self, forKey: .reviewReturn)
+        shell = (try? c.decodeIfPresent(Bool.self, forKey: .shell)) ?? false
+        // A snapshot from before receipts were drawn held none.
+        receipt = (try? c.decodeIfPresent(Bool.self, forKey: .receipt)) ?? false
+        deliveryCode = try? c.decodeIfPresent(String.self, forKey: .deliveryCode)
+        deliveryReason = try? c.decodeIfPresent(String.self, forKey: .deliveryReason)
     }
 }
 
@@ -278,11 +325,15 @@ public struct ThinkingBlock: Equatable, Sendable, Codable {
     /// stretch whose start this client never saw, and on transcripts recorded before these existed.
     public var startedTs: String?
     public var finishedTs: String?
+    /// How long the runner timed the stretch, as stored on the durable event that closed it
+    /// (`thinkingMs`), and summed when blocks fold. Unlike the two stamps above it survives a
+    /// reload, so the row prefers it. Absent on a block an older runner stored.
+    public var thinkingMs: Int?
     public var isFinalized: Bool { seq != nil }
     public var displayText: String { text.isEmpty ? streamingText : text }
 
     public init(id: String, text: String, streamingText: String, seq: Int?,
-                blocks: Int = 1, startedTs: String? = nil, finishedTs: String? = nil) {
+                blocks: Int = 1, startedTs: String? = nil, finishedTs: String? = nil, thinkingMs: Int? = nil) {
         self.id = id
         self.text = text
         self.streamingText = streamingText
@@ -290,12 +341,13 @@ public struct ThinkingBlock: Equatable, Sendable, Codable {
         self.blocks = blocks
         self.startedTs = startedTs
         self.finishedTs = finishedTs
+        self.thinkingMs = thinkingMs
     }
 
     // Tolerant decode, like `UserBubble` above: a snapshot written before these keys existed still
     // rehydrates (they default) instead of discarding the whole cached session.
     enum CodingKeys: String, CodingKey {
-        case id, text, streamingText, seq, blocks, startedTs, finishedTs
+        case id, text, streamingText, seq, blocks, startedTs, finishedTs, thinkingMs
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -306,6 +358,7 @@ public struct ThinkingBlock: Equatable, Sendable, Codable {
         blocks = (try? c.decodeIfPresent(Int.self, forKey: .blocks)) ?? 1
         startedTs = try? c.decodeIfPresent(String.self, forKey: .startedTs)
         finishedTs = try? c.decodeIfPresent(String.self, forKey: .finishedTs)
+        thinkingMs = try? c.decodeIfPresent(Int.self, forKey: .thinkingMs)
     }
 }
 
@@ -395,8 +448,8 @@ public struct ToolPayloadResolutionKey: Equatable, Sendable {
     public let inputSeq: Int?
     public let resultSeq: Int?
 
-    public init(card: ToolCard, expanded: Bool, needsWholeResult: Bool = false) {
-        inputSeq = expanded && card.inputTruncated ? card.inputSeq : nil
+    public init(card: ToolCard, expanded: Bool, needsWholeInput: Bool = false, needsWholeResult: Bool = false) {
+        inputSeq = (expanded || needsWholeInput) && card.inputTruncated ? card.inputSeq : nil
         resultSeq = (expanded || needsWholeResult) && card.resultTruncated ? card.resultSeq : nil
     }
 }

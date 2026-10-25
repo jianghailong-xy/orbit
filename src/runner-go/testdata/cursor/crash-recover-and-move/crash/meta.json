@@ -1,0 +1,78 @@
+{
+ "scenario": "crash-recover-and-move",
+ "process": "crash",
+ "version": "2026.10.14-941492e",
+ "exit": {
+  "code": null,
+  "signal": "SIGKILL"
+ },
+ "actions": [
+  {
+   "t": 9,
+   "channel": "spawn",
+   "value": {
+    "args": [
+     "acp"
+    ],
+    "cwd": "<RUN>/work",
+    "envKeys": [
+     "AGENT_CLI_CREDENTIAL_STORE",
+     "CURSOR_API_KEY",
+     "CURSOR_CONFIG_DIR",
+     "CURSOR_DATA_DIR",
+     "HOME",
+     "LANG",
+     "NO_OPEN_BROWSER",
+     "ORBIT_P0_CANARY",
+     "PATH",
+     "TERM",
+     "XDG_CACHE_HOME",
+     "XDG_CONFIG_HOME",
+     "XDG_DATA_HOME"
+    ]
+   }
+  },
+  {
+   "t": 9,
+   "channel": "client->agent",
+   "id": 1,
+   "method": "initialize"
+  },
+  {
+   "t": 410,
+   "channel": "client->agent",
+   "id": 2,
+   "method": "session/new"
+  },
+  {
+   "t": 9449,
+   "channel": "client->agent",
+   "id": 3,
+   "method": "session/prompt"
+  },
+  {
+   "t": 15237,
+   "channel": "client->agent",
+   "id": 0,
+   "method": null
+  },
+  {
+   "t": 18239,
+   "channel": "close-stdin",
+   "value": null
+  },
+  {
+   "t": 26246,
+   "channel": "signal",
+   "value": "SIGKILL"
+  },
+  {
+   "t": 26258,
+   "channel": "exit",
+   "value": {
+    "code": null,
+    "signal": "SIGKILL"
+   }
+  }
+ ]
+}

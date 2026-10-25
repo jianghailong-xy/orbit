@@ -1,0 +1,163 @@
+tree: ref 9acb176da0acd9a4d829ec1892c2efb139457c61
+load: 20.76 27.05 29.86 17/5689 2546720
+started: 2026-10-09T03:38:52Z
+
+Running 8 tests using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-desktop/p43a-header.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-desktop/p43a-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-desktop/p43a-status-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-desktop/p43a-status-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-desktop/p43a-status-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-desktop/p43a-status-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-desktop/p43a-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-desktop/p43a-delete-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-desktop/p43a-header-live.png, writing actual.
+  ✓  1 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:251:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question (22.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-desktop/p43a-tasks-keys-space.png, writing actual.
+  ✓  2 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:907:3 › P4.3a the Tasks page › keys with a task open: Space checks it whichever checkbox has focus, and the title passes the arrows on (6.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-phone/p43a-header.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-phone/p43a-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-phone/p43a-status-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-phone/p43a-status-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-phone/p43a-status-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-phone/p43a-status-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-phone/p43a-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-phone/p43a-delete-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-phone/p43a-header-live.png, writing actual.
+  ✓  3 [webkit-light-phone] › ui-migration/p43a.browser.mjs:251:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question (29.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-light-phone/p43a-tasks-keys-space.png, writing actual.
+  ✘  4 [webkit-light-phone] › ui-migration/p43a.browser.mjs:907:3 › P4.3a the Tasks page › keys with a task open: Space checks it whichever checkbox has focus, and the title passes the arrows on (7.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-dark-desktop/p43a-header.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-dark-desktop/p43a-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-dark-desktop/p43a-status-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-dark-desktop/p43a-status-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-dark-desktop/p43a-status-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-dark-desktop/p43a-status-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-dark-desktop/p43a-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-dark-desktop/p43a-delete-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-dark-desktop/p43a-header-live.png, writing actual.
+  ✓  5 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:251:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question (1.2m)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-dark-desktop/p43a-tasks-keys-space.png, writing actual.
+  ✓  6 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:907:3 › P4.3a the Tasks page › keys with a task open: Space checks it whichever checkbox has focus, and the title passes the arrows on (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-dark-phone/p43a-header.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-dark-phone/p43a-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-dark-phone/p43a-status-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-dark-phone/p43a-status-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-dark-phone/p43a-status-refused.png, writing actual.
+  ✘  7 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:251:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question (28.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/ref-3/shots/webkit-dark-phone/p43a-tasks-keys-space.png, writing actual.
+  ✓  8 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:907:3 › P4.3a the Tasks page › keys with a task open: Space checks it whichever checkbox has focus, and the title passes the arrows on (2.9s)
+
+
+  1) [webkit-light-phone] › ui-migration/p43a.browser.mjs:907:3 › P4.3a the Tasks page › keys with a task open: Space checks it whichever checkbox has focus, and the title passes the arrows on 
+
+    Error: No unhandled errors in the real application
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+       at harness.mjs:88
+
+      86 |       await use({ page, expect, capture, measure, api, measurements });
+      87 |       api.assertHandled();
+    > 88 |       expect(pageErrors, 'No unhandled errors in the real application').toEqual([]);
+         |                                                                         ^
+      89 |     } finally {
+      90 |       const path = testInfo.outputPath('evidence.json');
+      91 |       writeFileSync(path, JSON.stringify({ ...measurements, requests: api.requests, unhandled: api.unhandled, pageErrors }, null, 2) + '\n');
+        at Object.evidence (/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/ref/src/web/ui-migration/harness.mjs:88:73)
+
+    attachment #1: p43a-tasks-keys-space (image/png) ───────────────────────────────────────────────
+    Expected: ../../../repeat/ref-3/shots/webkit-light-phone/p43a-tasks-keys-space.png
+    Received: ../../../repeat/ref-3/out/p43a.browser.mjs-P4-3a-the-336f6--title-passes-the-arrows-on-webkit-light-phone/p43a-tasks-keys-space-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../repeat/ref-3/out/p43a.browser.mjs-P4-3a-the-336f6--title-passes-the-arrows-on-webkit-light-phone/attachments/computed-styles-and-timings-3156dde28452a4d18ab12067ede4824984d1914e.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../repeat/ref-3/out/p43a.browser.mjs-P4-3a-the-336f6--title-passes-the-arrows-on-webkit-light-phone/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../repeat/ref-3/out/p43a.browser.mjs-P4-3a-the-336f6--title-passes-the-arrows-on-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../repeat/ref-3/out/p43a.browser.mjs-P4-3a-the-336f6--title-passes-the-arrows-on-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-dark-phone] › ui-migration/p43a.browser.mjs:251:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('region', { name: 'Notifications', exact: true }).getByText('Recorded as done', { exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('region', { name: 'Notifications', exact: true }).getByText('Recorded as done', { exact: true }) with timeout 15000ms
+      - waiting for getByRole('region', { name: 'Notifications', exact: true }).getByText('Recorded as done', { exact: true })
+
+
+      306 |     await page.getByRole('button', { name: 'Record Orbit UI migration as done' }).click();
+      307 |     await button(dialog(page, 'Record “Orbit UI migration” as done?'), 'Record as done').click();
+    > 308 |     await expect(notifications(page).getByText('Recorded as done', { exact: true })).toBeVisible();
+          |                                                                                      ^
+      309 |     await expect(page.getByRole('button', { name: 'Reopen Orbit UI migration' })).toBeVisible();
+      310 |     trace.push(await observe(page, [fixtures], 'recorded as done'));
+      311 |     await toastsGone(page);
+        at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/ref/src/web/ui-migration/p43a.browser.mjs:308:86
+
+    attachment #1: p43a-header (image/png) ─────────────────────────────────────────────────────────
+    Expected: ../../../repeat/ref-3/shots/webkit-dark-phone/p43a-header.png
+    Received: ../../../repeat/ref-3/out/p43a.browser.mjs-P4-3a-a-p-7cbe3-enu-and-the-delete-question-webkit-dark-phone/p43a-header-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: p43a-header-menu (image/png) ────────────────────────────────────────────────────
+    Expected: ../../../repeat/ref-3/shots/webkit-dark-phone/p43a-header-menu.png
+    Received: ../../../repeat/ref-3/out/p43a.browser.mjs-P4-3a-a-p-7cbe3-enu-and-the-delete-question-webkit-dark-phone/p43a-header-menu-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: p43a-status-cancel (image/png) ──────────────────────────────────────────────────
+    Expected: ../../../repeat/ref-3/shots/webkit-dark-phone/p43a-status-cancel.png
+    Received: ../../../repeat/ref-3/out/p43a.browser.mjs-P4-3a-a-p-7cbe3-enu-and-the-delete-question-webkit-dark-phone/p43a-status-cancel-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #4: p43a-status-done (image/png) ────────────────────────────────────────────────────
+    Expected: ../../../repeat/ref-3/shots/webkit-dark-phone/p43a-status-done.png
+    Received: ../../../repeat/ref-3/out/p43a.browser.mjs-P4-3a-a-p-7cbe3-enu-and-the-delete-question-webkit-dark-phone/p43a-status-done-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #5: p43a-status-refused (image/png) ─────────────────────────────────────────────────
+    Expected: ../../../repeat/ref-3/shots/webkit-dark-phone/p43a-status-refused.png
+    Received: ../../../repeat/ref-3/out/p43a.browser.mjs-P4-3a-a-p-7cbe3-enu-and-the-delete-question-webkit-dark-phone/p43a-status-refused-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #6: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../repeat/ref-3/out/p43a.browser.mjs-P4-3a-a-p-7cbe3-enu-and-the-delete-question-webkit-dark-phone/attachments/computed-styles-and-timings-2a74b8c609cef7c5bda6f4477bb981388e640c25.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../repeat/ref-3/out/p43a.browser.mjs-P4-3a-a-p-7cbe3-enu-and-the-delete-question-webkit-dark-phone/error-context.md
+
+    attachment #8: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../repeat/ref-3/out/p43a.browser.mjs-P4-3a-a-p-7cbe3-enu-and-the-delete-question-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../repeat/ref-3/out/p43a.browser.mjs-P4-3a-a-p-7cbe3-enu-and-the-delete-question-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [webkit-light-phone] › ui-migration/p43a.browser.mjs:907:3 › P4.3a the Tasks page › keys with a task open: Space checks it whichever checkbox has focus, and the title passes the arrows on 
+    [webkit-dark-phone] › ui-migration/p43a.browser.mjs:251:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question 
+  6 passed (3.2m)
+exit=1

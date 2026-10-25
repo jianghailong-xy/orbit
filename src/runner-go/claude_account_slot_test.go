@@ -207,6 +207,49 @@ func TestClaudeSessionAccountDirResolvesTheSessionsOwnDirectory(t *testing.T) {
 	}
 }
 
+// TestClaudeSessionAuthAsksDefaultAsItsEngineRuns: a session on Default runs its claude with no
+// CLAUDE_CONFIG_DIR, and the spawn preflight asks that login, not Default's directory named outright —
+// on a Mac those are two Keychain items (claudeKeychainService), and a sign-in into Default never
+// writes the named one. The fake answers the way the CLI does there: signed in with no
+// CLAUDE_CONFIG_DIR, and in a named directory only once that directory has a login of its own.
+func TestClaudeSessionAuthAsksDefaultAsItsEngineRuns(t *testing.T) {
+	home, _ := claudeAccountSlotTestHomes(t)
+	work, err := claudeAccountKind.create("Work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	asked := filepath.Join(t.TempDir(), "asked")
+	fake := writeFakeBin(t, t.TempDir(), "claude", `printf '[%s]\n' "$CLAUDE_CONFIG_DIR" >> '`+asked+`'
+if [ -z "$CLAUDE_CONFIG_DIR" ] || [ -f "$CLAUDE_CONFIG_DIR/signed-in" ]; then
+  echo '{"loggedIn":true}'
+else
+  echo '{"loggedIn":false}'
+fi`)
+
+	if got := sessionEngineAuth(providerClaude, fake, nil); got != authYes {
+		t.Fatalf("a session on Default = %v, want signed in", got)
+	}
+	onWork := map[string]string{"CLAUDE_CONFIG_DIR": work.Dir}
+	if got := sessionEngineAuth(providerClaude, fake, onWork); got != authNo {
+		t.Fatalf("a session on Work, never signed in = %v, want signed out", got)
+	}
+	if err := os.WriteFile(filepath.Join(work.Dir, "signed-in"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := sessionEngineAuth(providerClaude, fake, onWork); got != authYes {
+		t.Fatalf("a session on Work, signed in = %v, want signed in", got)
+	}
+
+	b, err := os.ReadFile(asked)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "[]\n[" + work.Dir + "]\n[" + work.Dir + "]\n"; string(b) != want {
+		t.Fatalf("`claude auth status` ran with CLAUDE_CONFIG_DIR %q, want %q — Default is never asked as %s",
+			b, want, filepath.Join(home, ".claude"))
+	}
+}
+
 // TestClaudeSessionAccountDirsReadTheSessionsRecord: the directories a removal refuses to delete,
 // read from each running session's own record rather than from a claim that may have moved on.
 func TestClaudeSessionAccountDirsReadTheSessionsRecord(t *testing.T) {
@@ -223,6 +266,43 @@ func TestClaudeSessionAccountDirsReadTheSessionsRecord(t *testing.T) {
 	want := map[string]bool{filepath.Clean(work.Dir): true}
 	if len(dirs) != len(want) || !dirs[filepath.Clean(work.Dir)] {
 		t.Fatalf("live dirs = %#v, want %#v", dirs, want)
+	}
+}
+
+func TestClaudeSessionMoveToDefaultReleasesThePreviousAccountAfterSpawn(t *testing.T) {
+	_, _ = claudeAccountSlotTestHomes(t)
+	work, err := claudeAccountKind.create("Work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	execDir := t.TempDir()
+	scratch := runDir("moved-to-default")
+	if err := os.MkdirAll(scratch, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	job := &ClaimedSession{
+		SessionID: "moved-to-default", SessionUUID: "moved-to-default", Provider: providerClaude,
+		Agent: AgentExecConfig{Provider: providerClaude, Env: map[string]string{"CLAUDE_CONFIG_DIR": work.Dir}},
+	}
+	writeSessionMeta(scratch, job, execDir)
+
+	// Selecting Default is only a future destination until its engine starts. The old account must
+	// remain protected during that gap so a removal cannot take the conversation out from under it.
+	job.Agent.Env = nil
+	writeSessionMeta(scratch, job, execDir)
+	if dirs := claudeSessionAccountDirs([]string{job.SessionID}); !dirs[filepath.Clean(work.Dir)] {
+		t.Fatalf("old account was released before the Default engine started: %#v", dirs)
+	}
+
+	// Once the Default engine is running, the conversation has been carried and the old account is
+	// no longer this session's ground. Its empty Default marker must replace, not preserve, the slot.
+	writeClaudeSessionMeta(scratch, job, execDir)
+	if dirs := claudeSessionAccountDirs([]string{job.SessionID}); len(dirs) != 0 {
+		t.Fatalf("old account remains live after the Default engine started: %#v", dirs)
+	}
+	meta := readSessionMeta(filepath.Join(scratch, "meta.json"))
+	if meta == nil || meta.ClaudeConfigDir != "" {
+		t.Fatalf("session record still names the old account: %+v", meta)
 	}
 }
 

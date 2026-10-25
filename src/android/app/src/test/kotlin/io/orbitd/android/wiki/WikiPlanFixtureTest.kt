@@ -87,13 +87,7 @@ class WikiPlanFixtureTest {
         rows("errors").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.errorCount(it.fint("n"))) }
         rows("changesCount").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.changeCount(it.fint("n"))) }
         rows("time").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.time(it["since"].text(), it["until"].text())) }
-        rows("redraftNotes").forEach { row ->
-            val from = (row["from"] as? JsonObject)?.let { it.fint("version") to (it["inForce"].bool() == true) }
-            assertEquals(row.fstr("says"), WikiPlanCopy.redraftNote(row["provider"].text(), from))
-        }
         rows("protectedKept").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.protectedKept(it.fstrings("numbers"))) }
-        rows("emptyText").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.emptyText(it["provider"].text())) }
-        rows("emptyNote").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.emptyNote(it["where"].text(), it["provider"].text())) }
         rows("saveNote").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.saveNote(it.fint("n"))) }
         rows("editTitle").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.editTitle(it.fstr("number"))) }
         rows("confirmed").forEach { assertEquals(it.fstr("says"), WikiPlanCopy.confirmed(it.fint("n"))) }
@@ -289,9 +283,9 @@ class WikiPlanFixtureTest {
         assertEquals(listOf("no such file"), wikiGateErrors(ApiError.parse(422, body.encodeToByteArray()))?.map { it.message })
         assertNull(wikiGateErrors(ApiError.parse(409, """{"code":"WIKI_PLAN_STALE","message":"stale"}""".encodeToByteArray())))
         assertNull(wikiGateErrors(NetworkException()))
-        // Any other refusal is the server's own sentence, or the web's fallback.
+        // Any other refusal is the server's own sentence, or what kind of failure it was (iOS d625d9809: failureReason).
         assertEquals("stale", wikiRefusal(ApiError.parse(409, """{"code":"WIKI_PLAN_STALE","message":"stale"}""".encodeToByteArray())))
-        assertEquals(WikiCopy.refused, wikiRefusal(NetworkException()))
+        assertEquals("the connection dropped", wikiRefusal(NetworkException()))
     }
 
     /** A failed job's draft the model wrote in a shape this build cannot read is dropped, never the plan's read with it. */

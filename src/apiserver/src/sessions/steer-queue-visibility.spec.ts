@@ -21,9 +21,9 @@ import { taskRunResumeTurnId } from '../tasks/task-run-identity';
  * nowhere else. Left off this list it would simply vanish on refresh, which is the one outcome
  * mid-turn sending must not produce.
  *
- * Listed is not the same as withdrawable: cancelQueuedTurn refuses a steer, because a message the
- * engine may already be reading cannot be taken back. `kind` is what keeps the two apart on the
- * clients, so it has to survive the mapping.
+ * Listed is not the same as withdrawable on the same terms: a steer is withdrawn by its own rules
+ * (steer-withdraw.ts), never by Cancel's delete of a queued message. `kind` is what keeps the two
+ * apart on the clients, so it has to survive the mapping.
  */
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -94,6 +94,8 @@ const ITEM_CARD = {
     upstream: 'main',
     integration: `project/${PROJECT_ID}`,
   },
+  // The item names no landing: this fixture is a failed task, and a task failure lands nothing.
+  landingSessionId: null,
 };
 
 function makeService(
@@ -134,7 +136,7 @@ function makeService(
         return { count: deleteCounts[deletes++] ?? 0 };
       },
       // What the delete matched nothing BECAUSE of: a steer row, or nothing at all.
-      findFirst: async () => (rows.some((r) => r.kind === 'steer') ? { id: rows[0].id } : null),
+      findFirst: async () => rows.find((r) => r.kind === 'steer') ?? null,
       count: async () => 1,
     },
   };
@@ -524,21 +526,22 @@ test('the controller requires an exact active opt-in and defaults every other va
   assert.deepEqual(calls, [undefined, 'active', undefined]);
 });
 
-test('a steer is not withdrawable, however it got onto that list', async () => {
-  // The mirror of listing it: cancelQueuedTurn deletes only message/shell, so a client that
-  // offered Cancel on a steer would be offering a button that always fails. This is what makes
-  // hiding that affordance correct rather than merely tidy.
-  const h = makeService([row('t1', 'steer', 'actually, call it gadget')]);
+test('a steer still on that list is withdrawn by its own rule, not by a queued message\'s delete', async () => {
+  // Cancel's delete takes only message/shell, so a steer reaches the withdrawal of its own: one
+  // still PENDING has been handed to nothing, so it goes as a queued message would — matched as the
+  // steer it is, and only while it is still PENDING (steer-withdraw.ts).
+  const h = makeService([row('t1', 'steer', 'actually, call it gadget')], [], [], [0, 0, 1]);
 
-  await assert.rejects(
-    h.service.cancelQueuedTurn(OWNER_ID, SESSION_ID, '33333333-3333-4333-8333-333333333333'),
-    // And refused for the reason it is actually refused for: the message is not gone, it is
-    // already on its way into the running turn (see turn-error-contract.spec.ts).
-    /written into the running turn/,
+  assert.deepEqual(
+    await h.service.cancelQueuedTurn(OWNER_ID, SESSION_ID, '33333333-3333-4333-8333-333333333333'),
+    { ok: true },
   );
 
-  const where = h.deleteFilters[0] as { kind: { in: string[] } };
-  assert.deepEqual([...where.kind.in].sort(), ['message', 'shell']);
+  const cancel = h.deleteFilters[0] as { kind: { in: string[] } };
+  assert.deepEqual([...cancel.kind.in].sort(), ['message', 'shell']);
+  const withdraw = h.deleteFilters[2] as { kind: string; status: string };
+  assert.equal(withdraw.kind, 'steer');
+  assert.equal(withdraw.status, 'PENDING');
 });
 
 test('a message that settled undelivered can be discarded, unlike a steer in flight', async () => {

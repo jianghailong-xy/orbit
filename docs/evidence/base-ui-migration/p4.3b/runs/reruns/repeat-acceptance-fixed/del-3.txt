@@ -1,0 +1,12 @@
+tree del e21fad172 run 3 2026-10-09T11:39:29Z load 16.66 19.57 24.58
+cgroup: 0::/system.slice/run-p3283561-i53583878.scope oom_score_adj 500
+
+ RUN  v5.0.2 /root/.orbit/worktrees/ba9b2bbb-b78b-5991-855c-183de0d5d9e3/src/web
+
+
+ Test Files  1 passed (1)
+      Tests  19 passed (19)
+   Start at  19:39:29
+   Duration  5.18s (tests 53%, transform 22%, import 19%, environment 6%)
+
+exit=0

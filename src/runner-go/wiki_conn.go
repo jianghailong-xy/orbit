@@ -32,7 +32,7 @@ import (
 var wikiConnHealth = struct {
 	// sendPing is how long a connection may read nothing before it is pinged: long enough that a quiet one
 	// costs one ping a half-minute; short enough that, with ping's 15 seconds, a dead one is found well inside
-	// the heavy calls' 2-minute timeout and the 5-minute retry budget.
+	// the 5-minute retry budget.
 	sendPing time.Duration
 	// ping is how long a ping may go unanswered before the connection is closed, net/http's own default: a ping
 	// to the edge comes back in well under a second, so 15 seconds without an answer is a connection that is
@@ -69,6 +69,11 @@ func (t *Transport) wikiRetire(c *http.Client) {
 func newWikiClient(client *http.Client) *http.Client {
 	c := *client
 	base := c.Transport
+	// The link shadow's tap (link_shadow.go) watches the daemon's own calls: the wiki door's pool is cut
+	// from the transport under it, as it was before the tap.
+	if tap, ok := base.(*linkShadowTap); ok {
+		base = tap.next
+	}
 	if base == nil {
 		base = http.DefaultTransport
 	}

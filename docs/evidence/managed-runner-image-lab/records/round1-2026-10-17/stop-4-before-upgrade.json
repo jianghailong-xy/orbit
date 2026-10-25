@@ -1,0 +1,27 @@
+{
+  "deleteRequestedAt": "2026-10-17T07:36:29.931+00:00",
+  "grace": 240,
+  "log": "/mnt/data/managed-runner-lab/test-server/state/logs/t03-runner-c9ad7a80-2770-458f-ac72-8696aa6d09c2.log",
+  "logMarks": {
+    "detached": "2026-10-17T07:36:30.070750577Z",
+    "stopping": "2026-10-17T07:36:29.943983883Z"
+  },
+  "logTail": [
+    "2026-10-17T07:28:31.542439426Z [orbit-runner 2026-10-17T07:28:31.541Z] runner \"t03\" online -> https://10.0.2.2:13711 (max 2 concurrent)",
+    "2026-10-17T07:28:31.882793746Z [orbit-runner 2026-10-17T07:28:31.882Z] reclaiming session 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 T03 fake-model persistence session 2",
+    "2026-10-17T07:28:32.830168504Z [orbit-runner 2026-10-17T07:28:32.830Z] session 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 re-attached worktree /var/lib/orbit/home/.orbit/worktrees/01a148ba-a3da-7330-94bc-3ba0bd62959a (branch orbit/t03-fake-model-persistence-session-2-244d43)",
+    "2026-10-17T07:28:33.416005354Z [orbit-runner 2026-10-17T07:28:33.415Z] > interactive run 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 T03 fake-model persistence session 2",
+    "2026-10-17T07:28:46.542955045Z [orbit-runner 2026-10-17T07:28:46.542Z] claude plan-usage unavailable: open /var/lib/orbit/home/.claude/.credentials.json: no such file or directory",
+    "2026-10-17T07:36:29.943983883Z [orbit-runner 2026-10-17T07:36:29.943Z] runner stopping; draining session supervisors...",
+    "2026-10-17T07:36:30.070750577Z [orbit-runner 2026-10-17T07:36:30.070Z] \u23f8 interactive run 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 detached for shutdown (resumable)"
+  ],
+  "podGoneAt": "2026-10-17T07:36:32.269+00:00",
+  "podUid": "c9ad7a80-2770-458f-ac72-8696aa6d09c2",
+  "runnerTerminated": {
+    "containerID": "containerd://2ac1329026f0a06a383db65488d6e3f78ee9ddc6c51007a88dcbcba01220ad49",
+    "exitCode": 0,
+    "finishedAt": "2026-10-17T07:36:30Z",
+    "reason": "Completed",
+    "startedAt": "2026-10-17T07:28:31Z"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "answer": "pod \"mr-01a14b7d-4faf-7082-acb6-7cee4cd693ee\" force deleted from orbit-mr-test namespace",
+  "containersOfThatPodRightAfter": [],
+  "generation": 1,
+  "objectRightAfter": null,
+  "pod": {
+    "name": "mr-01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+    "uid": "9d9277e3-a0fb-43bd-930d-ebd3c9725b87"
+  },
+  "requestedAt": "2026-10-17T20:12:45.339+00:00"
+}

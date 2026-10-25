@@ -1,0 +1,1 @@
+06:29:27Z stopped; data kept in /mnt/data/managed-runner-lab/test-server-t07

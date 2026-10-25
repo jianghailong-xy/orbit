@@ -1,0 +1,48 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T00:48:39.393",
+    "ingested_at": "2026-10-18T00:48:39.422491+00:00",
+    "ingested_by_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "seq": 27,
+    "session_id": "01a14c75-bbb6-724b-83b5-8d8649235e38",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-AMY-SLOW",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T00:46:09Z",
+      "kind": "text",
+      "messages": 8,
+      "n": 4,
+      "tool": null
+    }
+  ],
+  "owner": "amy",
+  "session": {
+    "assigned_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "created_at": "2026-10-18T00:42:26.614",
+    "engine": "claude",
+    "id": "01a14c75-bbb6-724b-83b5-8d8649235e38",
+    "provider": "deepseek",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06-AMY-S1 hello from amy's first session"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T00:48:39.489",
+      "client_turn_id": "d2cd13ac-6e24-4888-9667-3f0b3a674297",
+      "content": "T06-AMY-SLOW FAKE-SLOW 150 a turn that runs for 150 s",
+      "created_at": "2026-10-18T00:46:09.226",
+      "delivered_at": "2026-10-18T00:46:09.267",
+      "id": "01a14c79-214a-7466-8d9a-1b2a5c28836b",
+      "kind": "message",
+      "seq": 3,
+      "status": "ANSWERED"
+    }
+  ]
+}

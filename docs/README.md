@@ -26,6 +26,8 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Build or change Orbit | [Development guide](development.md) and [contribution guide](../CONTRIBUTING.md) |
 | Automate tasks and sessions | [Runner CLI and automation](runner-cli.md) |
 | Restore or validate a backup | [Postgres backup and restore](postgres-backup-restore.md) |
+| Back up, restore or recover managed runners on Docker | [Managed runners on Docker: operations](managed-runner-docker-operations.md) |
+| Deploy, back up, restore, roll back or fail over managed runners on Kubernetes (test environments) | [Managed runners on Kubernetes: operations](managed-runner-kubernetes-operations.md) |
 | Diagnose database conflicts, or deploy and roll back the code that handles them | [PostgreSQL conflict runbook](postgres-conflict-runbook.md) |
 | Understand project direction | [Project maturity and brand roadmap](project-maturity.md) |
 
@@ -53,6 +55,13 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
   boundaries.
 - [Postgres backup and restore](postgres-backup-restore.md) — base backups, WAL archiving, point-in-time
   recovery, and restore verification.
+- [Managed runners on Docker: backup, restore and failure handling](managed-runner-docker-operations.md) — each
+  account's data volume backed up, checked and restored, and what to do on a volume over its limit, a full disk, a
+  container over its memory, a channel or apiserver outage, and a host restart or power loss.
+- [Managed runners on Kubernetes: deployment, backup and restore, rollback and failover](managed-runner-kubernetes-operations.md)
+  — an authorized test environment's deployment order, finding an account's runner, when the stop-report finalizer may
+  and may not be removed, an independent RBD backup checked off the cluster and restored to a new PVC, switching off and
+  rolling back, and fencing a node that stops reporting.
 - [PostgreSQL conflict runbook](postgres-conflict-runbook.md) — the transaction-conflict counters and where to
   read them, how to tell an injected fault from absorbed contention, a lock-order defect, a database resource
   fault and an unretried path, alert thresholds, PostgreSQL log correlation, and the deploy, mixed-schema,
@@ -66,7 +75,11 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 - [Managed runner deployment and data contract](managed-runner-design.md) — default disabled Kubernetes runners,
   per-user Ceph RBD storage, lifecycle, fencing, client status, and isolated test prerequisites.
 - [Interactive runner sessions](interactive-claude-runner-design.md) — the original long-lived session design.
+- [Runner link protocol v1](runner-link-design.md) — one WebSocket per runner to its cell's gateway, protobuf
+  frames, five traffic classes, presence, and the shadow-then-cutover plan that replaces the HTTP long polls.
 - [Session lifecycle](session-lifecycle-design.md) — run state, lifecycle state, and task state.
+- [Suggested replies](prompt-suggestions-design.md) — Claude Code's guess at the next message after a turn,
+  how it reaches the transcript, and where the clients offer it.
 - [Realtime control-plane stream](realtime-control-plane-stream.md) — user-level SSE events and replay.
 - [Watch contract](watch-contract.md) — the frozen domain and product semantics for persistent cross-Session
   and cross-Task watching: the versioned typed predicate, the Watch/Match/Delivery state machines, why

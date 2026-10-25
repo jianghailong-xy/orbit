@@ -6,6 +6,12 @@
 // The prompt drives the reply: lines of the form `mock:<verb> <args>` in the most
 // recent user message script what the "model" answers, one reply per model turn,
 // so a test states its scenario in the prompt it sends rather than in a side file.
+// A scripted call carries only the parameters the request's own declaration of that
+// function names: agy refuses a call with a property its schema does not declare,
+// and the schemas change between releases (1.4.3 dropped run_command's Cwd and the
+// toolAction every 1.4.2 tool required), so one script serves both. A tool a release
+// renamed is scripted under all its names, `view_file|read_file`, and called by the
+// first one the request declares.
 // Every request is appended to a JSONL log, and the server doubles as an HTTPS
 // proxy (HTTPS_PROXY) that records every host the CLI tries to reach and refuses
 // it unless -tunnel is set.
@@ -308,6 +314,37 @@ func (r *genRequest) declaresTools() bool {
 	return false
 }
 
+// declaredParams is the parameters each function the request declares names in its
+// schema, by function name; nil for a function whose schema lists none.
+func (r *genRequest) declaredParams() map[string]map[string]bool {
+	out := map[string]map[string]bool{}
+	for _, t := range r.Tools {
+		decls, _ := t["functionDeclarations"].([]interface{})
+		for _, d := range decls {
+			decl, _ := d.(map[string]interface{})
+			name, _ := decl["name"].(string)
+			if name == "" {
+				continue
+			}
+			schema, _ := decl["parametersJsonSchema"].(map[string]interface{})
+			if schema == nil {
+				schema, _ = decl["parameters"].(map[string]interface{})
+			}
+			props, _ := schema["properties"].(map[string]interface{})
+			if props == nil {
+				out[name] = nil
+				continue
+			}
+			names := map[string]bool{}
+			for p := range props {
+				names[p] = true
+			}
+			out[name] = names
+		}
+	}
+	return out
+}
+
 // --- the script ---
 
 // reply is one model turn: what one generateContent call answers.
@@ -344,7 +381,7 @@ func pickReply(req *genRequest) (reply, string) {
 		if len(lines) == 0 {
 			continue
 		}
-		replies := parseScript(lines)
+		replies := parseScript(lines, req.declaredParams())
 		turn := 0
 		for _, later := range req.Contents[i+1:] {
 			if later.isModelTurn() {
@@ -359,7 +396,11 @@ func pickReply(req *genRequest) (reply, string) {
 	return textReply("mock reply: " + summarize(lastUserText(req))), "text (no script)"
 }
 
-func parseScript(lines [][]string) []reply {
+// parseScript turns a script's lines into replies. declared is the request's
+// declaredParams: a call names the first of its |-separated names the request
+// declares, and keeps only the parameters that declaration names; a call to anything
+// else is sent as written.
+func parseScript(lines [][]string, declared map[string]map[string]bool) []reply {
 	var replies []reply
 	cur := reply{}
 	open := false
@@ -379,9 +420,24 @@ func parseScript(lines [][]string) []reply {
 			open = true
 		case "tool":
 			name, args, _ := strings.Cut(arg, " ")
+			names := strings.Split(name, "|")
+			name = names[0]
+			for _, n := range names {
+				if _, ok := declared[n]; ok {
+					name = n
+					break
+				}
+			}
 			var parsed map[string]interface{}
 			if err := json.Unmarshal([]byte(strings.TrimSpace(args)), &parsed); err != nil || parsed == nil {
 				parsed = map[string]interface{}{}
+			}
+			if params := declared[name]; params != nil {
+				for key := range parsed {
+					if !params[key] {
+						delete(parsed, key)
+					}
+				}
 			}
 			cur.parts = append(cur.parts, map[string]interface{}{
 				"functionCall": map[string]interface{}{"name": name, "args": parsed},

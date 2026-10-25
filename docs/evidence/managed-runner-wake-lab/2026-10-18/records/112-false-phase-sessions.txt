@@ -1,0 +1,6 @@
+t06-ben@lab.invalid|bb5f37cf|Task: T06-OFF-FALSE-TASK a task run |PENDING||0|0
+t06-amy@lab.invalid|01a14c75|T06-AMY-S1 hello from amy's first se|AWAITING_INPUT||0|0
+t06-root@lab.invalid|01a14ccf|t06 self-managed unset1|CANCELLED||0|0
+t06-ben@lab.invalid|01a14cc4|T06-BEN-OFFF FAKE-WAKEUP 1040 OFFF a|PENDING||0|2
+t06-ben@lab.invalid|01a14cc4|T06-BEN-RT FAKE-APIERR 3 BENRT a mes|FAILED|2026-10-18 02:27:10.53|2|0
+t06-root@lab.invalid|01a14cd5|t06 self-managed false1|RUNNING||0|1

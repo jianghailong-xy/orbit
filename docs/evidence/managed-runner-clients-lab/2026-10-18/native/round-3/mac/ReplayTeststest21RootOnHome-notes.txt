@@ -1,0 +1,6 @@
+scene 21-root-on-home: 88.193 s, actions (
+)
+21-root-on-home: no window after launch; File > New Window
+21-root-on-home-00: "selfhost" shows
+21-root-on-home: 22 requests, 0 violations, actions left [], notes (
+)

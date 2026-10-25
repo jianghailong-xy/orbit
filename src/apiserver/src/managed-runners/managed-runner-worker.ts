@@ -51,8 +51,13 @@ export class ManagedRunnerWorker {
     this.tick();
   }
 
-  /** One pass over every mapping that is due. */
+  /** One pass: wake the sleeping mappings that work is waiting for, then every mapping that is due. */
   async drain(): Promise<void> {
+    try {
+      await this.manager.sweepDemand();
+    } catch (error) {
+      this.log.error(`managed runner demand sweep failed: ${(error as Error).message}`);
+    }
     for (const id of await this.manager.dueMappings(MANAGED_RUNNER_PASS_BATCH)) {
       try {
         await this.manager.reconcile(id);

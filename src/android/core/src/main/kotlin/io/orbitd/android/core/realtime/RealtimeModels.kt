@@ -74,6 +74,8 @@ data class DirectorySnapshot(
 data class SessionSnapshot(
     val detail: JsonObject,
     val approvals: List<JsonObject>,
+    /** `GET …/turns?view=active`: the user turns no transcript event draws yet, each with its `placement` — the accepted head, the
+     * queue behind it and steers — and the receipts of steers that never made it (`delivery`). */
     val queuedTurns: List<JsonObject>,
     val background: List<JsonObject>,
     val standing: Map<String, JsonElement>,

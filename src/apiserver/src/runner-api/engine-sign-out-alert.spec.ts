@@ -21,6 +21,7 @@ function harness(priorEngines: unknown, row: Record<string, unknown> = {}) {
   const notified: { runnerId: string; engine: string }[] = [];
   let current: Record<string, unknown> = { maxConcurrent: 4, engines: priorEngines, ...row };
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: {
       findUnique: async () => current,
       update: async ({ data }: { data: Record<string, unknown> }) => {
@@ -164,4 +165,34 @@ test('Antigravity read as signed out while it is being signed in again is not ne
   );
   await beat(g.controller, [{ engine: 'claude', installed: true, auth: 'no' }]);
   assert.deepEqual(g.notified, [{ runnerId: RUNNER_ID, engine: 'claude' }]);
+});
+
+test('a Default removed from Orbit signing out is no news, and the account Orbit uses there signing out is', async () => {
+  const codex = (own: string, added?: string) => ({
+    engine: 'codex', installed: true, auth: own,
+    accounts: [
+      { id: 'default', home: '/root/.codex', auth: own },
+      ...(added ? [{ id: '3fa91c2e', home: '/root/.orbit/codex-accounts/3fa91c2e', auth: added }] : []),
+    ],
+  });
+  // The runner as its credential reads it (RunnerAuthGuard): the whole row, the record included.
+  const runner = { id: RUNNER_ID, version: null, defaultRemoved: ['codex'] };
+  const beatAs = (controller: RunnerApiController, engines: unknown[]) =>
+    controller.heartbeat(runner, { status: RunnerStatus.ONLINE, idleCapacity: 1, engines } as never);
+
+  const h = harness([codex('yes', 'yes')]);
+  await beatAs(h.controller, [codex('no', 'yes')]);
+  assert.deepEqual(h.notified, [], 'Default signs out on the machine, and Orbit runs on the other account');
+  await beatAs(h.controller, [codex('no', 'no')]);
+  assert.deepEqual(h.notified, [{ runnerId: RUNNER_ID, engine: 'codex' }], 'the account Orbit uses signs out');
+
+  // The other account gone from the machine: Default is in use again, as signed out as it is.
+  const gone = harness([codex('no', 'yes')]);
+  await beatAs(gone.controller, [codex('no')]);
+  assert.deepEqual(gone.notified, [{ runnerId: RUNNER_ID, engine: 'codex' }]);
+
+  // A Default in use signing out is news, as it always was.
+  const used = harness([codex('yes', 'yes')]);
+  await beat(used.controller, [codex('no', 'yes')]);
+  assert.deepEqual(used.notified, [{ runnerId: RUNNER_ID, engine: 'codex' }]);
 });

@@ -4,10 +4,12 @@ import { RightOutlined } from '@ant-design/icons';
 import type { ProjectIntegrationView } from '@orbit/shared';
 import { api } from '../api';
 import { projectIntegrationQuery } from '../lib/queries';
+import { LandingLink, LandingNoPage } from './LandingLink';
 import { useIsMobile } from '../lib/useMediaQuery';
 import {
   LANDING_WORDS,
-  LandingRow,
+  LandingHead,
+  landingHead,
   landingJobLines,
   landingJobsTitle,
   type LandingJobLine,
@@ -105,9 +107,14 @@ function LandingJobRow({
       void qc.invalidateQueries({ queryKey: ['project', projectId] });
     },
   });
+  // The row wears the merged line's head, like every other landing row (owner decision 2026-10-11,
+  // board docs/mocks/project-merge-check-row): the mark, the word, the live clock, and the state,
+  // the wait and the freshness in one line under both — then the task it lands.
   const body = (
     <div className="landing-jobs-body">
-      <LandingRow line={job.line} />
+      <LandingHead title={job.line.word} head={landingHead(job.line)} running={job.line.running}
+        timedOut={job.line.timedOut} />
+      {job.line.what ? <div className="landing-jobs-what">{job.line.what}</div> : null}
       {job.detail ? <div className="landing-jobs-detail">{job.detail}</div> : null}
     </div>
   );
@@ -128,6 +135,17 @@ function LandingJobRow({
           {LANDING_WORDS.RETRY}
         </Button>
       ) : null}
+      {/* The row's own way into the landing this job belongs to (owner 2026-10-19): a sibling of
+          Retry and of the row's task link, never inside either. A merge into main lands no task and
+          its row is no press, so this is that row's only way in — and a server that names no
+          landing session gets the sentence instead of a link. */}
+      <div className="landing-jobs-slot">
+        {job.landingSessionId ? (
+          <LandingLink className="landing-jobs-landing" sessionId={job.landingSessionId} />
+        ) : (
+          <LandingNoPage className="landing-jobs-landing is-none" />
+        )}
+      </div>
       {retry.isError ? (
         <div className="landing-jobs-error" role="alert">
           {/* The server's sentence ends with its own full stop; this line supplies one. */}

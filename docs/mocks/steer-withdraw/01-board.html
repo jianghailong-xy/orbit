@@ -1,0 +1,193 @@
+<!doctype html>
+<!-- Design board, as decided and built: withdrawing a message sent into a running turn while nothing has read it.
+     ① is the session page before the change (749188d86; the steer code is identical on origin/main d5c15f693).
+     ②–⑥ are the IMPLEMENTED page — this branch's src/web + src/shared on vite, Chromium, 1280-wide desktop / 390-wide
+     phone, 2x — fed by src/web/ui-migration's fixtures plus a conversation shaped like the owner's screenshot, with the
+     steer's `user` event carrying `withdrawable: true` as the runner now writes it. Nothing is written into the DOM:
+     Withdraw is pressed through the real handler, and only the server's answer to DELETE /sessions/:id/turns/:turnId
+     is stubbed (no answer yet / 200 / 409 STEER_ALREADY_READ). Dashed outlines and numbers are drawn on top.
+     Kit: /var/tmp/steer-withdraw-mock (capture.mjs for ①, capture-new.mjs inside run-ns-new.sh for ②–⑥, gen2.py,
+     render.mjs). Engine probe: /var/tmp/steer-withdraw-probe/probe.py. Decided 2026-10-16: 按推荐落地. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>撤回还没被读的消息</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1500px; }
+  .head { display: grid; grid-template-columns: minmax(0, 1fr) 520px; gap: 30px; align-items: start; }
+  .ref { background: #f5f6f8; border-radius: 10px; padding: 12px 14px 10px; }
+  .ref img { display: block; width: 100%; border-radius: 6px; background: #fff; }
+  .verdict { margin: 12px 0 0; padding: 10px 14px; border-radius: 8px; background: #fff; border: 1px solid #dde0e6;
+             font-size: 13px; line-height: 1.8; color: var(--text-2); }
+  .verdict b { color: var(--text-1); }
+  .verdict .yes { color: #16833a; font-weight: 700; }
+  .verdict .no { color: #c2410c; font-weight: 700; }
+  .cols2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .phone-row { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 30px; align-items: start; }
+  .fig { position: relative; }
+  .shot { display: block; width: 100%; border-radius: 10px; box-shadow: 0 0 0 1px rgba(15, 23, 42, .09), 0 1px 3px rgba(15, 23, 42, .06); }
+  .toast-row { margin-top: 12px; display: flex; align-items: center; gap: 14px; }
+  .toast-row img { width: 322px; flex: none; border-radius: 10px; box-shadow: 0 0 0 1.5px var(--warning-solid); }
+  .m-cap { font-size: 12.5px; line-height: 1.75; color: var(--text-2); margin: 10px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .en { font-family: -apple-system, "Inter", sans-serif; }
+  .ui { font-family: -apple-system, "Inter", sans-serif; font-size: 12px; padding: 0 5px; border-radius: 4px; background: #f0f2f5; color: var(--text-1); white-space: nowrap; }
+  .mk { position: absolute; border: 1.5px dashed var(--warning-solid); border-radius: 7px; pointer-events: none; }
+  .mk > .m-n { position: absolute; top: -10px; right: -10px; margin: 0; box-shadow: 0 0 0 2px #fff; }
+  .mk-l { position: absolute; top: 50%; transform: translateY(-50%); white-space: nowrap; font-size: 12px; font-weight: 700;
+          color: #fff; background: var(--warning-solid); border-radius: 5px; padding: 1px 7px; }
+  .mk-l-left { right: calc(100% + 14px); }
+  .mk-l-down { top: calc(100% + 10px); transform: none; right: -2px; }
+  .m-k.rec { background: #e8f7ee; color: #16833a; }
+  .m-k.alt { background: #fff1e8; color: #c2410c; }
+  .rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.65; width: 100%; }
+  .rules th, .rules td { border: 1px solid #dde0e6; padding: 7px 11px; text-align: left; vertical-align: top; }
+  .rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules td:first-child { font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules .y { color: #16833a; font-weight: 700; }
+  .rules .n { color: var(--text-3); font-weight: 700; }
+  .rules code, .files code, .ask code, .m-sub code, .m-cap code, .flow code, .proof code, .verdict code { font-size: 11.5px; }
+  .more { margin: 10px 0 0; padding: 0 0 0 18px; font-size: 12.5px; line-height: 1.75; color: var(--text-2); }
+  .more b { color: var(--text-1); }
+  .bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .flow, .proof { margin: 0; padding: 12px 16px 12px 34px; background: #f5f6f8; border-radius: 8px;
+                  font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .flow li + li, .proof li + li { margin-top: 6px; }
+  .flow b, .proof b { color: var(--text-1); }
+  .proof { list-style: disc; }
+  .proof-h { font-size: 12.5px; color: var(--text-2); margin: 14px 0 6px; }
+  .files { margin: 0; padding: 12px 16px; list-style: none; background: #f5f6f8; border-radius: 8px;
+           font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .files li + li { margin-top: 6px; }
+  .files b { color: var(--text-1); }
+  .ask { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e;
+         font-size: 12.5px; line-height: 1.8; color: #5c4210; }
+  .ask b { color: #3d2b08; }
+  .ask ol { margin: 6px 0 0; padding-left: 20px; }
+  .ask li + li { margin-top: 4px; }
+  .ask .rec { color: #16833a; font-weight: 700; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet">
+  <div class="head">
+    <div>
+      <h1 class="m-h1 zh">撤回还没被读的消息（原「<span class="en">Delivering…</span>」）</h1>
+      <p class="m-sub zh" style="line-height:1.8"><b>已定（2026-10-16）：按推荐落地。</b>回合进行中发出的消息（steer）在模型读到之前可以撤回：Claude 会话里，runner 让 Claude 把它从队列里删掉，删没删成以 Claude 的回答为准；删掉的模型永远看不到，原文回到输入框。这一行的文案也一起改了：<span class="en">Delivering…</span> → <span class="ui">Waiting to be read</span>，<span class="en">Sent into this turn</span> → <span class="ui">Read in this turn</span>（理由见 <code>02-copy.png</code>）。
+      ① 是改之前的页面；② 起每一张都是<b>实现后的真实页面</b>（本分支的 Web 代码 + 仓库 ui-migration 的 fixture，对话照你的截图造），点 Withdraw 走的是真实的处理函数，只有服务器的回答是桩。</p>
+    </div>
+    <div class="ref">
+      <div class="m-stage-l zh" style="margin-bottom:8px"><span class="m-k">参考</span>你的截图</div>
+      <img src="00-owner-ref.png" alt="">
+      <div class="verdict zh">
+        <span class="yes">Claude 会话：可以。</span>Claude CLI 的控制请求 <code>cancel_async_message</code>：消息还在它的队列里（模型没读）就删掉，删没删成它会明确回答。实测见最下面。<br>
+        <span class="no">Codex 会话：不行。</span><code>turn/steer</code> 交出去以后没有收回的接口，所以不显示 Withdraw。<br>
+        <b>其他引擎</b>（Kimi、DeepSeek Harness、OpenCode、Antigravity）不往运行中的回合里送：消息照常排队，本来就有 <span class="ui">Cancel</span>。
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">桌面 Web · Claude 会话</span>你截图里的那一行</div>
+    <div class="cols2">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">改之前</span>① 只有状态，没有出路</div>
+        <div class="fig"><img class="shot" src="01a-today.png" alt=""></div>
+        <p class="m-cap zh">Claude 在跑全量测试，中途发的消息停在 <span class="ui">Delivering…</span>，要等测试跑完才会被读到；这段时间里发现发错了、想改，都拿不回来。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">实现</span>② 等着被读，可以撤回</div>
+        <div class="fig"><img class="shot" src="01b-offer.png" alt=""><span class="mk" style="left:88.277%;top:66.126%;width:9.092%;height:4.404%"><span class="m-n">2</span><span class="mk-l mk-l-down zh">新增</span></span></div>
+        <p class="m-cap zh">状态改叫 <span class="ui">Waiting to be read</span>，后面跟 <span class="ui">Withdraw</span>：和没送到时的 <span class="ui">Put back in the composer</span> 同一种链接。只在 runner 说这条可以收回（Claude，CLI 2.1.296 起）、且还没被读时出现；还没交给 runner 的 <span class="ui">Sending…</span> 在排队区里也有。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">桌面 Web · Claude 会话</span>点了之后（只截对话下半段，上半段同 ②）</div>
+    <div class="cols2">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">状态</span>③ 正在撤回</div>
+        <div class="fig"><img class="shot" src="01c-withdrawing.png" alt=""><span class="mk" style="left:84.224%;top:37.480%;width:13.144%;height:8.128%"><span class="m-n">3</span></span></div>
+        <p class="m-cap zh">变成 <span class="ui">Withdrawing…</span>，链接消失，不能重复点。Claude 本身是立刻回答的（实测 &lt; 10 ms），等的是服务器和 runner 之间的来回；服务器最多等 15 秒。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">撤回成功</span>④ 气泡消失，文字回到输入框 <span class="m-k rec">已采用</span></div>
+        <div class="fig"><img class="shot" src="01d-withdrawn.png" alt=""><span class="mk" style="left:3.216%;top:67.222%;width:93.713%;height:13.767%"><span class="m-n">4</span></span></div>
+        <p class="m-cap zh">对话里不留这条（模型确实没看到它）；原文和图片回到输入框，输入框里已有草稿时<b>接在草稿下面</b>，不覆盖。runner 随后发 <code>withdrawn</code>，别的设备上这条也一起消失。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="phone-row">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">实现</span>⑥ 手机</div>
+        <div class="fig"><img class="shot" src="01f-phone.png" alt=""><span class="mk" style="left:81.490%;top:66.637%;width:15.946%;height:3.263%"><span class="m-n">6</span></span></div>
+        <p class="m-cap zh">同一行放得下。字号不变，点击区上下各扩 8px（实测 33px 高）。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">来不及</span>⑤ Claude 已经读到了</div>
+        <div class="fig" style="max-width:684px"><img class="shot" src="01e-too-late.png" alt=""><span class="mk" style="left:72.028%;top:37.480%;width:25.340%;height:8.128%"><span class="m-n">5</span></span></div>
+        <div class="toast-row"><img src="01e-toast.png" alt=""><p class="m-cap zh" style="margin:0">窗口右上角的提示。</p></div>
+        <p class="m-cap zh">点下去的同时 Claude 正好把它读进了回合，Claude 回答「没删成」：提示 <span class="ui">Too late to withdraw</span> / <span class="ui">Claude has already read it.</span>，消息原样留着，回显一到就变成 <span class="ui">Read in this turn</span>。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="bottom">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">规则</span>什么时候显示 Withdraw</div>
+        <table class="rules zh">
+          <tr><th>消息下面写的</th><th>这时消息在哪</th><th>Withdraw</th></tr>
+          <tr><td><span class="en">Sending…</span></td><td>Orbit 收下了，还没交给引擎</td><td><span class="y">显示</span>。服务器直接删，任何引擎都行</td></tr>
+          <tr><td><span class="en">Waiting to be read</span>（Claude）</td><td>在 Claude 的队列里，模型还没读</td><td><span class="y">显示</span>。以 Claude 的回答为准</td></tr>
+          <tr><td><span class="en">Waiting to be read</span>（Codex）</td><td>Codex 收下了</td><td><span class="n">不显示</span>：收不回</td></tr>
+          <tr><td><span class="en">Read in this turn</span></td><td>模型读到了</td><td><span class="n">不显示</span></td></tr>
+          <tr><td><span class="en">Not delivered</span></td><td>没送到</td><td>不变：<span class="ui">Put back in the composer</span></td></tr>
+          <tr><td><span class="en">Queued for next turn</span></td><td>排队等自己的回合</td><td>不变：<span class="ui">Cancel</span></td></tr>
+        </table>
+        <ul class="more zh">
+          <li><b>旧 runner、旧 Claude CLI、后台任务和 Watch 的唤醒</b>：不显示。</li>
+          <li><b>撤回失败</b>（runner 15 秒内没回话、会话结束了）：提示 <span class="ui">Couldn't withdraw the message</span> 和原因，消息保持原状态；没送出去的撤回请求会被收回，不会事后生效。</li>
+        </ul>
+        <div class="proof-h zh"><b>怎么做</b></div>
+        <ol class="flow zh">
+          <li>客户端发 <code>DELETE /sessions/:id/turns/:turnId</code>（和排队消息的 Cancel 同一个接口）。</li>
+          <li>服务器：还没交给 runner → 直接删。已在 Claude runner 手里、runner 声明了 <code>session-claude-steer-withdraw-v1</code> → 排一个 <code>withdraw</code> 控制 turn、唤醒 runner、等结果。Codex 或旧 runner → 409。</li>
+          <li>runner 对 claude 发 <code>cancel_async_message</code>，按 steer 帧上的 <code>uuid</code>（就是 turn id）指名；Claude 回答 <code>cancelled: true</code> 才删行，<code>false</code> 就是已读。</li>
+        </ol>
+        <div class="proof-h zh"><b>实测</b>：Claude CLI 2.1.296 和 2.1.300（本机，Haiku），回合里跑 <code>sleep 20</code>，中途发两条，撤一条：</div>
+        <ul class="proof zh">
+          <li>撤回请求 &lt; 10 ms 得到 <code>cancelled: true</code>，比工具结束早 16 秒；撤掉的那条没有回显、没进模型的回答，会话记录文件里也没有原文。</li>
+          <li>没撤的那条照常送达，回显带着我们给的 uuid；已读的再撤 → <code>cancelled: false</code>。</li>
+        </ul>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">改动</span>服务器 + runner + 客户端</div>
+        <ul class="files zh">
+          <li><b>runner</b>：<code>claude_withdraw.go</code>（新）；<code>claude_protocol.go</code> steer 帧带 uuid；<code>claude_delivery.go</code> 回显按 uuid 对上、新状态 withdrawn；<code>claude_control.go</code> 撤回请求；<code>session.go</code>；<code>transport.go</code> 能力声明；测试（含假 CLI 的端到端）。</li>
+          <li><b>服务器</b>：<code>sessions/steer-withdraw.ts</code>（新）；<code>sessions.service.ts</code> 的 <code>cancelQueuedTurn</code>；<code>runner-api.controller.ts</code> 的 inbox 与结算；<code>db-write-inventory.ts</code>；单测与真 Postgres 的 pg spec。</li>
+          <li><b>shared</b>：<code>withdraw</code> turn、结算子类型、结果与错误码、runner 能力。</li>
+          <li><b>Web</b>：<code>lib/steerDelivery.ts</code>、<code>Transcript.tsx</code>、<code>WorkspaceView.tsx</code>、<code>index.css</code>；测试。</li>
+          <li><b>iOS / macOS</b>：OrbitKit <code>SteerDelivery.swift</code>（新文案、<code>offersWithdraw</code>）、<code>Transcript.swift</code>（<code>withdrawable</code>）、<code>TranscriptReducer.swift</code>（<code>withdrawn</code> 时拿掉气泡）；OrbitApp <code>ConsoleModel.swift</code>（<code>withdrawSteer</code>）、<code>UserTurnRow.swift</code>、<code>MessageBubbles.swift</code>、<code>ConsoleView.swift</code>；测试。</li>
+          <li><b>Android</b>：<code>BackgroundWakeCard.kt</code> 只改文案（打字的消息下面没有投递状态行）。</li>
+          <li><b>文档</b>：<code>docs/codex-turn-steer-contract.md</code>、<code>docs/interactive-claude-runner-design.md</code>。</li>
+        </ul>
+        <div class="ask zh">
+          <b>已定（2026-10-16）：按推荐落地。</b>三项都取绿色那一项，文案按 <code>02-copy.png</code>。
+          <ol>
+            <li>撤回成功后：<span class="rec">气泡消失，文字回到输入框（④）</span>／原位置留一行 <span class="ui">You withdrew a message</span>（未采用）</li>
+            <li>Codex 会话：<span class="rec">不显示 Withdraw</span>／<span class="ui">Stop &amp; withdraw</span>（未采用）</li>
+            <li>范围：<span class="rec">Web 和 iOS / macOS 一起做</span>／先只做 Web（未采用）</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

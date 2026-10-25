@@ -1,0 +1,2 @@
+removed 2 container(s) and 4 volume(s) labelled orbit.test=d2-it-10171655c27a, and network orbit-mr-d2it-10171655c27a
+left after cleanup: ["", "", ""]

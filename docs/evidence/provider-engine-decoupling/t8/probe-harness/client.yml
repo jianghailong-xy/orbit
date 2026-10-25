@@ -1,0 +1,175 @@
+# TEMPORARY (probe branch, never merged). Task T8 (34cdPiDErJ3Zc2bsj7hcm): a push runs the client compile
+# gates on the T8 tree — OrbitKit `swift test` and OrbitApp `swift build` on macOS, the iOS app's build — and
+# .t8-probe/run.sh, which photographs the boards' iPhone screens against .t8-probe/stub.py. The report job
+# pushes the pictures, notes, request logs, test summaries and each job's result to
+# probe/t8-engine-provider-shots-results.
+name: Client CI (macOS + iOS)
+
+on:
+  push:
+    branches: ["probe/t8-engine-provider-shots"]
+
+concurrency:
+  group: client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: macOS (build + test)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Toolchain
+        run: swift --version && xcodebuild -version
+      - name: Test OrbitKit (macOS)
+        id: test
+        continue-on-error: true
+        working-directory: src/macos/OrbitKit
+        run: |
+          swift test 2>&1 | tee "$GITHUB_WORKSPACE/swift-test.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Build OrbitApp
+        id: build
+        continue-on-error: true
+        working-directory: src/macos/OrbitApp
+        run: |
+          swift build 2>&1 | tee "$GITHUB_WORKSPACE/orbitapp-build.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Summaries
+        if: always()
+        run: |
+          mkdir -p out/macos
+          grep -E "error:|Executed [0-9]+ tests|Test Suite 'All tests'" swift-test.log > out/macos/swift-test-summary.txt || true
+          grep -E "error:|failed \(" swift-test.log | head -300 > out/macos/swift-test-failures.txt || true
+          grep -E "error:" orbitapp-build.log | head -300 > out/macos/orbitapp-build-errors.txt || true
+          tail -80 orbitapp-build.log > out/macos/orbitapp-build-tail.txt || true
+          echo "test=${{ steps.test.outcome }} build=${{ steps.build.outcome }}" > out/macos/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-out
+          path: out
+      - name: Fail as the gate would
+        if: steps.test.outcome != 'success' || steps.build.outcome != 'success'
+        run: exit 1
+
+  ios:
+    name: iOS (generate + build)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version
+      - name: Generate Xcode project
+        working-directory: src/ios
+        run: xcodegen generate
+      - name: Build for iOS Simulator
+        id: build
+        continue-on-error: true
+        working-directory: src/ios
+        run: |
+          xcodebuild \
+            -project Orbit.xcodeproj \
+            -scheme Orbit \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee "$GITHUB_WORKSPACE/ios-build.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Summaries
+        if: always()
+        run: |
+          mkdir -p out/ios-build
+          grep -E "error:|BUILD SUCCEEDED|BUILD FAILED" ios-build.log | head -300 > out/ios-build/ios-build-summary.txt || true
+          echo "build=${{ steps.build.outcome }}" > out/ios-build/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-out
+          path: out
+      - name: Fail as the gate would
+        if: steps.build.outcome != 'success'
+        run: exit 1
+
+  shots:
+    name: Boards iOS 1, 2, 4, 5 (iPhone)
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        run: |
+          bash .t8-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          mkdir -p .t8-probe/shots
+          cp run-output.log .t8-probe/shots/run-output.log 2>/dev/null || true
+          for log in .t8-probe/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD" "$log" | head -400 > ".t8-probe/shots/summary-$base.txt" || true
+            tail -300 "$log" > ".t8-probe/shots/tail-$base.txt" || true
+          done
+          find .t8-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          echo "capture=${{ steps.capture.outcome }}" > .t8-probe/shots/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: t8-shots
+          path: .t8-probe/shots
+
+  report:
+    name: Push the results where a clone can read them
+    needs: [macos, ios, shots]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/t8-engine-provider-shots-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "run_number: ${{ github.run_number }}"
+            echo "sha: ${{ github.sha }}"
+            echo "macos: ${{ needs.macos.result }}"
+            echo "ios: ${{ needs.ios.result }}"
+            echo "shots: ${{ needs.shots.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/t8-engine-provider-shots-results

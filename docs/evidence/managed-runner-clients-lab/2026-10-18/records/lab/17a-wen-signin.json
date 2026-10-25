@@ -1,0 +1,17 @@
+{
+  "created": false,
+  "owner": "wen",
+  "preferences": {
+    "defaultPermissionMode": "bypassPermissions",
+    "status": 200
+  },
+  "signIn": {
+    "at": "2026-10-18T05:59:15.558+00:00",
+    "ms": 40.9,
+    "status": 201
+  },
+  "user": {
+    "email": "t06-wen@lab.invalid",
+    "id": "34htigz9m6qYm7BobSlYn"
+  }
+}

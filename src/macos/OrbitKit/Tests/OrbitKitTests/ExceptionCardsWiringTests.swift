@@ -201,7 +201,7 @@ final class ExceptionCardsWiringTests: XCTestCase {
     func testTheSecondControlHandsTheItemToTheComposer() throws {
         let card = try card()
         let handoff = try section(card, from: "// And the other way out, which is a sentence",
-                                  to: "Text(ExceptionCards.ownerLine(row))")
+                                  to: "if !isPause && ExceptionCards.markable(row) {")
         XCTAssertTrue(handoff.contains("console.startOwnerItemReply(row, isPause: isPause)"),
                       "the press must hand the reply to the composer with the row it was drawn for; "
                           + "without the row there is no item to talk about")
@@ -236,26 +236,96 @@ final class ExceptionCardsWiringTests: XCTestCase {
         XCTAssertFalse(card.contains("row.detailLine"),
                       "the sentence comes back through the model, in the arm that decides it — never "
                           + "straight off the row, which would print it beside the rows")
-        XCTAssertTrue(card.contains("block.logTail") && card.contains("tail.shown"),
-                      "a failed check's log is folded from its end, in the model's own lines")
+        XCTAssertTrue(card.contains("fact.logTail") && card.contains("tail.shown"),
+                      "a failed check's log is folded from its end, in the model's own lines — and "
+                          + "it is drawn under the row it hangs off, inside the same ForEach, which "
+                          + "is where the browser draws it")
         XCTAssertFalse(card.contains("outputTail"),
                       "and the block is what reads the payload: the view draws strings")
+        // The row's two faces, too: a check's command in the mono face and its verdict in red are
+        // the model's runs of the value (`Face`), not a decision the view makes about a string.
+        XCTAssertTrue(card.contains("switch run.face") && card.contains("case .mono:")
+                      && card.contains("case .bad:"),
+                      "every run of a row's value is drawn in the face the model gave it")
+    }
+
+    /// The card's first line is the server's sentence about what has to happen next (§7.5, T9),
+    /// and every door is drawn with the one line the model wrote about it — the view composes
+    /// neither, so the browser's own words cannot be paraphrased on the way to the screen.
+    func testTheCardSaysWhatHasToHappenNextAndEveryDoorSaysWhatItDoes() throws {
+        let card = try card()
+        XCTAssertTrue(card.contains("Text(ExceptionCards.requiredAction(row))"),
+                      "the decision block opens on the model's own sentence")
+        XCTAssertTrue(card.contains("if let fixing = ExceptionCards.handledByLine(row)"),
+                      "and names the tasks already filed as this item's fixes, when there are any")
+        XCTAssertTrue(card.contains("nextBlock(row)") && card.contains("factBlock(row)"),
+                      "the decision comes before the facts — the browser's own reading order")
+        XCTAssertTrue(card.contains("Text(cardPress.label)"),
+                      "a door wears the label the model gave it — never a constant in the view")
+        XCTAssertTrue(card.contains("doorRow(cardPress.consequence)"),
+                      "and its one line of consequence, from the same model")
+    }
+
+    /// The two presses this card reaches the rerun doors through (§4.7 H1, T5), and the one thing
+    /// that decides whether `Review` exists at all.
+    func testTheRerunAndReviewPressesGoThroughTheConsole() throws {
+        let card = try card()
+        XCTAssertTrue(card.contains("return { retry(row) }"),
+                      "a RETRY press runs the work again through the console, which owns the route")
+        XCTAssertTrue(card.contains("console.revealPromotionCard(promotionID)"),
+                      "a REVIEW press scrolls to the merge card rather than opening anything: the "
+                          + "review IS that card, and it is on screen")
+        XCTAssertTrue(card.contains("console.mergeCardPromotionID == promotionID"),
+                      "and it is drawn only where the console says that card is here — the "
+                          + "browser's `currentPromotionId`")
+
+        let doors = try section(try source(Self.consolePath),
+                                from: "func retryIntegration(",
+                                to: "/// The merge candidate whose card this conversation has delivered")
+        XCTAssertTrue(doors.contains("api.retryPromotionCheck("),
+                      "a row naming a candidate re-runs THAT candidate's check: "
+                          + "`POST /projects/:id/promotions/:promotionId/integration/retry`")
+        XCTAssertTrue(doors.contains("api.retryTaskIntegration("),
+                      "and one naming a task retries its landing: "
+                          + "`POST /projects/:id/tasks/:taskId/integration/retry`")
+        XCTAssertTrue(doors.contains("if row.kind == .taskFailed {")
+                      && doors.contains("try await api.executeTask(taskID, triggerId: PublicID.newToken())"),
+                      "and a FAILED task runs again through the owner's own route "
+                          + "(`POST /tasks/:id/execute`) — the integration retry would refuse it "
+                          + "(J-T1b), so it is never the press a failed task's Retry makes")
+        XCTAssertTrue(doors.contains("let reason = ExceptionCards.retryReason(row)"),
+                      "the reason the door requires is the item's own sentence, from the model")
+        XCTAssertTrue(doors.contains("await refreshRulerQuestions(force: true)"),
+                      "and the press re-reads the item list, where the rerun shows itself")
+        XCTAssertTrue(doors.contains("statusMessage = \"\\(headline) — "),
+                      "a refusal says so, in the browser's own headline for whichever door failed")
+        XCTAssertTrue(doors.contains("ExceptionCards.notRunAgain"),
+                      "the run-again refusal wears its own headline, which is the third door")
     }
 
     /// The action row is the model's presses in the model's order, and the tier picks the style —
     /// nothing here decides WHICH presses exist or which of them leads.
     func testThePressesComeFromTheModelInItsOwnWeights() throws {
         let card = try card()
-        XCTAssertTrue(card.contains("ForEach(ExceptionCards.presses(row), id: \\.action)"),
+        XCTAssertTrue(card.contains("ExceptionCards.presses(row, mergeCard: console.mergeCardPromotionID)"),
                       "the doors and their order are `ExceptionCards.presses` — the browser's own "
-                          + "rule, so the two cards cannot disagree about what leads")
-        XCTAssertTrue(card.contains("weighted(cardPress.tier)"),
+                          + "rule, told the one thing only this console knows, so the two cards "
+                          + "cannot disagree about what leads")
+        XCTAssertTrue(card.contains("weighted(cardPress.tier, tint:"),
                       "and the weight is the model's, applied to the style and to nothing else")
+        XCTAssertTrue(card.contains("cardPress.action == .abandon ? .red : nil"),
+                      "the one colour a card adds is the board's solid-red Abandon lead")
         XCTAssertTrue(card.contains("if tier == .primary {") && card.contains(".borderedProminent"),
                       "a primary press is the one prominent control on the card")
-        XCTAssertFalse(card.contains("ExceptionCards.retry") || card.contains("ExceptionCards.cancelTask"),
-                       "a door this client has no press for draws nothing: a control that goes "
-                          + "nowhere is worse than no control")
+        // A door this client has no press for draws nothing — and its consequence line goes with
+        // it, since the line is inside the same branch the press is (`cardPressDoor`'s guard).
+        XCTAssertFalse(card.contains("ExceptionCards.cancelTask"),
+                       "`Cancel task` is still a door this console has no press for: a control that "
+                          + "goes nowhere is worse than no control")
+        let door = try section(card, from: "private func cardPressDoor(",
+                               to: "/// What one door's press does")
+        XCTAssertTrue(door.contains("if let make = makePress(cardPress, row: row) {"),
+                      "the consequence line is drawn only where the press is")
     }
 
     // MARK: the owner's own ending
@@ -268,18 +338,54 @@ final class ExceptionCardsWiringTests: XCTestCase {
                       "offered where the item is the owner's and its kind is one the door closes by "
                           + "hand — the pause, the question and the merge have doors of their own")
         let row = try section(card, from: "// The owner's own ending, drawn last and quietest",
-                              to: "Text(ExceptionCards.ownerLine(row))")
+                              to: "            }\n        }\n        .padding(.horizontal, 10)")
         XCTAssertTrue(row.contains("markHandledButton()"),
                       "and it comes after the handoff, at the end of the action row")
+        XCTAssertTrue(row.contains("doorRow(ExceptionCards.markHandledConsequence)"),
+                      "drawn as a DOOR like every other one here: the browser gives it the same one "
+                          + "line of consequence, and a quiet link with no line is the one control on "
+                          + "the card that would say nothing about what it ends")
 
         let button = try section(card, from: "private func markHandledButton() -> some View {",
-                                 to: "/// Whether the door would take the press from here.")
+                                 to: "/// The reason the ending requires,")
         XCTAssertTrue(button.contains("Text(ExceptionCards.markHandled)"),
                       "it wears the browser's own word")
         XCTAssertTrue(button.contains(".buttonStyle(.plain)"),
                       "drawn in the quiet weight, not as a third button (方案 B)")
         XCTAssertTrue(button.contains("askingToHandle = true"),
                       "and it asks before it writes: the reason is required")
+        XCTAssertFalse(button.contains("reason = \"\""),
+                       "opening the field never costs the reader the words already in it — a "
+                           + "refused press, or a panel they closed to look again, keeps the draft")
+    }
+
+    /// The ending's dialog, in the four rules the browser's own dialog follows: nothing is sent
+    /// without a reason, the field stops at the door's ceiling, and the draft is cleared where it
+    /// is spent — on the door taking it — not when the field opens.
+    func testTheEndingsDialogHoldsTheDoorsOwnLine() throws {
+        let card = try card()
+        let panel = try section(card, from: "private func markHandledPanel() -> some View {",
+                                to: "private func pressable(_ row: ProjectOpenItemRow) -> Bool {")
+        XCTAssertTrue(panel.contains("Text(ExceptionCards.markHandledTitle)")
+                      && panel.contains("Text(ExceptionCards.markHandledBody)"),
+                      "the dialog's two sentences are the browser's, through the model")
+        XCTAssertTrue(panel.contains("TextField(ExceptionCards.markHandledReason"),
+                      "and it asks for what the browser's dialog asks for")
+        XCTAssertTrue(panel.contains(".disabled(sending || ExceptionCards.markHandledRequest(reason) == nil)"),
+                      "empty is not a press: the confirm waits for a reason, which is the door's own rule")
+        XCTAssertTrue(panel.contains("ExceptionCards.markHandledMaxLength"),
+                      "and the field stops at the door's ceiling (`maxLength` on the browser's)")
+        let submit = try section(card, from: "private func markHandled() {",
+                                 to: "/// Run the work the item is about again")
+        let took = try XCTUnwrap(submit.range(of: "if await console.markItemHandled(row, note: reason) != nil {"),
+                                 "the press goes through the console, which owns the door")
+        let cleared = try XCTUnwrap(submit.range(of: "reason = \"\""))
+        let kept = try XCTUnwrap(submit.range(of: "askingToHandle = false"))
+        XCTAssertLessThan(took.lowerBound, cleared.lowerBound,
+                          "the draft is cleared only where the door TOOK it")
+        XCTAssertLessThan(cleared.lowerBound, kept.lowerBound,
+                          "and the panel closes with it — a refusal leaves both where they were, "
+                              + "so the reader can read what the server said and answer it")
     }
 
     /// The reason is what the press carries, and an empty one is not a press: the field's submit
@@ -310,6 +416,39 @@ final class ExceptionCardsWiringTests: XCTestCase {
                       "and it re-reads the item list the card is derived from")
         XCTAssertTrue(doors.contains("statusMessage = \"\\(ExceptionCards.notMarkedHandled)"),
                       "a refused ending says so, in the browser's own headline")
+    }
+
+    // MARK: a session row's press lands on the card it names
+
+    /// A session ROW says which owner item is waiting on it ("Escalated to you · …") and its press
+    /// lands on that item's card, exactly as the banner's does — otherwise the reader presses a line
+    /// that named a decision and arrives at a conversation with nothing pointing at it (the account
+    /// owner's report, 2026-09-22).
+    func testTheSessionRowsPressLandsOnTheCardItNames() throws {
+        let app = try source("src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift")
+        let press = try section(app, from: "func openSessionRow(_ s: Session) {",
+                                to: "/// Point the console a row is about to open")
+        XCTAssertTrue(press.contains("focusConsoleOnOwnerItem(s.id)"),
+                      "the compact row's press points the console at the item before opening it")
+        XCTAssertTrue(press.contains("push(.console(sessionID: s.id, origin: .list))"),
+                      "through the one push mechanism, as the row always did")
+
+        let focus = try section(app, from: "private func focusConsoleOnOwnerItem(_ sessionID: String) {",
+                                to: "    }\n")
+        XCTAssertTrue(focus.contains("NeedsYouLogic.oldestOwnerItem([session])"),
+                      "the item is the row's own — the oldest, which is what the row's line named")
+        XCTAssertTrue(focus.contains(".focus(ownerItem: item)"),
+                      "and it is the same focus the needs-you banner hands the console")
+
+        // The three-column shells never go through that entry: their `List(selection:)` writes the
+        // projection, whose setter carries the same act.
+        let selection = try section(app, from: "var selectedAgentSessionID: String? {",
+                                    to: "var composingAgentSession: Bool {")
+        XCTAssertTrue(selection.contains("focusConsoleOnOwnerItem(id)"),
+                      "selecting a row lands on its card too, in the other shell")
+        XCTAssertTrue(selection
+            .contains("nav.selectConsole(.console(sessionID: id, origin: .list))"),
+                      "and writes the stack exactly as it did")
     }
 
     // MARK: the press goes through the doors

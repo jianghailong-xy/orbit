@@ -33,8 +33,7 @@ type RepoHealthReport struct {
 	AgentIDs []string `json:"agentIds,omitempty"`
 }
 
-// agentWorkDir pairs an agent with the directory its sessions run in; the runner's own configured
-// workDir is reported with an empty AgentID.
+// agentWorkDir pairs an agent with the directory its sessions run in.
 type agentWorkDir struct {
 	AgentID string
 	Dir     string

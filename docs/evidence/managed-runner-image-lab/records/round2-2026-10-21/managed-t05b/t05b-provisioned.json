@@ -1,0 +1,223 @@
+{
+  "at": "2026-10-20T22:38:39.196+00:00",
+  "bootstrapSecret": {
+    "createdAt": "2026-10-20T22:37:40Z",
+    "generation": "1"
+  },
+  "boundToTheManagedRunner": true,
+  "defaultWorkspace": {
+    "auto_init_git": true,
+    "created_at": "2026-10-20T22:37:35.388",
+    "enable_worktree": true,
+    "id": "01a15b76-811c-752e-b718-3f674357322a",
+    "name": "Default",
+    "position": null,
+    "runner_id": "01a15b76-811a-7339-b2d4-51962f5f718b",
+    "target_runner_id": "01a15b76-811a-7339-b2d4-51962f5f718b",
+    "work_dir": "/var/lib/orbit/home/orbit-repos/default"
+  },
+  "display": {
+    "acceptsWork": true,
+    "detail": "Sessions here run on the runner Orbit manages for you.",
+    "ensure": false,
+    "kind": "available",
+    "moving": false,
+    "retry": false,
+    "signIn": false,
+    "startsNewSession": true,
+    "title": "Managed runner ready"
+  },
+  "mapping": {
+    "attempt": 0,
+    "createdAt": "2026-10-20T22:37:35.391+00:00",
+    "desired_state": "RUNNING",
+    "generation": 1,
+    "id": "01a15b76-811f-74c0-b2b9-0a70ea7868c1",
+    "initial_provider": "deepseek-2",
+    "last_error": null,
+    "management_state": "READY",
+    "node_name": "orbit-mr-lab",
+    "pod_uid": "fd9e9481-b030-46cb-b2c6-023fd2e1fca9",
+    "pv_uid": "77b48621-01e2-464c-a0d6-3ee91f9aac4f",
+    "pvc_name": "mr-data-01a15b76-811a-7339-b2d4-51962f5f718b",
+    "pvc_uid": "33d64eee-a5f1-4b4b-b39a-f761f237f36e",
+    "state_entered_at": "2026-10-20T22:38:06.371+00:00",
+    "volume_handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-42ce53b4-26db-4894-8370-1713d347db1b"
+  },
+  "owner": "deepkey",
+  "pod": {
+    "containers": [
+      {
+        "name": "private-volume-directories",
+        "ready": true,
+        "state": {
+          "terminated": {
+            "containerID": "containerd://eb81c0c1e931793d63913ccb7799f68e18493a332f7bdbb7abe6716d1b3037f7",
+            "exitCode": 0,
+            "finishedAt": "2026-10-20T22:37:44Z",
+            "reason": "Completed",
+            "startedAt": "2026-10-20T22:37:44Z"
+          }
+        }
+      },
+      {
+        "name": "runner",
+        "ready": true,
+        "state": {
+          "running": {
+            "startedAt": "2026-10-20T22:37:45Z"
+          }
+        }
+      }
+    ],
+    "createdAt": "2026-10-20T22:37:40Z",
+    "node": "orbit-mr-lab",
+    "phase": "Running",
+    "startTime": "2026-10-20T22:37:40Z",
+    "uid": "fd9e9481-b030-46cb-b2c6-023fd2e1fca9"
+  },
+  "pv": {
+    "createdAt": "2026-10-20T22:37:36Z",
+    "driver": "rbd.csi.ceph.com",
+    "fsType": "ext4",
+    "image": "csi-vol-42ce53b4-26db-4894-8370-1713d347db1b",
+    "uid": "77b48621-01e2-464c-a0d6-3ee91f9aac4f"
+  },
+  "pvc": {
+    "accessModes": [
+      "ReadWriteOnce"
+    ],
+    "createdAt": "2026-10-20T22:37:35Z",
+    "phase": "Bound",
+    "storageClass": "runner-data",
+    "uid": "33d64eee-a5f1-4b4b-b39a-f761f237f36e"
+  },
+  "runner": {
+    "capabilities": [
+      "antigravity-account-login/v1",
+      "antigravity-account-remove/v1",
+      "antigravity-google-login/v1",
+      "claude-account-login/v1",
+      "claude-account-move/v1",
+      "claude-account-remove/v1",
+      "codex-account-login/v1",
+      "codex-account-move/v1",
+      "codex-account-remove/v1",
+      "codex-rate-limit-reset-v1",
+      "cursor-account-login/v1",
+      "cursor-account-remove/v1",
+      "cursor-key-check/v1",
+      "integration-job/v1",
+      "integration-progress/v2",
+      "kimi-account-login/v1",
+      "kimi-account-move/v1",
+      "kimi-account-remove/v1",
+      "kimi-login-region/v1",
+      "managed-runner-instance-v1",
+      "managed-runner-sleep-v1",
+      "promotion-automatic-land/v1",
+      "session-claude-coordinator-context-v1",
+      "session-claude-steer-withdraw-v1",
+      "session-codex-coordinator-context-v1",
+      "session-codex-steer-v1",
+      "session-current-work-routing-v1",
+      "session-merge-recovery-v1",
+      "session-move/v1",
+      "session-orchestration-credential-v1",
+      "session-terminal-handoff-v1",
+      "session-worktree-ops-v1",
+      "source-pin/v1",
+      "wiki-repo-op-read/v1",
+      "wiki-repo-op/v1",
+      "provider:claude",
+      "provider:codex",
+      "provider:opencode",
+      "provider:antigravity",
+      "provider:dsh",
+      "os:linux"
+    ],
+    "enrolled_at": "2026-10-20T22:37:35.386",
+    "id": "01a15b76-811a-7339-b2d4-51962f5f718b",
+    "last_heartbeat_at": "2026-10-20T22:38:16.321",
+    "name": "orbit-managed",
+    "status": "ONLINE",
+    "version": "managed-6d597ec38119793168825df0f028e871d333dca6"
+  },
+  "runnerEngines": [
+    {
+      "auth": "no",
+      "engine": "claude",
+      "installationError": null,
+      "installed": true,
+      "version": "2.1.300 (Claude Code)"
+    },
+    {
+      "auth": "no",
+      "engine": "codex",
+      "installationError": null,
+      "installed": true,
+      "version": "codex-cli 0.158.0"
+    },
+    {
+      "auth": "unknown",
+      "engine": "kimi",
+      "installationError": null,
+      "installed": false,
+      "version": null
+    },
+    {
+      "auth": "unknown",
+      "engine": "opencode",
+      "installationError": null,
+      "installed": false,
+      "version": null
+    },
+    {
+      "auth": "unknown",
+      "engine": "antigravity",
+      "installationError": null,
+      "installed": false,
+      "version": null
+    },
+    {
+      "auth": "unknown",
+      "engine": "dsh",
+      "installationError": "DSH_NOT_INSTALLED",
+      "installed": false,
+      "version": null
+    },
+    {
+      "auth": "unknown",
+      "engine": "cursor",
+      "installationError": "CURSOR_NOT_INSTALLED",
+      "installed": false,
+      "version": null
+    }
+  ],
+  "signIns": [
+    {
+      "at": "2026-10-20T22:37:35.305+00:00",
+      "ms": 114.1,
+      "port": 13710,
+      "status": 201
+    }
+  ],
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": true,
+      "canWake": false
+    },
+    "desiredState": "RUNNING",
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": "deepseek-2",
+    "lastHeartbeatAt": "2026-10-20T22:38:16.321Z",
+    "managementState": "READY",
+    "reason": null,
+    "runnerId": "34jQup6DEE3hhPfgLu01z",
+    "usable": true,
+    "workspaceId": "34jQup6PMW94GN1z2DGw6"
+  }
+}

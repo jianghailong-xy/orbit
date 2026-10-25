@@ -1,0 +1,34 @@
+{
+  "deleteRequestedAt": "2026-10-20T22:26:24.307+00:00",
+  "grace": 240,
+  "log": "/mnt/data/managed-runner-lab/test-server/state/logs/t03-runner-afc08368-4a00-49ab-9f51-0b389206cd06.log",
+  "logMarks": {
+    "stopping": "2026-10-20T22:26:24.325641136Z"
+  },
+  "logTail": [
+    "2026-10-20T22:24:17.880012560Z [orbit-runner 2026-10-20T22:24:17.879Z] session 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 re-attached worktree /var/lib/orbit/home/.orbit/worktrees/01a148ba-a3da-7330-94bc-3ba0bd62959a (branch orbit/t03-fake-model-persistence-session-2-244d43)",
+    "2026-10-20T22:24:17.881073751Z [orbit-runner 2026-10-20T22:24:17.881Z] reclaiming session 01a148d5-9efb-7758-ab03-7ae6a6276ea3 \u2014 T03 git identity check",
+    "2026-10-20T22:24:17.984813320Z [orbit-runner 2026-10-20T22:24:17.984Z] session 01a148d5-9efb-7758-ab03-7ae6a6276ea3 \u2014 re-attached worktree /var/lib/orbit/home/.orbit/worktrees/01a148d5-9efb-7758-ab03-7ae6a6276ea3 (branch orbit/t03-git-identity-check-7dded5)",
+    "2026-10-20T22:24:17.985991079Z [orbit-runner 2026-10-20T22:24:17.985Z] reclaiming session 01a148d5-daad-7081-9956-db8a8259f03c \u2014 t03 landing probe",
+    "2026-10-20T22:24:18.209503900Z [orbit-runner 2026-10-20T22:24:18.209Z] session 01a148d5-daad-7081-9956-db8a8259f03c \u2014 re-attached worktree /var/lib/orbit/home/.orbit/worktrees/01a148d5-daad-7081-9956-db8a8259f03c (branch orbit/t03-landing-probe-5a6c35)",
+    "2026-10-20T22:24:18.210610053Z [orbit-runner 2026-10-20T22:24:18.210Z] reclaiming session 01a15b67-58bd-70bc-8f14-ff0b214b5d43 \u2014 T03 real DeepSeek session",
+    "2026-10-20T22:24:18.312416208Z [orbit-runner 2026-10-20T22:24:18.312Z] session 01a15b67-58bd-70bc-8f14-ff0b214b5d43 \u2014 re-attached worktree /var/lib/orbit/home/.orbit/worktrees/01a15b67-58bd-70bc-8f14-ff0b214b5d43 (branch orbit/t03-real-deepseek-session-5d6195)",
+    "2026-10-20T22:25:24.152862651Z [orbit-runner 2026-10-20T22:25:24.152Z] session 72ee6f63-2c33-52cb-98cc-5745d8f95b4e \u2014 isolated in worktree /var/lib/orbit/home/.orbit/worktrees/72ee6f63-2c33-52cb-98cc-5745d8f95b4e (branch orbit/task-t03-r1-landing-probe-add-r1-txt-98f4fe @ pinned ff06725d)",
+    "2026-10-20T22:25:24.195190771Z [orbit-runner 2026-10-20T22:25:24.195Z] > interactive run 72ee6f63-2c33-52cb-98cc-5745d8f95b4e \u2014 Task: T03 R1 landing probe: add R1.txt",
+    "2026-10-20T22:25:32.727640889Z [orbit-runner 2026-10-20T22:25:32.727Z] \u25a0 interactive run 72ee6f63-2c33-52cb-98cc-5745d8f95b4e \u2192 SUCCEEDED",
+    "2026-10-20T22:26:04.134193026Z [orbit-runner 2026-10-20T22:26:04.134Z] integration job 4371b571-75e2-4cb7-85b5-97508a14f2b0 LAND_TASK refs/heads/orbit/task-t03-r1-landing-probe-add-r1-txt-98f4fe -> refs/heads/project/34hN5f2XmUTCDFMGa5mTR",
+    "2026-10-20T22:26:24.325641136Z [orbit-runner 2026-10-20T22:26:24.325Z] runner stopping; draining session supervisors...",
+    "2026-10-20T22:28:04.516408654Z [orbit-runner 2026-10-20T22:28:04.515Z] 1 heartbeat operation(s) still running 1m40s into the stop; stopping them, and a landing hands its claim back",
+    "2026-10-20T22:28:04.658097507Z [orbit-runner 2026-10-20T22:28:04.658Z] integration job 4371b571-75e2-4cb7-85b5-97508a14f2b0 stopped in CHECK because this runner is stopping; nothing was pushed and its worktree is gone, so it is handed back to be run again",
+    "2026-10-20T22:28:04.673545696Z [orbit-runner 2026-10-20T22:28:04.673Z] integration job 4371b571-75e2-4cb7-85b5-97508a14f2b0 handed back; the next heartbeat that asks for work is handed it again"
+  ],
+  "podGoneAt": "2026-10-20T22:28:06.208+00:00",
+  "podUid": "afc08368-4a00-49ab-9f51-0b389206cd06",
+  "runnerTerminated": {
+    "containerID": "containerd://f8357658efa9a743347820486d7bc97f46831a009350b775cd64e0a86119fbb1",
+    "exitCode": 0,
+    "finishedAt": "2026-10-20T22:28:04Z",
+    "reason": "Completed",
+    "startedAt": "2026-10-20T22:24:17Z"
+  }
+}

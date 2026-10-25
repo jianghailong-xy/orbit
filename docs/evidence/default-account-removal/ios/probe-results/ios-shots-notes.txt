@@ -1,0 +1,36 @@
+== test10bOfflineAnAddedAccountsRemoveIsGreyed
+offline-work: in view after 0 drag(s) at (32.0, 471.5833333333333, 41.66666666666666, 20.33333333333337)
+offline: Work's Remove… 9 label="Remove…" value="" frame=(76.0, 384.0, 250.0, 42.0) hittable=true
+== test10OfflineDefaultsRemoveStaysEnabled
+offline-default: in view after 0 drag(s) at (32.0, 291.33333333333337, 57.66666666666667, 20.333333333333314)
+offline: Default's Remove… 9 label="Remove…" value="" frame=(76.0, 625.3333333333333, 250.0, 42.0) hittable=true
+== test11OfflineUseAgainWorks
+offline-use-again: in view after 0 drag(s) at (282.0, 652.0, 88.0, 28.0)
+== test12RemovedTwoAccountsDark
+dark-line: in view after 0 drag(s) at (32.0, 659.0, 221.0, 15.666666666666629)
+== test1DefaultsMenuOffersRemove
+menu: in view after 0 drag(s) at (32.0, 291.33333333333337, 57.66666666666667, 20.333333333333314)
+menu: Remove… 9 label="Remove…" value="" frame=(76.0, 625.3333333333333, 250.0, 42.0) hittable=true
+== test2RemovingDefaultAsksThenListsTheAccountsThatRemain
+remove: in view after 0 drag(s) at (32.0, 291.33333333333337, 57.66666666666667, 20.333333333333314)
+remove: alert 7 label="Remove Default?" value="" frame=(41.0, 335.0, 320.0, 232.0) hittable=true; texts ["Remove Default?", "Orbit stops using it on HPC. Its sign-in stays on the machine, and Codex in a terminal there keeps working. Workspaces set to it run on Automatic."]
+removed-line: in view after 0 drag(s) at (32.0, 659.0, 221.0, 15.666666666666629)
+== test3OneRemainingAccountIsARowOfItsOwn
+
+== test4TheRunnersCodexRowSpeaksForTheAccountThatRemains
+runner-codex: in view after 1 drag(s) at (16.0, 502.0, 370.0, 148.0)
+runner: row 9 label="Codex, 0.161.0 · Signed in, Next: Work, Weekly limit, 41%, Resets Fri, Oct 23 at 6:54 PM" value="" frame=(16.0, 502.0, 370.0, 148.0) hittable=true
+== test5UseAgainBringsDefaultBack
+use-again: in view after 0 drag(s) at (282.0, 652.0, 88.0, 28.0)
+== test6AnAddedAccountsQuestionSaysAutomatic
+added: in view after 0 drag(s) at (32.0, 472.0, 69.33333333333333, 20.333333333333314)
+added: alert 7 label="Remove Personal?" value="" frame=(41.0, 355.0, 320.0, 192.0) hittable=true; texts ["Remove Personal?", "Its sign-in is deleted from HPC. Workspaces set to this account run on Automatic."]
+== test7TheLastAccountsQuestionSaysOrbitUsesDefaultAgain
+last: in view after 0 drag(s) at (32.0, 291.9166666666667, 41.66666666666666, 20.333333333333314)
+last: alert 7 label="Remove Work?" value="" frame=(41.0, 345.0, 320.0, 212.0) hittable=true; texts ["Remove Work?", "Its sign-in is deleted from HPC. Without it, Orbit uses Default there again, and workspaces set to this account run on it."]
+== test8DefaultsSwipeOffersRemove
+swipe: in view after 0 drag(s) at (32.0, 291.33333333333337, 57.66666666666667, 20.333333333333314)
+swipe: Remove 9 label="Remove" value="" frame=(321.8333435058594, 329.0, 48.333343505859375, 66.66665649414062) hittable=true
+swipe: alert 7 label="Remove Default?" value="" frame=(41.0, 335.0, 320.0, 232.0) hittable=true; texts ["Remove Default?", "Orbit stops using it on HPC. Its sign-in stays on the machine, and Codex in a terminal there keeps working. Workspaces set to it run on Automatic."]
+== test9DefaultAloneOffersNoRemove
+alone: in view after 0 drag(s) at (32.0, 291.33333333333337, 57.66666666666667, 20.333333333333314)

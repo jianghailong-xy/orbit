@@ -8,10 +8,13 @@ import io.orbitd.android.core.net.NetworkException
 import io.orbitd.android.core.protocol.RefreshRequest
 import io.orbitd.android.core.protocol.SignInMethods
 import io.orbitd.android.core.protocol.Wire
+import java.io.IOException
+import java.security.InvalidKeyException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -279,12 +282,89 @@ class AuthSessionTest {
             val h = Harness(this)
             h.instances.value = serverB.value
             h.credentials.value = StoredSession(serverA.value, tokens())
-            h.credentials.failLoad = corrupt
+            if (corrupt) h.credentials.loadFailures += SecureStorageException(unrecoverable = true)
             h.data.write(AccountKey(serverA.value, "alice"), DataKind.DRAFT, "s1", byteArrayOf(1))
             h.client.restore()
             assertTrue(h.client.state.value is AuthState.SignedOut)
             assertNull(h.credentials.value)
             assertTrue(h.data.values.isEmpty())
+        }
+    }
+
+    /** A03d: a storage failure that may pass (I/O, a busy Keystore) is read again; it costs neither credentials nor data. */
+    @Test fun aStorageFailureThatPassesIsReadAgainAndKeepsTheSessionAndData() = runTest {
+        val h = Harness(this)
+        val stored = storeSessionAndData(h)
+        h.credentials.loadFailures += SecureStorageException(IOException("fixture I/O failure"))
+        h.client.restore()
+        assertTrue("the stored session survives", h.credentials.value == stored)
+        val handle = (h.client.state.value as AuthState.SignedIn).handle
+        assertEquals(AccountKey(serverA.value, "alice"), handle.account)
+        assertArrayEquals("account data survives", byteArrayOf(1), h.client.readData(handle, DataKind.DRAFT, "s1"))
+        assertEquals("read again once, 200 ms later", 2, h.credentials.loads)
+        assertEquals(200L, currentTime)
+        assertLogged(h, "attempt 1 of 3 failed", IOException::class.java.name, "restored on attempt 2")
+    }
+
+    /** As iOS, whose Keychain read that fails only returns nil: signed out for this launch, nothing deleted, the next restores. */
+    @Test fun aStorageFailureThatPersistsSignsOutButKeepsTheSessionAndDataForTheNextLaunch() = runTest {
+        val h = Harness(this)
+        val stored = storeSessionAndData(h)
+        repeat(3) { h.credentials.loadFailures += SecureStorageException(IOException("fixture I/O failure")) }
+        h.client.restore()
+        assertTrue("nothing is deleted", h.credentials.value == stored)
+        assertEquals(1, h.data.values.size)
+        assertEquals(AuthState.SignedOut(serverA, SignOutReason.STORAGE), h.client.state.value)
+        assertEquals("three reads, 200 ms apart", 3, h.credentials.loads)
+        assertEquals(400L, currentTime)
+        assertLogged(h, "attempt 2 of 3 failed", "unreadable after 3 attempts", "kept for the next launch")
+        val next = h.launch()
+        next.restore()
+        val handle = (next.state.value as AuthState.SignedIn).handle
+        assertArrayEquals(byteArrayOf(1), next.readData(handle, DataKind.DRAFT, "s1"))
+        assertTrue(h.credentials.value == stored)
+    }
+
+    /** The Android store reports KeyPermanentlyInvalidatedException (an InvalidKeyException) as unrecoverable. */
+    @Test fun aStoredSessionWhoseKeyIsPermanentlyInvalidatedIsStillRetiredAndCleared() = runTest {
+        val h = Harness(this)
+        storeSessionAndData(h)
+        h.credentials.loadFailures += SecureStorageException(InvalidKeyException("fixture key invalidated"), unrecoverable = true)
+        h.client.restore()
+        assertEquals(AuthState.SignedOut(serverA, SignOutReason.STORAGE), h.client.state.value)
+        assertNull(h.credentials.value)
+        assertTrue(h.data.values.isEmpty())
+        assertEquals("never read again", 1, h.credentials.loads)
+        assertEquals(0L, currentTime)
+        assertLogged(h, "can never be read", InvalidKeyException::class.java.name, "cleared")
+    }
+
+    @Test fun withoutAStoredSessionRestoreIsUnchanged() = runTest {
+        val h = Harness(this)
+        h.instances.value = serverA.value
+        h.data.write(AccountKey(serverA.value, "alice"), DataKind.DRAFT, "s1", byteArrayOf(1))
+        h.client.restore()
+        assertEquals(AuthState.SignedOut(serverA), h.client.state.value)
+        assertNull(h.credentials.value)
+        assertTrue("orphan account data is still cleared", h.data.values.isEmpty())
+        assertEquals(1, h.credentials.loads)
+        assertEquals(0L, currentTime)
+        assertLogged(h, "no stored session")
+    }
+
+    private suspend fun storeSessionAndData(h: Harness): StoredSession {
+        h.instances.value = serverA.value
+        h.credentials.value = StoredSession(serverA.value, tokens())
+        h.data.write(AccountKey(serverA.value, "alice"), DataKind.DRAFT, "s1", byteArrayOf(1))
+        return h.credentials.value!!
+    }
+
+    /** The log names the way restore went and the failure's classes, never a credential, account, server or message. */
+    private fun assertLogged(h: Harness, vararg expected: String) {
+        val text = h.logs.joinToString("\n")
+        for (part in expected) assertTrue("log names \"$part\": $text", text.contains(part))
+        for (value in listOf(tokens().accessToken, tokens().refreshToken, tokens().user.email, "alice", "orbit.example", "fixture")) {
+            assertFalse("log holds \"$value\": $text", text.contains(value))
         }
     }
 
@@ -334,6 +414,51 @@ class AuthSessionTest {
             assertNull(failure, h.credentials.value)
             assertEquals(failure, AuthState.SignedOut(serverB, if (failure == "storage") SignOutReason.STORAGE else null), h.client.state.value)
         }
+    }
+
+    /** iOS fdeb033ad: only what signed in is remembered, so a mistyped server or email never sticks; the coordinator's A03c decision
+     * keeps each server's email, encrypted, through sign-out, as iOS keeps its one. */
+    @Test fun onlyASuccessfulPasswordLoginRemembersItsServerAndEmail() = runTest {
+        val h = Harness(this)
+        h.instances.value = serverA.value
+        h.client.restore()
+        // Turned down, or out of reach: nothing is remembered, but the page keeps the server it tried.
+        h.handler = { unauthorized() }
+        assertTrue(runCatching { h.client.login(serverB, "bob@example.test", "wrong-password") }.isFailure)
+        h.handler = { throw NetworkException() }
+        assertTrue(runCatching { h.client.login(serverB, "bob@example.test", "fixture-password") }.isFailure)
+        assertEquals(serverA.value, h.instances.value)
+        assertNull(h.client.rememberedEmail(serverB))
+        assertEquals(serverB, (h.client.state.value as AuthState.SignedOut).server)
+
+        h.handler = { response(tokens("bob")) }
+        h.client.login(serverB, "bob@example.test", "fixture-password")
+        assertEquals(serverB.value, h.instances.value)
+        assertEquals("bob@example.test", h.client.rememberedEmail(serverB))
+        assertNull("each server has its own", h.client.rememberedEmail(serverA))
+        // Signing out keeps the server and its email for the login page.
+        h.client.logout()
+        assertEquals(serverB.value, h.instances.value)
+        assertEquals("bob@example.test", h.client.rememberedEmail(serverB))
+
+        // Google remembers its server and no email: none was typed.
+        h.handler = { response(tokens("carol")) }
+        h.client.loginWithGoogleTicket(serverA, "fixture-ticket", "fixture-verifier")
+        assertEquals(serverA.value, h.instances.value)
+        assertNull(h.client.rememberedEmail(serverA))
+        assertEquals("bob@example.test", h.client.rememberedEmail(serverB))
+
+        // The next sign-in on a server replaces its email; a store that fails costs only the prefill, never the sign-in.
+        h.handler = { response(tokens("dave")) }
+        h.client.login(serverB, "dave@example.test", "fixture-password")
+        assertEquals("dave@example.test", h.client.rememberedEmail(serverB))
+        h.emails.fail = true
+        h.client.login(serverB, "erin@example.test", "fixture-password")
+        assertTrue(h.client.state.value is AuthState.SignedIn)
+        assertNull(h.client.rememberedEmail(serverB))
+        h.emails.fail = false
+        assertEquals("dave@example.test", h.client.rememberedEmail(serverB))
+        assertEquals(mapOf(serverB.value to "dave@example.test"), h.emails.values)
     }
 
     @Test fun signInMethodsAsksTheInstanceWithoutTouchingTheSession() = runTest {

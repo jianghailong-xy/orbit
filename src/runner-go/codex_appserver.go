@@ -52,6 +52,13 @@ const (
 	codexInstructionsAdditionalContext
 )
 
+// codexClientName is the name a session's codex app-server is initialized with, which codex carries as
+// the `originator` header and the product token of its User-Agent on every model request. It is the
+// official CLI's own name, not Orbit's, so a session on a pool gateway reaches the model backend with
+// the identity a stock CLI sends there. The version segment codex appends is codex's own, and
+// codexInstructionModeForUserAgent reads only that segment, so the name here does not affect it.
+const codexClientName = "codex_cli_rs"
+
 // codexApprovalFn answers one inbound approval request. nil keeps the fail-closed behaviour that
 // predates the bridge, which is also what the protocol tests exercise.
 type codexApprovalFn func(context.Context, codexApprovalRequest, map[string]interface{}) bool
@@ -76,6 +83,13 @@ type codexAppServer struct {
 	notifications chan codexRPCMessage
 	done          chan struct{}
 	doneOnce      sync.Once
+	// sideThreads routes the notifications of a thread Orbit opened for itself — the naming thread
+	// (codex_naming.go) — to the one goroutine waiting on it, rather than to the session's handler,
+	// which drops every thread but the session's own. Guarded by mu.
+	sideThreads map[string]chan codexRPCMessage
+	// orbitMCP is whether this process was started with Orbit's own MCP server
+	// (codexOrbitMCPServer), which a side thread turns off for itself.
+	orbitMCP bool
 
 	orbitExecutable     string
 	instructionMode     codexInstructionMode
@@ -110,6 +124,79 @@ type codexAppActiveTurn struct {
 	// steers: the mid-turn messages written into this turn, keyed by the Orbit turn id sent as
 	// clientUserMessageId — the only key Codex echoes back (codex_steer.go).
 	steers map[string]*codexSteerDelivery
+	// prepared is the input turn/start was sent, kept so a capacity retry replays it unchanged.
+	prepared *codexPreparedTurn
+	// capacityRetries counts the replays spent on "at capacity" (codexCapacityRetryDelays).
+	capacityRetries int
+	// retryWake is open while a capacity retry waits out its backoff; an interrupt closes it so
+	// the wait ends at once instead of holding a Stop or an `end` for up to two minutes.
+	retryWake chan struct{}
+	// reviewAtCapacity: Codex's auto_review approvals reviewer could not review an action of this
+	// turn because its model was at capacity. Codex then refuses the action and tells the model
+	// not to go on without asking, so the turn ends normally with its work undone — replayed
+	// like a turn that failed "at capacity" itself, which has the action reviewed again.
+	reviewAtCapacity bool
+}
+
+type codexCapacityRetry struct {
+	// reviewAtCapacity: replayed for an auto review that found its model at capacity, rather than
+	// for the turn's own failure.
+	reviewAtCapacity bool
+	orbitTurnID      string
+	prepared         codexPreparedTurn
+	attempt          int
+	delay            time.Duration
+	wake             chan struct{}
+	openSteers       []string
+}
+
+// beginCodexCapacityRetry turns a finalize of a turn that failed "at capacity" — or that ended
+// after an auto review of one of its actions found the reviewer's model at capacity — into a replay
+// of the same turn, while retries remain: the active turn goes back to its not-yet-started state — no
+// Codex turn id, so an interrupt in the backoff finalizes it as interrupted rather than addressing
+// a turn that is over — and the reply text the failed attempt left behind is dropped. Steers the
+// failed attempt still held are claimed for the caller to answer: Codex discarded them with it.
+func beginCodexCapacityRetry(activeMu *sync.Mutex, active **codexAppActiveTurn, result codexTurnResult, threadID string) (codexCapacityRetry, bool) {
+	activeMu.Lock()
+	defer activeMu.Unlock()
+	a := *active
+	if a == nil || a.finishing || a.interruptRequested || a.prepared == nil || a.capacityRetries >= len(codexCapacityRetryDelays) {
+		return codexCapacityRetry{}, false
+	}
+	status, errText := result.Status, result.Error
+	if status == "" {
+		status = a.result.Status
+	}
+	if errText == "" {
+		errText = a.result.Error
+	}
+	turnAtCapacity := status == stFailed && isCodexCapacityError(errText)
+	// A turn that failed for some other reason keeps that failure: replaying it would only
+	// repeat it.
+	reviewAtCapacity := a.reviewAtCapacity && status == stSucceeded
+	if !turnAtCapacity && !reviewAtCapacity {
+		return codexCapacityRetry{}, false
+	}
+	retry := codexCapacityRetry{
+		reviewAtCapacity: !turnAtCapacity,
+		orbitTurnID:      a.orbitTurnID,
+		prepared:         *a.prepared,
+		attempt:          a.capacityRetries + 1,
+		delay:            codexCapacityRetryDelays[a.capacityRetries],
+		wake:             make(chan struct{}),
+		openSteers:       takeOpenCodexSteers(a),
+	}
+	a.capacityRetries++
+	a.reviewAtCapacity = false
+	a.retryWake = retry.wake
+	a.codexTurnID = ""
+	a.startSent = false
+	a.interruptSent = false
+	a.result = codexTurnResult{Status: stSucceeded, Subtype: "completed", RuntimeSessionID: threadID}
+	a.fullText.Reset()
+	a.deltaText.Reset()
+	a.thinkText.Reset()
+	return retry, true
 }
 
 type codexAppTurnSnapshot struct {
@@ -151,7 +238,7 @@ func finishCodexAppTurnFinalize(activeMu *sync.Mutex, active **codexAppActiveTur
 	activeMu.Unlock()
 }
 
-func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), _ bool, bg *bgTailer, onRateLimits codexRateLimitSink, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
+func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onRateLimits codexRateLimitSink, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
 	setTurn("")
 	upDir := uploadsDir(job.SessionID)
 	_ = os.MkdirAll(upDir, 0o755)
@@ -268,7 +355,46 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		activeMu: &activeMu, active: &active, emitFor: emitFor, completeTurn: completeTurn,
 	}
 
+	// sendTurn sends the active turn's turn/start; assigned below, once what it calls exists.
+	var sendTurn func(orbitTurnID string, prepared codexPreparedTurn)
+
+	// retryAtCapacity replays a turn that failed "at capacity", or whose auto review did,
+	// instead of finalizing it, after a backoff an interrupt cuts short. Every Codex turn of the
+	// session ends through finalizeActive, so all of them get it.
+	retryAtCapacity := func(result codexTurnResult) bool {
+		retry, ok := beginCodexCapacityRetry(&activeMu, &active, result, threadID)
+		if !ok {
+			return false
+		}
+		for _, steerTurnID := range retry.openSteers {
+			steerDispatch.fail(steerTurnID, errCodexSteerDropped)
+		}
+		what := "codex model at capacity for"
+		if retry.reviewAtCapacity {
+			what = "codex auto review model at capacity for"
+		}
+		logln(what, job.SessionID+"; retrying turn", retry.orbitTurnID,
+			fmt.Sprintf("in %s (retry %d of %d)", retry.delay, retry.attempt, len(codexCapacityRetryDelays)))
+		asyncWg.Add(1)
+		go func() {
+			defer asyncWg.Done()
+			timer := time.NewTimer(retry.delay)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-retry.wake:
+			case <-workerCtx.Done():
+				return
+			}
+			sendTurn(retry.orbitTurnID, retry.prepared)
+		}()
+		return true
+	}
+
 	finalizeActive := func(result codexTurnResult) {
+		if retryAtCapacity(result) {
+			return
+		}
 		a, snapshot, ok := beginCodexAppTurnFinalize(&activeMu, &active)
 		if !ok {
 			return
@@ -459,6 +585,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		}
 	}()
 
+	var namingOnce sync.Once
 	startTurn := func(resp *RunInboxResponse, pendingShellCtx []string) {
 		activeMu.Lock()
 		if active != nil {
@@ -489,45 +616,64 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			if workerCtx.Err() != nil {
 				return
 			}
+			activeMu.Lock()
+			if active != nil && active.orbitTurnID == respCopy.TurnID {
+				active.prepared = &prepared
+			}
+			activeMu.Unlock()
+			sendTurn(respCopy.TurnID, prepared)
+		}()
+	}
 
-			ok, interrupted := beginCodexAppTurnStart(&activeMu, &active, respCopy.TurnID)
-			if !ok {
+	sendTurn = func(orbitTurnID string, prepared codexPreparedTurn) {
+		ok, interrupted := beginCodexAppTurnStart(&activeMu, &active, orbitTurnID)
+		if !ok {
+			return
+		}
+		if interrupted {
+			finalizeActive(codexTurnResult{Status: stInterrupted, Subtype: "interrupted"})
+			return
+		}
+
+		codexTurnID, err := app.startTurn(workerCtx, threadID, job, execDir, upDir, orbitTurnID, prepared.Prompt, prepared.ImagePaths)
+		if err != nil {
+			// Cleanup cancellation is a resumable detach, not a failed turn. In
+			// particular, never synthesize FAILED after a shutdown drain timeout.
+			if workerCtx.Err() != nil {
+				return
+			}
+			activeMu.Lock()
+			same := active != nil && active.orbitTurnID == orbitTurnID
+			interrupted := same && active.interruptRequested
+			activeMu.Unlock()
+			if !same {
 				return
 			}
 			if interrupted {
 				finalizeActive(codexTurnResult{Status: stInterrupted, Subtype: "interrupted"})
 				return
 			}
-
-			codexTurnID, err := app.startTurn(workerCtx, threadID, job, execDir, upDir, respCopy.TurnID, prepared.Prompt, prepared.ImagePaths)
-			if err != nil {
-				// Cleanup cancellation is a resumable detach, not a failed turn. In
-				// particular, never synthesize FAILED after a shutdown drain timeout.
-				if workerCtx.Err() != nil {
-					return
-				}
-				activeMu.Lock()
-				same := active != nil && active.orbitTurnID == respCopy.TurnID
-				interrupted := same && active.interruptRequested
-				activeMu.Unlock()
-				if !same {
-					return
-				}
-				if interrupted {
-					finalizeActive(codexTurnResult{Status: stInterrupted, Subtype: "interrupted"})
-					return
-				}
-				emit(evError, map[string]interface{}{"message": "failed to start codex turn: " + err.Error()})
-				finalizeActive(codexTurnResult{
-					Status:  stFailed,
-					Subtype: "turn_start_failed",
-					Error:   err.Error(),
-					Result:  err.Error(),
-				})
-				return
-			}
-			recordCodexTurnID(respCopy.TurnID, codexTurnID)
-		}()
+			emit(evError, map[string]interface{}{"message": "failed to start codex turn: " + err.Error()})
+			finalizeActive(codexTurnResult{
+				Status:  stFailed,
+				Subtype: "turn_start_failed",
+				Error:   err.Error(),
+				Result:  err.Error(),
+			})
+			return
+		}
+		recordCodexTurnID(orbitTurnID, codexTurnID)
+		// The opening turn is underway: name the session in a side thread of this same
+		// app-server, once, when the control plane asked for it (codex_naming.go).
+		if firstSpawn && !resumedThread && job.Naming != nil {
+			namingOnce.Do(func() {
+				asyncWg.Add(1)
+				go func() {
+					defer asyncWg.Done()
+					nameCodexSession(workerCtx, t, app, job)
+				}()
+			})
+		}
 	}
 
 	waitForIdle := func() {
@@ -665,6 +811,9 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			setTurn("")
 
 		case "interrupt":
+			// RunInterruptRequest.stopBackgroundWork — the composer's Stop ends this session's
+			// background work with the turn; see bgTailer.stopBackgroundWork.
+			stopBackgroundWorkForTurn(bg, resp)
 			emit(evInterrupt, map[string]interface{}{})
 			requestActiveInterrupt(true)
 
@@ -715,6 +864,10 @@ func requestCodexAppInterrupt(activeMu *sync.Mutex, active **codexAppActiveTurn)
 		return "", false
 	}
 	(*active).interruptRequested = true
+	if (*active).retryWake != nil {
+		close((*active).retryWake)
+		(*active).retryWake = nil
+	}
 	if !(*active).startSent && (*active).codexTurnID == "" {
 		return "", true
 	}
@@ -731,7 +884,9 @@ func markCodexAppTurnStarted(activeMu *sync.Mutex, active **codexAppActiveTurn, 
 	}
 	activeMu.Lock()
 	defer activeMu.Unlock()
-	if *active == nil || (*active).finishing {
+	// !startSent: a capacity retry is waiting out its backoff, and this id names the attempt that
+	// already failed.
+	if *active == nil || (*active).finishing || !(*active).startSent {
 		return "", ""
 	}
 	if orbitTurnID != "" && (*active).orbitTurnID != orbitTurnID {
@@ -756,6 +911,7 @@ func beginCodexAppTurnStart(activeMu *sync.Mutex, active **codexAppActiveTurn, o
 	if *active == nil || (*active).finishing || (*active).orbitTurnID != orbitTurnID {
 		return false, false
 	}
+	(*active).retryWake = nil
 	if (*active).interruptRequested {
 		return true, true
 	}
@@ -1021,6 +1177,11 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 	// ORBIT_* go on, so a person's own credential is dropped, and the runner's mark put on, here
 	// whatever the caller handed in.
 	cmd.Env = runnerChildEnv(processEnv)
+	// The session's own Go and npm caches: one runner-owned root shared by every session of this
+	// machine, instead of $HOME/.cache (read-only under the sandbox) or a directory the agent
+	// invents (cache_root.go). The cache root is also a writable root of the sandbox policy
+	// (codexRuntimeWorkspaceRoots), so a confined command may write it.
+	cmd.Env = append(cmd.Env, runnerCacheEnv()...)
 	cmd.Env = append(cmd.Env,
 		"ORBIT_SESSION_ID="+publicID(job.SessionID),
 		"ORBIT_AGENT_ID="+publicID(job.AgentID),
@@ -1069,6 +1230,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 		notifications:   make(chan codexRPCMessage, 256),
 		done:            make(chan struct{}),
 		orbitExecutable: orbitCLIExecutable(),
+		orbitMCP:        exe != "",
 	}
 	if err := startSessionProcess(cmd); err != nil {
 		cancel()
@@ -1103,6 +1265,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 
 func codexAppServerCommandArgs(job *ClaimedSession, stateDir, exe string) []string {
 	args := []string{"app-server", "--stdio", "-c", fmt.Sprintf("sqlite_home=%q", stateDir)}
+	args = appendCodexSessionToolConfig(args)
 	args = appendCodexOrbitMCPConfig(args, exe)
 	return append(args, codexProviderArgs(job.Agent.Env)...)
 }
@@ -1110,8 +1273,8 @@ func codexAppServerCommandArgs(job *ClaimedSession, stateDir, exe string) []stri
 func (a *codexAppServer) initialize(ctx context.Context) error {
 	result, err := a.request(ctx, "initialize", map[string]interface{}{
 		"clientInfo": map[string]interface{}{
-			"name":    "orbit",
-			"title":   "Orbit",
+			"name":    codexClientName,
+			"title":   "Codex CLI",
 			"version": "0.1.0",
 		},
 		"capabilities": map[string]interface{}{"experimentalApi": true},
@@ -1424,7 +1587,9 @@ func codexThreadParams(job *ClaimedSession, execDir, upDir string) map[string]in
 		"approvalPolicy":        codexApprovalPolicy(job.Agent.PermissionMode),
 		"sandbox":               codexSandboxMode(job.Agent.PermissionMode),
 		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(job.Agent.PermissionMode, job, execDir, upDir),
-		"threadSource":          "orbit",
+		// The thread's own source: a user's turn, as the CLI reports one, not Orbit's "orbit" — the
+		// backend sees `thread_source: user` in the turn metadata.
+		"threadSource": "user",
 	}
 	if reviewer := codexApprovalsReviewer(job.Agent.PermissionMode); reviewer != "" {
 		params["approvalsReviewer"] = reviewer
@@ -1547,7 +1712,7 @@ func (a *codexAppServer) readLoop(r io.Reader) {
 				a.handleServerRequest(msg)
 			} else if msg.ID != nil {
 				a.deliverResponse(msg)
-			} else if msg.Method != "" {
+			} else if msg.Method != "" && !a.routeSideThread(msg) {
 				// Never lose this state transition even if the high-volume notification
 				// channel is full; the next turn must restore compacted instructions. The
 				// durable system event is the control plane's matching boundary for sparse
@@ -1686,7 +1851,14 @@ func (a *codexAppServer) answerElicitation(msg codexRPCMessage) {
 }
 
 func (a *codexAppServer) handleServerRequest(msg codexRPCMessage) {
+	// A thread Orbit opened for itself asks nobody: whatever it raises is declined here, so none of
+	// it reaches the session's permission mode or puts a card in front of its owner.
+	side := a.isSideThread(codexNotificationThreadID(msg))
 	if msg.Method == codexMCPElicitationMethod {
+		if side {
+			_ = a.write(map[string]interface{}{"id": msg.ID, "result": codexElicitationResult(false)})
+			return
+		}
 		a.answerElicitation(msg)
 		return
 	}
@@ -1699,6 +1871,10 @@ func (a *codexAppServer) handleServerRequest(msg codexRPCMessage) {
 				"message": "Orbit runner does not implement app-server request " + msg.Method,
 			},
 		})
+		return
+	}
+	if side {
+		_ = a.write(map[string]interface{}{"id": msg.ID, "result": map[string]interface{}{"decision": request.decision(false)}})
 		return
 	}
 	// Answer on a goroutine: readLoop calls this inline, and an approval blocks on a human who
@@ -1855,6 +2031,23 @@ func handleCodexAppNotificationWithImageFallback(threadID string, msg codexRPCMe
 			(*active).result.Status = stFailed
 			(*active).result.Subtype = "error"
 			(*active).result.Error = errMsg
+		}
+		activeMu.Unlock()
+	case "item/autoApprovalReview/completed":
+		// [UNSTABLE] in the app-server schema. Which status a reviewer that could not run reports
+		// is not documented, so anything but an approval whose rationale says "at capacity" counts.
+		review := mapValue(params["review"])
+		status, rationale := firstString(review, "status"), firstString(review, "rationale")
+		if status == "approved" || status == "inProgress" {
+			return
+		}
+		logln("codex auto review", status+":", clip(rationale, 300))
+		if !isCodexCapacityError(rationale) {
+			return
+		}
+		activeMu.Lock()
+		if *active != nil {
+			(*active).reviewAtCapacity = true
 		}
 		activeMu.Unlock()
 	case "thread/tokenUsage/updated":

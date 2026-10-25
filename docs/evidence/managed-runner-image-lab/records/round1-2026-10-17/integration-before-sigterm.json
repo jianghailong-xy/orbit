@@ -1,0 +1,46 @@
+{
+  "at": "2026-10-17T07:49:31.201+00:00",
+  "inFlightJobs": [
+    {
+      "generation": 1,
+      "heartbeatAt": "2026-10-17T07:49:15.014Z",
+      "jobId": "3gRaY2BYI4iX9C67vX4VWb",
+      "jobPublicId": "3gRaY2BYI4iX9C67vX4VWb",
+      "kind": "LAND_TASK",
+      "limitSeconds": 1500,
+      "phase": "CHECK",
+      "queuedAt": "2026-10-17T07:49:14.815Z",
+      "retriedBy": null,
+      "retryable": false,
+      "runnerName": "t03",
+      "startedAt": "2026-10-17T07:49:14.899Z",
+      "state": "RUNNING",
+      "taskId": "34hN5fXRWKMWho7vIvdAZ",
+      "taskPublicId": "34hN5fXRWKMWho7vIvdAZ",
+      "taskTitle": "T03 landing probe: add LANDED.txt",
+      "timedOut": false
+    }
+  ],
+  "landTasks": [
+    {
+      "landTask": {
+        "blockingReason": null,
+        "finishedAt": null,
+        "generation": "1",
+        "heartbeatAt": "2026-10-17T07:49:15.014Z",
+        "jobId": "3gRaY2BYI4iX9C67vX4VWb",
+        "jobPublicId": "3gRaY2BYI4iX9C67vX4VWb",
+        "phase": "CHECK",
+        "queuedAt": "2026-10-17T07:49:14.815Z",
+        "startedAt": "2026-10-17T07:49:14.899Z",
+        "state": "RUNNING",
+        "targetRef": "refs/heads/project/34hN5f2XmUTCDFMGa5mTR",
+        "waitMs": 84
+      },
+      "taskId": "34hN5fXRWKMWho7vIvdAZ"
+    }
+  ],
+  "line": "PROJECT_BRANCH",
+  "locked": true,
+  "ref": "project/34hN5f2XmUTCDFMGa5mTR"
+}

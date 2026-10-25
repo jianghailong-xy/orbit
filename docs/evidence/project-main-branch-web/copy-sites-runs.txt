@@ -1,0 +1,40 @@
+# The runs copy-sites.md quotes (task 34cjZa1LTksTyhej32E6v)
+
+## OrbitKit swift test (swift:6.1, ok-run.sh), one tree copy each
+- base 7217e3402:
+    Executed 3671 tests, with 5 tests skipped and 0 failures (0 unexpected) in 39.204 (39.204) seconds
+- web change before the parity re-pins (snapshot e908652bb):
+    Executed 3671 tests, with 5 tests skipped and 24 failures (0 unexpected) in 42.901 (42.901) seconds
+- delivery tree 9e6fa256e (snapshot 65b9dd1d2, committed as 5e0198641):
+    Executed 3671 tests, with 5 tests skipped and 0 failures (0 unexpected) in 44.728 (44.728) seconds
+
+The 24 failures before the re-pins, by assertion (each a source-line pin on a rewritten line):
+        1 ProjectDoneCopyParityTests.swift:211: error: ProjectDoneCopyParityTests.testTheReasonsAreSaidInTheWebsOrderAndWords — landingReasonLabel no longer says default: return 'Landed on main';
+        1 ProjectDoneCopyParityTests.swift:246: error: ProjectDoneCopyParityTests.testTheFourTalliesAreTheWebsSentences — a tally drifted: the web no longer builds "`${counts.criteria} criteria met`,\n    `${counts.onM
+        1 ProjectDoneCopyParityTests.swift:246: error: ProjectDoneCopyParityTests.testTheFourTalliesAreTheWebsSentences — a tally drifted: the web no longer builds "`${counts.criteria} criteria`,\n    `${counts.met} me
+        1 ProjectDoneCopyParityTests.swift:246: error: ProjectDoneCopyParityTests.testTheFourTalliesAreTheWebsSentences — a tally drifted: the web no longer builds "`${counts.met} met`,\n    `${counts.onMain} ${PROJECT
+        1 ProjectDoneCopyParityTests.swift:246: error: ProjectDoneCopyParityTests.testTheFourTalliesAreTheWebsSentences — a tally drifted: the web no longer builds "`${derivedDone.criteria.length} criteria`,\n    `${me
+        1 ProjectDoneCopyParityTests.swift:295: error: ProjectDoneCopyParityTests.testTheOwnerCardsSentencesAreTheWebs — 
+        1 ProjectDoneCopyParityTests.swift:310: error: ProjectDoneCopyParityTests.testTheOwnerCardsSentencesAreTheWebs — 
+        1 ProjectDoneCopyParityTests.swift:347: error: ProjectDoneCopyParityTests.testTheReceiptsSentencesAreTheWebs — 
+        1 ProjectDoneCopyParityTests.swift:392: error: ProjectDoneCopyParityTests.testTheWhyNotDoneCardsGroupsAndButtonsAreTheWebs — the Why-not-done card drifted: no "{criterion.satisfied ? landingReasonLabel(criterio
+        1 ProjectDoneCopyParityTests.swift:392: error: ProjectDoneCopyParityTests.testTheWhyNotDoneCardsGroupsAndButtonsAreTheWebs — the Why-not-done card drifted: no "{!criterion.satisfied\n                    ? PROJE
+        1 ProjectDoneCopyParityTests.swift:392: error: ProjectDoneCopyParityTests.testTheWhyNotDoneCardsGroupsAndButtonsAreTheWebs — the Why-not-done card drifted: no "{projectWhyNotDoneTally(project.derivedDone)}"
+        1 ProjectMergeCopyParityTests.swift:78: error: ProjectMergeCopyParityTests.testTheSentencesAreTheWebsOwn — the web no longer writes `✓ Merged into ${shortRef(promotion.upstreamRef)}`
+        1 ProjectMergeCopyParityTests.swift:78: error: ProjectMergeCopyParityTests.testTheSentencesAreTheWebsOwn — the web no longer writes `Merged into ${shortRef(promotion.upstreamRef)}`
+        1 ProjectMergeCopyParityTests.swift:78: error: ProjectMergeCopyParityTests.testTheSentencesAreTheWebsOwn — the web no longer writes `nothing to merge — ${shortRef(promotion.sourceRef)} is already on ${shortRe
+        1 ProjectPageCopyParityTests.swift:114: error: ProjectPageCopyParityTests.testCriteriaWords — src/web/src/components/ProjectAcceptanceCard.tsx no longer says tail: 'not on main yet'
+        2 ProjectPageCopyParityTests.swift:62: error: ProjectPageCopyParityTests.testWorkOverviewWords — src/web/src/components/ProjectPanoramaHeader.tsx no longer says label: 'On main'
+        2 ProjectPageCopyParityTests.swift:66: error: ProjectPageCopyParityTests.testWorkOverviewWords — src/web/src/components/ProjectPanoramaHeader.tsx no longer says 'landed on main'
+        2 ProjectPageCopyParityTests.swift:66: error: ProjectPageCopyParityTests.testWorkOverviewWords — src/web/src/components/ProjectPanoramaHeader.tsx no longer says 'not on main yet'
+        1 ProjectRunSettingsCopyParityTests.swift:102: error: ProjectRunSettingsCopyParityTests.testTheNotStartedTagAndTheStartRowAreTheWebsWords — src/web/src/components/ProjectProgressStatus.tsx no longer says const 
+        1 ProjectRunSettingsCopyParityTests.swift:93: error: ProjectRunSettingsCopyParityTests.testTheNotStartedTagAndTheStartRowAreTheWebsWords — src/web/src/lib/projectStart.ts no longer says runLineInSentence(settin
+        1 SessionProjectCopyParityTests.swift:99: error: SessionProjectCopyParityTests.testTheNotStartedLineAndTheSuggestionAreTheWebsOwn — 
+
+## src/web vitest, 4 shards, web2.sh on each tree, compared by webdiff.py
+base 7217e3402 : files 401, tests 5208, passed 5208, failed 0, skipped 0, failedFiles 0
+delivery 9e6fa256e: files 401, tests 5235, passed 5235, failed 0, skipped 0, failedFiles 0
+
+failing on base: none
+failing on the delivery: none
+failing on the delivery only: none

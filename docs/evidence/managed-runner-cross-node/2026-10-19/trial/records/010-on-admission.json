@@ -1,0 +1,70 @@
+{
+ "checks": [
+  {
+   "check": "the admission webhook is installed and refuses a Pod on an unowned managed claim",
+   "ok": true,
+   "value": {
+    "dryRunUnmanagedPod": "pod/t02a-admission-check",
+    "dryRunUnownedManagedClaim": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission"
+   }
+  }
+ ],
+ "endedAt": "2026-10-19T12:32:04.477+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "on",
+ "result": {
+  "install": {
+   "apiServerFlagLines": "2",
+   "at": "2026-10-19T12:32:04.446+00:00",
+   "dryRunUnmanagedPod": {
+    "answer": "pod/t02a-admission-check",
+    "exit": 0
+   },
+   "dryRunUnownedManagedClaim": {
+    "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: UNMAPPED_MANAGED_CLAIM: no managed runner owns claim mr-data-47e17834-093e-4113-bdf1-ef7411b132a6",
+    "exit": 1
+   },
+   "k3s": "unchanged",
+   "tokenSha256": "da8d4588c7bf70f053fd26ae9e87e758fdbb12de4f25dca41e56c43029f560ad",
+   "webhook": {
+    "caBundleSha256": "50ad5749615f034a930d2b53808082c30741c24d0e8d65c6004b1784972100bf",
+    "failurePolicy": "Fail",
+    "name": "orbit-managed-runner-pods",
+    "namespaceSelector": {
+     "matchLabels": {
+      "kubernetes.io/metadata.name": "orbit-mr-test"
+     }
+    },
+    "objectSelector": {},
+    "rules": [
+     {
+      "apiGroups": [
+       ""
+      ],
+      "apiVersions": [
+       "v1"
+      ],
+      "operations": [
+       "CREATE",
+       "UPDATE"
+      ],
+      "resources": [
+       "pods",
+       "pods/ephemeralcontainers"
+      ],
+      "scope": "Namespaced"
+     }
+    ],
+    "sideEffects": "None",
+    "timeoutSeconds": 10,
+    "uid": "25435d0f-33c4-4e3d-a121-9cd6dd8be4f0",
+    "url": "https://10.0.2.2:13711/api/managed-runner/admission",
+    "webhook": "pods.managed-runner.orbit.dev"
+   }
+  }
+ },
+ "seconds": 11.4,
+ "startedAt": "2026-10-19T12:31:53.123+00:00",
+ "step": "admission"
+}

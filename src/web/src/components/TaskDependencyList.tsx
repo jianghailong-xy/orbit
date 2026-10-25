@@ -1,5 +1,4 @@
 import { CloseOutlined } from '@ant-design/icons';
-import { Popconfirm } from 'antd';
 import { useMemo } from 'react';
 import {
   getFocusPathSets,
@@ -7,6 +6,7 @@ import {
   type TaskDependencyGraphResponse,
 } from '../lib/taskDependencyGraph';
 import { TaskStatusPill } from './TaskStatusPill';
+import { Popconfirm } from './ui/Popconfirm';
 
 /** Topologically ordered, keyboard-friendly equivalent of the visual dependency graph. */
 export function TaskDependencyList({
@@ -61,19 +61,20 @@ export function TaskDependencyList({
                 <Popconfirm
                   title="Remove prerequisite?"
                   description="This task will no longer wait for this prerequisite."
-                  okText="Remove"
-                  okButtonProps={{ danger: true }}
+                  confirmText="Remove"
+                  danger
                   onConfirm={() => onRemoveDependency(node.id)}
-                >
-                  <button
-                    type="button"
-                    className="tdg-list-remove"
-                    disabled={removingTaskId === node.id}
-                    aria-label={`Remove ${node.title} as a prerequisite`}
-                  >
-                    <CloseOutlined />
-                  </button>
-                </Popconfirm>
+                  trigger={
+                    <button
+                      type="button"
+                      className="tdg-list-remove"
+                      disabled={removingTaskId === node.id}
+                      aria-label={`Remove ${node.title} as a prerequisite`}
+                    >
+                      <CloseOutlined />
+                    </button>
+                  }
+                />
               )}
             </div>
           );

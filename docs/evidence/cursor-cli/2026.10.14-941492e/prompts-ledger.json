@@ -1,0 +1,147 @@
+{
+ "cap": 30,
+ "spent": 20,
+ "model": "Auto (default[])",
+ "entries": [
+  {
+   "n": 1,
+   "at": "2026-10-16T16:34:41.975Z",
+   "scenario": "tools-default-allow-once",
+   "runId": "explore5",
+   "note": "read/ls/write/shell/mcp/fetch, allow-once to all"
+  },
+  {
+   "n": 2,
+   "at": "2026-10-16T17:22:16.836Z",
+   "scenario": "multi-turn-tools-default",
+   "runId": "2026-10-16T17-22-08-039Z",
+   "note": "turn 1: read/ls/write/echo(allow-always)/env/mcp(reject)/fetch"
+  },
+  {
+   "n": 3,
+   "at": "2026-10-16T17:22:46.256Z",
+   "scenario": "multi-turn-tools-default",
+   "runId": "2026-10-16T17-22-08-039Z",
+   "note": "turn 2: echo after allow-always, mcp allow-once, orbit mcp task_get, recall"
+  },
+  {
+   "n": 4,
+   "at": "2026-10-16T17:28:00.624Z",
+   "scenario": "multi-turn-tools-default",
+   "runId": "2026-10-16T17-27-51-600Z",
+   "note": "turn 1: read/ls/write/echo(allow-always)/env/mcp(reject)/fetch"
+  },
+  {
+   "n": 5,
+   "at": "2026-10-16T17:28:21.052Z",
+   "scenario": "multi-turn-tools-default",
+   "runId": "2026-10-16T17-27-51-600Z",
+   "note": "turn 2: echo after allow-always, mcp allow-once, orbit mcp task_get, recall"
+  },
+  {
+   "n": 6,
+   "at": "2026-10-16T17:30:28.548Z",
+   "scenario": "cancel-mid-tool",
+   "runId": "2026-10-16T17-30-18-093Z",
+   "note": "cancel while sleep 47 runs"
+  },
+  {
+   "n": 7,
+   "at": "2026-10-16T17:31:04.599Z",
+   "scenario": "prompt-while-busy",
+   "runId": "2026-10-16T17-30-18-093Z",
+   "note": "prompt A, interrupted by prompt B"
+  },
+  {
+   "n": 8,
+   "at": "2026-10-16T17:31:12.650Z",
+   "scenario": "prompt-while-busy",
+   "runId": "2026-10-16T17-30-18-093Z",
+   "note": "prompt B sent while A runs"
+  },
+  {
+   "n": 9,
+   "at": "2026-10-16T17:31:41.764Z",
+   "scenario": "crash-recover-and-move",
+   "runId": "2026-10-16T17-30-18-093Z",
+   "note": "turn interrupted by stdin EOF then SIGKILL"
+  },
+  {
+   "n": 10,
+   "at": "2026-10-16T17:32:09.327Z",
+   "scenario": "crash-recover-and-move",
+   "runId": "2026-10-16T17-30-18-093Z",
+   "note": "continue after crash + move, with SHELL wrapper"
+  },
+  {
+   "n": 11,
+   "at": "2026-10-16T17:45:17.781Z",
+   "scenario": "crash-recover-and-move",
+   "runId": "2026-10-16T17-45-08-331Z",
+   "note": "turn interrupted by stdin EOF then SIGKILL"
+  },
+  {
+   "n": 12,
+   "at": "2026-10-16T17:46:09.738Z",
+   "scenario": "ask-question",
+   "runId": "2026-10-16T17-45-59-200Z",
+   "note": "cursor/ask_question: unanswered 30 s then error (fallback), then answered"
+  },
+  {
+   "n": 13,
+   "at": "2026-10-16T17:46:11.151Z",
+   "scenario": "crash-continue-and-shell-wrapper",
+   "runId": "2026-10-16T17-45-08-331Z",
+   "note": "continue after crash + move: recall"
+  },
+  {
+   "n": 14,
+   "at": "2026-10-16T17:46:13.251Z",
+   "scenario": "crash-continue-and-shell-wrapper",
+   "runId": "2026-10-16T17-45-08-331Z",
+   "note": "SHELL wrapper: what HOME and which variable names agent commands see"
+  },
+  {
+   "n": 15,
+   "at": "2026-10-16T17:46:43.661Z",
+   "scenario": "permission-force",
+   "runId": "2026-10-16T17-45-08-331Z",
+   "note": "--force: write/shell/mcp/fetch"
+  },
+  {
+   "n": 16,
+   "at": "2026-10-16T17:47:31.603Z",
+   "scenario": "permission-auto-review",
+   "runId": "2026-10-16T17-45-08-331Z",
+   "note": "--auto-review: write/shell/mcp/fetch"
+  },
+  {
+   "n": 17,
+   "at": "2026-10-16T17:48:26.401Z",
+   "scenario": "plan-and-ask-modes-concurrent",
+   "runId": "2026-10-16T17-45-08-331Z",
+   "note": "plan mode (concurrent with ask)"
+  },
+  {
+   "n": 18,
+   "at": "2026-10-16T17:48:26.401Z",
+   "scenario": "plan-and-ask-modes-concurrent",
+   "runId": "2026-10-16T17-45-08-331Z",
+   "note": "ask mode (concurrent with plan)"
+  },
+  {
+   "n": 19,
+   "at": "2026-10-16T17:51:32.928Z",
+   "scenario": "subagent-and-todos",
+   "runId": "2026-10-16T17-45-59-200Z",
+   "note": "TodoWrite + Task subagent"
+  },
+  {
+   "n": 20,
+   "at": "2026-10-16T17:52:24.150Z",
+   "scenario": "background-shell-and-commit",
+   "runId": "2026-10-16T17-45-59-200Z",
+   "note": "commit attribution + background shell"
+  }
+ ]
+}

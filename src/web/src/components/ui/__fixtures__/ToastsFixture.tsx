@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { App as AntApp, ConfigProvider } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, useLocation } from 'react-router-dom';
 import { ThemeProvider, useThemeMode } from '../../../lib/theme';
-import { darkTheme, lightTheme } from '../../../theme';
 import { useToast } from '../../../lib/toast';
 import { ToastViewport } from '../../ToastViewport';
+import { AppRoot } from '../AppRoot';
 import { Button } from '../Button';
 import { Dialog } from '../Dialog';
 import { Drawer } from '../Drawer';
@@ -47,17 +46,12 @@ function Actions() {
   </>;
 }
 
-function LegacyConfirm() {
-  const { modal } = AntApp.useApp();
-  const toast = useToast();
-  return <Button onClick={() => modal.confirm({ title: 'Legacy confirmation', onOk: () => toast.success('Legacy confirmed') })}>Legacy confirm</Button>;
-}
-
 function Content() {
   const { resolved } = useThemeMode();
   const [open, setOpen] = useState('');
   const location = useLocation();
-  return <ConfigProvider theme={resolved === 'dark' ? darkTheme : lightTheme}><AntApp>
+  // The app's root (AppRoot, as main.tsx draws it).
+  return <AppRoot>
     <main style={{ padding: '240px 24px 24px', minHeight: '150vh', color: 'var(--text-1)' }}>
       <h1>Notification integration</h1>
       <output data-testid="theme">{resolved}</output><output aria-label="Location">{location.pathname}</output>
@@ -66,14 +60,13 @@ function Content() {
       <Button onClick={() => setOpen('Drawer')}>Open Drawer</Button>
       <Button onClick={() => setOpen('Bottom drawer')}>Open Bottom drawer</Button>
       <Button onClick={() => setOpen('Retained')}>Open Retained dialog</Button>
-      <LegacyConfirm />
       <Dialog open={open === 'Dialog'} onClose={() => setOpen('')} title="Workspace editor"><Actions /></Dialog>
       <Dialog open={open === 'Retained'} onClose={() => setOpen('')} title="Retained editor" keepMounted><Actions /></Dialog>
       <Drawer open={open === 'Drawer'} onClose={() => setOpen('')} title="Workspace drawer"><Actions /></Drawer>
       <Drawer open={open === 'Bottom drawer'} onClose={() => setOpen('')} placement="bottom" height="auto" title="Workspace sheet"><Actions /></Drawer>
     </main>
     <ToastViewport />
-  </AntApp></ConfigProvider>;
+  </AppRoot>;
 }
 
 export function ToastsFixture() {

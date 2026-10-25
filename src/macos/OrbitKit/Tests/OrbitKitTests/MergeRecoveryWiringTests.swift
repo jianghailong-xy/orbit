@@ -62,13 +62,30 @@ final class MergeRecoveryWiringTests: XCTestCase {
         XCTAssertFalse(sheet.contains("presentationDetents"),
                        "full height only — no half height, so no floating glass on iOS 26")
         XCTAssertTrue(sheet.contains(".safeAreaInset(edge: .bottom"), "its step is pinned, reachable without scrolling")
-        XCTAssertTrue(sheet.contains("r.buttons(supported: supported)"), "and its steps are MergeRecovery.buttons'")
+        XCTAssertTrue(sheet.contains("r.buttons(supported: supported, repair: repair)"),
+                      "and its steps are MergeRecovery.buttons', led by the repair session")
 
         let pill = code(try slice(source("Views/WorktreeBar.swift"),
                                   from: "private func pill(", to: ".padding(.bottom, .composerBandGap)"))
         XCTAssertFalse(pill.contains(".frame(minHeight: 30)"),
                        "a minimum on the whole bar takes any shorter height it's offered, and what the bar holds spills out of it")
         XCTAssertTrue(pill.contains(".frame(minHeight: 24)"), "the row holds the 30pt collapsed bar instead")
+    }
+
+    /// The owner's report, 2026-10-09: Merge pressed just after sending a message came back "wait for
+    /// the current turn to finish before merging". The bar held Merge back only on `.running`, and a
+    /// sent message queues its turn first. The bar and this sheet now share one gate, and both hand
+    /// it the send in flight and the sub-agents still at work.
+    func testTheBarAndTheSheetHoldMergeOnTheSameTurnGate() throws {
+        let pill = code(try slice(source("Views/WorktreeBar.swift"), from: "private func pill(", to: "let primary = "))
+        let review = code(try slice(source("Views/MergeRecoverySheet.swift"),
+                                    from: "private func review(", to: "let working = "))
+        for (name, gate) in [("bar", pill), ("sheet", review)] {
+            XCTAssertTrue(gate.contains("WorktreeBarLogic.turnActive("), "the \(name) reads the shared gate")
+            XCTAssertTrue(gate.contains("runningSubagents: session?.runningSubagentCount"), "the \(name) counts sub-agents")
+            XCTAssertTrue(gate.contains("sending: console.sending || console.awaitingReply"), "the \(name) counts the send")
+            XCTAssertFalse(gate.contains("== .running"), "the \(name) keeps no status check of its own")
+        }
     }
 
     /// The owner's report, 2026-10-01: the review led with a file diff the branch bar already shows,
@@ -86,5 +103,77 @@ final class MergeRecoveryWiringTests: XCTestCase {
         XCTAssertTrue(review.contains("r.reviewNote"))
         XCTAssertFalse(sheet.contains("The local-only commits above"), "the note is the model's, which checks there are some")
         XCTAssertFalse(review.contains("Saved repair branch"), "the repair branch lives behind the branches row")
+    }
+
+    /// The owner's report, 2026-10-11: a repair session waiting for its owner read "Repair session
+    /// completed · Ready to check again" while the step pinned under it still said "Resolve in repair
+    /// session". The row is now `MergeRepairRow`'s — six states, its words — and so are the steps.
+    func testTheRepairRowIsMergeRepairRows() throws {
+        let sheet = code(try source("Views/MergeRecoverySheet.swift"))
+        let review = try slice(sheet, from: "private func review(", to: ".safeAreaInset(edge: .bottom")
+        XCTAssertTrue(review.contains("let repair = MergeRepairRow(detail: d)"))
+        let row = try slice(sheet, from: "private func repairStatus(", to: ".accessibilityHint(")
+        XCTAssertTrue(row.contains("Text(repair.headline)"))
+        XCTAssertTrue(row.contains("repair.status()"))
+        XCTAssertTrue(row.contains("openRepair(repair.id)"), "tapping it opens that session")
+        XCTAssertFalse(sheet.contains("Repair session completed"), "AWAITING_INPUT is no longer \"completed\"")
+    }
+
+    /// While the server checks what the repair did, the header says so and the last check's findings fade
+    /// under it; Opening the repair is never held back by the repair being at work, and leaving the review
+    /// comes first, so the session opens in view rather than under the sheet.
+    func testTheSheetFollowsTheRepairLoop() throws {
+        let sheet = code(try source("Views/MergeRecoverySheet.swift"))
+        let review = try slice(sheet, from: "private func review(", to: ".safeAreaInset(edge: .bottom")
+        XCTAssertTrue(review.contains(".opacity(checking ? 0.4 : 1)"), "the old snapshot fades")
+        XCTAssertTrue(try slice(sheet, from: "private func header(", to: ".padding(.vertical, 4)")
+            .contains("Text(\"Checking the repair…\")"))
+        let actions = try slice(sheet, from: "private func actions(", to: ".padding(.horizontal, 16)")
+        XCTAssertTrue(actions.contains(".disabled(primary.waiting || (primary.action != .openRepair && blocked))"))
+        XCTAssertTrue(actions.contains("if let note = b.note"), "\"Orbit checks again when the repair stops.\"")
+        let open = try slice(sheet, from: "private func openRepair(", to: "\n    }")
+        let left = try XCTUnwrap(open.range(of: "dismiss()"))
+        let went = try XCTUnwrap(open.range(of: "app.openProjectCoordinator("))
+        XCTAssertLessThan(left.upperBound, went.lowerBound)
+        XCTAssertTrue(try slice(sheet, from: "private func run(", to: "private func openRepair(")
+            .contains("case .confirmLanded: await console.worktree.recoverMerge(action: \"confirm-landed\""),
+                      "Done is the server's confirm-landed")
+    }
+
+    /// ALREADY_LANDED is laid out as the board's ⑥: what origin has, the branches, Done — no repair row
+    /// (nothing is left to repair), no diagnostic, no push.
+    func testAnAlreadyLandedSessionIsLaidOutAsTheBoardsSixth() throws {
+        let sheet = code(try source("Views/MergeRecoverySheet.swift"))
+        let review = try slice(sheet, from: "private func review(", to: ".safeAreaInset(edge: .bottom")
+        XCTAssertTrue(review.contains("if landed {\n                landedSections(d, r, close: close)"),
+                      "its own sections in place of the review's (no repair row: MergeRepairRow has none for it)")
+        let landed = try slice(sheet, from: "private func landedSections(", to: "private func checkRow(")
+        for piece in ["MergeRecoveryCommitRow(commit: $0, landed: true)", "Text(\"On origin/\\(target)\")",
+                      "r.landedByContentNote", "r.landedLocalNote", "RecoveryRouteRow("] {
+            XCTAssertTrue(landed.contains(piece), "no \(piece)")
+        }
+        let lede = try slice(sheet, from: "private func lede(", to: "\n    }")
+        XCTAssertTrue(lede.contains("\"Some files in the repair worktree are still unresolved.\""))
+        XCTAssertTrue(lede.contains("r.landedSummary()"))
+    }
+
+    /// The coordinator's send-back, 2026-10-19: on the Mac, ④'s footnote was cut to one line ("…only this
+    /// file conflicts with the new…"). The footers that carry the board's sentences may grow to their height.
+    func testTheBoardsFootnotesAreDrawnWhole() throws {
+        let sheet = code(try source("Views/MergeRecoverySheet.swift"))
+        let helper = try slice(sheet, from: "private func footnote(", to: "\n    }")
+        XCTAssertTrue(helper.contains(".fixedSize(horizontal: false, vertical: true)"), "it grows to its height")
+        XCTAssertTrue(helper.contains(".lineLimit(nil)"), "with no line limit")
+        for note in ["r.targetMovedNote", "r.landedByContentNote", "r.landedLocalNote"] {
+            XCTAssertTrue(sheet.contains("if let note = \(note) { footnote(note) }"), "\(note) is a whole footnote")
+        }
+    }
+
+    /// The server checks the recovery after a repair round, and nothing tells the console: its poll reads
+    /// on until that check shows.
+    func testThePollReadsOnUntilTheRepairsCheckShows() throws {
+        let poll = try slice(code(try source("WorktreeModel.swift")), from: "func startPolling() async {", to: "\n    }")
+        XCTAssertTrue(poll.contains("MergeRepairRow.awaitsCheck($0)"))
+        XCTAssertTrue(poll.contains("guard pending || live || repairRunning || repairCheck else {"))
     }
 }

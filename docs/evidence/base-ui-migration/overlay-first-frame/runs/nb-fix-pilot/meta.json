@@ -1,0 +1,16 @@
+{
+ "label": "nb-fix-pilot",
+ "step": "pilot",
+ "tree": "/mnt/data/tmp/overlay-first-frame-34brok/run",
+ "command": "cd src/web && P32_SNAPSHOTS=/mnt/data/tmp/overlay-first-frame-34brok/runs/nb-fix-pilot/shots P32_OUTPUT=/mnt/data/tmp/overlay-first-frame-34brok/runs/nb-fix-pilot/results npx playwright test -c ui-migration/pilot.config.mjs ui-migration/pilot.browser.mjs --update-snapshots=all",
+ "commit": "c4c94c924e6163abd1bcff74d376899f69c4a8a0",
+ "webChanges": [],
+ "webDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "startedAt": "2026-10-08T15:09:12Z",
+ "endedAt": "2026-10-08T15:13:21+00:00",
+ "loadAverage": {
+  "start": "27.00 30.96 28.73",
+  "end": "21.27 23.77 26.11"
+ },
+ "exitCode": 0
+}

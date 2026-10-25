@@ -1,0 +1,33 @@
+fix(clients): every plan sentence names the System model while the server drafts
+
+The first delivery changed the line beside Draft plan and left the rest of the
+plan page saying the space's provider drafts it — the plan's empty body and
+the Redraft… dialog named `local-vllm` while the card above them named the
+System model. The review of that delivery asked for the drafter to be fixed
+wherever the plan's copy names one, for the empty page's note to keep the half
+that still holds, and for the native compile to be proved on CI.
+
+- `WIKI_PLAN_DRAFTER_SERVER` / `WikiPlanCopy.drafterServer` ("System model"):
+  taken by the empty page's body (`wikiPlanEmptyText`, `emptyText`), the
+  Redraft… dialog (`wikiPlanRedraftNote`, `redraftNote`) and the drafting
+  job's card (`wikiPlanJobCard`, `WikiPlanLogic.jobCard`) — the two ends read
+  one name from `src/shared/src/wiki-server-execution.fixture.json`;
+- the plan empty page's note keeps the sentence that still holds there:
+  `Runs on the server with the System model — usually 1–2 hours. Until you
+  confirm a plan, the Wiki shows its topic articles.`
+  (`WIKI_PLAN_EMPTY_NOTE_SERVER`, `WikiPlanCopy.emptyNoteServer`). Activity's
+  Plan card keeps the owner's short line, `System model · about 1–2 hours`;
+- the documents' build is P7's and is untouched;
+- tests: the web's lib and plan-page tests cover both modes for every sentence
+  (the empty page's body and note, the dialog, the drafting card), and
+  `WikiServerExecutionCopyParityTests` holds the native end to the web source
+  and the fixture; the plan/wiring parity tests moved with the signatures;
+- evidence: `docs/evidence/wiki-plan-server-note/` gains the plan empty page
+  under both modes, and `ci/` carries the client.yml probe that compiles the
+  three OrbitApp files the merge check cannot (`WikiPlanView.swift`,
+  `WikiDocScreens.swift`, `WikiModel.swift`).
+
+Verified: OrbitKit 3435 tests / 0 failures in docker swift:6.1, web vitest
+4743/4743, apiserver 4919/0, shared 406/406, compose topology 11/11.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

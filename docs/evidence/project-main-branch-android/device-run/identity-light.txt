@@ -1,0 +1,4 @@
+sha=abc7729acabef6c86ad50edb097cc9e103d6dad6
+dirty=false
+theme=light
+scope=controlled HTTP fixture (MockWebServer in this test); not a deployed account

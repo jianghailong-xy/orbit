@@ -1,0 +1,17 @@
+{
+ "command": "cd src/web && NO_COLOR=1 npx playwright test --config ui-migration/choices.config.mjs --list",
+ "commit": "069601b675c735a69263f4a75f8d4349c0877c77",
+ "webTree": "34ebe07972ab9680cad0775ad5f4169c39b5f98b",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-07T15:26:42Z",
+ "endedAt": "2026-10-07T15:26:43+00:00",
+ "loadAverage": {
+  "start": "48.65 36.98 28.91",
+  "end": [
+   "48.65",
+   "36.98",
+   "28.91"
+  ]
+ },
+ "exitCode": 0
+}

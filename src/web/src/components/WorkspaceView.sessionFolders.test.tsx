@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionMoveTargets } from '@orbit/shared';
@@ -144,10 +143,8 @@ async function mount(path: string, ready: () => void): Promise<void> {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[path]}>
-          <AntApp>
-            <WorkspaceView runner={RUNNER} />
-            <LocationProbe />
-          </AntApp>
+          <WorkspaceView runner={RUNNER} />
+          <LocationProbe />
           <ToastViewport />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -199,12 +196,17 @@ const listRow = (title: string): HTMLElement => {
   if (!found) throw new Error(`no list row titled ${title}`);
   return found;
 };
-const openMenu = (): HTMLElement | null =>
-  document.querySelector<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu');
+const openMenu = (): HTMLElement | null => document.querySelector<HTMLElement>('[role="menu"]:not([data-closed])');
 const menuItem = (label: string): HTMLElement | undefined =>
-  [...(openMenu()?.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item') ?? [])].find((el) =>
+  [...(openMenu()?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])].find((el) =>
     (el.textContent ?? '').trim().startsWith(label),
   );
+/** The folder name field New Folder… or Rename… opens in place: it opens once the menu has closed. */
+const nameField = async (): Promise<HTMLInputElement> => {
+  const field = () => mounted().querySelector<HTMLInputElement>('.session-folder-row.editing input');
+  await until(() => expect(field(), 'the name field is open').toBeTruthy());
+  return field()!;
+};
 const dialog = (): HTMLElement | null => document.querySelector<HTMLElement>('.move-dialog');
 const option = (label: string): HTMLButtonElement | undefined =>
   [...(dialog()?.querySelectorAll<HTMLButtonElement>('.move-dialog-option') ?? [])].find((el) =>
@@ -439,8 +441,8 @@ describe('managing folders', { timeout: 60_000 }, () => {
     await click(mounted().querySelector('.session-scope-menu'), 'the Open ▾ menu');
     await until(() => expect(menuItem('New Folder…')).toBeTruthy());
     await click(menuItem('New Folder…'), 'New Folder…');
-    const field = mounted().querySelector<HTMLInputElement>('.session-folder-row.editing input')!;
-    expect(field, 'the name field is open').toBeTruthy();
+    const field = await nameField();
+    expect(document.activeElement).toBe(field);
     await type(field, '  Design review ');
     await press(field, 'Enter');
 
@@ -457,7 +459,7 @@ describe('managing folders', { timeout: 60_000 }, () => {
     await click(mounted().querySelector('.session-scope-menu'), 'the Open ▾ menu');
     await until(() => expect(menuItem('New Folder…')).toBeTruthy());
     await click(menuItem('New Folder…'), 'New Folder…');
-    const field = mounted().querySelector<HTMLInputElement>('.session-folder-row.editing input')!;
+    const field = await nameField();
     await type(field, 'Release');
     await press(field, 'Enter');
 
@@ -477,8 +479,9 @@ describe('managing folders', { timeout: 60_000 }, () => {
     await until(() => expect(menuItem('Rename…')).toBeTruthy());
     await click(menuItem('Rename…'), 'Rename…');
 
-    const field = mounted().querySelector<HTMLInputElement>('.session-folder-row.editing input')!;
+    const field = await nameField();
     expect(field.value).toBe('Release');
+    expect(document.activeElement).toBe(field);
     await type(field, 'Release 1.0');
     await press(field, 'Enter');
 
@@ -493,13 +496,16 @@ describe('managing folders', { timeout: 60_000 }, () => {
     await until(() => expect(menuItem('Delete Folder…')).toBeTruthy());
     await click(menuItem('Delete Folder…'), 'Delete Folder…');
 
-    await until(() => expect(document.querySelector('.ant-modal-confirm')).not.toBeNull());
-    const confirm = document.querySelector<HTMLElement>('.ant-modal-confirm')!;
-    expect(confirm.querySelector('.ant-modal-confirm-title')?.textContent).toBe('Delete “Release”?');
-    expect(confirm.querySelector('.ant-modal-confirm-content')?.textContent).toBe(
+    await until(() => expect(document.querySelector('[role="alertdialog"]')).not.toBeNull());
+    const confirm = document.querySelector<HTMLElement>('[role="alertdialog"]')!;
+    // Named by its title, described by its sentence.
+    expect(document.getElementById(confirm.getAttribute('aria-labelledby') ?? '')?.textContent).toBe('Delete “Release”?');
+    expect(document.getElementById(confirm.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
       'Its sessions move back to the list. No session is deleted.',
     );
-    await click(confirm.querySelector('.ant-modal-confirm-btns .ant-btn-dangerous'), 'Delete');
+    const remove = [...confirm.querySelectorAll<HTMLElement>('button')].find((button) => button.textContent === 'Delete');
+    expect(remove?.classList.contains('orbit-button-danger')).toBe(true);
+    await click(remove, 'Delete');
 
     expect(apiModule.deleteSessionFolder).toHaveBeenCalledWith(RELEASE.id);
     await until(() => expect(folderNames()).toEqual(['Wiki']));
@@ -545,16 +551,20 @@ describe('Move', { timeout: 60_000 }, () => {
     );
     await click(option('Bugs'), 'the Bugs folder');
 
-    await until(() => expect(document.querySelector('.ant-modal-confirm')).not.toBeNull());
-    const confirm = document.querySelector<HTMLElement>('.ant-modal-confirm')!;
-    expect(confirm.querySelector('.ant-modal-confirm-title')?.textContent).toBe('Move to wikova-develop?');
+    // The question stacks on the Move dialog: an alert dialog, named by its title.
+    const question = () =>
+      [...document.querySelectorAll<HTMLElement>('[role="alertdialog"]')].find(
+        (el) => document.getElementById(el.getAttribute('aria-labelledby') ?? '')?.textContent === 'Move to wikova-develop?',
+      );
+    await until(() => expect(question()).toBeTruthy());
+    const confirm = question()!;
     expect([...confirm.querySelectorAll('.move-confirm-body p')].map((p) => p.textContent)).toEqual([
       'The conversation moves with it. Your next message continues it in wikova-develop.',
       '3 changed files aren’t merged into main yet. They stay on branch orbit/review-import-3fa21c in orbit.',
       'The session ends first.',
     ]);
-    const ok = confirm.querySelector<HTMLElement>('.ant-modal-confirm-btns .ant-btn-primary')!;
-    expect(ok.textContent).toBe('End and Move');
+    const ok = [...confirm.querySelectorAll<HTMLElement>('button')].find((button) => button.textContent === 'End and Move')!;
+    expect(ok.classList.contains('orbit-button-primary')).toBe(true);
     await click(ok, 'End and Move');
 
     await until(() => expect(apiModule.moveSession).toHaveBeenCalled());

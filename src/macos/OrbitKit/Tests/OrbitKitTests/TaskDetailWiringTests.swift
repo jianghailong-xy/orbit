@@ -120,6 +120,17 @@ final class TaskDetailWiringTests: XCTestCase {
         XCTAssertTrue(menu.contains("Task { await tasks.setStatus(task.id, .done) }"))
     }
 
+    /// The line under the presses says why a Run cannot be taken, or — on one it can take — that it
+    /// is the task's only start (`TaskDetailLogic.runNowHint`), the web's hover in words a phone shows.
+    func testTheLineUnderTheRunSaysWhyItCannotStartOrThatNothingElseWill() throws {
+        let view = try source(Self.tasksView)
+        let presses = try section(view, from: "private func actions(_ task: TaskItem) -> some View {",
+                                  to: "private func isOpenRun")
+        XCTAssertTrue(presses.contains(
+            "let hint = canStart(task) ? TaskDetailLogic.runNowHint(task) : runDisabledHint(task) {"))
+        XCTAssertTrue(presses.contains("Text(hint).font(.orbitLabel).foregroundStyle(.secondary)"))
+    }
+
     // MARK: the blocks
 
     func testEveryHeadingIsTheBrowsersWord() throws {
@@ -134,9 +145,9 @@ final class TaskDetailWiringTests: XCTestCase {
         let view = try source(Self.tasksView)
         let details = try section(view, from: "private func detailsSection(_ task: TaskItem) -> some View {",
                                   to: "private func detailRow(")
-        let order = try positions(["assigneePicker(task)", "suggestedPicker(task)", "providerPicker(task)",
-                                   "modelPicker(task)", "listPicker(task)", "TaskDetailCopy.startAtLabel",
-                                   "TaskDetailCopy.createdFromLabel"],
+        let order = try positions(["assigneePicker(task)", "suggestedPicker(task)", "enginePicker(task)",
+                                   "providerPicker(task)", "modelPicker(task)", "listPicker(task)",
+                                   "TaskDetailCopy.startAtLabel", "TaskDetailCopy.createdFromLabel"],
                                   in: details)
         XCTAssertEqual(order, order.sorted(), "the browser's field order")
         XCTAssertTrue(details.contains("editingSchedule = true"), "Start at opens its sheet")
@@ -144,8 +155,8 @@ final class TaskDetailWiringTests: XCTestCase {
         XCTAssertFalse(details.contains("detailRow(TaskDetailCopy.createdByLabel"))
         let pickers = try section(view, from: "private func assigneePicker(_ task: TaskItem)",
                                   to: "// MARK: dependencies")
-        XCTAssertEqual(pickers.components(separatedBy: ".pickerStyle(.menu)").count - 1, 4,
-                       "Assignee, Provider, Model and List are the platform's menu pickers")
+        XCTAssertEqual(pickers.components(separatedBy: ".pickerStyle(.menu)").count - 1, 5,
+                       "Assignee, Engine, Provider, Model and List are the platform's menu pickers")
     }
 
     // MARK: smart model selection (docs/model-routing-design.md §9)

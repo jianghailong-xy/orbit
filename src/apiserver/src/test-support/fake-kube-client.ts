@@ -3,7 +3,11 @@ import { randomUUID } from 'node:crypto';
 import {
   KubeAmbiguousError,
   KubeApiError,
+  KubeUnreachableError,
+  type ConfigMap,
+  type JsonPatchOperation,
   type KubeObject,
+  type KubePods,
   type KubeResource,
   type KubeWatchEvent,
   type ManagedKubeClient,
@@ -11,21 +15,49 @@ import {
   type PersistentVolumeClaim,
   type Pod,
   type Secret,
+  type VolumeAttachment,
 } from '../managed-runners/kube-client';
+import type { PodAdmissionRequest } from '../managed-runners/managed-runner-admission';
+import { podTerminated } from '../managed-runners/managed-runner-resources';
+import { TEST_MANAGER_USERNAME } from './managed-runner-profile.fixture';
 
 /**
- * An in-memory Kubernetes namespace for managed runner tests: the three resources the manager
- * uses, plus the PVs claims bind to. Several clients — several manager replicas — share one cluster.
+ * An in-memory Kubernetes namespace for managed runner tests: the resources the manager uses, plus
+ * the PVs claims bind to and the VolumeAttachments of the volumes Pods use. Several clients —
+ * several manager replicas — share one cluster.
  *
  * What it imitates of the API server: one object per name (a second create is 409 AlreadyExists),
- * server-assigned UIDs, delete preconditions by UID, label-selected list and watch. What a test
- * scripts: binding (a claim binds to a fresh CSI-backed PV at once unless `autoBind` is off), the
- * phase a Pod is created in, and faults — a create that commits and then times out, one that times
- * out without committing, or a server error — consumed in order by the matching call.
+ * server-assigned UIDs, delete preconditions by UID, label-selected list and watch, dry-run creates,
+ * a JSON Patch of a Pod (`test` and `remove`, all or nothing), finalizers on Pods (a deleted Pod
+ * with one stays, deletion stamped, until the last is removed), and — once a test installs one — a
+ * validating admission webhook every Pod create, update and patch passes through, with
+ * `failurePolicy: Fail` (a webhook that throws refuses the Pod). What a test scripts: binding (a
+ * claim binds to a fresh CSI-backed PV at once unless `autoBind` is off), the phase a Pod is created
+ * in, the kubelet (it reports a deleted Pod's containers stopped at once unless
+ * `kubeletReportsDeletions` is off, and a Pod without a finalizer goes as soon as it is deleted),
+ * attachment (a Pod's volume is attached to its node when it is stored, and detached when the last
+ * Pod using it is gone unless `autoDetach` is off), and faults — a create that commits and then
+ * times out, one that times out without committing, a server error, or an API server that cannot be
+ * reached — consumed in order by the matching call.
  */
 
-type Kind = 'persistentvolumeclaims' | 'secrets' | 'pods';
-export type FakeKubeOp = 'get' | 'create' | 'delete' | 'list' | 'watch' | 'getPersistentVolume';
+type Kind = 'persistentvolumeclaims' | 'secrets' | 'pods' | 'configmaps';
+export type FakeKubeOp =
+  | 'get'
+  | 'create'
+  | 'dryRunCreate'
+  | 'delete'
+  | 'patch'
+  | 'list'
+  | 'watch'
+  | 'getPersistentVolume'
+  | 'listVolumeAttachments';
+
+/** The installed admission webhook: refused, it says why. Throwing is the webhook failing. */
+export type FakeAdmissionWebhook = (request: PodAdmissionRequest) => Promise<{ allowed: boolean; message?: string }>;
+
+/** The name the fake API server gives the webhook in its refusals, as a ValidatingWebhookConfiguration would. */
+export const FAKE_ADMISSION_WEBHOOK_NAME = 'pods.managed-runner.orbit.dev';
 
 export interface FakeKubeFault {
   op: FakeKubeOp;
@@ -34,8 +66,9 @@ export interface FakeKubeFault {
    * `commit-then-timeout`: the object is stored, and the caller is told nothing definite.
    * `timeout`: nothing is stored, and the caller is told nothing definite.
    * `status`: nothing is stored; the API answers `status`.
+   * `unreachable`: nothing is stored; the API server could not be reached at all.
    */
-  mode: 'commit-then-timeout' | 'timeout' | 'status';
+  mode: 'commit-then-timeout' | 'timeout' | 'status' | 'unreachable';
   status?: number;
   /** How many matching calls it applies to; Infinity until cleared. Default 1. */
   times?: number;
@@ -52,16 +85,34 @@ const clone = <T>(value: T): T => structuredClone(value);
 export class FakeKubeCluster {
   readonly calls: FakeKubeCall[] = [];
   readonly persistentVolumes = new Map<string, PersistentVolume>();
+  readonly volumeAttachments = new Map<string, VolumeAttachment>();
   /** Bind each new claim to a fresh PV at once. */
   autoBind = true;
+  /** Detach a volume as soon as no stored Pod uses it. Off: it stays attached until `detach`. */
+  autoDetach = true;
   /** The phase a new Pod is stored in. */
   podPhase = 'Running';
   /** The node a new Pod is scheduled on. */
   podNode = 'node-a';
+  /**
+   * The kubelet of a deleted Pod stops its containers at once and reports them stopped (exit 0, as a
+   * runner that drained on SIGTERM ends). Off, it never does, as on a node that cannot answer.
+   */
+  kubeletReportsDeletions = true;
+  /** The validating admission webhook Pod creates and updates pass through; none until installed. */
+  admission?: FakeAdmissionWebhook;
+  /**
+   * A ResourceQuota in the namespace: object counts, enforced on every create (dry runs included) after
+   * the webhook, as the API server orders its admission. A create that would pass a count is refused 403
+   * "exceeded quota", nothing stored. Pods in a terminal phase do not count, as Kubernetes does not
+   * count them. None until set.
+   */
+  resourceQuota?: { name: string; hard: Partial<Record<'pods' | 'persistentvolumeclaims' | 'secrets', number>> };
   private readonly stores: Record<Kind, Map<string, KubeObject>> = {
     persistentvolumeclaims: new Map(),
     secrets: new Map(),
     pods: new Map(),
+    configmaps: new Map(),
   };
   private faults: FakeKubeFault[] = [];
   private version = 1;
@@ -69,16 +120,22 @@ export class FakeKubeCluster {
 
   constructor(readonly namespace = 'orbit-managed-test') {}
 
-  /** A client of this cluster, as one manager replica holds it. `delayMs` interleaves concurrent callers. */
-  client(options: { delayMs?: number } = {}): ManagedKubeClient {
+  /**
+   * A client of this cluster, as one manager replica holds it. `delayMs` interleaves concurrent
+   * callers; `username` is who the API server says is calling (the manager's identity by default).
+   */
+  client(options: { delayMs?: number; username?: string } = {}): ManagedKubeClient {
     const pause = async () => {
       await new Promise((resolve) => setTimeout(resolve, options.delayMs ?? 0));
     };
+    const username = options.username ?? TEST_MANAGER_USERNAME;
+    const configMaps = this.resource<ConfigMap>('configmaps', pause, username);
     return {
       namespace: this.namespace,
-      persistentVolumeClaims: this.resource<PersistentVolumeClaim>('persistentvolumeclaims', pause),
-      secrets: this.resource<Secret>('secrets', pause),
-      pods: this.resource<Pod>('pods', pause),
+      persistentVolumeClaims: this.resource<PersistentVolumeClaim>('persistentvolumeclaims', pause, username),
+      secrets: this.resource<Secret>('secrets', pause, username),
+      pods: this.pods(pause, username),
+      configMaps: { get: configMaps.get },
       getPersistentVolume: async (name) => {
         await pause();
         this.calls.push({ op: 'getPersistentVolume', name });
@@ -86,7 +143,65 @@ export class FakeKubeCluster {
         const pv = this.persistentVolumes.get(name);
         return pv ? clone(pv) : null;
       },
+      listVolumeAttachments: async () => {
+        await pause();
+        this.calls.push({ op: 'listVolumeAttachments' });
+        this.fault('listVolumeAttachments');
+        return [...this.volumeAttachments.values()].map((va) => clone(va));
+      },
     };
+  }
+
+  /**
+   * A Pod created through the API server by someone other than the manager — a tenant, an
+   * operator, a controller — through the same admission and name uniqueness the manager meets.
+   */
+  async submitPod(pod: Pod, options: { username: string; dryRun?: boolean }): Promise<Pod> {
+    return this.resource<Pod>('pods', async () => undefined, options.username).create(pod, { dryRun: options.dryRun });
+  }
+
+  /** An update of a stored Pod through the API server, admission included (`subResource` as sent). */
+  async updatePod(name: string, change: (pod: Pod) => void, options: { username: string; subResource?: string }): Promise<Pod> {
+    const before = this.stores.pods.get(name) as Pod | undefined;
+    if (!before) throw new KubeApiError(404, 'NotFound', `pods "${name}" not found`);
+    const after = clone(before);
+    change(after);
+    await this.admit('UPDATE', after, before, options.username, false, options.subResource);
+    after.metadata.resourceVersion = String(this.version++);
+    this.stores.pods.set(name, after);
+    this.emit('pods', 'MODIFIED', after);
+    return clone(after);
+  }
+
+  /** The kubelet reports every container of a stored Pod stopped: a terminal phase it vouches for (`reason` the runner's, e.g. OOMKilled). */
+  stopPod(name: string, exitCode = 0, reason = exitCode ? 'Error' : 'Completed'): void {
+    this.mutate<Pod>('pods', name, (pod) => reportStopped(pod, exitCode, reason));
+    this.settleDeletion(name);
+  }
+
+  /**
+   * A deletion through the API server, as an operator's `kubectl delete pod`, an eviction or a drain
+   * sends it: a Pod with a finalizer stays, deletion stamped, and its kubelet reports it stopped (unless
+   * `kubeletReportsDeletions` is off); one without goes at once.
+   */
+  async deletePod(name: string, options: { uid?: string; username?: string } = {}): Promise<void> {
+    await this.pods(async () => undefined, options.username ?? 'operator').delete(name, { uid: options.uid });
+  }
+
+  /** PodGC marks a Pod of an unreachable or out-of-service node Failed: the API's word, not the kubelet's. */
+  markFailedByControlPlane(name: string): void {
+    this.mutate<Pod>('pods', name, (pod) => {
+      pod.status = {
+        ...pod.status,
+        phase: 'Failed',
+        conditions: [...(pod.status?.conditions ?? []), { type: 'DisruptionTarget', status: 'True', reason: 'DeletionByPodGC' }],
+      };
+    });
+  }
+
+  /** The volume's attachment is gone, as the attach/detach controller would remove it. */
+  detach(pvName: string): void {
+    for (const [name, va] of this.volumeAttachments) if (va.spec.source.persistentVolumeName === pvName) this.volumeAttachments.delete(name);
   }
 
   inject(fault: FakeKubeFault): void {
@@ -125,11 +240,12 @@ export class FakeKubeCluster {
     this.emit(kind, 'MODIFIED', found);
   }
 
-  /** Remove an object as an operator would, whatever its UID. */
+  /** Remove an object as an operator would, whatever its UID and finalizers (a force delete of a Pod whose finalizer was taken off). */
   remove(kind: Kind, name: string): void {
     const found = this.stores[kind].get(name);
     if (!found) return;
     this.stores[kind].delete(name);
+    if (kind === 'pods') this.detachUnused();
     this.emit(kind, 'DELETED', found);
   }
 
@@ -141,11 +257,20 @@ export class FakeKubeCluster {
     const pv: PersistentVolume = {
       apiVersion: 'v1',
       kind: 'PersistentVolume',
-      metadata: { name: pvName, uid: randomUUID(), resourceVersion: String(this.version++) },
+      // Made for the claim, so never before it: the API server stamps both.
+      metadata: { name: pvName, uid: randomUUID(), resourceVersion: String(this.version++), creationTimestamp: new Date().toISOString() },
       spec: {
         storageClassName: pvc.spec.storageClassName,
         claimRef: { namespace: this.namespace, name, uid: pvc.metadata.uid },
-        csi: { driver: 'rbd.csi.ceph.com', volumeHandle: `0001-0009-test-0000000000000001-${randomUUID()}` },
+        // Ceph-CSI names the pool and the RBD image in the volume's attributes.
+        csi: (() => {
+          const image = randomUUID();
+          return {
+            driver: 'rbd.csi.ceph.com',
+            volumeHandle: `0001-0009-test-0000000000000001-${image}`,
+            volumeAttributes: { clusterID: 'test', pool: 'orbit-test', imageName: `csi-vol-${image}` },
+          };
+        })(),
         persistentVolumeReclaimPolicy: 'Retain',
       },
       status: { phase: 'Bound' },
@@ -163,9 +288,27 @@ export class FakeKubeCluster {
     fault.times = (fault.times ?? 1) - 1;
     if (fault.times <= 0) this.faults.splice(index, 1);
     if (fault.mode === 'status') throw new KubeApiError(fault.status ?? 500, 'InternalError', `injected ${fault.status ?? 500}`);
+    if (fault.mode === 'unreachable') throw new KubeUnreachableError(`injected: ${op} never reached the API server`);
     // Only a create can commit before its answer is lost; any other call simply has no answer.
     if (op !== 'create') throw new KubeAmbiguousError(`injected timeout of ${op}`);
     return fault;
+  }
+
+  /** The ResourceQuota's admission of one more object of `kind`, in the words the API server refuses with. */
+  private enforceQuota(kind: Kind, name: string): void {
+    const quota = this.resourceQuota;
+    const hard = quota && kind !== 'configmaps' ? quota.hard[kind] : undefined;
+    if (hard === undefined) return;
+    const counted = [...this.stores[kind].values()].filter((object) => {
+      const phase = kind === 'pods' ? (object as unknown as Pod).status?.phase : undefined;
+      return phase !== 'Succeeded' && phase !== 'Failed';
+    });
+    if (counted.length + 1 <= hard) return;
+    throw new KubeApiError(
+      403,
+      'Forbidden',
+      `${kind} "${name}" is forbidden: exceeded quota: ${quota!.name}, requested: ${kind}=1, used: ${kind}=${counted.length}, limited: ${kind}=${hard}`,
+    );
   }
 
   private store<T extends KubeObject>(kind: Kind, object: T): T {
@@ -177,6 +320,7 @@ export class FakeKubeCluster {
       const pod = object as unknown as Pod;
       pod.spec.nodeName ??= this.podNode;
       pod.status ??= { phase: this.podPhase };
+      this.attach(pod);
     }
     if (kind === 'persistentvolumeclaims') {
       (object as unknown as PersistentVolumeClaim).status ??= { phase: 'Pending' };
@@ -189,13 +333,119 @@ export class FakeKubeCluster {
     return clone(object);
   }
 
+  /** The attach/detach controller: each bound volume a scheduled Pod uses is attached to its node. */
+  private attach(pod: Pod): void {
+    for (const volume of pod.spec.volumes ?? []) {
+      const claim = volume.persistentVolumeClaim && (this.stores.persistentvolumeclaims.get(volume.persistentVolumeClaim.claimName) as PersistentVolumeClaim | undefined);
+      const pvName = claim?.spec.volumeName;
+      if (!pvName || !pod.spec.nodeName) continue;
+      const name = `csi-${pvName}-${pod.spec.nodeName}`;
+      if (this.volumeAttachments.has(name)) continue;
+      this.volumeAttachments.set(name, {
+        apiVersion: 'storage.k8s.io/v1',
+        kind: 'VolumeAttachment',
+        metadata: { name, uid: randomUUID(), resourceVersion: String(this.version++) },
+        spec: { attacher: 'rbd.csi.ceph.com', nodeName: pod.spec.nodeName, source: { persistentVolumeName: pvName } },
+        status: { attached: true },
+      });
+    }
+  }
+
+  /** …and detaches a volume once no stored Pod uses it, unless the test holds it attached. */
+  private detachUnused(): void {
+    if (!this.autoDetach) return;
+    const used = new Set<string>();
+    for (const object of this.stores.pods.values()) {
+      for (const volume of (object as Pod).spec.volumes ?? []) {
+        const claim = volume.persistentVolumeClaim && (this.stores.persistentvolumeclaims.get(volume.persistentVolumeClaim.claimName) as PersistentVolumeClaim | undefined);
+        if (claim?.spec.volumeName) used.add(claim.spec.volumeName);
+      }
+    }
+    for (const [name, va] of this.volumeAttachments) {
+      if (!used.has(va.spec.source.persistentVolumeName ?? '')) this.volumeAttachments.delete(name);
+    }
+  }
+
+  /** A Pod being deleted goes once no finalizer holds it and its kubelet is done with it (it has ended). */
+  private settleDeletion(name: string): void {
+    const pod = this.stores.pods.get(name) as Pod | undefined;
+    if (!pod?.metadata.deletionTimestamp || (pod.metadata.finalizers ?? []).length > 0 || !podTerminated(pod)) return;
+    this.stores.pods.delete(name);
+    this.detachUnused();
+    this.emit('pods', 'DELETED', pod);
+  }
+
+  /** The Pods of the namespace: a resource like the others, finalizers kept on delete, and a JSON Patch. */
+  private pods(pause: () => Promise<void>, username: string): KubePods {
+    const objects = this.stores.pods;
+    const base = this.resource<Pod>('pods', pause, username);
+    return {
+      ...base,
+      delete: async (name, options) => {
+        const found = objects.get(name) as Pod | undefined;
+        if (!found || (found.metadata.finalizers ?? []).length === 0) return base.delete(name, options);
+        await pause();
+        this.calls.push({ op: 'delete', kind: 'pods', name });
+        this.fault('delete', 'pods');
+        if (options?.uid && found.metadata.uid !== options.uid) {
+          throw new KubeApiError(409, 'Conflict', `Precondition failed: UID in precondition: ${options.uid}, UID in object meta: ${found.metadata.uid}`);
+        }
+        // Held by its finalizers: the deletion is stamped, the kubelet stops it, and it stays.
+        found.metadata.deletionTimestamp ??= new Date().toISOString();
+        if (this.kubeletReportsDeletions && !podTerminated(found)) reportStopped(found, 0, 'Completed');
+        found.metadata.resourceVersion = String(this.version++);
+        this.emit('pods', 'MODIFIED', found);
+        this.settleDeletion(name);
+      },
+      patch: async (name, operations) => {
+        await pause();
+        this.calls.push({ op: 'patch', kind: 'pods', name });
+        this.fault('patch', 'pods');
+        const before = objects.get(name) as Pod | undefined;
+        if (!before) throw new KubeApiError(404, 'NotFound', `pods "${name}" not found`);
+        const after = applyJsonPatch(before, operations);
+        await this.admit('UPDATE', after, before, username, false);
+        after.metadata.resourceVersion = String(this.version++);
+        objects.set(name, after);
+        this.emit('pods', 'MODIFIED', after);
+        this.settleDeletion(name);
+        return clone(after);
+      },
+    };
+  }
+
+  /** The installed webhook's answer, as the API server applies it with `failurePolicy: Fail`. */
+  private async admit(operation: 'CREATE' | 'UPDATE', object: Pod, oldObject: Pod | null, username: string, dryRun: boolean, subResource?: string): Promise<void> {
+    if (!this.admission) return;
+    let answer: { allowed: boolean; message?: string };
+    try {
+      answer = await this.admission({
+        uid: randomUUID(),
+        resource: { group: '', version: 'v1', resource: 'pods' },
+        ...(subResource ? { subResource } : {}),
+        operation,
+        namespace: this.namespace,
+        name: object.metadata.name,
+        userInfo: { username },
+        object: clone(object),
+        oldObject: oldObject ? clone(oldObject) : null,
+        dryRun,
+      });
+    } catch (error) {
+      throw new KubeApiError(500, 'InternalError', `Internal error occurred: failed calling webhook "${FAKE_ADMISSION_WEBHOOK_NAME}": ${(error as Error).message}`);
+    }
+    if (!answer.allowed) {
+      throw new KubeApiError(403, 'Forbidden', `admission webhook "${FAKE_ADMISSION_WEBHOOK_NAME}" denied the request: ${answer.message ?? 'without explanation'}`);
+    }
+  }
+
   private emit(kind: Kind, type: KubeWatchEvent<KubeObject>['type'], object: KubeObject): void {
     for (const watcher of this.watchers) {
       if (watcher.kind === kind && selects(watcher.selector, object)) watcher.onEvent({ type, object: clone(object) });
     }
   }
 
-  private resource<T extends KubeObject>(kind: Kind, pause: () => Promise<void>): KubeResource<T> {
+  private resource<T extends KubeObject>(kind: Kind, pause: () => Promise<void>, username: string): KubeResource<T> {
     const objects = this.stores[kind];
     return {
       get: async (name) => {
@@ -205,11 +455,20 @@ export class FakeKubeCluster {
         const found = objects.get(name);
         return found ? (clone(found) as T) : null;
       },
-      create: async (object) => {
+      create: async (object, options) => {
         await pause();
+        if (options?.dryRun) {
+          // Admission runs and answers; nothing is stored, and no fault meant for a create applies.
+          this.calls.push({ op: 'dryRunCreate', kind, name: object.metadata.name });
+          if (kind === 'pods') await this.admit('CREATE', clone(object) as unknown as Pod, null, username, true);
+          this.enforceQuota(kind, object.metadata.name);
+          return clone(object);
+        }
         this.calls.push({ op: 'create', kind, name: object.metadata.name });
         const fault = this.fault('create', kind);
         if (fault?.mode === 'timeout') throw new KubeAmbiguousError(`injected timeout before ${kind} ${object.metadata.name} committed`);
+        if (kind === 'pods') await this.admit('CREATE', clone(object) as unknown as Pod, null, username, false);
+        this.enforceQuota(kind, object.metadata.name);
         if (objects.has(object.metadata.name)) {
           throw new KubeApiError(409, 'AlreadyExists', `${kind} "${object.metadata.name}" already exists`);
         }
@@ -227,6 +486,7 @@ export class FakeKubeCluster {
           throw new KubeApiError(409, 'Conflict', `Precondition failed: UID in precondition: ${options.uid}, UID in object meta: ${found.metadata.uid}`);
         }
         objects.delete(name);
+        if (kind === 'pods') this.detachUnused();
         this.emit(kind, 'DELETED', found);
       },
       list: async (options) => {
@@ -251,6 +511,47 @@ export class FakeKubeCluster {
       },
     };
   }
+}
+
+/** The kubelet's report of every container of `pod` stopped (`reason` the runner's, e.g. OOMKilled). */
+function reportStopped(pod: Pod, exitCode: number, reason: string): void {
+  const finishedAt = new Date().toISOString();
+  const statuses = (key: 'initContainers' | 'containers') =>
+    (Array.isArray(pod.spec[key]) ? (pod.spec[key] as Array<{ name: string }>) : []).map((c) => ({
+      name: c.name,
+      state: { terminated: key === 'initContainers' ? { exitCode: 0, reason: 'Completed', finishedAt } : { exitCode, reason, finishedAt } },
+    }));
+  pod.status = {
+    ...pod.status,
+    phase: exitCode ? 'Failed' : 'Succeeded',
+    initContainerStatuses: statuses('initContainers'),
+    containerStatuses: statuses('containers'),
+  };
+}
+
+/**
+ * `operations` applied to a copy of `pod`, all or none, as the API server applies a JSON Patch: the
+ * paths a managed Pod's patch uses (`/metadata/uid`, `/metadata/finalizers/<i>`). A `test` that does
+ * not hold, or a path it cannot follow, is the API server's 422.
+ */
+function applyJsonPatch(pod: Pod, operations: JsonPatchOperation[]): Pod {
+  const after = clone(pod);
+  const invalid = (why: string) => new KubeApiError(422, 'Invalid', `the server rejected our request due to an error in our request: ${why}`);
+  for (const { op, path, value } of operations) {
+    const finalizer = /^\/metadata\/finalizers\/(\d+)$/.exec(path);
+    if (path === '/metadata/uid' && op === 'test') {
+      if (after.metadata.uid !== value) throw invalid(`testing value ${path} failed`);
+    } else if (finalizer) {
+      const at = Number(finalizer[1]);
+      const list = after.metadata.finalizers ?? [];
+      if (at >= list.length) throw invalid(`${path}: no such element`);
+      if (op === 'test' && list[at] !== value) throw invalid(`testing value ${path} failed`);
+      if (op === 'remove') after.metadata.finalizers = list.filter((_, i) => i !== at);
+    } else {
+      throw invalid(`${op} ${path} is not a patch this fake applies`);
+    }
+  }
+  return after;
 }
 
 /** `a=b,c=d` equality selectors, which is all the managed runner manager would ever use. */
@@ -292,7 +593,9 @@ export function tripwireKubeClient(record: string[]): ManagedKubeClient {
     namespace: 'tripwire',
     persistentVolumeClaims: resource('persistentVolumeClaims'),
     secrets: resource('secrets'),
-    pods: resource('pods'),
+    pods: { ...resource('pods'), patch: trap('pods.patch') },
+    configMaps: { get: trap('configMaps.get') },
     getPersistentVolume: trap('getPersistentVolume'),
+    listVolumeAttachments: trap('listVolumeAttachments'),
   };
 }

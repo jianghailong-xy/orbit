@@ -211,10 +211,12 @@ exit 97
     const provider = await call('POST', '/providers/mine', { label: 'IG Harness mock', runtime: 'dsh', baseUrl: mockURL, apiKey: MOCK_KEY, models: [] });
     assert.equal(provider.status, 201, `dsh provider: ${provider.text}`);
     const harness = provider.json.slug;
-    say(`==> provider ${harness} (runtime dsh) → ${mockURL}`);
+    // An older client's Harness form is stored as a DeepSeek key (docs/provider-engine-contract.md §3.6),
+    // which runs on Claude Code unless DeepSeek Harness is named as the engine.
+    say(`==> provider ${harness} (a DeepSeek key, run on DeepSeek Harness) → ${mockURL}`);
 
     const createSession = (workspaceId, providerSlug, prompt) =>
-      call('POST', '/sessions', { workspaceId, provider: providerSlug, prompt, permissionMode: 'dontAsk' });
+      call('POST', '/sessions', { workspaceId, provider: providerSlug, ...(providerSlug === harness ? { engine: 'dsh' } : {}), prompt, permissionMode: 'dontAsk' });
     const publicIdOf = (created) => created.json?.publicId ?? created.json?.id;
     const sessionRow = (uuid) => one(`SELECT id::text AS id, status::text AS status, num_turns, error, runtime_session_id,
       assigned_runner_id::text AS runner, finished_at, end_reason::text AS end_reason,

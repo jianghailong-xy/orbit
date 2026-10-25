@@ -10,7 +10,7 @@ import { WikiRolloutGuard } from './wiki-rollout';
  * The articles, on the user door (contracts/wiki.contract.json `articles.routes`): the owner reads a
  * space's category directory, one topic's article or one of its subtopic parts with the footnotes
  * resolved, and the A–Z index. Reads only — the door has no route that writes an article, which is
- * a maintenance run's work (`RunnerWikiArticlesController`).
+ * the server's own work (its `articles` job, and an import its container runs: `WikiArticles.write`).
  *
  * A controller of its own rather than more routes on `WikiController`, so the specs that stand that
  * one up by hand construct it exactly as before. Another account's space, topic or part is the plain

@@ -1,0 +1,72 @@
+{
+  "exec": {
+    "code": 137,
+    "stderr": "command terminated with exit code 137\n",
+    "stdout": ""
+  },
+  "generation": 3,
+  "owner": "amy",
+  "pod": "d2087fa2-9e39-4693-a481-ae99ee671b8f",
+  "sentAt": "2026-10-18T09:10:44.560+00:00",
+  "terminated": {
+    "exitCode": 137,
+    "finishedAt": "2026-10-18T09:10:47Z",
+    "reason": "OOMKilled"
+  },
+  "timeline": [
+    {
+      "at": "2026-10-18T09:10:47.554+00:00",
+      "containers": [
+        {
+          "private-volume-directories": [
+            "terminated"
+          ]
+        },
+        {
+          "runner": [
+            "running"
+          ]
+        }
+      ],
+      "deleting": false,
+      "phase": "Running",
+      "present": true
+    },
+    {
+      "at": "2026-10-18T09:10:49.143+00:00",
+      "containers": [
+        {
+          "private-volume-directories": [
+            "terminated"
+          ]
+        },
+        {
+          "runner": [
+            "terminated"
+          ]
+        }
+      ],
+      "deleting": false,
+      "phase": "Running",
+      "present": true
+    },
+    {
+      "at": "2026-10-18T09:10:50.202+00:00",
+      "containers": [
+        {
+          "private-volume-directories": [
+            "terminated"
+          ]
+        },
+        {
+          "runner": [
+            "terminated"
+          ]
+        }
+      ],
+      "deleting": false,
+      "phase": "Failed",
+      "present": true
+    }
+  ]
+}

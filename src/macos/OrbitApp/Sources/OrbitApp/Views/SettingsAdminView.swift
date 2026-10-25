@@ -24,6 +24,10 @@ struct SettingsView: View {
     @State private var orchestration = true
     /// The account's switch for smart model selection. Absent on the server means off.
     @State private var modelRouting = false
+    /// The account's switch for suggested replies. Absent on the server means on.
+    @State private var promptSuggestions = true
+    /// The account's switch for session recaps. Absent on the server means on.
+    @State private var recaps = true
     @State private var loaded = false
 
     @State private var curPw = ""
@@ -85,6 +89,12 @@ struct SettingsView: View {
                 Toggle(SettingsCopy.smartModelSelection, isOn: $modelRouting)
                 Text(SettingsCopy.smartModelSelectionHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
+                Toggle(SettingsCopy.suggestedReplies, isOn: $promptSuggestions)
+                Text(SettingsCopy.suggestedRepliesHint)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                Toggle(SettingsCopy.sessionRecaps, isOn: $recaps)
+                Text(SettingsCopy.sessionRecapsHint)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
                 Button("Save preferences") {
                     Task { await model.savePreferences(preferencesPatch) }
                 }
@@ -142,6 +152,8 @@ struct SettingsView: View {
         // afford.
         .onChange(of: orchestration) { saveOrchestration() }
         .onChange(of: modelRouting) { saveModelRouting() }
+        .onChange(of: promptSuggestions) { savePromptSuggestions() }
+        .onChange(of: recaps) { saveRecaps() }
         .task { await model.accessTokens?.load() }
         .onAppear {
             guard !loaded else { return }
@@ -154,6 +166,8 @@ struct SettingsView: View {
                 ?? AgentDefaults.defaultPermissionMode
             orchestration = p?.enableOrchestration ?? true
             modelRouting = p?.smartModelSelection ?? false
+            promptSuggestions = p?.suggestedReplies ?? true
+            recaps = p?.showRecaps ?? true
             name = model.user?.name ?? ""
         }
         .onChange(of: name) { accountMessage = nil }
@@ -188,6 +202,18 @@ struct SettingsView: View {
     private func saveModelRouting() {
         guard (model.user?.preferences?.smartModelSelection ?? false) != modelRouting else { return }
         Task { await model.savePreferences(UpdatePreferencesRequest(modelRouting: modelRouting)) }
+    }
+
+    /// And for suggested replies.
+    private func savePromptSuggestions() {
+        guard (model.user?.preferences?.suggestedReplies ?? true) != promptSuggestions else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(promptSuggestions: promptSuggestions)) }
+    }
+
+    /// And for session recaps.
+    private func saveRecaps() {
+        guard (model.user?.preferences?.showRecaps ?? true) != recaps else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(recaps: recaps)) }
     }
 }
 

@@ -1,0 +1,22 @@
+== account a, container mr-01a14aea-881f-71ea-ac19-0bcb23607ce2 (generation 1)
+== /tmp at 2026-10-17T17:31:29Z in 197be8004309, as 10001:10001
+-- mount: tmpfs /tmp tmpfs rw,nosuid,nodev,relatime,size=1048576k,inode64 0 0
+-- environment: TMPDIR=unset GOTMPDIR=unset; go env GOTMPDIR='' GOCACHE='/var/lib/orbit/home/.cache/go-build'
+-- size: tmpfs          1073741824 12288 1073729536   1% /tmp
+  a script ran from /tmp
+a script run from /tmp: exit=0
+a program copied to /tmp: exit=0
+  a Go binary ran from /tmp
+a Go binary built into /tmp: exit=0
+ok  	d8	0.001s
+?   	d8/hello	[no test files]
+go test, a module in /tmp, the default temporary directory: exit=0
+ok  	d8	0.001s
+?   	d8/hello	[no test files]
+go test, a module on the data volume (/var/lib/orbit/home/d8-go), the default temporary directory: exit=0
+  a Go binary ran from /tmp
+go run, the default temporary directory: exit=0
+-- the size limit: writing 1100 MiB into /tmp
+dd exit=1: dd: error writing '/tmp/d8-fill': No space left on device 1022+0 records in 1021+0 records out 1071321088 bytes (1.1 GB, 1022 MiB) copied, 0.216938 s, 4.9 GB/s 
+written: 1071321088 bytes; tmpfs          1073741824 1073741824         0 100% /tmp
+-- left in /tmp, none of them this check's: cc-socks claude-10001 

@@ -1,9 +1,38 @@
 import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
-import type { SessionTurnIntent } from '@orbit/shared';
+import type { SessionKind, SessionLandingView, SessionTurnIntent } from '@orbit/shared';
 import { MERGE_RECEIPT_RESULTS, type MergeReceiptResult } from './merge-receipt';
 
 const MERGE_RECEIPT_RESULT_VALUES = [...MERGE_RECEIPT_RESULTS];
+
+/**
+ * The optional fields a session payload carries once the platform's landing containers exist
+ * (contract §2.9 LS6): `sessionKind` on every row, and `landing` — the subject's view — on one
+ * read directly. Both optional, so a client built before migration 0436 ignores them.
+ */
+export interface SessionLandingFields {
+  sessionKind?: SessionKind;
+  landing?: SessionLandingView | null;
+}
+
+/**
+ * What a list row says about a LANDING session (contract §2.9 LS6; docs/session-list-projects-
+ * design.md §2/§3.2): the subject it represents and where it stands, so the project sessions page
+ * can keep an in-flight landing out of the ordinary rows, list an awaiting one, and fold a settled
+ * one into "Earlier · n landed". AWAITING_DECISION is the segment having an OPEN integration item
+ * or a BLOCKED candidate; the row does not carry the item itself — its own card is where that is
+ * answered. Grouping and the 24-hour window are the client's; the server says only these facts.
+ *
+ * Carried on a list row only (`GET /sessions?projectId=&includeLanding=1`), absent from every
+ * other row, and a client that does not know the field ignores it.
+ */
+export interface SessionLandingSummary {
+  subject: 'TASK' | 'PROMOTION';
+  state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'SETTLED';
+  /** How a SETTLED segment ended; null while it is open. */
+  settledAs: string | null;
+  settledAt: string | Date | null;
+}
 
 export interface CreateSessionDto {
   /** Optional display title; defaults to a slice of the prompt. */
@@ -25,11 +54,19 @@ export interface CreateSessionDto {
   /** Optional parent work item this session runs under. */
   taskId?: string;
 
-  /** Per-session provider override, picked on the New Session screen: a built-in engine
-   *  ("claude"/"codex"/"kimi"/"opencode"/"antigravity") or one of the caller's configured
-   *  ModelProvider slugs. Omitted keeps the historical behaviour — the session inherits its
-   *  workspace's provider. An unknown or foreign slug is rejected rather than silently falling
-   *  back, so a session never dispatches with an identity the caller can't use. */
+  /** The engine the session runs on for good — the CLI on the runner: `claude` (Claude Code), `codex`,
+   *  `kimi`, `antigravity`, `opencode` or `dsh` (DeepSeek Harness). Resolved with `provider`
+   *  (providers/engine-provider.ts): named alone, it runs on that engine's own sign-in (OpenCode on its
+   *  own config, DeepSeek Harness on the caller's first enabled DeepSeek key); named with a provider,
+   *  the pair has to be one the provider can run. Anything else is ENGINE_UNKNOWN. */
+  engine?: string;
+  /** Where the session's credential comes from, picked on the New Session screen: an engine's own
+   *  sign-in ("claude"/"codex"/"kimi"/"antigravity"), OpenCode's own config ("opencode"), one of the
+   *  caller's account pools, or one of their configured keys (ModelProvider slugs). Named without an
+   *  engine, it runs on the engine it ran on before engines were their own field — a key on its
+   *  protocol's own CLI. Neither named keeps the historical behaviour: the session starts where its
+   *  workspace last started. An unknown or foreign slug is rejected rather than silently falling back,
+   *  so a session never dispatches with an identity the caller can't use. */
   provider?: string;
   /** Per-session override; omitted falls back to the Runner Runtime or ModelProvider default. */
   model?: string;
@@ -53,6 +90,10 @@ export interface CreateSessionDto {
   claudeAccount?: string;
   /** The Antigravity Google account, the same again for a session on the built-in Antigravity engine. */
   antigravityAccount?: string;
+  /** The Kimi Code account, the same again for a session on the built-in Kimi engine. */
+  kimiAccount?: string;
+  /** The Cursor CLI account, the same again for a session on the built-in Cursor CLI engine. */
+  cursorAccount?: string;
   /** Ids of pre-uploaded image attachments (`POST /api/attachments` with no sessionId) to
    *  send with the seeded first turn. Each must be the caller's and not yet scoped to a
    *  session/turn — they're scoped to this session on create, then linked to the initial
@@ -87,6 +128,10 @@ export interface SessionInterruptDto {
   /** What to send once the current turn has stopped. Omitted → a plain interrupt. */
   content?: string;
   attachmentIds?: string[];
+  /** Also end the background work the session left running — see RunInterruptRequest,
+   *  which this mirrors. Omitted keeps the interrupt's own semantics exactly: no kill
+   *  anywhere on that path. */
+  stopBackgroundWork?: boolean;
 }
 
 export interface SessionResumeDto extends SessionTurnDto {
@@ -101,6 +146,8 @@ export interface SessionResumeDto extends SessionTurnDto {
    *  same rejection as SessionConfigDto.provider. No reload turn is needed here: the revived
    *  session is claimed afresh, and the claim resolves the environment from the row. */
   provider?: string;
+  /** The session's engine, as SessionConfigDto.engine: it never changes, so only its own is accepted. */
+  engine?: string;
   /** With `provider` naming the built-in Codex or Claude engine: which of the runner's accounts of
    *  it — `automatic`, `default` or a slot id — as SessionConfigDto.account. */
   account?: string;
@@ -163,6 +210,8 @@ export interface SessionArmRetryDto {
  *  so choosing a provider and then pressing Retry ran on the provider the session was already on. */
 export interface RetryIdentityDto {
   provider?: string;
+  /** The session's engine, as SessionConfigDto.engine: only its own is accepted. */
+  engine?: string;
   /** With `provider` naming the built-in Codex or Claude engine: which of the runner's accounts of
    *  it, as SessionResumeDto.account. Ignored without a provider, as it is there. */
   account?: string;
@@ -190,11 +239,14 @@ export interface SessionConfigDto {
    *  carries it. Either way it takes effect on the next turn. Forced off when the effective
    *  runtime/model (for Codex, the runner catalogue's row) do not have it. */
   fastMode?: boolean;
-  /** Re-point the session at another provider identity — a second account with the same vendor,
-   *  or another endpoint — that runs on the SAME built-in runtime. Cross-runtime is rejected:
-   *  the transcript, the resume id and the wire protocol belong to the CLI that started the
-   *  session. Omitted keeps the current provider. */
+  /** Re-point the session at another credential — a second account with the same vendor, another
+   *  endpoint, another key — that the session's engine runs (PROVIDER_ENGINE_INCOMPATIBLE otherwise):
+   *  the transcript, the resume id and the wire protocol belong to the CLI that started the session.
+   *  Omitted keeps the current provider. */
   provider?: string;
+  /** The session's engine. A session's engine never changes, so a request naming another one is
+   *  refused (ENGINE_IMMUTABLE) — starting a new session is how to use another engine. */
+  engine?: string;
   /** With `provider` moving the session onto the built-in Codex or Claude engine: which of the
    *  runner's accounts of it the session runs on — `automatic` (Orbit's pick, unpinned), `default`
    *  or a slot id (pinned). Omitted is Automatic's pick unless the session is pinned there. A

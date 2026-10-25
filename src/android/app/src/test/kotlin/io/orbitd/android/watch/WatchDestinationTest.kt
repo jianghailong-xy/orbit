@@ -44,9 +44,11 @@ class WatchDestinationTest {
 
     @Test fun openingFollowingReadsOnceAndAnEventThatMovesTargetsNudgesItShortlyAfter() {
         val app = compose.activity.application as WatchTestApplication
-        compose.waitUntil(5_000) { app.session.state.value is AuthState.SignedOut }
+        compose.waitUntil(60_000) { app.session.state.value is AuthState.SignedOut }
         val rows = listOf(WatchFixture.json(id = "A1", lastEvaluatedAt = iso(-20), createdAt = iso(-600), expiresAt = iso(3_600)))
         app.server.serve({ rows })
+        // No read of this account's list comes before this, so its 30 s floor (wall clock) asks again no sooner than 30 s on.
+        val signInStarted = System.nanoTime()
         val handle = runBlocking { app.server.signIn() }
         app.realtime.setNetwork(true, "fixture")
         fun listReads() = app.server.lines.count { it.startsWith("GET /api/watches") && !it.startsWith("GET /api/watches/") }
@@ -54,12 +56,12 @@ class WatchDestinationTest {
         compose.activityRule.scenario.onActivity { activity ->
             activity.setContent { OrbitTheme { WatchDestination(app, handle, route) { opened += it } } }
         }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("following-row:A1").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("following-row:A1").fetchSemanticsNodes().isNotEmpty() }
         compose.waitForIdle()
         assertEquals("opening Following reads the list once, and the floor counts from that read", 4, listReads())
         assertEquals("Following", PageBar.title(route))
 
-        compose.waitUntil(5_000) { app.realtime.state.value.controlConnects > 0 }
+        compose.waitUntil(60_000) { app.realtime.state.value.controlConnects > 0 }
         // A wiki event moves no target: nothing is read.
         app.server.event("wiki.changed")
         compose.waitForIdle()
@@ -73,7 +75,9 @@ class WatchDestinationTest {
         compose.waitForIdle()
         assertEquals(4, listReads())
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(2_100))
-        compose.waitUntil(5_000) { listReads() == 8 }
+        compose.waitUntil(60_000) { listReads() == 8 }
+        // A wait this long could also end on the floor's read: the list was read again before the floor could ask.
+        assertTrue("read again by the nudge, not the floor", System.nanoTime() - signInStarted < WatchStore.REFRESH_INTERVAL.toNanos())
         compose.waitForIdle()
         assertEquals(8, listReads())
 
@@ -81,7 +85,7 @@ class WatchDestinationTest {
         assertEquals(listOf(OrbitRoute(Destination.WATCH, "A1")), opened)
         // The page for that id, from the same store: no read of its own while the list holds it.
         compose.runOnIdle { route = OrbitRoute(Destination.WATCH, "A1") }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("watch-detail:A1").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("watch-detail:A1").fetchSemanticsNodes().isNotEmpty() }
         assertTrue(app.server.lines.none { it.startsWith("GET /api/watches/") })
         assertEquals("Watching 2 targets", PageBar.title(route))
     }

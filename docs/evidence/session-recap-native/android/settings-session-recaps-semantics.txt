@@ -1,0 +1,166 @@
+Printing with useUnmergedTree = 'false'
+Node #162 at (l=0.0, t=0.0, r=411.0, b=900.0)px
+ |-Node #215 at (l=0.0, t=0.0, r=411.0, b=900.0)px
+   IsTraversalGroup = 'true'
+   VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=557.0, reverseScrolling=false)'
+   Actions = [ScrollBy, ScrollByOffset]
+    |-Node #216 at (l=16.0, t=8.0, r=395.0, b=132.0)px
+    | ContentDescription = '[Edit profile]'
+    | Focused = 'false'
+    | IsContainer = 'true'
+    | Role = 'Button'
+    | StateDescription = 'Reader'
+    | Text = '[R, Reader]'
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    | MergeDescendants = 'true'
+    |-Node #227 at (l=32.0, t=152.0, r=101.0, b=172.0)px
+    | Text = '[Sessions]'
+    | [Heading]
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |-Node #228 at (l=16.0, t=178.0, r=395.0, b=580.0)px
+    | IsContainer = 'true'
+    |  |-Node #231 at (l=16.0, t=178.0, r=395.0, b=234.0)px
+    |  | Focused = 'false'
+    |  | IsContainer = 'true'
+    |  | Role = 'DropdownList'
+    |  | Text = '[Default permission, Auto]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #243 at (l=16.0, t=234.0, r=395.0, b=290.0)px
+    |  | Focused = 'false'
+    |  | IsContainer = 'true'
+    |  | Role = 'Switch'
+    |  | Text = '[Session orchestration]'
+    |  | ToggleableState = 'On'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #256 at (l=16.0, t=290.0, r=395.0, b=346.0)px
+    |  | Focused = 'false'
+    |  | IsContainer = 'true'
+    |  | Role = 'Switch'
+    |  | Text = '[Suggested replies]'
+    |  | ToggleableState = 'On'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #269 at (l=16.0, t=346.0, r=395.0, b=463.0)px
+    |  | Focused = 'false'
+    |  | IsContainer = 'true'
+    |  | Role = 'Switch'
+    |  | Text = '[Session recaps, Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply. Off: the raw last reply.]'
+    |  | ToggleableState = 'On'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #283 at (l=16.0, t=463.0, r=395.0, b=580.0)px
+    |    Focused = 'false'
+    |    IsContainer = 'true'
+    |    Role = 'Switch'
+    |    Text = '[Smart model selection, Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before.]'
+    |    ToggleableState = 'Off'
+    |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |    MergeDescendants = 'true'
+    |-Node #297 at (l=32.0, t=600.0, r=181.0, b=620.0)px
+    | Text = '[Machines & models]'
+    | [Heading]
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |-Node #298 at (l=16.0, t=626.0, r=395.0, b=738.0)px
+    | IsContainer = 'true'
+    |  |-Node #300 at (l=16.0, t=626.0, r=395.0, b=682.0)px
+    |  | Focused = 'false'
+    |  | IsContainer = 'true'
+    |  | Role = 'Button'
+    |  | Text = '[Runners, None]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #310 at (l=16.0, t=682.0, r=395.0, b=738.0)px
+    |    Focused = 'false'
+    |    IsContainer = 'true'
+    |    Role = 'Button'
+    |    Text = '[Providers]'
+    |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |    MergeDescendants = 'true'
+    |-Node #320 at (l=32.0, t=758.0, r=124.0, b=778.0)px
+    | Text = '[Preferences]'
+    | [Heading]
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |-Node #321 at (l=16.0, t=784.0, r=395.0, b=896.0)px
+    | IsContainer = 'true'
+    |  |-Node #323 at (l=16.0, t=784.0, r=395.0, b=840.0)px
+    |  | Focused = 'false'
+    |  | IsContainer = 'true'
+    |  | Role = 'Button'
+    |  | Text = '[Notifications, On]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #336 at (l=16.0, t=840.0, r=395.0, b=896.0)px
+    |    Focused = 'false'
+    |    IsContainer = 'true'
+    |    Role = 'DropdownList'
+    |    Text = '[Appearance, System]'
+    |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |    MergeDescendants = 'true'
+    |-Node #348 at (l=32.0, t=916.0, r=95.0, b=936.0)px
+    | Text = '[Account]'
+    | [Heading]
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |-Node #349 at (l=16.0, t=942.0, r=395.0, b=1222.0)px
+    | IsContainer = 'true'
+    |  |-Node #351 at (l=16.0, t=942.0, r=395.0, b=998.0)px
+    |  | Focused = 'false'
+    |  | IsContainer = 'true'
+    |  | Text = '[Email, reader@example.test]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #365 at (l=16.0, t=998.0, r=395.0, b=1054.0)px
+    |  | Focused = 'false'
+    |  | IsContainer = 'true'
+    |  | Text = '[Instance, fixture.test]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #379 at (l=16.0, t=1054.0, r=395.0, b=1110.0)px
+    |  | Focused = 'false'
+    |  | IsContainer = 'true'
+    |  | Role = 'Button'
+    |  | Text = '[Shared links]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #389 at (l=16.0, t=1110.0, r=395.0, b=1166.0)px
+    |  | Focused = 'false'
+    |  | IsContainer = 'true'
+    |  | Role = 'Button'
+    |  | Text = '[Access tokens]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #399 at (l=16.0, t=1166.0, r=395.0, b=1222.0)px
+    |    Focused = 'false'
+    |    IsContainer = 'true'
+    |    Role = 'Button'
+    |    Text = '[Change password]'
+    |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |    MergeDescendants = 'true'
+    |-Node #410 at (l=16.0, t=1242.0, r=395.0, b=1298.0)px
+    | IsContainer = 'true'
+    |  |-Node #411 at (l=16.0, t=1242.0, r=395.0, b=1298.0)px
+    |    Focused = 'false'
+    |    IsContainer = 'true'
+    |    Role = 'Button'
+    |    Text = '[About, 0.1.0-internal.1]'
+    |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |    MergeDescendants = 'true'
+    |-Node #424 at (l=16.0, t=1318.0, r=395.0, b=1374.0)px
+    | IsContainer = 'true'
+    |  |-Node #425 at (l=16.0, t=1318.0, r=395.0, b=1374.0)px
+    |    Focused = 'false'
+    |    IsContainer = 'true'
+    |    Role = 'Button'
+    |    Text = '[Sign out]'
+    |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |    MergeDescendants = 'true'
+    |-Node #433 at (l=16.0, t=1386.0, r=395.0, b=1401.0)px
+    | Text = '[Orbit 0.1.0-internal.1 (1)]'
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |-Node #434 at (l=129.0, t=1405.0, r=283.0, b=1445.0)px
+      Focused = 'false'
+      Role = 'Button'
+      Text = '[Build information]'
+      Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+      MergeDescendants = 'true'

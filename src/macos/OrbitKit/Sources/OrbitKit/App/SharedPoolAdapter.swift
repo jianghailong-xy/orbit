@@ -3,8 +3,8 @@ import Foundation
 /// Shared Codex pools as the new-session picker and the composer read them — the native port of web's
 /// `lib/sharedPools.ts` adapter (`sharedPoolAsProviderPool`); keep the two in sync. A pool somebody was
 /// added to is drawn as an account pool whose members are its ChatGPT accounts and its keys — the
-/// accounts first, as every session of the pool runs on them while one can run (2026-10-03) — so the
-/// Providers page, the picker and the composer take it exactly as they take one of the user's own Claude
+/// accounts first, as every session of the pool runs on them while one can run (2026-10-03) — so
+/// Infrastructure, the picker and the composer take it exactly as they take one of the user's own Claude
 /// pools. Which account or key a session starting now runs on (`CodexLogin.next`, `SharedPoolKey.next`),
 /// where each one stands and what the others spent of a key's cap are the server's answers, read off
 /// `SharedPool`; nothing here re-derives them.

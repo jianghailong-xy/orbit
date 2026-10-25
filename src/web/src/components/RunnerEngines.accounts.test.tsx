@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
-import { RunnerEngines, summaryOf, tildePath } from './RunnerEngines';
+import { machineChipsOf, RunnerEngines, summaryOf, tildePath } from './RunnerEngines';
 import { clickRunnerMenuItem, openRunnerCards } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
@@ -115,7 +115,8 @@ function mount(runners: Runner[]) {
 }
 
 const rows = (el: ParentNode, selector: string) => [...el.querySelectorAll<HTMLElement>(selector)];
-const tags = (row: Element) => rows(row, '.ant-tag').map((tag) => tag.textContent?.trim());
+/** What a row says of its state: the words in its status slot (a status label is text, with no role). */
+const tags = (row: Element) => rows(row, '.re-status').map((status) => status.textContent?.trim()).filter(Boolean);
 /** A button's words, or the name of a mark that has none (Re-sign in, Remove). */
 const labelOf = (b: Element) => b.textContent?.trim() || b.getAttribute('aria-label');
 const button = (el: ParentNode, label: string) => {
@@ -157,13 +158,14 @@ describe('a runner with two Codex accounts', () => {
     // Its one action; the head itself is the button that folds its accounts.
     expect(rows(head, '.re-act button').map(labelOf)).toEqual(['Add account']);
 
-    // The other engines are untouched rows, each still with its own tag.
+    // The other engines are untouched rows, each still with its own tag, by the CLI's own name.
     const engineRows = rows(page, '.re-row:not(.re-acct)');
     expect(engineRows.map((row) => row.querySelector('.re-name')?.textContent)).toEqual([
       'Claude Code',
       'Codex',
-      'Antigravity',
+      'Antigravity CLI',
       'Kimi Code',
+      'DeepSeek Harness',
     ]);
     expect(tags(engineRows[0])).toEqual(['Signed in']);
     expect(tags(engineRows[3])).toEqual(['Signed in']);
@@ -304,9 +306,11 @@ describe('a runner with two Codex accounts', () => {
 
   it('lets a folded card say an account still needs signing in', () => {
     // Every engine's own answer is yes — Default's, for Codex. Folding the card must not turn a
-    // signed-out Work into "All signed in".
-    expect(summaryOf(runner({ accounts: [DEFAULT, WORK] }))).toBe('2 of 3 signed in');
-    expect(summaryOf(runner({ accounts: [DEFAULT, { ...WORK, auth: 'yes' }] }))).toBe('All signed in');
+    // signed-out Work into a Codex that is all signed in: its chip says 1 of 2.
+    const codex = (box: Runner) => machineChipsOf(box).find((chip) => chip.engine === 'codex');
+    expect(codex(runner({ accounts: [DEFAULT, WORK] }))).toEqual({ engine: 'codex', logins: 1, accounts: 2, signedOut: false });
+    expect(codex(runner({ accounts: [DEFAULT, { ...WORK, auth: 'yes' }] }))).toEqual({ engine: 'codex', logins: 2, accounts: 2, signedOut: false });
+    expect(summaryOf(runner({ accounts: [DEFAULT, WORK] }))).toBeNull();
   });
 });
 

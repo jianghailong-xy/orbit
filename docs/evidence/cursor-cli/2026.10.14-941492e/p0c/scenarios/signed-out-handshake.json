@@ -1,0 +1,130 @@
+{
+ "name": "signed-out-handshake",
+ "runId": "2026-10-17T02-15-08-453Z",
+ "startedAt": "2026-10-17T02:15:20.558Z",
+ "finishedAt": "2026-10-17T02:15:42.589Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/signed-out-handshake.ndjson",
+ "protocolLines": 15,
+ "fixtures": [
+  "signed-out-handshake/acp"
+ ],
+ "checks": [
+  {
+   "name": "initialize works signed out",
+   "ok": true
+  },
+  {
+   "name": "capabilities: loadSession, MCP http+sse, image, session list",
+   "ok": true
+  },
+  {
+   "name": "only auth method is cursor_login",
+   "ok": true
+  },
+  {
+   "name": "no agentInfo in initialize",
+   "ok": true
+  },
+  {
+   "name": "session/new signed out -> -32000 Authentication required",
+   "ok": true,
+   "detail": {
+    "code": -32000,
+    "message": "Authentication required",
+    "data": {
+     "message": "Authentication required. Please run 'agent login' first, then call authenticate() with methodId 'cursor_login'."
+    }
+   }
+  },
+  {
+   "name": "session/list signed out -> -32000",
+   "ok": true,
+   "detail": {
+    "code": -32000,
+    "message": "Authentication required",
+    "data": {
+     "message": "Authentication required. Please run 'agent login' first, then call authenticate() with methodId 'cursor_login'."
+    }
+   }
+  },
+  {
+   "name": "authenticate(cursor_login) with NO_OPEN_BROWSER -> -32602 carrying the login URL, returned at once",
+   "ok": true,
+   "detail": {
+    "code": -32602,
+    "message": "Invalid params",
+    "data": {
+     "message": "Failed to open browser for login. Please visit: https://cursor.com/loginDeepControl?challenge=<REDACTED>&uuid=<REDACTED>&mode=login&redirectTarget=cli&supportsSelectedTeamLogin=true"
+    }
+   }
+  },
+  {
+   "name": "authenticate(unknown method) -> -32602",
+   "ok": true,
+   "detail": {
+    "code": -32602,
+    "message": "Invalid params",
+    "data": {
+     "message": "Unknown authentication method: bogus. Supported method: cursor_login"
+    }
+   }
+  },
+  {
+   "name": "stdin EOF does not end `agent acp` (still running 20 s later)",
+   "ok": true
+  },
+  {
+   "name": "SIGTERM exits with code 143",
+   "ok": true,
+   "detail": {
+    "code": 143,
+    "signal": null
+   }
+  },
+  {
+   "name": "stdout carried only JSON-RPC lines",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "initialize": {
+   "protocolVersion": 1,
+   "agentCapabilities": {
+    "loadSession": true,
+    "mcpCapabilities": {
+     "http": true,
+     "sse": true
+    },
+    "promptCapabilities": {
+     "audio": false,
+     "embeddedContext": false,
+     "image": true
+    },
+    "sessionCapabilities": {
+     "list": {}
+    }
+   },
+   "authMethods": [
+    {
+     "id": "cursor_login",
+     "name": "Cursor Login",
+     "description": "Authenticate using existing Cursor login credentials. Run 'agent login' first if not logged in."
+    }
+   ]
+  },
+  "status": {
+   "status": "unauthenticated",
+   "isAuthenticated": false,
+   "hasAccessToken": false,
+   "hasRefreshToken": false,
+   "message": "Not logged in"
+  }
+ }
+}

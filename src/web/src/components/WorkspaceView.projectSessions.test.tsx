@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -104,6 +103,23 @@ const project = (extra: Record<string, unknown> = {}) => ({
   coordinatorActivity: { working: false, lastTurnAt: COORDINATOR.lastTurnAt },
   ...extra,
 });
+/** The unified projection a current server carries on the project document: every listed criterion
+ *  met its work, each with the landing reason given (`null` is "on main"), and the counts that
+ *  partition them. The default is the tally the owner read back — six criteria, five on main, one
+ *  with no code to land. */
+const derivedDone = (landingReasons: (string | null)[] = [null, null, null, null, null, 'CODELESS']) => {
+  const criteria = landingReasons.map((landingReason, index) => ({
+    definitionId: `c${index + 1}`, satisfied: true, landing: 'LANDED' as const, landingReason,
+  }));
+  const byReason = { IN_FLIGHT: 0, ON_PROJECT_BRANCH: 0, NOTHING_TO_LAND: 0, NO_RECEIPT: 0, CODELESS: 0 };
+  for (const reason of landingReasons) if (reason) byReason[reason as keyof typeof byReason] += 1;
+  const total = landingReasons.length;
+  return {
+    status: 'DONE' as const, done: true, withheld: [], confirmation: 'CONFIRMED' as const,
+    counts: { criteria: total, met: total, landed: total, onMain: total - landingReasons.filter(Boolean).length, byReason },
+    criteria,
+  };
+};
 
 class FakeEventSource {
   static streams: FakeEventSource[] = [];
@@ -134,6 +150,8 @@ let currentPromotion: Record<string, unknown> | null = null;
 let merges: Array<Record<string, unknown>> = [];
 /** The coordinator's request to start, as the open-items door serves it, and how often it was read. */
 let startRequest: Record<string, unknown> | null = null;
+/** The exceptions the open-items door serves as the coordinator's — a blocked candidate's holder. */
+let withCoordinatorItems: Array<Record<string, unknown>> = [];
 let openItemsCalls = 0;
 /** The project's integration line, with whatever is landing on it. */
 let integrationView: Record<string, unknown> | null = null;
@@ -186,11 +204,9 @@ async function mount(ready: () => void = () => expect(projectRows()).toHaveLengt
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[path]}>
-          <AntApp>
-            {withControlPlane ? <ControlPlaneProvider>{view}</ControlPlaneProvider> : view}
-            <SessionSearch />
-            <LocationProbe />
-          </AntApp>
+          {withControlPlane ? <ControlPlaneProvider>{view}</ControlPlaneProvider> : view}
+          <SessionSearch />
+          <LocationProbe />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -203,11 +219,20 @@ async function click(element: Element | null | undefined, what: string): Promise
   await act(async () => element!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
   await settle();
 }
+/** Whether a menu or item is on an open menu: a closing or closed menu takes no pointer (the session list's
+ *  dropdowns stay in the page as they leave) or is gone. */
+const onOpenMenu = (el: Element): boolean => {
+  for (let node: HTMLElement | null = el as HTMLElement; node; node = node.parentElement) {
+    if (node.hidden || node.style.display === 'none' || node.style.pointerEvents === 'none') return false;
+  }
+  return true;
+};
+/** The open menus' plain items, top to bottom (a row that opens a submenu is not one). Submenus use their own
+ *  portal, outside their parent menu's element. */
+const menuItems = (): HTMLElement[] =>
+  [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]:not([aria-haspopup])')].filter(onOpenMenu);
 const menuItem = (label: string): HTMLElement | undefined =>
-  // Submenus use their own portal, outside the dropdown's root element.
-  [...document.querySelectorAll<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')].find(
-    (el) => el.closest<HTMLElement>('.ant-dropdown')?.style.pointerEvents !== 'none' && el.textContent?.trim().startsWith(label),
-  );
+  menuItems().find((el) => el.textContent?.trim().startsWith(label));
 async function chooseView(label: string): Promise<void> {
   await click(mounted().querySelector('.session-scope-menu'), 'the view menu');
   await until(() => expect(menuItem(label)).toBeTruthy());
@@ -233,6 +258,7 @@ beforeEach(() => {
   currentPromotion = null;
   merges = [];
   startRequest = null;
+  withCoordinatorItems = [];
   openItemsCalls = 0;
   integrationView = null;
   FakeEventSource.streams = [];
@@ -270,7 +296,7 @@ beforeEach(() => {
     if (path === `/projects/${PROJECT_ID}/promotions/merged`) return reply(merges);
     if (path === `/projects/${PROJECT_ID}/open-items`) {
       openItemsCalls += 1;
-      return reply({ needsYou: [], withCoordinator: [], startRequest });
+      return reply({ needsYou: [], withCoordinator: withCoordinatorItems, startRequest });
     }
     if (path === `/projects/${PROJECT_ID}/integration`) return reply(integrationView ?? []);
     if (path.startsWith('/sessions/search?')) return reply({
@@ -416,7 +442,7 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     projects = [project({ coordinatorActivity: null })];
     await mount();
     await hoverProjectMenu();
-    expect(menuItem('Open Session')?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(true);
+    expect(menuItem('Open Session')?.getAttribute('aria-disabled')).toBe('true');
     await click(menuItem('Open Session'), 'the disabled Open Session');
     expect(location).toBe(`/sessions/${LOOSE.id}`);
     await click(projectRow(), 'the project entry without a coordinator');
@@ -446,11 +472,12 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
       await act(async () => projectRow().dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
       await until(() => expect(menuItem('Sessions')).toBeTruthy());
     }
-    const labels = [...document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')].map((item) => item.textContent?.trim());
+    const labels = menuItems().map((item) => item.textContent?.trim());
     expect(labels).toEqual(['Open Session', 'Sessions', 'Open Project', 'Pin', 'Move…']);
-    const items = document.querySelector('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu')?.children;
-    expect(items?.[3].classList.contains('ant-dropdown-menu-item-divider')).toBe(true);
-    expect(document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item-divider')).toHaveLength(1);
+    const menus = [...document.querySelectorAll('[role="menu"]')].filter(onOpenMenu);
+    expect(menus).toHaveLength(1);
+    expect(menus[0].children[3]?.getAttribute('role')).toBe('separator');
+    expect(menus[0].querySelectorAll('[role="separator"]')).toHaveLength(1);
     const entryText = projectRow().textContent ?? '';
     for (const forbidden of ['Complete', 'Share', 'Delete', 'Confirm done', 'Chat about this', 'Approve', 'Reject', 'Start project']) {
       expect(labels).not.toContain(forbidden);
@@ -479,7 +506,7 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     rows = [LOOSE, { ...COORDINATOR, pinnedAt: '2026-10-01T09:00:00Z' }, TASK];
     await mount();
     await hoverProjectMenu();
-    expect([...document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')].map((item) => item.textContent?.trim())).toEqual(['Open Session', 'Sessions', 'Open Project', 'Unpin', 'Move…']);
+    expect(menuItems().map((item) => item.textContent?.trim())).toEqual(['Open Session', 'Sessions', 'Open Project', 'Unpin', 'Move…']);
     await click(menuItem('Unpin'), 'Unpin');
     await until(() => expect(apiModule.unpinSession).toHaveBeenCalledWith(COORDINATOR.id));
   });
@@ -543,11 +570,79 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
     expect(page()?.querySelector('.session-project-page-progress')?.textContent).toContain('4/5 done · 0 running');
     expect(page()?.querySelector('.session-project-progress-bar .done')?.getAttribute('style')).toContain('80%');
+    // No projection to tally (`derivedDone`): the progress card stays where a current server's read
+    // would have drawn the project's ending.
+    expect(page()?.querySelector('.project-why-not-done')).toBeNull();
     expect(projectDetailsCalls).toEqual([`/projects/${PROJECT_ID}`]);
     expect(listCalls.some((path) => {
       const params = new URLSearchParams(path.split('?')[1]);
       return !params.has('workspaceId') && !params.has('projectId') && !params.has('limit');
     })).toBe(false);
+  });
+
+  it('draws the project’s ending where the progress card was, once the read carries the projection', async () => {
+    projects = [];
+    projectDetails = {
+      id: PROJECT_ID, title: 'Delivered Alpha', status: 'DONE', doneBy: 'DERIVED',
+      tasksByStatus: { DONE: 4, FAILED: 1, CANCELLED: 2 }, derivedDone: derivedDone(),
+    };
+    rows = [LOOSE, ...[COORDINATOR, TASK].map((session) => ({
+      ...session, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED',
+      projectMembership: { ...session.projectMembership!, projectStatus: 'DONE' },
+    }))];
+    await mount(() => expect(titles()).toEqual([LOOSE.title]));
+    await chooseView('Completed');
+    await until(() => expect(projectRows()).toHaveLength(1));
+    await openSessions();
+    await until(() => expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Delivered Alpha'));
+    const ending = page()?.querySelector('.project-why-not-done.is-settled');
+    expect(ending?.querySelector('.project-settlement-heading')?.textContent).toBe('This project is done');
+    expect(ending?.querySelector('.criteria-provenance')?.textContent).toBe('recorded by Orbit');
+    expect(ending?.querySelector('.project-done-tally')?.textContent).toBe('6 criteria · 5 on main · 1 no code to land');
+    // The card it stands in for — one that would say nothing but "4/5 done · 0 running" — is gone.
+    expect(page()?.querySelector('.session-project-page-card')).toBeNull();
+  });
+
+  it('keeps the progress card when the projection carries no unified counts', async () => {
+    projects = [];
+    projectDetails = {
+      id: PROJECT_ID, title: 'Delivered Alpha', status: 'DONE', doneBy: 'DERIVED',
+      tasksByStatus: { DONE: 4, FAILED: 1, CANCELLED: 2 },
+      // An older server's projection: the criteria with no counts behind them draws none of these
+      // cards (the conversation's own rule).
+      derivedDone: { criteria: derivedDone().criteria },
+    };
+    rows = [LOOSE, ...[COORDINATOR, TASK].map((session) => ({
+      ...session, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED',
+      projectMembership: { ...session.projectMembership!, projectStatus: 'DONE' },
+    }))];
+    await mount(() => expect(titles()).toEqual([LOOSE.title]));
+    await chooseView('Completed');
+    await until(() => expect(projectRows()).toHaveLength(1));
+    await openSessions();
+    await until(() => expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Delivered Alpha'));
+    expect(page()?.querySelector('.session-project-page-progress')?.textContent).toContain('4/5 done · 0 running');
+    expect(page()?.querySelector('.project-why-not-done')).toBeNull();
+  });
+
+  it('spells the badge of the ending the way the recorder wrote it', async () => {
+    projects = [];
+    projectDetails = {
+      id: PROJECT_ID, title: 'Delivered Alpha', status: 'DONE', doneBy: 'OWNER',
+      tasksByStatus: { DONE: 5 }, derivedDone: derivedDone([null, 'CODELESS']),
+    };
+    rows = [LOOSE, ...[COORDINATOR, TASK].map((session) => ({
+      ...session, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED',
+      projectMembership: { ...session.projectMembership!, projectStatus: 'DONE' },
+    }))];
+    await mount(() => expect(titles()).toEqual([LOOSE.title]));
+    await chooseView('Completed');
+    await until(() => expect(projectRows()).toHaveLength(1));
+    await openSessions();
+    await until(() => expect(page()?.querySelector('.project-why-not-done.is-settled')).not.toBeNull());
+    const ending = page()!.querySelector('.project-why-not-done.is-settled')!;
+    expect(ending.querySelector('.criteria-provenance')?.textContent).toBe('recorded by you');
+    expect(ending.querySelector('.project-done-tally')?.textContent).toBe('2 criteria · 1 on main · 1 no code to land');
   });
 
   it('lists Open and Completed members across workspaces, excludes Trash and counts running members', async () => {
@@ -747,6 +842,35 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await until(() => expect(document.querySelector('.start-card-dialog')).not.toBeNull());
   });
 
+  it('says the suggestion goes directly into the main branch the start card opens with', async () => {
+    projects = [project({ startedAt: null, attention: { ownerItems: [], coordinatorItems: null, startRequest: { waitingSince: '2026-10-04T08:00:00Z' } } })];
+    const asking = (settings: Record<string, unknown>) => ({
+      itemId: 'start-1', kind: 'START_REQUEST', title: 'Start this project?', detailLine: '', waitingSince: '2026-10-04T08:00:00Z',
+      assignee: 'OWNER', assigneeReason: 'OWNER_ONLY',
+      startRequest: {
+        settings: { line: 'MAIN', automatic: false, maxConcurrentTasks: 1, mergeCheckCommand: null, ...settings },
+        why: 'One task.', criteriaDigest: 'sha256:abc', planDigest: 'plan', repository: null, warnings: [],
+      },
+    });
+    const suggestion = (): string | null | undefined =>
+      page()?.querySelector<HTMLElement>('.session-project-start-suggestion')?.textContent;
+    startRequest = asking({ upstreamRef: 'refs/heads/master' });
+    await mount();
+    await openSessions();
+    await until(() => expect(suggestion()).toBe('Directly into master · Automatic off · 1 at a time'));
+    await unmount();
+    // The owner's last choice for the repository outranks a suggestion that names none, as on the card.
+    startRequest = asking({});
+    integrationView = {
+      line: null, lineAbsentReason: 'NOT_DECIDED', ref: null, upstreamRef: 'main', upstreamChosenAt: null,
+      lastMainBranch: { branch: 'develop', repository: 'acme/payments-api', chosenAt: '2026-10-03T08:00:00Z' },
+      integratingCount: 0, queuedCount: 0, inFlight: null,
+    };
+    await mount();
+    await openSessions();
+    await until(() => expect(suggestion()).toBe('Directly into develop · Automatic off · 1 at a time'));
+  });
+
   it('reads no open items for a project already started, and draws no start', async () => {
     projects = [project({ startedAt: '2026-10-02T00:00:00Z' })];
     await mount();
@@ -757,7 +881,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(page()!.querySelector('.session-project-page-progress')?.textContent).toBe('2/5 done · 1 running');
   });
 
-  it('carries a task landing on the project branch in its card, and lists every job in flight from it', async () => {
+  it('carries a task landing on the project branch in a card of its own, and lists every job in flight from it', async () => {
     const now = new Date().toISOString();
     const listed = (over: Record<string, unknown>) => ({
       kind: 'LAND_TASK', state: 'RUNNING', phase: 'CHECK', taskId: TASK.id, taskTitle: 'Build the package', generation: 1,
@@ -775,12 +899,17 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     };
     await mount();
     await openSessions();
-    const landing = (): HTMLElement | null => page()!.querySelector<HTMLElement>('.session-project-page-card .session-project-page-landing');
+    const landing = (): HTMLElement | null => page()!.querySelector<HTMLElement>('.session-project-landing');
     await until(() => expect(landing()?.textContent).toContain('2 jobs'));
     expect(landing()!.textContent).toContain('Landing');
-    expect(landing()!.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(landing()!.querySelector('.spl-press')!.getAttribute('aria-haspopup')).toBe('dialog');
+    // Out of the progress card, which carried it as a last row until 2026-10-11
+    // (docs/mocks/project-landing-card), and ahead of the merge card in the same list.
+    const blocks = [...page()!.querySelectorAll('.session-project-page-card, .session-project-landing, .session-project-merge')];
+    expect(blocks.map((block) => block.className.split(' ')[0]))
+      .toEqual(['session-project-page-card', 'session-project-landing']);
     const before = location;
-    await click(landing(), 'the landing line');
+    await click(landing()!.querySelector('.spl-press')!, 'the landing card');
     const list = (): HTMLElement | null => document.querySelector<HTMLElement>('.landing-jobs-dialog');
     await until(() => expect(list()?.querySelector('.orbit-overlay-title')?.textContent).toBe('2 jobs in flight'));
     expect([...list()!.querySelectorAll('.landing-jobs-row')].map((entry) => entry.getAttribute('data-job')))
@@ -801,11 +930,13 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     };
     await mount();
     await openSessions();
-    const landing = (): HTMLElement | null => page()!.querySelector<HTMLElement>('.session-project-page-card .session-project-page-landing');
+    const landing = (): HTMLElement | null => page()!.querySelector<HTMLElement>('.session-project-landing');
     await until(() => expect(landing()?.textContent).toContain('Build the package'));
     expect(landing()!.textContent).toContain('Landing');
-    expect(landing()!.getAttribute('aria-haspopup')).toBeNull();
-    await click(landing(), 'the landing line');
+    // Nothing to open: the card is read, and its press is the project page's.
+    expect(landing()!.querySelector('.spl-press')!.tagName).toBe('BUTTON');
+    expect(landing()!.querySelector('.spl-press')!.getAttribute('aria-haspopup')).toBeNull();
+    await click(landing()!.querySelector('.spl-press')!, 'the landing card');
     await until(() => expect(location).toBe(`/projects/${PROJECT_ID}`));
     expect(document.querySelector('.landing-jobs-dialog')).toBeNull();
   });
@@ -1041,6 +1172,13 @@ describe('the merge into main on the project sessions page', { timeout: 60_000 }
 
   it('says a blocked candidate is the coordinator’s, and offers the way to it', async () => {
     currentPromotion = candidate('BLOCKED', { conflicts: ['src/a.go', 'src/b.go'], decidedAt: '2026-10-04T08:40:00Z' });
+    // The exception its check opened, which the coordinator holds.
+    withCoordinatorItems = [{
+      itemId: 'item-conflict', kind: 'INTEGRATION_CONFLICT', title: 'Merge conflict', detailLine: '',
+      assignee: 'COORDINATOR', assigneeReason: 'DEFAULT', waitingSince: '2026-10-04T08:40:00Z',
+      escalateAt: null, escalatedAt: null, taskId: null, sessionId: null, promotionId: 'promo-1',
+      fuseEpisodeId: null, actions: [], delivery: { state: 'DELIVERED', sessionId: COORDINATOR.id, at: '2026-10-04T08:40:00Z' },
+    }];
     await mount();
     await openSessions();
     await until(() => expect(card()?.getAttribute('data-shape')).toBe('blocked'));
@@ -1052,6 +1190,21 @@ describe('the merge into main on the project sessions page', { timeout: 60_000 }
     await click([...card()!.querySelectorAll('button')].find((button) => button.textContent === 'Open coordinator ›'), 'Open coordinator');
     await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
     expect(page()).not.toBeNull();
+  });
+
+  /** 2026-10-09: the coordinator had closed the exception (the work was already on main), and the
+   *  card still said "Coordinator is resolving it". Read with nothing holding it, it names nobody. */
+  it('names nobody once the project’s items are read and none holds the blocked candidate', async () => {
+    currentPromotion = candidate('BLOCKED', { conflicts: ['src/a.go'], decidedAt: '2026-10-04T08:40:00Z' });
+    await mount();
+    await openSessions();
+    await until(() => expect(card()?.getAttribute('data-shape')).toBe('blocked'));
+    await until(() => expect(openItemsCalls).toBeGreaterThan(0));
+    await until(() => expect(card()!.textContent ?? '').not.toContain('Coordinator is resolving it'));
+    expect(card()!.querySelector('.promotion-spin')).toBeNull();
+    const text = card()!.textContent ?? '';
+    expect(text).toContain('Can’t merge into main yet');
+    expect(text).toContain('Open coordinator ›');
   });
 
   it('lists the jobs in flight from the merge check’s landing row', async () => {
@@ -1068,9 +1221,14 @@ describe('the merge into main on the project sessions page', { timeout: 60_000 }
     await mount();
     await openSessions();
     await until(() => expect(card()?.getAttribute('data-shape')).toBe('checking'));
-    // The job is the merge card's, so the progress card draws no landing line of its own.
-    expect(page()!.querySelector('.session-project-page-landing')).toBeNull();
-    const press = card()!.querySelector<HTMLButtonElement>('button.project-landing-press');
+    // The job is the merge card's, so no landing card of its own is drawn.
+    expect(page()!.querySelector('.session-project-landing')).toBeNull();
+    // The row is the merged line's anatomy (owner decision 2026-10-11): the head, the whole row
+    // the press that opens the jobs, and no chevron — the merged line is pressed the same way.
+    expect(card()!.querySelector('.landing-head.is-running')).not.toBeNull();
+    expect(card()!.textContent ?? '').toContain('checking');
+    expect(card()!.querySelector('.landing-head-right')?.textContent).toMatch(/^\d+m \d+s$/);
+    const press = card()!.querySelector<HTMLButtonElement>('button.landing-head-press');
     expect(press?.textContent).toContain('Merge check');
     await click(press, 'the merge check’s landing row');
     await until(() => expect(document.querySelector('.landing-jobs-dialog .orbit-overlay-title')?.textContent)
@@ -1108,5 +1266,258 @@ describe('the merge into main on the project sessions page', { timeout: 60_000 }
     const receipt = document.querySelector('.review-card-dialog .project-promotion-receipt')!;
     expect(receipt.textContent).toContain('8d5a868');
     expect(receipt.textContent).toContain('Fix the runner gate');
+  });
+});
+
+/**
+ * The Landings group (owner 2026-10-19, board v4 04 c1; contract §2.9 LS6): under the coordinator,
+ * above the page's own timeline, listing what waits and what settled within the day — never a
+ * landing in flight, never a merge round that merged — and counted by none of the page's numbers.
+ */
+describe('the project sessions page — the Landings group', () => {
+  const LANDING = (n: number, title: string, landing: Record<string, unknown>, over: Record<string, unknown> = {}) => row(n, title, {
+    projectMembership: membership('TASK'),
+    sessionKind: 'LANDING',
+    startup: null,
+    landing,
+    ...over,
+  });
+  const awaiting = (subject: 'TASK' | 'PROMOTION' = 'TASK') => ({
+    subject, state: 'AWAITING_DECISION', settledAs: null, settledAt: null,
+  });
+  const settled = (settledAs: string, minutesAgo: number, subject: 'TASK' | 'PROMOTION' = 'TASK') => ({
+    subject, state: 'SETTLED', settledAs,
+    settledAt: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
+  });
+  const group = (): HTMLElement | null => mounted().querySelector<HTMLElement>('.session-project-landings');
+  const landingRows = (): HTMLElement[] =>
+    [...(group()?.querySelectorAll<HTMLElement>('.session-project-landing-row') ?? [])];
+  const sectionHead = (): string => group()?.querySelector('.session-section-head')?.textContent ?? '';
+  /** The fold's mark as `glyph:tone`, e.g. `✓:is-ok`. */
+  const foldMark = (fold: HTMLElement | null | undefined): string => {
+    const mark = fold?.querySelector<HTMLElement>('.session-project-landing-mark');
+    return `${mark?.textContent}:${mark?.className.replace('session-project-landing-mark ', '')}`;
+  };
+
+  it('lists the landings under the coordinator and above the page’s timeline', async () => {
+    rows = [LOOSE, COORDINATOR, TASK, LANDING(820, 'Land · Build the package', awaiting())];
+    await mount();
+    await openSessions();
+
+    expect(group()).not.toBeNull();
+    expect(sectionHead()).toBe('Landings');
+    const heads = [...mounted().querySelectorAll<HTMLElement>('.session-col-list .session-section-head')]
+      .map((head) => head.textContent);
+    expect(heads[0]).toBe('Coordinator');
+    expect(heads[1]).toBe('Landings');
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · Build the package']);
+    // The waiting row says the outcome and who holds it, and how long it has waited.
+    expect(landingRows()[0]!.querySelector('.session-project-merge-row-detail')?.textContent)
+      .toBe('Waiting for a decision');
+    // The row is no conversation: it is not among the session rows.
+    expect(sessionRows().map((row) => row.querySelector('.session-title')?.textContent))
+      .not.toContain('Land · Build the package');
+  });
+
+  it('keeps a LANDING row out of the page’s count, its running number and its timeline', async () => {
+    rows = [LOOSE, COORDINATOR, TASK, LANDING(820, 'Land · Build the package', awaiting(), {
+      status: 'RUNNING', runState: 'RUNNING',
+    })];
+    await mount();
+    await openSessions();
+
+    // The project's TWO conversations, whatever its landings are doing — the landing itself would
+    // make it three, and its RUNNING row a second running one.
+    expect(mounted().querySelector('.session-folder-workspace')?.textContent).toBe('Project · 2 sessions');
+    expect(page()!.querySelector('.session-project-page-progress')?.textContent).toContain('1 running');
+    // And it is not in the time sections either: only the conversations are.
+    expect(sessionRows().map((row) => row.querySelector('.session-title')?.textContent))
+      .toEqual(expect.arrayContaining([COORDINATOR.title, TASK.title]));
+  });
+
+  it('opens the landing session the row is about', async () => {
+    const landing = LANDING(820, 'Land · Build the package', awaiting());
+    rows = [LOOSE, COORDINATOR, TASK, landing];
+    await mount();
+    await openSessions();
+    await click(landingRows()[0], 'the landing row');
+    expect(location).toBe(`/sessions/${landing.id}?project=${PROJECT_ID}`);
+  });
+
+  it('lists the day’s outcomes, folds the rest into one line, and opens it', async () => {
+    rows = [
+      LOOSE, COORDINATOR, TASK,
+      LANDING(821, 'Land · checks failed', awaiting()),
+      LANDING(822, 'Land · landed today', settled('LANDED', 60)),
+      LANDING(823, 'Land · nothing today', settled('NOTHING_TO_LAND', 180)),
+      LANDING(824, 'Land · landed long ago', settled('LANDED', 30 * 60)),
+      LANDING(825, 'Land · nothing long ago', settled('NOTHING_TO_LAND', 50 * 60)),
+    ];
+    await mount();
+    await openSessions();
+
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · checks failed', 'Land · landed today', 'Land · nothing today']);
+    const fold = group()?.querySelector<HTMLButtonElement>('.session-project-landing-fold');
+    expect(fold?.textContent).toContain('Earlier · 1 landed · 1 nothing to land');
+    // A fold that counts landings wears v4 04 c1's green ✓ while closed.
+    expect(foldMark(fold)).toBe('✓:is-ok');
+    expect(landingRows()).toHaveLength(3);
+    // Open it: the folded ones are the rows the count named.
+    await click(fold, 'the fold');
+    expect(foldMark(fold)).toBe('◌:is-quiet');
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(expect.arrayContaining(['Land · landed long ago', 'Land · nothing long ago']));
+  });
+
+  it('leaves a zero count out of the fold’s line, and still opens to every older row', async () => {
+    rows = [
+      LOOSE, COORDINATOR, TASK,
+      LANDING(821, 'Land · checks failed', awaiting()),
+      LANDING(824, 'Land · landed long ago', settled('LANDED', 30 * 60)),
+      LANDING(828, 'Land · cancelled long ago', settled('CANCELLED', 40 * 60)),
+    ];
+    await mount();
+    await openSessions();
+
+    const fold = group()?.querySelector<HTMLButtonElement>('.session-project-landing-fold');
+    expect(fold?.querySelector('.session-project-landing-fold-text')?.textContent).toBe('Earlier · 1 landed');
+    expect(foldMark(fold)).toBe('✓:is-ok');
+    await click(fold, 'the fold');
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · checks failed', 'Land · landed long ago', 'Land · cancelled long ago']);
+  });
+
+  it('folds older landings neither count names under a bare Earlier, and opens onto them', async () => {
+    rows = [
+      LOOSE, COORDINATOR, TASK,
+      LANDING(821, 'Land · checks failed', awaiting()),
+      LANDING(828, 'Land · cancelled long ago', settled('CANCELLED', 40 * 60)),
+      LANDING(829, 'Land · handled long ago', settled('HANDLED', 50 * 60)),
+      LANDING(831, 'Land · declined long ago', settled('DECLINED', 60 * 60)),
+    ];
+    await mount();
+    await openSessions();
+
+    const fold = group()?.querySelector<HTMLButtonElement>('.session-project-landing-fold');
+    expect(fold).not.toBeNull();
+    expect(fold?.querySelector('.session-project-landing-fold-text')?.textContent).toBe('Earlier');
+    expect(fold?.getAttribute('aria-expanded')).toBe('false');
+    // A bare fold is no success: its closed ✓ is grey, as iOS and Android draw a closed fold.
+    expect(foldMark(fold)).toBe('✓:is-quiet');
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · checks failed']);
+    await click(fold, 'the fold');
+    expect(fold?.getAttribute('aria-expanded')).toBe('true');
+    expect(foldMark(fold)).toBe('◌:is-quiet');
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · checks failed', 'Land · cancelled long ago', 'Land · handled long ago', 'Land · declined long ago']);
+    expect(landingRows().slice(1).map((row) => row.querySelector('.session-project-merge-row-detail')?.textContent))
+      .toEqual(['Cancelled', 'Handled', 'Declined']);
+  });
+
+  it('is a group of one bare fold when its only landings are old ones neither count names', async () => {
+    rows = [
+      LOOSE, COORDINATOR, TASK,
+      LANDING(828, 'Land · cancelled long ago', settled('CANCELLED', 40 * 60)),
+      LANDING(829, 'Land · handled long ago', settled('HANDLED', 50 * 60)),
+    ];
+    await mount();
+    await openSessions();
+
+    expect(sectionHead()).toBe('Landings');
+    expect(landingRows()).toEqual([]);
+    const fold = group()?.querySelector<HTMLButtonElement>('.session-project-landing-fold');
+    expect(fold?.querySelector('.session-project-landing-fold-text')?.textContent).toBe('Earlier');
+    expect(foldMark(fold)).toBe('✓:is-quiet');
+    await click(fold, 'the fold');
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · cancelled long ago', 'Land · handled long ago']);
+  });
+
+  it('draws no fold when nothing is older than the day', async () => {
+    rows = [
+      LOOSE, COORDINATOR, TASK,
+      LANDING(821, 'Land · checks failed', awaiting()),
+      LANDING(828, 'Land · cancelled today', settled('CANCELLED', 60)),
+    ];
+    await mount();
+    await openSessions();
+
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · checks failed', 'Land · cancelled today']);
+    expect(group()?.querySelector('.session-project-landing-fold')).toBeNull();
+    expect(group()?.textContent).not.toContain('Earlier');
+  });
+
+  it('never lists a landing in flight, nor a merge round that merged', async () => {
+    rows = [
+      LOOSE, COORDINATOR, TASK,
+      LANDING(826, 'Land · still landing', { subject: 'TASK', state: 'IN_FLIGHT', settledAs: null, settledAt: null }),
+      LANDING(827, 'Merge project → main · #8', settled('MERGED', 30, 'PROMOTION')),
+    ];
+    await mount();
+    await openSessions();
+    // Nothing but those two: no group at all.
+    expect(group()).toBeNull();
+    expect(mounted().textContent).not.toContain('Land · still landing');
+    expect(mounted().textContent).not.toContain('Merge project → main · #8');
+  });
+});
+
+/**
+ * The derived landing label at the bottom of a source work session (owner 2026-10-19, board v4
+ * 06 e): the newest generation of the landing work this conversation fed, in the integration
+ * line's words — blue while it moves, green once it landed, red where it stopped — opening the
+ * landing session. A conversation that fed none draws none.
+ */
+describe('the source work session’s landing label', () => {
+  const LANDING = pid(830);
+  const source = (sourceLanding: Record<string, unknown> | null) => [
+    LOOSE,
+    { ...COORDINATOR, sourceLanding },
+    TASK,
+  ];
+  const chip = (): HTMLElement | null => mounted().querySelector<HTMLElement>('.session-source-landing-chip');
+  const at = (landing: Record<string, unknown> | null) => ({
+    landingSessionId: LANDING, subject: 'TASK', state: 'RUNNING', phase: 'CHECK', settledAs: null,
+    targetRef: 'refs/heads/project/alpha', ...landing,
+  });
+
+  async function openSource(landing: Record<string, unknown> | null): Promise<void> {
+    rows = source(landing);
+    await mount(() => expect(chip() ?? mounted().querySelector('.workspace-header')).not.toBeNull(),
+      `/sessions/${COORDINATOR.id}`);
+  }
+
+  it('says it is landing while it moves, and opens the landing session', async () => {
+    await openSource(at({}));
+    expect(chip()?.textContent).toBe('Landing · checking ›');
+    // Read on a bare conversation route, so there is no list context to keep; from a project's
+    // sessions page the `?project=` rides along (LandingLink).
+    expect(chip()?.getAttribute('href')).toBe(`/sessions/${LANDING}`);
+    expect(chip()?.className).toContain('is-run');
+    // The pill wears the ring the board draws on it (06 e); the words say the same thing.
+    expect(chip()?.querySelector('svg[data-glyph="spinner"]')).not.toBeNull();
+  });
+
+  it('says where it landed, and what stopped it', async () => {
+    await openSource(at({ settledAs: 'LANDED' }));
+    expect(chip()?.textContent).toBe('On project/alpha ✓ ›');
+    expect(chip()?.className).toContain('is-landed');
+    // A landed label is not "in hand": no ring.
+    expect(chip()?.querySelector('svg[data-glyph="spinner"]')).toBeNull();
+  });
+
+  it('says checks failed in the failed ink, and draws nothing for no landing at all', async () => {
+    await openSource(at({ state: 'CHECK_FAILED' }));
+    expect(chip()?.textContent).toBe('Landing · checks failed ›');
+    expect(chip()?.className).toContain('is-failed');
+  });
+
+  it('draws none on a conversation that fed no landing work', async () => {
+    await openSource(null);
+    expect(chip()).toBeNull();
   });
 });

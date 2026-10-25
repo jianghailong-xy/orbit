@@ -1,0 +1,11 @@
+{
+ "checks": [],
+ "endedAt": "2026-10-19T17:14:51.632+00:00",
+ "error": "Failed: guest command exited 39: Inferring fsid 12b3f1b2-c9ec-11f1-80c0-525400123456\nInferring config /var/lib/ceph/12b3f1b2-c9ec-11f1-80c0-525400123456/mon.orbit-mr-lab/config\nrbd: image has snapshots - these must be deleted with 'rbd snap purge' before the image can be removed.",
+ "ok": false,
+ "phase": "before",
+ "result": null,
+ "seconds": 56.0,
+ "startedAt": "2026-10-19T17:13:55.599+00:00",
+ "step": "left"
+}

@@ -43,9 +43,31 @@ describe('interruptSession', () => {
   it('stays a bodyless POST when there is nothing to send afterwards', async () => {
     await interruptSession('session-1');
 
+    // No body at all, not an empty one: an interrupt that says nothing extra is an interrupt that
+    // kills nothing, and the flag below must be the only thing that asks for more.
     expect(sentRequests()).toEqual([
       { url: '/api/sessions/session-1/interrupt', method: 'POST', body: undefined },
     ]);
+  });
+
+  it("carries Stop's stopBackgroundWork in the same request, and nothing else", async () => {
+    await interruptSession('session-1', undefined, { stopBackgroundWork: true });
+
+    const sent = sentRequests();
+    expect(sent).toHaveLength(1);
+    expect(sent[0].url).toBe('/api/sessions/session-1/interrupt');
+    expect(sent[0].method).toBe('POST');
+    // The one field, explicit: one press is one decision, and a second request could apply half of
+    // it. No clientTurnId rides along — that keys a follow-up, and there is none.
+    expect(sent[0].body).toEqual({ stopBackgroundWork: true });
+  });
+
+  it('keeps the flag off every call that did not ask for it', async () => {
+    await interruptSession('session-1', { content: 'this one instead' });
+
+    // interrupt-and-send is a different control (redirect), and it must not quietly inherit a kill:
+    // the follow-up's own shape is what it sends.
+    expect(sentRequests()[0].body).not.toHaveProperty('stopBackgroundWork');
   });
 
   it('carries the follow-up in the interrupt itself, not in a second request', async () => {

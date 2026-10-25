@@ -15,9 +15,10 @@ import {
 
 /**
  * The three places the web closeout read the project differently from the native clients:
- * an Orbit-recorded DONE draws the Why-not-done terminal in the coordinator conversation after a
- * refresh, Orbit checked leaves out only the DONE_REQUEST under review (a START_REQUEST still
- * counts), and the receipt is drawn only for a project whose status is DONE.
+ * an Orbit-recorded DONE draws nothing in the coordinator conversation after a refresh (its ending
+ * is the project page's card — the owner's ruling of 2026-10-25, which took the Why-not-done
+ * terminal out of the conversation), Orbit checked leaves out only the DONE_REQUEST under review
+ * (a START_REQUEST still counts), and the receipt is drawn only for a project whose status is DONE.
  */
 vi.mock('../api', () => ({ api: vi.fn() }));
 
@@ -145,12 +146,12 @@ const text = (): string => window.document.body.textContent ?? '';
 const noItems = { needsYou: [], withCoordinator: [], doneRequest: null };
 
 describe('an Orbit-recorded DONE in the coordinator conversation', () => {
-  it.each([['DERIVED' as const], [null]])('draws This project is done · recorded by Orbit after a refresh (doneBy %s)', async (doneBy) => {
+  it.each([['DERIVED' as const], [null]])('draws nothing after a refresh — the project page has the ending (doneBy %s)', async (doneBy) => {
     await mount(orbitDone(doneBy), noItems, session());
-    const card = window.document.querySelector('.project-why-not-done.is-settled');
-    expect(card).not.toBeNull();
-    expect(card?.querySelector('.project-settlement-heading')?.textContent).toBe(PROJECT_DONE_COPY.thisProjectIsDone);
-    expect(card?.querySelector('.criteria-provenance')?.textContent).toBe(PROJECT_DONE_COPY.recordedByOrbit);
+    expect(window.document.querySelector('.project-why-not-done')).toBeNull();
+    expect(window.document.querySelector('.project-done-card')).toBeNull();
+    expect(text()).not.toContain(PROJECT_DONE_COPY.thisProjectIsDone);
+    expect(text()).not.toContain(PROJECT_DONE_COPY.recordedByOrbit);
     expect(text()).not.toContain(PROJECT_DONE_COPY.receiptPrefix);
   });
 

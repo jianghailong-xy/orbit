@@ -184,7 +184,10 @@ test('Google sign-in configuration: off until an administrator turns it on, the 
 
   const admin = { id: '', email: `admin-${RUN}@google-sign-in-config.invalid`, name: 'First Admin', password: `pw-${RUN}-admin`, accessToken: '' };
 
-  /** A login answer is the pair and the user, exactly as before Google, and its access token the same claims. */
+  /**
+   * A login answer is the pair and the user, exactly as before Google, and its access token the same
+   * claims — plus `sid`, the login session (docs/push-login-session-design.md).
+   */
   const assertSession = (reply: Reply, what: string) => {
     assert.equal(reply.status, 201, `${what} answered ${reply.status}: ${reply.text}`);
     assert.deepEqual(Object.keys(reply.json).sort(), ['accessToken', 'refreshToken', 'user'], what);
@@ -195,9 +198,10 @@ test('Google sign-in configuration: off until an administrator turns it on, the 
     assert.equal(reply.json.user.email, admin.email, what);
     assert.equal(reply.json.user.name, admin.name, what);
     const claims = claimsOf(reply.json.accessToken);
-    assert.deepEqual(Object.keys(claims).sort(), ['email', 'exp', 'iat', 'sub'], what);
+    assert.deepEqual(Object.keys(claims).sort(), ['email', 'exp', 'iat', 'sid', 'sub'], what);
     assert.equal(claims.sub, admin.id, what);
     assert.equal(claims.email, admin.email, what);
+    assert.match(String(claims.sid), /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, what);
     assert.match(reply.json.refreshToken, /^[A-Za-z0-9_-]{43}$/, what);
   };
 

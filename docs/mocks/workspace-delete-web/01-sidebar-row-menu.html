@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<style>
+@font-face { font-family: Inter; src: url(/var/tmp/landing-mock-render/fonts/Inter.ttf); }
+@font-face { font-family: 'Noto Sans SC'; src: url(/var/tmp/landing-mock-render/fonts/NotoSansSC.ttf); }
+body { margin: 0; background: #eef0f3; font-family: Inter, 'Noto Sans SC', sans-serif; color: #1f2329; }
+.board { width: 1560px; padding: 40px 48px 56px; box-sizing: border-box; }
+h1 { font-size: 28px; margin: 0 0 6px; }
+.lead { font-size: 15px; color: #4b5563; line-height: 1.6; margin: 0 0 28px; max-width: 1300px; }
+.row { display: flex; gap: 28px; align-items: flex-start; margin-bottom: 36px; }
+.cell { display: flex; flex-direction: column; gap: 10px; }
+.cap { font-size: 15px; line-height: 1.5; max-width: 100%; }
+.cap b { font-size: 16px; }
+.cap .n { display: inline-block; width: 24px; height: 24px; border-radius: 12px; background: #2f6bff; color: #fff; text-align: center; line-height: 24px; font-size: 13px; font-weight: 600; margin-right: 6px; }
+.cap .n.today { background: #8a919c; }
+.cap .sub { display: block; color: #5b6472; font-size: 13.5px; margin-top: 2px; }
+img { display: block; border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 6px 20px rgba(0,0,0,.08); background: #fff; }
+.sidebar img { width: 280px; }
+.wide img { width: 420px; }
+.dlg img { width: 590px; }
+.cfg img { width: 560px; }
+.phone img { width: 300px; border-radius: 22px; }
+.note { font-size: 13px; color: #5b6472; line-height: 1.6; border-top: 1px solid #d5d9e0; padding-top: 16px; margin-top: 4px; }
+code { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; background: #e3e6ea; padding: 1px 5px; border-radius: 4px; }
+</style></head><body><div class="board">
+<h1>Web 侧边栏 Workspace 行：⋯ / 右键菜单（Configure · Delete workspace…）</h1>
+<p class="lead">现在 web 上删除 workspace 只能走 Infrastructure → 机器 Details → Workspaces 行的 ⋯ 菜单，侧边栏和 workspace 页面都没有入口。方案是在侧边栏每个 workspace 行加一个 ⋯：鼠标悬停时出现在 Ctrl N 的位置，右键整行也打开同一个菜单。删除沿用机器页现有的确认框和文案，服务端（软删除，会话和任务保留）不变。<br>以下截图都是真实构建的 web 界面（方案代码 + 仓库 UI 测试数据），不是手绘。</p>
+
+<div class="row">
+  <div class="cell sidebar"><div class="cap"><span class="n today">①</span><b>现在</b><span class="sub">悬停 site 只有底色变化，没有任何操作入口</span></div><img src="frames/1-today.png"></div>
+  <div class="cell sidebar"><div class="cap"><span class="n">②</span><b>悬停</b><span class="sub">⋯ 出现在 Ctrl 2 的位置，移开就恢复</span></div><img src="frames/2-hover.png"></div>
+  <div class="cell wide"><div class="cap"><span class="n">③</span><b>点 ⋯</b><span class="sub">Configure ／ 分隔线 ／ Delete workspace…（红色）</span></div><img src="frames/3-menu.png"></div>
+  <div class="cell wide"><div class="cap"><span class="n">④</span><b>右键行</b><span class="sub">打开同一个菜单（这里右键的是 scratch）</span></div><img src="frames/4-context.png"></div>
+</div>
+
+<div class="row">
+  <div class="cell dlg"><div class="cap"><span class="n">⑤</span><b>Delete workspace… → 确认</b><span class="sub">和机器页 Delete 一样的标题、说明和按钮</span></div><img src="frames/5-confirm.png"></div>
+  <div class="cell dlg"><div class="cap"><span class="n">⑥</span><b>服务端拒绝时</b><span class="sub">workspace 还是某个项目的 coordinator：错误显示在对话框里，对话框不关</span></div><img src="frames/6-refused.png"></div>
+  <div class="cell sidebar"><div class="cap"><span class="n">⑦</span><b>删除后</b><span class="sub">行消失，计数 4→3，Ctrl N 顺延。删的是当前打开的 workspace 时回首页</span></div><img src="frames/7-deleted.png"></div>
+</div>
+
+<div class="row">
+  <div class="cell cfg"><div class="cap"><span class="n">⑧</span><b>Configure</b><span class="sub">跳到所属机器页，自动展开这个 workspace 的编辑器并滚到它（新增 <code>?workspace=</code> 参数，打开后即去掉）</span></div><img src="frames/8-configure.png"></div>
+  <div class="cell phone"><div class="cap"><span class="n">⑨</span><b>手机抽屉（≤960px）</b><span class="sub">没有悬停，⋯ 常显；和 Workspaces 的 Edit 同一规则</span></div><img src="frames/9-phone.png"></div>
+  <div class="cell" style="width:520px"><div class="note">
+    <b>范围</b><br>
+    · 只改 web：<code>TasksSidePanel.tsx</code>（行菜单 + 确认框）、<code>RunnerDetailPage.tsx</code>（<code>?workspace=</code> 打开编辑器）、<code>index.css</code>。<br>
+    · 折叠后的头像栏、Edit 排序模式下不出菜单。<br>
+    · 没有机器的共享 workspace，菜单里只有 Delete workspace…。<br>
+    · 拒绝文案来自服务端，原文是 “This agent still coordinates…”，这次不改。<br>
+    · macOS / iOS / Android 已有删除入口，这次不动。
+  </div></div>
+</div>
+</div></body></html>

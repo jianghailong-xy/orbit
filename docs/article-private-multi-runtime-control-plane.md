@@ -126,7 +126,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Open the gateway, add the runner from **Runners → Add a runner**, and point a workspace at a copy of
+Open the gateway, add the runner from **Infrastructure → Add → Register a machine**, and point a workspace at a copy of
 `examples/demo-repo/`. Run `npm test`, inspect the transcript, then repeat with a second task and
 worktree isolation if the repository is suitable.
 

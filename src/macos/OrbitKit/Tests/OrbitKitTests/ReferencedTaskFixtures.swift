@@ -5,7 +5,8 @@ import Foundation
 /// None of it is typed out here: every note is transcribed from the browser's own fixtures
 /// (`src/web/src/lib/referencedTask.fixtures.ts`), which is where each is stamped with the row it
 /// came from. `ReferencedTaskCopyParityTests` reads that file back and fails if the two ends ever
-/// come to hold different text — a reading proved against a note nobody sends is no reading.
+/// come to hold different text — a reading proved against a note nobody sends is no reading. The rows
+/// are Chinese, as the block was written until 2026-10; `inEnglish` is what it is written in now.
 enum ReferencedTaskFixtures {
 
     /// One reference, the shape 25 of this deployment's 26 notes have. (run_event 01a0a2e1-2bc8-76b6-8cde-02a1227751ea)
@@ -134,6 +135,25 @@ enum ReferencedTaskFixtures {
 </background-jobs>
 """#
 
+    /// Two references as `describeTask` has written them since the block became English (2026-10-10): a verification task that ran, and a task nothing has run, unassigned and in no list. Not a row — apiserver tasks/reference-expansion.spec.ts writes these two blocks and compares them to the browser's copy of this note.
+    static let inEnglish = #"""
+<referenced-task id="34DH29mTc7OQ6AwxAFIJu">
+  Title    Claude QA: verify the Watch core backend and its recovery semantics
+  Status   DONE · verification task
+  List     (no list) · assignee orbit
+  Runs     1 in total, 1 of them took a turn; last: SUCCEEDED, 144 turns
+  For the details, fetch them yourself with task_get.
+</referenced-task>
+
+<referenced-task id="349vy0HknpSjHwdwJ31O1">
+  Title    P0 | Review and publish the docs and the community baseline
+  Status   OPEN
+  List     (no list) · assignee (unassigned)
+  Runs     0 in total, 0 of them took a turn; last: never run
+  For the details, fetch them yourself with task_get.
+</referenced-task>
+"""#
+
     /// Every note, under the name the browser's fixtures give it.
     static let all: [String: String] = [
         "ONE_TASK": oneTask,
@@ -141,5 +161,6 @@ enum ReferencedTaskFixtures {
         "TWO_TASKS": twoTasks,
         "EIGHT_TASKS": eightTasks,
         "WITH_BACKGROUND_JOBS": withBackgroundJobs,
+        "IN_ENGLISH": inEnglish,
     ]
 }

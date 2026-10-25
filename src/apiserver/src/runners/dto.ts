@@ -12,6 +12,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { KIMI_REGIONS, type InstallEngine, type KimiRegion, type LoginEngine } from '@orbit/shared';
+import { IsPublicId } from '../common/public-id';
 
 export class CreateEnrollmentTokenDto {
   @IsOptional() @IsString() label?: string;
@@ -31,10 +32,11 @@ export class UpdateRunnerDto {
   @IsOptional() @IsInt() @Min(1) minFreeDiskMb?: number | null;
 }
 
-// The requested runner order. The service filters this list against the caller's
-// current runners and appends omitted runners, so stale clients cannot drop rows.
+// The requested runner order, in the public ids GET /runners hands out — decoded to the UUIDs the
+// service compares, so uniqueness holds across both spellings. The service filters this list against
+// the caller's current runners and appends omitted runners, so stale clients cannot drop rows.
 export class ReorderRunnersDto {
-  @IsArray() @IsString({ each: true }) @ArrayUnique() ids!: string[];
+  @IsArray() @IsPublicId({ each: true }) @ArrayUnique() ids!: string[];
 }
 
 /** The authorization code the user pasted back from the hosted OAuth callback page. */
@@ -49,9 +51,10 @@ export class SubmitLoginCodeDto {
  */
 export const ACCOUNT_ID_PATTERN = /^(?:default|[0-9a-f]{8})$/;
 
-/** Which CLI to sign in. Absent from an older client, which only ever signed in claude. */
+/** Which CLI to sign in. Absent from an older client, which only ever signed in claude. Cursor CLI's
+ *  goes only to a runner that declares cursor-account-login/v1 (RunnersService.startLogin). */
 export class StartLoginDto {
-  @IsOptional() @IsIn(['claude', 'codex', 'kimi', 'antigravity']) engine?: LoginEngine;
+  @IsOptional() @IsIn(['claude', 'codex', 'kimi', 'antigravity', 'cursor']) engine?: LoginEngine;
   /** Sign in this account the runner already has, of an engine that keeps accounts. Absent: the
    *  runner's own login. */
   @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) account?: string;
@@ -68,7 +71,8 @@ export class RenameAccountDto {
   @IsString() @MaxLength(60) name!: string;
 }
 
-/** Which CLI to install on the runner. Required — there is no historical default here. */
+/** Which CLI to install on the runner. Required — there is no historical default here. Cursor CLI's
+ *  goes only to a runner that knows Cursor CLI (RunnersService.startInstall). */
 export class StartInstallDto {
-  @IsIn(['claude', 'codex', 'kimi', 'antigravity', 'opencode', 'dsh']) engine!: InstallEngine;
+  @IsIn(['claude', 'codex', 'kimi', 'antigravity', 'opencode', 'dsh', 'cursor']) engine!: InstallEngine;
 }

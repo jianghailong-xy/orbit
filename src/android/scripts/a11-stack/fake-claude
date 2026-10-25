@@ -10,6 +10,11 @@ Turn outcome is chosen by the prompt text:
   * contains A11-FAIL (task runs only, i.e. ORBIT_TASK_ID set) -> marks the current task IN_PROGRESS via `orbit task update` (as an agent starting
                          work does), then the turn FAILS (result is_error=true): the server fails the
                          task and, for a project task, opens a real TASK_FAILED exception;
+  * contains A07C-QUOTA (any session, its first such turn only) -> Claude Code's weekly-limit sentence, resetting two
+                         days out, as the CLI says it (assistant text, success result): the server arms the session's
+                         auto-retry from it. The same message re-sent is answered;
+  * contains A07C-FAIL (any session, its first such turn only) -> the turn FAILS (result is_error=true); the same
+                         message re-sent is answered;
   * otherwise         -> succeeds; inside a task worktree (cwd under …/worktrees/) it first appends one line
                          to A11_STACK_NOTES.md there (so `test -f A11_STACK_NOTES.md` acceptance passes).
 Every invocation is logged to $A11_FAKE_CLAUDE_LOG (if set).
@@ -86,9 +91,25 @@ def mark_in_progress():
         return f'could not mark the task IN_PROGRESS ({e})'
 
 
+def first_time(sid, marker):
+    """Whether this session meets [marker] for the first time (A07c's one-shot failures: a re-send of the message is answered)."""
+    seen = os.path.join(os.path.dirname(os.environ.get('A11_FAKE_CLAUDE_LOG') or os.environ.get('TMPDIR', '/tmp') + '/x'), 'fake-claude-seen')
+    os.makedirs(seen, exist_ok=True)
+    path = os.path.join(seen, f'{marker}-{sid}')
+    if os.path.exists(path):
+        return False
+    open(path, 'w').close()
+    return True
+
+
 def turn(sid, prompt):
     """Returns (assistant text, is_error)."""
     first = (prompt.strip().splitlines() or [''])[0][:160]
+    if 'A07C-QUOTA' in prompt and first_time(sid, 'A07C-QUOTA'):
+        reset = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=2)
+        return (f"You've hit your weekly limit · resets {reset:%b} {reset.day}, 1pm (Europe/Berlin)", False)
+    if 'A07C-FAIL' in prompt and first_time(sid, 'A07C-FAIL'):
+        return ('a11-stack fake engine: this turn fails on purpose (the message carries A07C-FAIL). No model was called.', True)
     if 'A11-FAIL' in prompt and os.environ.get('ORBIT_TASK_ID'):
         # Only a task's own run fails (a coordinator reading about the task must not). Like an agent starting work: mark the current task IN_PROGRESS through the runner's own CLI
         # (the server fails a task, and opens its project's TASK_FAILED item, only from IN_PROGRESS).

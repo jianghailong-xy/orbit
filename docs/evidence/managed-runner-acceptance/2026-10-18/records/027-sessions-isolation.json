@@ -1,0 +1,567 @@
+{
+ "checks": [
+  {
+   "check": "ann->bob: every request of the other owner naming this runner, workspace or instance is refused",
+   "ok": true,
+   "value": [
+    [
+     "B reads A's runner",
+     404,
+     null
+    ],
+    [
+     "B rotates A's runner's token",
+     404,
+     null
+    ],
+    [
+     "B deletes A's runner",
+     404,
+     null
+    ],
+    [
+     "B reads A's default workspace",
+     404,
+     null
+    ],
+    [
+     "B deletes A's default workspace",
+     404,
+     null
+    ],
+    [
+     "B's runner credential naming A's instance",
+     403,
+     "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED"
+    ],
+    [
+     "B's runner credential naming A's instance, claiming",
+     403,
+     "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED"
+    ]
+   ]
+  },
+  {
+   "check": "ann->bob: the other owner's writes left this mapping as it was",
+   "ok": true,
+   "value": {
+    "after": {
+     "generation": 1,
+     "management_state": "READY",
+     "pod_uid": "1ca70f34-4eb1-4a12-b9f5-db99499f73d2",
+     "pvc_uid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+     "revision": 17
+    },
+    "before": {
+     "generation": 1,
+     "management_state": "READY",
+     "pod_uid": "1ca70f34-4eb1-4a12-b9f5-db99499f73d2",
+     "pvc_uid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+     "revision": 17
+    }
+   }
+  },
+  {
+   "check": "ann->bob: the admission guard refuses Pods mixing the two owners and volumes",
+   "ok": true,
+   "value": [
+    "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the",
+    "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the"
+   ]
+  },
+  {
+   "check": "bob->ann: every request of the other owner naming this runner, workspace or instance is refused",
+   "ok": true,
+   "value": [
+    [
+     "B reads A's runner",
+     404,
+     null
+    ],
+    [
+     "B rotates A's runner's token",
+     404,
+     null
+    ],
+    [
+     "B deletes A's runner",
+     404,
+     null
+    ],
+    [
+     "B reads A's default workspace",
+     404,
+     null
+    ],
+    [
+     "B deletes A's default workspace",
+     404,
+     null
+    ],
+    [
+     "B's runner credential naming A's instance",
+     403,
+     "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED"
+    ],
+    [
+     "B's runner credential naming A's instance, claiming",
+     403,
+     "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED"
+    ]
+   ]
+  },
+  {
+   "check": "bob->ann: the other owner's writes left this mapping as it was",
+   "ok": true,
+   "value": {
+    "after": {
+     "generation": 1,
+     "management_state": "READY",
+     "pod_uid": "a0c62ecc-5825-40b9-ba8d-3ab33f74d620",
+     "pvc_uid": "f5cccf9b-6093-453e-b5de-f05993a2a483",
+     "revision": 17
+    },
+    "before": {
+     "generation": 1,
+     "management_state": "READY",
+     "pod_uid": "a0c62ecc-5825-40b9-ba8d-3ab33f74d620",
+     "pvc_uid": "f5cccf9b-6093-453e-b5de-f05993a2a483",
+     "revision": 17
+    }
+   }
+  },
+  {
+   "check": "bob->ann: the admission guard refuses Pods mixing the two owners and volumes",
+   "ok": true,
+   "value": [
+    "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the",
+    "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the"
+   ]
+  },
+  {
+   "check": "ann cannot read or act on bob's session, attachment or workspace",
+   "ok": true,
+   "value": {
+    "make a session in its workspace": 403,
+    "read its events": 404,
+    "read the attachment": 404,
+    "read the session": 404,
+    "send it a turn": 404
+   }
+  },
+  {
+   "check": "bob cannot read or act on ann's session, attachment or workspace",
+   "ok": true,
+   "value": {
+    "make a session in its workspace": 403,
+    "read its events": 404,
+    "read the attachment": 404,
+    "read the session": 404,
+    "send it a turn": 404
+   }
+  },
+  {
+   "check": "ann: one RBD filesystem in the runner, at /var/lib/orbit",
+   "ok": true,
+   "value": [
+    {
+     "fstype": "ext4",
+     "source": "/dev/rbd1",
+     "target": "/var/lib/orbit"
+    }
+   ]
+  },
+  {
+   "check": "ann: no service account token, no credential variable, no RBD device node",
+   "ok": true,
+   "value": {
+    "credentialLikeVariables": [],
+    "rbdDeviceNodes": [],
+    "serviceAccountToken": false
+   }
+  },
+  {
+   "check": "ann: the Kubernetes API gives the runner nothing (refused as anonymous, or unreachable)",
+   "ok": true,
+   "value": {
+    "/api/v1/namespaces/orbit-mr-test/pods": 401,
+    "/api/v1/namespaces/orbit-mr-test/secrets": 401,
+    "/api/v1/persistentvolumes": 401
+   }
+  },
+  {
+   "check": "bob: one RBD filesystem in the runner, at /var/lib/orbit",
+   "ok": true,
+   "value": [
+    {
+     "fstype": "ext4",
+     "source": "/dev/rbd2",
+     "target": "/var/lib/orbit"
+    }
+   ]
+  },
+  {
+   "check": "bob: no service account token, no credential variable, no RBD device node",
+   "ok": true,
+   "value": {
+    "credentialLikeVariables": [],
+    "rbdDeviceNodes": [],
+    "serviceAccountToken": false
+   }
+  },
+  {
+   "check": "bob: the Kubernetes API gives the runner nothing (refused as anonymous, or unreachable)",
+   "ok": true,
+   "value": {
+    "/api/v1/namespaces/orbit-mr-test/pods": 401,
+    "/api/v1/namespaces/orbit-mr-test/secrets": 401,
+    "/api/v1/persistentvolumes": 401
+   }
+  },
+  {
+   "check": "the two accounts have two different RBD images",
+   "ok": true,
+   "value": {
+    "ann": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+    "bob": "csi-vol-89d3b261-afdc-45cd-b89a-0fe94e3f46b8"
+   }
+  },
+  {
+   "check": "ann: a second Pod on the same node and claim is refused by the admission guard",
+   "ok": true,
+   "value": {
+    "a copy of the runner's Pod under another name, by the manager": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission",
+    "an unlabelled Pod on the claim, by the cluster admin": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission"
+   }
+  },
+  {
+   "check": "ann: the runner's own Pod still runs",
+   "ok": true
+  },
+  {
+   "check": "bob: a second Pod on the same node and claim is refused by the admission guard",
+   "ok": true,
+   "value": {
+    "a copy of the runner's Pod under another name, by the manager": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission",
+    "an unlabelled Pod on the claim, by the cluster admin": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission"
+   }
+  },
+  {
+   "check": "bob: the runner's own Pod still runs",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-18T12:39:16.009+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "sessions",
+ "result": {
+  "crossUser": {
+   "ann->bob": {
+    "a": "ann",
+    "aAfter": {
+     "generation": 1,
+     "management_state": "READY",
+     "pod_uid": "1ca70f34-4eb1-4a12-b9f5-db99499f73d2",
+     "pvc_uid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+     "revision": 17
+    },
+    "aBefore": {
+     "generation": 1,
+     "management_state": "READY",
+     "pod_uid": "1ca70f34-4eb1-4a12-b9f5-db99499f73d2",
+     "pvc_uid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+     "revision": 17
+    },
+    "aUnchanged": true,
+    "admission": [
+     {
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_FIXED_NAME: the one Pod of this volume is mr-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+      "case": "B's fixed name and identity, A's volume",
+      "exit": 1
+     },
+     {
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_OWNER: the Pod does not name the owner and runner of this volume",
+      "case": "A's fixed name and volume, B as the owner",
+      "exit": 1
+     }
+    ],
+    "answers": [
+     {
+      "case": "B reads its managed runner: its own, never A's",
+      "code": null,
+      "isA": false,
+      "message": null,
+      "route": "GET /api/managed-runner",
+      "runnerId": "34i3Ux0HnGyvX4i5pm6eJ",
+      "status": 200
+     },
+     {
+      "case": "B's retry at A's revision",
+      "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+      "message": "A READY managed runner is not retried.",
+      "route": "POST /api/managed-runner/retry",
+      "status": 409
+     },
+     {
+      "case": "B's sleep at A's revision",
+      "code": "MANAGED_RUNNER_BUSY",
+      "message": "This managed runner has work in flight or waiting, and sleep never interrupts work. Try again once it is done.",
+      "route": "POST /api/managed-runner/sleep",
+      "status": 409
+     },
+     {
+      "case": "B reads A's runner",
+      "code": null,
+      "message": "runner not found",
+      "route": "GET /api/runners/34i3UwvtrrXrgKkMkILWI",
+      "status": 404
+     },
+     {
+      "case": "B rotates A's runner's token",
+      "code": null,
+      "message": "runner not found",
+      "route": "POST /api/runners/34i3UwvtrrXrgKkMkILWI/rotate-token",
+      "status": 404
+     },
+     {
+      "case": "B deletes A's runner",
+      "code": null,
+      "message": "runner not found",
+      "route": "DELETE /api/runners/34i3UwvtrrXrgKkMkILWI",
+      "status": 404
+     },
+     {
+      "case": "B reads A's default workspace",
+      "code": null,
+      "message": "workspace not found",
+      "route": "GET /api/workspaces/34i3Uwy2j7K0mst5UIR7O",
+      "status": 404
+     },
+     {
+      "case": "B deletes A's default workspace",
+      "code": null,
+      "message": "workspace not found",
+      "route": "DELETE /api/workspaces/34i3Uwy2j7K0mst5UIR7O",
+      "status": 404
+     },
+     {
+      "case": "B's runner credential naming A's instance",
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "message": "Pod 1ca70f34-4eb1-4a12-b9f5-db99499f73d2 is not the instance authorized for generation 1.",
+      "route": "GET /api/runner/me",
+      "status": 403
+     },
+     {
+      "case": "B's runner credential naming A's instance, claiming",
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "message": "Pod 1ca70f34-4eb1-4a12-b9f5-db99499f73d2 is not the instance authorized for generation 1.",
+      "route": "GET /api/runner/sessions/claim",
+      "status": 403
+     }
+    ],
+    "at": "2026-10-18T12:39:14.085+00:00",
+    "b": "bob",
+    "bCredentialSha256Prefix": "c8ad7dc41e14"
+   },
+   "bob->ann": {
+    "a": "bob",
+    "aAfter": {
+     "generation": 1,
+     "management_state": "READY",
+     "pod_uid": "a0c62ecc-5825-40b9-ba8d-3ab33f74d620",
+     "pvc_uid": "f5cccf9b-6093-453e-b5de-f05993a2a483",
+     "revision": 17
+    },
+    "aBefore": {
+     "generation": 1,
+     "management_state": "READY",
+     "pod_uid": "a0c62ecc-5825-40b9-ba8d-3ab33f74d620",
+     "pvc_uid": "f5cccf9b-6093-453e-b5de-f05993a2a483",
+     "revision": 17
+    },
+    "aUnchanged": true,
+    "admission": [
+     {
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_FIXED_NAME: the one Pod of this volume is mr-01a14f03-ec5a-749b-9877-e882a1a198eb",
+      "case": "B's fixed name and identity, A's volume",
+      "exit": 1
+     },
+     {
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_OWNER: the Pod does not name the owner and runner of this volume",
+      "case": "A's fixed name and volume, B as the owner",
+      "exit": 1
+     }
+    ],
+    "answers": [
+     {
+      "case": "B reads its managed runner: its own, never A's",
+      "code": null,
+      "isA": false,
+      "message": null,
+      "route": "GET /api/managed-runner",
+      "runnerId": "34i3UwvtrrXrgKkMkILWI",
+      "status": 200
+     },
+     {
+      "case": "B's retry at A's revision",
+      "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+      "message": "A READY managed runner is not retried.",
+      "route": "POST /api/managed-runner/retry",
+      "status": 409
+     },
+     {
+      "case": "B's sleep at A's revision",
+      "code": "MANAGED_RUNNER_BUSY",
+      "message": "This managed runner has work in flight or waiting, and sleep never interrupts work. Try again once it is done.",
+      "route": "POST /api/managed-runner/sleep",
+      "status": 409
+     },
+     {
+      "case": "B reads A's runner",
+      "code": null,
+      "message": "runner not found",
+      "route": "GET /api/runners/34i3Ux0HnGyvX4i5pm6eJ",
+      "status": 404
+     },
+     {
+      "case": "B rotates A's runner's token",
+      "code": null,
+      "message": "runner not found",
+      "route": "POST /api/runners/34i3Ux0HnGyvX4i5pm6eJ/rotate-token",
+      "status": 404
+     },
+     {
+      "case": "B deletes A's runner",
+      "code": null,
+      "message": "runner not found",
+      "route": "DELETE /api/runners/34i3Ux0HnGyvX4i5pm6eJ",
+      "status": 404
+     },
+     {
+      "case": "B reads A's default workspace",
+      "code": null,
+      "message": "workspace not found",
+      "route": "GET /api/workspaces/34i3Ux0ZvyovI6M6JYbWD",
+      "status": 404
+     },
+     {
+      "case": "B deletes A's default workspace",
+      "code": null,
+      "message": "workspace not found",
+      "route": "DELETE /api/workspaces/34i3Ux0ZvyovI6M6JYbWD",
+      "status": 404
+     },
+     {
+      "case": "B's runner credential naming A's instance",
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "message": "Pod a0c62ecc-5825-40b9-ba8d-3ab33f74d620 is not the instance authorized for generation 1.",
+      "route": "GET /api/runner/me",
+      "status": 403
+     },
+     {
+      "case": "B's runner credential naming A's instance, claiming",
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "message": "Pod a0c62ecc-5825-40b9-ba8d-3ab33f74d620 is not the instance authorized for generation 1.",
+      "route": "GET /api/runner/sessions/claim",
+      "status": 403
+     }
+    ],
+    "at": "2026-10-18T12:39:14.558+00:00",
+    "b": "ann",
+    "bCredentialSha256Prefix": "b04ee759dd9a"
+   }
+  },
+  "inPod": {
+   "ann": {
+    "capEff": "0000000000000000",
+    "credentialLikeVariables": [],
+    "kubernetesApiAnonymous": {
+     "/api/v1/namespaces/orbit-mr-test/pods": 401,
+     "/api/v1/namespaces/orbit-mr-test/secrets": 401,
+     "/api/v1/persistentvolumes": 401
+    },
+    "rbdDeviceNodes": [],
+    "rbdMounts": [
+     {
+      "fstype": "ext4",
+      "source": "/dev/rbd1",
+      "target": "/var/lib/orbit"
+     }
+    ],
+    "serviceAccountToken": false,
+    "uid": 10001
+   },
+   "bob": {
+    "capEff": "0000000000000000",
+    "credentialLikeVariables": [],
+    "kubernetesApiAnonymous": {
+     "/api/v1/namespaces/orbit-mr-test/pods": 401,
+     "/api/v1/namespaces/orbit-mr-test/secrets": 401,
+     "/api/v1/persistentvolumes": 401
+    },
+    "rbdDeviceNodes": [],
+    "rbdMounts": [
+     {
+      "fstype": "ext4",
+      "source": "/dev/rbd2",
+      "target": "/var/lib/orbit"
+     }
+    ],
+    "serviceAccountToken": false,
+    "uid": 10001
+   }
+  },
+  "rbdImages": {
+   "ann": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+   "bob": "csi-vol-89d3b261-afdc-45cd-b89a-0fe94e3f46b8"
+  },
+  "secondPodSameNode": {
+   "ann": {
+    "attempts": {
+     "a copy of the runner's Pod under another name, by the manager": {
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_FIXED_NAME: the one Pod of this volume is mr-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+      "exit": 1
+     },
+     "an unlabelled Pod on the claim, by the cluster admin": {
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_MANAGER: only the managed runner manager may create a Pod that uses a managed runner volume",
+      "exit": 1
+     }
+    },
+    "runnerPod": "1ca70f34-4eb1-4a12-b9f5-db99499f73d2"
+   },
+   "bob": {
+    "attempts": {
+     "a copy of the runner's Pod under another name, by the manager": {
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_FIXED_NAME: the one Pod of this volume is mr-01a14f03-ec5a-749b-9877-e882a1a198eb",
+      "exit": 1
+     },
+     "an unlabelled Pod on the claim, by the cluster admin": {
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_MANAGER: only the managed runner manager may create a Pod that uses a managed runner volume",
+      "exit": 1
+     }
+    },
+    "runnerPod": "a0c62ecc-5825-40b9-ba8d-3ab33f74d620"
+   }
+  },
+  "sessions": {
+   "ann on bob's": {
+    "make a session in its workspace": 403,
+    "read its events": 404,
+    "read the attachment": 404,
+    "read the session": 404,
+    "send it a turn": 404
+   },
+   "bob on ann's": {
+    "make a session in its workspace": 403,
+    "read its events": 404,
+    "read the attachment": 404,
+    "read the session": 404,
+    "send it a turn": 404
+   }
+  }
+ },
+ "seconds": 2.3,
+ "startedAt": "2026-10-18T12:39:13.736+00:00",
+ "step": "isolation"
+}

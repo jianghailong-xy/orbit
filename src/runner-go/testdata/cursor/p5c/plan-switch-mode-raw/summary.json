@@ -1,0 +1,51 @@
+{
+  "args": [
+    "acp",
+    "--disable-auto-update",
+    "--disable-indexing",
+    "--disable-project-configs"
+  ],
+  "cards": null,
+  "checks": [
+    {
+      "name": "real-cursor-home-untouched /root/.cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.config/cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.config/cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.local/share/cursor-agent",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.local/share/cursor-agent: no such file or directory)"
+    }
+  ],
+  "completions": null,
+  "events": null,
+  "facts": {
+    "fileWritten": true,
+    "modeAfter": "plan",
+    "switchModeCards": [
+      "Switch Mode: unknown"
+    ],
+    "tools": [
+      "Switch Mode: agent",
+      "Write"
+    ],
+    "turn": {
+      "error": "",
+      "result": "I'll switch to Agent mode so the file can be created.\n\nSwitched to Agent mode and created `switched.txt` with the word switched.",
+      "status": "SUCCEEDED"
+    }
+  },
+  "mode": "plan",
+  "process": "acp",
+  "processes": null,
+  "prompts": null,
+  "scenario": "plan-switch-mode-raw",
+  "status": "",
+  "version": "2026.10.14-941492e"
+}

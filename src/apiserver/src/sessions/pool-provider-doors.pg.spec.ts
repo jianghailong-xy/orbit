@@ -39,6 +39,7 @@ import { ProvidersService } from '../providers/providers.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-support';
 import { TasksService } from '../tasks/tasks.service';
 import { SessionsService } from './sessions.service';
 
@@ -196,13 +197,14 @@ suite('an account pool through the doors that take a provider, on real PostgreSQ
     assert.equal(claimed.sessionId, sessionId);
     return claimed;
   }
+  /** One poll of the runner's inbox. */
+  const dequeue = (runnerApi as unknown as {
+    dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: string | null): Promise<
+      { kind: string; content?: string; env?: Record<string, string> } | null
+    >;
+  }).dequeueTurn.bind(runnerApi);
   /** The runner's inbox poll, until it is handed the reload a provider switch queued. */
   async function dequeueReload(sessionId: string, runnerId: string) {
-    const dequeue = (runnerApi as unknown as {
-      dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: string | null): Promise<
-        { kind: string; content?: string; env?: Record<string, string> } | null
-      >;
-    }).dequeueTurn.bind(runnerApi);
     for (let polls = 0; polls < 4; polls += 1) {
       const turn = await dequeue(sessionId, runnerId, null);
       assert.ok(turn, 'the inbox handed out nothing');
@@ -372,8 +374,9 @@ suite('an account pool through the doors that take a provider, on real PostgreSQ
     }
 
     // Past the door — the row written by hand, as nothing in the product can — the reload still
-    // resolves the pool within the session's owner only, where it names nothing: refused, not
-    // re-spawned on the Claude default, and the reload is not given out.
+    // resolves the pool within the session's owner only, where it names nothing: not re-spawned on the
+    // Claude default. The reload is answered without being given out, and the session says why in the
+    // words the claim holds it with.
     await db.session.update({ where: { id: theirLive }, data: { provider: pool.slug, providerBuiltin: false } });
     const queued = await db.conversationTurn.create({
       data: {
@@ -385,23 +388,27 @@ suite('an account pool through the doors that take a provider, on real PostgreSQ
         status: 'PENDING',
       },
     });
-    await assert.rejects(dequeueReload(theirLive, stranger.runnerId), /provider not available/);
-    assert.equal((await db.conversationTurn.findUniqueOrThrow({ where: { id: queued.id } })).status, 'PENDING');
+    assert.equal(await dequeue(theirLive, stranger.runnerId, null), null, 'the inbox handed out the reload');
+    assert.deepEqual(
+      await db.conversationTurn.findUniqueOrThrow({ where: { id: queued.id }, select: { status: true, deliveredAt: true } }),
+      { status: 'ANSWERED', deliveredAt: null },
+    );
     assert.equal((await recorded(theirLive)).poolMemberProviderId, null);
+    assert.equal((await db.session.findUniqueOrThrow({ where: { id: theirLive } })).error, PROVIDER_UNAVAILABLE_ERROR);
   });
 
   await t.test("(4) the list an agent reads its slugs from names its owner's own pool, keyless, and nobody else's", async () => {
     const mine = await providers.listUsable(me.id);
     assert.deepEqual(
       mine.find((p) => p.slug === pool.slug),
-      { slug: pool.slug, label: 'Claude accounts', runtime: 'claude', builtin: false },
+      { slug: pool.slug, label: 'Claude accounts', runtime: 'claude', engines: ['claude'], builtin: false },
     );
     assert.equal(mine.some((p) => p.slug === theirPool.slug), false);
 
     const theirs = await providers.listUsable(stranger.id);
     assert.deepEqual(
       theirs.find((p) => p.slug === theirPool.slug),
-      { slug: theirPool.slug, label: 'Their accounts', runtime: 'claude', builtin: false },
+      { slug: theirPool.slug, label: 'Their accounts', runtime: 'claude', engines: ['claude'], builtin: false },
     );
     assert.equal(theirs.some((p) => p.slug === pool.slug), false);
 

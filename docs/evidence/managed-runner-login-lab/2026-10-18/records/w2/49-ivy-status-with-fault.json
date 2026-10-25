@@ -1,0 +1,40 @@
+{
+  "at": "2026-10-17T23:41:11.993+00:00",
+  "display": {
+    "acceptsWork": false,
+    "detail": "This Orbit server can run a runner for you, so you can start sessions without setting up a machine of your own.",
+    "ensure": true,
+    "kind": "setup",
+    "moving": false,
+    "retry": false,
+    "signIn": false,
+    "startsNewSession": false,
+    "title": "Set up a managed runner"
+  },
+  "owner": "ivy",
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": true,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": null,
+    "contractVersion": 1,
+    "desiredState": null,
+    "enabled": true,
+    "heartbeatStatus": null,
+    "initialProvider": null,
+    "lastHeartbeatAt": null,
+    "managementState": "NOT_PROVISIONED",
+    "reason": null,
+    "retryAfter": null,
+    "revision": 0,
+    "runnerId": null,
+    "runnerPublicId": null,
+    "usable": false,
+    "workspaceId": null,
+    "workspacePublicId": null
+  }
+}

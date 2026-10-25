@@ -2,15 +2,14 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntdApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SignInMethods } from '../lib/queries';
 
 /**
  * Admin → Users and Google sign-in (docs/google-sign-in-design.md §5.3, §5.4, §5.6, §8.1): the list
- * says how each account signs in and when it was opened; a row with a Google account linked offers
- * Unlink Google, asked first, through the admin route; and Add user offers a Google-only account
+ * says how each account signs in and when it was opened; the menu of a row with a Google account
+ * linked offers Unlink Google, asked first, through the admin route; and Add user offers a Google-only account
  * while Google sign-in is on. Over a stand-in for the server's `/api` that keeps the accounts.
  */
 
@@ -72,27 +71,49 @@ async function open(): Promise<void> {
     root!.render(
       <MemoryRouter initialEntries={['/admin']}>
         <QueryClientProvider client={client}>
-          <AntdApp>
-            <AdminUsersPage />
-          </AntdApp>
+          <AdminUsersPage />
         </QueryClientProvider>
       </MemoryRouter>,
     );
   });
-  await vi.waitFor(() => expect(container!.querySelectorAll('.ant-table-row').length).toBe(users.length));
+  await vi.waitFor(() => expect(userRows().length).toBe(users.length));
   await settle();
 }
 
 const button = (within: ParentNode | null | undefined, label: string) =>
   [...(within?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((b) => b.textContent?.trim() === label);
-const rowOf = (email: string) =>
-  [...container!.querySelectorAll<HTMLElement>('.ant-table-row')].find((row) => row.querySelector('td')?.textContent === email);
-const headers = () => [...container!.querySelectorAll('.ant-table-thead th')].map((th) => th.textContent?.trim() ?? '');
+/** The users table's rows (its body's rows, less the one that says it is empty). */
+const userRows = () =>
+  [...container!.querySelectorAll<HTMLTableRowElement>('tbody tr')].filter((row) => row.cells.length > 1);
+const rowOf = (email: string) => userRows().find((row) => row.querySelector('.admin-users-email')?.textContent === email);
+const headers = () => [...container!.querySelectorAll('thead th')].map((th) => th.textContent?.trim() ?? '');
 /** The text of `email`'s cell under the column headed `title`. */
 const cell = (email: string, title: string) => rowOf(email)?.querySelectorAll('td')[headers().indexOf(title)]?.textContent?.trim();
 const confirmDialog = () => document.body.querySelector<HTMLElement>('.orbit-confirm[data-open]');
+const menuItems = () => [...document.body.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')];
+/** Opens `email`'s menu of every other action (from the keyboard, as jsdom's click has no pointer behind it). */
+async function openMenu(email: string): Promise<void> {
+  await click(rowOf(email)?.querySelector(`button[aria-label="More actions for ${email}"]`), `${email}'s menu`);
+}
+/** What `email`'s menu offers; it is closed again. */
+async function menuOf(email: string): Promise<string[]> {
+  await openMenu(email);
+  const offered = menuItems().map((item) => item.textContent?.trim() ?? '');
+  await act(async () => {
+    (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+  await settle();
+  return offered;
+}
+async function fromMenu(email: string, label: string): Promise<void> {
+  await openMenu(email);
+  await click(menuItems().find((item) => item.textContent?.trim() === label), `${label} in ${email}'s menu`);
+}
+/** The open dialog named Add user, by the title it is labelled by. */
 const addUserDialog = () =>
-  [...document.body.querySelectorAll<HTMLElement>('.ant-modal')].find((modal) => modal.querySelector('.ant-modal-title')?.textContent === 'Add user');
+  [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
+    (d) => document.getElementById(d.getAttribute('aria-labelledby') ?? '')?.textContent === 'Add user',
+  );
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -151,9 +172,9 @@ afterEach(async () => {
 describe('Admin → Users · Google sign-in', { timeout: 60_000 }, () => {
   it('the list says how each account signs in and when it was opened', async () => {
     await open();
-    expect(headers()).toEqual(['Email', 'Name', 'Role', 'Status', 'Sign-in', 'Created', '']);
+    expect(headers()).toEqual(['User', 'Sign-in', 'Status', 'Last active', 'Created', '']);
     expect(cell('admin@example.test', 'Sign-in')).toBe('Password');
-    expect(cell('dev@example.test', 'Sign-in')).toBe('PasswordGoogle');
+    expect(cell('dev@example.test', 'Sign-in')).toBe('Password · Google');
     expect(cell('gina@gmail.com', 'Sign-in')).toBe('Google');
     expect(cell('nora@example.test', 'Sign-in')).toBe('Google · pending');
     expect(rowOf('dev@example.test')?.querySelector('[title="dev@gmail.com"]')?.textContent).toBe('Google');
@@ -163,18 +184,18 @@ describe('Admin → Users · Google sign-in', { timeout: 60_000 }, () => {
 
   it('Unlink Google is offered only on rows with a Google account, asks first, then unlinks through the admin route', async () => {
     await open();
-    expect(button(rowOf('admin@example.test'), UNLINK_GOOGLE)).toBeUndefined();
-    expect(button(rowOf('nora@example.test'), UNLINK_GOOGLE)).toBeUndefined();
+    expect(await menuOf('admin@example.test')).not.toContain(UNLINK_GOOGLE);
+    expect(await menuOf('nora@example.test')).not.toContain(UNLINK_GOOGLE);
 
     // With a password: the account keeps a way in, and is told so.
-    await click(button(rowOf('dev@example.test'), UNLINK_GOOGLE), 'Unlink Google on dev');
+    await fromMenu('dev@example.test', UNLINK_GOOGLE);
     expect(confirmDialog()?.querySelector('.orbit-overlay-title')?.textContent).toContain('Unlink Google from dev@example.test?');
     expect(confirmDialog()?.textContent).toContain('They can still sign in with their password');
     await click(button(confirmDialog()?.querySelector('.orbit-overlay-footer'), 'Cancel'), 'Cancel');
     expect(requests.filter((r) => r.method === 'DELETE')).toEqual([]);
 
     // Without one: the administrator is told it is left with no way in until a password reset.
-    await click(button(rowOf('gina@gmail.com'), UNLINK_GOOGLE), 'Unlink Google on gina');
+    await fromMenu('gina@gmail.com', UNLINK_GOOGLE);
     expect(confirmDialog()?.textContent).toContain('This account has no password');
     expect(confirmDialog()?.textContent).toContain('until you reset its password');
     await click(button(confirmDialog()?.querySelector('.orbit-overlay-footer'), 'Unlink'), 'Unlink');
@@ -182,8 +203,8 @@ describe('Admin → Users · Google sign-in', { timeout: 60_000 }, () => {
     expect(requests.filter((r) => r.method === 'DELETE')).toEqual([{ path: '/admin/users/U3/identities/google', method: 'DELETE', body: undefined }]);
     expect(toast.success).toHaveBeenCalledWith('Google unlinked', 'gina@gmail.com');
     await vi.waitFor(() => expect(cell('gina@gmail.com', 'Sign-in')).toBe('Google · pending'));
-    expect(button(rowOf('gina@gmail.com'), UNLINK_GOOGLE)).toBeUndefined();
-    expect(button(rowOf('dev@example.test'), UNLINK_GOOGLE)).toBeTruthy();
+    expect(await menuOf('gina@gmail.com')).not.toContain(UNLINK_GOOGLE);
+    expect(await menuOf('dev@example.test')).toContain(UNLINK_GOOGLE);
   });
 
   it('Add user offers Google sign-in only while Google sign-in is on, says which addresses it can work for, and creates the account without a password', async () => {

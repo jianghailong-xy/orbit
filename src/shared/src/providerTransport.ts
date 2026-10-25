@@ -22,6 +22,10 @@ export const PROVIDER_TRANSPORTS: Record<AgentProvider, ProviderTransport> = {
   // ACP JSON-RPC over one resident process; a prompt remains outstanding until ordered updates
   // settle. It has cancellation and configuration, but no mid-turn steer (P0 contract §4).
   [AgentProvider.DSH]: 'json-rpc',
+  // Cursor CLI's own ACP server (`agent acp`), one resident process per session. A second
+  // `session/prompt` mid-turn cancels the running turn (docs/cursor-runtime-contract.md §3.2), so it
+  // has no mid-turn steer either: Orbit queues the message for the next turn (see MID_TURN_STEER).
+  [AgentProvider.CURSOR]: 'json-rpc',
   // One process per turn, carrying that turn's prompt and exiting with it.
   [AgentProvider.OPENCODE]: 'one-shot',
   // One resident `agy --print=` process per session, stream-json in both directions, a `result`
@@ -82,6 +86,8 @@ const MID_TURN_STEER: Record<AgentProvider, string | typeof ALWAYS | typeof NEVE
   // agy runs a mid-turn frame as a turn of its own after the current `result` (contract §8.1),
   // and the runner refuses a steer for it (provider_runtime.go). A message sent mid-turn queues.
   [AgentProvider.ANTIGRAVITY]: NEVER,
+  // A prompt sent mid-turn would cancel the running turn rather than join it (cursor contract §3.2).
+  [AgentProvider.CURSOR]: NEVER,
 };
 
 /**
@@ -111,6 +117,17 @@ export function supportsMidTurnSteer(runtime: string, declaredCapabilities?: rea
 }
 
 /**
+ * Whether this runtime can take a message into a running turn at all, whatever the runner holding
+ * it declared: what a client asks before it offers to send a queued message into the turn (the
+ * tray's Steer). The server still asks the runner (`supportsTargetBoundCurrentWorkSteer`) and
+ * refuses for one too old, so this can only withhold an offer that would always be refused.
+ */
+export function runtimeTakesMidTurnSteer(runtime: string): boolean {
+  const required = MID_TURN_STEER[runtime as AgentProvider];
+  return required !== NEVER && required !== undefined;
+}
+
+/**
  * Whether an explicit CURRENT_WORK message can be fenced to one exact executable turn.
  *
  * Codex app-server addresses an exact engine turn id. Claude has no provider-side address, so its
@@ -124,4 +141,27 @@ export function supportsTargetBoundCurrentWorkSteer(
 ): boolean {
   return supportsSessionCurrentWorkRouting(declaredCapabilities)
     && supportsMidTurnSteer(runtime, declaredCapabilities);
+}
+
+/**
+ * The runner capability that makes a steer the engine has not read yet withdrawable: the runner
+ * takes a `withdraw` turn and asks the resident engine to drop the message (claude's
+ * `cancel_async_message`), and the engine's own answer — dropped, or already read — is the outcome.
+ *
+ * Claude only. Codex buffers a steer inside the running turn with no call that takes one back, so
+ * a codex steer is handed over for good the moment `turn/steer` returns; the other runtimes never
+ * steer at all (their mid-turn messages queue, and a queued message is cancelled by the control
+ * plane alone).
+ */
+export const SESSION_CLAUDE_STEER_WITHDRAW_V1 = 'session-claude-steer-withdraw-v1';
+
+/**
+ * Whether a steer already handed to this runtime can still be taken back before it is read.
+ * Asked of the RUNTIME a session executes on (`execRuntime`), and of what the runner holding it
+ * declared: absent capabilities mean not declared, so a runner that predates `withdraw` keeps the
+ * refusal every steer has always had rather than being sent a turn it has no arm for.
+ */
+export function supportsSteerWithdraw(runtime: string, declaredCapabilities?: readonly string[]): boolean {
+  return runtime === AgentProvider.CLAUDE
+    && (declaredCapabilities ?? []).some((value) => value.trim().toLowerCase() === SESSION_CLAUDE_STEER_WITHDRAW_V1);
 }

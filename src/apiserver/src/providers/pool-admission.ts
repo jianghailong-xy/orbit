@@ -60,7 +60,7 @@ export function poolUnavailableReason(
   members: Array<PoolAdmissionRow & { label: string; enabled: boolean }>,
 ): string {
   if (members.length === 0) {
-    return `the account pool "${label}" has no accounts in it — add one on the Providers page, or pick another provider`;
+    return `the account pool "${label}" has no accounts in it — add one under Account pools on Infrastructure, or pick another provider`;
   }
   const out = members.map((member) => {
     const refusal = poolMemberRefusal(member);
@@ -69,6 +69,6 @@ export function poolUnavailableReason(
   });
   return (
     `no account in the pool "${label}" can run (${out.join('; ')}) — ` +
-    'fix one on the Providers page, or pick another provider'
+    'fix one under Account pools on Infrastructure, or pick another provider'
   );
 }

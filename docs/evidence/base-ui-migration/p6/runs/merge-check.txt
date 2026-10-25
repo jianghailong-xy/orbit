@@ -1,0 +1,2932 @@
+argv: bash -c cd /root/.orbit/worktrees/05c9af49-f99c-506f-b2c2-2c26a5edc79e && npm run build -w @orbit/web && npm run test -w @orbit/web
+tree: /root/.orbit/worktrees/05c9af49-f99c-506f-b2c2-2c26a5edc79e
+head: 6879542dc23a10a74417002810331a7e73778842
+uncommitted:
+load: 12.26 12.94 13.42 11/3460 1566529
+mem: 6040M available
+disk: / 68499M available, TMPDIR /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/tmp
+started: 2026-10-10T15:59:24Z
+
+
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 3238 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     6.07 kB │ gzip:   2.57 kB
+dist/assets/TaskDependencyGraph-DLioOiRN.css       15.41 kB │ gzip:   2.56 kB
+dist/assets/app-5i74Rup2.css                      496.27 kB │ gzip:  82.13 kB
+dist/assets/rolldown-runtime-hePW80VL.js            0.71 kB │ gzip:   0.42 kB
+dist/assets/StartPlanGraph-hcUVNew6.js              0.93 kB │ gzip:   0.53 kB
+dist/assets/ProjectTaskPanel-DTszGsa6.js            1.01 kB │ gzip:   0.59 kB
+dist/assets/BatchPlanGraph-D9LY9phL.js              1.07 kB │ gzip:   0.61 kB
+dist/assets/batchGraph-BnreTWgZ.js                  1.21 kB │ gzip:   0.65 kB
+dist/assets/ProjectDependencyGraph-D5PYFVx0.js     14.88 kB │ gzip:   5.52 kB
+dist/assets/Popconfirm-DqvX2hsy.js                 37.13 kB │ gzip:  12.00 kB
+dist/assets/projectDependencyGraph-u73Bjkqx.js    159.80 kB │ gzip:  53.65 kB
+dist/assets/taskDependencyGraph-CvMW041r.js       182.59 kB │ gzip:  61.90 kB
+dist/assets/TaskDependencyGraph-Bv2ZwuMe.js       188.64 kB │ gzip:  60.88 kB
+dist/assets/Transcript-f-omyaXB.js                705.29 kB │ gzip: 216.93 kB
+dist/assets/sessionExport-CDXq3grC.js             893.69 kB │ gzip: 214.77 kB
+dist/assets/index-BHnrYkic.js                   1,713.11 kB │ gzip: 511.38 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 916ms
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/05c9af49-f99c-506f-b2c2-2c26a5edc79e/src/web
+
+ ✓ src/pages/ProjectsPage.test.tsx (103 tests) 363ms
+ ✓ src/components/Transcript.test.tsx (126 tests) 603ms
+   ✓ a tag block typed into a user bubble (1)
+     ✓ keeps its lines and indentation on screen, in the person’s own bubble, with nothing attached 441ms
+ ✓ src/components/EvidenceDecisionCard.test.tsx (63 tests) 359ms
+ ✓ src/components/ProjectProgressStatus.test.tsx (52 tests) 514ms
+ ✓ src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx (19 tests) 2086ms
+   ✓ the start card in WorkspaceView (6)
+     ✓ is drawn once in a coordinator conversation, beside the criteria card, through every re-read 366ms
+ ✓ src/components/StartProjectCard.test.tsx (37 tests) 605ms
+ ✓ src/components/AcceptanceConfirmationCard.test.tsx (41 tests) 461ms
+ ✓ src/lib/sessionProviderChoices.test.ts (72 tests) 14ms
+ ✓ src/pages/TaskListView.test.tsx (33 tests) 128ms
+ ✓ src/components/WorkspaceView.projectSessions.test.tsx (54 tests) 8775ms
+   ✓ project entry navigation and actions (13)
+     ✓ opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=false) 397ms
+   ✓ project sessions page (30)
+     ✓ opens a phone row’s menu on a held press, and its release does not open the row 630ms
+   ✓ project-specific supplemental reads (5)
+     ✓ keeps the entry query stable on unrelated events and debounces project-member updates 1466ms
+     ✓ keeps the page query stable on unrelated events and debounces project-member updates 1515ms
+ ✓ src/components/CriteriaDecisionCard.test.tsx (36 tests) 539ms
+   ✓ a card that is no longer a question (3)
+     ✓ is the whole card at 0.72, and no later rule in the stylesheet takes it back 500ms
+ ✓ src/components/TaskDetailPanel.test.tsx (65 tests) 238ms
+ ✓ src/lib/workspaceDefaults.test.ts (67 tests) 10ms
+ ✓ src/components/ApprovalPanel.test.tsx (43 tests) 737ms
+ ✓ src/components/ProjectPromotionCard.test.tsx (54 tests) 91ms
+ ✓ src/components/WorkspaceView.coordinatorChat.test.tsx (21 tests) 1793ms
+   ✓ Chat about this in the coordinator conversation (3)
+     ✓ task-scoped, escalated: arms this composer with the item, and sends it as an ordinary turn carrying the project, the item, what failed and where it stands — through no door 339ms
+ ✓ src/components/ProjectAcceptanceCard.test.tsx (37 tests) 150ms
+ ✓ src/components/ProjectPanoramaHeader.test.tsx (63 tests) 49ms
+ ✓ src/lib/projectAttention.test.ts (61 tests) 33ms
+ ✓ src/components/ProjectDependencyGraph.test.tsx (45 tests) 94ms
+ ✓ src/components/WorkspaceView.codexAccount.test.tsx (22 tests) 2904ms
+   ✓ the runner account a session runs on (22)
+     ✓ with no account picked, a new session starts on the one Automatic picks, and says which 387ms
+     ✓ starts the new session on an account picked under Codex, and Automatic takes the pick back 310ms
+ ✓ src/components/PlanUsageIndicator.test.tsx (33 tests) 1662ms
+ ✓ src/components/DecisionRail.test.tsx (33 tests) 23ms
+ ✓ src/components/WorkspaceView.promotionPlacement.test.tsx (13 tests) 1265ms
+   ✓ the record a merge leaves, in the conversation it happened in (4)
+     ✓ is drawn among the events, at the moment it happened, and not in the pane’s card strip 324ms
+ ✓ src/lib/watches.test.ts (42 tests) 12ms
+ ✓ src/components/QueuedUserTurn.test.tsx (34 tests) 521ms
+stderr | src/pages/ProjectsPageToolbar.test.tsx > ProjectsPage — empty states > offers a create CTA on an account with nothing in it
+No routes matched location "/workspaces/2zQeDGWFFAgN2112jNEnZ/new?intent=project" 
+
+stderr | src/pages/ProjectsPageToolbar.test.tsx > ProjectsPage — starting a project > opens project-intent compose in firstOpenableWorkspace order
+No routes matched location "/workspaces/2zQeDGWFFAgN2112jNEna/new?intent=project" 
+
+stderr | src/pages/ProjectsPageToolbar.test.tsx > ProjectsPage — starting a project > routes to runner guidance when every workspace runner is offline
+No routes matched location "/infrastructure" 
+
+stderr | src/pages/ProjectsPageToolbar.test.tsx > ProjectsPage — starting a project > uses the DefaultLanding registration guide when no workspace can open
+No routes matched location "/runners/register" 
+
+stderr | src/pages/ProjectsPageToolbar.test.tsx > ProjectsPage — starting a project > uses the DefaultLanding only runner when no workspace can open
+No routes matched location "/runners/2zQeDGWFFAgN2112jNEnJ" 
+
+stderr | src/pages/ProjectsPageToolbar.test.tsx > ProjectsPage — starting a project > uses the DefaultLanding machine list when no workspace can open
+No routes matched location "/infrastructure" 
+
+ ✓ src/pages/ProjectsPageToolbar.test.tsx (18 tests) 870ms
+ ✓ src/components/TaskDetailPanel.modelRouting.test.tsx (21 tests) 1304ms
+ ✓ src/pages/ProviderPoolPage.whoCanUseIt.test.tsx (9 tests) 671ms
+ ✓ src/components/OwnerConfirmationCard.test.tsx (22 tests) 110ms
+ ✓ src/pages/InfrastructurePage.codexLogin.test.tsx (19 tests) 13273ms
+   ✓ a Codex pool of one’s own ChatGPT account (19)
+     ✓ puts an account in with the device flow: the notice, the code and its page, then the account 2072ms
+     ✓ offers a new code once the old one expired 2068ms
+     ✓ says why a sign-in did not finish, in the server’s words 2057ms
+     ✓ refuses an account the pool already holds, naming it and saying what a second sign-in is worth 2070ms
+     ✓ reads a refusal with no account named the same way, without the address 2065ms
+     ✓ adds a second account: the notice says what the pool runs on now, and the ending says how many it holds 2076ms
+ ✓ src/lib/taskSchedule.test.ts (29 tests) 25ms
+ ✓ src/components/TasksSidePanel.test.tsx (35 tests) 26ms
+ ✓ src/components/RunnerEngines.test.tsx (40 tests) 80ms
+ ✓ src/lib/wikiPlan.test.ts (42 tests) 18ms
+ ✓ src/pages/InfrastructurePage.sharedPools.test.tsx (15 tests) 952ms
+ ✓ src/components/WorkspaceView.settlementPointer.test.tsx (9 tests) 982ms
+ ✓ src/pages/ProjectCoordinatorSection.test.tsx (13 tests) 611ms
+ ✓ src/pages/SharedProjectPage.test.tsx (11 tests) 381ms
+ ✓ src/components/Transcript.backgroundWake.test.tsx (14 tests) 4201ms
+   ✓ a wake still waiting in the queued tail (1)
+     ✓ is the same line, drawn as still queued, with the queue’s line under it 4113ms
+ ✓ src/components/TaskScheduleEditor.test.tsx (26 tests) 34ms
+ ✓ src/components/WikiActivityPage.test.tsx (19 tests) 116ms
+ ✓ src/components/ProjectCoordinatorCard.test.tsx (37 tests) 37ms
+ ✓ src/components/WorkspaceView.sessionFolders.test.tsx (11 tests) 1290ms
+ ✓ src/components/WorkspaceView.modelControl.test.tsx (11 tests) 2208ms
+   ✓ the composer model control (11)
+     ✓ leaves the session config alone when the pick is already running, and PATCHes a change once 435ms
+ ✓ src/components/WorkspaceView.sessionProjects.test.tsx (19 tests) 1640ms
+ ✓ src/components/WorkspaceView.evidenceHandoff.test.tsx (8 tests) 521ms
+ ✓ src/lib/codexResetCredit.test.ts (38 tests) 12ms
+ ✓ src/pages/InfrastructurePage.pools.test.tsx (18 tests) 707ms
+ ✓ src/lib/runnerAttention.test.ts (112 tests) 22ms
+ ✓ src/components/WikiPlanPage.test.tsx (16 tests) 857ms
+ ✓ src/pages/WikiPage.test.tsx (24 tests) 62ms
+ ✓ src/components/OrbitLinkCard.test.tsx (15 tests) 208ms
+ ✓ src/components/WikiArticlePage.test.tsx (11 tests) 572ms
+ ✓ src/components/OwnerConfirmationReview.test.tsx (19 tests) 173ms
+ ✓ src/components/WorkspaceView.taskRunHandoff.test.tsx (6 tests) 5386ms
+   ✓ sending into a run the platform has already replaced (6)
+     ✓ says when a provider pick takes effect, while the pick still stands 4861ms
+ ✓ src/pages/ProjectDetailPanorama.test.tsx (9 tests) 434ms
+ ✓ src/components/ProjectReadyToRun.test.tsx (13 tests) 256ms
+ ✓ src/components/ApprovalPanel.stale.test.tsx (5 tests) 8749ms
+   ✓ an approval that arrived live outlives the question it was raised for (5)
+     ✓ stops offering an answer once the turn that asked has ended 4039ms
+     ✓ keeps answering for the card a live runner-hosted job is still reading 4038ms
+ ✓ src/components/ProjectProgressStatus.chat.test.tsx (21 tests) 113ms
+ ✓ src/components/WatchRelations.test.tsx (16 tests) 316ms
+ ✓ src/components/ProjectSettlementCard.test.tsx (29 tests) 58ms
+ ✓ src/pages/RunnerDetailPage.layout.test.tsx (13 tests) 884ms
+ ✓ src/pages/SharedSessionPage.test.tsx (18 tests) 740ms
+ ✓ src/lib/taskDependencyGraph.test.ts (30 tests) 16ms
+ ✓ src/pages/ProjectTasksTopology.test.tsx (19 tests) 36ms
+ ✓ src/components/WorkspaceView.sessionLine.test.tsx (31 tests) 14ms
+ ✓ src/pages/LoginPage.google.test.tsx (34 tests) 400ms
+ ✓ src/components/WorkspaceView.criteriaDecisionCard.test.tsx (4 tests) 876ms
+   ✓ the criteria decision card in an open coordinator conversation (4)
+     ✓ is on the page once for its intent, through every re-read and after the answer elsewhere 355ms
+ ✓ src/pages/ProjectsPageProductionSnapshot.test.tsx (13 tests) 72ms
+ ✓ src/components/RunnerEngines.kimiAccounts.test.tsx (19 tests) 559ms
+ ✓ src/pages/InfrastructurePage.overview.test.tsx (13 tests) 690ms
+ ✓ src/pages/RunnerDetailPage.selfUpdate.test.tsx (19 tests) 436ms
+ ✓ src/components/ProjectWhyNotDoneGate.test.tsx (23 tests) 219ms
+ ✓ src/components/WatchCard.test.tsx (9 tests) 281ms
+ ✓ src/components/WorkspaceView.queuedTurnWake.test.tsx (5 tests) 1180ms
+   ✓ a wake a watch queued, in the queued tail (3)
+     ✓ is the watch’s line with the queue’s line under it, and its JSON stays folded 317ms
+ ✓ src/components/WorkspaceView.retrySessionMessage.test.tsx (8 tests) 492ms
+ ✓ src/components/WorkspaceView.taskStartWaiting.test.tsx (5 tests) 891ms
+   ✓ a resumed run’s brief, while it waits, is drawn as its TaskStartCard (2)
+     ✓ queued behind the turn its run is working on: the card, with the queue’s line at its foot 318ms
+ ✓ src/pages/InfrastructurePage.machines.test.tsx (14 tests) 1004ms
+ ✓ src/components/WorkspaceView.sessionMenu.test.tsx (21 tests) 2297ms
+stderr | src/components/DeepSeekBalance.test.tsx > the DeepSeek account balance > on the pages > no other key’s page has one, and a page that is only connecting a key never asks
+No routes matched location "/providers/claude" 
+
+ ✓ src/components/DeepSeekBalance.test.tsx (22 tests) 387ms
+ ✓ src/components/ReviewCard.test.tsx (22 tests) 517ms
+stderr | src/pages/AccessTokensPage.test.tsx > Settings → Access tokens > lists each active token: what it can do and where, its expiry — Never expires marked — its last use and how it was made
+An update to AccessTokensPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/pages/AccessTokensPage.test.tsx > Settings → Access tokens > issues a token and shows it once — in full, beside Copy and why to copy it now — never in the list, and gone once dismissed
+An update to AccessTokensPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/pages/AccessTokensPage.test.tsx > Settings → Access tokens > keeps the token nowhere once the page is left: not when it is opened again, and in no cache
+An update to AccessTokensPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/pages/AccessTokensPage.test.tsx > Settings → Access tokens > keeps the token nowhere once the page is left: not when it is opened again, and in no cache
+An update to AccessTokensPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/pages/AccessTokensPage.test.tsx > Settings → Access tokens > a custom token is the scopes picked, write bringing read along; a name and a scope are needed to create one
+An update to AccessTokensPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/pages/AccessTokensPage.test.tsx > Settings → Access tokens > a refused token says why and keeps the dialog open; nothing is shown as issued
+An update to AccessTokensPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/pages/AccessTokensPage.test.tsx > Settings → Access tokens > revokes a token after asking, and files it under Revoked & expired
+An update to AccessTokensPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/pages/AccessTokensPage.test.tsx (6 tests) 1051ms
+   ✓ Settings → Access tokens (6)
+     ✓ a custom token is the scopes picked, write bringing read along; a name and a scope are needed to create one 327ms
+ ✓ src/components/WorkspaceView.retryAttachments.test.tsx (7 tests) 2438ms
+   ✓ the card that offers to re-send the last message (2)
+     ✓ re-sends it with the attachments it was sent with, not an empty array 418ms
+   ✓ taking an undelivered message back into the composer (4)
+     ✓ brings the attachments back with the text, as chips the reader can see 301ms
+     ✓ sends them again without the reader finding the files a second time 419ms
+     ✓ hands back a re-send withdrawn from the queue, files and all 428ms
+ ✓ src/components/WikiSettingsPage.test.tsx (12 tests) 774ms
+ ✓ src/components/WorkspaceView.commitResultMessage.test.tsx (9 tests) 729ms
+ ✓ src/lib/wikiDocs.test.ts (17 tests) 14ms
+ ✓ src/pages/ProjectsPage.status.test.tsx (7 tests) 473ms
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > renaming an account on a runner > renames Default: the new name goes to the control plane, and the row carries it with its DEFAULT mark
+An update to RunnerEngines inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > renaming an account on a runner > renames Default: the new name goes to the control plane, and the row carries it with its DEFAULT mark
+An update to AccountName inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > renaming an account on a runner > renames an added account, and a double-click on its name opens the same editor
+An update to RunnerEngines inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > renaming an account on a runner > renames an added account, and a double-click on its name opens the same editor
+An update to AccountName inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > renaming an account on a runner > names Default back to "Default", which drops its mark
+An update to RunnerEngines inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > renaming an account on a runner > names Default back to "Default", which drops its mark
+An update to AccountName inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > saves a name typed while the sign-in runs once the runner reports the account, then folds away
+An update to RunnerSignIn inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > saves a name typed while the sign-in runs once the runner reports the account, then folds away
+An update to RunnerEngines inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/components/SessionCreatedTasksStrip.test.tsx (18 tests) 765ms
+   ✓ the collapsed row (6)
+     ✓ never wraps the title: it truncates beside the sentence, stays whole beside one task 503ms
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > saves a name typed while the sign-in runs once the runner reports the account, then folds away
+An update to MenuTrigger inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AddEngineAccount inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountPauseActions inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountRow inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountPauseActions inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountRow inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > saves a name typed while the sign-in runs once the runner reports the account, then folds away
+An update to AddEngineAccount inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > saves a name typed while the sign-in runs once the runner reports the account, then folds away
+An update to RunnerEngines inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > saves a name typed while the sign-in runs once the runner reports the account, then folds away
+An update to RunnerEngineCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountName inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > waits for a name still being typed when the account arrives, then saves it and folds away
+An update to RunnerSignIn inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > waits for a name still being typed when the account arrives, then saves it and folds away
+An update to RunnerEngines inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > waits for a name still being typed when the account arrives, then saves it and folds away
+An update to MenuTrigger inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountPauseActions inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountRow inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountPauseActions inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountRow inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > waits for a name still being typed when the account arrives, then saves it and folds away
+An update to AddEngineAccount inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > waits for a name still being typed when the account arrives, then saves it and folds away
+An update to RunnerEngines inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > waits for a name still being typed when the account arrives, then saves it and folds away
+An update to RunnerEngineCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountName inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > sends nothing for the name the account already has, or for none, and folds away
+An update to RunnerSignIn inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > sends nothing for the name the account already has, or for none, and folds away
+An update to RunnerEngines inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > sends nothing for the name the account already has, or for none, and folds away
+An update to MenuTrigger inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AddEngineAccount inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountPauseActions inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountRow inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountPauseActions inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountRow inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to RunnerEngineCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > stays open until the runner reports the account signed in
+An update to RunnerSignIn inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > stays open until the runner reports the account signed in
+An update to RunnerEngines inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > stays open until the runner reports the account signed in
+An update to MenuTrigger inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AddEngineAccount inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountPauseActions inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountRow inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountRow inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > stays open until the runner reports the account signed in
+An update to RunnerSignIn inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > stays open until the runner reports the account signed in
+An update to RunnerEngines inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > stays open until the runner reports the account signed in
+An update to MenuTrigger inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to RunnerEngineCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountPauseActions inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > stays open, the name kept, when saving the name fails
+An update to RunnerSignIn inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > stays open, the name kept, when saving the name fails
+An update to RunnerEngines inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/RunnerEngines.renameAccount.test.tsx > naming an account while Add account adds it > stays open, the name kept, when saving the name fails
+An update to MenuTrigger inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountPauseActions inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountRow inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountPauseActions inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AccountRow inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/components/RunnerEngines.renameAccount.test.tsx (13 tests) 1481ms
+   ✓ renaming an account on a runner (7)
+     ✓ offers Rename in every account menu, Default included 302ms
+ ✓ src/components/DecisionRail.pointer.test.tsx (12 tests) 110ms
+ ✓ src/components/WorkspaceView.scrollToBottom.test.tsx (4 tests) 1083ms
+   ✓ the jump-to-bottom button (4)
+     ✓ holds a bar-opened preview through streaming and dismissal until the reader returns to the tail 411ms
+ ✓ src/pages/SharedLinksPage.test.tsx (11 tests) 449ms
+Not implemented: navigation to another Document
+ ✓ src/pages/SharedTaskPage.test.tsx (9 tests) 279ms
+ ✓ src/components/CoordinatorQuestionCard.test.tsx (18 tests) 172ms
+ ✓ src/components/CriteriaChangeCard.test.tsx (10 tests) 96ms
+ ✓ src/components/WikiDocPage.test.tsx (11 tests) 617ms
+ ✓ src/components/RunnerEngines.antigravityAccounts.test.tsx (18 tests) 552ms
+ ✓ src/components/ProjectPromotionCard.chat.test.tsx (15 tests) 74ms
+ ✓ src/components/WorkspaceView.openItemDelivery.test.tsx (3 tests) 513ms
+ ✓ src/lib/sharedPools.test.ts (16 tests) 16ms
+ ✓ src/components/RunnerSignIn.test.tsx (28 tests) 19ms
+stderr | src/components/WorkspaceView.managedRunner.test.tsx > a managed workspace in the console > asleep: says so, takes a message instead of refusing it as offline, and shows the runner waking
+Matched leaf route at location "/workspaces/2zQeDGWFFAgN2112jNTf8/new" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/components/WorkspaceView.managedRunner.test.tsx > a managed workspace in the console > asleep: says so, takes a message instead of refusing it as offline, and shows the runner waking
+Matched leaf route at location "/sessions/2zQeDGWFFAgN2112jNEn5" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/components/WorkspaceView.managedRunner.test.tsx > a managed workspace in the console > before it was ever ready: no default engine for a first session, and nothing to send
+Matched leaf route at location "/workspaces/2zQeDGWFFAgN2112jNTf8/new" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/components/WorkspaceView.managedRunner.test.tsx > a managed workspace in the console > started without a signed-in runtime: says so, points at Infrastructure, and still offers no engine
+Matched leaf route at location "/workspaces/2zQeDGWFFAgN2112jNTf8/new" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/components/WorkspaceView.managedRunner.test.tsx > a managed workspace in the console > failed: Retry calls the server’s retry with the revision it read, and the console follows the answer
+Matched leaf route at location "/workspaces/2zQeDGWFFAgN2112jNTf8/new" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/components/WorkspaceView.managedRunner.test.tsx > a managed workspace in the console > asleep, a conversation that ended: its message resumes it rather than being refused as offline
+Matched leaf route at location "/sessions/2zQeDGWFFAgN2112jNEn6" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/components/WorkspaceView.managedRunner.test.tsx > a managed workspace in the console > asleep, a conversation that ended: its message resumes it rather than being refused as offline
+Matched leaf route at location "/sessions/2zQeDGWFFAgN2112jNEn6" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/components/WorkspaceView.managedRunner.test.tsx > a managed workspace in the console > removed: says so and takes nothing
+Matched leaf route at location "/workspaces/2zQeDGWFFAgN2112jNTf8/new" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/components/WorkspaceView.managedRunner.test.tsx > what stays as it was > a self-managed runner offline: no managed notice, and "Runner offline" as before
+Matched leaf route at location "/workspaces/2zQeDGWFFAgN2112jNEn4/new" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/components/WorkspaceView.managedRunner.test.tsx > what stays as it was > without the capability, a conversation that ended on it is refused as offline, as before
+Matched leaf route at location "/sessions/2zQeDGWFFAgN2112jNEn6" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/components/WorkspaceView.managedRunner.test.tsx > what stays as it was > without the capability the managed workspace is one more offline runner, and its status is never read
+Matched leaf route at location "/workspaces/2zQeDGWFFAgN2112jNTf8/new" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+ ✓ src/components/WorkspaceView.managedRunner.test.tsx (9 tests) 560ms
+ ✓ src/components/BackgroundWakeSteer.test.tsx (5 tests) 4218ms
+   ✓ a wake written into the running turn, while it waits for the runner (1)
+     ✓ is the wake’s line with a steer’s state under it, and nothing to cancel or withdraw 4146ms
+ ✓ src/pages/ProjectsPage.automatic.test.tsx (7 tests) 396ms
+ ✓ src/components/ProjectRunSettings.test.tsx (15 tests) 289ms
+ ✓ src/components/ui/keyboardWindow.test.tsx (58 tests) 1181ms
+ ✓ src/components/CoordinatorQuestionRecord.test.tsx (23 tests) 86ms
+ ✓ src/components/WorkspaceView.sessionDeepLink.test.tsx (5 tests) 1546ms
+   ✓ a session opened at one record (4)
+     ✓ shows the page around the record, marks it, and does not stream while the window stops short of the tail 571ms
+     ✓ joins the live stream once paging down reaches the latest event 497ms
+ ✓ src/lib/wikiReviewMode.test.ts (14 tests) 7ms
+ ✓ src/components/RunnerEngines.accounts.test.tsx (12 tests) 366ms
+ ✓ src/lib/wiki.test.ts (24 tests) 7ms
+ ✓ src/lib/sessionProjects.test.ts (31 tests) 14ms
+ ✓ src/pages/RunnerDetailPage.modelRouting.test.tsx (12 tests) 544ms
+ ✓ src/components/WorkspaceView.shareEntry.test.tsx (9 tests) 1068ms
+ ✓ src/api.test.ts (20 tests) 23ms
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > not shared: only you, no public address, and the signed-in Copy link
+An update to ShareModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > turning it on opens a link with the defaults, then shows the link, the layers with counts, Live, Expires and views
+An update to ShareModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > shared: Access, the link and Copy, Includes with counts, the Live line, Expires, views and Preview
+An update to ShareModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > shared: Access, the link and Copy, Includes with counts, the Live line, Expires, views and Preview
+An update to CheckboxRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to CheckboxRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/components/ProjectDoneConversation.test.tsx (12 tests) 270ms
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > the counts are the session’s own, one of each read in the singular
+An update to ShareModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > the counts are the session’s own, one of each read in the singular
+An update to CheckboxRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to CheckboxRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > turning Tool calls and output off sends only that layer
+An update to ShareModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > turning Tool calls and output off sends only that layer
+An update to CheckboxRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to CheckboxRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > choosing Only you asks first, and turns the link off only when that is confirmed
+An update to ShareModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > choosing Only you asks first, and turns the link off only when that is confirmed
+An update to CheckboxRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to CheckboxRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > cancelling the question leaves the link as it was
+An update to ShareModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > cancelling the question leaves the link as it was
+An update to CheckboxRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to CheckboxRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > Expires sends a day seven days out and says when it stops working
+An update to ShareModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > Expires sends a day seven days out and says when it stops working
+An update to CheckboxRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to CheckboxRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > a link reopened with an expiry names the day it stops
+An update to ShareModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > a link reopened with an expiry names the day it stops
+An update to CheckboxRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to CheckboxRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SelectRoot inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/ShareModal.test.tsx > the Share dialog on a session > a link past its expiry is not a public link any more
+An update to ShareModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/components/ShareModal.test.tsx (10 tests) 1033ms
+stderr | src/components/WikiReviewPage.decided.test.tsx > a decide the server recorded without applying it > a stale amend: Accept says nothing was applied, not Accepted
+An update to WikiReviewPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.decided.test.tsx > a decide the server recorded without applying it > a stale amend: Accept says nothing was applied, not Accepted
+An update to ReviewCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.decided.test.tsx > a decide the server recorded without applying it > a stale amend edited in Edit's form: the same refusal, and no 'Accepted with your edits'
+An update to WikiReviewPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.decided.test.tsx > a decide the server recorded without applying it > a stale amend edited in Edit's form: the same refusal, and no 'Accepted with your edits'
+An update to ReviewCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.decided.test.tsx > a decide the server recorded without applying it > a challenge of an entry no longer active: Re-confirm says the entry is no longer active
+An update to WikiReviewPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.decided.test.tsx > a decide the server recorded without applying it > a challenge of an entry no longer active: Re-confirm says the entry is no longer active
+An update to ReviewCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/components/WorkspaceView.promptSuggestion.test.tsx (9 tests) 1005ms
+   ✓ the composer offers the engine’s suggested next message (9)
+     ✓ hands a lone tap on the idle box on as its focus once the double-tap window passes 341ms
+stderr | src/components/WikiReviewPage.decided.test.tsx > a decide the server recorded without applying it > a challenge of an entry no longer active: its Amend form says so too, and not 'Amended'
+An update to WikiReviewPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.decided.test.tsx > a decide the server recorded without applying it > a challenge of an entry no longer active: its Amend form says so too, and not 'Amended'
+An update to ReviewCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.decided.test.tsx > a decide the server recorded as asked > Accept recorded `accepted` still says Accepted, about the entry, and nothing else
+An update to WikiReviewPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.decided.test.tsx > a decide the server recorded as asked > Retire on a challenge is recorded `withdrawn` — the retire takes its own challenge with it — and says Retired
+An update to WikiReviewPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.decided.test.tsx > a decide the server recorded as asked > Retire on a challenge is recorded `withdrawn` — the retire takes its own challenge with it — and says Retired
+An update to ReviewCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/components/WikiReviewPage.decided.test.tsx (10 tests) 572ms
+Not implemented: Window's open() method
+ ✓ src/components/WikiHomeContent.test.tsx (10 tests) 376ms
+ ✓ src/components/RunnerEngines.claudeAccount.test.tsx (10 tests) 365ms
+ ✓ src/components/LandingJobsSheet.test.tsx (10 tests) 297ms
+ ✓ src/components/WorkspaceView.sessionMessageQueue.test.tsx (5 tests) 1130ms
+   ✓ another session’s message, waiting in the queue (5)
+     ✓ is the "From" card with the queue’s line, not the reader’s own bubble 321ms
+ ✓ src/pages/FollowingPage.test.tsx (11 tests) 429ms
+ ✓ src/pages/ProviderConnectPage.deepseek.test.tsx (10 tests) 441ms
+ ✓ src/components/WorkspaceView.neverStarted.test.tsx (9 tests) 359ms
+ ✓ src/components/CardHotkey.test.tsx (19 tests) 73ms
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > draws the task instead of the brief, with the brief folded at its foot
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > draws the task instead of the brief, with the brief folded at its foot
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > names itself on the sticky bar the way every card that is nobody's message does
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > names itself on the sticky bar the way every card that is nobody's message does
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > opens to the criteria and the whole command, and folds again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > opens to the criteria and the whole command, and folds again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > opens to the criteria and the whole command, and folds again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > opens to the criteria and the whole command, and folds again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > opens to the criteria and the whole command, and folds again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > opens to the criteria and the whole command, and folds again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > draws no chip for a run somebody asked for, and nothing to open when there is nothing behind it
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > draws no chip for a run somebody asked for, and nothing to open when there is nothing behind it
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > carries the task's inputs and whatever delivery appended inside the card, not in a bubble beside it
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > carries the task's inputs and whatever delivery appended inside the card, not in a bubble beside it
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > stays a card when the wiki handed the run its context, and opens onto what it read
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > stays a card when the wiki handed the run its context, and opens onto what it read
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > stays a card when the wiki handed the run its context, and opens onto what it read
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > keeps a retried task brief as the same card after a provider failure
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > keeps a retried task brief as the same card after a provider failure
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > does not promote an ordinary repeated brief without a failed turn
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > does not promote an ordinary repeated brief without a failed turn
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > leaves a brief with no card recorded as the message it always was
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > leaves a brief with no card recorded as the message it always was
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > draws an English brief as the same card, and as the same bubble without one
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > draws an English brief as the same card, and as the same bubble without one
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > draws an English brief as the same card, and as the same bubble without one
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > the turn that starts a task run > says what each judgment is in the task panel's own words
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskStartCard.test.tsx > parseTaskStartCard > is a card only with a task and a title, and defaults every other field
+The current testing environment is not configured to support act(...)
+
+ ✓ src/components/TaskStartCard.test.tsx (12 tests) 126ms
+ ✓ src/components/WorkspaceView.jumpToStart.test.tsx (3 tests) 336ms
+ ✓ src/components/WorkspaceView.composerMenu.test.tsx (6 tests) 465ms
+   ✓ the composer + menu (2)
+     ✓ draws the native menu: command group under the thumb, media group above the rule 327ms
+ ✓ src/components/WorkspaceView.stickyWake.test.tsx (4 tests) 326ms
+ ✓ src/components/WorkspaceView.modelRouting.test.tsx (7 tests) 711ms
+ ✓ src/lib/projectMerge.test.ts (13 tests) 5ms
+ ✓ src/components/DecisionRail.settlement.test.tsx (14 tests) 13ms
+ ✓ src/components/ProjectBlockers.test.tsx (11 tests) 250ms
+ ✓ src/lib/dshRuntime.test.ts (15 tests) 7ms
+stderr | src/components/WikiReviewPage.edit.test.tsx > Review's Edit > opens a form on the proposal's own title and one line, and decides nothing yet
+An update to WikiReviewPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/pages/RunnerDetailPage.engines.test.tsx (10 tests) 499ms
+stderr | src/components/WikiReviewPage.edit.test.tsx > Review's Edit > sends the title the owner changed, and not the summary they left alone
+An update to WikiReviewPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.edit.test.tsx > Review's Edit > opens an amend on the entry with the amend's changes over it, and sends its edit as edited
+An update to WikiReviewPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.edit.test.tsx > Review's Edit > opens an amend on the entry with the amend's changes over it, and sends its edit as edited
+An update to ReviewCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.edit.test.tsx > Review's Edit > cannot be sent while nothing has changed
+An update to WikiReviewPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.edit.test.tsx > Review's Edit > keeps the form open with the refusal in it when the server says no
+An update to WikiReviewPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.edit.test.tsx > Review's Edit > turns to the next proposal on a phone once the edit is accepted, as Accept does
+An update to WikiReviewPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/components/WikiReviewPage.edit.test.tsx (6 tests) 598ms
+stderr | src/lib/toast.test.tsx > a toast says what happened to what > hands nothing back for a mutation's onError to wait on
+An update to ToastViewport inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ToastViewport inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/lib/toast.test.tsx (18 tests) 170ms
+ ✓ src/pages/ProjectsPage.newTask.test.tsx (3 tests) 91ms
+ ✓ src/pages/ProfilePage.signInMethods.test.tsx (10 tests) 330ms
+stderr | src/App.managedRunner.test.tsx > without the capability, every landing and deep link is what it was > a server from before the feature — a workspace: its console
+Matched leaf route at location "/workspaces/33zx0JhRhJo8rd25d3qAP" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > without the capability, every landing and deep link is what it was > a server from before the feature — deep links open their console and nothing managed
+Matched leaf route at location "/sessions/33zx0JhRhJo8rd25d3qAQ" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > without the capability, every landing and deep link is what it was > a server from before the feature — deep links open their console and nothing managed
+Matched leaf route at location "/workspaces/2zQeDGWFFAgN2112jNTf8" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > without the capability, every landing and deep link is what it was > no managedRunners member — a workspace: its console
+Matched leaf route at location "/workspaces/33zx0JhRhJo8rd25d3qAP" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > without the capability, every landing and deep link is what it was > no managedRunners member — deep links open their console and nothing managed
+Matched leaf route at location "/sessions/33zx0JhRhJo8rd25d3qAQ" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > without the capability, every landing and deep link is what it was > no managedRunners member — deep links open their console and nothing managed
+Matched leaf route at location "/workspaces/2zQeDGWFFAgN2112jNTf8" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > without the capability, every landing and deep link is what it was > switched off — a workspace: its console
+Matched leaf route at location "/workspaces/33zx0JhRhJo8rd25d3qAP" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > without the capability, every landing and deep link is what it was > switched off — deep links open their console and nothing managed
+Matched leaf route at location "/sessions/33zx0JhRhJo8rd25d3qAQ" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > without the capability, every landing and deep link is what it was > switched off — deep links open their console and nothing managed
+Matched leaf route at location "/workspaces/2zQeDGWFFAgN2112jNTf8" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > without the capability, every landing and deep link is what it was > a contract this client does not know — a workspace: its console
+Matched leaf route at location "/workspaces/33zx0JhRhJo8rd25d3qAP" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > without the capability, every landing and deep link is what it was > a contract this client does not know — deep links open their console and nothing managed
+Matched leaf route at location "/sessions/33zx0JhRhJo8rd25d3qAQ" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > without the capability, every landing and deep link is what it was > a contract this client does not know — deep links open their console and nothing managed
+Matched leaf route at location "/workspaces/2zQeDGWFFAgN2112jNTf8" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > without the capability, every landing and deep link is what it was > malformed — a workspace: its console
+Matched leaf route at location "/workspaces/33zx0JhRhJo8rd25d3qAP" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > without the capability, every landing and deep link is what it was > malformed — deep links open their console and nothing managed
+Matched leaf route at location "/sessions/33zx0JhRhJo8rd25d3qAQ" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > without the capability, every landing and deep link is what it was > malformed — deep links open their console and nothing managed
+Matched leaf route at location "/workspaces/2zQeDGWFFAgN2112jNTf8" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+ ✓ src/components/WorkspaceView.poolAccount.test.tsx (6 tests) 359ms
+ ✓ src/pages/TaskDetailPage.test.tsx (8 tests) 46ms
+stderr | src/App.managedRunner.test.tsx > with the capability switched on > a status that cannot be read is no managed UI: the landing goes where it always went
+An update to DefaultLanding inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/App.managedRunner.test.tsx > with the capability switched on > a status that cannot be read is no managed UI: the landing goes where it always went
+An update to BrowserRouter inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/App.managedRunner.test.tsx > with the capability switched on > lands in the sleeping managed workspace, not in registration, and hands its console the state
+Matched leaf route at location "/workspaces/2zQeDGWFFAgN2112jNTf8" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > with the capability switched on > keeps the workspace a person already had first, and hands no managed state to a self-managed console
+Matched leaf route at location "/workspaces/33zx0JhRhJo8rd25d3qAP" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > with the capability switched on > a deep link into the managed workspace opens it with its state; one into a session elsewhere is untouched
+Matched leaf route at location "/workspaces/2zQeDGWFFAgN2112jNTf8" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | src/App.managedRunner.test.tsx > with the capability switched on > a deep link into the managed workspace opens it with its state; one into a session elsewhere is untouched
+Matched leaf route at location "/sessions/33zx0JhRhJo8rd25d3qAQ" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+ ✓ src/App.managedRunner.test.tsx (32 tests) 1507ms
+   ✓ with the capability switched on (6)
+     ✓ a status that cannot be read is no managed UI: the landing goes where it always went 1014ms
+ ✓ src/components/ProjectCrossingsCard.test.tsx (19 tests) 32ms
+ ✓ src/lib/sessionState.test.ts (25 tests) 6ms
+ ✓ src/pages/ProjectsPagePhone.test.tsx (7 tests) 313ms
+ ✓ src/components/Transcript.controlPlaneNote.test.tsx (11 tests) 111ms
+ ✓ src/pages/InfrastructurePage.keys.test.tsx (5 tests) 429ms
+ ✓ src/components/ui/ImagePreview.test.tsx (13 tests) 496ms
+ ✓ src/pages/InfrastructurePage.test.tsx (6 tests) 664ms
+ ✓ src/pages/SharedWikiPage.test.tsx (4 tests) 218ms
+ ✓ src/components/WikiRunPage.test.tsx (6 tests) 271ms
+ ✓ src/components/CriteriaDecisionCard.settled.test.tsx (12 tests) 16ms
+ ✓ src/lib/providerPools.test.ts (23 tests) 16ms
+ ✓ src/components/RunnerEngines.antigravityGoogle.test.tsx (14 tests) 278ms
+ ✓ src/components/ProjectDoneSettlementCard.closeout.test.tsx (13 tests) 173ms
+ ✓ src/components/RunnerEngines.removeAccount.test.tsx (12 tests) 514ms
+ ✓ src/components/ProjectShareControls.test.tsx (5 tests) 255ms
+ ✓ src/pages/ProviderPoolPage.access.test.tsx (5 tests) 261ms
+ ✓ src/components/RunnerEngines.accountFold.test.tsx (8 tests) 357ms
+ ✓ src/components/WatchEditor.test.tsx (8 tests) 433ms
+ ✓ src/lib/taskRunHandoff.test.ts (12 tests) 6ms
+ ✓ src/components/ProjectChainProgress.test.tsx (10 tests) 17ms
+ ✓ src/pages/TaskListView.taskUrl.test.tsx (10 tests) 610ms
+ ✓ src/lib/backgroundWake.test.ts (15 tests) 7ms
+stderr | src/components/WorkspaceView.retryMessage.test.tsx > the Retry button on a run that a provider outage killed > asks the server for the words its window never held, and offers them
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["session","2zQeDGWFFAgN2112jNEmp"]
+
+stderr | src/components/WorkspaceView.retryMessage.test.tsx > the Retry button on a run that a provider outage killed > asks nobody when the message is right there in the window
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["session","2zQeDGWFFAgN2112jNEmp"]
+
+ ✓ src/components/WorkspaceView.retryMessage.test.tsx (3 tests) 354ms
+ ✓ src/lib/sessionFolders.test.ts (24 tests) 11ms
+ ✓ src/components/WorkspaceView.streamOrder.test.tsx (1 test) 282ms
+ ✓ src/components/WorkspaceView.loginPool.test.tsx (2 tests) 276ms
+ ✓ src/pages/AdminSignInPage.test.tsx (5 tests) 197ms
+ ✓ src/components/ProjectProgressStatus.handling.test.tsx (10 tests) 25ms
+stderr | src/pages/AdminUsersPage.signIn.test.tsx > Admin → Users · Google sign-in > the list says how each account signs in and when it was opened
+An update to AdminUsersPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/pages/AdminUsersPage.signIn.test.tsx > Admin → Users · Google sign-in > Unlink Google is offered only on rows with a Google account, asks first, then unlinks through the admin route
+An update to AdminUsersPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/pages/AdminUsersPage.signIn.test.tsx > Admin → Users · Google sign-in > Add user offers Google sign-in only while Google sign-in is on, says which addresses it can work for, and creates the account without a password
+An update to AdminUsersPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/pages/AdminUsersPage.signIn.test.tsx > Admin → Users · Google sign-in > with Google sign-in off, Add user is as it was: no Google sign-in only, and a password is generated
+An update to AdminUsersPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/pages/AdminUsersPage.signIn.test.tsx (4 tests) 539ms
+ ✓ src/lib/runnerSlots.test.ts (26 tests) 6ms
+ ✓ src/lib/deliveredMessage.test.ts (24 tests) 5ms
+ ✓ src/components/ui/Select.test.tsx (39 tests) 1079ms
+ ✓ src/lib/acceptedUserTurn.test.ts (21 tests) 5ms
+stderr | src/components/SessionReplyCard.test.tsx > the recipient’s card says the message is a request, and where it stands > reads the request live and draws its state, with the deadline while it waits
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the recipient’s card says the message is a request, and where it stands > reads the request live and draws its state, with the deadline while it waits
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the recipient’s card says the message is a request, and where it stands > reads the request live and draws its state, with the deadline while it waits
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the recipient’s card says the message is a request, and where it stands > reads the request live and draws its state, with the deadline while it waits
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the recipient’s card says the message is a request, and where it stands > refreshes when the request moves: the state the next read returns is the one drawn
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the recipient’s card says the message is a request, and where it stands > refreshes when the request moves: the state the next read returns is the one drawn
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the recipient’s card says the message is a request, and where it stands > refreshes when the request moves: the state the next read returns is the one drawn
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the recipient’s card says the message is a request, and where it stands > refreshes when the request moves: the state the next read returns is the one drawn
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the recipient’s card says the message is a request, and where it stands > a message that asked for nothing reads no request
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the recipient’s card says the message is a request, and where it stands > a message that asked for nothing reads no request
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the asker’s turn that handed outcomes back is reply cards, not the owner’s bubble > draws one card per outcome, naming who answered and opening the original request
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the asker’s turn that handed outcomes back is reply cards, not the owner’s bubble > draws one card per outcome, naming who answered and opening the original request
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the asker’s turn that handed outcomes back is reply cards, not the owner’s bubble > a message of the owner’s that carried held outcomes keeps its words as the bubble, then the cards
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the asker’s turn that handed outcomes back is reply cards, not the owner’s bubble > a message of the owner’s that carried held outcomes keeps its words as the bubble, then the cards
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the asker’s turn that handed outcomes back is reply cards, not the owner’s bubble > a turn with no recorded cards keeps the reading it always had
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the asker’s turn that handed outcomes back is reply cards, not the owner’s bubble > a turn with no recorded cards keeps the reading it always had
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the pieces the cards are drawn from > parses only cards that name a request, an outcome and the session asked
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionReplyCard.test.tsx > the pieces the cards are drawn from > takes the reply blocks out of a note and leaves what else was appended
+The current testing environment is not configured to support act(...)
+
+ ✓ src/components/SessionReplyCard.test.tsx (8 tests) 117ms
+ ✓ src/components/WorkspaceView.sessionSwipe.test.tsx (3 tests) 479ms
+ ✓ src/components/RunnerEngines.duplicateAccount.test.tsx (9 tests) 465ms
+ ✓ src/components/TaskDetailPanel.share.test.tsx (4 tests) 578ms
+ ✓ src/components/WikiReviewPage.test.tsx (12 tests) 41ms
+ ✓ src/pages/ProjectsPage.delete.test.tsx (4 tests) 351ms
+ ✓ src/components/RunnerEngines.singleAccount.test.tsx (24 tests) 380ms
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws the start as a card: how, which project, and the tasks that wait on the coordinator
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws the start as a card: how, which project, and the tasks that wait on the coordinator
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > leaves a message with no payload as the bubble it always was
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > leaves a message with no payload as the bubble it always was
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > carries the settings the start left, and marks the ones that differ from the suggestion
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > carries the settings the start left, and marks the ones that differ from the suggestion
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws no settings line for a start that recorded none, nor for a malformed one
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws no settings line for a start that recorded none, nor for a malformed one
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws no settings line for a start that recorded none, nor for a malformed one
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > draws no settings line for a start that recorded none, nor for a malformed one
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > names the Automatic switch as its own kind of start, confirming nothing
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > names the Automatic switch as its own kind of start, confirming nothing
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > says so in one line when no task waits on the coordinator
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > says so in one line when no task waits on the coordinator
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > speaks of one waiting task in the singular
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > speaks of one waiting task in the singular
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > folds the list past three, unfolds it, and points at the project for what it did not list
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > folds the list past three, unfolds it, and points at the project for what it did not list
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > folds the list past three, unfolds it, and points at the project for what it did not list
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/ProjectStartedCard.test.tsx > a project start told to the coordinator > is drawn the same while it waits on the queue as once a runner echoes it
+The current testing environment is not configured to support act(...)
+
+ ✓ src/components/ProjectStartedCard.test.tsx (10 tests) 103ms
+ ✓ src/pages/RunnerDetailPage.codexAccount.test.tsx (6 tests) 790ms
+ ✓ src/copyLanguage.test.ts (2 tests) 640ms
+   ✓ copy language (2)
+     ✓ holds Chinese only in the files ALLOWED lists, at exactly their counts 638ms
+ ✓ src/components/TasksSidePanel.workspaceStep.test.tsx (9 tests) 329ms
+stderr | src/pages/AdminUsersPage.disable.test.tsx > Admin → Users · disabling accounts > Status says which accounts are disabled; Disable is offered on every other account but your own, Enable on a disabled one
+An update to AdminUsersPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/pages/AdminUsersPage.disable.test.tsx > Admin → Users · disabling accounts > a refused Disable, the last administrator, is said in the dialog, and nothing changes
+An update to AdminUsersPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/pages/AdminUsersPage.disable.test.tsx > Admin → Users · disabling accounts > Enable lets a disabled account back in at once, without asking
+An update to AdminUsersPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/pages/AdminUsersPage.disable.test.tsx > Admin → Users · disabling accounts > a failed Enable is said in a toast, and the account stays disabled
+An update to AdminUsersPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/pages/AdminUsersPage.disable.test.tsx (5 tests) 556ms
+ ✓ src/components/Transcript.settledReply.test.tsx (2 tests) 271ms
+stderr | src/components/RunNeverStartedCard.test.tsx > the card as it is drawn > draws the title, the ref, the shared next step and only the presses it was handed
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/RunNeverStartedCard.test.tsx > the card as it is drawn > draws the title, the ref, the shared next step and only the presses it was handed
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/RunNeverStartedCard.test.tsx > the card as it is drawn > draws no press the host cannot make
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/RunNeverStartedCard.test.tsx > the card as it is drawn > draws no press the host cannot make
+The current testing environment is not configured to support act(...)
+
+ ✓ src/components/RunNeverStartedCard.test.tsx (16 tests) 46ms
+ ✓ src/components/AccountPause.test.tsx (9 tests) 425ms
+ ✓ src/components/Transcript.backgroundTasks.test.tsx (7 tests) 79ms
+ ✓ src/components/CriteriaDecisionCard.sessionSwitch.test.tsx (3 tests) 39ms
+ ✓ src/pages/CliLoginPage.test.tsx (9 tests) 165ms
+ ✓ src/components/WikiHome.window.test.tsx (5 tests) 180ms
+ ✓ src/components/TaskAttributionCard.test.tsx (13 tests) 42ms
+ ✓ src/components/WorkspaceView.projectIntent.test.tsx (4 tests) 222ms
+ ✓ src/components/WorkspaceView.recapRow.test.tsx (2 tests) 233ms
+ ✓ src/components/TasksSidePanel.projects.test.tsx (12 tests) 345ms
+ ✓ src/lib/wikiArticles.test.ts (13 tests) 13ms
+ ✓ src/pages/TaskListView.scopeMenu.test.tsx (8 tests) 334ms
+ ✓ src/components/CriteriaDecisionCard.receipt.test.tsx (2 tests) 34ms
+ ✓ src/App.loginNext.test.tsx (8 tests) 247ms
+stderr | src/components/WikiEntryMarks.test.tsx > an entry a review mode applied > Unreviewed: Confirm, then Reject ▾, then Edit — and the bar says it is not sent
+An update to WikiEntryDrawer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiEntryMarks.test.tsx > an entry a review mode applied > confirms through the owner’s door
+An update to WikiEntryDrawer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiEntryMarks.test.tsx > an entry a review mode applied > rejects with the reason picked from Review’s four, and says where it goes
+An update to WikiEntryDrawer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/components/TasksSidePanel.destinations.test.tsx (21 tests) 449ms
+stderr | src/components/WikiEntryMarks.test.tsx > an entry a review mode applied > Auto: Reject alone — it is already sent — and a green bar that says Reject takes it back
+An update to WikiEntryDrawer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiEntryMarks.test.tsx > an entry a review mode applied > Web-derived: Confirm is what shows it to agents, said in amber
+An update to WikiEntryDrawer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiEntryMarks.test.tsx > an entry a review mode applied > says who checked it and what they said, from the entry read, with nothing of it waiting in Review
+An update to WikiEntryDrawer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiEntryMarks.test.tsx > an entry a review mode applied > Web-derived: says the verdict, and that it went no further than Unreviewed
+An update to WikiEntryDrawer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiEntryMarks.test.tsx > an entry a review mode applied > no verdict — a Tiered entry — and the line says who applied it and when, and nothing more
+An update to WikiEntryDrawer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiEntryMarks.test.tsx > an entry a review mode applied > what the owner wrote or confirmed offers neither answer and no bar
+An update to WikiEntryDrawer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/components/WikiEntryMarks.test.tsx (9 tests) 716ms
+ ✓ src/components/ProjectDoneSettlementCard.nativeParity.test.tsx (12 tests) 297ms
+ ✓ src/components/Transcript.watchWake.test.tsx (8 tests) 93ms
+ ✓ src/components/WorkspaceView.watchingRow.test.tsx (1 test) 158ms
+ ✓ src/lib/planUsage.test.ts (13 tests) 10ms
+ ✓ src/components/WorkspaceView.pinnedFold.test.tsx (3 tests) 306ms
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > draws the item as a card: its kind, its title and the files it conflicted on
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > draws the item as a card: its kind, its title and the files it conflicted on
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > draws a delivery review as the coordinator’s decision, with the files it is about
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > draws a delivery review as the coordinator’s decision, with the files it is about
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > stamps the kind once: a title that already says it is not prefixed again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > stamps the kind once: a title that already says it is not prefixed again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > stamps the kind once: a title that already says it is not prefixed again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > stamps the kind once: a title that already says it is not prefixed again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > folds the file list past three, and unfolds it again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > folds the file list past three, and unfolds it again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > folds the file list past three, and unfolds it again
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > says the work is already on main when a merge receipt records it
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > says the work is already on main when a merge receipt records it
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > leaves a delivery with no payload as the message it always was
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/OpenItemDeliveryCard.test.tsx > an exception item delivered to the coordinator > leaves a delivery with no payload as the message it always was
+The current testing environment is not configured to support act(...)
+
+ ✓ src/components/OpenItemDeliveryCard.test.tsx (6 tests) 75ms
+ ✓ src/components/DecisionRail.exceptions.test.tsx (8 tests) 75ms
+ ✓ src/components/Transcript.questionRecord.test.tsx (10 tests) 62ms
+ ✓ src/lib/orbitLink.test.ts (37 tests) 41ms
+ ✓ src/pages/SetupPage.test.tsx (10 tests) 221ms
+ ✓ src/wikiHomeLayout.test.ts (15 tests) 6ms
+stderr | src/components/WikiRunsCard.test.tsx > the Runs card > draws a row a run in the fixture’s words, newest first as the read gives them
+Encountered two children with the same key, `34cE0job0000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0job0000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0job0000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0job0000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0job0000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0job0000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0job0000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0job0000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0job0000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0job0000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0job0000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0job0000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0job0000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0job0000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0job0000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+
+stderr | src/components/WikiRunsCard.test.tsx > the Runs card > opens a run’s call log: each call’s state, waits, run time, tokens and error, and the line under it
+Encountered two children with the same key, `34cE0call000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0call000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0call000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0call000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0call000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0call000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0call000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+
+stderr | src/components/WikiRunsCard.test.tsx > the Runs card > opens the run View run names, and links to no task and no session
+Encountered two children with the same key, `34cE0call000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0call000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0call000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0call000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0call000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0call000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `34cE0call000000000001`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+
+ ✓ src/components/WikiRunsCard.test.tsx (5 tests) 65ms
+ ✓ src/lib/taskFilters.test.ts (25 tests) 5ms
+ ✓ src/components/Transcript.imagePreview.test.tsx (6 tests) 357ms
+ ✓ src/lib/paneTransition.test.ts (13 tests) 65ms
+ ✓ src/lib/statusPalette.test.ts (3 tests) 4ms
+ ✓ src/components/ProjectSections.test.tsx (8 tests) 87ms
+ ✓ src/components/ManagedRunnerNotice.test.tsx (7 tests) 61ms
+ ✓ src/pages/RunnerDetailPage.kimiAccount.test.tsx (3 tests) 420ms
+   ✓ which Kimi account a workspace runs on (3)
+     ✓ offers each Kimi account with the window that stops it, and saves the id picked 316ms
+ ✓ src/components/SessionSearch.wiki.test.tsx (6 tests) 1555ms
+   ✓ ⌘K with the wiki above the sessions (5)
+     ✓ asks both endpoints for one query, and draws one group above the other 399ms
+ ✓ src/pages/TaskListView.createdIn.test.tsx (5 tests) 300ms
+ ✓ src/lib/useControlPlane.projects.test.tsx (14 tests) 34ms
+ ✓ src/components/WikiShareButton.test.tsx (3 tests) 289ms
+ ✓ src/components/MergeRecoveryPanel.test.tsx (12 tests) 39ms
+ ✓ src/lib/sessionExport.test.tsx (4 tests) 75ms
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > is drawn as "From [that session]": its title opens it, and the words are the sender’s
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > is drawn as "From [that session]": its title opens it, and the words are the sender’s
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > links no task for a sender that runs none, and names an untitled sender
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > links no task for a sender that runs none, and names an untitled sender
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > says so when the session never confirmed it received the message
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > says so when the session never confirmed it received the message
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > leaves a message with no card as the bubble it always was
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > leaves a message with no card as the bubble it always was
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message > draws a payload that is not a card as the bubble too, never as half a card
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message, while it waits to be delivered > is the same card, dashed, with the queue’s line at its foot and out of the sticky bar’s reach
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message, while it waits to be delivered > is the same card, dashed, with the queue’s line at its foot and out of the sticky bar’s reach
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message, while it waits to be delivered > is drawn as the card while its echo is on the way, from whichever read recovered the row
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > another session’s message, while it waits to be delivered > is drawn as the card while its echo is on the way, from whichever read recovered the row
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > parseSessionMessage > reads every field, and leaves a missing task absent rather than empty
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/SessionMessageCard.test.tsx > parseSessionMessage > names the turn on the sticky bar by who sent it
+The current testing environment is not configured to support act(...)
+
+ ✓ src/components/SessionMessageCard.test.tsx (9 tests) 80ms
+ ✓ src/pages/RunnerDetailPage.antigravityAccount.test.tsx (3 tests) 454ms
+   ✓ which Antigravity account a workspace runs on (3)
+     ✓ offers each Google account with what is left of its emptiest bucket, and saves the id picked 323ms
+ ✓ src/components/Transcript.referencedTask.test.tsx (10 tests) 121ms
+ ✓ src/components/ProjectCrossingsCard.move.test.tsx (3 tests) 95ms
+ ✓ src/lib/useSessionProjectData.test.tsx (7 tests) 27ms
+ ✓ src/App.infrastructure.test.tsx (10 tests) 343ms
+ ✓ src/pages/ProjectTaskRow.opening.test.tsx (7 tests) 52ms
+ ✓ src/pages/TaskListView.toolbarHeight.test.tsx (2 tests) 205ms
+ ✓ src/components/NewSessionProviderHero.test.tsx (13 tests) 18ms
+ ✓ src/components/Transcript.turnFoot.test.tsx (10 tests) 115ms
+ ✓ src/components/ui/Menu.footer.test.tsx (8 tests) 433ms
+ ✓ src/components/WikiEntryDrawer.test.tsx (10 tests) 28ms
+ ✓ src/components/WikiMaintenanceStatus.test.tsx (21 tests) 68ms
+stderr | src/components/WikiReviewPage.challenge.test.tsx > a challenge card > says which anchors broke, how, and on which commit of main
+An update to WikiReviewPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.challenge.test.tsx > a challenge card > says which anchors broke, how, and on which commit of main
+An update to ReviewCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.challenge.test.tsx > a challenge card > is answered Re-confirm, Amend or Retire — not Accept, Edit or Reject
+An update to WikiReviewPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.challenge.test.tsx > a challenge card > is answered Re-confirm, Amend or Retire — not Accept, Edit or Reject
+An update to ReviewCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.challenge.test.tsx > a challenge card > retires the entry it names
+An update to WikiReviewPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.challenge.test.tsx > a challenge card > retires the entry it names
+An update to ReviewCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.challenge.test.tsx > a challenge card > amends it with the keys the owner changed, and no others
+An update to WikiReviewPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/components/WikiReviewPage.challenge.test.tsx > a challenge card > amends it with the keys the owner changed, and no others
+An update to ReviewCard inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/components/WikiReviewPage.challenge.test.tsx (4 tests) 392ms
+ ✓ src/components/RunnerEngines.dsh.test.tsx (6 tests) 167ms
+ ✓ src/pages/ProjectsPageRowSortKeysVisible.test.tsx (3 tests) 5ms
+ ✓ src/components/WorkOverviewReadiness.acceptance.test.tsx (6 tests) 5ms
+ ✓ src/components/CardAction.test.tsx (4 tests) 8ms
+ ✓ src/components/ProjectIntegrationLine.test.tsx (12 tests) 25ms
+Not implemented: navigation to another Document
+ ✓ src/components/Transcript.localArtifact.test.tsx (9 tests) 73ms
+ ✓ src/components/AcceptanceConfirmationCard.preview.test.tsx (2 tests) 118ms
+ ✓ src/lib/runRequestResend.test.ts (7 tests) 24ms
+stderr | src/pages/ProviderConnectPage.gemini.test.tsx > connecting a Gemini key > probes the Gemini API with the model a session would run, then saves the row on agy
+No routes matched location "/infrastructure#keys" 
+
+stderr | src/pages/ProviderConnectPage.gemini.test.tsx > connecting a Gemini key > keeps an edited row on agy and preserves its stored name unless renamed
+No routes matched location "/infrastructure#keys" 
+
+ ✓ src/pages/ProviderConnectPage.gemini.test.tsx (3 tests) 101ms
+stderr | src/pages/AdminUsersPage.accessTokens.test.tsx > Admin → Users → access tokens > lists a user's tokens and revokes one through the admin route, which then lists as revoked by an administrator
+An update to AdminUsersPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/pages/AdminUsersPage.accessTokens.test.tsx (1 test) 211ms
+ ✓ src/lib/useControlPlane.pendingDecisions.test.tsx (3 tests) 2031ms
+   ✓ the pending-decision reads ride the control-plane stream (3)
+     ✓ task.changed — evidence submitted or decided — invalidates every session’s pending decisions 514ms
+     ✓ project.criteria_decisions.changed invalidates the named project’s read, and one naming none every project’s 1010ms
+     ✓ an unrelated event (provider.changed) invalidates neither read 506ms
+ ✓ src/lib/slashCommands.test.ts (14 tests) 10ms
+ ✓ src/App.googleSignIn.test.tsx (1 test) 94ms
+ ✓ src/pages/TaskListView.outsideProjects.test.tsx (8 tests) 252ms
+ ✓ src/lib/markdownText.test.ts (15 tests) 7ms
+ ✓ src/components/ui/Menu.test.tsx (20 tests) 427ms
+ ✓ src/components/RunnerEngines.kimiSite.test.tsx (6 tests) 256ms
+ ✓ src/pages/SettingsPage.modelRouting.test.tsx (6 tests) 210ms
+ ✓ src/lib/codexLogin.test.ts (9 tests) 6ms
+ ✓ src/components/SessionOutputs.commitFailure.test.tsx (8 tests) 55ms
+ ✓ src/components/Transcript.turnHead.test.tsx (13 tests) 105ms
+ ✓ src/components/TaskDetailPanel.reopen.test.tsx (10 tests) 49ms
+stderr | src/pages/ProfilePage.revokeAccessTokens.test.tsx > Profile → Change password → Also revoke all my access tokens > is offered unticked, says what ticking it does, and left alone the request revokes nothing
+An update to ProfilePage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/pages/ProfilePage.revokeAccessTokens.test.tsx > Profile → Change password → Also revoke all my access tokens > ticked, the request asks for it, the page says how many tokens it revoked, and the token list is read again
+An update to ProfilePage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/pages/ProfilePage.revokeAccessTokens.test.tsx > Profile → Change password → Also revoke all my access tokens > ticked with no token to revoke, it says only that the password changed
+An update to ProfilePage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/pages/ProfilePage.revokeAccessTokens.test.tsx (3 tests) 294ms
+ ✓ src/lib/batchGraph.test.ts (16 tests) 4ms
+ ✓ src/lib/findMatches.test.ts (21 tests) 13ms
+ ✓ src/lib/projectAttention.doneRequest.test.ts (7 tests) 4ms
+ ✓ src/components/WorkspaceView.projectBackLink.test.ts (8 tests) 18ms
+ ✓ src/components/EvidenceDecisionReceipt.test.tsx (6 tests) 18ms
+ ✓ src/components/OrbitReferenceLinks.test.tsx (8 tests) 70ms
+ ✓ src/lib/referencedTask.test.ts (11 tests) 6ms
+ ✓ src/lib/useControlPlane.watches.test.tsx (6 tests) 6049ms
+   ✓ the watches read rides the control-plane stream (6)
+     ✓ session.updated invalidates the watches, and again once the evaluation it set off can have landed 3529ms
+     ✓ an approval and a task change invalidate the watches too 1007ms
+     ✓ a watch.changed re-reads the watches at once, without the 60s poll 503ms
+     ✓ a watch.changed re-reads only the watches 505ms
+     ✓ library events leave the watches alone 504ms
+ ✓ src/lib/sessionProjectLanding.test.ts (8 tests) 5ms
+ ✓ src/components/ApprovalPanel.questionWrap.test.tsx (2 tests) 578ms
+   ✓ a multi-line AskUserQuestion in the generic form (1)
+     ✓ keeps its line breaks on screen 478ms
+ ✓ src/lib/composerRefs.test.ts (16 tests) 6ms
+ ✓ src/components/ProjectTasksGraph.test.tsx (2 tests) 62ms
+ ✓ src/components/TasksSidePanel.wiki.test.tsx (8 tests) 35ms
+ ✓ src/lib/toastFeed.test.ts (12 tests) 5ms
+ ✓ src/lib/wikiRuns.test.ts (30 tests) 6ms
+ ✓ src/lib/runRequestToken.test.ts (10 tests) 10ms
+ ✓ src/lib/backgroundJobs.test.ts (11 tests) 5ms
+ ✓ src/components/TaskDependencyGraph.test.tsx (7 tests) 9ms
+ ✓ src/components/Transcript.streamingOrder.test.tsx (6 tests) 46ms
+ ✓ src/components/WikiContextNote.test.tsx (3 tests) 46ms
+ ✓ src/components/RunnerEngines.loginLapse.test.tsx (4 tests) 191ms
+ ✓ src/components/Transcript.antigravity.test.tsx (6 tests) 99ms
+ ✓ src/lib/wikiSpace.test.ts (29 tests) 6ms
+ ✓ src/components/Transcript.inserts.test.tsx (7 tests) 65ms
+ ✓ src/lib/sessionGrouping.test.ts (12 tests) 5ms
+stderr | src/pages/ProfilePage.password.test.tsx > Profile → Change password > submitted empty, each field says what it needs and nothing is sent
+An update to ProfilePage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/pages/ProfilePage.password.test.tsx > Profile → Change password > a short new password and a confirmation that differs are said as they are typed; the confirmation follows the new password
+An update to ProfilePage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/pages/ProfilePage.password.test.tsx > Profile → Change password > a valid form sends the current and the new password, then starts over
+An update to ProfilePage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/pages/ProfilePage.password.test.tsx (3 tests) 277ms
+ ✓ src/lib/useControlPlane.wiki.test.tsx (3 tests) 1526ms
+   ✓ the wiki reads ride the control-plane stream (3)
+     ✓ a wiki.changed re-reads the whole wiki group at once 517ms
+     ✓ a wiki.changed re-reads the wiki group, and NOT the sessions the default branch names 503ms
+     ✓ no other event re-reads the wiki 505ms
+ ✓ src/pages/ProjectsPage.readyToClose.test.tsx (2 tests) 143ms
+ ✓ src/lib/theme.test.tsx (5 tests) 37ms
+ ✓ src/components/Transcript.dsh.test.tsx (4 tests) 32ms
+ ✓ src/lib/sessionCapabilities.test.ts (19 tests) 4ms
+ ✓ src/components/WorkspaceView.statusGlyph.test.tsx (7 tests) 11ms
+ ✓ src/lib/coordinatorChat.test.ts (5 tests) 4ms
+ ✓ src/lib/decisionReceipt.test.ts (7 tests) 3ms
+ ✓ src/components/ProjectDoneSettlementCard.test.tsx (5 tests) 20ms
+ ✓ src/lib/sessionExport.download.test.tsx (3 tests) 39ms
+ ✓ src/components/ClaudeHistoryOffer.test.tsx (9 tests) 28ms
+ ✓ src/lib/transcriptStore.test.ts (18 tests) 5ms
+ ✓ src/components/TasksSidePanel.admin.test.tsx (4 tests) 296ms
+ ✓ src/lib/deepseekBalance.test.ts (10 tests) 12ms
+ ✓ src/pages/InfrastructurePage.antigravity.test.tsx (2 tests) 191ms
+ ✓ src/lib/transcriptPaint.test.ts (15 tests) 4ms
+ ✓ src/lib/startingAnchor.test.ts (7 tests) 3ms
+ ✓ src/lib/sessionSwipe.test.ts (10 tests) 4ms
+ ✓ src/pages/TaskRoute.test.tsx (6 tests) 41ms
+ ✓ src/components/Transcript.thinking.test.tsx (7 tests) 32ms
+ ✓ src/components/ProjectTaskPanel.test.tsx (5 tests) 37ms
+ ✓ src/components/WorkspaceView.queuedTurn.test.tsx (8 tests) 6ms
+ ✓ src/components/WorkspaceView.decisionStrip.test.tsx (4 tests) 3ms
+ ✓ src/components/ui/Menu.spanTrigger.test.tsx (3 tests) 247ms
+ ✓ src/lib/liveToolOutputs.test.ts (8 tests) 3ms
+ ✓ src/components/Transcript.backgroundJobs.test.tsx (4 tests) 76ms
+ ✓ src/lib/composerSendState.test.ts (9 tests) 4ms
+stderr | src/components/TaskInputs.test.tsx > TaskInputs > lists what every run will be given, with a count and a readable size
+The current testing environment is not configured to support act(...)
+
+ ✓ src/lib/wikiHealth.test.ts (21 tests) 6ms
+stderr | src/components/TaskInputs.test.tsx > TaskInputs > lists what every run will be given, with a count and a readable size
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskInputs.test.tsx > TaskInputs > says these are copied per run, which is what makes them not a transcript image
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskInputs.test.tsx > TaskInputs > says these are copied per run, which is what makes them not a transcript image
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskInputs.test.tsx > TaskInputs > names the task when uploading, so the file becomes an input and not a session blob
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskInputs.test.tsx > TaskInputs > names the task when uploading, so the file becomes an input and not a session blob
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskInputs.test.tsx > TaskInputs > names the task when uploading, so the file becomes an input and not a session blob
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskInputs.test.tsx > TaskInputs > falls back to the mime type when an upload carried no filename
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskInputs.test.tsx > TaskInputs > falls back to the mime type when an upload carried no filename
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskInputs.test.tsx > TaskInputs > offers no removal when the task has no inputs
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TaskInputs.test.tsx > TaskInputs > offers no removal when the task has no inputs
+The current testing environment is not configured to support act(...)
+
+ ✓ src/components/TaskInputs.test.tsx (5 tests) 61ms
+ ✓ src/components/WikiReviewPage.phone.test.tsx (2 tests) 15ms
+ ✓ src/components/ui/Floating.test.tsx (6 tests) 12ms
+ ✓ src/lib/searchHighlight.test.ts (14 tests) 12ms
+ ✓ src/components/SameOriginLink.test.tsx (7 tests) 31ms
+ ✓ src/firstPageStylesheet.test.ts (1 test) 1064ms
+   ✓ the first page stylesheet (1)
+     ✓ is one file: the app root, the overlays, review cards and highlight theme, the reset, index.css, then the components 1063ms
+ ✓ src/lib/taskSelection.test.ts (15 tests) 4ms
+ ✓ src/components/BatchPlanGraph.test.tsx (4 tests) 34ms
+ ✓ src/lib/sessionLifecycleApi.test.ts (8 tests) 18ms
+ ✓ src/indexCss.test.ts (2 tests) 72ms
+stderr | src/components/TasksSidePanel.wikiWorkspace.test.tsx > the workspace the Wiki opens the space of > is the workspace on screen
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TasksSidePanel.wikiWorkspace.test.tsx > the workspace the Wiki opens the space of > is the workspace on screen
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TasksSidePanel.wikiWorkspace.test.tsx > the workspace the Wiki opens the space of > is the coordinator’s workspace on a project’s page
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TasksSidePanel.wikiWorkspace.test.tsx > the workspace the Wiki opens the space of > is the coordinator’s workspace on a project’s page
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TasksSidePanel.wikiWorkspace.test.tsx > the workspace the Wiki opens the space of > is the coordinator’s workspace on a project’s sessions page, not the workspace it shows
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TasksSidePanel.wikiWorkspace.test.tsx > the workspace the Wiki opens the space of > is the coordinator’s workspace on a project’s sessions page, not the workspace it shows
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TasksSidePanel.wikiWorkspace.test.tsx > the workspace the Wiki opens the space of > is none after the Projects or Tasks list
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TasksSidePanel.wikiWorkspace.test.tsx > the workspace the Wiki opens the space of > is none after the Projects or Tasks list
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TasksSidePanel.wikiWorkspace.test.tsx > the workspace the Wiki opens the space of > is left as the page before said while the Wiki is open
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | src/components/TasksSidePanel.wikiWorkspace.test.tsx > the workspace the Wiki opens the space of > is left as the page before said while the Wiki is open
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+ ✓ src/components/TasksSidePanel.wikiWorkspace.test.tsx (5 tests) 75ms
+ ✓ src/lib/useControlPlane.folders.test.tsx (2 tests) 1021ms
+   ✓ session folders ride the control-plane stream (2)
+     ✓ a folder.changed re-reads the folders and the session lists 515ms
+     ✓ a session moving between folders re-reads the lists, not the folders 506ms
+ ✓ src/components/LandTaskStatus.test.tsx (4 tests) 18ms
+ ✓ src/lib/streamAnchor.test.ts (5 tests) 2ms
+ ✓ src/lib/wikiContext.test.ts (5 tests) 4ms
+ ✓ src/components/MentionDeliveryNotes.test.tsx (7 tests) 9ms
+ ✓ src/components/Transcript.turnEnd.test.tsx (7 tests) 122ms
+ ✓ src/pages/ProviderConnectPage.test.tsx (5 tests) 22ms
+ ✓ src/lib/steerDelivery.test.ts (6 tests) 3ms
+ ✓ src/lib/taskSorting.test.ts (7 tests) 8ms
+ ✓ src/components/ui/Popover.test.tsx (3 tests) 228ms
+ ✓ src/lib/transcriptDeepLink.test.ts (5 tests) 8ms
+ ✓ src/nginxConf.test.ts (5 tests) 3ms
+ ✓ src/components/ui/Floating.submenu.test.tsx (3 tests) 10ms
+ ✓ src/pages/SettingsPage.test.tsx (5 tests) 30ms
+ ✓ src/lib/idCodec.test.ts (12 tests) 4ms
+ ✓ src/pages/SettingsPage.accessTokens.test.tsx (2 tests) 64ms
+ ✓ src/lib/taskOutcome.test.ts (9 tests) 3ms
+ ✓ src/components/ui/Tooltip.test.tsx (3 tests) 155ms
+ ✓ src/lib/interruptAndSend.test.ts (4 tests) 7ms
+ ✓ src/lib/tailPinning.test.ts (9 tests) 3ms
+ ✓ src/components/ui/Floating.dropdown.test.tsx (3 tests) 22ms
+ ✓ src/lib/foldHead.test.ts (5 tests) 23ms
+ ✓ src/lib/thinkingDraft.test.ts (8 tests) 3ms
+ ✓ src/lib/wikiRollout.test.ts (7 tests) 5ms
+ ✓ src/lib/tagColor.test.ts (4 tests) 4ms
+ ✓ src/lib/accessTokens.test.ts (5 tests) 12ms
+ ✓ src/components/ProjectProgressStatus.doneRequest.test.tsx (2 tests) 10ms
+ ✓ src/components/WorkspaceView.exceptionPlacement.test.tsx (3 tests) 6ms
+ ✓ src/lib/sessionImport.test.ts (3 tests) 8ms
+ ✓ src/components/ui/Avatar.test.tsx (3 tests) 28ms
+ ✓ src/lib/promptSuggestion.test.ts (14 tests) 3ms
+ ✓ src/lib/scrollbarAutohide.test.ts (4 tests) 9ms
+ ✓ src/lib/sessionActivity.test.ts (8 tests) 3ms
+ ✓ src/lib/backgroundShells.test.ts (5 tests) 3ms
+ ✓ src/lib/liveTaskProgress.test.ts (4 tests) 4ms
+ ✓ src/lib/plainPreview.test.ts (7 tests) 3ms
+ ✓ src/components/ui/boundary.test.ts (1 test) 434ms
+   ✓ keeps Base UI inside Orbit components and fixtures private 433ms
+ ✓ src/lib/steerDeliveryParity.test.ts (2 tests) 2ms
+ ✓ src/components/ui/Result.test.tsx (2 tests) 32ms
+ ✓ src/lib/workspaceOrder.test.ts (6 tests) 3ms
+ ✓ src/lib/clipboard.test.ts (5 tests) 4ms
+ ✓ src/lib/useDelayedFlag.test.tsx (4 tests) 20ms
+ ✓ src/pages/ProfilePage.test.tsx (3 tests) 20ms
+ ✓ src/lib/accountLogin.test.ts (4 tests) 3ms
+ ✓ src/lib/queuedTurnRestore.test.ts (4 tests) 3ms
+ ✓ src/components/WorkspaceView.compactingAfterInit.test.tsx (4 tests) 2ms
+ ✓ src/lib/reseedActiveSnapshot.test.ts (4 tests) 4ms
+ ✓ src/lib/eventFull.test.ts (3 tests) 3ms
+ ✓ src/lib/wikiImport.test.ts (2 tests) 3ms
+ ✓ src/components/SessionReplyCard.queued.test.tsx (1 test) 23ms
+ ✓ src/pages/EnrollPage.test.tsx (2 tests) 7ms
+ ✓ src/components/ApprovalPanel.dsh.test.tsx (3 tests) 9ms
+ ✓ src/lib/taskDeletion.test.ts (3 tests) 4ms
+ ✓ src/lib/providerAdmin.test.ts (4 tests) 3ms
+ ✓ src/components/TaskDependencyList.test.tsx (2 tests) 18ms
+ ✓ src/lib/sessionDetailPolling.test.ts (4 tests) 3ms
+ ✓ src/lib/ansi.test.ts (5 tests) 2ms
+ ✓ src/lib/taskPages.test.ts (5 tests) 2ms
+ ✓ src/lib/sessionTags.test.ts (2 tests) 3ms
+ ✓ src/lib/outcomeSurfaces.contract.test.ts (1 test) 2ms
+ ✓ src/lib/contextSeed.test.ts (3 tests) 2ms
+ ✓ src/lib/turnPlacement.test.ts (2 tests) 3ms
+ ✓ src/lib/engineAccounts.test.ts (2 tests) 2ms
+ ✓ src/lib/sessionTurnIntent.test.ts (6 tests) 2ms
+ ✓ src/lib/providerGlyphs.test.ts (1 test) 2ms
+
+ Test Files  399 passed (399)
+      Tests  5167 passed (5167)
+   Start at  23:59:27
+   Duration  195.26s (tests 44%, import 35%, environment 19%, transform 2%)
+
+     Import  877 modules were evaluated 3513 times · 127.59s total, 35% of tracked time
+             ~39.73s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+
+exit=0
+load: 12.93 12.63 13.17 12/3540 1578762
+ended: 2026-10-10T16:02:43Z

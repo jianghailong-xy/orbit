@@ -279,6 +279,11 @@ public enum RunEventType: String, Codable, Sendable {
     /// so the turn in progress when it does is often a different one.
     case userDelivery = "user_delivery"
     case turnEnd = "turn_end"
+    /// The engine's guess at the person's next message, filed after a turn ended against that turn
+    /// (`{ text, source }`; docs/prompt-suggestions-design.md). Durable, never a transcript row: the
+    /// reducer keeps it as `TranscriptState.promptSuggestion` while it is still the newest of
+    /// `user` / `turn_end` / itself, and the composer offers it.
+    case promptSuggestion = "prompt_suggestion"
     case interrupt
     case approvalRequest = "approval_request"
     case approvalResolved = "approval_resolved"

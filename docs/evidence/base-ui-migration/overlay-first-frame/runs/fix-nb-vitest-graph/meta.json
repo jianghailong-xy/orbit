@@ -1,0 +1,16 @@
+{
+ "label": "fix-nb-vitest-graph",
+ "step": "vitest-graph",
+ "tree": "/mnt/data/tmp/overlay-first-frame-34brok/run",
+ "command": "cd src/web && npx vitest run src/components/ProjectTasksGraph.test.tsx",
+ "commit": "c4c94c924e6163abd1bcff74d376899f69c4a8a0",
+ "webChanges": [],
+ "webDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "startedAt": "2026-10-08T16:30:16Z",
+ "endedAt": "2026-10-08T16:32:42+00:00",
+ "loadAverage": {
+  "start": "33.84 34.74 28.59",
+  "end": "24.16 30.17 27.76"
+ },
+ "exitCode": 1
+}

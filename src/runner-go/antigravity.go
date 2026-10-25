@@ -581,18 +581,19 @@ func agyUnansweredToolText(status string) string {
 
 // canonicalAgyTool names agy's tools the way Orbit's cards know them (§2.3). agy streams only a
 // display subset of each call's parameters — no file contents, no diff — so a card shows what
-// there is, and a file change shows up in the session's diff.
+// there is, and a file change shows up in the session's diff. agy 1.4.3 renamed the file tools
+// (read_file, write_file and edit_file, each with a Path); both generations are read.
 func canonicalAgyTool(name string, params interface{}) (string, interface{}) {
 	p := mapValue(params)
 	switch name {
 	case "run_command":
 		return "Bash", map[string]interface{}{"command": firstString(p, "CommandLine")}
-	case "view_file":
-		return "Read", map[string]interface{}{"file_path": firstString(p, "AbsolutePath")}
-	case "write_to_file":
-		return "Write", map[string]interface{}{"file_path": firstString(p, "TargetFile")}
-	case "replace_file_content", "multi_replace_file_content":
-		return "Edit", map[string]interface{}{"file_path": firstString(p, "TargetFile")}
+	case "view_file", "read_file":
+		return "Read", map[string]interface{}{"file_path": firstString(p, "AbsolutePath", "Path")}
+	case "write_to_file", "write_file":
+		return "Write", map[string]interface{}{"file_path": firstString(p, "TargetFile", "Path")}
+	case "replace_file_content", "multi_replace_file_content", "edit_file":
+		return "Edit", map[string]interface{}{"file_path": firstString(p, "TargetFile", "Path")}
 	case "read_url_content":
 		return "WebFetch", map[string]interface{}{"url": firstString(p, "Url", "URL", "url")}
 	case "search_web":
@@ -618,9 +619,9 @@ func agyPermission(rawName string) string {
 	switch rawName {
 	case "run_command":
 		return "command"
-	case "write_to_file", "replace_file_content", "multi_replace_file_content":
+	case "write_to_file", "replace_file_content", "multi_replace_file_content", "write_file", "edit_file":
 		return "write_file"
-	case "view_file":
+	case "view_file", "read_file":
 		return "read_file"
 	case "read_url_content", "search_web":
 		return "read_url"
@@ -880,7 +881,7 @@ func (d *agyDriver) handleInit(event map[string]interface{}) {
 func (d *agyDriver) startTurn(resp *RunInboxResponse, pendingShellCtx []string) {
 	d.setTurn(resp.TurnID)
 	d.turn = newAgyTurn(resp.TurnID)
-	text, refs := prepareAntigravityPrompt(d.ctx, d.t, d.job, resp, pendingShellCtx)
+	text, refs := prepareTextOnlyPrompt(d.ctx, d.t, d.job, resp, pendingShellCtx)
 	userEvent := map[string]interface{}{"text": resp.Content}
 	if len(refs) > 0 {
 		userEvent["attachments"] = refs
@@ -909,10 +910,10 @@ func (d *agyDriver) startTurn(resp *RunInboxResponse, pendingShellCtx []string) 
 	d.proc.send(append(frame, '\n'))
 }
 
-// prepareAntigravityPrompt is a turn's text. agy's stream-json input takes text only (§1.1), so every
-// attachment — images included — is saved beside the session and named in the prompt for agy's own
-// tools to open.
-func prepareAntigravityPrompt(ctx context.Context, t *Transport, job *ClaimedSession, resp *RunInboxResponse, pendingShellCtx []string) (string, []map[string]interface{}) {
+// prepareTextOnlyPrompt is a turn's text for an engine whose input takes text only — agy's stream-json
+// (§1.1), dsh's ACP composition — so every attachment, images included, is saved beside the session
+// and named in the prompt for the engine's own tools to open.
+func prepareTextOnlyPrompt(ctx context.Context, t *Transport, job *ClaimedSession, resp *RunInboxResponse, pendingShellCtx []string) (string, []map[string]interface{}) {
 	var refs []map[string]interface{}
 	var paths []string
 	for _, att := range resp.Attachments {
@@ -1218,6 +1219,9 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 		case "steer":
 			refuseUnsupportedSteer(resp.TurnID, resp.Content, providerAntigravity, job, emitFor, completeTurn)
 		case "interrupt":
+			// RunInterruptRequest.stopBackgroundWork — the composer's Stop ends this session's
+			// background work with the turn; see bgTailer.stopBackgroundWork.
+			stopBackgroundWorkForTurn(bg, resp)
 			emit(evInterrupt, map[string]interface{}{})
 		case "reload":
 			pendingReloads = append(pendingReloads, resp)
@@ -1310,6 +1314,8 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 			}
 			switch resp.Kind {
 			case "interrupt":
+				// RunInterruptRequest.stopBackgroundWork — see bgTailer.stopBackgroundWork.
+				stopBackgroundWorkForTurn(bg, resp)
 				emit(evInterrupt, map[string]interface{}{})
 				d.interrupt()
 			case "steer":

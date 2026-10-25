@@ -12,7 +12,7 @@ import { sharedPoolAsProviderPool, type SharedPool } from '../lib/sharedPools';
 import { AccountPauseActions } from './AccountPause';
 import { PoolMembers } from './AccountPools';
 import { RunnerEngines } from './RunnerEngines';
-import { clickRunnerMenuItem, openRunnerCards } from './RunnerEngines.test-helpers';
+import { clickRunnerMenuItem, dialogName, openRunnerCards } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -51,6 +51,11 @@ const button = (text: string, scope: ParentNode = document) => {
   return result;
 };
 const click = async (element: HTMLElement) => { await act(async () => element.click()); };
+/** The open dialog's name, as assistive technology reads it. */
+const dialogTitle = () => {
+  const dialog = document.querySelector('[role="dialog"]');
+  return dialog ? dialogName(dialog) : undefined;
+};
 const duration = async (value: string) => click(document.querySelector<HTMLInputElement>(`.account-pause-durations input[value="${value}"]`)!);
 const changeHours = async (value: string) => {
   const input = document.querySelector<HTMLInputElement>('input[aria-label="Pause hours"]')!;
@@ -103,7 +108,7 @@ describe('timed pause controls', () => {
     render(<AccountPauseActions name="Work" endpoint="/pause" until={until()} />);
     await click(button('Change Duration'));
     await click(button('Update Pause'));
-    expect(document.querySelector('.ant-modal-title')?.textContent).toBe('Change pause duration');
+    expect(dialogTitle()).toBe('Change pause duration');
   });
 
   it('changes expired controls back to Pause and refreshes server choices without a reload', async () => {
@@ -186,12 +191,12 @@ describe('account pause on real account rows', () => {
     expect(host.textContent).not.toContain('Pause…');
     expect(host.textContent).not.toContain('Resume now');
     await clickRunnerMenuItem(rows[1], 'Pause account…');
-    expect(document.querySelector('.ant-modal-title')?.textContent).toBe('Pause account');
+    expect(dialogTitle()).toBe('Pause account');
     await duration('4');
     await click(button('Pause Account'));
     expect(apiMock).toHaveBeenCalledWith(`/runners/${runner.id}/accounts/codex/abcd1234/pause`, { method: 'POST', body: { durationMinutes: 240 } });
     await clickRunnerMenuItem(rows[0], 'Change pause duration…');
-    expect(document.querySelector('.ant-modal-title')?.textContent).toBe('Change pause duration');
+    expect(dialogTitle()).toBe('Change pause duration');
     await click(button('Update Pause'));
     expect(apiMock).toHaveBeenCalledWith(`/runners/${runner.id}/accounts/codex/default/pause`, { method: 'POST', body: { durationMinutes: 120 } });
     await clickRunnerMenuItem(rows[0], 'Resume now');

@@ -1,0 +1,17 @@
+{
+ "p02Images": 252,
+ "referenceEntries": 206,
+ "acceptedEntries": 43,
+ "finalLayers": {
+  "p0-drift": 165,
+  "p0.2": 44,
+  "accepted": 43
+ },
+ "acceptedByDecisionTask": {
+  "34Za39ACSBoCkYKc80Md8": 23,
+  "34Za39Ov1yysHZaYL6wgJ": 8,
+  "34cBi0yt6bFcSmbJFgDPj": 11,
+  "34Za39Do3N6tkmIMP0GBP": 1
+ },
+ "note": "独立重算：reference 表是只增日志，同一截图多次登记时后者生效；被 accepted 覆盖的 41 张同时出现在两张表里"
+}

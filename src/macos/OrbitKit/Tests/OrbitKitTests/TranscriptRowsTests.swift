@@ -35,8 +35,12 @@ final class TranscriptRowsTests: XCTestCase {
 
     func testOrderIsSpinnerHistoryApprovalsWorkingQueuedBottom() {
         let appr = PendingApproval(id: "ap1", kind: .tool, toolName: "Bash", input: nil)
+        // A turn Orbit queued keeps its row in the tail; the reader's own messages wait in the tray
+        // above the composer instead (`PendingTrayTests`).
+        var orbitQueued = user("i2")
+        orbitQueued.authoredByOrbit = true
         let rows = TranscriptRows.build(
-            state: state(items: [.user(user("i1"))], approvals: [appr], queued: [user("i2")], oldestSeq: 42),
+            state: state(items: [.user(user("i1"))], approvals: [appr], queued: [orbitQueued], oldestSeq: 42),
             statusCards: [], canPageOlder: true, showWorkingIndicator: true)
         XCTAssertEqual(rows.map(\.id),
                        ["load-older-42", "i1", "approval-ap1", "working-indicator", "queued-i2", "transcript-bottom"])

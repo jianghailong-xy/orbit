@@ -6,10 +6,12 @@ final class SessionLineTests: XCTestCase {
     private func session(status: RunStatus, lastAssistantText: String? = nil, lastToolUse: String? = nil,
                          lastUserText: String? = nil, runningBgCount: Int? = nil,
                          engineTurnActive: Bool? = nil,
-                         pendingApprovals: Int? = nil, endReason: String? = nil) -> Session {
+                         pendingApprovals: Int? = nil, endReason: String? = nil,
+                         recapText: String? = nil, recapAt: String? = nil) -> Session {
         Session(id: "s", title: "t", status: status, agentId: nil, assignedRunnerId: nil,
                 pendingApprovals: pendingApprovals, branch: nil, updatedAt: nil,
                 lastAssistantText: lastAssistantText, lastToolUse: lastToolUse, lastUserText: lastUserText,
+                recapText: recapText, recapAt: recapAt,
                 runningBgCount: runningBgCount, engineTurnActive: engineTurnActive, endReason: endReason)
     }
 
@@ -122,13 +124,82 @@ final class SessionLineTests: XCTestCase {
     }
 
     /// The list payload's preview fields decode (server keys: lastAssistantText / lastToolUse /
-    /// lastUserText / runningBgCount).
+    /// lastUserText / runningBgCount), and the recap beside them (0418).
     func testSessionDecodesPreviewFields() throws {
-        let json = #"{"id":"s1","status":"RUNNING","lastAssistantText":"hello","lastToolUse":"Read","lastUserText":"hi there","runningBgCount":1}"#
+        let json = #"{"id":"s1","status":"RUNNING","lastAssistantText":"hello","lastToolUse":"Read","lastUserText":"hi there","runningBgCount":1,"recapText":"Moved the recap onto the list row.","recapAt":"2026-09-28T09:38:00.000Z"}"#
         let s = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
         XCTAssertEqual(s.lastAssistantText, "hello")
         XCTAssertEqual(s.lastToolUse, "Read")
         XCTAssertEqual(s.lastUserText, "hi there")
         XCTAssertEqual(s.runningBgCount, 1)
+        XCTAssertEqual(s.recapText, "Moved the recap onto the list row.")
+        XCTAssertEqual(s.recapAt, "2026-09-28T09:38:00.000Z")
+
+        // A session the server has recapped none of — the `ORBIT_RECAP_ENABLED=0` deployment's
+        // shape — answers nulls, and the row falls back exactly as it did before the recap existed.
+        let bare = try JSONDecoder().decode(Session.self, from: Data(#"{"id":"s2","status":"AWAITING_INPUT","lastAssistantText":"All done.","recapText":null,"recapAt":null}"#.utf8))
+        XCTAssertNil(bare.recapText)
+        XCTAssertEqual(SessionLine.make(for: bare, live: true),
+                       .init(text: "All done.", tone: .preview))
+    }
+
+    /// The rolling recap (0418) takes the place of the raw last reply — and only that place — and the
+    /// whole line is the sentence (the owner, 2026-10-22): when it was written is the Recap card's to
+    /// say (`RecapCardTests`). Ports the web `sessionLine` cases of the same name
+    /// (`WorkspaceView.sessionLine.test.tsx`).
+    func testRecapTakesThePlaceOfTheReplyPreview() {
+        let recap = "Moved the recap onto the list row; the three states are covered by tests."
+        let line = SessionLine(text: recap, tone: .preview)
+        // Written now, on another day, or with no time on it: the line reads the same.
+        for recapAt in [ISO8601DateFormatter().string(from: Date()),
+                        ISO8601DateFormatter().string(from: Date(timeIntervalSinceNow: -3 * 86_400)),
+                        nil] as [String?] {
+            let parked = session(status: .awaitingInput, lastAssistantText: "Committed the row change.",
+                                 recapText: recap, recapAt: recapAt)
+            XCTAssertEqual(SessionLine.make(for: parked, live: true), line)
+            // Trash keeps it too: nothing live is left to outrank it there.
+            XCTAssertEqual(SessionLine.make(for: parked, live: false), line)
+        }
+
+        // No recap at all (and a blank one, which the server never stores): the reply preview the
+        // row always had.
+        XCTAssertEqual(SessionLine.make(for: session(status: .awaitingInput, lastAssistantText: "All done."), live: true),
+                       .init(text: "All done.", tone: .preview))
+        XCTAssertEqual(SessionLine.make(for: session(status: .awaitingInput, lastAssistantText: "All done.",
+                                                     recapText: "   ", recapAt: nil), live: true),
+                       .init(text: "All done.", tone: .preview))
+    }
+
+    /// The account's Session recaps switch (Settings): off, the same row falls through to the reply
+    /// it showed before the recap existed.
+    func testRecapsOffFallsBackToTheReply() {
+        let parked = session(status: .awaitingInput, lastAssistantText: "Committed the row change.",
+                             recapText: "Moved the recap onto the list row.", recapAt: nil)
+        XCTAssertEqual(SessionLine.make(for: parked, live: true, recaps: false),
+                       .init(text: "Committed the row change.", tone: .preview))
+        // On (the default, and what an absent preference means): the recap.
+        XCTAssertEqual(SessionLine.make(for: parked, live: true, recaps: true),
+                       .init(text: "Moved the recap onto the list row.", tone: .preview))
+    }
+
+    /// Every live line still outranks the recap: it is newer work, not older prose. (The web's
+    /// `never hides work that is still happening behind it`.)
+    func testLiveLinesOutrankTheRecap() {
+        let recap = "Moved the recap onto the list row."
+        // Waiting on you.
+        XCTAssertEqual(SessionLine.make(for: session(status: .awaitingInput, pendingApprovals: 1,
+                                                     recapText: recap, recapAt: nil), live: true).tone, .approval)
+        // Working: the tool in flight.
+        XCTAssertEqual(SessionLine.make(for: session(status: .running, lastToolUse: "Bash",
+                                                     recapText: recap, recapAt: nil), live: true),
+                       .init(text: "Running Bash…", tone: .running))
+        // A message of yours that has no answer yet — newer than the recap.
+        XCTAssertEqual(SessionLine.make(for: session(status: .awaitingInput, lastUserText: "and now the footer?",
+                                                     recapText: recap, recapAt: nil), live: true),
+                       .init(text: "You: and now the footer?", tone: .preview))
+        // A background process it left up.
+        XCTAssertEqual(SessionLine.make(for: session(status: .awaitingInput, runningBgCount: 1,
+                                                     recapText: recap, recapAt: nil), live: true),
+                       .init(text: "Background process running…", tone: .background))
     }
 }

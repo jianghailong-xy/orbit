@@ -15,6 +15,13 @@ services:
     container_name: orbit-postgres
     restart: unless-stopped
     logging: *logging
+    # Docker's default 64MB /dev/shm is smaller than the ~67MB dynamic shared memory segment
+    # VACUUM allocates (maintenance_work_mem-sized). On 2026-10-09 a manual VACUUM on the
+    # production box died with `could not resize shared memory segment ... to 67145440 bytes:
+    # No space left on device` — and PG16 parallelizes VACUUM automatically on any table over
+    # min_parallel_table_scan_size (8MB), so even a plain VACUUM hits it. The official postgres
+    # image documents 256MB as the recommended size; evidence in docs/postgres-runtime-settings.md §6.
+    shm_size: "256m"
     # The image's entrypoint only fixes up PGDATA's ownership, so create and chown the
     # archive here — still as root — before it drops to the postgres user. Without this
     # archive_command cannot write into the bind mount and WAL archiving stalls.
@@ -205,6 +212,43 @@ services:
       FCM_CLIENT_EMAIL: "${FCM_CLIENT_EMAIL:-}"
       FCM_PRIVATE_KEY: "${FCM_PRIVATE_KEY:-}"
       FCM_ANDROID_PACKAGE: "${FCM_ANDROID_PACKAGE:-io.orbitd.android}"
+      # Optional: the runner link (docs/self-hosting.md, "Runner link"): the connection tokens a runner trades its runner
+      # token for, to reach the link gateway. All three or none: unset, the link is off, its routes answer 404 and runners
+      # work over HTTP as before. The signing key is base64 of an Ed25519 private key in PEM (generate: openssl genpkey
+      # -algorithm ed25519 | base64 -w0); the gateway is given only its public key. The URL is the gateway's ws:// or
+      # wss:// address. The gateway token is the secret the gateway presents to read revoked credentials (generate:
+      # openssl rand -base64 32).
+      RUNNER_LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:-}"
+      RUNNER_LINK_URL: "${RUNNER_LINK_URL:-}"
+      RUNNER_LINK_GATEWAY_TOKEN: "${RUNNER_LINK_GATEWAY_TOKEN:-}"
+      # The runner link's hints (src/apiserver/src/realtime/runner-hints.ts): each wake for a runner is also published
+      # to the nats service below, which the link gateway relays to that runner. Only while the link above is
+      # configured; otherwise nothing connects. With NATS unreachable a hint is dropped and counted in the log, and the
+      # runner learns of its work at its next heartbeat.
+      RUNNER_LINK_NATS_URL: "${RUNNER_LINK_NATS_URL:-nats://nats:4222}"
+      # The runner link's calls (src/apiserver/src/runner-api/runner-link-call.ts): the runner routes, served to the link
+      # gateway alone on a listener of their own, which opens only while the link above is configured. It binds every
+      # interface of this container, so the gateway reaches it over this project's network; the port is published
+      # nowhere, and every call must present RUNNER_LINK_GATEWAY_TOKEN. Then the apiserver's NATS credential: the seed of
+      # its nkey user (src/link-gateway/nats.conf; generate with: docker compose run --rm --no-deps link-gateway nkey).
+      RUNNER_LINK_INTERNAL_PORT: "${RUNNER_LINK_INTERNAL_PORT:-3001}"
+      RUNNER_LINK_INTERNAL_HOST: "${RUNNER_LINK_INTERNAL_HOST:-0.0.0.0}"
+      RUNNER_LINK_NATS_SEED: "${RUNNER_LINK_NATS_APISERVER_SEED:-}"
+      # What /dl publishes, read from the web container beside the apiserver for the runner link
+      # (src/apiserver/src/runner-api/runner-release-feed.ts): a runner working over the link is told its release in
+      # Welcome and HeartbeatAck, assigned from these two manifests as GET /api/runner/release assigns it. Read at most once
+      # a minute, for at most 2 s; while it cannot be read, no release is stated and runners ask that route over HTTPS.
+      RUNNER_RELEASE_DL_URL: "${RUNNER_RELEASE_DL_URL:-http://web/dl/}"
+      # Optional: managed runners (docs/self-hosting.md, "Managed runners"): every account gets a runner of its own,
+      # a container on this host's Docker, at sign-in. Off unless the host's .env says true. A fresh install
+      # (scripts/install-server.sh) writes that line and an upgrade never does, so a deployment that predates managed
+      # runners keeps them off. The profile read here, the Docker channel's token and its socket are the files in
+      # ORBIT_MANAGED_RUNNERS_DIR, mounted below.
+      ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"
+      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json
+    volumes:
+      # Read-only. With ORBIT_MANAGED_RUNNERS_DIR unset, /dev/null stands in, so nothing is created on the host.
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"
     depends_on:
       postgres:
         condition: service_healthy
@@ -292,6 +336,173 @@ services:
       timeout: 5s
       retries: 6
       start_period: 10s
+
+  # Managed runners on this host's Docker (docs/self-hosting.md, "Managed runners"): the restricted Docker channel
+  # (deploy/managed-runner/docker-channel), the one process given the Docker socket. It makes each account's runner
+  # container and data volume from its own template, and touches nothing without its instance's label. The apiserver
+  # reaches it only through its unix socket in ORBIT_MANAGED_RUNNERS_DIR, and it needs no network of its own.
+  # It runs only under the managed-runners-docker profile, which a fresh install switches on in .env
+  # (scripts/install-server.sh) and an upgrade never does.
+  docker-channel:
+    profiles: [managed-runners-docker]
+    build:
+      context: .
+      dockerfile: deploy/managed-runner/docker-channel/Dockerfile
+    image: orbit-docker-channel:local
+    container_name: orbit-docker-channel
+    restart: unless-stopped
+    logging: *logging
+    network_mode: none
+    # The disk the storage budget is measured on: an empty volume of the channel's own, read-only, which Docker keeps
+    # beside every runner's data volume whatever filesystem its data root is on. This container sees neither the data
+    # root nor what is in it.
+    command: ["serve", "--config", "/var/lib/orbit-managed-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners"
+      - type: volume
+        target: /var/lib/orbit-docker-volumes
+        read_only: true
+    healthcheck:
+      # Serving: its socket takes a connection. Every request on it still needs the token.
+      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect('/var/lib/orbit-managed-runners/channel.sock')"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  # The managed runners' host firewall (docs/self-hosting.md, "Isolation and its limits"; deploy/managed-runner/firewall):
+  # rules on this host's iptables that leave a managed runner the gateway's published port, DNS and public addresses, and
+  # nothing else of this host or of the private networks behind it. It runs in the host's network namespace with
+  # NET_ADMIN and NET_RAW, never with the Docker socket; it checks the rules every 10 s, repairs what changed, and leaves
+  # them in place when it stops. The Docker channel starts no runner container while it does not report them in force.
+  # It runs only under the managed-runner-firewall profile, which a fresh install switches on in .env beside the Docker
+  # backend's (scripts/install-server.sh; --no-managed-runner-firewall leaves it off), and an upgrade never does.
+  managed-runner-firewall:
+    profiles: [managed-runner-firewall]
+    build:
+      context: .
+      dockerfile: deploy/managed-runner/firewall/Dockerfile
+    image: orbit-managed-runner-firewall:local
+    container_name: orbit-managed-runner-firewall
+    restart: unless-stopped
+    logging: *logging
+    network_mode: host
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, NET_RAW]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    volumes:
+      # Its configuration, and the status the Docker channel reads.
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}/firewall:/var/lib/orbit-managed-runner-firewall"
+      # The legacy iptables backend's lock, which Docker's own iptables calls take too; the install names it only where
+      # the host's iptables is legacy. Never made on the host: a directory there would break the host's iptables.
+      - type: bind
+        source: "${ORBIT_MANAGED_RUNNER_FIREWALL_XTABLES_LOCK:-/dev/null}"
+        target: /run/xtables.lock
+        bind:
+          create_host_path: false
+    healthcheck:
+      # Healthy while its status says the rules are in force: what the Docker channel reads before it starts a runner.
+      test: ["CMD", "python3", "-I", "/opt/orbit-managed-runner-firewall/firewall.py", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # The runner link's gateway (docs/runner-link-design.md §6.1; docs/self-hosting.md, "Runner link"): the WebSocket
+  # endpoint runners connect to, on a port of its own published straight from this host, never through the web gateway
+  # above or a proxying CDN. It checks each connection token with the public half of the apiserver's signing key and
+  # reads revoked runner credentials from the apiserver with the gateway secret; it holds no signing key and no database
+  # connection. Until the link is switched over (MODE_HTTP, as LINK_MODE is unset here) it keeps connections, answers
+  # heartbeats and compares what runners mirror to it, and forwards nothing; once switched, it forwards their calls to
+  # the apiserver's internal listener and their live streams to NATS (src/link-gateway/README.md). It runs only under the
+  # runner-link profile, which no install switches on, so a deployment whose .env does not name that profile runs
+  # exactly what it ran.
+  link-gateway:
+    profiles: [runner-link]
+    build:
+      context: src/link-gateway
+      args:
+        ORBIT_SOURCE_SHA: "${ORBIT_SOURCE_SHA:-}"
+    image: orbit-link-gateway:local
+    container_name: orbit-link-gateway
+    restart: unless-stopped
+    logging: *logging
+    # Room to drain before Docker stops it: runners are told to reconnect within LINK_DRAIN_RECONNECT_MAX (30s) and given
+    # LINK_DRAIN_GRACE (15s) more, and the drain gives up at LINK_DRAIN_TIMEOUT (80s).
+    stop_grace_period: 90s
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      # The public half of RUNNER_LINK_SIGNING_KEY, base64 of its PEM (openssl pkey -in runner-link.pem -pubout | base64
+      # -w0); two, comma-separated, while the signing key is replaced.
+      LINK_PUBLIC_KEYS: "${RUNNER_LINK_PUBLIC_KEY:-}"
+      LINK_GATEWAY_TOKEN: "${RUNNER_LINK_GATEWAY_TOKEN:-}"
+      LINK_API_URL: http://apiserver:3000
+      # The apiserver's listener for runner link calls (RUNNER_LINK_INTERNAL_PORT above), inside this project's network.
+      LINK_INTERNAL_API_URLS: "http://apiserver:${RUNNER_LINK_INTERNAL_PORT:-3001}"
+      # Where the apiserver publishes runner hints; the gateway subscribes for the runners it holds connections of, and
+      # connects as its own nkey user (src/link-gateway/nats.conf) with this seed.
+      LINK_NATS_URL: nats://nats:4222
+      LINK_NATS_SEED: "${RUNNER_LINK_NATS_GATEWAY_SEED:-}"
+      # Certificates: from files in RUNNER_LINK_GATEWAY_DIR/tls, reloaded when they change, unless
+      # RUNNER_LINK_ACME_DOMAINS names the link's host, when the gateway obtains and renews them itself (TLS-ALPN-01,
+      # which needs RUNNER_LINK_PORT=443) and keeps them in RUNNER_LINK_GATEWAY_DIR/acme.
+      LINK_TLS_CERT_FILE: /var/lib/orbit-link-gateway/tls/fullchain.pem
+      LINK_TLS_KEY_FILE: /var/lib/orbit-link-gateway/tls/privkey.pem
+      LINK_ACME_DOMAINS: "${RUNNER_LINK_ACME_DOMAINS:-}"
+      LINK_ACME_EMAIL: "${RUNNER_LINK_ACME_EMAIL:-}"
+      LINK_ACME_CACHE_DIR: /var/lib/orbit-link-gateway/acme
+    ports:
+      # The runners' port, open to the internet. Metrics and the health check stay on this host's loopback.
+      - "${RUNNER_LINK_PORT:-8443}:8443"
+      - "127.0.0.1:${RUNNER_LINK_METRICS_PORT:-9464}:9464"
+    volumes:
+      - "${RUNNER_LINK_GATEWAY_DIR:-/dev/null}:/var/lib/orbit-link-gateway"
+    depends_on:
+      apiserver:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/link-gateway", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  # The runner link's message bus (docs/runner-link-design.md §6.3): NATS, its core publish and subscribe and nothing
+  # else. It stores nothing: no JetStream, no store. The apiserver publishes a hint for a runner on rnr.<runnerId> after
+  # the commit it announces, and the link gateway holding that runner's connection relays it; a hint lost while NATS is
+  # down costs that runner one heartbeat interval. Live streams travel on ses.<sessionId>.live while a client watches.
+  # Its whole configuration is src/link-gateway/nats.conf, mounted read-only and the only file read, so the image's own,
+  # which opens a cluster port with a well-known route password, never is: two nkey users, the apiserver and the
+  # gateway, each allowed only what it does, by the public keys below. With either key unset nats-server refuses to
+  # start, and a client without a seed cannot connect. It is reached inside this project's network and on no port of
+  # the host, monitoring included, and runs only under the runner-link profile, beside the gateway.
+  nats:
+    profiles: [runner-link]
+    image: nats:2.15-alpine
+    container_name: orbit-nats
+    restart: unless-stopped
+    logging: *logging
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    command: ["--config", "/etc/orbit-nats/nats.conf"]
+    environment:
+      RUNNER_LINK_NATS_APISERVER_KEY: "${RUNNER_LINK_NATS_APISERVER_KEY:-}"
+      RUNNER_LINK_NATS_GATEWAY_KEY: "${RUNNER_LINK_NATS_GATEWAY_KEY:-}"
+    volumes:
+      - ./src/link-gateway/nats.conf:/etc/orbit-nats/nats.conf:ro
+    expose:
+      - "4222"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
 
 volumes:
   # Only the Postgres socket directory: the archive itself is a bind mount under ./data

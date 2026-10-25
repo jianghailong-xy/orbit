@@ -1,0 +1,24 @@
+{
+  "changes": [
+    [
+      "2026-10-18T06:40:05Z",
+      {
+        "desiredState": "RUNNING",
+        "managementState": "STARTING",
+        "reason": null,
+        "revision": 78
+      }
+    ],
+    [
+      "2026-10-18T06:40:10Z",
+      {
+        "desiredState": "RUNNING",
+        "managementState": "READY",
+        "reason": null,
+        "revision": 79
+      }
+    ]
+  ],
+  "owner": "eve",
+  "reached": "READY"
+}

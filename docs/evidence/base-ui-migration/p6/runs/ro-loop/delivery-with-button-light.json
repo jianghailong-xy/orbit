@@ -1,0 +1,482 @@
+{
+ "tree": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-del",
+ "theme": "light",
+ "runs": [
+  {
+   "errors": [],
+   "geometry": {
+    "region": [
+     24,
+     694,
+     342,
+     369
+    ],
+    "scrollY": 0,
+    "scrollHeight": 1800
+   },
+   "observerCallbacks": 8,
+   "lastCallbacks": [
+    {
+     "t": 375,
+     "step": "fill docs",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       20
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       40
+      ]
+     ]
+    },
+    {
+     "t": 412,
+     "step": "Enter picks Docs",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       118
+      ]
+     ]
+    },
+    {
+     "t": 418,
+     "step": "Enter picks Docs",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       20
+      ]
+     ]
+    },
+    {
+     "t": 429,
+     "step": "Enter picks Docs",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 479,
+     "step": "tap Ops",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       40
+      ]
+     ]
+    },
+    {
+     "t": 495,
+     "step": "Backspace",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       20
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 597,
+     "step": "reopen, untick Docs",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       20
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 606,
+     "step": "reopen, untick Docs",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       136
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "errors": [],
+   "geometry": {
+    "region": [
+     24,
+     694,
+     342,
+     369
+    ],
+    "scrollY": 0,
+    "scrollHeight": 1800
+   },
+   "observerCallbacks": 8,
+   "lastCallbacks": [
+    {
+     "t": 371,
+     "step": "fill docs",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       20
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       40
+      ]
+     ]
+    },
+    {
+     "t": 407,
+     "step": "Enter picks Docs",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       118
+      ]
+     ]
+    },
+    {
+     "t": 413,
+     "step": "Enter picks Docs",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       20
+      ]
+     ]
+    },
+    {
+     "t": 424,
+     "step": "Enter picks Docs",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 481,
+     "step": "tap Ops",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       40
+      ]
+     ]
+    },
+    {
+     "t": 498,
+     "step": "Backspace",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       20
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 601,
+     "step": "reopen, untick Docs",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       20
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 609,
+     "step": "reopen, untick Docs",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       136
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "errors": [],
+   "geometry": {
+    "region": [
+     24,
+     694,
+     342,
+     369
+    ],
+    "scrollY": 0,
+    "scrollHeight": 1800
+   },
+   "observerCallbacks": 8,
+   "lastCallbacks": [
+    {
+     "t": 385,
+     "step": "fill docs",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       20
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       40
+      ]
+     ]
+    },
+    {
+     "t": 422,
+     "step": "Enter picks Docs",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       118
+      ]
+     ]
+    },
+    {
+     "t": 428,
+     "step": "Enter picks Docs",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       20
+      ]
+     ]
+    },
+    {
+     "t": 440,
+     "step": "Enter picks Docs",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 497,
+     "step": "tap Ops",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       40
+      ]
+     ]
+    },
+    {
+     "t": 514,
+     "step": "Backspace",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       20
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 616,
+     "step": "reopen, untick Docs",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       20
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 625,
+     "step": "reopen, untick Docs",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       136
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "errors": [],
+   "geometry": {
+    "region": [
+     24,
+     694,
+     342,
+     369
+    ],
+    "scrollY": 0,
+    "scrollHeight": 1800
+   },
+   "observerCallbacks": 8,
+   "lastCallbacks": [
+    {
+     "t": 367,
+     "step": "fill docs",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       20
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       40
+      ]
+     ]
+    },
+    {
+     "t": 401,
+     "step": "Enter picks Docs",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       118
+      ]
+     ]
+    },
+    {
+     "t": 406,
+     "step": "Enter picks Docs",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       20
+      ]
+     ]
+    },
+    {
+     "t": 416,
+     "step": "Enter picks Docs",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 466,
+     "step": "tap Ops",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       40
+      ]
+     ]
+    },
+    {
+     "t": 481,
+     "step": "Backspace",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       20
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 584,
+     "step": "reopen, untick Docs",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       188,
+       20
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 594,
+     "step": "reopen, untick Docs",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       200,
+       136
+      ]
+     ]
+    }
+   ]
+  }
+ ]
+}

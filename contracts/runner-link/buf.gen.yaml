@@ -1,0 +1,32 @@
+# Generates the runner link protocol's Go and TypeScript code. The output is committed and never
+# edited by hand; after changing v1/*.proto, regenerate it from the repository root with
+#
+#   npm run generate:runner-link -w @orbit/shared
+#
+# Both generators come from the repository's own lockfiles, so each is the same release as the
+# runtime its code runs on: protoc-gen-go is built from the google.golang.org/protobuf version in
+# the go.mod of the module it generates for (src/runner-go, src/link-gateway), and protoc-gen-es is
+# the @bufbuild/protoc-gen-es version in package-lock.json.
+# Paths are relative to this directory, which the npm script runs buf from.
+version: v2
+plugins:
+  - local: ["go", "run", "-C", "../../src/runner-go", "google.golang.org/protobuf/cmd/protoc-gen-go"]
+    out: ../../src/runner-go
+    opt:
+      - module=orbit
+      # Package orbit/linkpb of the runner module (module orbit), written to src/runner-go/linkpb/.
+      # A new .proto file needs a line of its own here.
+      - Mv1/runner_link.proto=orbit/linkpb
+  - local: ["go", "run", "-C", "../../src/link-gateway", "google.golang.org/protobuf/cmd/protoc-gen-go"]
+    out: ../../src/link-gateway
+    opt:
+      - module=orbit/link-gateway
+      # Package orbit/link-gateway/linkpb of the link gateway's module, written to src/link-gateway/linkpb/.
+      # A new .proto file needs a line of its own here too.
+      - Mv1/runner_link.proto=orbit/link-gateway/linkpb
+  - local: protoc-gen-es
+    out: ../../src/shared/src/runner-link
+    opt:
+      - target=ts
+      # The shared package compiles with nodenext resolution, which needs explicit extensions.
+      - import_extension=js

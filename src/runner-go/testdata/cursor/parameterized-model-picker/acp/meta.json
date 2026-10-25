@@ -1,0 +1,75 @@
+{
+ "scenario": "parameterized-model-picker",
+ "process": "acp",
+ "version": "2026.10.14-941492e",
+ "exit": null,
+ "actions": [
+  {
+   "t": 7,
+   "channel": "spawn",
+   "value": {
+    "args": [
+     "acp"
+    ],
+    "cwd": "<RUN>/work",
+    "envKeys": [
+     "AGENT_CLI_CREDENTIAL_STORE",
+     "CURSOR_API_KEY",
+     "CURSOR_CONFIG_DIR",
+     "CURSOR_DATA_DIR",
+     "HOME",
+     "LANG",
+     "NO_OPEN_BROWSER",
+     "ORBIT_P0_CANARY",
+     "PATH",
+     "TERM",
+     "XDG_CACHE_HOME",
+     "XDG_CONFIG_HOME",
+     "XDG_DATA_HOME"
+    ]
+   }
+  },
+  {
+   "t": 8,
+   "channel": "client->agent",
+   "id": 1,
+   "method": "initialize"
+  },
+  {
+   "t": 416,
+   "channel": "client->agent",
+   "id": 2,
+   "method": "session/new"
+  },
+  {
+   "t": 10232,
+   "channel": "client->agent",
+   "id": 3,
+   "method": "session/set_config_option"
+  },
+  {
+   "t": 13658,
+   "channel": "client->agent",
+   "id": 4,
+   "method": "session/set_config_option"
+  },
+  {
+   "t": 17199,
+   "channel": "client->agent",
+   "id": 5,
+   "method": "session/set_config_option"
+  },
+  {
+   "t": 18969,
+   "channel": "client->agent",
+   "id": 6,
+   "method": "session/set_config_option"
+  },
+  {
+   "t": 22409,
+   "channel": "client->agent",
+   "id": 7,
+   "method": "cursor/list_available_models"
+  }
+ ]
+}

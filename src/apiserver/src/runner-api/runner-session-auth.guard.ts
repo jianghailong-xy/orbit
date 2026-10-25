@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { sha256 } from '../common/crypto.util';
+import { authorizeManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { PrismaService } from '../prisma/prisma.service';
 import { RUNNER_OWNER_STATE, admitRunner } from './runner-auth.guard';
 import { ServiceTokenAuthorizer, ServiceTokenGrant } from './service-token.authorizer';
@@ -37,7 +38,11 @@ export class RunnerSessionAuthGuard implements CanActivate {
 
     const runner = await this.prisma.runner.findFirst({ where: { tokenHash: sha256(token) }, include: RUNNER_OWNER_STATE });
     if (runner) {
-      req.runner = admitRunner(runner);
+      // As on RunnerAuthGuard's routes: a disabled account's runner is refused first, then a managed
+      // runner's machine credential is bound to its authorized instance.
+      const admitted = admitRunner(runner);
+      req.managedRunnerInstance = await authorizeManagedRunnerInstance(this.prisma, admitted.id, req.headers);
+      req.runner = admitted;
       return true;
     }
 

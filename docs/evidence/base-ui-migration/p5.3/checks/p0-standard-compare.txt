@@ -1,0 +1,10 @@
+# Standard P0 (ui-migration/playwright.config.mjs, expected screenshots = P0.2 originals + registered layers) on the delivery
+# b72da6eda and on the base 6fa5196e5 (origin/main, which holds the project tip; without P5.3), round f1.
+failing tests: delivery 6, base 0
+
+delivery chromium-dark-phone :: session | session-attachment-menu.png 925 px | Error: expect(page).toHaveScreenshot(expected) failed
+delivery chromium-light-desktop :: session | session-attachment-staged.png 1382 px | Error: expect(page).toHaveScreenshot(expected) failed
+delivery chromium-light-phone :: session | session-attachment-menu.png 1045 px | Error: expect(page).toHaveScreenshot(expected) failed
+delivery webkit-dark-phone :: session | session-attachment-menu.png 834 px | Error: expect(page).toHaveScreenshot(expected) failed
+delivery webkit-light-desktop :: session | session-attachment-staged.png 1388 px | Error: expect(page).toHaveScreenshot(expected) failed
+delivery webkit-light-phone :: session | session-attachment-menu.png 958 px | Error: expect(page).toHaveScreenshot(expected) failed

@@ -1,0 +1,10 @@
+summary-build-mac.txt:Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt]' passed (36.482 seconds).
+summary-build-mac.txt:Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked]' passed (70.508 seconds).
+summary-build-mac.txt:Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test2HowItRunsWritesAPickAtOnce]' passed (34.980 seconds).
+summary-build-mac.txt:Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test3ALockedProjectShowsItsMainBranchLocked]' passed (23.208 seconds).
+summary-build-mac.txt:Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test4AProjectWithNoRepositoryHasNoMainBranchRow]' passed (24.285 seconds).
+summary-build-ios.txt:Test Case '-[MainBranchProbeUITests.MainBranchShotTests test0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt]' passed (53.568 seconds).
+summary-build-ios.txt:Test Case '-[MainBranchProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked]' passed (85.980 seconds).
+summary-build-ios.txt:Test Case '-[MainBranchProbeUITests.MainBranchShotTests test2HowItRunsWritesAPickAtOnce]' passed (33.015 seconds).
+summary-build-ios.txt:Test Case '-[MainBranchProbeUITests.MainBranchShotTests test3ALockedProjectShowsItsMainBranchLocked]' passed (10.238 seconds).
+summary-build-ios.txt:Test Case '-[MainBranchProbeUITests.MainBranchShotTests test4AProjectWithNoRepositoryHasNoMainBranchRow]' passed (14.717 seconds).

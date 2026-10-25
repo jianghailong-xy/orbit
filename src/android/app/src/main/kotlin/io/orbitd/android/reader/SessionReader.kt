@@ -5,37 +5,83 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.R
+import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.SessionComposer
+import io.orbitd.android.cards.CardFocus
+import io.orbitd.android.cards.CardReceiptSheet
+import io.orbitd.android.cards.CardReviewSheet
+import io.orbitd.android.cards.LocalSteerDeliveries
+import io.orbitd.android.cards.NeedsYouLogic
+import io.orbitd.android.cards.SessionCardsReads
+import io.orbitd.android.cards.rememberSessionCards
+import io.orbitd.android.core.cards.CardPreviews
+import io.orbitd.android.cards.ReaderSide
 import io.orbitd.android.cards.SessionCards
+import io.orbitd.android.cards.SessionNeedsYouBar
+import io.orbitd.android.cards.SessionRunStartCard
+import io.orbitd.android.cards.SessionTasksCard
+import io.orbitd.android.cards.LocalWatchTargetNames
+import io.orbitd.android.cards.watchTargetName
 import io.orbitd.android.watch.SessionWatches
+import io.orbitd.android.watch.rememberSessionTitles
+import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.cards.obj
+import io.orbitd.android.core.cards.text
+import io.orbitd.android.core.cards.AntigravityRepair
+import io.orbitd.android.core.cards.DshRuntime
+import io.orbitd.android.core.cards.SessionRunStart
+import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.*
+import io.orbitd.android.management.LocalSessionRecaps
+import io.orbitd.android.toast.OrbitToasts
+import io.orbitd.android.toast.ToastTone
 import io.orbitd.android.navigation.*
 import io.orbitd.android.text.*
+import io.orbitd.android.ui.LocalOrbitColors
+import io.orbitd.android.ui.typingFold
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
 
 @Composable
 fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi,
-    data: DirectoryData, open: (OrbitRoute) -> Unit) {
+    data: DirectoryData, open: (OrbitRoute) -> Unit, leave: () -> Unit = {}) {
+    // This page shows a conversation, and the store streams the one it shows: selecting it is the reader's own act, so a
+    // landing session — which SessionDestination never sends here — is never subscribed to (§2.9 LS6). A reader leaving
+    // clears the selection; a reader replacing another (a link to a second session) sets its own after the old one's.
+    LaunchedEffect(handle, route.id) { app.realtime.selectSession(route.id) }
+    DisposableEffect(handle, route.id) { onDispose { app.realtime.selectSession(null) } }
     var recordOpened by rememberSaveable { mutableStateOf(false) }
     val model = remember(handle, route.id, route.recordId) { SessionReaderModel(app.session, handle,
         app.realtime, route.id!!, app.processScope, route.recordId, recordOpened) }
@@ -48,24 +94,40 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(state.window.seeded, state.loading, state.targetSeq) {
         if (route.recordId != null && state.window.seeded && !state.loading && state.targetSeq != null) recordOpened = true
     }
-    val rows = remember(state.window.events) { transcriptRows(state.window.events) }
+    // The reader's steers nothing has read yet wait in the tray above the composer, and each is drawn where its delivery settled — a
+    // receipt in the queue's listing settles one no runner will speak for. Only a window at the live tail can see how they came out.
+    val listedTurns = state.session?.snapshot?.queuedTurns.orEmpty()
+    val atTail = state.window.newerAfter == null
+    val rows = remember(state.window.events, listedTurns, atTail) { transcriptRows(state.window.events, listedTurns, holdsSteers = atTail) }
+    // What the tray holds, off the same events the rows leave them out of — or the live transcript's, while the reader is in history.
+    val steerEvents = if (atTail) state.window.events else state.session?.transcript?.events.orEmpty()
+    val unreadSteers = remember(steerEvents, listedTurns) { SteerDelivery.place(steerEvents, listedTurns).unread }
     val readable by rememberUpdatedState(!state.denied)
     val attachmentMetadata by rememberUpdatedState(state.window.events.flatMap { event ->
         (event.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
     }.associateBy { ObjectId.canonical(it.string("id").orEmpty()) })
+    // The session's pictures in transcript order: image attachments, and uploads linked by name in prose.
+    val galleryImages by rememberUpdatedState(remember(state.window.events) { sessionImages(state.window.events) })
     val resources = remember(handle, route.id) { ReaderResources(app.session, handle, route.id,
         available = { readable }, metadata = { source ->
             attachmentMetadata[ObjectId.canonical(source.removePrefix("orbit-attachment:"))]?.let {
                 (it.string("name") ?: it.string("fileName") ?: "Attachment") to
                     (it.string("mime") ?: it.string("mimeType") ?: "application/octet-stream")
             }
-        }, images = { attachmentMetadata.values.filter { (it.string("mime") ?: it.string("mimeType"))?.startsWith("image/") == true }
-            .mapNotNull { it.string("id")?.let { id -> "orbit-attachment:$id" } } }) }
+        }, images = { galleryImages } ) }
     val openLink = rememberReaderLinkHandler(resources) { next ->
         if (next.destination == Destination.SESSION && ObjectId.same(next.id, route.id) &&
             next.recordId != null && next.recordId == route.recordId) model.openRecord(next.recordId)
         else open(next)
     }
+    // The worktree bar's model: its own reads while an outcome is pending or the session is live, and the store's as they land.
+    val worktree = remember(handle, route.id) { WorktreeModel(api, route.id!!, app.processScope) }
+    // What the conversation's repair cards act through: the session's freshest detail, its runner, the composer (A07-4).
+    val latestOpen by rememberUpdatedState(open)
+    val console = remember(handle, route.id) { SessionConsole(app, handle, route.id!!, composer, app.processScope, reloadDetail = { worktree.loadDetail() },
+        openRunner = { runner, engine -> latestOpen(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
+        openSession = { latestOpen(OrbitRoute(Destination.SESSION, it)) },
+        openDraft = { latestOpen(OrbitRoute(Destination.DRAFT, workspaceId = it)) }) }
     val list = rememberLazyListState()
     var follow by rememberSaveable { mutableStateOf(route.recordId == null) }
     var placed by remember(model) { mutableStateOf(false) }
@@ -73,6 +135,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     var positioning by remember { mutableStateOf(false) }
     var details by rememberSaveable { mutableStateOf(false) }
     var action by remember { mutableStateOf<DirectoryDialog?>(null) }
+    // A05-3: the session's ⋯ in the bar, where its Share button was (iOS d2858a5e8).
+    val listed = remember(state.session?.snapshot?.detail) {
+        state.session?.snapshot?.detail?.let { runCatching { Wire.json.decodeFromJsonElement(DirectorySession.serializer(), it) }.getOrNull() }
+    }
+    val actions = remember(api) { SessionActions(api, app) { app.realtime.refreshDirectory(); app.realtime.refreshSession() } }
+    val link = remember(handle, route.id) { "${handle.account.server.trimEnd('/')}/sessions/${ObjectId.toPublic(route.id!!)}" }
     val currentRows by rememberUpdatedState(rows)
     val nested = remember { object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -106,18 +174,161 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             }
     }
     val transcript = state.session?.transcript
-    LaunchedEffect(state.window.events, transcript?.textDrafts, transcript?.thinkingDrafts, transcript?.toolOutputs, follow, placed) {
+    val snapshotDetail = state.session?.snapshot?.detail
+    // The conversation's cards, and the review a preview opens (A08-2), held outside the transcript's recyclable rows.
+    val cards = rememberSessionCards(app, handle, route.id!!)
+    // What the needs-you bar counts in this conversation (iOS `ConsoleModel.openBelowRows`), and which way it lies from
+    // the reader: the cards are drawn in the rail before the tail, so they are above only once the reader is past it. A question
+    // answered here stops counting with the press, not with the read after it (A08-13).
+    val belowRows = remember(state.session?.snapshot, cards.answered) {
+        state.session?.snapshot?.let { NeedsYouLogic.belowRows(state.session!!.id, it, cards.answered) }.orEmpty()
+    }
+    // A08-4: the queue's turns drawn at the transcript's end, the ones the window has not seen delivered yet — but the reader's own
+    // messages still on their way, which the tray above the composer holds; what Orbit queued keeps its card here. After them, the
+    // reader's steers only the server's receipt says were not delivered, until Put back takes one away.
+    val queued = remember(state.session?.snapshot?.queuedTurns, state.window.events, composerState.withdrawing, composerState.withdrawn) {
+        val listed = state.session?.snapshot?.queuedTurns.orEmpty()
+        queuedTail(listed, state.window.events).filterNot { it.inTray } + undeliveredTail(listed, state.window.events).filterNot {
+            (ObjectId.canonical(it.turnId!!) ?: it.turnId) in composerState.withdrawing + composerState.withdrawn
+        }
+    }
+    // A07-14: the turn the runner has taken, until its echo or its end — drawn where the echo will land, as the echo will be.
+    val accepted = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
+        acceptedHeads(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events)
+    }
+    val queuedShown = if (transcript != null && state.window.newerAfter == null) queued.size else 0
+    val readerSide by remember(list) { derivedStateOf {
+        when (val top = topLineItem(list.layoutInfo.visibleItemsInfo, list.layoutInfo.viewportStartOffset)) {
+            null -> null
+            "tail" -> ReaderSide.ABOVE
+            else -> if (top.startsWith("queued:")) ReaderSide.ABOVE else ReaderSide.BELOW
+        }
+    } }
+    val scope = rememberCoroutineScope()
+    // The conversation's last row while it is at rest (RecapCard). It steps aside for the rest of this visit once the conversation
+    // starts a new turn — the reader is in it now, and a card arriving under each answer would push the answer up — and is back the
+    // next time the session is opened (the owner, 2026-10-22).
+    val recapRests = listed?.let { RecapCard.rests(it) } ?: true
+    var recapAside by remember(handle, route.id) { mutableStateOf(false) }
+    LaunchedEffect(recapRests) { if (!recapRests) recapAside = true }
+    val recapCard = if (recapAside) null else listed?.let { RecapCard.make(it, LocalSessionRecaps.current) }
+    var recapRefreshing by remember(handle, route.id) { mutableStateOf(false) }
+    val refreshRecap: () -> Unit = {
+        if (!recapRefreshing) {
+            recapRefreshing = true
+            scope.launch {
+                val notice = try {
+                    val outcome = api.refreshRecap(route.id!!)
+                    if (outcome.written) null else RecapCard.notice(outcome.reason ?: "error")
+                } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { RecapCard.notice("error") }
+                // A pass that wrote is read back by the session and the lists, which the card and the row draw from.
+                if (notice == null) { app.realtime.refreshSession(); app.realtime.refreshDirectory() }
+                else OrbitToasts.show(notice.text, tone = if (notice.failed) ToastTone.ERROR else ToastTone.INFO)
+                recapRefreshing = false
+            }
+        }
+    }
+    LaunchedEffect(snapshotDetail) { snapshotDetail?.let(worktree::offer) }
+    val worktreeState by worktree.state.collectAsState()
+    LaunchedEffect(worktreeState.detail, snapshotDetail) { console.detail = worktreeState.detail ?: snapshotDetail }
+    // What a Retry re-sends when it is the reader's: the newest message of a person the window holds.
+    LaunchedEffect(rows) { console.lastUser = rows.lastOrNull { it.event.type == "user" && it.event.personWords().isNotBlank() }?.event }
+    // An Antigravity failure said here is read against the runner and the providers, once, when it first appears.
+    val antigravityFailure = remember(rows, snapshotDetail) {
+        rows.any { it.event.type in setOf("error", "assistant") && AntigravityRepair.of(it.event.body().trim()) != null } ||
+            AntigravityRepair.of(snapshotDetail?.string("error")) != null
+    }
+    LaunchedEffect(antigravityFailure, console.runnerId) { if (antigravityFailure) console.reload() }
+    // So is a DeepSeek Harness one (A07-5) — and, from a server that doesn't say a session's engine, a session on a key or a pool,
+    // whose engine the account's providers say: its cards and its failures follow it.
+    val dshFailure = remember(rows, snapshotDetail) {
+        rows.any { it.event.type == "error" && DshRuntime.repair(it.event.body().trim()) != null } || DshRuntime.repair(snapshotDetail?.string("error")) != null
+    }
+    val engineFromKeys = snapshotDetail?.let(ProviderChoices::engineFromKeys) == true
+    LaunchedEffect(dshFailure || engineFromKeys, console.runnerId) { if (dshFailure || engineFromKeys) console.reload() }
+    // A07-18: what this page reads off the runner — the composer's catalogue, the cards' runner — again on every reconnect, and
+    // once a minute while the session streams, so a read that failed as the page opened, or a quota read before the phone slept,
+    // does not stay that way.
+    LaunchedEffect(console, model) {
+        refreshWhileStreaming(model.state.map { it.session?.connection == ConnectionState.CONNECTED }, console::refreshRunner)
+    }
+    LaunchedEffect(worktree, state.denied) {
+        if (!state.denied) worktree.poll { (worktree.state.value.detail ?: snapshotDetail)?.let { it.string("runStatus") ?: it.string("status") } in
+            setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED") }
+    }
+    // A06-5: the viewport changing size under a pinned reader (keyboard, a taller composer, the reconnect
+    // line) asks for the tail again; nothing else re-anchors the bottom of a list that shrank.
+    val viewport = remember(model) { TranscriptViewport() }
+    var repin by remember(model) { mutableIntStateOf(0) }
+    LaunchedEffect(state.window.events, transcript?.textDrafts, transcript?.thinkingDrafts, transcript?.toolOutputs, follow, placed, repin,
+        state.session?.snapshot?.queuedTurns) {
         if (placed && follow && !dragging && state.window.newerAfter == null && !state.loading) {
             withFrameNanos { }
+            // A reader who stopped following during that frame stays where they went: a card brought into view, a touch.
+            if (!follow || dragging) return@LaunchedEffect
             positioning = true
             list.scrollToItem((list.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
             positioning = false
         }
     }
-    CompositionLocalProvider(LocalReaderResources provides resources) {
+    // A06-13 (iOS `TailPinning.followsGeometry`, 900e1810d and 66c42e852): rows that grow under a still, pinned list — a running
+    // agent's line arriving, a picture or a row measured again — push the tail out of view, and nothing else would bring it back.
+    // Only within the rule's slack and never after a scroll; the card rail, which arrives whole at any height, follows by its own size.
+    FollowsTailGeometry(list, model, pinned = { placed && follow && !dragging && state.window.newerAfter == null && !state.loading },
+        moving = { positioning }) { positioning = it }
+    val rail = remember(model) { RailHeight() }
+    // Background agents' and workflows' progress, as their cards and the background list read it.
+    val background = state.session?.snapshot?.background
+    val taskActivity = remember(transcript?.taskProgress, state.window.events, background) {
+        TaskActivity.of(transcript?.taskProgress, state.window.events, background.orEmpty())
+    }
+    LaunchedEffect(cards, console.engine) { cards.engine = console.engine }
+    val reviewStates = rememberSaveableStateHolder()
+    val discussCard: ((String) -> Unit)? = if (!composerState.loaded) null else { context ->
+        val prior = composer.state.value.draft.text
+        val text = prior + (if (prior.isBlank()) "" else "\n\n") + context
+        composer.edit(text, text.length, text.length)
+        composerFocused = true
+        composeFocus++
+    }
+    // A08-3: while a review is open the transcript does not follow its tail, so closing it returns to the card's place.
+    LaunchedEffect(cards.review) { if (cards.review != null) follow = false }
+    // How far each steer got, by its turn: the latest `user_delivery` the window holds (A08-11's wake receipt reads it).
+    val steerDeliveries = remember(state.window.events) {
+        state.window.events.filter { it.type == "user_delivery" }
+            .mapNotNull { event -> event.fields.string("turnId")?.let { turn -> event.fields.string("delivery")?.let { turn to it } } }.toMap()
+    }
+    // A08-14: what a watch's wake line calls the targets that moved — the watches this conversation observes, the session list,
+    // and its own Tasks card.
+    val sessionTitles = rememberSessionTitles(app, handle)
+    val targetNames = remember(cards.watches, cards.created, sessionTitles) {
+        { watchId: String, target: JsonObject -> watchTargetName(watchId, target, cards.watches.map { it.source }, { sessionTitles(it) }, cards.created) }
+    }
+    CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
+        LocalSessionConsole provides console, LocalWatchTargetNames provides targetNames) {
+        SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val otherInputHasKeyboard = WindowInsets.ime.getBottom(LocalDensity.current) > 0 && !composerFocused
         val composerHeight = if (otherInputHasKeyboard) 0.dp else if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
+        val compact = maxWidth < 600.dp
+        // iOS `ConsoleView.foldsChrome`: on a phone, while the composer holds the keyboard the conversation gets the
+        // screen. The shell's bar, the needs-you bar, the reconnect line and the cards above the composer fold away together, and come
+        // back when the keyboard goes; a wide page keeps all of it.
+        val foldsChrome = composerFocused && compact
+        // A06-18 (iOS d87e5fa67, e9c1552f5): the bar names no session. Between back and the ⋯ it carries the question above the
+        // fold, as a capsule, only while the reader is off the live tail — scrolled up, or reading a window opened at a record —
+        // which is when the jump row shows too; at the tail the reader is following the answer to what they just asked, and the
+        // bar's middle stays empty. Only the capsule reads the named question, so a scroll past one redraws it alone; and the bar
+        // keeps the content it is first handed, so both are states the content reads as it draws.
+        val question = rememberStuckQuestion(rows, list)
+        val offTail by rememberUpdatedState(!state.denied && (!follow || state.window.newerAfter != null))
+        // A05-3: the session's ⋯ in the bar, where its Share button was (iOS d2858a5e8), bound while this page shows.
+        PageBar.Bind(route, title = null, folds = foldsChrome, center = {
+            if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
+        }, actions = {
+            SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
+                actions, open, { action = it }, { details = true }, leave)
+        })
         Column(Modifier.fillMaxSize()) {
             val session = state.session
             val detail = session?.snapshot?.detail
@@ -125,38 +336,37 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 StatusMessage("Session unavailable", if (session?.error?.httpStatus == 403) "You don't have permission to access this item." else "This item is no longer available.", model::retry)
             } else {
                 Column(Modifier.weight(1f).fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { details = true }, enabled = detail != null) { Text(detail?.string("title") ?: "Session details") }
-                    val directorySession = remember(detail) { detail?.let { runCatching { Wire.json.decodeFromJsonElement(DirectorySession.serializer(), it) }.getOrNull() } }
-                    TextButton(enabled = session?.fresh == true && data.fresh && directorySession != null,
-                        onClick = { action = DirectoryDialog.SessionMenu(directorySession!!,
-                            SessionView.entries.firstOrNull { it.name == directorySession.lifecycleState } ?: SessionView.OPEN) }) { Text("Session options") }
-                }
-                // Connection changes must not insert/remove a banner above the reading viewport.
-                val reconnecting = session?.fresh != true && state.window.seeded
-                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Text(if (reconnecting) "Saved messages · Reconnecting…" else sessionLabel(session),
-                        Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
-                    // Reserve the scaled button's height even while fresh, including 200% text.
-                    TextButton(onClick = model::retry, enabled = reconnecting,
-                        modifier = Modifier.alpha(if (reconnecting) 1f else 0f)
-                            .then(if (reconnecting) Modifier else Modifier.clearAndSetSemantics { })) { Text("Retry") }
-                }
                 state.error?.let { StatusMessage("Couldn't load messages", it, model::retry) }
+                // The needs-you bar, under the header and over the transcript (iOS `NeedsYouBannerView` in the console's top
+                // inset). Its press here unpins the reader and shows the waiting card, which the card rail brings into view.
+                SessionNeedsYouBar(app, handle, route.id!!, list, hidden = foldsChrome,
+                    below = NeedsYouLogic.below(belowRows, readerSide), open = open, onBelow = { row ->
+                        follow = false
+                        scope.launch {
+                            // The rail is the item before the queue and the tail; a card in it is brought into view once it is drawn.
+                            list.scrollToItem((list.layoutInfo.totalItemsCount - 2 - queuedShown).coerceAtLeast(0))
+                            CardFocus.request(route.id!!, row)
+                            // A08-3: a card answered in a review opens it, over the card it scrolled to (iOS 419fa780b). Evidence and
+                            // exceptions are answered in place, so the press only shows them.
+                            state.session?.let { live -> cards.shown(live).firstOrNull { it.key == row } }
+                                ?.takeIf { CardPreviews.preview(it) != null }?.let { cards.open(it.key) }
+                        }
+                    })
                 // Capture all lazy intervals in this composition, preserving A05's measurement fix.
                 val displayedRows = rows
                 val displayedWindow = state.window
                 val live = transcript.takeIf { displayedWindow.newerAfter == null }
                 val displayedLoading = state.loading
                 val targetSeq = state.targetSeq
-                LazyColumn(Modifier.weight(1f).fillMaxWidth().nestedScroll(nested).pointerInput(model) {
+                LazyColumn(Modifier.weight(1f).fillMaxWidth().fadesIntoComposerBand().onSizeChanged {
+                    if (viewport.resized(it.height, placed && follow && state.window.newerAfter == null)) repin++
+                }.nestedScroll(nested).pointerInput(model) {
                     // Do not consume the gesture: native selection/links still receive it.
                     // A touch pauses following so a live update cannot move text under a selection.
                     awaitEachGesture { awaitFirstDown(requireUnconsumed = false); follow = false }
                 }.testTag("transcript-list"), state = list,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // No room under the rows but the tail row's own: every follow and jump lands on it (iOS 9d3751ec2).
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
@@ -164,7 +374,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     items(displayedRows, key = { it.key }, contentType = { it.event.type }) { row ->
                         TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1))
                     }
-                    if (displayedWindow.seeded && displayedRows.isEmpty()) item(key = "empty") { Text("No messages yet") }
+                    if (displayedWindow.seeded && displayedRows.isEmpty() && (live == null || accepted.isEmpty())) item(key = "empty") { Text("No messages yet") }
                     if (live != null) {
                         items(live.thinkingDrafts.entries.toList(), key = { "thinking:${it.key}" }) { entry ->
                             LiveMessage("Thinking", entry.key, entry.value, openLink)
@@ -172,56 +382,167 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         items(live.textDrafts.entries.toList(), key = { "assistant:${it.key}" }) { entry ->
                             LiveMessage("Assistant", entry.key, entry.value, openLink)
                         }
+                        // A07-14: the accepted head at the history's end, ahead of the decisions and the queue, as the transcript draws
+                        // a person's turn — no dashes, no "Queued", no Cancel: the runner has it.
+                        items(accepted, key = { "accepted:${it.turnId}" }) { head ->
+                            Box(Modifier.testTag("accepted:${head.turnId}")) { TranscriptRowView(TranscriptRow(head), model, live, openLink) }
+                        }
+                    }
+                    // At the live tail, under everything the conversation said and above the cards that ask the owner something.
+                    if (live != null && displayedRows.isNotEmpty()) recapCard?.let { card ->
+                        item(key = "recap") { RecapCardView(card, recapRefreshing, refreshRecap) }
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
-                    item(key = "interaction-cards") { SessionCards(openLink, discuss = if (!composerState.loaded) null else { context ->
-                        val prior = composer.state.value.draft.text
-                        val text = prior + (if (prior.isBlank()) "" else "\n\n") + context
-                        composer.edit(text, text.length, text.length)
-                        composerFocused = true
-                        composeFocus++
-                    }) }
-                    item(key = "tail") { Spacer(Modifier.height(1.dp).testTag("transcript-tail")) }
+                    item(key = "interaction-cards") {
+                        Box(Modifier.onSizeChanged { if (rail.grew(it.height) && placed && follow && state.window.newerAfter == null) repin++ }) {
+                            SessionCards(cards, openLink, discuss = discussCard)
+                        }
+                    }
+                    // A08-4: what is still waiting in the queue, as the turns it will be — after the decisions, before the tail.
+                    if (live != null) items(queued, key = { it.key }) { turn ->
+                        QueuedTurnRow(turn, openLink, cancelEnabled = state.session?.fresh == true && !composerState.busy,
+                            putBack = if (turn.delivery != null && composerState.loaded) ({
+                                composer.putBack(turn.event.fields.string("text").orEmpty(), discard = turn.turnId)
+                            }) else null) { turnId ->
+                            composer.control("turns/$turnId", HttpMethod.DELETE)
+                        }
+                    }
+                    // A06-12: the room the fade lies over, so a list at its tail has nothing in it — and the 1 dp anchor it always was.
+                    item(key = "tail") { Spacer(Modifier.height(COMPOSER_BAND_FADE + 1.dp).testTag("transcript-tail")) }
                 }
-                if (!follow || state.window.newerAfter != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                // Android's jump stays a row under the list (iOS floats a disc 6 pt above the fade): below the list, so never in its fade.
+                if (!follow || state.window.newerAfter != null) Row(Modifier.fillMaxWidth().testTag("transcript-jump"), horizontalArrangement = Arrangement.SpaceEvenly) {
                     TextButton(onClick = {
                         val last = rows.lastOrNull { it.event.type == "user" }
                         if (last != null) model.show(last.event.seq)
                     }, enabled = rows.any { it.event.type == "user" }) { Text("Last question") }
                     TextButton(onClick = { follow = true; model.latest() }) { Text("Jump to latest") }
                 }
+                // Android's own, as iOS's console shows no connection: only while the stream is being made again (A06-18), under
+                // the list so its coming and going never moves the line being read, and folded with the chrome while a phone types.
+                val reconnecting = session?.fresh != true && state.window.seeded
+                if (reconnecting && !foldsChrome) Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp).testTag("reconnecting"),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text("Saved messages · Reconnecting…", Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = model::retry) { Text("Retry") }
                 }
-                SessionWatches(app, handle, route.id!!, open = open)
+                }
+                // A08-5: a run that never started says why, first in the band above the composer — and stays while a phone types.
+                SessionRunStartCard(app, handle, state.session?.snapshot?.detail, state.session?.fresh == true,
+                    chat = {
+                        // The composer is handed a reply about this run, in place of whatever was in it (iOS `chatAboutRefusedRun`).
+                        composer.edit(SessionRunStart.chatPrefix, SessionRunStart.chatPrefix.length, SessionRunStart.chatPrefix.length)
+                        composerFocused = true; composeFocus++
+                    },
+                    sendAgain = { composer.retryFailed() },
+                    openRunner = { runner -> open(OrbitRoute(Destination.RUNNER, runner)) })
+                // A07-4: a session queued behind the runner's Antigravity gate says what to fix, above the composer (iOS
+                // `queuedAntigravityRepair`).
+                val queuedDetail = console.detail
+                val queued = (queuedDetail?.string("runStatus") ?: queuedDetail?.string("status")) == "PENDING"
+                // A07-5: and behind its DeepSeek Harness gate, first (iOS `queuedDshRepair`).
+                val queuedDsh = DshRuntime.repair(queuedDetail?.string("error"))?.takeIf { console.executesDsh && queued }
+                if (queuedDsh != null) Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { DshRepairCard(queuedDsh, console) }
+                else AntigravityRepair.of(queuedDetail?.string("error"))?.takeIf {
+                    console.executesAntigravity && queued
+                }?.let { Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { AntigravityRepairCard(it, console) } }
+                // What this session waits on, the tasks it created and its code output: folded to no height while a
+                // phone's composer holds the keyboard (iOS `TypingFold`), so an open list or a sheet comes back as it was.
+                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionWatches(app, handle, route.id!!, open = open) }
+                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionTasksCard(app, handle, route.id!!, cards, openLink) }
+                // The composer's send in flight holds Merge as a queued turn does (A06-14, iOS `console.sending`).
+                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { Box(Modifier.padding(horizontal = 16.dp)) {
+                    WorktreeBar(worktree, sending = composerState.waiting || composerState.busy, open = openLink) } }
+                // The landing this conversation's work fed, at the session's own bottom (owner 2026-10-19, board v4 06 e).
+                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SourceLandingChip(queuedDetail ?: detail) {
+                    open(OrbitRoute(Destination.SESSION, it)) } }
                 // Keep the composer and its activity-result launchers alive while card forms use the IME.
+                // The chip's Open task › pushes the task over this run, so Back returns to it.
                 Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
-                    focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }) }
+                    focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }, foldsChrome = foldsChrome,
+                    openTask = { open(OrbitRoute(Destination.TASK, it)) },
+                    openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
+                    unreadSteers = unreadSteers) }
             }
         }
         }
+        if (!state.denied) CardReviewSheet(cards, reviewStates, openLink, discussCard)
+        if (!state.denied) CardReceiptSheet(cards, openLanding = { open(OrbitRoute(Destination.SESSION, it)) })
         if (details && !state.denied) SessionDetails(state.session, api, openLink) { details = false }
-        action?.let { DirectoryActionDialog(it, api, data.copy(fresh = data.fresh && state.session?.fresh == true), { action = it }) {
+        action?.let { dialog -> DirectoryActionDialog(dialog, api, data.copy(fresh = data.fresh && state.session?.fresh == true), { action = it }) {
             app.realtime.refreshDirectory(); app.realtime.refreshSession()
+            // Deleted for good from its own page: the page goes with it, as iOS's console does.
+            if (dialog is DirectoryDialog.Purge) leave()
         } }
-    }
-}
-
-private fun sessionLabel(session: SessionState?): String {
-    val snapshot = session?.snapshot
-    return when {
-        snapshot?.approvals?.isNotEmpty() == true -> "Waiting for your reply"
-        session?.error != null -> "Disconnected · Retrying"
-        snapshot != null -> snapshot.detail.string("runState") ?: snapshot.detail.string("status") ?: "Session"
-        else -> "Connecting…"
     }
 }
 
 @Composable
 private fun LiveMessage(label: String, parent: String, text: String, open: (String) -> Unit) {
+    // A06-11: reasoning still being written is open and held to a few self-scrolling lines (iOS 471b2afbb).
+    if (label == "Thinking") return LiveThinking(parent, text, open)
     Column { Text(if (parent.isEmpty()) "$label · Live" else "Subagent · $label · Live", style = MaterialTheme.typography.labelMedium)
-        if (label == "Thinking") {
-            var expanded by rememberSaveable { mutableStateOf(false) }
-            TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide thinking" else "Show thinking") }
-            if (expanded) StreamingText(text, open)
-        } else StreamingText(text, open)
+        StreamingText(text, open)
     }
+}
+
+/** How far the transcript fades out above the band under it, and the room its tail row keeps clear (iOS `composerBandFade`). */
+internal val COMPOSER_BAND_FADE = 20.dp
+
+/**
+ * A06-12 (iOS 9d3751ec2 `fadesIntoComposerBand`): the transcript's bottom edge dissolves into the band under it — the cards
+ * above the composer and the composer's own band — instead of slicing a row through, and its tail row keeps [COMPOSER_BAND_FADE]
+ * of room, so only rows on their way out of view are in the fade. Drawn offscreen so the gradient (DstIn) masks the list's own
+ * pixels, not the page under it. On the list alone: the jump row under it stays solid.
+ */
+internal fun Modifier.fadesIntoComposerBand(): Modifier = graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        val fade = COMPOSER_BAND_FADE.toPx()
+        drawRect(Brush.verticalGradient(listOf(Color.Black, Color.Transparent), startY = size.height - fade, endY = size.height),
+            topLeft = Offset(0f, size.height - fade), size = Size(size.width, fade), blendMode = BlendMode.DstIn)
+    }
+
+/**
+ * The landing this conversation's work fed, at the session's own bottom (owner 2026-10-19, board v4 06 e): a derived label, not a
+ * turn — the source session did the work, the platform lands it, and the label opens the landing session where every attempt is read.
+ * `Landing · checking ›`, `On project/x ✓ ›`, `Landing · checks failed ›`. Absent from a session that produced no landing work, and
+ * from a server that predates the field.
+ */
+@Composable
+internal fun SourceLandingChip(detail: JsonObject?, open: (String) -> Unit) {
+    val source = detail?.obj("sourceLanding") ?: return
+    val summary = SessionProjectLandings.LandingSummary(source.text("landingSessionId").orEmpty(), subject = source.text("subject"),
+        state = source.text("state"), phase = source.text("phase"), settledAs = source.text("settledAs"), targetRef = source.text("targetRef"))
+    if (summary.landingSessionId.isEmpty()) return
+    val label = SessionProjectLandings.sourceLabel(summary) ?: return
+    val ink = when (label.tone) {
+        "run" -> MaterialTheme.colorScheme.primary
+        "landed" -> LocalOrbitColors.current.success
+        "failed" -> LocalOrbitColors.current.needsYou
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 4.dp)) {
+        Row(Modifier.background(ink.copy(alpha = 0.12f), RoundedCornerShape(50))
+            .clickable(role = Role.Button) { open(summary.landingSessionId) }.padding(horizontal = 10.dp, vertical = 5.dp)
+            .testTag("source-landing"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            // The moving state wears the ring (board 06 e; web's spinner Glyph, iOS's arrow.triangle.2.circlepath): static, and silent to TalkBack.
+            if (label.tone == "run") Icon(painterResource(R.drawable.ic_sync), null, Modifier.size(14.dp).testTag("source-landing:ring"), tint = ink)
+            Text("${label.text} ›", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = ink, maxLines = 1)
+        }
+    }
+}
+
+/** Every picture a reader can page through: image attachments, and `[label](orbit-attachment:id "name.png")` links. */
+internal fun sessionImages(events: List<RunEvent>): List<String> {
+    val linked = Regex("""\[[^\]\n]+\]\((orbit-attachment:[^)\s]+)(?:\s+"((?:\\.|[^"\\])*)")?\)""")
+    return events.flatMap { event ->
+        val attached = (event.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+            .filter { (it.string("mime") ?: it.string("mimeType"))?.startsWith("image/") == true }
+            .mapNotNull { it.string("id")?.let { id -> "orbit-attachment:$id" } }
+        val body = event.body()
+        attached + if ("orbit-attachment:" !in body) emptyList() else linked.findAll(body)
+            .filter { MarkdownFileRef(it.groupValues[1], "", it.groupValues[2].ifEmpty { null }).isImage }.map { it.groupValues[1] }.toList()
+    }.distinct()
 }

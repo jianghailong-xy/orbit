@@ -1,0 +1,17 @@
+mac-list-with-recap: no window after launch; pressing ⌘N
+mac-list-with-recap: 1 window(s)
+mac: Recap on the session list row is up; the rows' second lines follow
+mac: S1 carries the label and the recap text on one row yes
+mac: S1 does NOT show its raw reply beside the label confirmed
+mac: S1's recap sentence shown
+mac: S2 shows its raw reply shown
+mac: S2 carries no label confirmed
+mac: S3 shows Running Bash… shown
+mac: S3 is NOT drawn as its recap confirmed
+mac: S4's older-day recap carries the label too yes
+mac-settings-session-recaps: no window after launch; pressing ⌘N
+mac-settings-session-recaps: 1 window(s)
+mac-settings-session-recaps: never between 120.0 and 480.0; last frame (30.0, 734.0, 92.0, 16.0)
+mac: the switch itself shown
+mac: the switch's hint shown
+mac-settings-session-recaps: in view after 2 move(s) at (30.0, 176.0, 92.0, 16.0)

@@ -1,0 +1,542 @@
+{
+ "chromium-dark-desktop/p51-appearance.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 3,
+  "max": 4
+ },
+ "chromium-dark-desktop/p51-merge-conflict-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 9270,
+  "max": 164
+ },
+ "chromium-dark-desktop/p51-merge-error-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 5412,
+  "max": 164
+ },
+ "chromium-dark-desktop/p51-merge-menu-filtered.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 20,
+  "max": 5
+ },
+ "chromium-dark-desktop/p51-merge-menu-short.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 36,
+  "max": 5
+ },
+ "chromium-dark-desktop/p51-merge-menu.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 20,
+  "max": 5
+ },
+ "chromium-dark-desktop/p51-move-progress.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 18,
+  "max": 11
+ },
+ "chromium-dark-desktop/p51-rail-jobs-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 1830,
+  "max": 164
+ },
+ "chromium-dark-desktop/p51-rail-offline-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 1625,
+  "max": 164
+ },
+ "chromium-dark-desktop/p51-rail-running-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 728,
+  "max": 164
+ },
+ "chromium-dark-desktop/p51-reset-confirm.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 2451,
+  "max": 110
+ },
+ "chromium-dark-desktop/p51-reset-done.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3204,
+  "max": 172
+ },
+ "chromium-dark-desktop/p51-reset-started.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3140,
+  "max": 172
+ },
+ "chromium-dark-desktop/p51-reset-unanswered.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3643,
+  "max": 172
+ },
+ "chromium-dark-desktop/p51-row-offline-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 1710,
+  "max": 210
+ },
+ "chromium-dark-desktop/p51-usage-hover.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 2509,
+  "max": 200
+ },
+ "chromium-dark-desktop/p51-usage.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 2509,
+  "max": 200
+ },
+ "chromium-dark-phone/p51-appearance.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 3,
+  "max": 4
+ },
+ "chromium-dark-phone/p51-merge-menu-filtered.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 19,
+  "max": 5
+ },
+ "chromium-dark-phone/p51-merge-menu-short.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 35,
+  "max": 5
+ },
+ "chromium-dark-phone/p51-merge-menu.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 20,
+  "max": 5
+ },
+ "chromium-dark-phone/p51-reset-confirm.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 2451,
+  "max": 110
+ },
+ "chromium-dark-phone/p51-reset-done.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3204,
+  "max": 172
+ },
+ "chromium-dark-phone/p51-reset-started.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3140,
+  "max": 172
+ },
+ "chromium-dark-phone/p51-reset-unanswered.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3643,
+  "max": 172
+ },
+ "chromium-dark-phone/p51-search-arrows.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 4,
+  "max": 4
+ },
+ "chromium-dark-phone/p51-usage.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 2509,
+  "max": 200
+ },
+ "chromium-light-desktop/p51-appearance.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 2,
+  "max": 7
+ },
+ "chromium-light-desktop/p51-engines.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 2,
+  "max": 7
+ },
+ "chromium-light-desktop/p51-merge-conflict-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 12017,
+  "max": 224
+ },
+ "chromium-light-desktop/p51-merge-error-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 7044,
+  "max": 224
+ },
+ "chromium-light-desktop/p51-merge-menu-short.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 16,
+  "max": 7
+ },
+ "chromium-light-desktop/p51-rail-jobs-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 2791,
+  "max": 224
+ },
+ "chromium-light-desktop/p51-rail-offline-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 2576,
+  "max": 223
+ },
+ "chromium-light-desktop/p51-rail-running-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 1369,
+  "max": 222
+ },
+ "chromium-light-desktop/p51-reset-confirm.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3308,
+  "max": 112
+ },
+ "chromium-light-desktop/p51-reset-done.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3287,
+  "max": 233
+ },
+ "chromium-light-desktop/p51-reset-started.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3219,
+  "max": 233
+ },
+ "chromium-light-desktop/p51-reset-unanswered.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3732,
+  "max": 233
+ },
+ "chromium-light-desktop/p51-row-offline-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 2806,
+  "max": 242
+ },
+ "chromium-light-desktop/p51-usage-hover.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3379,
+  "max": 204
+ },
+ "chromium-light-desktop/p51-usage.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3379,
+  "max": 204
+ },
+ "chromium-light-desktop/p51-wt-bar.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 1,
+  "max": 9
+ },
+ "chromium-light-phone/p51-appearance.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 2,
+  "max": 7
+ },
+ "chromium-light-phone/p51-merge-menu-short.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 16,
+  "max": 7
+ },
+ "chromium-light-phone/p51-move-confirm.png": {
+  "class": "a dialog shadow over the page: up to 4 levels",
+  "pixelsOver2": 5200,
+  "max": 4
+ },
+ "chromium-light-phone/p51-move-progress.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 24,
+  "max": 12
+ },
+ "chromium-light-phone/p51-reset-confirm.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3308,
+  "max": 112
+ },
+ "chromium-light-phone/p51-reset-done.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3287,
+  "max": 233
+ },
+ "chromium-light-phone/p51-reset-started.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3219,
+  "max": 233
+ },
+ "chromium-light-phone/p51-reset-unanswered.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3732,
+  "max": 233
+ },
+ "chromium-light-phone/p51-usage.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 3379,
+  "max": 204
+ },
+ "webkit-dark-desktop/p51-account-menu-photo.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 7,
+  "max": 12
+ },
+ "webkit-dark-desktop/p51-account-menu.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 7,
+  "max": 12
+ },
+ "webkit-dark-desktop/p51-appearance.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 10,
+  "max": 12
+ },
+ "webkit-dark-desktop/p51-merge-conflict-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 9361,
+  "max": 164
+ },
+ "webkit-dark-desktop/p51-merge-error-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 5487,
+  "max": 164
+ },
+ "webkit-dark-desktop/p51-merge-menu-empty.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 558,
+  "max": 98
+ },
+ "webkit-dark-desktop/p51-merge-menu-filtered.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 15,
+  "max": 4
+ },
+ "webkit-dark-desktop/p51-merge-menu.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 10,
+  "max": 4
+ },
+ "webkit-dark-desktop/p51-rail-account-menu.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 7,
+  "max": 12
+ },
+ "webkit-dark-desktop/p51-rail-jobs-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 1912,
+  "max": 164
+ },
+ "webkit-dark-desktop/p51-rail-offline-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 1675,
+  "max": 164
+ },
+ "webkit-dark-desktop/p51-rail-running-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 766,
+  "max": 164
+ },
+ "webkit-dark-desktop/p51-reset-confirm.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1509,
+  "max": 110
+ },
+ "webkit-dark-desktop/p51-reset-done.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1819,
+  "max": 168
+ },
+ "webkit-dark-desktop/p51-reset-started.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1819,
+  "max": 168
+ },
+ "webkit-dark-desktop/p51-reset-unanswered.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1819,
+  "max": 168
+ },
+ "webkit-dark-desktop/p51-row-offline-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 1727,
+  "max": 208
+ },
+ "webkit-dark-desktop/p51-usage-hover.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1527,
+  "max": 200
+ },
+ "webkit-dark-desktop/p51-usage.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1527,
+  "max": 200
+ },
+ "webkit-dark-phone/p51-account-menu-photo.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 7,
+  "max": 12
+ },
+ "webkit-dark-phone/p51-account-menu.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 7,
+  "max": 12
+ },
+ "webkit-dark-phone/p51-appearance.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 10,
+  "max": 12
+ },
+ "webkit-dark-phone/p51-merge-menu-empty.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 558,
+  "max": 98
+ },
+ "webkit-dark-phone/p51-merge-menu-filtered.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 15,
+  "max": 4
+ },
+ "webkit-dark-phone/p51-merge-menu.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 10,
+  "max": 4
+ },
+ "webkit-dark-phone/p51-reset-confirm.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1509,
+  "max": 110
+ },
+ "webkit-dark-phone/p51-reset-done.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1819,
+  "max": 168
+ },
+ "webkit-dark-phone/p51-reset-started.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1819,
+  "max": 168
+ },
+ "webkit-dark-phone/p51-reset-unanswered.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1819,
+  "max": 168
+ },
+ "webkit-dark-phone/p51-usage.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1527,
+  "max": 200
+ },
+ "webkit-light-desktop/p51-account-menu-photo.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 7,
+  "max": 16
+ },
+ "webkit-light-desktop/p51-account-menu.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 7,
+  "max": 16
+ },
+ "webkit-light-desktop/p51-appearance.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 9,
+  "max": 16
+ },
+ "webkit-light-desktop/p51-merge-conflict-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 12616,
+  "max": 225
+ },
+ "webkit-light-desktop/p51-merge-error-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 7495,
+  "max": 225
+ },
+ "webkit-light-desktop/p51-merge-menu-empty.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 562,
+  "max": 112
+ },
+ "webkit-light-desktop/p51-rail-account-menu.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 7,
+  "max": 16
+ },
+ "webkit-light-desktop/p51-rail-jobs-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 3047,
+  "max": 226
+ },
+ "webkit-light-desktop/p51-rail-offline-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 2820,
+  "max": 224
+ },
+ "webkit-light-desktop/p51-rail-running-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 1453,
+  "max": 224
+ },
+ "webkit-light-desktop/p51-reset-confirm.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 2358,
+  "max": 121
+ },
+ "webkit-light-desktop/p51-reset-done.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1836,
+  "max": 214
+ },
+ "webkit-light-desktop/p51-reset-started.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1836,
+  "max": 214
+ },
+ "webkit-light-desktop/p51-reset-unanswered.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1836,
+  "max": 214
+ },
+ "webkit-light-desktop/p51-row-offline-tip.png": {
+  "class": "Tooltip edge padding (accepted in P4.2)",
+  "pixelsOver2": 3100,
+  "max": 243
+ },
+ "webkit-light-desktop/p51-usage-hover.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 2376,
+  "max": 220
+ },
+ "webkit-light-desktop/p51-usage.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 2376,
+  "max": 220
+ },
+ "webkit-light-phone/p51-account-menu-photo.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 7,
+  "max": 16
+ },
+ "webkit-light-phone/p51-account-menu.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 7,
+  "max": 16
+ },
+ "webkit-light-phone/p51-appearance.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 9,
+  "max": 16
+ },
+ "webkit-light-phone/p51-merge-menu-empty.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 562,
+  "max": 112
+ },
+ "webkit-light-phone/p51-reset-confirm.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 2358,
+  "max": 121
+ },
+ "webkit-light-phone/p51-reset-done.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1836,
+  "max": 214
+ },
+ "webkit-light-phone/p51-reset-started.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1836,
+  "max": 214
+ },
+ "webkit-light-phone/p51-reset-unanswered.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 1836,
+  "max": 214
+ },
+ "webkit-light-phone/p51-usage.png": {
+  "class": "a popup above its trigger: vertical rounding",
+  "pixelsOver2": 2379,
+  "max": 220
+ }
+}

@@ -1,0 +1,26 @@
+{
+  "deleteRequestedAt": "2026-10-17T07:47:40.340+00:00",
+  "grace": 240,
+  "log": "/mnt/data/managed-runner-lab/test-server/state/logs/t03-runner-7a8204dc-d0d4-489f-b416-72cdc34cd1d3.log",
+  "logMarks": {
+    "detached": "2026-10-17T07:47:40.477275738Z",
+    "stopping": "2026-10-17T07:47:40.357744868Z"
+  },
+  "logTail": [
+    "2026-10-17T07:36:40.504920406Z [orbit-runner 2026-10-17T07:36:40.504Z] runner \"t03\" online -> https://10.0.2.2:13711 (max 2 concurrent)",
+    "2026-10-17T07:36:41.794182557Z [orbit-runner 2026-10-17T07:36:41.793Z] reclaiming session 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 T03 fake-model persistence session 2",
+    "2026-10-17T07:36:42.804809968Z [orbit-runner 2026-10-17T07:36:42.804Z] session 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 re-attached worktree /var/lib/orbit/home/.orbit/worktrees/01a148ba-a3da-7330-94bc-3ba0bd62959a (branch orbit/t03-fake-model-persistence-session-2-244d43)",
+    "2026-10-17T07:37:20.792799598Z [orbit-runner 2026-10-17T07:37:20.792Z] > interactive run 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 T03 fake-model persistence session 2",
+    "2026-10-17T07:47:40.357744868Z [orbit-runner 2026-10-17T07:47:40.357Z] runner stopping; draining session supervisors...",
+    "2026-10-17T07:47:40.477275738Z [orbit-runner 2026-10-17T07:47:40.477Z] \u23f8 interactive run 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 detached for shutdown (resumable)"
+  ],
+  "podGoneAt": "2026-10-17T07:47:41.793+00:00",
+  "podUid": "7a8204dc-d0d4-489f-b416-72cdc34cd1d3",
+  "runnerTerminated": {
+    "containerID": "containerd://59ddf8c985861dc0457c7404c5d9dcb4fa4db5b9a4b829eeafc13c017cb1e9b7",
+    "exitCode": 0,
+    "finishedAt": "2026-10-17T07:47:40Z",
+    "reason": "Completed",
+    "startedAt": "2026-10-17T07:36:40Z"
+  }
+}

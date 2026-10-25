@@ -1,0 +1,724 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/reviews.config.mjs",
+   "--update-snapshots=all"
+  ],
+  "configFile": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration/reviews.config.mjs",
+  "rootDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/.reviews-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "reviews.check.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/.reviews-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "reviews.check.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/.reviews-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "reviews.check.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/.reviews-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "reviews.check.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/.reviews-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "all",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "reviews.check.mjs",
+   "file": "reviews.check.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "question traps focus, preserves choices and drafts, and suspends background shortcuts",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Compact reviews are used on narrow screens.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration/reviews.check.mjs",
+          "line": 56,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 664,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:12:12.339Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Compact reviews are used on narrow screens.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration/reviews.check.mjs",
+            "line": 56,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-ecf9a490e5249ae9e055",
+     "file": "reviews.check.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "long plan scrolls above visible actions and owns the foreground shortcut",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Compact reviews are used on narrow screens.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration/reviews.check.mjs",
+          "line": 107,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 540,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:12:13.098Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Compact reviews are used on narrow screens.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration/reviews.check.mjs",
+            "line": 107,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-689edf395eeaa0736d60",
+     "file": "reviews.check.mjs",
+     "line": 106,
+     "column": 1
+    },
+    {
+     "title": "wide screens show full questions and actions without opening a preview",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 819,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:12:13.644Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "coordinator-inline.png",
+           "contentType": "image/png"
+          },
+          {
+           "name": "coordinator-inline.json",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-a0e29072987d4fa9f446",
+     "file": "reviews.check.mjs",
+     "line": 130,
+     "column": 1
+    },
+    {
+     "title": "question traps focus, preserves choices and drafts, and suspends background shortcuts",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1435,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:12:14.789Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "question-retained.png",
+           "contentType": "image/png"
+          },
+          {
+           "name": "question-retained.json",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-c9455cbcadceb695a791",
+     "file": "reviews.check.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "long plan scrolls above visible actions and owns the foreground shortcut",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1374,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:12:16.272Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "plan-scrolled.png",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plan-scrolled.json",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-b80d4c4cbf0070961264",
+     "file": "reviews.check.mjs",
+     "line": 106,
+     "column": 1
+    },
+    {
+     "title": "wide screens show full questions and actions without opening a preview",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Wide screens show inline reviews.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration/reviews.check.mjs",
+          "line": 131,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 572,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:12:17.651Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Wide screens show inline reviews.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration/reviews.check.mjs",
+            "line": 131,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-66855058be03568350db",
+     "file": "reviews.check.mjs",
+     "line": 130,
+     "column": 1
+    },
+    {
+     "title": "question traps focus, preserves choices and drafts, and suspends background shortcuts",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Compact reviews are used on narrow screens.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration/reviews.check.mjs",
+          "line": 56,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 606,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:12:18.473Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Compact reviews are used on narrow screens.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration/reviews.check.mjs",
+            "line": 56,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-bfd57e007b5a7a22080d",
+     "file": "reviews.check.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "long plan scrolls above visible actions and owns the foreground shortcut",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Compact reviews are used on narrow screens.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration/reviews.check.mjs",
+          "line": 107,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 570,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:12:19.129Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Compact reviews are used on narrow screens.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration/reviews.check.mjs",
+            "line": 107,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-1f66c289d703d39409c1",
+     "file": "reviews.check.mjs",
+     "line": 106,
+     "column": 1
+    },
+    {
+     "title": "wide screens show full questions and actions without opening a preview",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 818,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:12:19.705Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "coordinator-inline.png",
+           "contentType": "image/png"
+          },
+          {
+           "name": "coordinator-inline.json",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-ee53ee1c016296e4b6d8",
+     "file": "reviews.check.mjs",
+     "line": 130,
+     "column": 1
+    },
+    {
+     "title": "question traps focus, preserves choices and drafts, and suspends background shortcuts",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1478,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:12:20.758Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "question-retained.png",
+           "contentType": "image/png"
+          },
+          {
+           "name": "question-retained.json",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-c59cebfdacd12df6af8c",
+     "file": "reviews.check.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "long plan scrolls above visible actions and owns the foreground shortcut",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1423,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:12:22.284Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "plan-scrolled.png",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plan-scrolled.json",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-eaef565ddd0b7e8375fa",
+     "file": "reviews.check.mjs",
+     "line": 106,
+     "column": 1
+    },
+    {
+     "title": "wide screens show full questions and actions without opening a preview",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Wide screens show inline reviews.",
+         "location": {
+          "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration/reviews.check.mjs",
+          "line": 131,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 522,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:12:23.711Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Wide screens show inline reviews.",
+           "location": {
+            "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration/reviews.check.mjs",
+            "line": 131,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "0977331bd6f9464b76c9-7d1f36a38a83bddb8e40",
+     "file": "reviews.check.mjs",
+     "line": 130,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-10T18:12:09.123Z",
+  "duration": 15171.967,
+  "expected": 6,
+  "skipped": 6,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

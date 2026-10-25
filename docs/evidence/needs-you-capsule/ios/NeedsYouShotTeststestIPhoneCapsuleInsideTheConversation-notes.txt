@@ -1,0 +1,2 @@
+ios-owner-light: capsule `1 waiting` at (20.0, 116.0, 400.0, 44.0)
+ios-owner-dark: capsule `1 waiting` at (20.0, 116.0, 400.0, 44.0)

@@ -1,0 +1,89 @@
+red run on 47ad8a751 (dev reference tree; shared components identical to 64e45915e) with two mutations:
+diff --git a/src/web/src/components/ui/Floating.ts b/src/web/src/components/ui/Floating.ts
+index 2e71d8bdf..eeef0a487 100644
+--- a/src/web/src/components/ui/Floating.ts
++++ b/src/web/src/components/ui/Floating.ts
+@@ -67,7 +67,7 @@ export function useWholePixelOffsets(anchor: RefObject<Element | null>, gap: num
+       const at = align === pointAt ? start + size / 2 : align === 'end' ? start : start + size;
+       edge = align === 'end' ? Math.ceil(at + 20) - own : Math.floor(at - 20);
+     } else if (padding !== undefined && vertical) {
+-      const slid = Math.max(padding, Math.min(base, document.documentElement.clientWidth - padding - own));
++      const slid = Math.max(8, Math.min(base, document.documentElement.clientWidth - 8 - own)); // red run: padding ignored
+       if (slid !== base) edge = Math.floor(slid);
+       const covered = (Math.max(slid, rect.left) + Math.min(slid + own, rect.right)) / 2;
+       positionerRef.current?.style.setProperty('--orbit-arrow-nudge',
+diff --git a/src/web/src/components/ui/Menu.tsx b/src/web/src/components/ui/Menu.tsx
+index a7e3822a2..8add54048 100644
+--- a/src/web/src/components/ui/Menu.tsx
++++ b/src/web/src/components/ui/Menu.tsx
+@@ -151,7 +151,7 @@ export function Menu({ trigger, items, disabled, variant = 'default', openOnArro
+             {/* Typed into (a search field), not walked: Base UI's typeahead and arrow keys on the menu would take
+                 its letters and arrows. Escape and Tab go on to close the menu. */}
+             <div className="orbit-menu-footer" onKeyDown={(event) => {
+-              if (event.key !== 'Escape' && event.key !== 'Tab') event.stopPropagation();
++              void event; // red run: the footer's key guard removed
+             }}>{footer}</div>
+           </>}
+         </BaseMenu.Popup>
+
+$ npx vitest run src/components/ui/Menu.footer.test.tsx src/components/ui/Floating.test.tsx
+
+ RUN  v5.0.2 /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/devref/src/web
+
+ ❯ src/components/ui/Menu.footer.test.tsx (8 tests | 1 failed) 450ms
+   ❯ Menu footer (7)
+     × keeps the letters and arrows typed in it, where the items would have taken them 51ms
+ ❯ src/components/ui/Floating.test.tsx (6 tests | 1 failed) 22ms
+   ❯ useWholePixelOffsets padding (2)
+     × slides flush to the edge with padding 0 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/ui/Floating.test.tsx > useWholePixelOffsets padding > slides flush to the edge with padding 0
+AssertionError: expected 8 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 8
+
+ ❯ src/components/ui/Floating.test.tsx:88:78
+     86|
+     87|   it('slides flush to the edge with padding 0', async () => {
+     88|     expect(leftEdge(await offsetsFor(pill, undefined, 0), pill, 'end',…
+       |                                                                              ^
+     89|   });
+     90| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/components/ui/Menu.footer.test.tsx > Menu footer > keeps the letters and arrows typed in it, where the items would have taken them
+AssertionError: d: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/components/ui/Menu.footer.test.tsx:120:37
+    118|     await act(async () => search()!.focus());
+    119|     for (const key of ['d', 'r', ' ', 'ArrowDown', 'ArrowUp', 'Home', …
+    120|       expect(await press(key), key).toBe(false);
+       |                                     ^
+    121|       expect(highlighted(), key).toBe(before);
+    122|       expect(document.activeElement, key).toBe(search());
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 12 passed (14)
+   Start at  11:15:31
+   Duration  2.82s (import 38%, environment 32%, tests 18%, transform 12%)
+
+    Isolate  2 workers spawned · ~486ms startup each (spawn + environment, per file)
+             at least ~486ms faster with isolate: false — reuses workers across files instead of one per file
+
+exit=1

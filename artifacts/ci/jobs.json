@@ -1,0 +1,257 @@
+{
+  "total_count": 6,
+  "jobs": [
+    {
+      "id": 113258104226,
+      "run_id": 37761308160,
+      "workflow_name": "Client CI (macOS + iOS)",
+      "head_branch": "probe/plan-system-model-note",
+      "run_url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/runs/37761308160",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS60R8c8AAAAaXrWFog",
+      "head_sha": "8793ce12c35669678f7a146ed8a865b09f9c3988",
+      "url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/jobs/113258104226",
+      "html_url": "https://github.com/jianghailong-xy/orbit/actions/runs/37761308160/job/113258104226",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-08T10:06:48Z",
+      "started_at": "2026-10-08T10:06:50Z",
+      "completed_at": "2026-10-08T10:07:16Z",
+      "name": "Navigation (one push mechanism per stack)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-08T10:06:51Z",
+          "completed_at": "2026-10-08T10:06:52Z"
+        },
+        {
+          "name": "Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-08T10:06:52Z",
+          "completed_at": "2026-10-08T10:07:13Z"
+        },
+        {
+          "name": "Gate a second push mechanism",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-08T10:07:13Z",
+          "completed_at": "2026-10-08T10:07:13Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-08T10:07:13Z",
+          "completed_at": "2026-10-08T10:07:13Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-10-08T10:07:13Z",
+          "completed_at": "2026-10-08T10:07:13Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/jianghailong-xy/orbit/check-runs/113258104226",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000022526,
+      "runner_name": "GitHub Actions 1000022526",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 113258104427,
+      "run_id": 37761308160,
+      "workflow_name": "Client CI (macOS + iOS)",
+      "head_branch": "probe/plan-system-model-note",
+      "run_url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/runs/37761308160",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS60R8c8AAAAaXrWGaw",
+      "head_sha": "8793ce12c35669678f7a146ed8a865b09f9c3988",
+      "url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/jobs/113258104427",
+      "html_url": "https://github.com/jianghailong-xy/orbit/actions/runs/37761308160/job/113258104427",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-08T10:06:48Z",
+      "started_at": "2026-10-08T10:06:50Z",
+      "completed_at": "2026-10-08T10:07:14Z",
+      "name": "Font tokens (bare system(size:) audit)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-08T10:06:51Z",
+          "completed_at": "2026-10-08T10:06:52Z"
+        },
+        {
+          "name": "Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-08T10:06:52Z",
+          "completed_at": "2026-10-08T10:07:12Z"
+        },
+        {
+          "name": "Audit bare system(size:) outside Typography.swift",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-08T10:07:12Z",
+          "completed_at": "2026-10-08T10:07:12Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v7",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-08T10:07:12Z",
+          "completed_at": "2026-10-08T10:07:12Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-10-08T10:07:12Z",
+          "completed_at": "2026-10-08T10:07:12Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/jianghailong-xy/orbit/check-runs/113258104427",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000022527,
+      "runner_name": "GitHub Actions 1000022527",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 113258105981,
+      "run_id": 37761308160,
+      "workflow_name": "Client CI (macOS + iOS)",
+      "head_branch": "probe/plan-system-model-note",
+      "run_url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/runs/37761308160",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS60R8c8AAAAaXrWMfQ",
+      "head_sha": "8793ce12c35669678f7a146ed8a865b09f9c3988",
+      "url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/jobs/113258105981",
+      "html_url": "https://github.com/jianghailong-xy/orbit/actions/runs/37761308160/job/113258105981",
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-10-08T10:06:49Z",
+      "started_at": "2026-10-08T10:06:49Z",
+      "completed_at": "2026-10-08T10:06:48Z",
+      "name": "macOS (build + test)",
+      "steps": [
+
+      ],
+      "check_run_url": "https://api.github.com/repos/jianghailong-xy/orbit/check-runs/113258105981",
+      "labels": [
+        "macos-15"
+      ],
+      "runner_id": null,
+      "runner_name": null,
+      "runner_group_id": null,
+      "runner_group_name": null
+    },
+    {
+      "id": 113258106027,
+      "run_id": 37761308160,
+      "workflow_name": "Client CI (macOS + iOS)",
+      "head_branch": "probe/plan-system-model-note",
+      "run_url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/runs/37761308160",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS60R8c8AAAAaXrWMqw",
+      "head_sha": "8793ce12c35669678f7a146ed8a865b09f9c3988",
+      "url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/jobs/113258106027",
+      "html_url": "https://github.com/jianghailong-xy/orbit/actions/runs/37761308160/job/113258106027",
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-10-08T10:06:49Z",
+      "started_at": "2026-10-08T10:06:49Z",
+      "completed_at": "2026-10-08T10:06:48Z",
+      "name": "Source-refused probe (Mac window + iPhone)",
+      "steps": [
+
+      ],
+      "check_run_url": "https://api.github.com/repos/jianghailong-xy/orbit/check-runs/113258106027",
+      "labels": [
+        "macos-26"
+      ],
+      "runner_id": null,
+      "runner_name": null,
+      "runner_group_id": null,
+      "runner_group_name": null
+    },
+    {
+      "id": 113258106100,
+      "run_id": 37761308160,
+      "workflow_name": "Client CI (macOS + iOS)",
+      "head_branch": "probe/plan-system-model-note",
+      "run_url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/runs/37761308160",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS60R8c8AAAAaXrWM9A",
+      "head_sha": "8793ce12c35669678f7a146ed8a865b09f9c3988",
+      "url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/jobs/113258106100",
+      "html_url": "https://github.com/jianghailong-xy/orbit/actions/runs/37761308160/job/113258106100",
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-10-08T10:06:49Z",
+      "started_at": "2026-10-08T10:06:49Z",
+      "completed_at": "2026-10-08T10:06:48Z",
+      "name": "iOS (generate + build)",
+      "steps": [
+
+      ],
+      "check_run_url": "https://api.github.com/repos/jianghailong-xy/orbit/check-runs/113258106100",
+      "labels": [
+        "macos-15"
+      ],
+      "runner_id": null,
+      "runner_name": null,
+      "runner_group_id": null,
+      "runner_group_name": null
+    },
+    {
+      "id": 113258106965,
+      "run_id": 37761308160,
+      "workflow_name": "Client CI (macOS + iOS)",
+      "head_branch": "probe/plan-system-model-note",
+      "run_url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/runs/37761308160",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS60R8c8AAAAaXrWQVQ",
+      "head_sha": "8793ce12c35669678f7a146ed8a865b09f9c3988",
+      "url": "https://api.github.com/repos/jianghailong-xy/orbit/actions/jobs/113258106965",
+      "html_url": "https://github.com/jianghailong-xy/orbit/actions/runs/37761308160/job/113258106965",
+      "status": "completed",
+      "conclusion": "skipped",
+      "created_at": "2026-10-08T10:06:49Z",
+      "started_at": "2026-10-08T10:06:49Z",
+      "completed_at": "2026-10-08T10:06:48Z",
+      "name": "Push the shots where a clone can read them",
+      "steps": [
+
+      ],
+      "check_run_url": "https://api.github.com/repos/jianghailong-xy/orbit/check-runs/113258106965",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": null,
+      "runner_name": null,
+      "runner_group_id": null,
+      "runner_group_name": null
+    }
+  ]
+}

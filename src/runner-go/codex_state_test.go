@@ -194,14 +194,16 @@ func TestResolveCodexStateMarkerWinsAndCustomProviderStaysLocal(t *testing.T) {
 	}
 }
 
-// A credential-isolated session runs in a CODEX_HOME of its own: the real home's configuration is
-// linked in, its history and its login are not, so Codex has none of the runner's history to
-// backfill. Every start links again — the real home as it is now — and keeps what Codex wrote there.
-func TestIsolatedCodexHomeBorrowsConfigurationButNotHistoryOrLogin(t *testing.T) {
+// A credential-isolated session runs in a CODEX_HOME of its own and borrows nothing from the
+// runner's: not its configuration (config.toml, AGENTS.md, rules, skills, prompts, plugins), not
+// its history, not its login. The session's configuration is the one Orbit builds for it — the `-c`
+// overrides and the injected credentials — and its history is its own threads and nothing else, so
+// Codex has none of the runner's history to backfill. Every start keeps what Codex wrote there.
+func TestIsolatedCodexHomeBorrowsNothingFromTheRunner(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("ORBIT_HOME", filepath.Join(root, "orbit"))
 	realHome := filepath.Join(root, "user", ".codex")
-	for _, dir := range []string{"rules", "skills", ".tmp", "archived_sessions", filepath.Join("sessions", "2026", "09", "30")} {
+	for _, dir := range []string{"rules", "skills", "prompts", "plugins", ".tmp", "archived_sessions", filepath.Join("sessions", "2026", "09", "30")} {
 		if err := os.MkdirAll(filepath.Join(realHome, dir), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -209,6 +211,7 @@ func TestIsolatedCodexHomeBorrowsConfigurationButNotHistoryOrLogin(t *testing.T)
 	const config = "model = \"gpt-5.5\"\n"
 	for name, body := range map[string]string{
 		"config.toml": config,
+		"AGENTS.md":   "# the runner user's own instructions\n",
 		"auth.json":   `{"tokens":"the runner's own"}`,
 		filepath.Join("sessions", "2026", "09", "30", "rollout-2026-09-30T08-00-00-history.jsonl"): "{}\n",
 	} {
@@ -235,18 +238,15 @@ func TestIsolatedCodexHomeBorrowsConfigurationButNotHistoryOrLogin(t *testing.T)
 			t.Fatalf("the session's home: %v, %v", info, err)
 		}
 	}
-	for _, name := range []string{"config.toml", "rules", "skills", ".tmp"} {
-		if got, err := os.Readlink(filepath.Join(home, name)); err != nil || got != filepath.Join(realHome, name) {
-			t.Fatalf("%s links to %q (%v), want the real home's", name, got, err)
-		}
-	}
-	for _, name := range []string{"sessions", "archived_sessions", "auth.json", "AGENTS.md"} {
+	// Nothing of the runner's home is in it — not as a file, not as a link: a link is exactly how
+	// the runner's own configuration and login used to leak into a session.
+	for _, name := range []string{"config.toml", "AGENTS.md", "rules", "skills", "prompts", "plugins", ".tmp", "sessions", "archived_sessions", "auth.json"} {
 		if _, err := os.Lstat(filepath.Join(home, name)); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("%s is in the session's home (%v)", name, err)
+			t.Fatalf("%s is in the session's home (%v), want nothing of the runner's home borrowed", name, err)
 		}
 	}
 
-	// What Codex writes is the session's: its thread, and a file it put where a link was.
+	// What Codex writes is the session's, and outlives a restart.
 	rollout := filepath.Join(home, "sessions", "2026", "10", "01", "rollout-2026-10-01T16-40-29-thread-1.jsonl")
 	if err := os.MkdirAll(filepath.Dir(rollout), 0o755); err != nil {
 		t.Fatal(err)
@@ -254,17 +254,11 @@ func TestIsolatedCodexHomeBorrowsConfigurationButNotHistoryOrLogin(t *testing.T)
 	if err := os.WriteFile(rollout, []byte("{}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(filepath.Join(home, "config.toml")); err != nil {
-		t.Fatal(err)
-	}
 	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte("its own"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	// And the real home changes between two starts.
 	if err := os.WriteFile(filepath.Join(realHome, "AGENTS.md"), []byte("# instructions\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.RemoveAll(filepath.Join(realHome, "rules")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -278,12 +272,6 @@ func TestIsolatedCodexHomeBorrowsConfigurationButNotHistoryOrLogin(t *testing.T)
 	}
 	if got, err := os.ReadFile(filepath.Join(home, "config.toml")); err != nil || string(got) != "its own" {
 		t.Fatalf("the file Codex wrote became %q (%v)", got, err)
-	}
-	if got, err := os.Readlink(filepath.Join(home, "AGENTS.md")); err != nil || got != filepath.Join(realHome, "AGENTS.md") {
-		t.Fatalf("AGENTS.md links to %q (%v), want the real home's new one", got, err)
-	}
-	if _, err := os.Lstat(filepath.Join(home, "rules")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("rules still links to an entry the real home no longer has (%v)", err)
 	}
 	if got, err := os.ReadFile(filepath.Join(realHome, "config.toml")); err != nil || string(got) != config {
 		t.Fatalf("the real home's config.toml became %q (%v)", got, err)

@@ -1,0 +1,34 @@
+01-new-session-engines-dark.png	CHANGED pixels=1266 box=(552, 1082, 776, 1110) statusbar=differs
+01-new-session-engines-light.png	CHANGED pixels=1267 box=(552, 1082, 776, 1110) statusbar=differs
+02-new-session-dsh-menu-dark.png	CHANGED pixels=131930 box=(120, 432, 960, 2040) statusbar=differs
+02-new-session-dsh-menu-light.png	CHANGED pixels=131961 box=(120, 432, 960, 2040) statusbar=differs
+03-new-session-dsh-provider-dark.png	CHANGED pixels=127711 box=(120, 432, 960, 2040) statusbar=differs
+03-new-session-dsh-provider-light.png	CHANGED pixels=127742 box=(120, 432, 960, 2040) statusbar=differs
+04-new-session-claude-provider-dark.png	CHANGED pixels=148856 box=(120, 432, 960, 2040) statusbar=differs
+04-new-session-claude-provider-light.png	CHANGED pixels=148887 box=(120, 432, 960, 2040) statusbar=differs
+04b-new-session-claude-provider-end-dark.png	CHANGED pixels=138960 box=(120, 432, 960, 2040) statusbar=differs
+04b-new-session-claude-provider-end-light.png	CHANGED pixels=138990 box=(120, 432, 960, 2040) statusbar=differs
+05-new-session-opencode-provider-dark.png	CHANGED pixels=149245 box=(120, 432, 960, 2040) statusbar=differs
+05-new-session-opencode-provider-light.png	CHANGED pixels=149276 box=(120, 432, 960, 2040) statusbar=differs
+05b-new-session-opencode-provider-end-dark.png	CHANGED pixels=163396 box=(120, 432, 960, 2040) statusbar=differs
+05b-new-session-opencode-provider-end-light.png	CHANGED pixels=163427 box=(120, 432, 960, 2040) statusbar=differs
+06-new-session-no-deepseek-key-dark.png	CHANGED pixels=1266 box=(552, 1059, 776, 1087) statusbar=differs
+06-new-session-no-deepseek-key-light.png	CHANGED pixels=1267 box=(552, 1059, 776, 1087) statusbar=differs
+07-composer-dsh-switch-dark.png	CHANGED pixels=128386 box=(120, 432, 960, 2040) statusbar=differs
+07-composer-dsh-switch-light.png	CHANGED pixels=128418 box=(120, 432, 960, 2040) statusbar=differs
+08-composer-dsh-switched-dark.png	CHANGED pixels=128890 box=(120, 432, 960, 2040) statusbar=differs
+08-composer-dsh-switched-light.png	CHANGED pixels=128922 box=(120, 432, 960, 2040) statusbar=differs
+09-composer-key-deleted-dark.png	CHANGED pixels=493313 box=(0, 432, 1080, 2337) statusbar=differs
+09-composer-key-deleted-light.png	CHANGED pixels=140611 box=(120, 432, 960, 2040) statusbar=differs
+10-task-pin-engine-menu-dark.png	CHANGED pixels=200 box=(389, 500, 405, 526) statusbar=differs
+10-task-pin-engine-menu-light.png	CHANGED pixels=200 box=(389, 500, 405, 526) statusbar=differs
+11-task-pin-provider-menu-dark.png	CHANGED pixels=200 box=(389, 500, 405, 526) statusbar=differs
+11-task-pin-provider-menu-light.png	CHANGED pixels=200 box=(389, 500, 405, 526) statusbar=differs
+12-task-pinned-dark.png	CHANGED pixels=200 box=(389, 500, 405, 526) statusbar=differs
+12-task-pinned-light.png	CHANGED pixels=200 box=(389, 500, 405, 526) statusbar=differs
+13-keys-engines-dark.png	SAME below y=140
+13-keys-engines-light.png	SAME below y=140
+14-deepseek-key-works-with-dark.png	SAME below y=140
+14-deepseek-key-works-with-light.png	SAME below y=140
+15-runner-engines-dark.png	SAME below y=140
+15-runner-engines-light.png	SAME below y=140

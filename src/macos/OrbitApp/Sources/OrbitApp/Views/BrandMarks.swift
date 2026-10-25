@@ -83,23 +83,26 @@ struct VectorMark: Shape {
 /// `VectorMark` parses (relative commands, H/V, S/T shorthand and elliptical arcs are all resolved
 /// there, and each result was diffed against the browser rendering before being pasted in).
 enum AgentBrand {
-    case claude, codex, gemini, deepseek, kimi, glm, minimax, qwen, antigravity, generic
+    case claude, codex, gemini, deepseek, kimi, glm, minimax, qwen, antigravity, cursor, generic
 
     /// Resolve from a preset key or provider slug. Engine slugs map to the preset they run
     /// (`claude` → Anthropic, `codex` → OpenAI), mirroring web's `ENGINE_PRESET`; `antigravity` is
     /// its own mark, not Gemini's — the Gemini preset runs on it, but is named for the models a key
-    /// buys, and the engine is the CLI.
+    /// buys, and the engine is the CLI. DeepSeek Harness (`dsh`) wears DeepSeek's whale, the keys it
+    /// runs on, as web's `brandForProvider` gives it.
     static func from(_ provider: String?) -> AgentBrand {
         switch provider?.lowercased() {
         case "codex", "openai":            return .codex
         case "claude", "anthropic", nil:   return .claude
         case "gemini", "google":           return .gemini
-        case "deepseek", "deepseek-harness": return .deepseek
+        case "deepseek", "deepseek-harness", "dsh": return .deepseek
         case "kimi", "moonshot":           return .kimi
         case "glm", "zai", "z.ai":         return .glm
         case "minimax":                    return .minimax
         case "qwen", "dashscope":          return .qwen
         case "antigravity":                return .antigravity
+        // Cursor CLI, the engine, and a Cursor key (`cursor-api`) wear Cursor's cube (the owner's D3).
+        case "cursor", "cursor-api":       return .cursor
         default:                           return .generic
         }
     }
@@ -116,6 +119,7 @@ enum AgentBrand {
         case .minimax:  return Self.minimaxMark
         case .qwen:     return Self.qwenMark
         case .antigravity: return Self.antigravityMark
+        case .cursor:   return Self.cursorMark
         case .generic:  return nil
         }
     }
@@ -136,6 +140,7 @@ enum AgentBrand {
         case .minimax: return (Color(red: 1.000, green: 0.357, blue: 0.463), Color(red: 0.882, green: 0.114, blue: 0.282))   // #ff5b76 → #e11d48
         case .qwen: return (Color(red: 0.478, green: 0.447, blue: 1.000), Color(red: 0.310, green: 0.275, blue: 0.898))   // #7a72ff → #4f46e5
         case .antigravity: return (Color(red: 0.192, green: 0.525, blue: 1.000), Color(red: 0.000, green: 0.725, blue: 0.361))   // #3186ff → #00b95c
+        case .cursor: return (Color(red: 0.169, green: 0.169, blue: 0.169), Color(red: 0.000, green: 0.000, blue: 0.000))   // #2b2b2b → #000000
         case .generic: return (Color(red: 0.604, green: 0.627, blue: 0.659), Color(red: 0.420, green: 0.443, blue: 0.471))   // #9aa0a8 → #6b7178
         }
     }
@@ -152,4 +157,8 @@ enum AgentBrand {
     static let qwenMark = "M12.604 1.34 C12.997 2.03 13.388 2.722 13.778 3.415 C13.8101 3.4714 13.8701 3.5062 13.935 3.506 L19.487 3.506 C19.661 3.506 19.809 3.616 19.933 3.833 L21.387 6.403 C21.577 6.74 21.627 6.881 21.411 7.24 C21.151 7.67 20.898 8.104 20.651 8.54 L20.284 9.198 C20.178 9.394 20.061 9.478 20.244 9.71 L22.896 14.347 C23.068 14.648 23.007 14.841 22.853 15.117 C22.416 15.902 21.971 16.681 21.518 17.457 C21.359 17.729 21.166 17.832 20.838 17.827 C20.061 17.811 19.286 17.817 18.511 17.843 C18.4772 17.8447 18.4467 17.8636 18.43 17.893 C17.5358 19.4773 16.6342 21.0573 15.725 22.633 C15.556 22.926 15.345 22.996 15 22.997 C14.003 23 12.998 23.001 11.983 22.999 C11.7907 22.9985 11.6133 22.8951 11.518 22.728 L10.183 20.405 C10.1671 20.374 10.1348 20.3549 10.1 20.356 L4.982 20.356 C4.697 20.386 4.429 20.355 4.177 20.264 L2.574 17.494 C2.4775 17.3271 2.4768 17.1216 2.572 16.954 L3.779 14.834 C3.814 14.773 3.814 14.698 3.779 14.637 C3.1503 13.5485 2.5253 12.4578 1.904 11.365 L1.114 9.97 C0.954 9.66 0.941 9.474 1.209 9.005 C1.674 8.192 2.136 7.38 2.596 6.569 C2.728 6.335 2.9 6.235 3.18 6.234 C4.043 6.2304 4.906 6.23 5.769 6.233 C5.8134 6.2327 5.8542 6.2086 5.876 6.17 L8.682 1.275 C8.7686 1.1234 8.9295 1.0296 9.104 1.029 C9.628 1.028 10.157 1.029 10.687 1.023 L11.704 1 C12.045 0.997 12.428 1.032 12.604 1.34 Z M9.172 1.743 C9.1506 1.743 9.1307 1.7544 9.12 1.773 L6.254 6.788 C6.226 6.8361 6.1746 6.8658 6.119 6.866 L3.253 6.866 C3.197 6.866 3.183 6.891 3.212 6.94 L9.022 17.096 C9.047 17.138 9.035 17.158 8.988 17.159 L6.193 17.174 C6.1096 17.1712 6.032 17.2163 5.993 17.29 L4.673 19.6 C4.629 19.678 4.652 19.718 4.741 19.718 L10.457 19.726 C10.503 19.726 10.537 19.746 10.561 19.787 L11.964 22.241 C12.01 22.322 12.056 22.323 12.103 22.241 L17.109 13.481 L17.892 12.099 C17.9017 12.0816 17.9201 12.0709 17.94 12.0709 C17.9599 12.0709 17.9783 12.0816 17.988 12.099 L19.412 14.629 C19.4338 14.6676 19.4747 14.6913 19.519 14.691 L22.282 14.671 C22.2964 14.6711 22.3098 14.6635 22.317 14.651 C22.3239 14.6386 22.3239 14.6234 22.317 14.611 L19.417 9.525 C19.3957 9.4903 19.3957 9.4467 19.417 9.412 L19.71 8.905 L20.83 6.928 C20.854 6.887 20.842 6.866 20.795 6.866 L9.2 6.866 C9.141 6.866 9.127 6.84 9.157 6.789 L10.591 4.284 C10.6129 4.2492 10.6129 4.2048 10.591 4.17 L9.225 1.774 C9.2144 1.7547 9.194 1.7428 9.172 1.743 Z M15.462 9.763 C15.508 9.763 15.52 9.783 15.496 9.823 L14.664 11.288 L12.051 15.873 C12.041 15.8912 12.0218 15.9023 12.001 15.902 C11.9804 15.9019 11.9613 15.8909 11.951 15.873 L8.498 9.841 C8.478 9.807 8.488 9.789 8.526 9.787 L8.742 9.775 L15.464 9.763 Z"
     /// LobeHub's Antigravity icon (MIT) — the glyph web draws under the `antigravity` key.
     static let antigravityMark = "M21.751 22.607 C23.091 23.612 25.101 22.942 23.259 21.099 C17.73 15.74 18.904 1 12.037 1 C5.17 1 6.342 15.74 0.815 21.1 C-1.195 23.109 0.982 23.611 2.322 22.606 C7.514 19.089 7.179 12.892 12.037 12.892 C16.894 12.892 16.559 19.089 21.751 22.607 Z"
+    /// LobeHub's Cursor icon (src/Cursor/components/Mono.tsx, MIT) — the cube web draws under the
+    /// `cursor` and `cursor-api` keys (providerGlyphs.ts). Its facet is the second subpath, wound against
+    /// the first, so the non-zero fill leaves it cut out as the source's even-odd rule does.
+    static let cursorMark = "M22.106 5.68 L12.5 0.135 C12.1912 -0.0433 11.8108 -0.0433 11.502 0.135 L1.893 5.68 C1.6339 5.83 1.4743 6.1066 1.474 6.406 L1.474 17.592 C1.474 17.892 1.634 18.169 1.894 18.319 L11.501 23.866 C11.8098 24.0441 12.1902 24.0441 12.499 23.866 L22.107 18.319 C22.3668 18.169 22.5268 17.8919 22.527 17.592 L22.527 6.407 C22.5265 6.1074 22.3664 5.8308 22.107 5.681 Z M21.503 6.856 L12.228 22.92 C12.165 23.028 12 22.984 12 22.859 L12 12.34 C11.9997 12.1296 11.8873 11.9352 11.705 11.83 L2.595 6.57 C2.488 6.508 2.532 6.342 2.657 6.342 L21.207 6.342 C21.471 6.342 21.635 6.628 21.503 6.856 Z"
 }

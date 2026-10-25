@@ -1,0 +1,148 @@
+{
+ "sourceCommit": "09d94a12f",
+ "command": "NO_COLOR=1 npm run build -w @orbit/web",
+ "compression": "Python gzip.compress(data, compresslevel=9, mtime=0); byte counts, not rounded kB. Vite console gzip uses its own defaults.",
+ "initialDefinition": "JS/CSS script, stylesheet, or modulepreload URLs directly referenced by production dist/index.html; excludes lazy route imports until loaded.",
+ "assets": [
+  {
+   "path": "assets/BatchPlanGraph-DuLZ1oKz.js",
+   "kind": "js",
+   "bytes": 1079,
+   "gzipBytes": 613,
+   "sha256": "cc8112f5fb6955a16d762eb1473bf4e927498ad173e308e6d49ea0cdb2a91b20",
+   "initialHtmlReference": false
+  },
+  {
+   "path": "assets/Popconfirm-CTpOyBdD.js",
+   "kind": "js",
+   "bytes": 37139,
+   "gzipBytes": 11939,
+   "sha256": "1cf4af0c705bbd478ae1359d2378479bcf9c7cb252b3334d52cfb5d99328130b",
+   "initialHtmlReference": true
+  },
+  {
+   "path": "assets/ProjectDependencyGraph-TEuol0wZ.js",
+   "kind": "js",
+   "bytes": 14887,
+   "gzipBytes": 5502,
+   "sha256": "ba57d63c437385a485e9642566b95e67532eb40d05cb2abf32381769315e51ca",
+   "initialHtmlReference": false
+  },
+  {
+   "path": "assets/ProjectTaskPanel-QrQn_qiL.js",
+   "kind": "js",
+   "bytes": 1019,
+   "gzipBytes": 598,
+   "sha256": "95e6d166b09d33eff443f9fa946c64587a330198a7d6441fb22efd497c582766",
+   "initialHtmlReference": false
+  },
+  {
+   "path": "assets/StartPlanGraph-CbNhiEdx.js",
+   "kind": "js",
+   "bytes": 930,
+   "gzipBytes": 534,
+   "sha256": "046fe0c204ce39ebbc8eee1fb1ca7ecdc8e5e79da12f616f0df82326112ccc6f",
+   "initialHtmlReference": false
+  },
+  {
+   "path": "assets/TaskDependencyGraph-DLioOiRN.css",
+   "kind": "css",
+   "bytes": 15413,
+   "gzipBytes": 2536,
+   "sha256": "b0cb7bd6fec5951c9c8f5808821438206604b1629a912c96009ac427f38e7d69",
+   "initialHtmlReference": false
+  },
+  {
+   "path": "assets/TaskDependencyGraph-DYmXNJ9A.js",
+   "kind": "js",
+   "bytes": 188645,
+   "gzipBytes": 60081,
+   "sha256": "89bab7aff4bd421fb9c61fd1d5f6658676b0db0a488593b9ad2926e70d8de5b0",
+   "initialHtmlReference": false
+  },
+  {
+   "path": "assets/Transcript-C5U3ynzT.js",
+   "kind": "js",
+   "bytes": 746919,
+   "gzipBytes": 226137,
+   "sha256": "96f0963e6ecd658ab58c0802b060bcc53e98aa4b11d34efb8f8ed76a717cfcc4",
+   "initialHtmlReference": true
+  },
+  {
+   "path": "assets/app-DXQjFb_Y.css",
+   "kind": "css",
+   "bytes": 496850,
+   "gzipBytes": 81346,
+   "sha256": "48de4e67be7f14db0140de18e2337c41eba197302921c894fc2064b2d14d4f84",
+   "initialHtmlReference": true
+  },
+  {
+   "path": "assets/batchGraph-BnreTWgZ.js",
+   "kind": "js",
+   "bytes": 1214,
+   "gzipBytes": 653,
+   "sha256": "0d94395a63d8e9e27a6b20fd1c44b0f811da537b1ade5640b85b64905165e961",
+   "initialHtmlReference": true
+  },
+  {
+   "path": "assets/index-r3aCxisy.js",
+   "kind": "js",
+   "bytes": 1677393,
+   "gzipBytes": 493247,
+   "sha256": "8f381f16952f5d26071c4e28bc6d12e4757e3cce279ee1dbd23e14fbaf1133f3",
+   "initialHtmlReference": true
+  },
+  {
+   "path": "assets/projectDependencyGraph-D23USDv5.js",
+   "kind": "js",
+   "bytes": 159801,
+   "gzipBytes": 52931,
+   "sha256": "b54437425a1393b278c43a51f64e3c0910fb9813638674d4a7be545653e7b3ef",
+   "initialHtmlReference": true
+  },
+  {
+   "path": "assets/rolldown-runtime-hePW80VL.js",
+   "kind": "js",
+   "bytes": 716,
+   "gzipBytes": 430,
+   "sha256": "580ad8c58061a4dde99bde0a56905e382f0568516ee2f5b84dbfb52085709021",
+   "initialHtmlReference": true
+  },
+  {
+   "path": "assets/sessionExport-CeeaRt5L.js",
+   "kind": "js",
+   "bytes": 894609,
+   "gzipBytes": 212910,
+   "sha256": "b54a617269fd869c916a43661f14e5bebbf7514a15528677e8b70a5571ed4c09",
+   "initialHtmlReference": false
+  },
+  {
+   "path": "assets/taskDependencyGraph-ffHKPUKq.js",
+   "kind": "js",
+   "bytes": 182591,
+   "gzipBytes": 61125,
+   "sha256": "e256f0d7fc4fa6cb569ef25d7236e8a14275c84eafae9affa8ec0bdfc6cb671b",
+   "initialHtmlReference": true
+  }
+ ],
+ "initialTotals": {
+  "js": {
+   "bytes": 2805773,
+   "gzipBytes": 846462
+  },
+  "css": {
+   "bytes": 496850,
+   "gzipBytes": 81346
+  }
+ },
+ "allAssetTotals": {
+  "js": {
+   "bytes": 3906942,
+   "gzipBytes": 1126700
+  },
+  "css": {
+   "bytes": 512263,
+   "gzipBytes": 83882
+  }
+ }
+}

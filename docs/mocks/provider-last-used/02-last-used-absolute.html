@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- 方案 B：绝对时间。真实控制台渲染（本分支的 web 构建 + fixtures 数据），新列以控制台自己的类注入绘制。 -->
+<meta charset="utf-8" />
+<title>API keys · Last used（绝对时间）</title>
+<style>
+  body { margin: 0; background: #f4f5f7; font-family: Inter, 'Noto Sans SC', -apple-system, sans-serif; color: #1f2226; }
+  .board { width: 1000px; margin: 0 auto; padding: 36px 40px 44px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { color: #5b6270; font-size: 13px; margin: 0 0 26px; }
+  .panel { background: #fff; border: 1px solid #e3e5ea; border-radius: 10px; overflow: hidden; margin-bottom: 26px; }
+  .cap { display: flex; gap: 10px; align-items: baseline; padding: 12px 16px; border-bottom: 1px solid #eceef2; background: #fafbfc; }
+  .cap b { font-size: 14px; }
+  .cap span { font-size: 12.5px; color: #5b6270; }
+  img.shot { display: block; width: 932px; margin: 16px auto 18px; }
+  .foot { color: #5b6270; font-size: 12.5px; line-height: 1.8; }
+  code { background: #eef0f3; border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+</style>
+<div class="board">
+  <h1>API keys 增加「最近使用时间」列 · 方案 B（绝对时间）</h1>
+  <p class="sub">同一列的另一种显示形式：真实控制台渲染（本分支 web 构建，fixtures 数据）</p>
+
+  <div class="panel">
+    <div class="cap"><b>③ 方案 B · 绝对时间</b><span>Sep 28, 20:00 / Aug 18, 20:00；一眼看到具体日期，但看不出「多久没用了」</span></div>
+    <img class="shot" src="./absolute.png" />
+  </div>
+
+  <p class="foot">
+    与方案 A 相同的口径与实现，只是显示形式不同（悬停同样给完整时间）。<br />
+    布局代价更高：一行「Sep 28, 20:00」要 ~140px 列宽（方案 A 只需 110px），Endpoint 要收得更窄。
+  </p>
+</div>

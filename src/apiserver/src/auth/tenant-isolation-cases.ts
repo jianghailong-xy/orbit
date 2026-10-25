@@ -44,6 +44,9 @@ export interface Tenant {
   agentRuleId: string;
   workspaceRuleId: string;
   sessionId: string;
+  /** A LANDING session of the account's project, with its landing subject: the address a landing
+   *  page and its check log are read through (`GET /sessions/:id/landing/log`). */
+  landingSessionId: string;
   /** A session of the account working on `evidenceTaskId`, which its evidence names as its source. */
   evidenceSessionId: string;
   approvalId: string;
@@ -111,7 +114,7 @@ export interface Tenant {
   wikiArticlePart: number;
   wikiDocSlug: string;
   wikiTopicSlug: string;
-  /** For /admin/*: a user an administrator acts on, one of its tokens, a global provider. */
+  /** For /admin/*: a user an administrator acts on (with a profile photo), one of its tokens, a global provider. */
   adminSubjectId: string;
   adminSubjectTokenId: string;
   adminProviderId: string;
@@ -209,6 +212,10 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
 
   // ── admin/*: an administrator acts on other accounts by design; a member is refused ─────────────
   'GET /admin/users/:id/access-tokens': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
+  // The subject has a profile photo: the administrator is answered its bytes.
+  'GET /admin/users/:id/avatar': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
+  // Before the role and disabled cases below: the subject is still an enabled member, whom an administrator may view.
+  'POST /admin/users/:id/impersonate': { request: (of) => ({ params: { id: of.adminSubjectId }, body: { reason: 'the census' } }) },
   'DELETE /admin/users/:id/access-tokens/:tokenId': {
     request: (of) => ({ params: { id: of.adminSubjectId, tokenId: of.adminSubjectTokenId } }),
   },
@@ -219,6 +226,11 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // The subject has no Google account linked: the administrator is answered its sign-in methods as they are.
   'DELETE /admin/users/:id/identities/google': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
   'PATCH /admin/providers/:id': { request: (of) => ({ params: { id: of.adminProviderId }, body: { label: 'renamed by the census' } }) },
+  // The wiki's support routes (contract `plan.jobs.rebuild.support`): the member's spaces read, and the administrator's
+  // own space's build asked for — answered WIKI_RUNNER_EXECUTES under the census's default executor, and refused 403
+  // to a member either way.
+  'GET /admin/wiki/users/:id/spaces': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
+  'POST /admin/wiki/spaces/:id/plan/build': { request: (of) => ({ params: { id: of.wikiSpaceId }, body: { reason: 'the census' } }) },
   'DELETE /admin/providers/:id': { request: (of) => ({ params: { id: of.spare.adminProviderId } }) },
 
   // ── workspaces, under both of their names ────────────────────────────────────────────────────
@@ -343,6 +355,18 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     request: (of) => ({ params: { id: of.projectId, jobId: of.integrationJobId } }),
     nested: ['jobId'],
   },
+  // The owner's abandon (J-T10) and stop (J-T8) doors. Another account's project is a 404; on the
+  // owner's own project the abandon names a QUEUED job (answered "not running") and the stop names
+  // the task whose queued landing that job is (answered by the stop itself), so neither is refused
+  // as an id that names nothing.
+  'POST /projects/:id/integration/jobs/:jobId/abandon': {
+    request: (of) => ({ params: { id: of.projectId, jobId: of.integrationJobId } }),
+    nested: ['jobId'],
+  },
+  'POST /projects/:id/tasks/:taskId/integration/stop': {
+    request: (of) => ({ params: { id: of.projectId, taskId: of.projectTaskId } }),
+    nested: ['taskId'],
+  },
   'POST /projects/:id/promotions/:promotionId/integration/retry': {
     request: (of) => ({ params: { id: of.projectId, promotionId: of.promotionId }, body: { reason: 'the census' } }),
     nested: ['promotionId'],
@@ -365,6 +389,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // ── providers: the account's own, its pools, and the pools it shares with others ───────────────
   'GET /providers/mine/:id/key': { request: (of) => ({ params: { id: of.providerId } }) },
   'GET /providers/mine/:id/balance': { request: (of) => ({ params: { id: of.providerId } }) },
+  'GET /providers/mine/:id/usage': { request: (of) => ({ params: { id: of.providerId } }) },
+  // The account's own key is no Cursor key: it is answered that, which no key of anybody else's is.
+  'POST /providers/mine/:id/key-check': { request: (of) => ({ params: { id: of.providerId } }) },
   'PATCH /providers/mine/:id': { request: (of) => ({ params: { id: of.providerId }, body: { label: 'renamed by the census' } }) },
   'DELETE /providers/mine/:id': { request: (of) => ({ params: { id: of.spare.providerId } }) },
   'GET /providers/pools/:id': { request: (of) => ({ params: { id: of.poolId } }) },
@@ -430,6 +457,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'DELETE /runners/:id/accounts/:engine/:account': {
     request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount } }),
   },
+  'POST /runners/:id/accounts/:engine/default/restore': {
+    request: (of) => ({ params: { id: of.runnerId, engine: of.runnerAccount.engine } }),
+  },
   'PATCH /runners/:id/accounts/:engine/:account': {
     request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount }, body: { name: 'renamed by the census' } }),
   },
@@ -469,6 +499,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // ── sessions ─────────────────────────────────────────────────────────────────────────────────
   'GET /sessions/:id': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/compact': { request: (of) => ({ params: { id: of.sessionId } }) },
+  // A landing session's check output (contract §2.9 LS2): the subject the session belongs to is the
+  // account's, and another account's session is the same 404 as one that does not exist.
+  'GET /sessions/:id/landing/log': { request: (of) => ({ params: { id: of.landingSessionId } }) },
   'PATCH /sessions/:id': { request: (of) => ({ params: { id: of.sessionId }, body: { title: 'renamed by the census' } }) },
   'DELETE /sessions/:id': { request: (of) => ({ params: { id: of.spare.sessionId } }) },
   'DELETE /sessions/:id/purge': { request: (of) => ({ params: { id: of.spare.purgedSessionId } }) },
@@ -478,10 +511,15 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /sessions/:id/worktree-file': { request: (of) => ({ params: { id: of.sessionId }, query: { path: 'census.txt' } }) },
   'GET /sessions/:id/diff': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/diff/refresh': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'POST /sessions/:id/recap': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/turns': { request: (of) => ({ params: { id: of.sessionId }, body: turn('turn') }) },
   'POST /sessions/:id/turns/current-work-routing': { request: (of) => ({ params: { id: of.sessionId }, body: turn('routed') }) },
   'GET /sessions/:id/turns': { request: (of) => ({ params: { id: of.sessionId } }) },
   'DELETE /sessions/:id/turns/:turnId': {
+    request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
+    nested: ['turnId'],
+  },
+  'POST /sessions/:id/turns/:turnId/steer': {
     request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
     nested: ['turnId'],
   },
@@ -623,6 +661,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /wiki/spaces/:id/entries': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/timeline': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/health': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
+  'GET /wiki/spaces/:id/jobs': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/topics/:slug': { request: (of) => ({ params: { id: of.wikiSpaceId, slug: of.wikiTopicSlug } }) },
   'POST /wiki/spaces/:id/changesets': {
     request: (of) => ({
@@ -654,6 +693,11 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /wiki/spaces/:id/plan/versions/:version/confirm': {
     request: (of) => ({ params: { id: of.wikiSpaceId, version: of.wikiPlanVersion }, body: {} }),
   },
+  // The version in force (1, the census's confirmed one): the owner is answered WIKI_RUNNER_EXECUTES under the default
+  // executor, never a 404.
+  'POST /wiki/spaces/:id/plan/versions/:version/build': {
+    request: (of) => ({ params: { id: of.wikiSpaceId, version: 1 }, body: {} }),
+  },
   'POST /wiki/spaces/:id/plan/edits': { request: (of) => ({ params: { id: of.wikiSpaceId }, body: {} }) },
   'POST /wiki/spaces/:id/plan/redraft': { request: (of) => ({ params: { id: of.wikiSpaceId }, body: {} }) },
   'POST /wiki/plan-proposals/:id/decide': { request: (of) => ({ params: { id: of.wikiPlanProposalId }, body: { action: 'reject' } }) },
@@ -671,7 +715,17 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * Routes the census cannot stand up against the production apiserver, each with why, and the reading
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
-export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {};
+export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  'POST /admin/managed-runners/:id/volume-switch':
+    'an administrator acts on another account\'s runner by design, and anybody else is refused 403 by AdminRoleGuard '
+    + 'before anything is read (users/admin-role.guard.ts:21). The census server runs with managed runners off, where every '
+    + 'caller, an administrator too, is answered 404 MANAGED_RUNNER_DISABLED before the role is asked (managed-runners/'
+    + 'managed-runner-gate.ts:76), so no case of it can be answered there. On, the runner id finds that runner\'s mapping '
+    + 'alone (managed-runners/managed-runner.service.ts:294), its volume is read only under that runner\'s own fixed name in '
+    + 'the managed namespace (managed-runners/kubernetes-backend.ts:228), and a volume another mapping records is refused '
+    + '(managed-runners/managed-runner-manager.ts:1460) — all of it, and a member\'s 403 with nothing written, sent over HTTP '
+    + 'in managed-runners/managed-runner-volume-switch.pg.spec.ts',
+};
 
 // ── Ids a request carries in its body or query ────────────────────────────────────────────────────
 //
@@ -866,6 +920,11 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
       },
     }),
   },
+  // Two different runners, so B's own request is a reorder the route answers, not a duplicate
+  // `@ArrayUnique` refuses.
+  'POST /runners/reorder body ids[]': {
+    request: (of, mine) => ({ params: {}, body: { ids: [mine.runnerId, of.spare.runnerId] } }),
+  },
 
   // ── sessions ─────────────────────────────────────────────────────────────────────────────────
   'POST /session-folders body workspaceId': { request: (of) => ({ params: {}, body: { workspaceId: of.workspaceId, name: 'census folder' } }) },
@@ -884,6 +943,11 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   'GET /sessions query agentId': { request: (of) => ({ params: {}, query: { agentId: of.workspaceId } }) },
   'GET /sessions query workspaceId': { request: (of) => ({ params: {}, query: { workspaceId: of.workspaceId } }) },
   'GET /sessions query runnerId': { request: (of) => ({ params: {}, query: { runnerId: of.runnerId } }) },
+  // The attempt a landing page names: B reads its own landing with A's job in the query, and is
+  // answered as if it named nothing — the job is resolved within that landing and nowhere else.
+  'GET /sessions/:id/landing/log query jobId': {
+    request: (of, mine) => ({ params: { id: mine.landingSessionId }, query: { jobId: of.integrationJobId } }),
+  },
   'GET /sessions/:id/events/page query around': {
     request: (of, mine) => ({ params: { id: mine.sessionId }, query: { around: of.eventId } }),
   },

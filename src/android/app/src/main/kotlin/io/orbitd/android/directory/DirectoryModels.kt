@@ -6,7 +6,11 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 
 /** [position] is null until the workspace is first dragged into place (schema.prisma Workspace.position Int?). */
 @Serializable
@@ -21,6 +25,9 @@ data class Tag(val id: String, val name: String, val color: String? = null,
     val isSystem: Boolean = false, val position: Int = 0)
 @Serializable
 data class WorkspaceRef(val id: String, val name: String = "")
+/** What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why it wrote none ([RecapCard.notice]). */
+@Serializable
+data class RecapOutcome(val written: Boolean, val recapText: String? = null, val reason: String? = null)
 @Serializable
 data class DirectorySession(
     val id: String, val title: String? = null, val status: String = "UNKNOWN",
@@ -31,16 +38,52 @@ data class DirectorySession(
     val pendingApprovals: Int = 0, val runningBgJobCount: Int = 0,
     val confirmationUnderReview: JsonObject? = null,
     val lastAssistantText: String? = null, val lastUserText: String? = null,
+    /** The rolling recap the server wrote about this session and when it wrote it (0418), clipped like the previews beside it; the
+     *  line the list prefers to [lastAssistantText]. Both null on a session no pass has recapped yet, and from a server that writes
+     *  no recaps (`ORBIT_RECAP_ENABLED=0`) — exactly what the row falls back from. The account's Session recaps switch can also hold
+     *  it back (`LocalSessionRecaps`). */
+    val recapText: String? = null, val recapAt: String? = null,
     val tags: List<Tag> = emptyList(), val capabilities: SessionCapabilities? = null,
+    // What SessionLine reads beyond the above (OrbitKit `Session`): null from a server that does not send it.
+    val runStatus: String? = null, val endReason: String? = null, val error: String? = null, val retryAt: String? = null,
+    val completedAt: String? = null, val deletedAt: String? = null, val lastToolUse: String? = null,
+    val runningBgCount: Int? = null, val runningSubagentCount: Int? = null, val engineTurnActive: Boolean? = null,
+    val waitingKind: String? = null, val ownerItems: JsonArray? = null,
+    /** The project this session belongs to in any role; null for an ordinary conversation and from an older server. */
+    val projectMembership: SessionProjectMembership? = null,
+    /** `LANDING` for platform work with no engine (contract §2.9 LS6), `CONVERSATION` otherwise; absent from an older server. */
+    val sessionKind: String? = null,
+    /** What a LANDING row says about its subject, on `GET /sessions?projectId=&includeLanding=1` only; absent everywhere else. */
+    val landing: SessionLandingSummary? = null,
 ) {
+    /** Whether this row is a landing session (platform work), not a conversation. */
+    val isLanding get() = sessionKind == "LANDING"
     val workspace get() = workspaceId ?: agentId ?: agent?.id
     val name get() = title?.takeIf(String::isNotBlank) ?: "Untitled session"
     val stateLabel get() = when {
         pendingApprovals > 0 -> "Needs you · $pendingApprovals"
-        confirmationUnderReview != null -> "Under review"
+        // Its report is with its reviewer (A08-1; OrbitKit `underReviewLine`): drawn, not counted, and who has it.
+        confirmationUnderReview != null -> "Under review · ${(confirmationUnderReview["reviewerTitle"] as? JsonPrimitive)?.contentOrNull?.trim()
+            ?.ifEmpty { null } ?: "Reviewer"}"
         runState == "RUNNING" || status == "RUNNING" -> "Running"
         else -> (runState ?: status).lowercase().replace('_', ' ').replaceFirstChar(Char::uppercase)
     }
+}
+/** What a LANDING session row says about its subject (`SessionLandingSummary`, contract §2.9 LS6): the subject it represents and where
+ * it stands, so the project's page can keep an in-flight landing out of the ordinary rows, list an awaiting one, and fold a settled
+ * one into "Earlier · n landed". Every slot optional, so a server that sends less still decodes. */
+@Serializable
+data class SessionLandingSummary(val subject: String? = null, val state: String? = null,
+    val settledAs: String? = null, val settledAt: String? = null)
+
+/** A session's project membership (OrbitKit `SessionProjectMembership`): derived from its coordinator, task, context, judgment or
+ * root relation. A role or status this build does not know is kept as the server spelled it, and matches none of the known ones. */
+@Serializable
+data class SessionProjectMembership(val projectId: String, val projectTitle: String = "", val projectStatus: String = "UNKNOWN",
+    val role: String = "UNKNOWN") {
+    val isCoordinator get() = role == "COORDINATOR"
+    /** A landing session's membership (`LANDING`, contract §2.9 LS6): no engine, and never a member of the page's timeline. */
+    val isLanding get() = role == "LANDING"
 }
 @Serializable
 data class SearchHit(val id: String, val title: String, val status: String = "UNKNOWN",
@@ -58,12 +101,20 @@ data class MoveTarget(val workspaceId: String, val name: String, val reason: Str
 data class MoveTargets(val workspaceId: String? = null, val folderId: String? = null,
     val folders: List<MoveFolder> = emptyList(), val reason: String? = null,
     val needsEnd: Boolean = false, val branch: String? = null, val changedFiles: Int = 0,
-    val targets: List<MoveTarget> = emptyList())
+    val unmergedFiles: Int = 0, val mergeTarget: String? = null, val targets: List<MoveTarget> = emptyList())
 
 /** iOS's order (AgentListLogic.ordered): the server's — placed workspaces by position, then never-placed ones
  * (position null) oldest first — with the workspaces that have no runner moved to the bottom. */
-fun orderedWorkspaces(workspaces: List<DirectoryWorkspace>): List<DirectoryWorkspace> = workspaces.sortedWith(
-    compareBy<DirectoryWorkspace> { it.runnerId == null }.thenBy(nullsLast()) { it.position }.thenBy { it.createdAt })
+fun orderedWorkspaces(workspaces: List<DirectoryWorkspace>): List<DirectoryWorkspace> =
+    workspaces.sortedWith(workspaceOrder({ it.runnerId }, { it.position }, { it.createdAt }))
+
+/** The same order for the realtime directory's raw rows: Tasks' Set assignee and a task's Assignee picker (iOS `orderedAgents`). */
+fun orderedWorkspaceRows(rows: List<JsonObject>): List<JsonObject> = rows.sortedWith(workspaceOrder(
+    { (it["runnerId"] as? JsonPrimitive)?.contentOrNull }, { (it["position"] as? JsonPrimitive)?.intOrNull },
+    { (it["createdAt"] as? JsonPrimitive)?.contentOrNull }))
+
+private fun <T> workspaceOrder(runnerId: (T) -> String?, position: (T) -> Int?, createdAt: (T) -> String?) =
+    compareBy<T> { runnerId(it) == null }.thenBy(nullsLast()) { position(it) }.thenBy { createdAt(it) }
 
 enum class SessionView(val query: String, val label: String) { OPEN("open", "Open"), COMPLETED("completed", "Completed"), TRASH("trash", "Trash") }
 enum class Grouping { RECENCY, TAG }
@@ -81,20 +132,25 @@ fun directoryGroups(sessions: List<DirectorySession>, view: SessionView, groupin
             listOfNotNull(sorted.filter { it.tags.isEmpty() }.takeIf { it.isNotEmpty() }?.let { SessionGroup("bucket:untagged", "Untagged", it) })
     }
     val today = now.atZone(zone).toLocalDate()
-    val titles = listOf("Pinned", "Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older")
-    val buckets = sorted.groupBy { s ->
-        val days = date(s)?.atZone(zone)?.toLocalDate()?.let { ChronoUnit.DAYS.between(it, today) }
-        when {
-            view == SessionView.OPEN && s.pinnedAt != null -> 0
-            days == null -> 5
-            days <= 0 -> 1
-            days == 1L -> 2
-            days <= 7 -> 3
-            days <= 30 -> 4
-            else -> 5
-        }
+    val buckets = sorted.groupBy { s -> if (view == SessionView.OPEN && s.pinnedAt != null) 0 else recencyBucket(date(s), today, zone) }
+    return recencyTitles.mapIndexedNotNull { i, title -> buckets[i]?.let { SessionGroup("time:$i", title, it) } }
+}
+
+/** The list's sections in order, Pinned first; [recencyBucket] indexes into them. */
+internal val recencyTitles = listOf("Pinned", "Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older")
+
+/** 1 Today · 2 Yesterday · 3 2–7 days ago · 4 8–30 days ago · 5 Older, for any instant — so a row that is not a session (a merge on a
+ * project's timeline) lands in the section its time says. A future instant reads as Today; none at all falls to Older. */
+internal fun recencyBucket(at: Instant?, today: java.time.LocalDate, zone: ZoneId): Int {
+    val days = at?.atZone(zone)?.toLocalDate()?.let { ChronoUnit.DAYS.between(it, today) }
+    return when {
+        days == null -> 5
+        days <= 0 -> 1
+        days == 1L -> 2
+        days <= 7 -> 3
+        days <= 30 -> 4
+        else -> 5
     }
-    return titles.mapIndexedNotNull { i, title -> buckets[i]?.let { SessionGroup("time:$i", title, it) } }
 }
 
 /** A missing folder never hides a session. Trash is flat. A folder page contains its own rows once. */

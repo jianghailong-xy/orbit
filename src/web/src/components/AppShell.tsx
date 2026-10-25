@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { MenuOutlined } from '@ant-design/icons';
 import { Outlet, useLocation } from 'react-router-dom';
 import { TasksSidePanel } from './TasksSidePanel';
+import { ImpersonationBanner } from './ImpersonationBanner';
 import { SessionSearch } from './SessionSearch';
 import { ControlPlaneProvider } from '../lib/useControlPlane';
 
@@ -20,6 +21,8 @@ export function AppShell() {
     // session lists below can stop polling while it's connected (see useControlPlane). Mounted here,
     // inside the auth gate, so the stream only runs for a signed-in user and spans every route.
     <ControlPlaneProvider>
+    {/* Over the shell, which it shortens rather than covers, while an administrator views Orbit as another user. */}
+    <ImpersonationBanner />
     <div className="app-shell">
       <header className="app-topbar">
         <button

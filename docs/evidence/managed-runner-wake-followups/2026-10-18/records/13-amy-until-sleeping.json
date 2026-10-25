@@ -1,0 +1,66 @@
+{
+  "at": "2026-10-18T03:57:35.495+00:00",
+  "changes": [
+    [
+      "2026-10-18T03:57:22.491+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 0,
+        "desired_state": "SLEEPING",
+        "drain": "asked",
+        "generation": 1,
+        "management_state": "DRAINING",
+        "pod": "3c1449d4",
+        "reason": null,
+        "revision": 13
+      }
+    ],
+    [
+      "2026-10-18T03:57:27.362+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 0,
+        "desired_state": "SLEEPING",
+        "drain": "accepted",
+        "generation": 1,
+        "management_state": "DRAINING",
+        "pod": "3c1449d4",
+        "reason": null,
+        "revision": 13
+      }
+    ],
+    [
+      "2026-10-18T03:57:30.623+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 0,
+        "desired_state": "SLEEPING",
+        "drain": "accepted",
+        "generation": 1,
+        "management_state": "DRAINING",
+        "pod": "3c1449d4",
+        "reason": null,
+        "revision": 16
+      }
+    ],
+    [
+      "2026-10-18T03:57:35.495+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 0,
+        "desired_state": "SLEEPING",
+        "drain": null,
+        "generation": 2,
+        "management_state": "SLEEPING",
+        "pod": null,
+        "reason": null,
+        "revision": 17
+      }
+    ]
+  ],
+  "owner": "amy",
+  "reached": {
+    "reason": null,
+    "state": "SLEEPING"
+  }
+}

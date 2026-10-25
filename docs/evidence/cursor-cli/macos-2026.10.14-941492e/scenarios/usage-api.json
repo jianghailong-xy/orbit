@@ -1,0 +1,202 @@
+{
+ "name": "usage-api",
+ "runId": "2026-10-24T23-10-31-791Z",
+ "startedAt": "2026-10-24T23:10:31.799Z",
+ "finishedAt": "2026-10-24T23:10:57.889Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/usage-api.ndjson",
+ "protocolLines": 9,
+ "fixtures": [],
+ "checks": [
+  {
+   "name": "GetCurrentPeriodUsage answers 200 with the exchanged access token",
+   "ok": true
+  },
+  {
+   "name": "GetPlanInfo answers 200 with planInfo.planName",
+   "ok": true
+  },
+  {
+   "name": "the raw API key is not a bearer for the dashboard (401 ERROR_NOT_LOGGED_IN)",
+   "ok": true
+  },
+  {
+   "name": "no bearer -> 401 unauthenticated",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "dashboard RPCs (identity fields reduced to their names)": {
+   "GetCurrentPeriodUsage": {
+    "status": 200,
+    "body": {
+     "billingCycleStart": "1792805536338",
+     "billingCycleEnd": "1793410336338",
+     "planUsage": {
+      "remainingBonus": false,
+      "bonusTooltip": "We work with model providers to give you free usage beyond what you've purchased. Amounts may vary.",
+      "autoPercentUsed": 0,
+      "apiPercentUsed": 0,
+      "totalPercentUsed": 0
+     },
+     "spendLimitUsage": {
+      "limitType": "user"
+     },
+     "displayThreshold": 200,
+     "enabled": true,
+     "displayMessage": "You've used 0% of your included usage",
+     "autoModelSelectedDisplayMessage": "You've used 0% of your included total usage",
+     "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage",
+     "autoBucketModels": [
+      "default"
+     ]
+    }
+   },
+   "GetPlanInfo": {
+    "status": 200,
+    "body": {
+     "planInfo": {
+      "planName": "Premium",
+      "price": "",
+      "billingCycleEnd": "1795537946082",
+      "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY",
+      "includedUsageResetsAt": "1793410336338"
+     },
+     "nextUpgrade": {
+      "tier": "super",
+      "name": "Super",
+      "includedAmountCents": 16159,
+      "description": "Get more usage with Super",
+      "dashboardAction": {
+       "action": "xaiCommercePaywall",
+       "args": {
+        "tier": "super",
+        "entrypoint": "plan_info",
+        "sku": "sku_WWvZ1VL9fabh"
+       }
+      },
+      "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY"
+     },
+     "isMerged": true
+    }
+   },
+   "GetHardLimit": {
+    "status": 200,
+    "body": {
+     "hardLimit": 2147483647
+    }
+   },
+   "GetUsageLimitPolicyStatus": {
+    "status": 200,
+    "body": {
+     "canConfigureSpendLimit": true,
+     "creditRequestButtonHidden": false
+    }
+   },
+   "GetUsageLimitStatusAndActiveGrants": {
+    "status": 200,
+    "body": {
+     "usageLimitPolicyStatus": {
+      "canConfigureSpendLimit": true,
+      "canAdjustOnDemand": true,
+      "recommendedOnDemandLimitCents": "10000",
+      "onDemandMinCents": "5000",
+      "onDemandMaxCents": "20000",
+      "creditRequestButtonHidden": false
+     }
+    }
+   },
+   "GetCreditGrantsBalance": {
+    "status": 200,
+    "body": {}
+   },
+   "GetTeams": {
+    "status": 200,
+    "body": {}
+   },
+   "GetUserPrivacyMode": {
+    "status": 200,
+    "body": {
+     "privacyMode": "PRIVACY_MODE_USAGE_DATA_TRAINING_ALLOWED",
+     "accountPrivacyMode": "PRIVACY_MODE_USAGE_DATA_TRAINING_ALLOWED"
+    }
+   },
+   "GetMe": {
+    "status": 200,
+    "body": {
+     "fields": [
+      "authId",
+      "country",
+      "createdAt",
+      "cursorReviewOnboardingUseCursorGithubApp",
+      "email",
+      "emailDomainType",
+      "firstName",
+      "isEnterpriseUser",
+      "lastName",
+      "profilePictureUrl",
+      "publicUserId",
+      "userId",
+      "workosId"
+     ]
+    }
+   },
+   "GetCurrentPeriodUsage (raw API key)": {
+    "status": 401,
+    "body": {
+     "code": "unauthenticated",
+     "message": "Error",
+     "details": [
+      {
+       "type": "aiserver.v1.ErrorDetails",
+       "debug": {
+        "error": "ERROR_NOT_LOGGED_IN",
+        "details": {
+         "title": "Authentication error",
+         "detail": "If you are logged in, try logging out and back in.",
+         "isRetryable": false,
+         "analyticsMetadata": {
+          "actionRequired": "login"
+         }
+        },
+        "isExpected": true
+       },
+       "value": "CAISVQoUQXV0aGVudGljYXRpb24gZXJyb3ISMklmIHlvdSBhcmUgbG9nZ2VkIGluLCB0cnkgbG9nZ2luZyBvdXQgYW5kIGJhY2sgaW4uIABSBwoFbG9naW4YAQ"
+      }
+     ]
+    }
+   },
+   "GetCurrentPeriodUsage (no auth)": {
+    "status": 401,
+    "body": {
+     "code": "unauthenticated",
+     "message": "Error",
+     "details": [
+      {
+       "type": "aiserver.v1.ErrorDetails",
+       "debug": {
+        "error": "ERROR_NOT_LOGGED_IN",
+        "details": {
+         "title": "Authentication error",
+         "detail": "If you are logged in, try logging out and back in.",
+         "isRetryable": false,
+         "analyticsMetadata": {
+          "actionRequired": "login"
+         }
+        },
+        "isExpected": true
+       },
+       "value": "CAISVQoUQXV0aGVudGljYXRpb24gZXJyb3ISMklmIHlvdSBhcmUgbG9nZ2VkIGluLCB0cnkgbG9nZ2luZyBvdXQgYW5kIGJhY2sgaW4uIABSBwoFbG9naW4YAQ"
+      }
+     ]
+    }
+   }
+  }
+ }
+}

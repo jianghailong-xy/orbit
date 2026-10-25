@@ -51,8 +51,10 @@ class StartProjectCardTest {
 
     private var started = 0
 
+    private var viewed = 0
+
     private fun card(request: StartProjectCopy.Request, asked: Boolean, hasCoordinator: Boolean = true, maxConcurrent: Int? = null,
-        standing: StartProjectCopy.Standing = StartProjectCopy.Standing.LIVE, chat: (() -> Unit)? = null) {
+        standing: StartProjectCopy.Standing = StartProjectCopy.Standing.LIVE, chat: (() -> Unit)? = null, graph: DependencyGraph? = null) {
         compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
             // Keyed: a second setContent reuses this composition.
             var draft by androidx.compose.runtime.remember(request, maxConcurrent) {
@@ -60,9 +62,10 @@ class StartProjectCardTest {
                 mutableStateOf(maxConcurrent?.let { opened.copy(maxConcurrentTasks = it) } ?: opened)
             }
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                StartProjectCard(project, "Runner 页整页改版", asked, if (asked) "56m ago" else null, request, criteria, plan, hasCoordinator, 7_200, draft,
+                StartProjectCard(project, "Runner 页整页改版", asked, if (asked) "56m ago" else null, request, criteria,
+                    graph?.let { StartProjectCopy.planView(it, it.taskCount) } ?: plan, hasCoordinator, 7_200, draft,
                     { draft = it }, standing, enabled = true, starting = false, error = null, tag = tag, startTag = "$tag-confirm",
-                    onStart = { started++ }, onViewTasks = {}, onChatAbout = chat)
+                    onStart = { started++ }, onViewTasks = { viewed++ }, onChatAbout = chat, graph = graph)
             }
         } } }
         compose.waitForIdle()
@@ -75,7 +78,10 @@ class StartProjectCardTest {
     @Test fun theCoordinatorsCardSaysWhoAskedQuotesItAndListsWhatStillComesToTheOwner() {
         card(request(automatic = false), asked = true, chat = {})
         shows("Runner 页整页改版"); shows(StartProjectCopy.askedLine("56m ago"))
-        shows(StartProjectCopy.coordinator); shows(request().why); shows(StartProjectCopy.more)
+        // The coordinator's words in full within three lines: no More, which would open nothing (iOS d91a0dd48); nor Read all for two
+        // criteria shown whole. StartProjectCardClampTest measures the cut ones.
+        shows(StartProjectCopy.coordinator); shows(request().why)
+        compose.onNodeWithTag("$tag-why").assertDoesNotExist(); compose.onNodeWithTag("$tag-criteria").assertDoesNotExist()
         // Automatic opens on whatever was suggested, and the note says the coordinator suggested off.
         compose.onNodeWithTag("$tag-automatic").assertIsOn()
         shows(RunSettings.automaticOnChecked)
@@ -208,4 +214,83 @@ class StartProjectCardTest {
         shows(StartProjectCopy.requestGone)
         compose.onNodeWithTag("start:item-1:START").performScrollTo().assertIsNotEnabled()
     }
+
+    // MARK: the plan as the task graph (iOS d91a0dd48, docs/mocks/start-card-web-width board 02)
+
+    /** The mock's plan is two tasks wide at its widest: 376 dp laid out top to bottom, which a 360 dp phone's card (336 dp inside its
+     * panel) draws at 0.89 — the task graph itself, its head counting tasks only, and no "Task graph" press beside View tasks. */
+    @Config(qualifiers = "w360dp-h800dp")
+    @Test fun aPlanThatFitsAtSevenTenthsIsDrawnAsTheTaskGraph() {
+        card(request(), asked = true, graph = mockGraph)
+        shows("PLAN · 5 TASKS")
+        compose.onNodeWithTag("$tag-plan-graph").performScrollTo().assertIsDisplayed()
+        listOf("a", "b", "c", "d", "e").forEach { compose.onNodeWithTag("graph-mark:$it", useUnmergedTree = true).assertExists() }
+        compose.onNodeWithTag("$tag-level:1").assertDoesNotExist(); compose.onNodeWithTag("$tag-task-graph").assertDoesNotExist()
+        // A task in the picture opens the way View tasks opens the plan's tasks.
+        compose.onNodeWithTag("graph-mark:e", useUnmergedTree = true).performClick()
+        assertEquals(1, viewed)
+    }
+
+    /** Three tasks side by side need 556 dp: at 360 dp that is 0.60, under the line, so the card keeps its levels and offers the task
+     * graph full screen beside View tasks — what most plans get on a phone. */
+    @Config(qualifiers = "w360dp-h800dp")
+    @Test fun aPlanTooWideForTheCardIsListedByLevelWithTheTaskGraphAPressAway() {
+        card(request(), asked = true, graph = wideGraph)
+        shows("PLAN · 4 TASKS IN 2 LEVELS")
+        compose.onNodeWithTag("$tag-level:2").assertTextContains("B · C · D").assertTextContains("3 in parallel")
+        compose.onNodeWithTag("$tag-plan-graph").assertDoesNotExist()
+        compose.onNodeWithTag("$tag-task-graph").performScrollTo().assertTextEquals(StartProjectCopy.taskGraph).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("project-graph-fullscreen").assertExists()
+        compose.onNodeWithTag("graph-mark:d", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Done").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("project-graph-fullscreen").assertDoesNotExist()
+        // No graph read at all: the levels, and no press to a picture nobody has.
+        card(request(), asked = true)
+        compose.onNodeWithTag("$tag-level:1").performScrollTo().assertExists(); compose.onNodeWithTag("$tag-task-graph").assertDoesNotExist()
+    }
+
+    /** The conversation's card draws the graph its session read hands it (the `plan` the conversation puts on the card's context). */
+    @Config(qualifiers = "w360dp-h800dp")
+    @Test fun theCoordinatorsCardDrawsThePlanItsConversationRead() {
+        val reads = mapOf<String, JsonElement>("project" to j("""{"id":"$project","title":"Aurora","startedAt":null,"exceptionEscalationSeconds":1800,
+            "acceptanceCriteriaItems":[{"id":"c1","ordinal":1,"text":"Done."}]}"""), "openItems" to j("""{"needsYou":[],"withCoordinator":[],"startRequest":
+            {"itemId":"item-1","kind":"START_REQUEST","title":"Start this project?","assignee":"OWNER","waitingSince":"2026-09-29T08:24:00.000Z","actions":[],
+            "startRequest":{"settings":{"line":"PROJECT_BRANCH","projectBranchName":"refs/heads/project/p1","automatic":true,"maxConcurrentTasks":3,
+            "mergeCheckCommand":null},"why":"Ready.","criteriaDigest":"$seal","planDigest":"pp","repository":null,"warnings":[]}}}"""),
+            "acceptanceConfirmation" to j("""{"state":"UNCONFIRMED","confirmed":false,"currentVersion":{"digest":"$seal","material":[]}}"""))
+        val card = CardCatalog.project("s1", project, reads).single { it.family == CardFamily.START }
+        fun draw(graph: String) {
+            compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    CoordinatorStartCard(card.copy(context = JsonObject(card.context + ("plan" to j(graph)))), reads, fresh = true, result = CardActionState(),
+                        open = {}, discuss = {}) { _, _ -> }
+                }
+            } } }
+            compose.waitForIdle()
+        }
+        draw(graphJson(listOf("a" to "A", "b" to "B"), listOf("a" to "b")))
+        compose.onNodeWithTag("start:item-1-plan-graph").performScrollTo().assertIsDisplayed()
+        shows("PLAN · 2 TASKS")
+        draw(graphJson(listOf("a" to "A", "b" to "B", "c" to "C", "d" to "D"), listOf("a" to "b", "a" to "c", "a" to "d")))
+        compose.onNodeWithTag("start:item-1-task-graph").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("start:item-1-plan-graph").assertDoesNotExist()
+    }
+
+    /** The mock's plan as the graph read serves it. */
+    private val mockGraph = DependencyGraph(listOf("a" to "A · 提醒规则做成两端共用的真源", "b" to "B · OrbitKit：提醒规则、文案、DTO 与接口",
+        "c" to "C · web：Runners 列表与 runner 详情页", "d" to "D · iOS/macOS：Runners 列表、Add Runner、Edit", "e" to "E · 上线").map { (id, title) ->
+        GraphMark(MarkKind.TASK, id, title, status = "OPEN", completionCriterion = "EVIDENCE_JUDGMENT", autoRunWhenReady = true) },
+        listOf("a" to "b", "a" to "c", "b" to "d", "c" to "e", "d" to "e").map { GraphEdge(it.first, it.second) }, 5, false, null)
+    /** A; then B, C and D side by side. */
+    private val wideGraph = DependencyGraph(listOf("a" to "A · 起点", "b" to "B · 一", "c" to "C · 二", "d" to "D · 三").map { (id, title) ->
+        GraphMark(MarkKind.TASK, id, title, status = "OPEN", completionCriterion = "EVIDENCE_JUDGMENT", autoRunWhenReady = true) },
+        listOf("a" to "b", "a" to "c", "a" to "d").map { GraphEdge(it.first, it.second) }, 4, false, null)
+    private fun graphJson(tasks: List<Pair<String, String>>, edges: List<Pair<String, String>>) = buildJsonObject {
+        putJsonArray("marks") { tasks.forEach { (id, title) -> addJsonObject { put("kind", "TASK"); put("id", id); put("taskId", id); put("title", title)
+            put("status", "OPEN"); put("completionCriterion", "EVIDENCE_JUDGMENT"); put("autoRunWhenReady", true) } } }
+        putJsonArray("edges") { edges.forEach { (s, t) -> addJsonObject { put("sourceMarkId", s); put("targetMarkId", t) } } }
+        put("taskCount", tasks.size); put("truncated", false)
+    }.toString()
 }

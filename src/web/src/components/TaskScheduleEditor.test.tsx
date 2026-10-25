@@ -112,7 +112,7 @@ function button(html: string, label: string): { disabled: boolean; loading: bool
   const re = new RegExp(`<button\\s+([^>]*)>((?:(?!</button>).)*)</button>`, 'gis');
   for (const m of html.matchAll(re)) {
     if (!m[2].includes(`>${label}<`)) continue;
-    return { disabled: /\bdisabled(?:=|\s|$)/i.test(m[1]), loading: m[1].includes('ant-btn-loading') };
+    return { disabled: /\bdisabled(?:=|\s|$)/i.test(m[1]), loading: /\baria-busy="true"/.test(m[1]) };
   }
   return null;
 }
@@ -451,7 +451,7 @@ describe('the Start at editor — a draft the reader has changed', () => {
     expect(out).toContain(RUN_AT_IMPOSSIBLE);
     // Marked wrong on the control, for eyes and for anything reading the accessibility tree.
     expect(control(out)!['aria-invalid']).toBe('true');
-    expect(out).toContain('ant-input-status-error');
+    expect(control(out)!['data-invalid']).toBe('');
     // The reason is announced WITH the field, alongside the hint rather than instead of it, and
     // as a live region so it is heard when it appears rather than on the next visit to the input.
     const described = control(out)!['aria-describedby'].split(' ');

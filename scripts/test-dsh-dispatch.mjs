@@ -219,9 +219,11 @@ exit 97
     assert.equal(provider.status, 201, `dsh provider: ${provider.text}`);
     const harness = provider.json.slug;
     assert.ok(harness, `dsh provider has no slug: ${provider.text}`);
-    say(`==> provider ${harness} (runtime dsh) → ${mockURL}`);
+    // An older client's Harness form is stored as a DeepSeek key (docs/provider-engine-contract.md §3.6),
+    // which runs on Claude Code unless DeepSeek Harness is named as the engine.
+    say(`==> provider ${harness} (a DeepSeek key, run on DeepSeek Harness) → ${mockURL}`);
     const createSession = (workspaceId, providerSlug, prompt, extra = {}) =>
-      call('POST', '/sessions', { workspaceId, provider: providerSlug, prompt, ...extra });
+      call('POST', '/sessions', { workspaceId, provider: providerSlug, ...(providerSlug === harness ? { engine: 'dsh' } : {}), prompt, ...extra });
     const sessionRow = (prompt) => one(`SELECT id::text AS id, status::text AS status, num_turns, result, error, runtime_session_id,
       assigned_runner_id::text AS runner, finished_at, end_reason::text AS end_reason FROM session WHERE prompt = $1`, [prompt]);
     const answerEvents = (id, runner) => one(`SELECT count(*)::int AS n, array_agg(DISTINCT type) AS types FROM run_event

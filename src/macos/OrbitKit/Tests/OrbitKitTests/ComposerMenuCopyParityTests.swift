@@ -228,4 +228,55 @@ final class ComposerMenuCopyParityTests: XCTestCase {
             menu[first.lowerBound...].contains(".disabled"),
             "the native `+` menu gates an attach item again")
     }
+    // MARK: the model menu's Provider level (boards iOS 4 ④⑤, iOS 5)
+
+    /// The Provider level groups a session's credentials by where they come from, under the web's
+    /// headings, and says what became of a key its engine no longer lists in the web's words. Read off
+    /// OrbitKit's own answers (`SessionProviderChoices.menuGroups`, `keyGone`, `subscriptionOnlyNote`), so
+    /// a heading re-worded at one end reddens here.
+    func testTheProviderLevelSaysWhatTheWebsSays() throws {
+        let web = try source(Self.webComposer)
+        func says(_ piece: String) {
+            XCTAssertTrue(web.contains(piece), "the web composer no longer says `\(piece)`")
+        }
+        let login = ProviderChoice(slug: "claude", label: "Default", kind: .login, brandKey: "anthropic", modelLabel: "Opus 5")
+        let pool = ProviderChoice(slug: "pool", label: "Claude accounts", kind: .pool, brandKey: "anthropic", modelLabel: "Opus 5")
+        let key = ProviderChoice(slug: "deepseek", label: "DeepSeek", kind: .key, brandKey: "deepseek", modelLabel: "DeepSeek V4 Pro")
+        let groups = SessionProviderChoices.menuGroups([login, pool, key], listed: true, runnerName: "hpc")
+        XCTAssertEqual(groups.map(\.title), ["Signed in on hpc", "Account pools", "API keys"])
+        says("? `Signed in on ${runnerLabel}` : `On ${runnerLabel}`")
+        says("...providerGroup('pools', 'Account pools', listedChoices.filter((c) => c.kind === 'pool')),")
+        says("...providerGroup('keys', 'API keys', listedChoices.filter((c) => c.kind === 'key')),")
+        // OpenCode's own configuration is "on" the machine rather than signed in there.
+        let own = ProviderChoice(slug: "opencode", label: "OpenCode's own sign-in", kind: .opencode, brandKey: nil,
+                                 modelLabel: "Managed by OpenCode")
+        XCTAssertEqual(SessionProviderChoices.menuGroups([own, key], listed: true, runnerName: "hpc").first?.title, "On hpc")
+        // The session's own key, when its engine no longer lists it, leads under its own heading.
+        let gone = ProviderChoice(slug: "gone", label: "gone", kind: .key, brandKey: nil, modelLabel: "")
+        XCTAssertEqual(SessionProviderChoices.menuGroups([gone, key], listed: false, runnerName: "hpc").map(\.title),
+                       ["This session's key", "API keys"])
+        says("label: \"This session's key\", children: [sessionKeyRow(providerSwitchChoices[0])]")
+        // What became of it: turned off, or deleted.
+        let deleted = SessionProviderChoices.KeyGone.deleted
+        let off = SessionProviderChoices.KeyGone.turnedOff(providerID: "p1")
+        says("return row.enabled ? null : { status: '\(off.status)', href: `/providers/${encodeId(row.id)}` };")
+        says("return shownProvider === AgentProvider.DSH ? null : { status: '\(deleted.status)' };")
+        says("{shownKeyGone.status === 'Key deleted' ? '\(deleted.rowStatus)' : shownKeyGone.status}")
+        XCTAssertEqual(off.rowStatus, off.status)
+        // What the Provider row says it is on.
+        says("? 'Automatic'")
+        says("? '\(SessionProviderChoices.providerValue(own, provider: "opencode", automatic: false, accountLabel: nil))'")
+        // A subscription token's absence under OpenCode, said rather than left to be wondered about.
+        let max = ConfiguredProvider(slug: "claude-max", label: "Claude Max", runtime: "claude", engines: ["claude"])
+        XCTAssertEqual(SessionProviderChoices.subscriptionOnlyNote(engine: "opencode", configured: [max]),
+                       "Claude Max isn’t here: a subscription token runs on Claude Code only.")
+        XCTAssertNil(SessionProviderChoices.subscriptionOnlyNote(engine: "claude", configured: [max]))
+        says("{subscriptionOnly.map((p) => p.label).join(', ')} {subscriptionOnly.length === 1 ? 'isn’t' : 'aren’t'} here: a")
+        says("subscription token runs on Claude Code only.")
+        // The menu's title is the session's own engine, never "A → B".
+        says("const engineTitle = useMemo(() => engineTitleFor(shownEngine), [shownEngine]);")
+        let native = try source(Self.nativeComposer)
+        XCTAssertTrue(native.contains("SessionProviderChoices.engineTitle(console.engine)"))
+        XCTAssertFalse(native.contains("nextProvider:"), "the title no longer says where a held pick goes")
+    }
 }

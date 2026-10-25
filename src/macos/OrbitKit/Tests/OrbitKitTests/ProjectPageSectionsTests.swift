@@ -51,10 +51,11 @@ final class ProjectPageSectionsTests: XCTestCase {
         XCTAssertEqual(finished.text, "A completed conversation is told nothing new — and 2 open tasks still point at it.")
     }
 
-    func testTheCoordinatorsPressRepliesOnlyWhileItIsWaitingOnTheReader() {
-        XCTAssertEqual(ProjectPage.coordinatorPress(finished: false, needsReply: true), "Reply to coordinator")
-        XCTAssertEqual(ProjectPage.coordinatorPress(finished: false, needsReply: false), "Open coordinator")
-        XCTAssertEqual(ProjectPage.coordinatorPress(finished: true, needsReply: true), "Open coordinator")
+    func testTheCoordinatorsPressSaysWhatWaitsOnTheReader() {
+        XCTAssertEqual(ProjectPage.coordinatorPress(finished: false, waiting: 1), "Review 1 request")
+        XCTAssertEqual(ProjectPage.coordinatorPress(finished: false, waiting: 2), "Review 2 requests")
+        XCTAssertEqual(ProjectPage.coordinatorPress(finished: false, waiting: 0), "Open coordinator")
+        XCTAssertEqual(ProjectPage.coordinatorPress(finished: true, waiting: 1), "Open coordinator")
     }
 
     // MARK: blockers

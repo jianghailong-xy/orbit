@@ -1,12 +1,10 @@
 import { expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
-// Helpers for composer*.browser.mjs. Every check runs the same script against the fixture's AntD
-// field (?impl=ant, what WorkspaceView/TaskDetailPanel render today) and the Orbit Textarea, then
-// compares what the browser reports. Nothing here injects styles except the explicit glyph probe.
+// Helpers for composer*.browser.mjs: each check drives the fixture's Orbit Textarea in the session composer or
+// the comment box and records what the browser reports. Nothing here injects styles except the explicit glyph probe.
 
-export const IMPLS = ['ant', 'orbit'];
-// AntD keeps its hidden measuring textarea in <body>; the field under test is the labelled one.
+// The field under test is the labelled textarea (Orbit attaches a measuring twin only while measuring).
 export const FIELD = 'textarea[aria-label]';
 
 export const STYLE = ['display', 'boxSizing', 'width', 'height', 'minHeight', 'maxHeight', 'overflowX', 'overflowY', 'resize',
@@ -16,16 +14,16 @@ export const STYLE = ['display', 'boxSizing', 'width', 'height', 'minHeight', 'm
   'lineHeight', 'letterSpacing', 'wordSpacing', 'textIndent', 'textTransform', 'textRendering', 'fontVariant',
   'whiteSpace', 'wordBreak', 'overflowWrap', 'tabSize', 'boxShadow', 'outlineStyle', 'outlineWidth', 'outlineColor',
   'outlineOffset', 'cursor', 'textOverflow', 'position', 'zIndex', 'opacity', 'transform', 'flexGrow', 'flexShrink', 'flexBasis'];
-// Transitions are compared on their own: under prefers-reduced-motion Orbit text controls do not
-// animate (P1.2/P2.1 rule) while AntD keeps 0.3s; with normal motion they must be equal.
+// Transitions are read on their own: under prefers-reduced-motion Orbit text controls do not
+// animate (P1.2/P2.1 rule).
 export const MOTION = ['transitionProperty', 'transitionDuration', 'transitionTimingFunction', 'transitionDelay'];
 
-export function fixtureUrl(impl, scenario = 'session', query = '') {
-  return `/ui-migration/composer.html?impl=${impl}&scenario=${scenario}${query}`;
+export function fixtureUrl(scenario = 'session', query = '') {
+  return `/ui-migration/composer.html?scenario=${scenario}${query}`;
 }
 
-export async function open(page, info, impl, scenario = 'session', query = '') {
-  await page.goto(fixtureUrl(impl, scenario, query));
+export async function open(page, info, scenario = 'session', query = '') {
+  await page.goto(fixtureUrl(scenario, query));
   await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);
   await page.evaluate(() => document.fonts.ready);
   expect(await page.evaluate(() => ({ width: innerWidth, dpr: devicePixelRatio, scale: visualViewport.scale })))
@@ -89,23 +87,6 @@ export async function fieldState(page, { motion = false } = {}) {
   }, { FIELD, STYLE, MOTION, motion });
 }
 
-/** Exact comparison; layout numbers may differ by one CSS subpixel (1/64px), nothing more. */
-export function differences(name, actual, reference, path = '') {
-  const out = [];
-  if (typeof actual === 'number' && typeof reference === 'number') {
-    if (Math.abs(actual - reference) > 1 / 64) out.push({ case: name, path, orbit: actual, ant: reference });
-    return out;
-  }
-  if (actual && reference && typeof actual === 'object' && typeof reference === 'object') {
-    for (const key of new Set([...Object.keys(actual), ...Object.keys(reference)])) {
-      out.push(...differences(name, actual[key], reference[key], path ? `${path}.${key}` : key));
-    }
-    return out;
-  }
-  if (actual !== reference) out.push({ case: name, path, orbit: actual, ant: reference });
-  return out;
-}
-
 /** Pixel comparison of two PNGs, decoded by the page itself (no image library in this repo). */
 export async function pixelDiff(page, a, b) {
   return page.evaluate(async ([a, b]) => {
@@ -141,11 +122,9 @@ export async function pixelDiff(page, a, b) {
 }
 
 /**
- * The composer and anything it opens above itself, clipped from the viewport — as first painted,
- * and again after both pages repaint it from scratch. AntD's two-pass measurement repaints part of
- * the field while it settles, which Chromium can rasterize into slightly different antialiased
- * corner pixels than one full paint; a brief opacity change on <main> (no layout, focus or hover
- * change) repaints the whole region the same way in both pages. The repainted capture is compared.
+ * The composer and anything it opens above itself, clipped from the viewport — as first painted, and
+ * again after the page repaints it from scratch: a brief opacity change on <main> (no layout, focus or
+ * hover change) repaints the whole region.
  */
 export async function composerShot(page) {
   const raw = await clipShot(page);

@@ -1,0 +1,10 @@
+{
+  "install": "__WORK__/.cursor/hooks/mark.sh environment-install",
+  "start": "__WORK__/.cursor/hooks/mark.sh environment-start",
+  "terminals": [
+    {
+      "name": "t",
+      "command": "__WORK__/.cursor/hooks/mark.sh environment-terminal"
+    }
+  ]
+}

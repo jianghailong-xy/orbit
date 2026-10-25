@@ -2,7 +2,6 @@
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NEAR_BOTTOM } from '../lib/tailPinning';
@@ -300,9 +299,7 @@ async function mountTranscript(): Promise<FakeEventSource> {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
-          <AntApp>
-            <WorkspaceView runner={RUNNER} />
-          </AntApp>
+          <WorkspaceView runner={RUNNER} />
         </MemoryRouter>
       </QueryClientProvider>,
     );

@@ -1,0 +1,19 @@
+[WebServer] (node:1603288) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 88 P0.2 originals, 150 main drift references, 14 accepted migration differences.
+
+Running 2 tests using 1 worker
+
+(node:1603711) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-pilot-share-again-d49a8749b/shots/chromium-light-desktop/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-pilot-share-again-d49a8749b/shots/chromium-light-desktop/pilot-share-error.png, writing actual.
+  ✓  1 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (3.8s)
+(node:1604618) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-pilot-share-again-d49a8749b/shots/chromium-dark-desktop/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-pilot-share-again-d49a8749b/shots/chromium-dark-desktop/pilot-share-error.png, writing actual.
+  ✓  2 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (3.1s)
+
+  2 passed (11.6s)
+commit d49a8749be97c5654ca35230e1fa4087a199a98e entry pilot exit 0 start 2026-10-09T01:18:39Z end 2026-10-09T01:18:53Z screenshots 4

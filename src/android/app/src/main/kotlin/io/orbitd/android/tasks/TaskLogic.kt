@@ -322,6 +322,7 @@ object TaskDetailCopy {
     const val runsHeading = "Runs"
     const val commentsHeading = "Comments"
     const val runNow = "Run now"
+    const val nothingStartsThisTask = "Nothing starts this task by itself: auto-run needs a prerequisite or a project, and it has neither."
     const val assigneeLabel = "Assignee"
     const val providerLabel = "Provider"
     const val modelLabel = "Model"
@@ -400,6 +401,14 @@ object TaskDetailCopy {
         "DENIED" to "refusing is final for this crossing — file the work yourself if you change your mind",
         "APPLIED" to "this answer has been spent; it authorises nothing further",
     )
+    /** What each state means for a request to move this task (iOS 779471b97), where `crossingStateMeaning` speaks for a filing: the
+     * task is already filed, so "not filed anywhere until you answer" would be false of it. */
+    val moveTaskStateMeaning = mapOf(
+        "PENDING" to "the task stays in its project until you answer, and confirming moves it",
+        "APPROVED" to "the task has not moved: this yes was recorded without moving it",
+        "DENIED" to "refusing is final for this request, and the task stays where it is",
+        "APPLIED" to "the task was moved when this request was confirmed",
+    )
     const val followTask = "Follow task"
     const val loadingWatches = "Loading watches…"
     const val watchesUnavailable = "Couldn’t load watches."
@@ -431,6 +440,12 @@ object TaskDetailCopy {
     fun wouldHavePicked(pick: String, level: String) = "✦ Smart selection would have picked $pick ($level)"
     fun why(pick: String) = "Why $pick"
     const val usageLimitNote = "a failure from a usage limit would not have moved the tier"
+    // The composer's chip on a task run smart selection routed (iOS 6826eed7e, 4622c6a60): its menu's head, its note, and the way to
+    // the task; what the chip's spoken name ends on while it carries the ✦.
+    fun pickedBySmartSelection(tier: String) = "Picked by smart selection · tier $tier"
+    const val chipPickedBySmartSelection = ", picked by smart selection"
+    const val modelChangeAppliesToThisRun = "Changing the model here applies to this run only. To fix the model for every run, set it on the task."
+    const val openTask = "Open task ›"
     // TasksView.swift's own words beside the copy file's.
     const val loadFailed = "Task couldn't be loaded"
     const val runDisabledBlockedFailed = "A prerequisite failed or was cancelled — resolve it first."
@@ -669,6 +684,14 @@ object TaskDetailLogic {
         else -> null
     }
 
+    /** OrbitKit's `runNowHint`: on a Run that can be taken, that it is the task's only start. Auto-run never picks up an
+     * OPEN task in no project that has no prerequisites, and a scheduled start does start it, so only that task gets it —
+     * and not from a row that does not carry its prerequisites. */
+    fun runNowHint(task: JsonObject): String? = TaskDetailCopy.nothingStartsThisTask.takeIf {
+        task.text("status") == "OPEN" && task.text("projectId") == null && (task["dependsOn"] as? JsonArray)?.isEmpty() == true &&
+            task.text("runAt").isNullOrEmpty()
+    }
+
     fun createdFootnote(creatorName: String?, createdAt: String?, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String? {
         val time = TaskTime.local(createdAt, zone, locale)
         val who = creatorName?.takeUnless { it.isBlank() }
@@ -802,7 +825,8 @@ object TaskDetailLogic {
         val crossing = view.obj("crossing") ?: return absent(TaskDetailCopy.crossingLabel, view.text("crossingAbsentReason"))
         val state = crossing.text("state").orEmpty()
         val notes = buildList {
-            TaskDetailCopy.crossingStateMeaning[state]?.let(::add)
+            // A request to move the task reads as a move.
+            (if (crossing.text("kind") == "MOVE_TASK") TaskDetailCopy.moveTaskStateMeaning else TaskDetailCopy.crossingStateMeaning)[state]?.let(::add)
             val from = crossing.obj("from")?.text("title"); val to = crossing.obj("to")?.text("title")
             if (from != null && to != null) add("$from → $to")
             crossing.text("code")?.let { code -> add(listOfNotNull(code, crossing.text("requiredAction")).joinToString(" ")) }
@@ -839,11 +863,14 @@ object TaskDetailLogic {
     /** A tier picked by a person is their own: the coordinator's reason is cleared with it. */
     fun modelHintRequest(level: String?) = buildJsonObject { put("modelHint", level?.let(::JsonPrimitive) ?: JsonNull); put("modelHintReason", JsonNull) }
 
-    fun runRoute(session: JsonObject): JsonObject? = session.obj("route")?.takeIf { !it.text("level").isNullOrEmpty() }
+    /** The decision behind a run, when it named a tier. A route with no tier routed nothing, and with the account's switch off
+     * (the default) there is none: runs read as before routing (iOS 9fb3ae6ee). */
+    fun runRoute(session: JsonObject, smartSelection: Boolean): JsonObject? =
+        session.obj("route")?.takeIf { smartSelection && !it.text("level").isNullOrEmpty() }
     fun routePick(route: JsonObject, modelLabel: (String) -> String) =
         listOf(route.text("model")?.let(modelLabel) ?: route.text("provider").orEmpty(), route.text("effort").orEmpty()).filter { it.isNotEmpty() }.joinToString(" · ")
-    fun runModelLine(session: JsonObject, modelLabel: (String) -> String): String? {
-        val applied = runRoute(session)?.flag("applied") == true
+    fun runModelLine(session: JsonObject, smartSelection: Boolean, modelLabel: (String) -> String): String? {
+        val applied = runRoute(session, smartSelection)?.flag("applied") == true
         val ranOn = session.text("model")?.takeIf { it.isNotEmpty() } ?: if (applied) session.obj("route")?.text("model")?.takeIf { it.isNotEmpty() } else null
         ranOn ?: return null
         val ranAt = session.text("effort")?.takeIf { it.isNotEmpty() } ?: if (applied) session.obj("route")?.text("effort")?.takeIf { it.isNotEmpty() } else null
@@ -931,4 +958,39 @@ fun mentionedWorkspaceIds(body: String, workspaces: List<JsonObject>): List<Stri
     val name = workspace.text("name")?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
     val pattern = Regex("(?:^|\\s)@" + Regex.escape(name) + "(?![\\w])", RegexOption.IGNORE_CASE)
     workspace.text("id")?.takeIf { pattern.containsMatchIn(body) }
+}
+
+/**
+ * One write of a task's run pins (docs/provider-engine-contract.md §1.2, §3.5): [engine] and [provider] are each left as they are
+ * (null), taken back (`Pin(null)`) or set, three-state on the wire; the model pin goes with every move, since a model id means
+ * something only inside one engine and provider's space.
+ */
+data class TaskPin(val engine: Pin? = null, val provider: Pin? = null) {
+    data class Pin(val value: String?)
+    fun request(): JsonObject = buildJsonObject {
+        engine?.let { put("engine", it.value?.let(::JsonPrimitive) ?: JsonNull) }
+        provider?.let { put("provider", it.value?.let(::JsonPrimitive) ?: JsonNull) }
+        put("model", JsonNull)
+    }
+}
+
+/** What a press on a task's Engine or Provider row writes (board 6; web TaskDetailPanel's pinEngine / pinProvider), or null when it
+ * changes nothing. */
+object TaskPins {
+    /** Pin [engine], or take every pin back (null): the task then runs on what its assignee last ran. A pinned credential the new
+     * engine does not run ([providerRuns] are the engines the pinned one runs on) gives way to that engine's default. */
+    fun engine(engine: String?, pinnedEngine: String?, pinnedProvider: String?, providerRuns: List<String>): TaskPin? = when {
+        engine == pinnedEngine -> null
+        engine == null -> TaskPin(TaskPin.Pin(null), TaskPin.Pin(null))
+        pinnedProvider != null && engine !in providerRuns -> TaskPin(TaskPin.Pin(engine), TaskPin.Pin(null))
+        else -> TaskPin(TaskPin.Pin(engine))
+    }
+
+    /** Pin [slug] with the engine it runs on here, [engine] — a task names the pair — or take the credential pin back (null), which
+     * leaves the engine's default: its own sign-in on the runner, OpenCode's own configuration, the first DeepSeek key. */
+    fun provider(slug: String?, pinnedProvider: String?, engine: String): TaskPin? = when {
+        slug == pinnedProvider -> null
+        slug == null -> TaskPin(provider = TaskPin.Pin(null))
+        else -> TaskPin(TaskPin.Pin(engine), TaskPin.Pin(slug))
+    }
 }

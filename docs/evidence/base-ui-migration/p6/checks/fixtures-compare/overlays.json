@@ -1,0 +1,1272 @@
+{
+ "tests": {
+  "overlays-app-frame.browser.mjs › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "scroll-positions": {
+     "differences": 6,
+     "sample": [
+      {
+       "path": "[0].pageScrollTop",
+       "before": 1646,
+       "after": 1606
+      },
+      {
+       "path": "[1].pageScrollTop",
+       "before": 1646,
+       "after": 1606
+      },
+      {
+       "path": "[2].pageScrollTop",
+       "before": 1646,
+       "after": 1606
+      },
+      {
+       "path": "[3].pageScrollTop",
+       "before": 1646,
+       "after": 1606
+      },
+      {
+       "path": "[4].pageScrollTop",
+       "before": 1646,
+       "after": 1606
+      },
+      {
+       "path": "[5].pageScrollTop",
+       "before": 1646,
+       "after": 1606
+      }
+     ]
+    }
+   }
+  },
+  "overlays-app-frame.browser.mjs › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "scroll-positions": {
+     "differences": 6,
+     "sample": [
+      {
+       "path": "[0].pageScrollTop",
+       "before": 1646,
+       "after": 1606
+      },
+      {
+       "path": "[1].pageScrollTop",
+       "before": 1646,
+       "after": 1606
+      },
+      {
+       "path": "[2].pageScrollTop",
+       "before": 1646,
+       "after": 1606
+      },
+      {
+       "path": "[3].pageScrollTop",
+       "before": 1646,
+       "after": 1606
+      },
+      {
+       "path": "[4].pageScrollTop",
+       "before": 1646,
+       "after": 1606
+      },
+      {
+       "path": "[5].pageScrollTop",
+       "before": 1646,
+       "after": 1606
+      }
+     ]
+    }
+   }
+  },
+  "overlays-app-frame.browser.mjs › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "scroll-positions": {
+     "differences": 6,
+     "sample": [
+      {
+       "path": "[0].pageScrollTop",
+       "before": 1652,
+       "after": 1612
+      },
+      {
+       "path": "[1].pageScrollTop",
+       "before": 1652,
+       "after": 1612
+      },
+      {
+       "path": "[2].pageScrollTop",
+       "before": 1652,
+       "after": 1612
+      },
+      {
+       "path": "[3].pageScrollTop",
+       "before": 1652,
+       "after": 1612
+      },
+      {
+       "path": "[4].pageScrollTop",
+       "before": 1652,
+       "after": 1612
+      },
+      {
+       "path": "[5].pageScrollTop",
+       "before": 1652,
+       "after": 1612
+      }
+     ]
+    }
+   }
+  },
+  "overlays-app-frame.browser.mjs › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "scroll-positions": {
+     "differences": 6,
+     "sample": [
+      {
+       "path": "[0].pageScrollTop",
+       "before": 1652,
+       "after": 1612
+      },
+      {
+       "path": "[1].pageScrollTop",
+       "before": 1652,
+       "after": 1612
+      },
+      {
+       "path": "[2].pageScrollTop",
+       "before": 1652,
+       "after": 1612
+      },
+      {
+       "path": "[3].pageScrollTop",
+       "before": 1652,
+       "after": 1612
+      },
+      {
+       "path": "[4].pageScrollTop",
+       "before": 1652,
+       "after": 1612
+      },
+      {
+       "path": "[5].pageScrollTop",
+       "before": 1652,
+       "after": 1612
+      }
+     ]
+    }
+   }
+  },
+  "overlays-app-frame.browser.mjs › Orbit confirm leaves the page where it was scrolled, before and after a notice › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit confirm leaves the page where it was scrolled, before and after a notice › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "scroll-positions": {
+     "differences": 6,
+     "sample": [
+      {
+       "path": "[0].pageScrollTop",
+       "before": 1686,
+       "after": 1606
+      },
+      {
+       "path": "[1].pageScrollTop",
+       "before": 1686,
+       "after": 1606
+      },
+      {
+       "path": "[2].pageScrollTop",
+       "before": 1686,
+       "after": 1606
+      },
+      {
+       "path": "[3].pageScrollTop",
+       "before": 1686,
+       "after": 1606
+      },
+      {
+       "path": "[4].pageScrollTop",
+       "before": 1686,
+       "after": 1606
+      },
+      {
+       "path": "[5].pageScrollTop",
+       "before": 1686,
+       "after": 1606
+      }
+     ]
+    }
+   }
+  },
+  "overlays-app-frame.browser.mjs › Orbit confirm leaves the page where it was scrolled, before and after a notice › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit confirm leaves the page where it was scrolled, before and after a notice › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "scroll-positions": {
+     "differences": 6,
+     "sample": [
+      {
+       "path": "[0].pageScrollTop",
+       "before": 1686,
+       "after": 1606
+      },
+      {
+       "path": "[1].pageScrollTop",
+       "before": 1686,
+       "after": 1606
+      },
+      {
+       "path": "[2].pageScrollTop",
+       "before": 1686,
+       "after": 1606
+      },
+      {
+       "path": "[3].pageScrollTop",
+       "before": 1686,
+       "after": 1606
+      },
+      {
+       "path": "[4].pageScrollTop",
+       "before": 1686,
+       "after": 1606
+      },
+      {
+       "path": "[5].pageScrollTop",
+       "before": 1686,
+       "after": 1606
+      }
+     ]
+    }
+   }
+  },
+  "overlays-app-frame.browser.mjs › Orbit confirm leaves the page where it was scrolled, before and after a notice › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit confirm leaves the page where it was scrolled, before and after a notice › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "scroll-positions": {
+     "differences": 6,
+     "sample": [
+      {
+       "path": "[0].pageScrollTop",
+       "before": 1692,
+       "after": 1612
+      },
+      {
+       "path": "[1].pageScrollTop",
+       "before": 1692,
+       "after": 1612
+      },
+      {
+       "path": "[2].pageScrollTop",
+       "before": 1692,
+       "after": 1612
+      },
+      {
+       "path": "[3].pageScrollTop",
+       "before": 1692,
+       "after": 1612
+      },
+      {
+       "path": "[4].pageScrollTop",
+       "before": 1692,
+       "after": 1612
+      },
+      {
+       "path": "[5].pageScrollTop",
+       "before": 1692,
+       "after": 1612
+      }
+     ]
+    }
+   }
+  },
+  "overlays-app-frame.browser.mjs › Orbit confirm leaves the page where it was scrolled, before and after a notice › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit confirm leaves the page where it was scrolled, before and after a notice › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "scroll-positions": {
+     "differences": 6,
+     "sample": [
+      {
+       "path": "[0].pageScrollTop",
+       "before": 1692,
+       "after": 1612
+      },
+      {
+       "path": "[1].pageScrollTop",
+       "before": 1692,
+       "after": 1612
+      },
+      {
+       "path": "[2].pageScrollTop",
+       "before": 1692,
+       "after": 1612
+      },
+      {
+       "path": "[3].pageScrollTop",
+       "before": 1692,
+       "after": 1612
+      },
+      {
+       "path": "[4].pageScrollTop",
+       "before": 1692,
+       "after": 1612
+      },
+      {
+       "path": "[5].pageScrollTop",
+       "before": 1692,
+       "after": 1612
+      }
+     ]
+    }
+   }
+  },
+  "overlays-app-frame.browser.mjs › Orbit dialog leaves the page where it was scrolled, before and after a notice › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit dialog leaves the page where it was scrolled, before and after a notice › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit dialog leaves the page where it was scrolled, before and after a notice › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit dialog leaves the page where it was scrolled, before and after a notice › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit dialog leaves the page where it was scrolled, before and after a notice › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit dialog leaves the page where it was scrolled, before and after a notice › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit dialog leaves the page where it was scrolled, before and after a notice › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit dialog leaves the page where it was scrolled, before and after a notice › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit right drawer leaves the page where it was scrolled, before and after a notice › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit right drawer leaves the page where it was scrolled, before and after a notice › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "scroll-positions": {
+     "differences": 6,
+     "sample": [
+      {
+       "path": "[0].pageScrollTop",
+       "before": 1606,
+       "after": 1566
+      },
+      {
+       "path": "[1].pageScrollTop",
+       "before": 1606,
+       "after": 1566
+      },
+      {
+       "path": "[2].pageScrollTop",
+       "before": 1606,
+       "after": 1566
+      },
+      {
+       "path": "[3].pageScrollTop",
+       "before": 1606,
+       "after": 1566
+      },
+      {
+       "path": "[4].pageScrollTop",
+       "before": 1606,
+       "after": 1566
+      },
+      {
+       "path": "[5].pageScrollTop",
+       "before": 1606,
+       "after": 1566
+      }
+     ]
+    }
+   }
+  },
+  "overlays-app-frame.browser.mjs › Orbit right drawer leaves the page where it was scrolled, before and after a notice › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit right drawer leaves the page where it was scrolled, before and after a notice › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "scroll-positions": {
+     "differences": 6,
+     "sample": [
+      {
+       "path": "[0].pageScrollTop",
+       "before": 1606,
+       "after": 1566
+      },
+      {
+       "path": "[1].pageScrollTop",
+       "before": 1606,
+       "after": 1566
+      },
+      {
+       "path": "[2].pageScrollTop",
+       "before": 1606,
+       "after": 1566
+      },
+      {
+       "path": "[3].pageScrollTop",
+       "before": 1606,
+       "after": 1566
+      },
+      {
+       "path": "[4].pageScrollTop",
+       "before": 1606,
+       "after": 1566
+      },
+      {
+       "path": "[5].pageScrollTop",
+       "before": 1606,
+       "after": 1566
+      }
+     ]
+    }
+   }
+  },
+  "overlays-app-frame.browser.mjs › Orbit right drawer leaves the page where it was scrolled, before and after a notice › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit right drawer leaves the page where it was scrolled, before and after a notice › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "scroll-positions": {
+     "differences": 6,
+     "sample": [
+      {
+       "path": "[0].pageScrollTop",
+       "before": 1612,
+       "after": 1572
+      },
+      {
+       "path": "[1].pageScrollTop",
+       "before": 1612,
+       "after": 1572
+      },
+      {
+       "path": "[2].pageScrollTop",
+       "before": 1612,
+       "after": 1572
+      },
+      {
+       "path": "[3].pageScrollTop",
+       "before": 1612,
+       "after": 1572
+      },
+      {
+       "path": "[4].pageScrollTop",
+       "before": 1612,
+       "after": 1572
+      },
+      {
+       "path": "[5].pageScrollTop",
+       "before": 1612,
+       "after": 1572
+      }
+     ]
+    }
+   }
+  },
+  "overlays-app-frame.browser.mjs › Orbit right drawer leaves the page where it was scrolled, before and after a notice › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › Orbit right drawer leaves the page where it was scrolled, before and after a notice › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "scroll-positions": {
+     "differences": 6,
+     "sample": [
+      {
+       "path": "[0].pageScrollTop",
+       "before": 1612,
+       "after": 1572
+      },
+      {
+       "path": "[1].pageScrollTop",
+       "before": 1612,
+       "after": 1572
+      },
+      {
+       "path": "[2].pageScrollTop",
+       "before": 1612,
+       "after": 1572
+      },
+      {
+       "path": "[3].pageScrollTop",
+       "before": 1612,
+       "after": 1572
+      },
+      {
+       "path": "[4].pageScrollTop",
+       "before": 1612,
+       "after": 1572
+      },
+      {
+       "path": "[5].pageScrollTop",
+       "before": 1612,
+       "after": 1572
+      }
+     ]
+    }
+   }
+  },
+  "overlays-app-frame.browser.mjs › a notice leaves the document one viewport high, with no scrollbar of its own › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › a notice leaves the document one viewport high, with no scrollbar of its own › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › a notice leaves the document one viewport high, with no scrollbar of its own › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › a notice leaves the document one viewport high, with no scrollbar of its own › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › a notice leaves the document one viewport high, with no scrollbar of its own › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › a notice leaves the document one viewport high, with no scrollbar of its own › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › a notice leaves the document one viewport high, with no scrollbar of its own › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-app-frame.browser.mjs › a notice leaves the document one viewport high, with no scrollbar of its own › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-close-hover.browser.mjs › the dialog Close takes the replaced modal Close hover background › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "Orbit-close-hover": {
+     "equal": false,
+     "pixels": 68,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "overlays-close-hover.browser.mjs › the dialog Close takes the replaced modal Close hover background › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-close-hover.browser.mjs › the dialog Close takes the replaced modal Close hover background › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "Orbit-close-hover": {
+     "equal": false,
+     "pixels": 50,
+     "maxChannelDiff": 116
+    }
+   }
+  },
+  "overlays-close-hover.browser.mjs › the dialog Close takes the replaced modal Close hover background › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-close-hover.browser.mjs › the dialog Close takes the replaced modal Close hover background › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "Orbit-close-hover": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 96
+    }
+   }
+  },
+  "overlays-close-hover.browser.mjs › the dialog Close takes the replaced modal Close hover background › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays-close-hover.browser.mjs › the dialog Close takes the replaced modal Close hover background › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "Orbit-close-hover": {
+     "equal": false,
+     "pixels": 37,
+     "maxChannelDiff": 116
+    }
+   }
+  },
+  "overlays-close-hover.browser.mjs › the dialog Close takes the replaced modal Close hover background › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › a dialog taller than the screen keeps its scroll when the control with focus gives way › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › a dialog taller than the screen keeps its scroll when the control with focus gives way › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › a dialog taller than the screen keeps its scroll when the control with focus gives way › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › a dialog taller than the screen keeps its scroll when the control with focus gives way › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › a dialog taller than the screen keeps its scroll when the control with focus gives way › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › a dialog taller than the screen keeps its scroll when the control with focus gives way › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › a dialog taller than the screen keeps its scroll when the control with focus gives way › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › a dialog taller than the screen keeps its scroll when the control with focus gives way › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "confirm-error": {
+     "equal": false,
+     "pixels": 73528,
+     "maxChannelDiff": 98
+    },
+    "confirm-pending": {
+     "equal": false,
+     "pixels": 73528,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "confirm-error": {
+     "equal": false,
+     "pixels": 67674,
+     "maxChannelDiff": 98
+    },
+    "confirm-pending": {
+     "equal": false,
+     "pixels": 69955,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "confirm-error": {
+     "equal": false,
+     "pixels": 20914,
+     "maxChannelDiff": 123
+    },
+    "confirm-pending": {
+     "equal": false,
+     "pixels": 20914,
+     "maxChannelDiff": 123
+    }
+   }
+  },
+  "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "confirm-error": {
+     "equal": false,
+     "pixels": 17525,
+     "maxChannelDiff": 123
+    },
+    "confirm-pending": {
+     "equal": false,
+     "pixels": 19351,
+     "maxChannelDiff": 123
+    }
+   }
+  },
+  "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "confirm-error": {
+     "equal": false,
+     "pixels": 72456,
+     "maxChannelDiff": 98
+    },
+    "confirm-pending": {
+     "equal": false,
+     "pixels": 72456,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "confirm-error": {
+     "equal": false,
+     "pixels": 69295,
+     "maxChannelDiff": 98
+    },
+    "confirm-pending": {
+     "equal": false,
+     "pixels": 70584,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "confirm-error": {
+     "equal": false,
+     "pixels": 21343,
+     "maxChannelDiff": 123
+    },
+    "confirm-pending": {
+     "equal": false,
+     "pixels": 21343,
+     "maxChannelDiff": 123
+    }
+   }
+  },
+  "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "confirm-error": {
+     "equal": false,
+     "pixels": 19041,
+     "maxChannelDiff": 123
+    },
+    "confirm-pending": {
+     "equal": false,
+     "pixels": 19770,
+     "maxChannelDiff": 123
+    }
+   }
+  },
+  "overlays.browser.mjs › confirmation owner unmount and immediate sequential prompts do not reuse stale state › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › confirmation owner unmount and immediate sequential prompts do not reuse stale state › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › confirmation owner unmount and immediate sequential prompts do not reuse stale state › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › confirmation owner unmount and immediate sequential prompts do not reuse stale state › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › confirmation owner unmount and immediate sequential prompts do not reuse stale state › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › confirmation owner unmount and immediate sequential prompts do not reuse stale state › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › confirmation owner unmount and immediate sequential prompts do not reuse stale state › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › confirmation owner unmount and immediate sequential prompts do not reuse stale state › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › dialog and drawers open with no control hovered or focused; the sheet field takes hover and focus › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › dialog and drawers open with no control hovered or focused; the sheet field takes hover and focus › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "Orbit-bottom drawer": {
+     "equal": false,
+     "pixels": 35,
+     "maxChannelDiff": 2
+    },
+    "Orbit-dialog": {
+     "equal": false,
+     "pixels": 31,
+     "maxChannelDiff": 19
+    }
+   }
+  },
+  "overlays.browser.mjs › dialog and drawers open with no control hovered or focused; the sheet field takes hover and focus › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › dialog and drawers open with no control hovered or focused; the sheet field takes hover and focus › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "Orbit-bottom drawer": {
+     "equal": false,
+     "pixels": 38,
+     "maxChannelDiff": 2
+    },
+    "Orbit-dialog": {
+     "equal": false,
+     "pixels": 6,
+     "maxChannelDiff": 15
+    }
+   }
+  },
+  "overlays.browser.mjs › dialog and drawers open with no control hovered or focused; the sheet field takes hover and focus › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › dialog and drawers open with no control hovered or focused; the sheet field takes hover and focus › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "Orbit-dialog": {
+     "equal": false,
+     "pixels": 235,
+     "maxChannelDiff": 89
+    }
+   }
+  },
+  "overlays.browser.mjs › dialog and drawers open with no control hovered or focused; the sheet field takes hover and focus › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › dialog and drawers open with no control hovered or focused; the sheet field takes hover and focus › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "Orbit-dialog": {
+     "equal": false,
+     "pixels": 215,
+     "maxChannelDiff": 106
+    }
+   }
+  },
+  "overlays.browser.mjs › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › dismissal controls, retained form values, long content and bottom sheet remain usable › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "bottom-sheet": {
+     "equal": false,
+     "pixels": 77516,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "overlays.browser.mjs › dismissal controls, retained form values, long content and bottom sheet remain usable › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "bottom-sheet": {
+     "equal": false,
+     "pixels": 73642,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "overlays.browser.mjs › dismissal controls, retained form values, long content and bottom sheet remain usable › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "bottom-sheet": {
+     "equal": false,
+     "pixels": 23906,
+     "maxChannelDiff": 123
+    }
+   }
+  },
+  "overlays.browser.mjs › dismissal controls, retained form values, long content and bottom sheet remain usable › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "bottom-sheet": {
+     "equal": false,
+     "pixels": 21334,
+     "maxChannelDiff": 123
+    }
+   }
+  },
+  "overlays.browser.mjs › dismissal controls, retained form values, long content and bottom sheet remain usable › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "bottom-sheet": {
+     "equal": false,
+     "pixels": 76581,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "overlays.browser.mjs › dismissal controls, retained form values, long content and bottom sheet remain usable › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "bottom-sheet": {
+     "equal": false,
+     "pixels": 74033,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "overlays.browser.mjs › dismissal controls, retained form values, long content and bottom sheet remain usable › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "bottom-sheet": {
+     "equal": false,
+     "pixels": 24479,
+     "maxChannelDiff": 123
+    }
+   }
+  },
+  "overlays.browser.mjs › dismissal controls, retained form values, long content and bottom sheet remain usable › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "bottom-sheet": {
+     "equal": false,
+     "pixels": 21746,
+     "maxChannelDiff": 123
+    }
+   }
+  },
+  "overlays.browser.mjs › explicit focus, native form validation, motion and document scroll restore correctly › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › explicit focus, native form validation, motion and document scroll restore correctly › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › explicit focus, native form validation, motion and document scroll restore correctly › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › explicit focus, native form validation, motion and document scroll restore correctly › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › explicit focus, native form validation, motion and document scroll restore correctly › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › explicit focus, native form validation, motion and document scroll restore correctly › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › explicit focus, native form validation, motion and document scroll restore correctly › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › explicit focus, native form validation, motion and document scroll restore correctly › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › nested dialog and imperative confirmation close only the top layer › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "drawer-with-dialog": {
+     "equal": false,
+     "pixels": 75966,
+     "maxChannelDiff": 92
+    }
+   }
+  },
+  "overlays.browser.mjs › nested dialog and imperative confirmation close only the top layer › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "drawer-with-dialog": {
+     "equal": false,
+     "pixels": 6,
+     "maxChannelDiff": 1
+    }
+   }
+  },
+  "overlays.browser.mjs › nested dialog and imperative confirmation close only the top layer › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "drawer-with-dialog": {
+     "equal": false,
+     "pixels": 20197,
+     "maxChannelDiff": 123
+    }
+   }
+  },
+  "overlays.browser.mjs › nested dialog and imperative confirmation close only the top layer › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › nested dialog and imperative confirmation close only the top layer › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "drawer-with-dialog": {
+     "equal": false,
+     "pixels": 74867,
+     "maxChannelDiff": 92
+    }
+   }
+  },
+  "overlays.browser.mjs › nested dialog and imperative confirmation close only the top layer › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › nested dialog and imperative confirmation close only the top layer › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "drawer-with-dialog": {
+     "equal": false,
+     "pixels": 20596,
+     "maxChannelDiff": 123
+    }
+   }
+  },
+  "overlays.browser.mjs › nested dialog and imperative confirmation close only the top layer › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › open portals inherit live theme changes and composing Escape preserves the dialog › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › open portals inherit live theme changes and composing Escape preserves the dialog › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › open portals inherit live theme changes and composing Escape preserves the dialog › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › open portals inherit live theme changes and composing Escape preserves the dialog › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › open portals inherit live theme changes and composing Escape preserves the dialog › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › open portals inherit live theme changes and composing Escape preserves the dialog › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › open portals inherit live theme changes and composing Escape preserves the dialog › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "overlays.browser.mjs › open portals inherit live theme changes and composing Escape preserves the dialog › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  }
+ },
+ "totals": {
+  "tests": 120,
+  "bothPassed": 120,
+  "statusDiffers": 0,
+  "onlyBefore": 0,
+  "onlyAfter": 0,
+  "jsonAttachments": 120,
+  "jsonDiffering": 12,
+  "pngAttachments": 88,
+  "pngEqual": 49,
+  "pngDiffering": 39
+ }
+}

@@ -57,8 +57,23 @@ describe('the strip is handed the exception cards the owner presses', () => {
   it('passes the cards the transcript draws for the owner, and which side of the reader each is on', () => {
     // The rows the inserts draw, filtered by the cards' own rule — so a press has a card to reach.
     expect(SOURCE).toContain('isOwnerExceptionCard(row)');
-    expect(SOURCE).toContain('exceptions={ownerExceptionRows.map(');
+    expect(SOURCE).toContain('needsYou={ownerExceptionRows.map(');
     // Measured where the sticky bar is measured, off the handle every exception card carries.
     expect(SOURCE).toContain("querySelectorAll<HTMLElement>('[data-open-item]')");
+  });
+});
+
+describe('the strip is handed the questions, never the versions waiting for the coordinator', () => {
+  it('builds the cards it points at from the evidence card’s questions alone', () => {
+    // The versions a paused coordinator is owed are drawn beside the questions, folded, and the
+    // owner may open one to decide it — but it is nobody's question yet, so the set the strip
+    // counts and points at is the questions' and nothing else (`coordinatorQueueRows` stays out).
+    const at = SOURCE.indexOf('const decisionCards = new Set(');
+    expect(at, 'the set the strip is handed was renamed; this scan is reading the wrong thing')
+      .toBeGreaterThan(-1);
+    const built = SOURCE.slice(at, SOURCE.indexOf('\n  );', at));
+    expect(built).toContain('evidenceDecisionCardRows(');
+    expect(built).not.toContain('coordinatorQueueRows');
+    expect(SOURCE).toContain('cards={decisionCards}');
   });
 });

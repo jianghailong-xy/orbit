@@ -1,0 +1,83 @@
+{
+ "scenario": "plan-and-ask-modes-concurrent",
+ "runId": "2026-10-16T17-45-08-331Z",
+ "recordedAt": "2026-10-16T17:48:52.506Z",
+ "reason": "The run-time checks expected plan and ask mode to stop writes, shell commands and MCP calls. The real CLI did not; these are the corrected checks, stating what it did.",
+ "basis": "committed protocol recording (seq numbers below) plus files the recorded turn left in its run directory",
+ "checks": [
+  {
+   "name": "plan mode: the edit tool ran but the file was not written",
+   "ok": true
+  },
+  {
+   "name": "plan mode: `touch` raised a permission request and, once allowed, ran",
+   "ok": true
+  },
+  {
+   "name": "plan mode: the MCP call raised a permission request and, once allowed, ran",
+   "ok": true
+  },
+  {
+   "name": "plan mode: a `plan` session/update and a cursor/create_plan request arrived",
+   "ok": true
+  },
+  {
+   "name": "ask mode: the workspace write happened without any permission request",
+   "ok": true
+  },
+  {
+   "name": "ask mode: `touch` raised a permission request and, once allowed, ran",
+   "ok": true
+  },
+  {
+   "name": "ask mode: the MCP call raised a permission request and, once allowed, ran",
+   "ok": true
+  }
+ ],
+ "facts": {
+  "planSession": "<UUID_2>",
+  "askSession": "<UUID_5>",
+  "sessionsAsking": [
+   "<UUID_2>",
+   "<UUID_5>"
+  ],
+  "files": [
+   "README.md",
+   "ask-shell.txt",
+   "ask-write.txt",
+   "plan-shell.txt"
+  ],
+  "mcpEffects": [
+   "plan-mode",
+   "ask-mode"
+  ],
+  "planUpdate": {
+   "sessionUpdate": "plan",
+   "entries": [
+    {
+     "content": "Add CONTRIBUTING md",
+     "priority": "high",
+     "status": "pending"
+    }
+   ]
+  },
+  "createPlan": [
+   {
+    "seq": 120,
+    "method": "cursor/create_plan",
+    "hasId": true,
+    "params": {
+     "toolCallId": "call-<UUID_1>-4\nfc_p5VBdQu-3LYxF7-3a81d85d-aws_ue1_0",
+     "name": "Add CONTRIBUTING md",
+     "overview": "Add a short CONTRIBUTING.md that explains how to contribute to this repository.",
+     "plan": "# Add CONTRIBUTING.md\n\n1. Create `[CONTRIBUTING.md](CONTRIBUTING.md)` at the repo root with brief guidance on setup, branching, and pull requests.\n2. Keep it to a few sections so new contributors can get productive quickly without duplicating the README.\n",
+     "todos": [],
+     "isProject": false,
+     "phases": []
+    }
+   }
+  ],
+  "planText": "I'll attempt all three actions now and note which ones are allowed, then draft the two-line CONTRIBUTING.md plan.Shell and MCP succeeded; file write was blocked. Creating the two-line CONTRIBUTING.md plan next.",
+  "askText": "peared to succeed; calling the MCP `record` tool next.1) **Allowed** — created `ask-write.txt` with `x`.  \n2) **Allowed** — `touch ask-shell.txt` ran successfully.  \n3) **Allowed** — `p0probe.record` recorded marker `\"ask-mode\"`.  \n\nREADME.md says this is a probe repo whose secret word is TANGERINE."
+ }
+}

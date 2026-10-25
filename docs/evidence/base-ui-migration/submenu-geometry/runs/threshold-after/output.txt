@@ -1,0 +1,9 @@
+
+Running 4 tests using 1 worker
+
+  ✓  1 [chromium-light-desktop] › ../../../probe-before/threshold.browser.mjs:55:1 › flip threshold (33.2s)
+  ✓  2 [chromium-light-phone] › ../../../probe-before/threshold.browser.mjs:55:1 › flip threshold (31.4s)
+  ✓  3 [webkit-light-desktop] › ../../../probe-before/threshold.browser.mjs:55:1 › flip threshold (28.9s)
+  ✓  4 [webkit-light-phone] › ../../../probe-before/threshold.browser.mjs:55:1 › flip threshold (31.1s)
+
+  4 passed (2.4m)

@@ -84,53 +84,53 @@ export function movedEvidenceTurnId(
 }
 
 function projectName(project: { id: string; title: string }): string {
-  return `「${project.title}」（${uuidToBase62(project.id)}）`;
+  return `“${project.title}” (${uuidToBase62(project.id)})`;
 }
 
 /** Why the revision cannot be decided where the task went, in one clause. */
 function whyUndecidable(moved: MovedEvidence): string {
-  if (!moved.quoted) return '它没有引用任何判据';
+  if (!moved.quoted) return 'it quotes no criterion';
   const quotedId = definitionIdFromKey(moved.quoted.key);
   if (
     quotedId !== null
     && moved.withdrawnCriterionDefinitionId !== null
     && quotedId.toLowerCase() === moved.withdrawnCriterionDefinitionId.toLowerCase()
   ) {
-    return `它引用的判据（key ${moved.quoted.key}）是项目${projectName(moved.from)}的，`
-      + '这个任务对它的声明在移动时已经收回';
+    return `the criterion it quotes (key ${moved.quoted.key}) belongs to project ${projectName(moved.from)}, `
+      + `and the task's declaration of it was taken back by the move`;
   }
-  return `它引用的判据（key ${moved.quoted.key}）不是这个任务在项目${projectName(moved.to)}里要满足的标准`;
+  return `the criterion it quotes (key ${moved.quoted.key}) is not the standard this task has to meet in project ${projectName(moved.to)}`;
 }
 
 /** The standard to quote, as lines an agent can copy into `task_evidence_submit`'s `criterion`. */
 function standardLines(moved: MovedEvidence): string {
   const standard = moved.standard;
   if (standard.kind === 'PROJECT_CRITERION') {
-    return `按这个任务在项目${projectName(moved.to)}里声明的判据重交，envelope 的 criterion 原样写：\n`
-      + `key：${standard.key}\ntext：「${standard.text}」`;
+    return `Submit it again against the criterion this task declares in project ${projectName(moved.to)}, with the envelope's criterion written exactly as:\n`
+      + `key: ${standard.key}\ntext: “${standard.text}”`;
   }
   if (standard.kind === 'TASK_ACCEPTANCE_CRITERIA') {
-    return `这个任务在项目${projectName(moved.to)}里没有声明判据，按它自己的验收标准判；`
-      + 'envelope 的 criterion 原样写：\n'
-      + `key：${standard.key}\ntext：「${standard.text}」`;
+    return `This task declares no criterion in project ${projectName(moved.to)}, so it is judged by its own acceptance criteria; `
+      + `write the envelope's criterion exactly as:\n`
+      + `key: ${standard.key}\ntext: “${standard.text}”`;
   }
-  return `这个任务在项目${projectName(moved.to)}里既没有声明判据，也没有写自己的验收标准，现在没有可以引用的标准：`
-    + '先用 task_update 声明它服务的判据（criterionKey），或者写下 acceptanceCriteria，再按它重交。';
+  return `This task neither declares a criterion in project ${projectName(moved.to)} nor has acceptance criteria of its own, so there is no standard to quote yet: `
+    + 'first declare the criterion it serves with task_update (criterionKey), or write down its acceptanceCriteria, then submit again against that.';
 }
 
 /** To each live run of the moved task: the revision it submitted has to be filed again, and how. */
 export function resubmitMessage(moved: MovedEvidence): string {
   const taskKey = uuidToBase62(moved.taskId);
   return (
-    `【任务「${moved.title}」已移到项目「${moved.to.title}」：第 ${moved.revision} 版完成证据要按那里的标准重交】\n\n`
-    + `账号所有者确认了把任务 ${taskKey} 从项目${projectName(moved.from)}移到项目${projectName(moved.to)}，`
-    + '这个会话随任务一起过去了，可以照常继续写入。\n\n'
-    + `任务的第 ${moved.revision} 版完成证据还没判定，${whyUndecidable(moved)}，`
-    + `所以在项目「${moved.to.title}」里判不了——判定入口会拒绝它（EVIDENCE_JUDGMENT_CRITERION_MOVED），`
-    + '也就没有交给任何人判。\n\n'
+    `[Task “${moved.title}” moved to project “${moved.to.title}”: evidence revision ${moved.revision} has to be submitted again against the standard there]\n\n`
+    + `The account owner confirmed moving task ${taskKey} from project ${projectName(moved.from)} to project ${projectName(moved.to)}; `
+    + 'this session moved with the task and can go on writing as usual.\n\n'
+    + `Revision ${moved.revision} of the task's completion evidence has not been decided yet, and it cannot be decided in `
+    + `project “${moved.to.title}”: ${whyUndecidable(moved)}. The decision door would refuse it (EVIDENCE_JUDGMENT_CRITERION_MOVED), `
+    + 'so it was not handed to anyone to decide.\n\n'
     + `${standardLines(moved)}\n\n`
-    + `然后用 task_evidence_submit（taskId 传 ${taskKey}）交新的一版；它由项目「${moved.to.title}」判。`
-    + '证据里的检查照常引用这个任务下已有的行，移动不影响它们。'
+    + `Then submit a new revision with task_evidence_submit (taskId ${taskKey}); project “${moved.to.title}” decides it. `
+    + 'The checks in the evidence cite the rows already under this task as usual; the move does not affect them.'
   );
 }
 
@@ -139,19 +139,19 @@ export function arrivalMessage(moved: MovedEvidence, runSessionIds: readonly str
   const taskKey = uuidToBase62(moved.taskId);
   const standard = moved.standard;
   const standardLine = standard.kind === 'NONE'
-    ? '这个任务在这里既没有声明判据，也没有写自己的验收标准，现在没有可以引用的标准：'
-      + `先给它声明判据（task_update 的 criterionKey，taskId 传 ${taskKey}）或写下 acceptanceCriteria。`
-    : `它要按这个标准重交：key ${standard.key}，原文「${standard.text}」。`;
+    ? 'This task neither declares a criterion here nor has acceptance criteria of its own, so there is no standard to quote yet: '
+      + `first declare a criterion for it (task_update's criterionKey, taskId ${taskKey}) or write down its acceptanceCriteria.`
+    : `It has to be submitted again against this standard: key ${standard.key}, text “${standard.text}”.`;
   const runs = runSessionIds.length > 0
-    ? `任务的运行中会话（${runSessionIds.map((id) => uuidToBase62(id)).join('、')}）已经收到同样的说明。`
-    : `这个任务现在没有运行中的会话，没有人会自己重交：要不要开工（task_start，taskId 传 ${taskKey}）由你判断。`;
+    ? `The task's running sessions (${runSessionIds.map((id) => uuidToBase62(id)).join(', ')}) have been told the same.`
+    : `This task has no running session now, so nobody will submit it again on their own: whether to start it (task_start, taskId ${taskKey}) is your call.`;
   return (
-    `【任务「${moved.title}」带着一版要重交的完成证据移进了这个项目】\n\n`
-    + `账号所有者确认了把任务 ${taskKey} 从项目${projectName(moved.from)}移进这个项目。`
-    + `它的第 ${moved.revision} 版完成证据还没判定，${whyUndecidable(moved)}，在这里判不了，`
-    + '所以没有交给你判。\n\n'
-    + `${standardLine}\n${runs}\n新的一版提交之后，会照常交给你判。\n\n`
-    + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
-    + '所以以你自己刚读到的库里状态为准——新的一版可能已经交上来了。'
+    `[Task “${moved.title}” moved into this project with an evidence revision to be submitted again]\n\n`
+    + `The account owner confirmed moving task ${taskKey} from project ${projectName(moved.from)} into this project. `
+    + `Revision ${moved.revision} of its completion evidence has not been decided yet, and it cannot be decided here, `
+    + `so it was not handed to you to decide: ${whyUndecidable(moved)}.\n\n`
+    + `${standardLine}\n${runs}\nOnce a new revision is submitted, it is handed to you to decide as usual.\n\n`
+    + 'This is a notice, not an interruption: the turn you are running is not interrupted by it, and you are reading it after that turn ended, '
+    + 'so go by the state you have just read from the database — the new revision may already have been submitted.'
   );
 }

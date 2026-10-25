@@ -154,7 +154,9 @@ function prismaFor(s: Scenario) {
       // (providerSlugsOn); none do here.
       findMany: async () => [],
     },
-    runEvent: { aggregate: async () => ({ _max: { seq: 7 } }) },
+    // run_event max(seq) for the reclaim snapshot — raw SQL, never `aggregate`, which Prisma
+    // compiles into an OFFSET subquery the planner cannot flatten.
+    $queryRaw: async () => [{ max: 7 }],
     user: { findUnique: async () => null },
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
     $executeRaw: async () => {
@@ -197,11 +199,12 @@ async function reclaim(s: Scenario): Promise<AgentExecConfig> {
  *  switch is already on the session row by then (updateConfig persists it before queueing this). */
 async function reload(s: Scenario, provider: string): Promise<Record<string, string> | undefined> {
   const prisma = prismaFor({ ...s, provider });
-  return (
+  const built = await (
     controllerFor(prisma) as unknown as {
-      reloadProviderEnv(tx: unknown, sessionId: string, content: string): Promise<Record<string, string> | undefined>;
+      reloadProviderEnv(tx: unknown, sessionId: string, content: string): Promise<{ env?: Record<string, string> }>;
     }
   ).reloadProviderEnv(prisma.tx, SESSION_ID, JSON.stringify({ provider }));
+  return built.env;
 }
 
 test('a workspace on another Codex account dispatches its session in that account\'s CODEX_HOME, through every door', async () => {

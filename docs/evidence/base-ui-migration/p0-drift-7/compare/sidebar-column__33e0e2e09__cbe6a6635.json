@@ -1,0 +1,626 @@
+{
+ "chromium-dark-desktop/breakpoint-961-session.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-dark-desktop/breakpoint-961-session.png left: 0 px | right: 0 px"
+ },
+ "chromium-dark-desktop/breakpoint-961-wiki.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 5411,
+  "detail": "chromium-dark-desktop/breakpoint-961-wiki.png left: 0 px | right: 5411 px box x494-787 y24-55 max178"
+ },
+ "chromium-dark-desktop/notification-error.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-dark-desktop/notification-error.png left: 0 px | right: 0 px"
+ },
+ "chromium-dark-desktop/profile-validation.png": {
+  "run33e0e2e09": "sp-old-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 594,
+  "detail": "chromium-dark-desktop/profile-validation.png left: 0 px | right: 594 px box x525-1246 y28-762 max88"
+ },
+ "chromium-dark-desktop/profile.png": {
+  "run33e0e2e09": "sp-old-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-dark-desktop/profile.png left: 0 px | right: 0 px"
+ },
+ "chromium-dark-desktop/project-graph-fullscreen.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-dark-desktop/project-graph-fullscreen.png left: 0 px | right: 0 px"
+ },
+ "chromium-dark-desktop/project-graph.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-dark-desktop/project-graph.png left: 0 px | right: 0 px"
+ },
+ "chromium-dark-desktop/project-overview.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 15,
+  "detail": "chromium-dark-desktop/project-overview.png left: 0 px | right: 15 px box x312-1247 y154-585 max1\n   right pixels: [(312, 154, 1), (313, 154, 1), (312, 155, 1), (313, 155, 1), (313, 156, 1), (312, 157, 1), (1247, 546, 1), (1247, 547, 1), (1247, 548, 1), (1246, 549, 1), (1247, 549, 1), (1246, 583, 1), (1247, 583, 1), (1246, 584, 1), (1247, 585, 1)]"
+ },
+ "chromium-dark-desktop/projects-error.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-dark-desktop/projects-error.png left: 0 px | right: 0 px"
+ },
+ "chromium-dark-desktop/projects-list.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-dark-desktop/projects-list.png left: 0 px | right: 0 px"
+ },
+ "chromium-dark-desktop/projects-loading.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-dark-desktop/projects-loading.png left: 0 px | right: 0 px"
+ },
+ "chromium-dark-desktop/projects-search-empty.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-dark-desktop/projects-search-empty.png left: 0 px | right: 0 px"
+ },
+ "chromium-dark-desktop/session-attachment-menu.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-dark-desktop/session-attachment-menu.png left: 0 px | right: 0 px"
+ },
+ "chromium-dark-desktop/session-attachment-staged.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-dark-desktop/session-attachment-staged.png left: 0 px | right: 0 px"
+ },
+ "chromium-dark-desktop/session-composer-focus.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-dark-desktop/session-composer-focus.png left: 0 px | right: 0 px"
+ },
+ "chromium-dark-desktop/session-idle.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-dark-desktop/session-idle.png left: 0 px | right: 0 px"
+ },
+ "chromium-dark-desktop/session-streaming.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-dark-desktop/session-streaming.png left: 0 px | right: 0 px"
+ },
+ "chromium-dark-desktop/settings-saved.png": {
+  "run33e0e2e09": "sp-old-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 94098,
+  "detail": "chromium-dark-desktop/settings-saved.png left: 0 px | right: 94098 px box x500-1230 y31-899 max223"
+ },
+ "chromium-dark-desktop/settings.png": {
+  "run33e0e2e09": "sp-old-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 94001,
+  "detail": "chromium-dark-desktop/settings.png left: 0 px | right: 94001 px box x500-1059 y329-899 max223"
+ },
+ "chromium-dark-desktop/task-action-focus.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 3,
+  "detail": "chromium-dark-desktop/task-action-focus.png left: 0 px | right: 3 px box x312-313 y175-176 max1\n   right pixels: [(312, 175, 1), (312, 176, 1), (313, 176, 1)]"
+ },
+ "chromium-dark-desktop/task-action-hover.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 3,
+  "detail": "chromium-dark-desktop/task-action-hover.png left: 0 px | right: 3 px box x312-313 y175-176 max1\n   right pixels: [(312, 175, 1), (312, 176, 1), (313, 176, 1)]"
+ },
+ "chromium-dark-desktop/task-action-menu.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 466,
+  "detail": "chromium-dark-desktop/task-action-menu.png left: 0 px | right: 466 px box x312-1231 y14-176 max45"
+ },
+ "chromium-dark-desktop/task-detail.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 3,
+  "detail": "chromium-dark-desktop/task-detail.png left: 0 px | right: 3 px box x312-313 y175-176 max1\n   right pixels: [(312, 175, 1), (312, 176, 1), (313, 176, 1)]"
+ },
+ "chromium-dark-desktop/task-share-dialog.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 1618,
+  "detail": "chromium-dark-desktop/task-share-dialog.png left: 0 px | right: 1618 px box x438-891 y108-179 max186"
+ },
+ "chromium-dark-desktop/wiki-home.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 5410,
+  "detail": "chromium-dark-desktop/wiki-home.png left: 0 px | right: 5410 px box x813-1106 y24-55 max178"
+ },
+ "chromium-dark-desktop/wiki-new-entry.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 5407,
+  "detail": "chromium-dark-desktop/wiki-new-entry.png left: 0 px | right: 5407 px box x813-1106 y24-55 max98"
+ },
+ "chromium-light-desktop/breakpoint-961-session.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-light-desktop/breakpoint-961-session.png left: 0 px | right: 0 px"
+ },
+ "chromium-light-desktop/breakpoint-961-wiki.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 2302,
+  "detail": "chromium-light-desktop/breakpoint-961-wiki.png left: 0 px | right: 2302 px box x494-787 y24-55 max224"
+ },
+ "chromium-light-desktop/notification-error.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-light-desktop/notification-error.png left: 0 px | right: 0 px"
+ },
+ "chromium-light-desktop/profile-validation.png": {
+  "run33e0e2e09": "sp-old-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 586,
+  "detail": "chromium-light-desktop/profile-validation.png left: 0 px | right: 586 px box x525-1246 y28-762 max113"
+ },
+ "chromium-light-desktop/profile.png": {
+  "run33e0e2e09": "sp-old-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-light-desktop/profile.png left: 0 px | right: 0 px"
+ },
+ "chromium-light-desktop/project-graph-fullscreen.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-light-desktop/project-graph-fullscreen.png left: 0 px | right: 0 px"
+ },
+ "chromium-light-desktop/project-graph.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-light-desktop/project-graph.png left: 0 px | right: 0 px"
+ },
+ "chromium-light-desktop/project-overview.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-light-desktop/project-overview.png left: 0 px | right: 0 px"
+ },
+ "chromium-light-desktop/projects-error.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-light-desktop/projects-error.png left: 0 px | right: 0 px"
+ },
+ "chromium-light-desktop/projects-list.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-light-desktop/projects-list.png left: 0 px | right: 0 px"
+ },
+ "chromium-light-desktop/projects-loading.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-light-desktop/projects-loading.png left: 0 px | right: 0 px"
+ },
+ "chromium-light-desktop/projects-search-empty.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-light-desktop/projects-search-empty.png left: 0 px | right: 0 px"
+ },
+ "chromium-light-desktop/session-attachment-menu.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-light-desktop/session-attachment-menu.png left: 0 px | right: 0 px"
+ },
+ "chromium-light-desktop/session-attachment-staged.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-light-desktop/session-attachment-staged.png left: 0 px | right: 0 px"
+ },
+ "chromium-light-desktop/session-composer-focus.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-light-desktop/session-composer-focus.png left: 0 px | right: 0 px"
+ },
+ "chromium-light-desktop/session-idle.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-light-desktop/session-idle.png left: 0 px | right: 0 px"
+ },
+ "chromium-light-desktop/session-streaming.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "chromium-light-desktop/session-streaming.png left: 0 px | right: 0 px"
+ },
+ "chromium-light-desktop/settings-saved.png": {
+  "run33e0e2e09": "sp-old-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 44039,
+  "detail": "chromium-light-desktop/settings-saved.png left: 0 px | right: 44039 px box x500-1230 y31-899 max224"
+ },
+ "chromium-light-desktop/settings.png": {
+  "run33e0e2e09": "sp-old-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 43942,
+  "detail": "chromium-light-desktop/settings.png left: 0 px | right: 43942 px box x500-1059 y329-899 max224"
+ },
+ "chromium-light-desktop/task-action-focus.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 5,
+  "detail": "chromium-light-desktop/task-action-focus.png left: 0 px | right: 5 px box x312-313 y174-176 max1\n   right pixels: [(313, 174, 1), (312, 175, 1), (313, 175, 1), (312, 176, 1), (313, 176, 1)]"
+ },
+ "chromium-light-desktop/task-action-hover.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 5,
+  "detail": "chromium-light-desktop/task-action-hover.png left: 0 px | right: 5 px box x312-313 y174-176 max1\n   right pixels: [(313, 174, 1), (312, 175, 1), (313, 175, 1), (312, 176, 1), (313, 176, 1)]"
+ },
+ "chromium-light-desktop/task-action-menu.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 466,
+  "detail": "chromium-light-desktop/task-action-menu.png left: 0 px | right: 466 px box x312-1231 y14-176 max82"
+ },
+ "chromium-light-desktop/task-detail.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 5,
+  "detail": "chromium-light-desktop/task-detail.png left: 0 px | right: 5 px box x312-313 y174-176 max1\n   right pixels: [(313, 174, 1), (312, 175, 1), (313, 175, 1), (312, 176, 1), (313, 176, 1)]"
+ },
+ "chromium-light-desktop/task-share-dialog.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 1228,
+  "detail": "chromium-light-desktop/task-share-dialog.png left: 0 px | right: 1228 px box x439-891 y108-178 max239"
+ },
+ "chromium-light-desktop/wiki-home.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 2302,
+  "detail": "chromium-light-desktop/wiki-home.png left: 0 px | right: 2302 px box x813-1106 y24-55 max224"
+ },
+ "chromium-light-desktop/wiki-new-entry.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 2301,
+  "detail": "chromium-light-desktop/wiki-new-entry.png left: 0 px | right: 2301 px box x813-1106 y24-55 max123"
+ },
+ "webkit-dark-desktop/breakpoint-961-session.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/breakpoint-961-session.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/breakpoint-961-wiki.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 5456,
+  "detail": "webkit-dark-desktop/breakpoint-961-wiki.png left: 0 px | right: 5456 px box x494-803 y24-55 max178"
+ },
+ "webkit-dark-desktop/notification-error.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 1,
+  "restPixels": 27114,
+  "detail": "webkit-dark-desktop/notification-error.png left: 1 px box x0-0 y0-0 max31 | right: 27114 px box x873-1279 y0-899 max255"
+ },
+ "webkit-dark-desktop/profile-validation.png": {
+  "run33e0e2e09": "sp-old-33e0e2e09",
+  "sidebarColumnPixels": 1,
+  "restPixels": 51673,
+  "detail": "webkit-dark-desktop/profile-validation.png left: 1 px box x0-0 y0-0 max31 | right: 51673 px box x492-1279 y0-899 max255"
+ },
+ "webkit-dark-desktop/profile.png": {
+  "run33e0e2e09": "sp-old-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/profile.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/project-graph-fullscreen.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/project-graph-fullscreen.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/project-graph.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/project-graph.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/project-overview.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/project-overview.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/projects-error.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/projects-error.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/projects-list.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/projects-list.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/projects-loading.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/projects-loading.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/projects-search-empty.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/projects-search-empty.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/session-attachment-menu.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/session-attachment-menu.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/session-attachment-staged.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/session-attachment-staged.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/session-composer-focus.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/session-composer-focus.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/session-idle.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/session-idle.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/session-streaming.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/session-streaming.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/settings-saved.png": {
+  "run33e0e2e09": "sp-old-33e0e2e09",
+  "sidebarColumnPixels": 1,
+  "restPixels": 133340,
+  "detail": "webkit-dark-desktop/settings-saved.png left: 1 px box x0-0 y0-0 max31 | right: 133340 px box x492-1279 y0-899 max255"
+ },
+ "webkit-dark-desktop/settings.png": {
+  "run33e0e2e09": "sp-old-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 94783,
+  "detail": "webkit-dark-desktop/settings.png left: 0 px | right: 94783 px box x496-1279 y329-899 max223"
+ },
+ "webkit-dark-desktop/task-action-focus.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/task-action-focus.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/task-action-hover.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/task-action-hover.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/task-action-menu.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 489,
+  "detail": "webkit-dark-desktop/task-action-menu.png left: 0 px | right: 489 px box x1054-1231 y14-155 max45"
+ },
+ "webkit-dark-desktop/task-detail.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-dark-desktop/task-detail.png left: 0 px | right: 0 px"
+ },
+ "webkit-dark-desktop/task-share-dialog.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 1260,
+  "detail": "webkit-dark-desktop/task-share-dialog.png left: 0 px | right: 1260 px box x380-899 y101-597 max138"
+ },
+ "webkit-dark-desktop/wiki-home.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 5456,
+  "detail": "webkit-dark-desktop/wiki-home.png left: 0 px | right: 5456 px box x813-1122 y24-55 max178"
+ },
+ "webkit-dark-desktop/wiki-new-entry.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 5447,
+  "detail": "webkit-dark-desktop/wiki-new-entry.png left: 0 px | right: 5447 px box x813-1122 y24-55 max98"
+ },
+ "webkit-light-desktop/breakpoint-961-session.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/breakpoint-961-session.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/breakpoint-961-wiki.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 2352,
+  "detail": "webkit-light-desktop/breakpoint-961-wiki.png left: 0 px | right: 2352 px box x494-803 y24-55 max224"
+ },
+ "webkit-light-desktop/notification-error.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 1,
+  "restPixels": 29905,
+  "detail": "webkit-light-desktop/notification-error.png left: 1 px box x0-0 y0-0 max38 | right: 29905 px box x874-1279 y0-899 max255"
+ },
+ "webkit-light-desktop/profile-validation.png": {
+  "run33e0e2e09": "sp-old-33e0e2e09",
+  "sidebarColumnPixels": 1,
+  "restPixels": 47774,
+  "detail": "webkit-light-desktop/profile-validation.png left: 1 px box x0-0 y0-0 max38 | right: 47774 px box x492-1279 y0-899 max255"
+ },
+ "webkit-light-desktop/profile.png": {
+  "run33e0e2e09": "sp-old-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/profile.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/project-graph-fullscreen.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/project-graph-fullscreen.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/project-graph.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/project-graph.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/project-overview.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/project-overview.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/projects-error.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/projects-error.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/projects-list.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/projects-list.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/projects-loading.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/projects-loading.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/projects-search-empty.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/projects-search-empty.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/session-attachment-menu.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/session-attachment-menu.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/session-attachment-staged.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/session-attachment-staged.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/session-composer-focus.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/session-composer-focus.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/session-idle.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/session-idle.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/session-streaming.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/session-streaming.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/settings-saved.png": {
+  "run33e0e2e09": "sp-old-33e0e2e09",
+  "sidebarColumnPixels": 1,
+  "restPixels": 80312,
+  "detail": "webkit-light-desktop/settings-saved.png left: 1 px box x0-0 y0-0 max38 | right: 80312 px box x492-1279 y0-899 max255"
+ },
+ "webkit-light-desktop/settings.png": {
+  "run33e0e2e09": "sp-old-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 45038,
+  "detail": "webkit-light-desktop/settings.png left: 0 px | right: 45038 px box x496-1279 y329-899 max224"
+ },
+ "webkit-light-desktop/task-action-focus.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/task-action-focus.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/task-action-hover.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/task-action-hover.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/task-action-menu.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 489,
+  "detail": "webkit-light-desktop/task-action-menu.png left: 0 px | right: 489 px box x1056-1231 y14-155 max82"
+ },
+ "webkit-light-desktop/task-detail.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 0,
+  "detail": "webkit-light-desktop/task-detail.png left: 0 px | right: 0 px"
+ },
+ "webkit-light-desktop/task-share-dialog.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 1254,
+  "detail": "webkit-light-desktop/task-share-dialog.png left: 0 px | right: 1254 px box x382-899 y101-597 max163"
+ },
+ "webkit-light-desktop/wiki-home.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 2352,
+  "detail": "webkit-light-desktop/wiki-home.png left: 0 px | right: 2352 px box x813-1122 y24-55 max224"
+ },
+ "webkit-light-desktop/wiki-new-entry.png": {
+  "run33e0e2e09": "full-33e0e2e09",
+  "sidebarColumnPixels": 0,
+  "restPixels": 2344,
+  "detail": "webkit-light-desktop/wiki-new-entry.png left: 0 px | right: 2344 px box x813-1122 y24-55 max123"
+ }
+}

@@ -1,0 +1,12 @@
+# 2026-10-20T23:41:24Z, before the commit; the evidence directory is /root/.orbit/worktrees/7423e624-0ae4-5ebc-9759-b34b6c0212c6/docs/evidence/managed-runner-docker-e2e/2026-10-21
+control: the key file itself: 1 line(s); /etc/hostname: 0
+control: the pattern file has no empty line
+/mnt/data/tmp/34hJ7RzpqTB13BmLR8uQv/logs: 6 files, 0 with the key
+/mnt/data/tmp/34hJ7RzpqTB13BmLR8uQv/records: 45 files, 0 with the key
+/mnt/data/tmp/34hJ7RzpqTB13BmLR8uQv/kit: 9 files, 0 with the key
+/mnt/data/tmp/34hJ7RzpqTB13BmLR8uQv/prompts: 3 files, 0 with the key
+/root/.orbit/worktrees/7423e624-0ae4-5ebc-9759-b34b6c0212c6/docs/evidence/managed-runner-docker-e2e/2026-10-21: 61 files, 0 with the key
+/root/.orbit/worktrees/7423e624-0ae4-5ebc-9759-b34b6c0212c6/docs/managed-runner-design.md: 1 files, 0 with the key
+the stack is removed: no container, journal or database left to scan
+apiserver.txt.gz decompressed: 3224 lines, 0 with the key
+docker-channel.txt.gz decompressed: 1278 lines, 0 with the key

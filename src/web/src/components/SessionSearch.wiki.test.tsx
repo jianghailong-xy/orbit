@@ -130,8 +130,8 @@ async function type(value: string) {
   }
 }
 
-// From `document`, not the mount container: the palette is an AntD Modal, which portals itself
-// onto the body.
+// From `document`, not the mount container: the palette is a dialog, which portals itself onto the
+// body.
 const inDoc = (selector: string) => [...document.querySelectorAll(selector)];
 const texts = (selector: string) => inDoc(selector).map((node) => node.textContent ?? '');
 

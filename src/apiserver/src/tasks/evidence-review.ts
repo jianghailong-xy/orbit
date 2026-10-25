@@ -1,8 +1,8 @@
 import { ConflictException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { CreatorType, type Prisma } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 import { SESSION_ENDING_SELECT, sessionHasEnded } from '../projects/project-open-item';
-import { EVIDENCE_REVIEW_TURN_KEY_PREFIX } from '../sessions/watch-turn-key';
+import { EVIDENCE_REVIEW_TURN_KEY_PREFIX, EVIDENCE_SEND_BACK_TURN_KEY_PREFIX } from '../sessions/watch-turn-key';
 import { criterionStandingRefusal, decidingSessionDisqualification } from './task-evidence-decision';
 import { describeEvidenceCitations, parseEvidenceEnvelope, type EvidenceEnvelope } from './task-evidence-envelope';
 
@@ -84,6 +84,44 @@ export function isEvidenceReviewTurn(clientTurnId: string | null | undefined): b
 export function evidenceReviewRetryTurnId(clientTurnId: string | null | undefined, nonce: string): string | null {
   const evidenceId = evidenceIdOfReviewTurn(clientTurnId);
   return evidenceId ? `${evidenceReviewTurnId(evidenceId)}:retry:${nonce}` : null;
+}
+
+/**
+ * The one delivery a SEND_BACK decision makes: its note, handed to the run that submitted the
+ * decided revision as a platform turn, keyed by the decision row so a replayed decide replays the
+ * turn rather than telling the run twice (task-completion-evidence.service.ts#decide).
+ */
+export function evidenceSendBackTurnId(decisionId: string): string {
+  return `${EVIDENCE_SEND_BACK_TURN_KEY_PREFIX}${decisionId}`;
+}
+
+/**
+ * What that turn says. Written into the turn at delivery — the decision row it names is immutable,
+ * so nothing here is re-rendered at hand-out time, unlike the review block. The run learns whose
+ * note it is, what the next revision has to show, and that nothing else was going to reach it.
+ */
+export function evidenceSendBackMessage(input: {
+  taskId: string;
+  taskTitle: string;
+  revision: string;
+  decidedByType: CreatorType;
+  note: string;
+}): string {
+  const by = input.decidedByType === CreatorType.USER ? 'the account owner' : 'the session that reviewed it';
+  return [
+    `<orbit-evidence-send-back task="${uuidToBase62(input.taskId)}" revision="${input.revision}">`,
+    `Revision ${input.revision} of the completion evidence you submitted for the task “${input.taskTitle}”`,
+    `was sent back by ${by}.`,
+    '',
+    'What the next revision has to show (the note recorded with the decision):',
+    input.note,
+    '',
+    'The task stays OPEN, and this message is the note\'s only delivery: no comment is added and no',
+    'status changes. Address it and submit the next revision with task_evidence_submit',
+    `(taskId "${uuidToBase62(input.taskId)}") — only the latest revision is judged, and each`,
+    'revision is answered once. The decision is also on the revision in task_evidence_list.',
+    '</orbit-evidence-send-back>',
+  ].join('\n');
 }
 
 /** One unanswered revision of a dispatched task, as the hold reads it. */
@@ -421,7 +459,7 @@ export async function evidenceReviewBlock(db: Db, evidenceId: string): Promise<s
     '- CONFIRM when the evidence shows the criteria are met: the task becomes DONE and what depends on it',
     '  may start.',
     '- SEND_BACK, with a note saying what the next revision has to show, when it does not: the task stays',
-    '  open for that revision. The note is not delivered to the run; if it should carry on, tell it.',
+    '  open for that revision, and the note is delivered to the run as a platform message.',
     'If you leave it undecided, the owner decides it on their card after due-at.',
     close,
   ];

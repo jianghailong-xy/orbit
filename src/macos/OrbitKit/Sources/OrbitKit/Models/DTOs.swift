@@ -92,6 +92,10 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     /// interactive session. An agent stores no provider of its own: it names a machine and a
     /// directory, while the provider is a per-session binding.
     public let lastProvider: String?
+    /// The engine that session ran on — the CLI, which a provider no longer decides (one DeepSeek key
+    /// runs on Claude Code, OpenCode and DeepSeek Harness alike). Nil from an older server, and where
+    /// nobody can tell; `defaultEngine(configured:)` reads it.
+    public let lastEngine: String?
     /// @deprecated The same derived value under its old name, served for builds that predate
     /// `lastProvider`. Read `defaultProvider` instead of either.
     public let provider: String?
@@ -126,6 +130,11 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let claudeAccount: String?
     /// The same for its Antigravity sessions: one of the runner's Google accounts, or nil for Automatic.
     public let antigravityAccount: String?
+    /// The same for its Kimi Code sessions: one of the runner's Kimi accounts, or nil for Automatic.
+    public let kimiAccount: String?
+    /// The same for its Cursor CLI sessions: one of the runner's Cursor CLI accounts, or nil for
+    /// Automatic.
+    public var cursorAccount: String? = nil
 
     public let enableWorktree: Bool?
     /// Smart model selection (docs/model-routing-design.md §7.2): on, a fresh task run here gets the
@@ -142,11 +151,13 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let repoCleanup: RunnerRepoCleanup?
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, lastProvider, provider, model, permissionMode, effort, workDir
+        case id, name, lastProvider, lastEngine, provider, model, permissionMode, effort, workDir
         case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
         case antigravityKeyAvailableByRunner
-        case autoInitGit, codexAccount, claudeAccount, antigravityAccount, enableWorktree, modelRouting, workDirExists, workDirIsGit
+        case autoInitGit, codexAccount, claudeAccount, antigravityAccount, kimiAccount, cursorAccount
+        case enableWorktree, modelRouting
+        case workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup
     }
 
@@ -155,6 +166,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         id = try c.decode(String.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
         lastProvider = try c.decodeIfPresent(String.self, forKey: .lastProvider)
+        lastEngine = try c.decodeIfPresent(String.self, forKey: .lastEngine)
         provider = try c.decodeIfPresent(String.self, forKey: .provider)
         model = try c.decodeIfPresent(String.self, forKey: .model)
         permissionMode = try c.decodeIfPresent(String.self, forKey: .permissionMode)
@@ -178,6 +190,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         codexAccount = try c.decodeIfPresent(String.self, forKey: .codexAccount)
         claudeAccount = try c.decodeIfPresent(String.self, forKey: .claudeAccount)
         antigravityAccount = try c.decodeIfPresent(String.self, forKey: .antigravityAccount)
+        kimiAccount = try c.decodeIfPresent(String.self, forKey: .kimiAccount)
+        cursorAccount = try c.decodeIfPresent(String.self, forKey: .cursorAccount)
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
         modelRouting = try c.decodeIfPresent(Bool.self, forKey: .modelRouting)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
@@ -202,6 +216,12 @@ extension KeyedDecodingContainer {
 extension Agent {
     /// The provider a new session here starts on, unless the composer picks another.
     public var defaultProvider: String { lastProvider ?? provider ?? "claude" }
+
+    /// The engine a new session here starts on, unless the hero picks another: the one this project
+    /// last ran on, else — from an older server — the one its provider runs on by default.
+    public func defaultEngine(configured: [ConfiguredProvider]?) -> String {
+        ProviderEngines.sessionEngine(lastEngine, provider: defaultProvider, configured: configured)
+    }
 }
 
 public struct Runner: Codable, Equatable, Sendable, Identifiable {
@@ -339,6 +359,13 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let projectIntegrationRef: String?
     public let agentId: String?
     public let assignedRunnerId: String?
+    /// The engine the session runs on for good — the CLI on the runner that produced its runtime
+    /// session (`claude`, `codex`, `kimi`, `antigravity`, `opencode`, `dsh` or `cursor`). Nil from an older
+    /// server, and for a session whose engine nobody can tell; read it with
+    /// `ProviderEngines.sessionEngine`, which places such a row by its provider.
+    public let engine: String?
+    /// Where the session's credential comes from: an engine's own sign-in (the engine's name), OpenCode's
+    /// own configuration (`opencode`), an account pool or a key — never which CLI runs it.
     public let provider: String?
     /// On an account pool: the member its last claim dispatched on (nil before the first). Carried
     /// by the detail payload only — the list leaves it out — so read it off `GET /sessions/:id`.
@@ -364,6 +391,17 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// accounts.
     public let antigravityAccount: String?
     public let antigravityAccountPinned: Bool?
+    /// The same pair for a session on the built-in Kimi Code engine: one of the runner's Kimi accounts.
+    public let kimiAccount: String?
+    public let kimiAccountPinned: Bool?
+    /// The same pair for a session on Cursor CLI's own sign-in: one of the runner's Cursor CLI accounts.
+    public var cursorAccount: String? = nil
+    public var cursorAccountPinned: Bool? = nil
+    /// How many turns of it have settled, and the conversation id its engine reported (the detail
+    /// payload carries both): with a turn running, what says whether a Cursor CLI session has talked
+    /// (`CursorRuntime.conversationStarted`, the server's own test).
+    public var numTurns: Int? = nil
+    public var runtimeSessionId: String? = nil
     public let pendingApprovals: Int?
     /// What `pendingApprovals` is counting, when one word says it better than "approval":
     /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -435,6 +473,13 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// yet — the server sets it while the user turn is the frontier and clears it once a reply or
     /// tool lands, so the row shows your pending message instead of the now-stale previous reply.
     public let lastUserText: String?
+    /// The rolling recap the server wrote about this session (0418) and when it wrote it — the
+    /// sentence the list prefers to `lastAssistantText`. Both nil on a session no pass has recapped
+    /// yet, and on a server writing no recaps (ORBIT_RECAP_ENABLED=0): exactly what the row falls
+    /// back from to the raw last reply. The account's Session recaps switch can also hold it back
+    /// (`UserPreferences.recapsEnabled`).
+    public let recapText: String?
+    public let recapAt: String?
     public let runningBgCount: Int?
     /// Of `runningBgCount`, the ones that are jobs with an end (a `bg_run` of kind `job`/`watch`,
     /// never a `service`): the background work a session can be doing with nobody generating in it.
@@ -484,6 +529,17 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// from an older server, which doesn't send the key. The list groups by it
     /// (`SessionFolderGrouping`).
     public let folderId: String?
+    /// What drives this session (contract §2.9 LS6): `LANDING` is platform work with no engine,
+    /// drawn as its own page rather than as a conversation. Absent from an older server, and nil
+    /// on every row that predates the column.
+    public let sessionKind: String?
+    /// What a LANDING row says about its subject, as `GET /sessions?projectId=&includeLanding=1`
+    /// carries it (`subject`, `state`, `settledAs`, `settledAt`). The same key carries the whole
+    /// landing view on `GET /sessions/:id`; the tolerant decode reads both. Nil everywhere else.
+    public let landing: SessionLandingView?
+
+    /// Whether this row is a landing session (platform work), not a conversation.
+    public var isLanding: Bool { sessionKind == "LANDING" }
 
     public var effectiveRunStatus: RunStatus { runStatus ?? status }
     public var effectiveRunState: SessionRunState {
@@ -498,6 +554,14 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public var isGenerating: Bool {
         let state = effectiveRunState
         return state == .running || (state == .awaitingInput && engineTurnActive == true)
+    }
+    /// Whether work this session started is still running under a parked turn — a sub-agent or
+    /// workflow the runtime started, or a background process. A port of web's
+    /// `outlivingSessionWork` (src/web/src/lib/sessionActivity.ts), differing only in shape: the
+    /// stop decision needs the fact, while the row's words and glyph ask which kind it is
+    /// separately. Absent fields from an older server read as none, like web's `?? 0`.
+    public var hasOutlivingWork: Bool {
+        (runningSubagentCount ?? 0) > 0 || (runningBgCount ?? 0) > 0
     }
     /// Whether this session's failure is one the server intends to undo by itself — a port of the
     /// web console's `sessionRetryPending`. A spent quota, a provider that couldn't answer, and a
@@ -549,6 +613,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         projectIntegrationRef = try values.decodeIfPresent(String.self, forKey: .projectIntegrationRef)
         agentId = try values.decodeIfPresent(String.self, forKey: .agentId)
         assignedRunnerId = try values.decodeIfPresent(String.self, forKey: .assignedRunnerId)
+        engine = try values.decodeIfPresent(String.self, forKey: .engine)
         provider = try values.decodeIfPresent(String.self, forKey: .provider)
         poolMemberProviderId = try values.decodeIfPresent(String.self, forKey: .poolMemberProviderId)
         poolKeyId = try values.decodeIfPresent(String.self, forKey: .poolKeyId)
@@ -559,6 +624,12 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         claudeAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .claudeAccountPinned)
         antigravityAccount = try values.decodeIfPresent(String.self, forKey: .antigravityAccount)
         antigravityAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .antigravityAccountPinned)
+        kimiAccount = try values.decodeIfPresent(String.self, forKey: .kimiAccount)
+        kimiAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .kimiAccountPinned)
+        cursorAccount = try values.decodeIfPresent(String.self, forKey: .cursorAccount)
+        cursorAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .cursorAccountPinned)
+        numTurns = try? values.decodeIfPresent(Int.self, forKey: .numTurns)
+        runtimeSessionId = try? values.decodeIfPresent(String.self, forKey: .runtimeSessionId)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
@@ -584,6 +655,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         lastAssistantText = try values.decodeIfPresent(String.self, forKey: .lastAssistantText)
         lastToolUse = try values.decodeIfPresent(String.self, forKey: .lastToolUse)
         lastUserText = try values.decodeIfPresent(String.self, forKey: .lastUserText)
+        recapText = try values.decodeIfPresent(String.self, forKey: .recapText)
+        recapAt = try values.decodeIfPresent(String.self, forKey: .recapAt)
         runningBgCount = try values.decodeIfPresent(Int.self, forKey: .runningBgCount)
         runningBgJobCount = try values.decodeIfPresent(Int.self, forKey: .runningBgJobCount)
         runningSubagentCount = try values.decodeIfPresent(Int.self, forKey: .runningSubagentCount)
@@ -598,6 +671,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         agent = try values.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         tags = try values.decodeIfPresent([SessionTag].self, forKey: .tags)
         folderId = try values.decodeIfPresent(String.self, forKey: .folderId)
+        // The landing's two fields are optional in both directions: an older server leaves them
+        // out, and a shape this build cannot read is that same absence rather than a failed read.
+        sessionKind = try? values.decodeIfPresent(String.self, forKey: .sessionKind)
+        landing = try? values.decodeIfPresent(SessionLandingView.self, forKey: .landing)
     }
 
     public init(id: String, title: String?, status: RunStatus, runStatus: RunStatus? = nil,
@@ -606,7 +683,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 completedAt: String? = nil, deletedAt: String? = nil,
                 capabilities: SessionCapabilities? = nil,
                 agentId: String?,
-                assignedRunnerId: String?, provider: String? = nil,
+                assignedRunnerId: String?, engine: String? = nil, provider: String? = nil,
                 pendingApprovals: Int?, waitingKind: SessionWaitingKind? = nil,
                 ownerItems: [SessionOwnerItem]? = nil, taskId: String? = nil,
                 branch: String?,
@@ -614,7 +691,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 effort: String? = nil, fastMode: Bool? = nil, source: String? = nil,
                 projectId: String? = nil, projectTitle: String? = nil,
                 lastAssistantText: String? = nil,
-                lastToolUse: String? = nil, lastUserText: String? = nil, runningBgCount: Int? = nil,
+                lastToolUse: String? = nil, lastUserText: String? = nil,
+                recapText: String? = nil, recapAt: String? = nil,
+                runningBgCount: Int? = nil,
                 runningBgJobCount: Int? = nil,
                 runningSubagentCount: Int? = nil,
                 engineTurnActive: Bool? = nil,
@@ -629,11 +708,15 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 codexAccount: String? = nil, codexAccountPinned: Bool? = nil,
                 claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil,
                 antigravityAccount: String? = nil, antigravityAccountPinned: Bool? = nil,
+                kimiAccount: String? = nil, kimiAccountPinned: Bool? = nil,
+                cursorAccount: String? = nil, cursorAccountPinned: Bool? = nil,
+                numTurns: Int? = nil, runtimeSessionId: String? = nil,
                 awaitingReplyFrom: [SessionRequestPeer]? = nil, owesReplyTo: [SessionRequestPeer]? = nil,
                 folderId: String? = nil,
                 confirmationUnderReview: ConfirmationUnderReview? = nil,
                 projectMembership: SessionProjectMembership? = nil,
-                projectIntegrationRef: String? = nil) {
+                projectIntegrationRef: String? = nil,
+                sessionKind: String? = nil, landing: SessionLandingView? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -646,6 +729,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.capabilities = capabilities
         self.agentId = agentId
         self.assignedRunnerId = assignedRunnerId
+        self.engine = engine
         self.provider = provider
         self.poolMemberProviderId = poolMemberProviderId
         self.poolKeyId = poolKeyId
@@ -656,6 +740,12 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.claudeAccountPinned = claudeAccountPinned
         self.antigravityAccount = antigravityAccount
         self.antigravityAccountPinned = antigravityAccountPinned
+        self.kimiAccount = kimiAccount
+        self.kimiAccountPinned = kimiAccountPinned
+        self.cursorAccount = cursorAccount
+        self.cursorAccountPinned = cursorAccountPinned
+        self.numTurns = numTurns
+        self.runtimeSessionId = runtimeSessionId
         self.pendingApprovals = pendingApprovals
         self.waitingKind = waitingKind
         self.ownerItems = ownerItems
@@ -677,6 +767,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.lastAssistantText = lastAssistantText
         self.lastToolUse = lastToolUse
         self.lastUserText = lastUserText
+        self.recapText = recapText
+        self.recapAt = recapAt
         self.runningBgCount = runningBgCount
         self.runningBgJobCount = runningBgJobCount
         self.runningSubagentCount = runningSubagentCount
@@ -694,6 +786,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.currentTurnStartedAt = currentTurnStartedAt
         self.tags = tags
         self.folderId = folderId
+        self.sessionKind = sessionKind
+        self.landing = landing
     }
 }
 
@@ -713,14 +807,36 @@ public struct SessionOwnerItem: Codable, Equatable, Sendable, Identifiable {
     public let title: String
     /// Since when it has been waiting on the owner (ISO-8601). The bar shows the oldest.
     public let since: String
+    /// The short reason an escalated item carries — the server's one clause about what it is
+    /// (T9), which the session ROW says after the word "Escalated to you". Absent for the other
+    /// three kinds and from a server that predates it, and then the row says the word alone.
+    public let need: String?
+    /// The item's project's main branch by name, which a merge approval asks to merge into. Nil
+    /// with no repository bound and from an older server, and then it is main.
+    public let mainBranch: String?
 
     public var id: String { itemId }
 
-    public init(itemId: String, kind: OwnerItemKind, title: String, since: String) {
+    public init(itemId: String, kind: OwnerItemKind, title: String, since: String,
+                need: String? = nil, mainBranch: String? = nil) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
         self.since = since
+        self.need = need
+        self.mainBranch = mainBranch
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        itemId = try c.decode(String.self, forKey: .itemId)
+        kind = try c.decode(OwnerItemKind.self, forKey: .kind)
+        title = try c.decode(String.self, forKey: .title)
+        since = try c.decode(String.self, forKey: .since)
+        // A field this build cannot read is an older server's absence: the item, and the row it
+        // arrived on, still stand. Same reading as the branch below.
+        need = try? c.decodeIfPresent(String.self, forKey: .need)
+        mainBranch = try? c.decodeIfPresent(String.self, forKey: .mainBranch)
     }
 }
 
@@ -741,6 +857,10 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     public var claudeAccount: String? = nil
     /// Its Antigravity account, the same way (`Agent.antigravityAccount`).
     public var antigravityAccount: String? = nil
+    /// Its Kimi Code account, the same way (`Agent.kimiAccount`).
+    public var kimiAccount: String? = nil
+    /// Its Cursor CLI account, the same way (`Agent.cursorAccount`).
+    public var cursorAccount: String? = nil
     /// Its environment, which can decide the account too — a config directory or a key of its own
     /// (`CodexAccounts.automaticOffered`). Carried by the detail payload's workspace row.
     public var env: [String: String]? = nil
@@ -848,11 +968,16 @@ public struct SessionTurnRequest: Codable, Sendable {
     public let content: String
     public let kind: String           // "message" | "shell"
     public let attachmentIds: [String]?
-    public init(clientTurnId: String, content: String, kind: String = "message", attachmentIds: [String]? = nil) {
+    /// `NEXT_TURN` to queue a message behind a running turn instead of sending it into that turn;
+    /// nil (left out of the body) keeps the server's own placement, as every send before it had.
+    public let intent: String?
+    public init(clientTurnId: String, content: String, kind: String = "message", attachmentIds: [String]? = nil,
+                intent: String? = nil) {
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
         self.attachmentIds = attachmentIds
+        self.intent = intent
     }
 }
 
@@ -873,6 +998,26 @@ public struct SessionInterruptRequest: Codable, Sendable {
         self.clientTurnId = clientTurnId
         self.content = content
         self.attachmentIds = attachmentIds
+    }
+}
+
+/// POST /sessions/:id/interrupt WITHOUT a follow-up — the composer's Stop, and the one thing that
+/// makes it more than an interrupt.
+///
+/// An interrupt does not kill anything: the engine's process, its conversation and its stdin
+/// survive it, which is the entire difference from ending a session. `stopBackgroundWork` is the
+/// explicit ask to also end what the session left running — the runner's jobs (a dev server or
+/// watcher included), the engine's own shells and Monitors, and its background Workflows. It has to
+/// be a field rather than a second request for the same reason the follow-up does: one press is one
+/// decision, and two requests could apply half of it.
+///
+/// Deliberately NOT sent by `interrupt(sessionID:)`'s default: an interrupt that says nothing extra
+/// must stay an interrupt that kills nothing, or the difference between stopping a turn and ending a
+/// session disappears silently. The body is omitted entirely when the flag is off.
+public struct SessionStopRequest: Codable, Sendable {
+    public let stopBackgroundWork: Bool
+    public init(stopBackgroundWork: Bool = true) {
+        self.stopBackgroundWork = stopBackgroundWork
     }
 }
 
@@ -897,9 +1042,11 @@ public struct TurnAccepted: Codable, Sendable {
     public let routedToSessionId: String?
 }
 
-/// One still-PENDING user turn from GET /sessions/:id/turns. These rows have not entered the
-/// transcript event stream yet; clients render them as the cancellable queued tail and reconcile
-/// them again whenever `queued_turns_changed` arrives.
+/// One user turn from GET /sessions/:id/turns?view=active that no transcript event draws yet: the
+/// accepted head a runner has taken (or is about to), the turns queued behind it, and steers. These
+/// rows have not entered the transcript event stream; clients render the head where its echo will
+/// land and the rest as the queued tail, and reconcile them again whenever `queued_turns_changed`
+/// arrives.
 public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     public struct Attachment: Codable, Equatable, Sendable {
         public let id: String
@@ -912,6 +1059,25 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
 
     public let turnId: String
     public let kind: String?
+    /// Where the server placed this turn, under the Session row lock — never inferred here:
+    /// `accepted` is the executable head, which a runner has taken or is about to and which nobody
+    /// can withdraw any more; `queued` waits behind it; `steer` is on its way into the turn already
+    /// running. Nil from a server that predates the active view, whose listing holds only queued
+    /// turns and steers, told apart by `kind` as they always were.
+    public let placement: String?
+    /// The accepted head: the runner's now, drawn where its echo will land rather than in the queue.
+    public var isAccepted: Bool { placement == "accepted" }
+    /// When the server filed the turn (ISO-8601) — the moment an accepted turn's placeholder carries
+    /// until its echo brings the runner's own (web: `AcceptedUserTurn.acceptedAt`).
+    public let createdAt: String?
+    /// For a steer, the executable turn it was written into.
+    public let targetTurnId: String?
+    /// The server's durable receipt for a message written into the running turn that never made it:
+    /// `failed`, or `unconfirmed` when nothing could say whether the engine read it — with the
+    /// receipt's own code and reason. Nil on every turn still on its way.
+    public let delivery: String?
+    public let deliveryCode: String?
+    public let deliveryReason: String?
     public let content: String
     /// Optional for rolling compatibility with a server that predates attachment refs on this list.
     public let attachments: [Attachment]?
@@ -925,6 +1091,12 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// The card this queued turn is, read by the same function the runner's echo is read by. Nil
     /// unless `openItemDelivery` is one.
     public var itemCard: OpenItemDelivery? { OpenItemDelivery.parseCard(openItemDelivery) }
+    /// The same for the owner's answer handed to the coordinator (`ownerAnswer`) — held raw for
+    /// `OwnerAnswer.parseCard`, the reader the echo's payload is read by, so the line drawn while the
+    /// answer waits is the line its echo is drawn as. Nil on every other turn, and from a server that
+    /// predates the field.
+    public let ownerAnswer: JSONValue?
+    public var ownerAnswerCard: OwnerAnswer? { OwnerAnswer.parseCard(ownerAnswer) }
     /// The same for the turn that hands a task's run its brief (`taskStart`) — a resumed run's; a
     /// run's opening turn is never listed — held raw for `TaskStart.parseCard`, the reader the echo's
     /// payload is read by. Nil on every other turn, and from a server that predates the field.
@@ -960,7 +1132,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// cards are gathered, so the row reconciled in place and the row first seen in a listing carry
     /// the same ones (`TranscriptReducer.reconcileQueuedTurns`).
     public var cards: TurnCards {
-        TurnCards(itemCard: itemCard, taskStart: taskStartCard, startedCard: startedCard,
+        TurnCards(itemCard: itemCard, ownerAnswer: ownerAnswerCard, taskStart: taskStartCard, startedCard: startedCard,
                   sessionMessage: senderCard, sessionReplies: replyCards,
                   reviewRequest: reviewRequestCard, reviewReturn: reviewReturnCard)
     }
@@ -971,15 +1143,24 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
 
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
-                taskStart: JSONValue? = nil,
+                ownerAnswer: JSONValue? = nil, taskStart: JSONValue? = nil,
                 projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
                 sessionReplies: JSONValue? = nil, authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
-                confirmationReturn: JSONValue? = nil) {
+                confirmationReturn: JSONValue? = nil, placement: String? = nil, createdAt: String? = nil,
+                targetTurnId: String? = nil, delivery: String? = nil, deliveryCode: String? = nil,
+                deliveryReason: String? = nil) {
         self.turnId = turnId
         self.kind = kind
+        self.placement = placement
+        self.createdAt = createdAt
+        self.targetTurnId = targetTurnId
+        self.delivery = delivery
+        self.deliveryCode = deliveryCode
+        self.deliveryReason = deliveryReason
         self.content = content
         self.attachments = attachments
         self.openItemDelivery = openItemDelivery
+        self.ownerAnswer = ownerAnswer
         self.taskStart = taskStart
         self.projectStarted = projectStarted
         self.sessionMessage = sessionMessage
@@ -996,9 +1177,12 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let title: String?
     public let agentId: String?
     public let assignedRunnerId: String?
-    /// Provider picked on the new-session screen: a built-in engine slug or one of this account's
-    /// configured providers. Nil omits the field, so the session starts where this project last
-    /// started — the behaviour every client had before the picker existed.
+    /// The engine picked on the new-session screen — the CLI the session runs on for good — sent with
+    /// the credential of it picked there (docs/provider-engine-contract.md §3.2). Nil omits both, so the
+    /// session starts where this project last started.
+    public let engine: String?
+    /// The credential picked on the new-session screen: an engine's own sign-in (the engine's name),
+    /// OpenCode's own configuration, an account pool or a key — one `engine` runs.
     public let provider: String?
     public let model: String?
     public let permissionMode: String?
@@ -1020,20 +1204,26 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let claudeAccount: String?
     /// The same for a session on the built-in Antigravity engine: one of the runner's Google accounts.
     public let antigravityAccount: String?
+    /// The same for a session on the built-in Kimi Code engine: one of the runner's Kimi accounts.
+    public let kimiAccount: String?
+    /// The same for a session on Cursor CLI's own sign-in: one of the runner's Cursor CLI accounts.
+    public let cursorAccount: String?
     /// The folder the new session is filed in — one started from a folder's page lands in that
     /// folder (docs/session-folders-move-design.md §3.2). It has to be one of this workspace's
     /// folders, else the server answers 400. Nil omits it: the session is in no folder.
     public let folderId: String?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
-                provider: String? = nil,
+                engine: String? = nil, provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
-                claudeAccount: String? = nil, antigravityAccount: String? = nil, folderId: String? = nil) {
+                claudeAccount: String? = nil, antigravityAccount: String? = nil, kimiAccount: String? = nil,
+                cursorAccount: String? = nil, folderId: String? = nil) {
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
         self.assignedRunnerId = assignedRunnerId
+        self.engine = engine
         self.provider = provider
         self.model = model
         self.permissionMode = permissionMode
@@ -1044,6 +1234,8 @@ public struct CreateSessionRequest: Codable, Sendable {
         self.codexAccount = codexAccount
         self.claudeAccount = claudeAccount
         self.antigravityAccount = antigravityAccount
+        self.kimiAccount = kimiAccount
+        self.cursorAccount = cursorAccount
         self.folderId = folderId
     }
 }
@@ -1173,6 +1365,45 @@ public struct SessionChangedFile: Codable, Equatable, Sendable, Identifiable {
 /// remembered default merge target (set when the user last switched targets in the merge dropdown;
 /// nil = the runner's auto-detected default). Distinct from `SessionAgentRef` (list rows), which
 /// carries name/model instead of the merge target.
+/// The landing a code session's work fed (§2.9 LS1's derived `sourceLanding`): the label at the
+/// source session's own bottom opens it. Absent from a session that produced no landing work, and
+/// from a server that predates the field.
+public struct SessionSourceLanding: Codable, Equatable, Sendable {
+    /// The LANDING session's id, available before its row exists (it is pre-generated).
+    public let landingSessionId: String
+    /// `TASK` or `PROMOTION`.
+    public let subject: String
+    /// The newest attempt's job state.
+    public let state: String
+    /// The step the newest attempt last reported, or the one it stopped at.
+    public let phase: String?
+    /// `LANDED | ALREADY_LANDED | NOTHING_TO_LAND | MERGED | HANDLED | DECLINED | CANCELLED |
+    /// DELETED`, or nil while the subject is open.
+    public let settledAs: String?
+    /// The branch the attempt writes, as the job froze it.
+    public let targetRef: String
+
+    public init(landingSessionId: String, subject: String = "", state: String = "",
+                phase: String? = nil, settledAs: String? = nil, targetRef: String = "") {
+        self.landingSessionId = landingSessionId
+        self.subject = subject
+        self.state = state
+        self.phase = phase
+        self.settledAs = settledAs
+        self.targetRef = targetRef
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        landingSessionId = try c.decodeIfPresent(String.self, forKey: .landingSessionId) ?? ""
+        subject = try c.decodeIfPresent(String.self, forKey: .subject) ?? ""
+        state = try c.decodeIfPresent(String.self, forKey: .state) ?? ""
+        phase = try? c.decodeIfPresent(String.self, forKey: .phase)
+        settledAs = try? c.decodeIfPresent(String.self, forKey: .settledAs)
+        targetRef = try c.decodeIfPresent(String.self, forKey: .targetRef) ?? ""
+    }
+}
+
 public struct SessionDetailAgent: Codable, Equatable, Sendable {
     public let id: String
     public let defaultMergeTarget: String?
@@ -1194,6 +1425,12 @@ public struct MergeRepairSession: Codable, Equatable, Sendable, Identifiable {
     public let lifecycleState: SessionLifecycleState?
     public let error: String?
     public let completedAt: String?
+    /// When its turn last ended (or it finished), when it finished, and the start of what it last
+    /// said — what a repair waiting for the owner asked, up to 200 characters. Nil from a server
+    /// that predates the server's own check after a repair round.
+    public let lastTurnAt: String?
+    public let finishedAt: String?
+    public let lastAssistantText: String?
 
     public var effectiveRunStatus: RunStatus? { runStatus ?? status }
     public var effectiveRunState: SessionRunState? {
@@ -1244,6 +1481,11 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public let mergeRecovery: MergeRecovery?
     public let mergeRepairSession: MergeRepairSession?
     public let mergeRecoverySupported: Bool?
+    /// The recovery step the pending merge operation runs ("preview" | "apply" | "sync-local"); a
+    /// pending preview is a check under way.
+    public let mergeRecoveryAction: String?
+    /// Set while a repair round's check waits for this session's own turn to end. Nil from older servers.
+    public let mergeRepairTurnEndedAt: String?
     public let workspace: SessionDetailAgent?
     /// The server-resolved merge target: an explicit choice, project integration line, or default.
     public let mergeTarget: String?
@@ -1277,6 +1519,19 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// The routing decision this task run was planned with (docs/model-routing-design.md §7.5) —
     /// what marks the composer's model chip ✦. Nil on any other session.
     public let route: TaskRunRoute?
+    /// What drives this session (contract §2.9 LS6): `LANDING` is platform work with no engine,
+    /// drawn by the landing page instead of a transcript. Absent from an older server.
+    public let sessionKind: String?
+    /// A LANDING session's subject view (§2.9 LS1/LS6), present on a landing and on the
+    /// pre-generated id before its row exists. The same key carries the list row's summary; the
+    /// tolerant decode reads both, and nil is every other session.
+    public let landing: SessionLandingView?
+    /// The landing a code session's work fed (§2.9 LS1's derived field), or nil for a conversation
+    /// that produced no landing work.
+    public let sourceLanding: SessionSourceLanding?
+
+    /// Whether this detail is a landing session, which is what chooses its renderer.
+    public var isLanding: Bool { sessionKind == "LANDING" }
 
     public var effectiveRunStatus: RunStatus? { runStatus ?? status }
     public var effectiveRunState: SessionRunState? {
@@ -1314,6 +1569,8 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         mergeRecovery = try values.decodeIfPresent(MergeRecovery.self, forKey: .mergeRecovery)
         mergeRepairSession = try values.decodeIfPresent(MergeRepairSession.self, forKey: .mergeRepairSession)
         mergeRecoverySupported = try values.decodeIfPresent(Bool.self, forKey: .mergeRecoverySupported)
+        mergeRecoveryAction = try values.decodeIfPresent(String.self, forKey: .mergeRecoveryAction)
+        mergeRepairTurnEndedAt = try values.decodeIfPresent(String.self, forKey: .mergeRepairTurnEndedAt)
         workspace = try values.decodeIfPresent(SessionDetailAgent.self, forKey: .workspace)
         mergeTarget = try values.decodeIfPresent(String.self, forKey: .mergeTarget)
         mergeTargets = try values.decodeIfPresent([String].self, forKey: .mergeTargets)
@@ -1327,6 +1584,10 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         retryAttempts = try values.decodeIfPresent(Int.self, forKey: .retryAttempts)
         route = try values.decodeIfPresent(TaskRunRoute.self, forKey: .route)
+        sessionKind = try? values.decodeIfPresent(String.self, forKey: .sessionKind)
+        landing = try? values.decodeIfPresent(SessionLandingView.self, forKey: .landing)
+        sourceLanding = try? values.decodeIfPresent(SessionSourceLanding.self,
+                                                    forKey: .sourceLanding)
     }
 
     public init(id: String, status: RunStatus? = nil, runStatus: RunStatus? = nil,
@@ -1342,12 +1603,15 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 mergeStatus: String? = nil, mergeError: String? = nil, mergeTarget: String? = nil,
                 mergeRecovery: MergeRecovery? = nil, mergeRecoverySupported: Bool? = nil,
                 mergeRepairSession: MergeRepairSession? = nil,
+                mergeRecoveryAction: String? = nil, mergeRepairTurnEndedAt: String? = nil,
                 workspace: SessionDetailAgent? = nil,
                 mergeTargets: [String]? = nil, branchMerged: Bool? = nil, worktreeBranch: String? = nil,
                 commitStatus: String? = nil, commitError: String? = nil,
                 commitResultMessage: String? = nil,
                 agent: SessionDetailAgent? = nil, shareToken: String? = nil,
-                retryAt: String? = nil, retryAttempts: Int? = nil, route: TaskRunRoute? = nil) {
+                retryAt: String? = nil, retryAttempts: Int? = nil, route: TaskRunRoute? = nil,
+                sessionKind: String? = nil, landing: SessionLandingView? = nil,
+                sourceLanding: SessionSourceLanding? = nil) {
         self.id = id
         self.status = status
         self.runStatus = runStatus
@@ -1369,6 +1633,8 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.mergeRecovery = mergeRecovery
         self.mergeRepairSession = mergeRepairSession
         self.mergeRecoverySupported = mergeRecoverySupported
+        self.mergeRecoveryAction = mergeRecoveryAction
+        self.mergeRepairTurnEndedAt = mergeRepairTurnEndedAt
         self.workspace = workspace
         self.mergeTarget = mergeTarget
         self.mergeTargets = mergeTargets
@@ -1382,6 +1648,9 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.retryAt = retryAt
         self.retryAttempts = retryAttempts
         self.route = route
+        self.sessionKind = sessionKind
+        self.landing = landing
+        self.sourceLanding = sourceLanding
     }
 }
 
@@ -1590,4 +1859,20 @@ public struct SessionSearchResponse: Codable, Equatable, Sendable {
     /// The match count to display. An older server sends no total, and a page with nothing behind
     /// it is its own total either way.
     public var effectiveTotal: Int { total ?? hits.count }
+}
+
+/// What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why it
+/// wrote none — the answer of `POST /sessions/:id/recap` (`APIClient.refreshRecap`).
+public struct RecapOutcome: Decodable, Equatable, Sendable {
+    public let written: Bool
+    /// The recap the pass wrote; nil when it wrote none.
+    public let recapText: String?
+    /// Why it wrote none (`RecapCard.notice(for:)`); nil when it wrote.
+    public let reason: String?
+
+    public init(written: Bool, recapText: String? = nil, reason: String? = nil) {
+        self.written = written
+        self.recapText = recapText
+        self.reason = reason
+    }
 }

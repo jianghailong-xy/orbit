@@ -1,0 +1,68 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<body>
+<h1>needs-you 条（黄色审批条）改版 · 三个方向</h1>
+<p class="lede">左一是按你 4:32 那张截图量出来的<b>现状</b>（Pro Max 440pt、暗色，几何和颜色逐像素取自截图）；右边三个是改法，同一时刻、同一份数据：项目「落地会话」的协调会话在问你一件事，你正在读另一个会话。<br>
+三个方案<b>行为一样</b>：按下去还是去最久那件事的卡（<code>openNeedsYouItem</code>），会话里自己有待答的卡时还是指上 / 指下；都不闪、不呼吸。<b>词不改</b>（<code>kindWord</code> 的四个词原样）；新画上去的只有会话行上已有的数据——按种类的图形（<code>kind</code>）、项目全名（<code>projectTitle</code>）、等了多久（<code>since</code>）、还有几件（<code>count</code>）。</p>
+<div class="row" id="row"></div>
+<p class="foot" id="foot"></p>
+<script>
+const Q = { glyph: 'qbub', title: 'Question from coordinator', sub: PROJ, age: '2h' };
+const H = 560;
+
+// 现状
+const now = phone('dark', `${statusBar()}${navCircles()}${todayBar('dark', 'Question from coordinator · ' + PROJ)}${tx(158)}
+${mk(3, 3, 434, 153)}${num(1, 410, 8)}
+${mk(262, 119, 142, 32)}${num(2, 392, 104)}
+${mk(10, 125, 19, 19, 'round')}${num(3, 2, 106)}
+${mk(408, 122, 22, 26)}${num(4, 418, 150)}`, { h: H, cls: 'crop' });
+
+// A
+const a = phone('dark', `${statusBar()}${navCircles()}${edge('dark', 150, 174)}${capA({ ...Q, top: 112 })}${tx(162)}`, { h: H, cls: 'crop' });
+
+// B：转录尾部（中间空着）+ 往上翻时
+const bNav = `<div class="nav"><div class="gc l">${ic('chevl', 22, 'var(--l1)', 2.6)}</div><div class="cap44 capnav" style="top:0">${capInner(Q)}</div><div class="gc r">${dots()}</div></div>`;
+const b = phone('dark', `${statusBar()}${bNav}${edge('dark', 104, 128)}${tx(116)}`, { h: H, cls: 'crop' });
+const bUp = phone('dark', `${statusBar()}<div class="nav"><div class="gc l">${ic('chevl', 22, 'var(--l1)', 2.6)}</div>
+<div class="sq" style="left:72px;width:240px"><span class="lb">↑</span><span class="q">把合入检查的失败原因整理成一张表</span></div>
+<div class="gc" style="left:320px">${ic('qbub', 19, 'var(--or)', 2.1)}<span class="badge">3</span></div><div class="gc r">${dots()}</div></div>${edge('dark', 104, 128)}${tx(116)}`, { h: 76, off: 46, cls: 'strip' });
+
+// C
+const c = phone('dark', `${statusBar()}${navCircles()}${bandC('dark', Q)}${tx(158)}`, { h: H, cls: 'crop' });
+
+document.getElementById('row').innerHTML = `
+<div class="col"><span class="tag now">现状 · 你的截图</span>${now}
+<div class="cap"><h3>现状</h3><ul>
+<li><span class="n">1</span>顶上 154pt 被涂成两截：条用的 <code>.bar</code> 底板一路铺到状态栏（<b>#191919</b>），条本身是 20% 橙叠在黑上——<b>#402E1D</b>，暗色里不是琥珀，是泥。导航键是 iOS 26 的玻璃圆，条却是一整条贴边色带，两套语言。</li>
+<li><span class="n">2</span>一行放不下：<code>Question from coordinator</code> 占去六成宽，项目名只剩「落地会话：每次…」；等了多久、后面还有几件，都没处说。</li>
+<li><span class="n">3</span>合入审批 / 提问 / 升级 / 暂停，和普通的工具审批长得一模一样，只靠一颗 7pt 圆点说「有事」。</li>
+<li><span class="n">4</span>chevron 是棕底上的 tertiary（#85674A 对 #402E1D，约 2.5:1），几乎看不见。</li>
+</ul><p style="margin:8px 0 0">占高 <span class="cost">48pt</span>：条 38 + 导航键下 10。</p></div></div>
+
+<div class="col"><span class="tag rec">A · 我建议</span>${a}
+<div class="cap"><h3>A · 导航下一枚玻璃胶囊，两行</h3><ul>
+<li><b>形</b>：44pt 高、两头圆，左右对齐返回键和 ⋯ 的外沿（20pt），离导航键 6pt——和导航栏中间那枚「↑ 你的问题」胶囊（<code>questionGlass</code>：44pt、<code>.regular</code> 玻璃）是同一种料。</li>
+<li><b>色</b>：胶囊是中性玻璃；琥珀只留在左边 30pt 的圆里——就是 Landing 头 / 合入检查行那颗圆（<code>ProjectLandingRow</code>：30pt、橙 15% 底、橙图形），圆与胶囊同心（内缩 7pt）。顶上不再刷灰，导航区回到转录自己的黑，转录从胶囊底下淡出。</li>
+<li><b>字</b>：第一行 15pt 半粗说是什么事，右边 <code>2h</code> 是等了多久；第二行 13pt 次要色是项目名，占满整宽：Pro Max 上放得下约 25 个汉字（393pt 的 Pro 上约 22 个），今天只有 7 个。</li>
+<li><b>不画 chevron</b>：整枚就是按压，和「↑ 你的问题」胶囊一样（合入检查行 10-11 也是这样去掉的）；会话内那种（<code>1 open question below</code>）留着 ↓ / ↑，因为它要说卡在哪一边。</li>
+<li><b>图形按种类</b>：合入、提问、升级、暂停、普通审批各一个（见图二），扫一眼就知道是哪种事。</li>
+</ul><p style="margin:8px 0 0">占高 <span class="cost">56pt</span>：胶囊 44 + 上下各 6，比今天多 8pt。</p></div></div>
+
+<div class="col"><span class="tag alt">B</span>${b}<div style="margin-top:14px;font-size:13px;color:#4f4f58">往上翻、中间要放「↑ 你的问题」时：</div><div style="margin-top:6px">${bUp}</div>
+<div class="cap"><h3>B · 收进导航栏中间</h3><ul>
+<li>在转录尾部时导航栏中间是空的（10-15 起会话页不放标题），把同一枚两行胶囊放进去，宽 296pt。往上翻、中间要让给「↑ 你的问题」时，它缩成 ⋯ 左边一颗琥珀图形的玻璃圆，右上角是件数；回到尾部再展开。</li>
+<li>代价：同一个位置轮流放两样东西，跟着翻动变形；中间那枚容易被读成「这个会话的标题」；列表页是大标题，放不进去，得另用 A 的胶囊。</li>
+</ul><p style="margin:8px 0 0">占高 <span class="cost">0</span>——10-15 把问题条收进导航栏，就是为了这个。</p></div></div>
+
+<div class="col"><span class="tag alt">C</span>${c}
+<div class="cap"><h3>C · 只修颜色（最小改动）</h3><ul>
+<li>位置、整条、单行都不动；去掉 20% 橙（暗色变泥的根源），条和导航区是同一块 <code>.bar</code>；圆点换成按种类的琥珀图形，词加粗、项目名退成次要色，右边加 <code>2h</code>。</li>
+<li>改动最小：iOS <code>NeedsYouBannerView</code> 一个视图 + Android 的孪生 <code>NeedsYouBar</code>。</li>
+<li>代价：还是压在导航下面的一整条色带；项目名照样被截。</li>
+</ul><p style="margin:8px 0 0">占高 <span class="cost">48pt</span>（不变）。</p></div></div>`;
+
+document.getElementById('foot').innerHTML = `<b>三个方案都不动的</b>：按下的去处（会话里有待答的卡 → 滚到那张卡并打开它的审阅；否则 → 最久那件事的卡，合入审批去项目 sessions 页）；只在 compact 宽度（手机）出现，打字时随导航一起收起；不闪、不呼吸、不弹。<br>
+<b>A 要动的</b>：OrbitKit <code>NeedsYouBanner</code> 加第二行与 <code>since</code>，<code>NeedsYouLogic.banner</code> 填它们（项目名今天就在 <code>text</code> 的「·」后面）；<code>NeedsYouBannerView.bar</code> 换成胶囊——iOS 26 用 <code>.glassEffect(.regular.interactive(), in: .capsule)</code>，挂在 <code>.safeAreaBar(edge: .top)</code> 上让转录的滚动边缘一路淡到胶囊底下，更早的系统用 <code>.bar</code> 胶囊兜底；Android <code>NeedsYouBar</code> 同步换。没有服务端改动。`;
+</script>
+</body></html>

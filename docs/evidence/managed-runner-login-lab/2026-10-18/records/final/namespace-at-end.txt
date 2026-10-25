@@ -1,0 +1,21 @@
+NAME                       READY   STATUS    RESTARTS      AGE
+pod/lab-20261017061552-b   1/1     Running   8 (16m ago)   17h
+
+NAME                                                                 STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+persistentvolumeclaim/mr-data-01a14b6a-bbb3-703c-9da2-52e164ebf799   Bound    pvc-d5299c21-8be0-4e61-91dd-33636ccda9ab   2Gi        RWO            runner-data    <unset>                 3h59m
+persistentvolumeclaim/mr-data-01a14b7d-4faf-7082-acb6-7cee4cd693ee   Bound    pvc-f00e77e6-337a-464f-9a54-0c6fb3bfcc1f   2Gi        RWO            runner-data    <unset>                 3h39m
+persistentvolumeclaim/mr-data-01a14bc6-f4dc-7456-913d-bc14f2f3bcd4   Bound    pvc-d2dd3096-1e5f-44f0-9fc2-0a44e9fb1250   2Gi        RWO            runner-data    <unset>                 139m
+persistentvolumeclaim/mr-data-01a14bc6-f4de-7328-9a3f-0d025ff3a21b   Bound    pvc-e8aa1f8c-ce3f-4bba-8674-89fbdb37615f   2Gi        RWO            runner-data    <unset>                 139m
+persistentvolumeclaim/mr-data-01a14bdc-ead8-73ba-9322-286ff7b293dd   Bound    pvc-8278f180-68bf-4eea-ae49-c79d896e3c15   2Gi        RWO            runner-data    <unset>                 114m
+persistentvolumeclaim/mr-data-01a14c23-4d07-7679-812d-f74876266c72   Bound    pvc-4ede0589-3cb3-44a8-bc3e-f7b414b71681   2Gi        RWO            runner-data    <unset>                 38m
+persistentvolumeclaim/mr-data-01a14c39-5ff2-746d-87ad-ac5f6fa1a3ee   Bound    pvc-928c943a-bc2a-4df9-9cea-97d88369f2f0   2Gi        RWO            runner-data    <unset>                 14m
+persistentvolumeclaim/mr-data-01a14c3a-e9b4-77bb-8d63-0bb1fc697702   Bound    pvc-fc1c9388-c2d1-49d5-a9fc-4325d9cdd413   2Gi        RWO            runner-data    <unset>                 12m
+persistentvolumeclaim/mr-data-01a14c3c-502b-71cb-984b-0594e9adc118   Bound    pvc-9bddfcba-1043-48d2-bbd5-f1453d65f862   2Gi        RWO            runner-data    <unset>                 10m
+persistentvolumeclaim/mr-data-01a14c3d-df2c-701d-9013-6ead27f5922a   Bound    pvc-10238454-a0bd-4438-9173-a17b35b2778b   2Gi        RWO            runner-data    <unset>                 9m21s
+persistentvolumeclaim/mr-data-01a14c3e-c23e-7476-91bc-0b1010f420a1   Bound    pvc-d1075e02-0f32-4913-9884-5c3da5d1e57d   2Gi        RWO            runner-data    <unset>                 8m23s
+persistentvolumeclaim/mr-data-01a14c44-d7e6-75a4-8ab9-4fb0625f5ac0   Bound    pvc-9a7cd7cb-8c86-4071-a5b0-856fd5457b0e   2Gi        RWO            runner-data    <unset>                 104s
+persistentvolumeclaim/mr-data-13282595-dbc7-4ac3-b7ef-0999794197d4   Bound    pvc-8780660e-7455-4612-8b16-3f1fddaf9ded   1Gi        RWOP           runner-data    <unset>                 18h
+persistentvolumeclaim/mr-data-640deaf2-edcb-4c42-aedd-716f4bcbccf3   Bound    pvc-e2daf0db-ed65-4a62-9841-ced57d71ed3b   1Gi        RWO            runner-data    <unset>                 18h
+persistentvolumeclaim/mr-data-83283361-0bc1-4cdf-a05d-647fc0b120cf   Bound    pvc-dd745a38-f385-4596-b359-8bc9f27828c6   1Gi        RWOP           runner-data    <unset>                 17h
+persistentvolumeclaim/mr-data-b3c54306-e474-4fce-a316-228ce37a5266   Bound    pvc-c869968e-0f44-4365-800c-0448f74f8892   1Gi        RWO            runner-data    <unset>                 17h
+persistentvolumeclaim/t03-data                                       Bound    pvc-b4ed170c-e8ee-40bb-96a4-83f5156bcd6f   5Gi        RWO            runner-data    <unset>                 16h

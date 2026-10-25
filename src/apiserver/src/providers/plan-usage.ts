@@ -63,7 +63,8 @@ export function subscriptionUsageRefusal(row: UsageProbeRow, apiKey: string): Su
     row.runtime === AgentProvider.CODEX ||
     row.runtime === AgentProvider.KIMI ||
     row.runtime === AgentProvider.ANTIGRAVITY ||
-    row.runtime === AgentProvider.DSH
+    row.runtime === AgentProvider.DSH ||
+    row.runtime === AgentProvider.CURSOR
   ) {
     return 'NOT_CLAUDE_RUNTIME';
   }

@@ -1,4 +1,4 @@
-import type { ProviderBalanceAmount, ProviderBalanceFailure } from '@orbit/shared';
+import { isDeepSeekKey, type ProviderBalanceAmount, type ProviderBalanceFailure } from '@orbit/shared';
 
 /**
  * The DeepSeek account balance behind a configured provider's key.
@@ -15,24 +15,17 @@ export const DEEPSEEK_BALANCE_URL = 'https://api.deepseek.com/user/balance';
 
 const DEEPSEEK_HOST = 'api.deepseek.com';
 
-/** The presets whose key is a DeepSeek platform key: the one that borrows Claude Code, and the
- *  one DeepSeek Harness runs on. */
-const DEEPSEEK_PRESETS: ReadonlySet<string> = new Set(['deepseek', 'deepseek-harness']);
-
 /** How long the balance request may take; the clients name it when it ran out. */
 export const BALANCE_TIMEOUT_MS = 10_000;
 
 /**
- * Whether a row's key is a DeepSeek account's — the only rows a balance is asked for. A preset row
- * is decided by its preset; a custom one (no preset) by its endpoint being DeepSeek's own host.
+ * Whether a row's key is a DeepSeek account's — the only rows a balance is asked for. The same rule
+ * the compatibility table runs DeepSeek Harness by (shared `isDeepSeekKey`), so the two never
+ * disagree: a preset row is decided by its preset, a custom one (no preset) by its endpoint being
+ * DeepSeek's own host.
  */
 export function isDeepSeekAccountRow(row: { presetSlug: string | null; baseUrl: string }): boolean {
-  if (row.presetSlug) return DEEPSEEK_PRESETS.has(row.presetSlug);
-  try {
-    return new URL(row.baseUrl).hostname.toLowerCase() === DEEPSEEK_HOST;
-  } catch {
-    return false;
-  }
+  return isDeepSeekKey(row);
 }
 
 /** DeepSeek's documented names for its error statuses (api-docs.deepseek.com/quick_start/error_codes). */

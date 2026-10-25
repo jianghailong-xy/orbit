@@ -1,0 +1,34 @@
+tree: /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base (f78e93f61)
+edits:
+   src/web/ui-migration/choices.browser.mjs | 241 +++++++++++++------------------
+   1 file changed, 100 insertions(+), 141 deletions(-)
+load: 12.41 8.61 6.05 13/3250 3167180
+available: 6047 MB
+
+P0 expected screenshots: 44 P0.2 originals, 165 main drift references, 43 accepted migration differences.
+
+Running 20 tests using 1 worker
+
+  ✓   1 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.5s)
+  ✓   2 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✓   3 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✓   4 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+  ✓   5 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✓   6 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✓   7 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+  ✓   8 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✓   9 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✓  10 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.4s)
+  ✓  11 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✓  12 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✓  13 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✓  14 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✓  15 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+  ✓  16 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+  ✓  17 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✓  18 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✓  19 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+  ✓  20 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+
+  20 passed (35.0s)
+exit=0

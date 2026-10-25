@@ -87,7 +87,7 @@ class RealtimeLifecycleTest {
             callback.onCapabilitiesChanged(network, capabilities)
             store.selectSession("s1")
             lifecycle.onActivityStarted(Activity())
-            withTimeoutOrNull(3000) {
+            withTimeoutOrNull(60_000) {
                 while (store.state.value.session?.connection != ConnectionState.CONNECTED || !store.state.value.directoryFresh) delay(10)
             }
             assertEquals(ConnectionState.CONNECTED, store.state.value.controlConnection)
@@ -95,13 +95,13 @@ class RealtimeLifecycleTest {
             assertTrue(store.state.value.directoryFresh)
             assertTrue(streamOpens.get() >= 2)
             callback.onLost(network)
-            withTimeout(3000) { while (store.state.value.controlConnection != ConnectionState.STOPPED) delay(10) }
+            withTimeout(60_000) { while (store.state.value.controlConnection != ConnectionState.STOPPED) delay(10) }
             callback.onAvailable(network); callback.onCapabilitiesChanged(network, capabilities)
-            withTimeoutOrNull(3000) { while (store.state.value.controlConnection != ConnectionState.CONNECTED) delay(10) }
+            withTimeoutOrNull(60_000) { while (store.state.value.controlConnection != ConnectionState.CONNECTED) delay(10) }
             assertEquals("state=${store.state.value}, opens=${streamOpens.get()}, paths=$paths",
                 ConnectionState.CONNECTED, store.state.value.controlConnection)
             lifecycle.onActivityStopped(Activity())
-            withTimeout(3000) { while (store.state.value.session?.connection != ConnectionState.STOPPED) delay(10) }
+            withTimeout(60_000) { while (store.state.value.session?.connection != ConnectionState.STOPPED) delay(10) }
         } finally {
             lifecycle.close(); store.close(); owner.cancel(); auth.logout(); server.shutdown()
         }

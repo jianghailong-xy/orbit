@@ -3,7 +3,7 @@ import { codexAccountSnapshot, withEnginePlanUsage } from '@orbit/shared';
 import type { Runner } from '../components/TasksSidePanel';
 import { engineKeepsAccounts, runsOnEnvKey } from './engineAccounts';
 import { planUsageRows, planUsageSnapshotForProvider, type PlanUsageDisplayRow } from './planUsage';
-import { ago, ENGINE_CLI_NAME, updateNoteOf } from './runnerEngines';
+import { ago, ENGINE_CLI_NAME, updateNoteOf, webShowsEngine } from './runnerEngines';
 import {
   ATTENTION_CANT_UPDATE_ITSELF,
   ATTENTION_CHECKOUT_DETAIL,
@@ -115,7 +115,10 @@ export type AttentionRunner = Pick<
 export interface AttentionWorkspace {
   id: string;
   name: string;
-  /** The provider its last interactive session ran on: a built-in engine or a configured provider. */
+  /** The engine its last interactive session ran on (null when nobody can tell, absent from an older
+   *  server) and the credential it spent: an engine's own sign-in on the runner — the engine's name —
+   *  or a key or pool, which the runner's sign-in and quota have nothing to do with. */
+  lastEngine?: string | null;
   lastProvider?: string | null;
   workDir?: string | null;
   /** BIGINT columns, which the API sends as strings (main.ts BigInt.toJSON); numbers work too. */
@@ -177,15 +180,18 @@ const DAY = 24 * HOUR;
 const MIB = 1024 * 1024;
 const GIB = 1024 * MIB;
 
-const LOGIN_ENGINES: LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity'];
+const LOGIN_ENGINES: LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity', 'cursor'];
 const LOGIN_NAME: Record<LoginEngine, string> = {
   claude: RUNNER_LOGIN_CLAUDE,
   codex: RUNNER_LOGIN_CODEX,
   kimi: RUNNER_LOGIN_KIMI,
   antigravity: 'Antigravity',
+  cursor: ENGINE_CLI_NAME.cursor,
 };
-/** Every engine a runner reports on, in the order its page lists them. */
-const REPORTED_ENGINES = Object.keys(ENGINE_CLI_NAME) as ReportedEngine[];
+/** Every engine a runner reports on, in the order its page lists them — Cursor CLI on a runner that
+ *  knows it (webShowsEngine). */
+const reportedEngines = (runner: AttentionRunner): ReportedEngine[] =>
+  (Object.keys(ENGINE_CLI_NAME) as ReportedEngine[]).filter((engine) => webShowsEngine(engine, [runner]));
 
 /** The RunnerRepoHealth states that block every merge into the checkout, and what it is stuck in.
  *  `dirty` is not one: a stray edit still lets merges fast-forward around it. */
@@ -374,9 +380,13 @@ function namesPhrase(names: string[]): string {
   return names[0] ?? '';
 }
 
-/** The workspaces whose sessions run on this built-in engine's login on this machine. */
+/** The workspaces whose sessions run on this engine's own sign-in on this machine: the engine is
+ *  theirs and so is its credential. One that runs the engine on a key (Claude Code on a DeepSeek key)
+ *  does not depend on the sign-in at all. */
 function workspacesOn(workspaces: ReadonlyArray<AttentionWorkspace>, engine: LoginEngine): string[] {
-  return workspaces.filter((w) => w.lastProvider === engine).map((w) => w.name);
+  return workspaces
+    .filter((w) => w.lastProvider === engine && (w.lastEngine ?? engine) === engine)
+    .map((w) => w.name);
 }
 
 function signedOutItems(
@@ -635,7 +645,7 @@ function cannotSelfUpdateItem(
 
 /** An installed CLI whose update note is a warning (runnerEngines' updateNoteOf). */
 function engineUpdateItems(runner: AttentionRunner, nowMs: number): AttentionItem[] {
-  return REPORTED_ENGINES.flatMap((engine): AttentionItem[] => {
+  return reportedEngines(runner).flatMap((engine): AttentionItem[] => {
     const health = runner.engines?.find((e) => e.engine === engine);
     if (!health?.installed) return [];
     const note = updateNoteOf(health.update, nowMs);

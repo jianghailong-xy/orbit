@@ -118,6 +118,7 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       maxConcurrent: true,
       version: true,
       lastHeartbeatAt: true,
+      presence: { select: { lastBeatAt: true } },
       enrolledAt: true,
       position: true,
       runsAsRoot: true,
@@ -137,6 +138,8 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       // The names its accounts were given in Orbit, laid over the report (namedRunnerEngines).
       accountNames: true,
       accountPauses: true,
+      // The Defaults removed from Orbit, left out of the report (usedRunnerEngines).
+      defaultRemoved: true,
       installStatus: true,
       installEngine: true,
       installCommand: true,

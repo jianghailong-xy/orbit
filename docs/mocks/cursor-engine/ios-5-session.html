@@ -1,0 +1,114 @@
+<!doctype html>
+<!-- Design board iOS 5 (T0, Cursor engine): a Cursor session on iPhone — the composer's model menu with Cursor's
+     own model parameters, a message sent mid-turn (queued, with the reason), the Context sheet that has no
+     reading, and the quota card. 393 × 852 pt; drawn from today's ComposerView.swift, PendingTrayView.swift and
+     AutoRetryCard.swift. macOS is the same SwiftUI; Android follows. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>iOS 5 · Cursor session: model and variant, queued messages, context, quota</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<script src="../antigravity-accounts/kit.js"></script>
+<script src="kit.js"></script>
+<style>
+  .i-menu .i-mi { min-height: 40px; padding-top: 4px; padding-bottom: 4px; }
+  .i-chat .tool { font-size: 14px; color: #8a8a8e; display: flex; align-items: center; gap: 6px; }
+  .i-chat .tool b { color: #3c3c43; font-weight: 600; }
+  .ph.dark .i-chat .tool b { color: #e5e5ea; }
+  .i-comp .tb .send.stop { background: #3e69f6; font-size: 12px; }
+  .i-comp .f.long { font-size: 15px; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet" style="width:2260px">
+  <h1 class="m-h1 zh">iOS 5 · Cursor 会话：模型 + Cursor 自己的参数；轮中发的消息排到下一轮并写原因；Context 写「Unavailable」；额度用尽是额度卡</h1>
+  <p class="m-sub zh">规则同 Web 5。模型菜单：标题「Cursor CLI」，Provider，模型（Auto 在前），选了带参数的模型才有 Effort / Context / Speed（Cursor 的 <code>fast</code>，<span class="tbd coord">待协调确认</span>，见 Web 5 ④）。iPhone 的托盘（<code>PendingTrayView</code>）今天对不能插话的 engine 只写「Queued for next turn」，Cursor 多一行原因；长按发送的「Queue for next turn」菜单不出现（同 Kimi 等）。Context 环点开是一张「Context」表，Cursor 写「Unavailable」。额度卡同今天的 <code>AutoRetryCard</code>，文字同 Web 5。Android 跟这张稿。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① composer 的模型菜单</div>
+    <div class="phones">
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>Auto：没有参数</div><div id="p1"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>Claude Opus 5.5：Effort / Context / Speed</div><div id="p2"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>一轮进行中再发一条</div><div id="p3"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>点 Context 环</div><div id="p4"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>Default 的 Free 套餐用完</div><div id="p5"></div></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+<script>
+const chatDone = `<div class="i-chat"><div class="me">The nightly export test fails about once a week. Find out why and fix it.</div>
+  <p>The test builds “yesterday” in the machine’s local time zone, so it misses a row just after midnight UTC. I pinned the test clock to UTC; five runs in a row now pass.</p></div>`;
+const comp = ({ chip = '<b>Auto</b>', ph = 'Reply…', stop = false, ring = true, mode = 'Accept Edits', on = false } = {}) =>
+  `<div class="i-comp"><div class="f${ph.length > 30 ? ' long' : ''}">${ph}</div><div class="tb"><span class="plus">+</span><span class="mode">${mode}</span><span class="sp"></span>
+    <span class="chip${on ? ' on' : ''}">${chip}</span>${ring ? '<span class="i-ring" id="ring"></span>' : ''}<span class="send${stop ? ' stop' : ''}">${stop ? '■' : '↑'}</span></div></div>`;
+const band = (inner) => `<div class="i-band">${inner}</div>`;
+const sess = (id, body, overlay = '') => chatPhone({ id, title: 'Fix the flaky export test', sub: 'hpc · Cursor CLI', body, overlay });
+const mainMenu = (items, style, cls = '') => iMenu([{ title: 'Cursor CLI', mark: iMk('cursor', 18) }, ...items], style, cls);
+const models = (current) => ['Auto', 'Claude Opus 5.5', 'Claude Sonnet 5.5', 'GPT-5.5', 'Gemini 3.8 Pro', 'Grok 4.7', 'Composer 2.5']
+  .map((t) => ({ t, ...(t === current ? { sub: 'Current' } : {}) }));
+document.getElementById('p1').innerHTML = sess('ph1', chatDone + band(comp({ on: true })), '<div class="i-dimbg"></div>' + mainMenu([
+  { t: 'Provider', sub: 'Automatic', chev: '›' }, { sep: true }, ...models('Auto'), { sep: true },
+  { foot: 'Auto picks a model for each request. Cursor doesn’t report which one it used, and Auto has no effort or context to set.' },
+], 'left:60px;bottom:120px').replace('class="i-menu "', 'class="i-menu " id="m1"'));
+document.getElementById('p2').innerHTML = sess('ph2', chatDone + band(comp({ chip: '<b>Opus 5.5</b><i>High · 1M · Fast</i>', on: true })), '<div class="i-dimbg"></div>'
+  + mainMenu([{ t: 'Provider', sub: 'Automatic', chev: '›' }, { sep: true }, ...models('Claude Opus 5.5'), { sep: true },
+    { t: 'Effort', sub: 'High', chev: '›', id: 'v-effort' }, { t: 'Context', sub: '1M', chev: '›', id: 'v-context' }, { t: 'Speed', sub: 'Fast', chev: '›', id: 'v-speed' }], 'left:60px;bottom:120px').replace('class="i-menu "', 'class="i-menu " id="m2"'));
+
+const queuedIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11M2.5 7h11M2.5 10.5h4.5"/><path d="M9.5 10.5h4M12 9l1.5 1.5L12 12"/></svg>';
+const trashIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.75 4.25h10.5"/><path d="M6.25 4.25V3a1 1 0 0 1 1-1h1.5a1 1 0 0 1 1 1v1.25"/><path d="M4 4.25l.6 8.4a1.5 1.5 0 0 0 1.5 1.35h3.8a1.5 1.5 0 0 0 1.5-1.35l.6-8.4"/></svg>';
+const tray = `<div class="i-tray" id="tray"><div class="tr">${queuedIcon}<span class="tx">Also add a line about the fix to CHANGELOG.md</span><span class="st">Queued for next turn</span>${trashIcon}</div>
+  <div class="note" id="trnote">Cursor CLI can’t take a message mid-turn — sending one would stop the turn. These go in order once it ends.</div></div>`;
+const chatRunning = `<div class="i-chat"><div class="me">Run the whole suite before you commit.</div><p>Running the full suite now.</p>
+  <div class="tool"><b>Bash</b> Run the full test suite ${spin}</div></div>`;
+document.getElementById('p3').innerHTML = sess('ph3', chatRunning + band(tray + comp({ ph: 'Reply — it goes to Cursor CLI when this turn ends…', stop: true })));
+
+const contextSheet = `<div class="i-dimbg heavy"></div><div class="i-sheet" id="ctx"><div class="grab"></div><div class="hd">Context<span class="done">Done</span></div>
+  <div class="i-sec"><div class="kv strong"><span>Context window</span><span>Unavailable</span></div></div>
+  <div class="i-foot">Cursor CLI doesn’t report how much of the window a session has used, so there is no reading to show.</div>
+  <div class="i-sec" style="margin-top:14px"><div class="kv"><span>Model</span><span>Auto</span></div></div></div>`;
+document.getElementById('p4').innerHTML = sess('ph4', chatDone + band(comp()), contextSheet);
+
+const quotaCard = `<div class="i-quota" id="quota"><b>Usage limit reached</b>The quota for Default (Cursor CLI) on “hpc” is used up.
+  <div class="q2">Cursor answered “Upgrade your plan to continue”: Default’s Free plan has no requests left until Oct 3. This conversation can’t move to Team yet — <span class="lnk">start a new session on Team</span>.</div>
+  <div class="bbs" style="margin-top:10px"><span class="bb prom">Retry Now</span></div></div>`;
+const chatQuota = `<div class="i-chat"><div class="me">Add a regression test for the midnight case too.</div>${quotaCard}</div>`;
+document.getElementById('p5').innerHTML = sess('ph5', chatQuota + band(comp()));
+
+finish();
+requestAnimationFrame(() => {
+  const ph = (id) => document.getElementById(id);
+  ring(ph('ph1'), '#m1 .i-mt', 1, 2);
+  ring(ph('ph1'), '#m1 .i-mfoot', 2, 2);
+  ring(ph('ph2'), '#v-effort', 0, 1);
+  ring(ph('ph2'), '#v-speed', 3, 1);
+  ring(ph('ph2'), '#v-context', 0, 1);
+  ring(ph('ph2'), '.i-comp .chip', 4, 3);
+  ring(ph('ph3'), '#trnote', 5, 2);
+  ring(ph('ph3'), '.i-comp .f', 6, 2);
+  ring(ph('ph4'), '#ctx .i-sec', 7, 3);
+  ring(ph('ph5'), '#quota', 8, 3);
+});
+document.getElementById('notes').innerHTML = notes([
+  [1, '<b>标题</b>「Cursor CLI」带 Cursor 标（暗色下标的 glyph 用正文色，同 Web 5 ①）。'],
+  [2, '<b>Auto 的说明</b>：菜单底部一行，同 Web。'],
+  [3, '<b>Cursor 模型的参数</b>：Effort（Low…Max）、Context（300K tokens / 1M tokens）、Speed（Standard / Fast）——只列这个模型有的参数，各自是子菜单（iOS 26 菜单叠在前面），选项同 Web 5。'],
+  [4, '<b>chip</b>：「Opus 5.5 High · 1M · Fast」。iPhone 上模型名用短名，和今天一致。'],
+  [5, '<b>托盘原因</b>：「Cursor CLI can’t take a message mid-turn — sending one would stop the turn. These go in order once it ends.」'],
+  [6, '<b>输入框</b>：一轮进行中「Reply — it goes to Cursor CLI when this turn ends…」。'],
+  [7, '<b>Context 表</b>：「Context window · Unavailable」+ 说明；Context 环是虚线空环（今天没读数时是实线空环）。'],
+  [8, '<b>额度卡</b>：今天的 <code>AutoRetryCard</code>，用账号名，引 Cursor 原话，出路是新会话（D5：这段对话还不能换账号）。'],
+]);
+</script>
+</body>
+</html>

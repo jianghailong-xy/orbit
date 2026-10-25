@@ -329,7 +329,8 @@ test('each inventory entry holds what it says it holds', () => {
  */
 const SESSION_WRITERS: ReadonlyArray<{ method: string; statements: number; note: string }> = [
   {
-    method: 'events',
+    // The events route's transaction, which the runner link's batches run too (one per part of a batch).
+    method: 'ingestEvents',
     statements: 1,
     note:
       'One, literally. It used to be up to eight — a telemetry write, a runtime-id fill, the ' +
@@ -351,7 +352,7 @@ const SESSION_WRITERS: ReadonlyArray<{ method: string; statements: number; note:
 test('the runner Session writers issue one write per row', () => {
   const SESSION_WRITE = /\btx\.session\.(update|updateMany)\b|UPDATE\s+"session"/g;
   for (const writer of SESSION_WRITERS) {
-    const start = runnerApi.indexOf(`  async ${writer.method}(`);
+    const start = runnerApi.search(new RegExp(`\\n {2}(?:private )?async ${writer.method}\\(`));
     assert.ok(start > 0, `${writer.method} is gone`);
     // Up to the next method declaration at class-body indentation.
     const rest = runnerApi.slice(start + 10);

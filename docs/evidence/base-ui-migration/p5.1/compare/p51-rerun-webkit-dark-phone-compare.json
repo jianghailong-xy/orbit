@@ -1,0 +1,2975 @@
+{
+ "screenshots": {
+  "webkit-dark-phone/p51-reset-confirm.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      8,
+      13
+     ],
+     "y": [
+      109,
+      113
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      376,
+      381
+     ],
+     "y": [
+      109,
+      113
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      8,
+      12
+     ],
+     "y": [
+      374,
+      378
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      377,
+      380
+     ],
+     "y": [
+      374,
+      378
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 544,
+     "x": [
+      54,
+      364
+     ],
+     "y": [
+      403,
+      446
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 18,
+     "x": [
+      38,
+      53
+     ],
+     "y": [
+      404,
+      409
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      298,
+      299
+     ],
+     "y": [
+      404,
+      404
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 47,
+     "x": [
+      0,
+      37
+     ],
+     "y": [
+      405,
+      429
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      307,
+      325
+     ],
+     "y": [
+      405,
+      409
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      4,
+      4
+     ],
+     "y": [
+      414,
+      414
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      362,
+      369
+     ],
+     "y": [
+      460,
+      464
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      370,
+      370
+     ],
+     "y": [
+      475,
+      475
+     ]
+    },
+    {
+     "maxChannelDiff": 12,
+     "pixels": 9,
+     "x": [
+      11,
+      13
+     ],
+     "y": [
+      491,
+      497
+     ]
+    },
+    {
+     "maxChannelDiff": 12,
+     "pixels": 7,
+     "x": [
+      304,
+      305
+     ],
+     "y": [
+      491,
+      497
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      371,
+      371
+     ],
+     "y": [
+      491,
+      496
+     ]
+    },
+    {
+     "maxChannelDiff": 85,
+     "pixels": 248,
+     "x": [
+      304,
+      331
+     ],
+     "y": [
+      542,
+      552
+     ]
+    },
+    {
+     "maxChannelDiff": 54,
+     "pixels": 284,
+     "x": [
+      12,
+      81
+     ],
+     "y": [
+      543,
+      555
+     ]
+    },
+    {
+     "maxChannelDiff": 54,
+     "pixels": 5,
+     "x": [
+      39,
+      47
+     ],
+     "y": [
+      543,
+      543
+     ]
+    },
+    {
+     "maxChannelDiff": 54,
+     "pixels": 58,
+     "x": [
+      58,
+      81
+     ],
+     "y": [
+      543,
+      551
+     ]
+    },
+    {
+     "maxChannelDiff": 33,
+     "pixels": 8,
+     "x": [
+      75,
+      79
+     ],
+     "y": [
+      543,
+      544
+     ]
+    },
+    {
+     "maxChannelDiff": 110,
+     "pixels": 449,
+     "x": [
+      11,
+      229
+     ],
+     "y": [
+      563,
+      570
+     ]
+    },
+    {
+     "maxChannelDiff": 9,
+     "pixels": 1,
+     "x": [
+      228,
+      228
+     ],
+     "y": [
+      563,
+      563
+     ]
+    },
+    {
+     "maxChannelDiff": 93,
+     "pixels": 502,
+     "x": [
+      11,
+      331
+     ],
+     "y": [
+      623,
+      660
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      324,
+      324
+     ],
+     "y": [
+      623,
+      623
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      11,
+      19
+     ],
+     "y": [
+      728,
+      735
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      324,
+      331
+     ],
+     "y": [
+      729,
+      735
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      371,
+      371
+     ],
+     "y": [
+      735,
+      735
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      370,
+      370
+     ],
+     "y": [
+      755,
+      755
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      362,
+      362
+     ],
+     "y": [
+      759,
+      761
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      369,
+      369
+     ],
+     "y": [
+      766,
+      766
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      348,
+      348
+     ],
+     "y": [
+      767,
+      767
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      347,
+      347
+     ],
+     "y": [
+      774,
+      774
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      365,
+      367
+     ],
+     "y": [
+      776,
+      782
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 627,
+     "x": [
+      0,
+      322
+     ],
+     "y": [
+      782,
+      826
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 12,
+     "x": [
+      336,
+      350
+     ],
+     "y": [
+      782,
+      795
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      23,
+      25
+     ],
+     "y": [
+      790,
+      791
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      13,
+      13
+     ],
+     "y": [
+      791,
+      791
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      34,
+      44
+     ],
+     "y": [
+      795,
+      797
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      295,
+      310
+     ],
+     "y": [
+      795,
+      798
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      51,
+      54
+     ],
+     "y": [
+      798,
+      798
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 110,
+   "pixels": 3140,
+   "pixelsAtMost2": 1631,
+   "sha256Del": "5b3b42a1643ec7eee13da07fd5739a2515e83f3117c2209f169b1609779c0166",
+   "sha256Ref": "93e30a5d78a5253fd3f996a1ccc84d1f767c3b8c38ff260b657203c9d811eeff"
+  },
+  "webkit-dark-phone/p51-reset-done.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 72,
+     "pixels": 510,
+     "x": [
+      12,
+      141
+     ],
+     "y": [
+      468,
+      480
+     ]
+    },
+    {
+     "maxChannelDiff": 39,
+     "pixels": 2,
+     "x": [
+      41,
+      41
+     ],
+     "y": [
+      468,
+      469
+     ]
+    },
+    {
+     "maxChannelDiff": 67,
+     "pixels": 13,
+     "x": [
+      53,
+      59
+     ],
+     "y": [
+      468,
+      469
+     ]
+    },
+    {
+     "maxChannelDiff": 68,
+     "pixels": 22,
+     "x": [
+      78,
+      89
+     ],
+     "y": [
+      468,
+      469
+     ]
+    },
+    {
+     "maxChannelDiff": 70,
+     "pixels": 111,
+     "x": [
+      98,
+      139
+     ],
+     "y": [
+      468,
+      476
+     ]
+    },
+    {
+     "maxChannelDiff": 72,
+     "pixels": 68,
+     "x": [
+      110,
+      141
+     ],
+     "y": [
+      468,
+      472
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      11,
+      15
+     ],
+     "y": [
+      585,
+      591
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      328,
+      331
+     ],
+     "y": [
+      585,
+      591
+     ]
+    },
+    {
+     "maxChannelDiff": 168,
+     "pixels": 389,
+     "x": [
+      61,
+      129
+     ],
+     "y": [
+      602,
+      611
+     ]
+    },
+    {
+     "maxChannelDiff": 66,
+     "pixels": 4,
+     "x": [
+      91,
+      92
+     ],
+     "y": [
+      602,
+      603
+     ]
+    },
+    {
+     "maxChannelDiff": 168,
+     "pixels": 10,
+     "x": [
+      120,
+      127
+     ],
+     "y": [
+      602,
+      603
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      107,
+      108
+     ],
+     "y": [
+      603,
+      603
+     ]
+    },
+    {
+     "maxChannelDiff": 142,
+     "pixels": 349,
+     "x": [
+      60,
+      135
+     ],
+     "y": [
+      625,
+      636
+     ]
+    },
+    {
+     "maxChannelDiff": 142,
+     "pixels": 3,
+     "x": [
+      115,
+      117
+     ],
+     "y": [
+      625,
+      625
+     ]
+    },
+    {
+     "maxChannelDiff": 142,
+     "pixels": 9,
+     "x": [
+      124,
+      134
+     ],
+     "y": [
+      625,
+      628
+     ]
+    },
+    {
+     "maxChannelDiff": 135,
+     "pixels": 72,
+     "x": [
+      60,
+      83
+     ],
+     "y": [
+      626,
+      634
+     ]
+    },
+    {
+     "maxChannelDiff": 142,
+     "pixels": 15,
+     "x": [
+      74,
+      91
+     ],
+     "y": [
+      628,
+      628
+     ]
+    },
+    {
+     "maxChannelDiff": 32,
+     "pixels": 336,
+     "x": [
+      11,
+      328
+     ],
+     "y": [
+      688,
+      696
+     ]
+    },
+    {
+     "maxChannelDiff": 23,
+     "pixels": 19,
+     "x": [
+      324,
+      331
+     ],
+     "y": [
+      688,
+      695
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 168,
+   "pixels": 1949,
+   "pixelsAtMost2": 130,
+   "sha256Del": "0fa20c9a25b3b58026f1cc16fc337c0ee84079eed56f246a4d8f51d2b4d6b862",
+   "sha256Ref": "f25284c8922c50fd9405c045de8e0947e2d440e4d50f34226085971bfb4217ae"
+  },
+  "webkit-dark-phone/p51-reset-started.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 72,
+     "pixels": 510,
+     "x": [
+      12,
+      141
+     ],
+     "y": [
+      483,
+      495
+     ]
+    },
+    {
+     "maxChannelDiff": 39,
+     "pixels": 2,
+     "x": [
+      41,
+      41
+     ],
+     "y": [
+      483,
+      484
+     ]
+    },
+    {
+     "maxChannelDiff": 67,
+     "pixels": 13,
+     "x": [
+      53,
+      59
+     ],
+     "y": [
+      483,
+      484
+     ]
+    },
+    {
+     "maxChannelDiff": 68,
+     "pixels": 22,
+     "x": [
+      78,
+      89
+     ],
+     "y": [
+      483,
+      484
+     ]
+    },
+    {
+     "maxChannelDiff": 70,
+     "pixels": 111,
+     "x": [
+      98,
+      139
+     ],
+     "y": [
+      483,
+      491
+     ]
+    },
+    {
+     "maxChannelDiff": 72,
+     "pixels": 68,
+     "x": [
+      110,
+      141
+     ],
+     "y": [
+      483,
+      487
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      11,
+      15
+     ],
+     "y": [
+      600,
+      606
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      328,
+      331
+     ],
+     "y": [
+      600,
+      606
+     ]
+    },
+    {
+     "maxChannelDiff": 168,
+     "pixels": 389,
+     "x": [
+      61,
+      129
+     ],
+     "y": [
+      617,
+      626
+     ]
+    },
+    {
+     "maxChannelDiff": 66,
+     "pixels": 4,
+     "x": [
+      91,
+      92
+     ],
+     "y": [
+      617,
+      618
+     ]
+    },
+    {
+     "maxChannelDiff": 168,
+     "pixels": 10,
+     "x": [
+      120,
+      127
+     ],
+     "y": [
+      617,
+      618
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      107,
+      108
+     ],
+     "y": [
+      618,
+      618
+     ]
+    },
+    {
+     "maxChannelDiff": 142,
+     "pixels": 349,
+     "x": [
+      60,
+      135
+     ],
+     "y": [
+      640,
+      651
+     ]
+    },
+    {
+     "maxChannelDiff": 142,
+     "pixels": 3,
+     "x": [
+      115,
+      117
+     ],
+     "y": [
+      640,
+      640
+     ]
+    },
+    {
+     "maxChannelDiff": 142,
+     "pixels": 9,
+     "x": [
+      124,
+      134
+     ],
+     "y": [
+      640,
+      643
+     ]
+    },
+    {
+     "maxChannelDiff": 135,
+     "pixels": 72,
+     "x": [
+      60,
+      83
+     ],
+     "y": [
+      641,
+      649
+     ]
+    },
+    {
+     "maxChannelDiff": 142,
+     "pixels": 15,
+     "x": [
+      74,
+      91
+     ],
+     "y": [
+      643,
+      643
+     ]
+    },
+    {
+     "maxChannelDiff": 32,
+     "pixels": 336,
+     "x": [
+      11,
+      328
+     ],
+     "y": [
+      703,
+      711
+     ]
+    },
+    {
+     "maxChannelDiff": 23,
+     "pixels": 19,
+     "x": [
+      324,
+      331
+     ],
+     "y": [
+      703,
+      710
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 168,
+   "pixels": 1949,
+   "pixelsAtMost2": 130,
+   "sha256Del": "93cb952f7c6513ea1bd8fd4ea6f7a29e4a59fa3f5f00804df7a763f6fb1d5ad3",
+   "sha256Ref": "d0347a9b61b2fe4b034e6ba55ebc7b836fcafe44e3f8e41be8ca4698505863f1"
+  },
+  "webkit-dark-phone/p51-reset-unanswered.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 72,
+     "pixels": 510,
+     "x": [
+      12,
+      141
+     ],
+     "y": [
+      450,
+      462
+     ]
+    },
+    {
+     "maxChannelDiff": 39,
+     "pixels": 2,
+     "x": [
+      41,
+      41
+     ],
+     "y": [
+      450,
+      451
+     ]
+    },
+    {
+     "maxChannelDiff": 67,
+     "pixels": 13,
+     "x": [
+      53,
+      59
+     ],
+     "y": [
+      450,
+      451
+     ]
+    },
+    {
+     "maxChannelDiff": 68,
+     "pixels": 22,
+     "x": [
+      78,
+      89
+     ],
+     "y": [
+      450,
+      451
+     ]
+    },
+    {
+     "maxChannelDiff": 70,
+     "pixels": 111,
+     "x": [
+      98,
+      139
+     ],
+     "y": [
+      450,
+      458
+     ]
+    },
+    {
+     "maxChannelDiff": 72,
+     "pixels": 68,
+     "x": [
+      110,
+      141
+     ],
+     "y": [
+      450,
+      454
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      11,
+      15
+     ],
+     "y": [
+      567,
+      573
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      328,
+      331
+     ],
+     "y": [
+      567,
+      573
+     ]
+    },
+    {
+     "maxChannelDiff": 168,
+     "pixels": 389,
+     "x": [
+      61,
+      129
+     ],
+     "y": [
+      584,
+      593
+     ]
+    },
+    {
+     "maxChannelDiff": 66,
+     "pixels": 4,
+     "x": [
+      91,
+      92
+     ],
+     "y": [
+      584,
+      585
+     ]
+    },
+    {
+     "maxChannelDiff": 168,
+     "pixels": 10,
+     "x": [
+      120,
+      127
+     ],
+     "y": [
+      584,
+      585
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      107,
+      108
+     ],
+     "y": [
+      585,
+      585
+     ]
+    },
+    {
+     "maxChannelDiff": 142,
+     "pixels": 349,
+     "x": [
+      60,
+      135
+     ],
+     "y": [
+      607,
+      618
+     ]
+    },
+    {
+     "maxChannelDiff": 142,
+     "pixels": 3,
+     "x": [
+      115,
+      117
+     ],
+     "y": [
+      607,
+      607
+     ]
+    },
+    {
+     "maxChannelDiff": 142,
+     "pixels": 9,
+     "x": [
+      124,
+      134
+     ],
+     "y": [
+      607,
+      610
+     ]
+    },
+    {
+     "maxChannelDiff": 135,
+     "pixels": 72,
+     "x": [
+      60,
+      83
+     ],
+     "y": [
+      608,
+      616
+     ]
+    },
+    {
+     "maxChannelDiff": 142,
+     "pixels": 15,
+     "x": [
+      74,
+      91
+     ],
+     "y": [
+      610,
+      610
+     ]
+    },
+    {
+     "maxChannelDiff": 32,
+     "pixels": 336,
+     "x": [
+      11,
+      328
+     ],
+     "y": [
+      670,
+      678
+     ]
+    },
+    {
+     "maxChannelDiff": 23,
+     "pixels": 19,
+     "x": [
+      324,
+      331
+     ],
+     "y": [
+      670,
+      677
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 168,
+   "pixels": 1949,
+   "pixelsAtMost2": 130,
+   "sha256Del": "8c55e59856adad5d9cdb838ed57f1af5f085138aa91e2c170619b1429e920865",
+   "sha256Ref": "f8342cc2df34e8bf10cab57d577ddc436375dc58f68956fd10cb0818c2b0bf6e"
+  },
+  "webkit-dark-phone/p51-usage.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 551,
+     "x": [
+      54,
+      364
+     ],
+     "y": [
+      403,
+      446
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 18,
+     "x": [
+      38,
+      53
+     ],
+     "y": [
+      404,
+      409
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      298,
+      299
+     ],
+     "y": [
+      404,
+      404
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 54,
+     "x": [
+      0,
+      37
+     ],
+     "y": [
+      405,
+      429
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      307,
+      325
+     ],
+     "y": [
+      405,
+      409
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      4,
+      4
+     ],
+     "y": [
+      414,
+      414
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      362,
+      369
+     ],
+     "y": [
+      460,
+      464
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      370,
+      370
+     ],
+     "y": [
+      475,
+      475
+     ]
+    },
+    {
+     "maxChannelDiff": 22,
+     "pixels": 9,
+     "x": [
+      11,
+      13
+     ],
+     "y": [
+      491,
+      497
+     ]
+    },
+    {
+     "maxChannelDiff": 22,
+     "pixels": 7,
+     "x": [
+      304,
+      305
+     ],
+     "y": [
+      491,
+      497
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      371,
+      371
+     ],
+     "y": [
+      491,
+      496
+     ]
+    },
+    {
+     "maxChannelDiff": 155,
+     "pixels": 249,
+     "x": [
+      304,
+      331
+     ],
+     "y": [
+      542,
+      552
+     ]
+    },
+    {
+     "maxChannelDiff": 98,
+     "pixels": 285,
+     "x": [
+      12,
+      81
+     ],
+     "y": [
+      543,
+      555
+     ]
+    },
+    {
+     "maxChannelDiff": 98,
+     "pixels": 5,
+     "x": [
+      39,
+      47
+     ],
+     "y": [
+      543,
+      543
+     ]
+    },
+    {
+     "maxChannelDiff": 98,
+     "pixels": 60,
+     "x": [
+      58,
+      81
+     ],
+     "y": [
+      543,
+      551
+     ]
+    },
+    {
+     "maxChannelDiff": 61,
+     "pixels": 8,
+     "x": [
+      75,
+      79
+     ],
+     "y": [
+      543,
+      544
+     ]
+    },
+    {
+     "maxChannelDiff": 200,
+     "pixels": 449,
+     "x": [
+      11,
+      229
+     ],
+     "y": [
+      563,
+      570
+     ]
+    },
+    {
+     "maxChannelDiff": 16,
+     "pixels": 1,
+     "x": [
+      228,
+      228
+     ],
+     "y": [
+      563,
+      563
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      330,
+      331
+     ],
+     "y": [
+      564,
+      570
+     ]
+    },
+    {
+     "maxChannelDiff": 168,
+     "pixels": 505,
+     "x": [
+      11,
+      331
+     ],
+     "y": [
+      623,
+      660
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      324,
+      324
+     ],
+     "y": [
+      623,
+      623
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 16,
+     "x": [
+      11,
+      19
+     ],
+     "y": [
+      728,
+      735
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 14,
+     "x": [
+      324,
+      331
+     ],
+     "y": [
+      728,
+      735
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      371,
+      371
+     ],
+     "y": [
+      735,
+      735
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      370,
+      370
+     ],
+     "y": [
+      755,
+      755
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      362,
+      362
+     ],
+     "y": [
+      759,
+      761
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      369,
+      369
+     ],
+     "y": [
+      766,
+      766
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      348,
+      348
+     ],
+     "y": [
+      767,
+      767
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      347,
+      347
+     ],
+     "y": [
+      774,
+      774
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      365,
+      367
+     ],
+     "y": [
+      776,
+      782
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 643,
+     "x": [
+      0,
+      322
+     ],
+     "y": [
+      782,
+      826
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 36,
+     "x": [
+      321,
+      353
+     ],
+     "y": [
+      782,
+      821
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      23,
+      44
+     ],
+     "y": [
+      790,
+      797
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      295,
+      313
+     ],
+     "y": [
+      794,
+      798
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      51,
+      54
+     ],
+     "y": [
+      798,
+      798
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      293,
+      294
+     ],
+     "y": [
+      798,
+      798
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      357,
+      357
+     ],
+     "y": [
+      798,
+      798
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 215,
+     "x": [
+      67,
+      283
+     ],
+     "y": [
+      799,
+      799
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 200,
+   "pixels": 3194,
+   "pixelsAtMost2": 1667,
+   "sha256Del": "72ef7b0d73a54ec27f032c46c227df631fb796eb928d160f9cfe71d60fa33e65",
+   "sha256Ref": "3eb7271a11ae14b98ab6ac770f30aa2e3fe76df612d3c55667c08cecf049b788"
+  }
+ },
+ "styles": {
+  "webkit-dark-phone/p51-reset-confirm": {
+   "dialog": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "usage": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p51-reset-done": {
+   "popover": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "8px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p51-reset-started": {
+   "popover": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "8px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p51-reset-unanswered": {
+   "popover": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "8px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p51-usage": {
+   "popover": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "8px"
+    ]
+   }
+  }
+ },
+ "tests": {
+  "webkit-dark-phone :: P5.1 Plan usage \u203a the popover by hover and by press, the reset credit and its confirmation": {
+   "del": "passed",
+   "ref": "passed"
+  }
+ },
+ "traces": {
+  "webkit-dark-phone :: P5.1 Plan usage \u203a the popover by hover and by press, the reset credit and its confirmation": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "focus": {
+       "name": "5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset cred",
+       "role": "div"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "requests": [],
+      "step": "pressed",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-avatar",
+       "ant-avatar-circle",
+       "ant-avatar-css-var",
+       "ant-avatar-icon",
+       "ant-btn",
+       "ant-btn-block",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-popover",
+       "ant-popover-arrow",
+       "ant-popover-container",
+       "ant-popover-content",
+       "ant-popover-css-var",
+       "ant-popover-open",
+       "ant-popover-placement-topRight",
+       "ant-popover-title",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "focus": {
+       "name": "Plan usage",
+       "role": "dialog"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "requests": [],
+      "step": "pressed",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "step": "pressed"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "focus": {
+       "name": "Use reset credit",
+       "role": "button"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "requests": [],
+      "step": "tab",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-avatar",
+       "ant-avatar-circle",
+       "ant-avatar-css-var",
+       "ant-avatar-icon",
+       "ant-btn",
+       "ant-btn-block",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-popover",
+       "ant-popover-arrow",
+       "ant-popover-container",
+       "ant-popover-content",
+       "ant-popover-css-var",
+       "ant-popover-open",
+       "ant-popover-placement-topRight",
+       "ant-popover-title",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "focus": {
+       "name": "Use reset credit",
+       "role": "button"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "requests": [],
+      "step": "tab",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "step": "tab"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit",
+       "Use reset credit?This consumes 1 earned credit and resets eligible Codex usage windows. This action can\u2019t be undone.Current usage92% \u2192 reset2 available \u00b7 Next e"
+      ],
+      "focus": {
+       "name": "Cancel",
+       "role": "button"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "requests": [],
+      "step": "confirmation",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-avatar",
+       "ant-avatar-circle",
+       "ant-avatar-css-var",
+       "ant-avatar-icon",
+       "ant-btn",
+       "ant-btn-block",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-modal",
+       "ant-modal-body",
+       "ant-modal-close",
+       "ant-modal-close-icon",
+       "ant-modal-close-x",
+       "ant-modal-container",
+       "ant-modal-footer",
+       "ant-modal-header",
+       "ant-modal-mask",
+       "ant-modal-title",
+       "ant-modal-wrap",
+       "ant-popover",
+       "ant-popover-arrow",
+       "ant-popover-container",
+       "ant-popover-content",
+       "ant-popover-css-var",
+       "ant-popover-open",
+       "ant-popover-placement-topRight"
+      ],
+      "dialogs": [
+       "5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit",
+       "Use reset credit?This consumes 1 earned credit and resets eligible Codex usage windows. This action can\u2019t be undone.Current usage92% \u2192 reset2 available \u00b7 Next e"
+      ],
+      "focus": {
+       "name": "Cancel",
+       "role": "button"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "requests": [],
+      "step": "confirmation",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "step": "confirmation"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "focus": {
+       "name": "Use reset credit",
+       "role": "button"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "requests": [],
+      "step": "cancelled",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-avatar",
+       "ant-avatar-circle",
+       "ant-avatar-css-var",
+       "ant-avatar-icon",
+       "ant-btn",
+       "ant-btn-block",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-popover",
+       "ant-popover-arrow",
+       "ant-popover-container",
+       "ant-popover-content",
+       "ant-popover-css-var",
+       "ant-popover-open",
+       "ant-popover-placement-topRight",
+       "ant-popover-title",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "focus": {
+       "name": "Use reset credit",
+       "role": "button"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "requests": [],
+      "step": "cancelled",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "step": "cancelled"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoCouldn\u2019t confirm the r"
+      ],
+      "focus": {
+       "name": "Couldn\u2019t confirm the reset requestOrbit didn\u2019t answer. Retry sends the same requ",
+       "role": "status"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoCouldn\u2019t confirm the reset requestOrbit didn\u2019t answer. Retry sends the same request, so at most 1 credit is used.RetryDismiss"
+      ],
+      "requests": [
+       {
+        "body": {
+         "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+         "clientRequestId": "7c5c109c-60c0-4e7c-bb75-cb43d06fd5b9",
+         "workspaceId": "2zwQZ2hd93IvLb59t6p1s"
+        },
+        "method": "POST",
+        "path": "/api/runners/2zwQZ2hd93IvLb59t6p28/codex-rate-limit-reset"
+       },
+       {
+        "body": {
+         "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+         "clientRequestId": "7c5c109c-60c0-4e7c-bb75-cb43d06fd5b9",
+         "workspaceId": "2zwQZ2hd93IvLb59t6p1s"
+        },
+        "method": "POST",
+        "path": "/api/runners/2zwQZ2hd93IvLb59t6p28/codex-rate-limit-reset"
+       },
+       {
+        "body": {
+         "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+         "clientRequestId": "7c5c109c-60c0-4e7c-bb75-cb43d06fd5b9",
+         "workspaceId": "2zwQZ2hd93IvLb59t6p1s"
+        },
+        "method": "POST",
+        "path": "/api/runners/2zwQZ2hd93IvLb59t6p28/codex-rate-limit-reset"
+       }
+      ],
+      "step": "unanswered",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-avatar",
+       "ant-avatar-circle",
+       "ant-avatar-css-var",
+       "ant-avatar-icon",
+       "ant-btn",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-text",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-popover",
+       "ant-popover-arrow",
+       "ant-popover-container",
+       "ant-popover-content",
+       "ant-popover-css-var",
+       "ant-popover-open",
+       "ant-popover-placement-topRight",
+       "ant-popover-title",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoCouldn\u2019t confirm the reset reque"
+      ],
+      "focus": {
+       "name": "Couldn\u2019t confirm the reset requestOrbit didn\u2019t answer. Retry sends the same requ",
+       "role": "status"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoCouldn\u2019t confirm the reset requestOrbit didn\u2019t answer. Retry sends the same request, so at most 1 credit is used.RetryDismiss"
+      ],
+      "requests": [
+       {
+        "body": {
+         "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+         "clientRequestId": "c2f61cfa-c87b-400c-a909-6da594c01bef",
+         "workspaceId": "2zwQZ2hd93IvLb59t6p1s"
+        },
+        "method": "POST",
+        "path": "/api/runners/2zwQZ2hd93IvLb59t6p28/codex-rate-limit-reset"
+       },
+       {
+        "body": {
+         "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+         "clientRequestId": "c2f61cfa-c87b-400c-a909-6da594c01bef",
+         "workspaceId": "2zwQZ2hd93IvLb59t6p1s"
+        },
+        "method": "POST",
+        "path": "/api/runners/2zwQZ2hd93IvLb59t6p28/codex-rate-limit-reset"
+       },
+       {
+        "body": {
+         "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+         "clientRequestId": "c2f61cfa-c87b-400c-a909-6da594c01bef",
+         "workspaceId": "2zwQZ2hd93IvLb59t6p1s"
+        },
+        "method": "POST",
+        "path": "/api/runners/2zwQZ2hd93IvLb59t6p28/codex-rate-limit-reset"
+       }
+      ],
+      "step": "unanswered",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "step": "unanswered"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "focus": {
+       "name": "Use reset credit",
+       "role": "button"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "requests": [],
+      "step": "unanswered dismissed",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-avatar",
+       "ant-avatar-circle",
+       "ant-avatar-css-var",
+       "ant-avatar-icon",
+       "ant-btn",
+       "ant-btn-block",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-popover",
+       "ant-popover-arrow",
+       "ant-popover-container",
+       "ant-popover-content",
+       "ant-popover-css-var",
+       "ant-popover-open",
+       "ant-popover-placement-topRight",
+       "ant-popover-title",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "focus": {
+       "name": "Use reset credit",
+       "role": "button"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "requests": [],
+      "step": "unanswered dismissed",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "step": "unanswered dismissed"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoStarting reset\u2026Waiting"
+      ],
+      "focus": {
+       "name": "Starting reset\u2026Waiting for the runner to pick this up. No credit has been used y",
+       "role": "status"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoStarting reset\u2026Waiting for the runner to pick this up. No credit has been used yet."
+      ],
+      "requests": [
+       {
+        "body": {
+         "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+         "clientRequestId": "c07c165b-adb7-4f95-87b8-ad7f6101050b",
+         "workspaceId": "2zwQZ2hd93IvLb59t6p1s"
+        },
+        "method": "POST",
+        "path": "/api/runners/2zwQZ2hd93IvLb59t6p28/codex-rate-limit-reset"
+       }
+      ],
+      "step": "started",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-avatar",
+       "ant-avatar-circle",
+       "ant-avatar-css-var",
+       "ant-avatar-icon",
+       "ant-btn",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-popover",
+       "ant-popover-arrow",
+       "ant-popover-container",
+       "ant-popover-content",
+       "ant-popover-css-var",
+       "ant-popover-open",
+       "ant-popover-placement-topRight",
+       "ant-popover-title",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoStarting reset\u2026Waiting for the r"
+      ],
+      "focus": {
+       "name": "Starting reset\u2026Waiting for the runner to pick this up. No credit has been used y",
+       "role": "status"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoStarting reset\u2026Waiting for the runner to pick this up. No credit has been used yet."
+      ],
+      "requests": [
+       {
+        "body": {
+         "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+         "clientRequestId": "239114b7-0933-43d1-85f4-7d569d47d80d",
+         "workspaceId": "2zwQZ2hd93IvLb59t6p1s"
+        },
+        "method": "POST",
+        "path": "/api/runners/2zwQZ2hd93IvLb59t6p28/codex-rate-limit-reset"
+       }
+      ],
+      "step": "started",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "step": "started"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUsage limits reset1 cr"
+      ],
+      "focus": {
+       "name": "Usage limits reset1 credit used. Plan usage has been refreshed.",
+       "role": "status"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUsage limits reset1 credit used. Plan usage has been refreshed.Dismiss"
+      ],
+      "requests": [],
+      "step": "settled",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-avatar",
+       "ant-avatar-circle",
+       "ant-avatar-css-var",
+       "ant-avatar-icon",
+       "ant-btn",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-text",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-popover",
+       "ant-popover-arrow",
+       "ant-popover-container",
+       "ant-popover-content",
+       "ant-popover-css-var",
+       "ant-popover-open",
+       "ant-popover-placement-topRight",
+       "ant-popover-title",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUsage limits reset1 credit used."
+      ],
+      "focus": {
+       "name": "Usage limits reset1 credit used. Plan usage has been refreshed.",
+       "role": "status"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUsage limits reset1 credit used. Plan usage has been refreshed.Dismiss"
+      ],
+      "requests": [],
+      "step": "settled",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "step": "settled"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "focus": {
+       "name": "Use reset credit",
+       "role": "button"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "requests": [],
+      "step": "dismissed",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-avatar",
+       "ant-avatar-circle",
+       "ant-avatar-css-var",
+       "ant-avatar-icon",
+       "ant-btn",
+       "ant-btn-block",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-popover",
+       "ant-popover-arrow",
+       "ant-popover-container",
+       "ant-popover-content",
+       "ant-popover-css-var",
+       "ant-popover-open",
+       "ant-popover-placement-topRight",
+       "ant-popover-title",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [
+       "5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "focus": {
+       "name": "Use reset credit",
+       "role": "button"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [
+       "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+      ],
+      "requests": [],
+      "step": "dismissed",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "step": "dismissed"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Plan usage 92%",
+       "role": "button"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [],
+      "requests": [],
+      "step": "escape",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-avatar",
+       "ant-avatar-circle",
+       "ant-avatar-css-var",
+       "ant-avatar-icon",
+       "ant-btn",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Plan usage 92%",
+       "role": "button"
+      },
+      "lit": [
+       "O",
+       "Orbit baseline\u00b7Baseline runnerCtrl 3"
+      ],
+      "menus": [],
+      "notifications": "",
+      "popovers": [],
+      "requests": [],
+      "step": "escape",
+      "theme": "dark",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5"
+     },
+     "step": "escape"
+    }
+   ],
+   "equal": false
+  }
+ }
+}

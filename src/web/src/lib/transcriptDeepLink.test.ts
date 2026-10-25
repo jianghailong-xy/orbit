@@ -3,11 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { encodeId } from './idCodec';
 import {
   elementForSeq,
+  ITEM_PARAM,
+  itemAtOf,
   RECORD_PARAM,
   recordAtOf,
   recordScrollDelta,
   sessionCardHref,
   sessionRecordHref,
+  sessionItemHref,
 } from './transcriptDeepLink';
 
 const SESSION = '01a0d191-1a54-76ee-b10c-df98bbadec34';
@@ -30,6 +33,16 @@ describe('a link to one record of a session', () => {
     expect(recordAtOf(new URLSearchParams(''))).toBeNull();
     expect(recordAtOf(new URLSearchParams('at='))).toBeNull();
     expect(recordAtOf(new URLSearchParams('at=not-an-id!'))).toBeNull();
+  });
+});
+
+describe('a link to an owner-item card in a session', () => {
+  it('uses `item` and round-trips public ids', () => {
+    const href = sessionItemHref(SESSION, RECORD);
+    expect(href).toBe(`/sessions/${encodeId(SESSION)}?item=${encodeId(RECORD)}`);
+    expect(ITEM_PARAM).toBe('item');
+    expect(itemAtOf(new URL(href, 'https://orbitd.io').searchParams)).toBe(encodeId(RECORD));
+    expect(itemAtOf(new URLSearchParams('item=not-an-id!'))).toBeNull();
   });
 });
 

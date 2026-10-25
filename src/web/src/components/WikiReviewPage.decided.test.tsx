@@ -3,7 +3,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { App as AntApp } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiChangeset, WikiChangesetOp, WikiOpDecision } from '@orbit/shared';
 import { WikiReviewPage } from './WikiReviewPage';
@@ -183,9 +182,7 @@ async function mount(changesets: WikiChangeset[], ready: string): Promise<HTMLEl
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <AntApp>
-            <WikiReviewPage spaceSlug={null} />
-          </AntApp>
+          <WikiReviewPage spaceSlug={null} />
           <ToastViewport />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -212,11 +209,11 @@ async function press(label: string, scope: ParentNode): Promise<void> {
 }
 
 const toasts = (): string => document.body.querySelector('.toast-viewport')?.textContent ?? '';
-const form = (): HTMLElement | null => document.body.querySelector<HTMLElement>('.ant-modal');
+const form = (): HTMLElement | null => document.body.querySelector<HTMLElement>('[role="dialog"]');
 
 /** Type into the form's title through React's own setter, so the change is one React sees. */
 async function retitle(value: string): Promise<void> {
-  const field = form()!.querySelector('input.ant-input') as HTMLInputElement;
+  const field = form()!.querySelector('input') as HTMLInputElement;
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, value);
     field.dispatchEvent(new Event('input', { bubbles: true }));
@@ -256,7 +253,7 @@ describe('a decide the server recorded without applying it', () => {
     await vi.waitFor(() => expect(form()).not.toBeNull(), { timeout: 10_000 });
 
     await retitle('Upgrade recreates only the services that changed');
-    await act(async () => (form()!.querySelector('.ant-modal-footer .ant-btn-primary') as HTMLButtonElement).click());
+    await act(async () => button('Accept', form()!).click());
     await settle();
 
     expect(decides).toEqual([

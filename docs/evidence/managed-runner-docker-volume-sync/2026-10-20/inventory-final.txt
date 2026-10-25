@@ -1,0 +1,47 @@
+== 2026-10-19T22:55:39Z the test host at the end
+-- containers
+mr-01a155a1-d3eb-740d-ba20-9075fe0731d3	b0dedb927136	Up 9 minutes
+mr-01a155a1-d568-71f0-a360-0b6cd5ef8397	b0dedb927136	Up 9 minutes
+mr-01a155a1-d48f-70eb-8a15-ad6b40f090d9	b0dedb927136	Up 9 minutes
+mr-01a155a1-d52f-702a-a700-f59884b28a25	b0dedb927136	Up 9 minutes
+mr-01a155a1-d3c3-76fe-b73f-dfb5b6cd3305	b0dedb927136	Up 9 minutes
+mr-01a155a1-d4e5-7614-805f-c860e3d77741	b0dedb927136	Up 9 minutes
+mr-01a155a1-d422-715e-9e9d-d483a4a84850	b0dedb927136	Up 9 minutes
+mr-01a155a1-d45b-7075-bba3-f28d00e4ddbb	b0dedb927136	Up 9 minutes
+orbit-docker-channel	orbit-docker-channel:local	Up 10 minutes (healthy)
+orbit-apiserver	orbit-apiserver:local	Up 10 minutes (healthy)
+orbit-gateway	nginx:alpine	Up 3 hours (healthy)
+orbit-wiki-worker	orbit-apiserver:local	Up 3 hours
+orbit-web	orbit-web	Up 3 hours (healthy)
+orbit-pgbackup	postgres:16-alpine	Up 3 hours
+orbit-managed-runner-firewall	orbit-managed-runner-firewall:local	Up 3 hours (healthy)
+orbit-postgres	postgres:16-alpine	Up 4 hours (healthy)
+-- managed runner volumes
+mr-data-01a155a1-d3c3-76fe-b73f-dfb5b6cd3305
+mr-data-01a155a1-d3eb-740d-ba20-9075fe0731d3
+mr-data-01a155a1-d4e5-7614-805f-c860e3d77741
+mr-data-01a155a1-d45b-7075-bba3-f28d00e4ddbb
+mr-data-01a155a1-d48f-70eb-8a15-ad6b40f090d9
+mr-data-01a155a1-d52f-702a-a700-f59884b28a25
+mr-data-01a155a1-d254-77ac-9c62-378c9e143b0a
+mr-data-01a155a1-d422-715e-9e9d-d483a4a84850
+mr-data-01a155a1-d568-71f0-a360-0b6cd5ef8397
+-- images
+orbit-managed-runner:d10-d10 99c89fb1f7d3
+orbit-managed-runner:d10-t02c 442830588a08
+orbit-managed-runner:d10-before b0dedb927136
+orbit-managed-runner:d10-installed acc7295ee099
+orbit-managed-runner:local acc7295ee099
+orbit-managed-runner-firewall:local 694bc88a8f26
+-- managed_runner rows
+probe@d10-volume-sync.test | SLEEPING | SLEEPING | 2
+u1@d10-volume-sync.test | READY | RUNNING | 18
+u2@d10-volume-sync.test | READY | RUNNING | 18
+u3@d10-volume-sync.test | READY | RUNNING | 18
+u4@d10-volume-sync.test | READY | RUNNING | 18
+u5@d10-volume-sync.test | READY | RUNNING | 18
+u6@d10-volume-sync.test | READY | RUNNING | 18
+u7@d10-volume-sync.test | READY | RUNNING | 18
+u8@d10-volume-sync.test | READY | RUNNING | 18
+-- the channel's image
+  "image": "sha256:b0dedb927136095356371ddf018bd6edc8282053a43b1144543a850f87f2ab55",

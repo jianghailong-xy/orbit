@@ -1,0 +1,118 @@
+{
+ "tests": 60,
+ "steps": 496,
+ "semantic": [
+  {
+   "test": "chromium-dark-desktop :: P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips",
+   "step": "nothing matches",
+   "delta": {
+    "menus": [
+     [],
+     [
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-dark-phone :: P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips",
+   "step": "nothing matches",
+   "delta": {
+    "menus": [
+     [],
+     [
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-light-desktop :: P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips",
+   "step": "nothing matches",
+   "delta": {
+    "menus": [
+     [],
+     [
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-light-phone :: P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips",
+   "step": "nothing matches",
+   "delta": {
+    "menus": [
+     [],
+     [
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-dark-desktop :: P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips",
+   "step": "nothing matches",
+   "delta": {
+    "menus": [
+     [],
+     [
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-dark-phone :: P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips",
+   "step": "nothing matches",
+   "delta": {
+    "menus": [
+     [],
+     [
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-light-desktop :: P5.1 Plan usage › the popover by hover and by press, the reset credit and its confirmation",
+   "step": "escape",
+   "delta": {
+    "popovers": [
+     [
+      "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+     ],
+     []
+    ]
+   }
+  },
+  {
+   "test": "webkit-light-desktop :: P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips",
+   "step": "nothing matches",
+   "delta": {
+    "menus": [
+     [],
+     [
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-light-phone :: P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips",
+   "step": "nothing matches",
+   "delta": {
+    "menus": [
+     [],
+     [
+      []
+     ]
+    ]
+   }
+  }
+ ],
+ "presentation": {
+  "focus": 148,
+  "dialogs": 93
+ }
+}

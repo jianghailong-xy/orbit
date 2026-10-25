@@ -1,0 +1,119 @@
+<!doctype html>
+<!-- Design board iOS 6 (T0, Cursor engine): the permission mode menu on a Cursor session (D6 A and B) and the
+     Provider submenu when the session's account can't move yet (D5). 393 × 852 pt; drawn from today's
+     ComposerView.swift (modeMenu, modelMenu) and CodexAccounts.swift. macOS is the same SwiftUI; Android
+     follows. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>iOS 6 · Cursor session: permission modes, switching the account</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<script src="../antigravity-accounts/kit.js"></script>
+<script src="kit.js"></script>
+<style>
+  .i-menu .i-mi { min-height: 40px; padding-top: 4px; padding-bottom: 4px; }
+  .i-mi .ck { flex: none; width: 18px; color: #3e69f6; font-weight: 600; }
+  .ph.dark .i-mi .ck { color: #5b84ff; }
+  .i-under { position: absolute; left: 30px; right: 30px; bottom: 30px; font-size: 13px; line-height: 18px; color: #8a8a8e; text-align: center; z-index: 4; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet" style="width:2260px">
+  <h1 class="m-h1 zh">iOS 6 · 权限模式：可选、带说明、不可选三种；换账号：说过话的 Cursor 会话先不能换，列出来并说明</h1>
+  <p class="m-sub zh">规则同 Web 6。iOS 今天的模式菜单只有模式名，DeepSeek Harness 不支持的写「— not on DeepSeek Harness」并灰掉，没有说明行。Cursor 的模式需要一句说明才不误导（Plan 不是只读、Auto 不审文件写、Don’t Ask 仍会写文件），所以 iOS 26 菜单项带一行副标题（同今天「Current」的位置）——这和 DeepSeek Harness 那块板（docs/mocks/dsh-permission-mode-notes）的方案 A 是同一个做法，那块板的 A/B 还没定，可以一起定。Provider 子菜单：今天 runner 没声明搬运能力就把账号整组藏起来；Cursor 改成列出来、灰掉，底下一句说明。Android 跟这张稿。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 模式菜单与换账号</div>
+    <div class="phones">
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k">现在</span>先例：DeepSeek Harness</div><div id="p1"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>D6 方案 A（推荐）</div><div id="p2"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>D6 方案 B</div><div id="p3"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>说过话：不能换</div><div id="p4"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>没说过话 / 验证后：能换</div><div id="p5"></div></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+<script>
+const chat = `<div class="i-chat"><div class="me">The nightly export test fails about once a week. Find out why and fix it.</div>
+  <p>The test builds “yesterday” in the machine’s local time zone, so it misses a row just after midnight UTC. I pinned the test clock to UTC; five runs in a row now pass.</p></div>`;
+const comp = ({ chip = '<b>Auto</b>', mode = 'Accept Edits', on = false, ph = 'Reply…' } = {}) => `<div class="i-band"><div class="i-comp"><div class="f">${ph}</div><div class="tb"><span class="plus">+</span><span class="mode">${mode}</span><span class="sp"></span>
+  <span class="chip${on ? ' on' : ''}">${chip}</span><span class="i-ring"></span><span class="send">↑</span></div></div></div>`;
+const sess = (id, title, sub, body, overlay = '') => chatPhone({ id, title, sub, body, overlay });
+/** A menu built by hand where items need a tick, a disabled look or a second line. */
+const handMenu = (items, style, id) => `<div class="i-menu" id="${id}" style="${style}">${items.map((it) => {
+  if (it.sep) return '<div class="i-ms"></div>';
+  if (it.title) return `<div class="i-mt">${it.mark || ''}${it.title}</div>`;
+  if (it.head) return `<div class="i-mh">${it.head}</div>`;
+  if (it.foot) return `<div class="i-mfoot" ${it.id ? `id="${it.id}"` : ''}>${it.foot}</div>`;
+  return `<div class="i-mi${it.dis ? ' dis' : ''}" ${it.id ? `id="${it.id}"` : ''}><span class="ck">${it.on ? '✓' : ''}</span><div class="t">${it.t}${it.sub ? `<small class="note">${it.sub}</small>` : ''}</div>${it.chev ? `<span class="chv">${it.chev}</span>` : ''}</div>`;
+}).join('')}</div>`;
+const modeAt = 'left:18px;bottom:118px';
+
+document.getElementById('p1').innerHTML = sess('ph1', 'Fix the flaky export test', 'hpc · DeepSeek Harness', chat + comp({ chip: '<b>DeepSeek V4 Pro</b>', mode: 'Auto' }), '<div class="i-dimbg"></div>' + handMenu([
+  { t: 'Default' }, { t: 'Accept Edits — not on DeepSeek Harness', dis: true }, { t: 'Plan — not on DeepSeek Harness', dis: true },
+  { t: 'Auto', on: true }, { t: 'Don’t Ask' }, { t: 'Bypass — not on DeepSeek Harness', dis: true },
+], modeAt, 'm1'));
+const cursorModes = (b) => [
+  b ? { t: 'Default', sub: 'Runs as Accept Edits — file edits don’t ask', id: 'md' } : { t: 'Default', sub: 'Not on Cursor CLI — it edits files without asking', dis: true, id: 'md' },
+  { t: 'Accept Edits', on: true },
+  { t: 'Plan', sub: 'File writes blocked, commands refused', id: 'mp' },
+  { t: 'Auto', sub: 'File edits aren’t reviewed', id: 'ma' },
+  { t: 'Don’t Ask', sub: 'File edits still happen', id: 'mn' },
+  { t: 'Bypass' },
+];
+document.getElementById('p2').innerHTML = sess('ph2', 'Fix the flaky export test', 'hpc · Cursor CLI', chat + comp(), '<div class="i-dimbg"></div>' + handMenu(cursorModes(false), modeAt, 'm2'));
+document.getElementById('p3').innerHTML = sess('ph3', 'Fix the flaky export test', 'hpc · Cursor CLI', chat + comp(), '<div class="i-dimbg"></div>' + handMenu(cursorModes(true), modeAt, 'm3'));
+
+const provider = (blocked) => handMenu([
+  { t: 'Provider', sub: 'Automatic', chev: '⌄' }, { sep: true },
+  { head: 'Signed in on hpc' },
+  { t: 'Automatic', sub: 'Switches to soonest reset', on: true, dis: blocked },
+  { t: 'Default', dis: blocked },
+  { t: 'Team', sub: 'Monthly 34%', dis: blocked, id: blocked ? 'tb' : 'tt' },
+  { head: 'API keys' },
+  { t: 'Cursor', dis: blocked },
+  ...(blocked ? [{ foot: 'Cursor CLI can’t carry a conversation to another account or key yet. Start a new session to use one of these.', id: 'pf' }] : []),
+], 'left:60px;bottom:126px', blocked ? 'm4' : 'm5');
+const back = iMenu([{ title: 'Cursor CLI', mark: iMk('cursor', 18) }, { t: 'Provider', sub: 'Automatic', chev: '›' }, { sep: true }, { t: 'Auto', sub: 'Current' }, { t: 'Claude Opus 5.5' }], 'left:60px;bottom:118px', 'back');
+document.getElementById('p4').innerHTML = sess('ph4', 'Fix the flaky export test', 'hpc · Cursor CLI', chat + comp({ on: true }), '<div class="i-dimbg"></div>' + back + provider(true));
+document.getElementById('p5').innerHTML = sess('ph5', 'orbit', '', iHero({ e: 'cursor', top: 150, s2: 'Auto' }) + comp({ on: true, ph: 'Message…' }), '<div class="i-dimbg"></div>' + back + provider(false));
+
+finish();
+requestAnimationFrame(() => {
+  const ph = (id) => document.getElementById(id);
+  peek(ph('ph4'));
+  peek(ph('ph5'));
+  ring(ph('ph1'), '#m1', 'A', 3);
+  ring(ph('ph2'), '#md', 1, 1);
+  ring(ph('ph2'), '#mp', 2, 1);
+  ring(ph('ph2'), '#ma', 0, 1);
+  ring(ph('ph2'), '#mn', 0, 1);
+  ring(ph('ph3'), '#md', 3, 1);
+  ring(ph('ph4'), '#tb', 4, 1);
+  ring(ph('ph4'), '#pf', 5, 1);
+  ring(ph('ph5'), '#tt', 6, 1);
+  document.querySelectorAll('.mk-n').forEach((m) => { if (/^[A-Z]$/.test(m.textContent)) m.style.background = '#6b7280'; });
+});
+document.getElementById('notes').innerHTML = notes([
+  ['A', '<b>今天 iOS 只有模式名</b>：不支持的灰掉写「— not on DeepSeek Harness」，支持的模式没有任何说明。'],
+  [1, '<b>Default（方案 A）</b>：灰掉，副标题「Not on Cursor CLI — it edits files without asking」。'],
+  [2, '<b>可选带说明</b>：Plan「File writes blocked, commands refused」、Auto「File edits aren’t reviewed」、Don’t Ask「File edits still happen」。Accept Edits、Bypass 没有副标题。副标题和 Web 的短说明是同一份文字（shared <code>permissionSemantics</code> 的 <code>shortNote</code>），首字母大写。'],
+  [3, '<b>Default（方案 B）</b>：可选，「Runs as Accept Edits — file edits don’t ask」。'],
+  [4, '<b>说过话的会话</b>：Automatic、Default、Team、Cursor key 都列出，灰掉，只有当前项打勾。'],
+  [5, '<b>说明</b>：「Cursor CLI can’t carry a conversation to another account or key yet. Start a new session to use one of these.」。真点到（旧客户端或 API）时服务端拒绝，iOS 弹「Couldn’t move this session — this session’s runner can’t move a Cursor conversation to another account yet …」。'],
+  [6, '<b>能换</b>：新会话草稿（没有对话要搬），或 P6b 验证后 runner 声明 <code>cursor-account-move/v1</code>。选中后 composer 下沿用今天的「Your next message uses Team.」。'],
+]);
+</script>
+</body>
+</html>

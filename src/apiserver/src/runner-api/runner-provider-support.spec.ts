@@ -4,6 +4,7 @@ import { AgentProvider } from '@orbit/shared';
 import {
   ADVERTISED_RUNTIMES,
   ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
+  CURSOR_RUNNER_UPGRADE_ERROR,
   DSH_RUNNER_UPGRADE_ERROR,
   OPENCODE_RUNNER_UPGRADE_ERROR,
   advertisedRunnerProviders,
@@ -42,8 +43,11 @@ test('the gated runtimes are exactly the runtimes a legacy runner would start as
     { provider: AgentProvider.OPENCODE, upgradeError: OPENCODE_RUNNER_UPGRADE_ERROR },
     { provider: AgentProvider.ANTIGRAVITY, upgradeError: ANTIGRAVITY_RUNNER_UPGRADE_ERROR },
     { provider: AgentProvider.DSH, upgradeError: DSH_RUNNER_UPGRADE_ERROR },
+    { provider: AgentProvider.CURSOR, upgradeError: CURSOR_RUNNER_UPGRADE_ERROR },
   ]);
   // The stalled row says which runtime it is waiting for and what to do about it.
   assert.match(ANTIGRAVITY_RUNNER_UPGRADE_ERROR, /^Antigravity requires a newer Orbit runner/);
   assert.match(ANTIGRAVITY_RUNNER_UPGRADE_ERROR, /update this runner first$/);
+  assert.match(CURSOR_RUNNER_UPGRADE_ERROR, /^Cursor CLI requires a newer Orbit runner/);
+  assert.match(CURSOR_RUNNER_UPGRADE_ERROR, /update this runner first$/);
 });

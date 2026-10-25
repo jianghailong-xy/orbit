@@ -1,0 +1,28 @@
+{
+  "at": "2026-10-17T23:37:32.776+00:00",
+  "deepLinks": {},
+  "list": [
+    {
+      "autoInitGit": true,
+      "createdAt": "2026-10-17T23:36:30.964Z",
+      "enableWorktree": true,
+      "id": "34hkLQCpbLRvNolEcg8Ym",
+      "lastEngine": "claude",
+      "lastProvider": "deepseek-2",
+      "name": "Default",
+      "position": null,
+      "runnerId": "34hkLQCdaTRbQff2QouEQ",
+      "targetRunnerId": "34hkLQCdaTRbQff2QouEQ",
+      "workDir": "/var/lib/orbit/home/orbit-repos/default"
+    }
+  ],
+  "owner": "erin",
+  "saved": "/mnt/data/managed-runner-lab/test-server-t05/landing/erin.json",
+  "sessionRuns": {},
+  "web": {
+    "landing": "34hkLQCpbLRvNolEcg8Ym",
+    "order": [
+      "34hkLQCpbLRvNolEcg8Ym"
+    ]
+  }
+}

@@ -301,7 +301,7 @@ describe('every exception card carries the conversation about it', () => {
   it('is no door: drawn apart from the action row, which is exactly what it was', () => {
     const doors = (row: ProjectOpenItemRow) =>
       [...parse(card(row, () => undefined)).querySelectorAll('.project-open-item-actions > *')]
-        .map((press) => press.textContent?.trim());
+        .map((door) => door.querySelector<HTMLElement>('button, a')?.textContent?.trim() ?? '');
     expect(doors(ESCALATED_TASK)).toEqual([
       'Ask the coordinator again',
       'Open task session',
@@ -422,6 +422,22 @@ describe('what the coordinator is told', () => {
     expect(context).toContain('The coordinator’s reason: main’s merge-check baseline was repaired');
     expect(context).toContain(`promotion ${HANDLING_PROMOTION.promotionId}`);
     expect(context).not.toContain(' · task ');
+  });
+
+  it('names the merge being re-checked by the project’s main branch, main as before', () => {
+    const stands = (main?: string) =>
+      openItemChatContext({ projectTitle: 'Wikids', projectId: PROJECT_ID, row: HANDLING_PROMOTION, now: NOW, main })
+        .split('\n')
+        .find((line) => line.startsWith('Where it stands: '));
+    expect(stands('master')).toBe(
+      'Where it stands: being handled — the re-check of the merge into master — generation 2 is queued · asked 1m ago',
+    );
+    // Main by name, and a host that names none.
+    for (const main of ['main', undefined]) {
+      expect(stands(main), String(main)).toBe(
+        'Where it stands: being handled — the re-check of the merge into main — generation 2 is queued · asked 1m ago',
+      );
+    }
   });
 
   it('escalated while its rerun runs: says both — the rerun in flight, and that it is the owner’s now', () => {

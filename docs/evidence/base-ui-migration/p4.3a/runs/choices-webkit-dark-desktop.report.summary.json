@@ -1,0 +1,3964 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/choices.config.mjs",
+   "--project",
+   "webkit-dark-desktop"
+  ],
+  "configFile": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration/choices.config.mjs",
+  "rootDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "choices-first-frame.browser.mjs",
+   "file": "choices-first-frame.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "menu is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 21033,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:02:01.712Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-df6e3c9211f8a7ef4faf",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "menu keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 6867,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:02:22.911Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-58a5d2b901faaca0b5f9",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "submenu is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 20194,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:02:29.785Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-fd69c5ae152295afc2aa",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "submenu keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4842,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:02:49.984Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-7c60ec89c560c2c5a041",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "select is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 17553,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:02:54.839Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-d963b514a26cc70a35b3",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "select keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3360,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:03:12.398Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-5210fed493d258f64718",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "combobox is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 14965,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:03:15.763Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-e2bc02c3c2c665946e25",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "combobox keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3387,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:03:30.732Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-40abc1e19e7a7c0fbfa9",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "multiselect is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 13708,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:03:34.124Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-921c46f163468036904a",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "multiselect keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4839,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:03:47.842Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-1c2de077cf88e0d53ed5",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "popover is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 12782,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:03:52.686Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-267fcf3ceed79ee3c7ac",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "popover keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3907,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:04:05.474Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-14a7aba2fadb975f0ce7",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "tooltip is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 16196,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:04:09.403Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-fce6307a0a1864581b09",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "tooltip keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3608,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:04:25.613Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-32590ee8c481608aa328",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "popconfirm is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 12306,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:04:29.224Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-f9d37b542c229de82aeb",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "popconfirm keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3967,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:04:41.535Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-54e8e6dc9b3a180a7158",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    }
+   ]
+  },
+  {
+   "title": "choices-lifecycle.browser.mjs",
+   "file": "choices-lifecycle.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3376,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:32.758Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-151730351215009cb72a",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "reduce Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2070,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:36.245Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-e6d0cc8c8d4d5f480407",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "reduced motion attachment has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1014,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:38.321Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-1660a534f28e51ea68bc",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "reduced motion expiry has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 912,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:39.344Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-1d32e896307800a65c8e",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "reduced motion search has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1023,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:40.261Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-fce67e4995e26901a43d",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "reduced motion multiple has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 956,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:41.290Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-324b9689511233548a47",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "reduced motion popover has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 935,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:42.251Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-603f6ebcc2de8ad5c144",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "reduced motion tooltip has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 947,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:43.195Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-3448081b2c4138716419",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "normal attachment can reopen during exit without stale unmount",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1618,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:44.147Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reopen",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-c847f24c1733e6c58063",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 132,
+     "column": 67
+    },
+    {
+     "title": "normal expiry can reopen during exit without stale unmount",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1740,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:45.769Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reopen",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-e5f89628af9cc02fdbcf",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 132,
+     "column": 67
+    },
+    {
+     "title": "normal search can reopen during exit without stale unmount",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1641,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:47.516Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reopen",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-bfe0aedbd84f07fc1471",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 132,
+     "column": 67
+    },
+    {
+     "title": "normal popover can reopen during exit without stale unmount",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1780,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:49.162Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reopen",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-6182e2bd344c0cbbe67c",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 132,
+     "column": 67
+    }
+   ]
+  },
+  {
+   "title": "choices-motion.browser.mjs",
+   "file": "choices-motion.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "normal bottom entrance and exit motion matches attachment",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2155,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:51.087Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-b5ae1794e9bf36eaaae0",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches attachment",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3235,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:53.248Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-8b8535c7ecdf0272e096",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches attachment",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2561,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:56.487Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-5325363e13ef7ceed1a5",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1876,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:59.053Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-65aa400faaf3714b7d4c",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2086,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:00.935Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-099dea248b4c5bf0510a",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2100,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:03.025Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-e27cfbf95ba3bdb318b1",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1792,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:05.129Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-4dadae493a8b5d67a14f",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2140,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:06.926Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-a39fe952421a29119706",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2241,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:09.071Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-56a0de2b276f8593a2a2",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches multiple",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1885,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:11.317Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-74db97137e7aa169c534",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches multiple",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2341,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:13.206Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-9890e5293d186aa78a6e",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches multiple",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2299,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:15.552Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-5ec0dfb07857ff7a536b",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches popover",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1951,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:17.856Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-09e59017dd3b6232ce84",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches popover",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2206,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:19.811Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-5c19c5bdb2ca1d986ef0",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches popover",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2213,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:22.022Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-e083b56d2d27d950875a",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches tooltip",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2205,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:24.240Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-b3d9278f51834e3e1e49",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches tooltip",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2174,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:26.450Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-dfe8a47d26ab9c128e55",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches tooltip",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2259,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:28.628Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-28ff774b8ae12e0762c7",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "popover center zoom origin matches",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2392,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:30.891Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-9ea4526a324c1f4c0fe3",
+     "file": "choices-motion.browser.mjs",
+     "line": 141,
+     "column": 83
+    },
+    {
+     "title": "popover end zoom origin matches",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2599,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:33.288Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-244186498d25b6ed55a2",
+     "file": "choices-motion.browser.mjs",
+     "line": 141,
+     "column": 83
+    },
+    {
+     "title": "tooltip center zoom origin matches",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2498,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:35.892Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-a1750a2507ac38b10280",
+     "file": "choices-motion.browser.mjs",
+     "line": 141,
+     "column": 83
+    },
+    {
+     "title": "tooltip end zoom origin matches",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2669,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:38.395Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-73b5a5d35e1793821bb7",
+     "file": "choices-motion.browser.mjs",
+     "line": 141,
+     "column": 83
+    },
+    {
+     "title": "submenu left edge zoom matches and stays in view",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4215,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:41.069Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-894e24404bf04eac9833",
+     "file": "choices-motion.browser.mjs",
+     "line": 160,
+     "column": 41
+    },
+    {
+     "title": "submenu right edge zoom matches and stays in view",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3207,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:45.291Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-a5d8e6dcd21d33fa96b9",
+     "file": "choices-motion.browser.mjs",
+     "line": 160,
+     "column": 41
+    }
+   ]
+  },
+  {
+   "title": "choices-open-value.browser.mjs",
+   "file": "choices-open-value.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "expiry dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2883,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:48.636Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-5df12e6d631ff138a926",
+     "file": "choices-open-value.browser.mjs",
+     "line": 31,
+     "column": 53
+    },
+    {
+     "title": "account dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2485,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:51.523Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-98654d134f11f670f8b1",
+     "file": "choices-open-value.browser.mjs",
+     "line": 31,
+     "column": 53
+    },
+    {
+     "title": "search dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2537,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:54.012Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-5fa7403a814bbeefadb1",
+     "file": "choices-open-value.browser.mjs",
+     "line": 31,
+     "column": 53
+    }
+   ]
+  },
+  {
+   "title": "choices-submenu-geometry.browser.mjs",
+   "file": "choices-submenu-geometry.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "submenu at the left of the page settles where the replaced submenu does",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 10849,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:04:45.639Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "submenu-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "868cb2351927fbf39c3e-a65028c27693dac2e977",
+     "file": "choices-submenu-geometry.browser.mjs",
+     "line": 84,
+     "column": 29
+    },
+    {
+     "title": "submenu at the middle of the page settles where the replaced submenu does",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 12112,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:04:56.498Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "submenu-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "868cb2351927fbf39c3e-1b1a13b47f2c5985027b",
+     "file": "choices-submenu-geometry.browser.mjs",
+     "line": 84,
+     "column": 29
+    },
+    {
+     "title": "submenu at the right edge settles where the replaced submenu does",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 10922,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:08.629Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "submenu-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "868cb2351927fbf39c3e-549e78e0a3db171304d8",
+     "file": "choices-submenu-geometry.browser.mjs",
+     "line": 84,
+     "column": 29
+    },
+    {
+     "title": "submenu at the right edge of a dialog settles where the replaced submenu does",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "not the same place",
+         "description": "submenu, short label: viewport 1280,1280 / 1272,1272"
+        },
+        {
+         "type": "not the same place",
+         "description": "submenu, medium label: viewport 1280,1280 / 1272,1272"
+        },
+        {
+         "type": "not the same place",
+         "description": "submenu, long label: viewport 1280,1280 / 1272,1272"
+        },
+        {
+         "type": "not the same place",
+         "description": "session, short label: viewport 1280,1280 / 1272,1272"
+        },
+        {
+         "type": "not the same place",
+         "description": "session, medium label: viewport 1280,1280 / 1272,1272"
+        },
+        {
+         "type": "not the same place",
+         "description": "session, long label: viewport 1280,1280 / 1272,1272"
+        }
+       ],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 12584,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:05:19.564Z",
+         "annotations": [
+          {
+           "type": "not the same place",
+           "description": "submenu, short label: viewport 1280,1280 / 1272,1272"
+          },
+          {
+           "type": "not the same place",
+           "description": "submenu, medium label: viewport 1280,1280 / 1272,1272"
+          },
+          {
+           "type": "not the same place",
+           "description": "submenu, long label: viewport 1280,1280 / 1272,1272"
+          },
+          {
+           "type": "not the same place",
+           "description": "session, short label: viewport 1280,1280 / 1272,1272"
+          },
+          {
+           "type": "not the same place",
+           "description": "session, medium label: viewport 1280,1280 / 1272,1272"
+          },
+          {
+           "type": "not the same place",
+           "description": "session, long label: viewport 1280,1280 / 1272,1272"
+          }
+         ],
+         "attachments": [
+          {
+           "name": "submenu-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "868cb2351927fbf39c3e-050879a8070b2e904e63",
+     "file": "choices-submenu-geometry.browser.mjs",
+     "line": 84,
+     "column": 29
+    }
+   ]
+  },
+  {
+   "title": "choices.browser.mjs",
+   "file": "choices.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "attachment matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2719,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:56.594Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-attachment-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-attachment-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "menu-glyphs",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-72204b265b7b8a12dea4",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "access matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3200,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:06:59.318Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-access-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-access-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "menu-glyphs",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-2b99d2bf080008424b12",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "expiry matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3426,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:02.522Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-d0037d157b869285ee02",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "account matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3840,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:05.952Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-cf86c943f88148d03474",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "search matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3748,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:09.797Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-d4b0b5144aa14599aed1",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "popover matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2734,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:13.549Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-popover-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-popover-context",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-popover-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-popover-context",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-28b208a355e58bdb7623",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "tooltip matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2255,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:16.289Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-tooltip-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-tooltip-context",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-tooltip-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-tooltip-context",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-49f16e72805dc2e9377d",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "empty, disabled, hover and focus choice surfaces match the existing states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 12372,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:18.548Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choice-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-527b8a0afe8b72c100b5",
+     "file": "choices.browser.mjs",
+     "line": 158,
+     "column": 1
+    },
+    {
+     "title": "menu arrows, disabled items, submenu, checkbox and focus return work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2365,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:30.925Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-menu",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-72c3446940eb61d8c30a",
+     "file": "choices.browser.mjs",
+     "line": 198,
+     "column": 1
+    },
+    {
+     "title": "touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1984,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:33.313Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "pointer-menu",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-7d95a2f7a5212b5dee71",
+     "file": "choices.browser.mjs",
+     "line": 231,
+     "column": 1
+    },
+    {
+     "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1534,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:35.302Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-a1d13c261ec7b1f7f8b8",
+     "file": "choices.browser.mjs",
+     "line": 263,
+     "column": 1
+    },
+    {
+     "title": "search preserves selection, filters groups, handles no results, composition and explicit clear",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1766,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:36.841Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "search",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-bd43dc0d4f53b4c79b6b",
+     "file": "choices.browser.mjs",
+     "line": 292,
+     "column": 1
+    },
+    {
+     "title": "remote search accepts server labels and resets an action picker without local filtering",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1208,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:38.613Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "remote-search",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-e6af2a9971b8abfc2084",
+     "file": "choices.browser.mjs",
+     "line": 323,
+     "column": 1
+    },
+    {
+     "title": "Dialog owns choices, top-layer Escape, Tab and theme",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2615,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:39.829Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "choices-in-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-choices",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-3c66f13e0cfe2bf64ba8",
+     "file": "choices.browser.mjs",
+     "line": 343,
+     "column": 37
+    },
+    {
+     "title": "legacy Modal owns choices, top-layer Escape, Tab and theme",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2258,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:42.451Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "choices-in-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-choices",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-55dfb348de9dcba8128a",
+     "file": "choices.browser.mjs",
+     "line": 343,
+     "column": 37
+    },
+    {
+     "title": "legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3201,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:44.714Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-tab-baseline",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-6254ceb91f7b7acb9616",
+     "file": "choices.browser.mjs",
+     "line": 381,
+     "column": 1
+    },
+    {
+     "title": "popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1859,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:47.919Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "popover-tooltip",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-3b16eb8f7e40ac0fad9b",
+     "file": "choices.browser.mjs",
+     "line": 400,
+     "column": 1
+    },
+    {
+     "title": "open choices follow the live system theme without losing selection",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1057,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:49.784Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "live-theme",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-6951d57721d8df93ff2a",
+     "file": "choices.browser.mjs",
+     "line": 435,
+     "column": 1
+    },
+    {
+     "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1565,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:50.846Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dialog-boundaries",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-2a858958fb18d83b69b2",
+     "file": "choices.browser.mjs",
+     "line": 453,
+     "column": 1
+    },
+    {
+     "title": "multiple chip appearance matches current labels and email fields",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3810,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:52.416Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-multiple-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-multiple-options",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-options",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-multiple-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "multi-appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-722c0c0cfc31dcbf13c2",
+     "file": "choices.browser.mjs",
+     "line": 486,
+     "column": 42
+    },
+    {
+     "title": "tags chip appearance matches current labels and email fields",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2674,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:56.231Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-tags-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-tags-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-tags-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-tags-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "multi-appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-86cbcce664d8f5226b61",
+     "file": "choices.browser.mjs",
+     "line": 486,
+     "column": 42
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1244,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:07:58.911Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-369f25d1867e92e3b853",
+     "file": "choices.browser.mjs",
+     "line": 515,
+     "column": 1
+    },
+    {
+     "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1179,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:08:00.159Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "email-tags",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-c1d3a4040d79def568eb",
+     "file": "choices.browser.mjs",
+     "line": 552,
+     "column": 1
+    },
+    {
+     "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1450,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:08:01.343Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multi-dialog-and-row",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-4c8a793bfe5526c41e39",
+     "file": "choices.browser.mjs",
+     "line": 592,
+     "column": 1
+    },
+    {
+     "title": "search option touch selects once and preserves input focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 920,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:08:02.797Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "search-touch",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-b2043501df84df3d5a4a",
+     "file": "choices.browser.mjs",
+     "line": 631,
+     "column": 1
+    },
+    {
+     "title": "disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1322,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:08:03.722Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "long-tooltip",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plan-usage-sized-popover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "tooltip-and-popover-edges",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-f54c44f3b431f4247b99",
+     "file": "choices.browser.mjs",
+     "line": 642,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-09T07:01:57.296Z",
+  "duration": 368206.24700000003,
+  "expected": 85,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

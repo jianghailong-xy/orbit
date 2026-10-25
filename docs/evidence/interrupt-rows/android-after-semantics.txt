@@ -1,0 +1,249 @@
+Printing with useUnmergedTree = 'false'
+Node #1 at (l=0.0, t=0.0, r=1233.0, b=2673.0)px
+ |-Node #59 at (l=0.0, t=0.0, r=1233.0, b=2673.0)px
+ | IsContainer = 'true'
+ |  |-Node #129 at (l=0.0, t=192.0, r=1233.0, b=336.0)px
+ |  | HorizontalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+ |  | IsTraversalGroup = 'true'
+ |  | Actions = [ScrollBy, ScrollByOffset]
+ |  |  |-Node #130 at (l=24.0, t=204.0, r=599.0, b=324.0)px
+ |  |    Focused = 'false'
+ |  |    Role = 'Button'
+ |  |    Text = '[Composer increments]'
+ |  |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+ |  |    MergeDescendants = 'true'
+ |  |-Node #134 at (l=48.0, t=385.0, r=993.0, b=431.0)px
+ |  | Text = '[AWAITING_INPUT]'
+ |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |-Node #135 at (l=993.0, t=336.0, r=1185.0, b=480.0)px
+ |  | ClearAndSetSemantics = 'true'
+ |  |-Node #138 at (l=0.0, t=480.0, r=1233.0, b=2193.0)px, Tag: 'transcript-list'
+ |  | CollectionInfo = 'androidx.compose.ui.semantics.CollectionInfo@69fdb87b'
+ |  | IsTraversalGroup = 'true'
+ |  | VerticalScrollAxisRange = 'ScrollAxisRange(value=802.0, maxValue=802.0, reverseScrolling=false)'
+ |  | Actions = [GetScrollViewportLength, IndexForKey, ScrollBy, ScrollByOffset, ScrollToIndex]
+ |  |  |-Node #208 at (l=78.0, t=244.0, r=1155.0, b=465.0)px, Tag: 'event:1'
+ |  |  |  |-Node #210 at (l=78.0, t=293.0, r=145.0, b=339.0)px
+ |  |  |  | Text = '[You]'
+ |  |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |  |  |-Node #212 at (l=747.0, t=256.0, r=1155.0, b=376.0)px
+ |  |  |  | Focused = 'false'
+ |  |  |  | Role = 'Button'
+ |  |  |  | Text = '[Copy message]'
+ |  |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+ |  |  |  | MergeDescendants = 'true'
+ |  |  |  |-Node #215 at (l=78.0, t=406.0, r=591.0, b=465.0)px
+ |  |  |    Focused = 'false'
+ |  |  |    Actions = [RequestFocus]
+ |  |  |     |-Node #218 at (l=78.0, t=406.0, r=591.0, b=465.0)px
+ |  |  |       Text = '[Why was it sent twice?]'
+ |  |  |       Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |  |-Node #220 at (l=78.0, t=573.0, r=1155.0, b=794.0)px, Tag: 'event:2'
+ |  |  |  |-Node #222 at (l=78.0, t=622.0, r=243.0, b=668.0)px
+ |  |  |  | Text = '[Assistant]'
+ |  |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |  |  |-Node #224 at (l=747.0, t=585.0, r=1155.0, b=705.0)px
+ |  |  |  | Focused = 'false'
+ |  |  |  | Role = 'Button'
+ |  |  |  | Text = '[Copy message]'
+ |  |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+ |  |  |  | MergeDescendants = 'true'
+ |  |  |  |-Node #227 at (l=78.0, t=735.0, r=662.0, b=794.0)px
+ |  |  |    Focused = 'false'
+ |  |  |    Actions = [RequestFocus]
+ |  |  |     |-Node #230 at (l=78.0, t=735.0, r=662.0, b=794.0)px
+ |  |  |       Text = '[Reading the delivery path.]'
+ |  |  |       Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |  |-Node #232 at (l=78.0, t=902.0, r=1155.0, b=1046.0)px, Tag: 'event:3'
+ |  |  |  |-Node #234 at (l=78.0, t=951.0, r=273.0, b=997.0)px
+ |  |  |  | Text = '[Interrupted]'
+ |  |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |  |  |-Node #236 at (l=747.0, t=914.0, r=1155.0, b=1034.0)px
+ |  |  |    Focused = 'false'
+ |  |  |    Role = 'Button'
+ |  |  |    Text = '[Copy message]'
+ |  |  |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+ |  |  |    MergeDescendants = 'true'
+ |  |  |-Node #240 at (l=78.0, t=1154.0, r=1155.0, b=1375.0)px, Tag: 'event:5'
+ |  |  |  |-Node #242 at (l=78.0, t=1203.0, r=145.0, b=1249.0)px
+ |  |  |  | Text = '[You]'
+ |  |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |  |  |-Node #244 at (l=747.0, t=1166.0, r=1155.0, b=1286.0)px
+ |  |  |  | Focused = 'false'
+ |  |  |  | Role = 'Button'
+ |  |  |  | Text = '[Copy message]'
+ |  |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+ |  |  |  | MergeDescendants = 'true'
+ |  |  |  |-Node #247 at (l=78.0, t=1316.0, r=281.0, b=1375.0)px
+ |  |  |    Focused = 'false'
+ |  |  |    Actions = [RequestFocus]
+ |  |  |     |-Node #250 at (l=78.0, t=1316.0, r=281.0, b=1375.0)px
+ |  |  |       Text = '[Carry on.]'
+ |  |  |       Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |  |-Node #252 at (l=78.0, t=1483.0, r=1155.0, b=1704.0)px, Tag: 'event:6'
+ |  |  |  |-Node #254 at (l=78.0, t=1532.0, r=243.0, b=1578.0)px
+ |  |  |  | Text = '[Assistant]'
+ |  |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |  |  |-Node #256 at (l=747.0, t=1495.0, r=1155.0, b=1615.0)px
+ |  |  |  | Focused = 'false'
+ |  |  |  | Role = 'Button'
+ |  |  |  | Text = '[Copy message]'
+ |  |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+ |  |  |  | MergeDescendants = 'true'
+ |  |  |  |-Node #259 at (l=78.0, t=1645.0, r=661.0, b=1704.0)px
+ |  |  |    Focused = 'false'
+ |  |  |    Actions = [RequestFocus]
+ |  |  |     |-Node #262 at (l=78.0, t=1645.0, r=661.0, b=1704.0)px
+ |  |  |       Text = '[Back on the delivery path.]'
+ |  |  |       Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |  |-Node #264 at (l=78.0, t=1812.0, r=1155.0, b=1956.0)px, Tag: 'event:7'
+ |  |  |  |-Node #266 at (l=78.0, t=1834.0, r=412.0, b=1934.0)px
+ |  |  |  | Text = '[Interrupted — the runner restarted]'
+ |  |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |  |  |-Node #268 at (l=747.0, t=1824.0, r=1155.0, b=1944.0)px
+ |  |  |    Focused = 'false'
+ |  |  |    Role = 'Button'
+ |  |  |    Text = '[Copy message]'
+ |  |  |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+ |  |  |    MergeDescendants = 'true'
+ |  |  |-Node #272 at (l=48.0, t=2082.0, r=1185.0, b=2082.0)px, Tag: 'interaction-cards'
+ |  |  |-Node #273 at (l=48.0, t=2130.0, r=48.0, b=2193.0)px, Tag: 'transcript-tail'
+ |  |-Node #143 at (l=0.0, t=2193.0, r=1233.0, b=2673.0)px
+ |  |  |-Node #145 at (l=0.0, t=2193.0, r=1233.0, b=2673.0)px
+ |  |    IsContainer = 'true'
+ |  |     |-Node #146 at (l=36.0, t=2205.0, r=1197.0, b=2661.0)px, Tag: 'session-composer'
+ |  |        |-Node #147 at (l=36.0, t=2205.0, r=1197.0, b=2517.0)px
+ |  |        | IsTraversalGroup = 'true'
+ |  |        | VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+ |  |        | Actions = [ScrollBy, ScrollByOffset]
+ |  |        |  |-Node #151 at (l=36.0, t=2217.0, r=479.0, b=2337.0)px
+ |  |        |  | Focused = 'false'
+ |  |        |  | Role = 'Button'
+ |  |        |  | Text = '[Context: 0 tokens · Usage]'
+ |  |        |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+ |  |        |  | MergeDescendants = 'true'
+ |  |        |  |-Node #155 at (l=36.0, t=2349.0, r=1197.0, b=2517.0)px, Tag: 'composer-input'
+ |  |        |    ContentDataType = 'AndroidContentDataType(androidAutofillType=1)'
+ |  |        |    EditableText = ''
+ |  |        |    Focused = 'false'
+ |  |        |    ImeAction = 'Default'
+ |  |        |    InputText = ''
+ |  |        |    IsEditable = 'true'
+ |  |        |    Text = '[Message…]'
+ |  |        |    TextSelectionRange = 'TextRange(0, 0)'
+ |  |        |    Actions = [ClearTextSubstitution, GetTextLayoutResult, InsertTextAtCursor, OnAutofillText, OnClick, OnLongClick, PasteText, PerformImeAction, RequestFocus, SetSelection, SetText, SetTextSubstitution, ShowTextSubstitution]
+ |  |        |    MergeDescendants = 'true'
+ |  |        |-Node #167 at (l=36.0, t=2529.0, r=210.0, b=2649.0)px
+ |  |        | Focused = 'false'
+ |  |        | Role = 'Button'
+ |  |        | Text = '[+]'
+ |  |        | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+ |  |        | MergeDescendants = 'true'
+ |  |        |-Node #170 at (l=210.0, t=2529.0, r=938.0, b=2649.0)px, Tag: 'composer-model'
+ |  |        | ContentDescription = '[Model claude-opus-5-5, effort Default]'
+ |  |        | Focused = 'false'
+ |  |        | Role = 'Button'
+ |  |        | Text = '[claude-opus-5-5]'
+ |  |        | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+ |  |        | MergeDescendants = 'true'
+ |  |        |-Node #175 at (l=938.0, t=2529.0, r=1197.0, b=2649.0)px, Tag: 'composer-send'
+ |  |          Role = 'Button'
+ |  |          Text = '[Send]'
+ |  |          [Disabled]
+ |  |          Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, SetTextSubstitution, ShowTextSubstitution]
+ |  |          MergeDescendants = 'true'
+ |  |-Node #123 at (l=617.0, t=216.0, r=617.0, b=216.0)px
+ |  |-Node #125 at (l=617.0, t=240.0, r=617.0, b=240.0)px
+ |  |-Node #97 at (l=0.0, t=0.0, r=1233.0, b=192.0)px, Tag: 'app-bar'
+ |    IsTraversalGroup = 'true'
+ |     |-Node #98 at (l=0.0, t=0.0, r=1233.0, b=192.0)px
+ |        |-Node #100 at (l=24.0, t=36.0, r=144.0, b=156.0)px
+ |        | ContentDescription = '[Back]'
+ |        | Focused = 'false'
+ |        | Role = 'Button'
+ |        | Actions = [OnClick, RequestFocus]
+ |        | MergeDescendants = 'true'
+ |        |-Node #102 at (l=168.0, t=66.0, r=348.0, b=125.0)px
+ |        |  |-Node #103 at (l=168.0, t=66.0, r=348.0, b=125.0)px
+ |        |    Text = '[Session]'
+ |        |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |        |-Node #204 at (l=801.0, t=36.0, r=921.0, b=156.0)px
+ |        | ContentDescription = '[Session actions]'
+ |        | Role = 'Button'
+ |        | [Disabled]
+ |        | Actions = [OnClick]
+ |        | MergeDescendants = 'true'
+ |        |-Node #106 at (l=945.0, t=36.0, r=1065.0, b=156.0)px
+ |        | ContentDescription = '[Open navigation]'
+ |        | Focused = 'false'
+ |        | Role = 'Button'
+ |        | Actions = [OnClick, RequestFocus]
+ |        | MergeDescendants = 'true'
+ |        |-Node #108 at (l=1089.0, t=36.0, r=1209.0, b=156.0)px
+ |          ContentDescription = '[Refresh directory]'
+ |          Focused = 'false'
+ |          Role = 'Button'
+ |          Actions = [OnClick, RequestFocus]
+ |          MergeDescendants = 'true'
+ |-Node #62 at (l=-1080.0, t=0.0, r=0.0, b=2673.0)px
+   PaneTitle = 'Navigation menu'
+    |-Node #63 at (l=-1080.0, t=0.0, r=0.0, b=2673.0)px
+      IsContainer = 'true'
+       |-Node #64 at (l=-1080.0, t=0.0, r=0.0, b=2673.0)px
+          |-Node #65 at (l=-1080.0, t=0.0, r=0.0, b=2673.0)px
+            IsTraversalGroup = 'true'
+            VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+            Actions = [ScrollBy, ScrollByOffset]
+             |-Node #67 at (l=-1044.0, t=70.0, r=-899.0, b=147.0)px
+             | Text = '[Orbit]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+             |-Node #68 at (l=-168.0, t=48.0, r=-48.0, b=168.0)px
+             | ContentDescription = '[Search sessions]'
+             | Focused = 'false'
+             | Role = 'Button'
+             | Actions = [OnClick, RequestFocus]
+             | MergeDescendants = 'true'
+             |-Node #70 at (l=-1044.0, t=180.0, r=-36.0, b=348.0)px
+             | Focused = 'false'
+             | Role = 'Tab'
+             | Selected = 'false'
+             | Text = '[Projects]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+             | MergeDescendants = 'true'
+             |-Node #76 at (l=-1044.0, t=348.0, r=-36.0, b=516.0)px
+             | Focused = 'false'
+             | Role = 'Tab'
+             | Selected = 'false'
+             | Text = '[Tasks]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+             | MergeDescendants = 'true'
+             |-Node #188 at (l=-1044.0, t=516.0, r=-36.0, b=684.0)px
+             | Focused = 'false'
+             | Role = 'Tab'
+             | Selected = 'false'
+             | Text = '[Wiki]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+             | MergeDescendants = 'true'
+             |-Node #82 at (l=-996.0, t=720.0, r=-782.0, b=766.0)px
+             | Text = '[Workspaces]'
+             | [Heading]
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+             |-Node #195 at (l=-1044.0, t=802.0, r=-36.0, b=970.0)px
+             | Focused = 'false'
+             | Role = 'Tab'
+             | Selected = 'false'
+             | Text = '[Alpha, Fixture runner]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+             | MergeDescendants = 'true'
+             |-Node #87 at (l=-1044.0, t=1054.0, r=-611.0, b=1174.0)px
+             | Focused = 'false'
+             | Role = 'Button'
+             | Text = '[New session]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+             | MergeDescendants = 'true'
+             |-Node #90 at (l=-1044.0, t=1198.0, r=-688.0, b=1318.0)px
+               Focused = 'false'
+               Role = 'Button'
+               Text = '[Settings]'
+               Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+               MergeDescendants = 'true'

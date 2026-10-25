@@ -1,0 +1,38 @@
+{
+  "at": "2026-10-18T01:53:53.904+00:00",
+  "changes": [
+    [
+      "2026-10-18T01:53:52.272+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 0,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 1,
+        "management_state": "WAITING_CAPACITY",
+        "pod": null,
+        "reason": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+        "revision": 2
+      }
+    ],
+    [
+      "2026-10-18T01:53:53.904+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 0,
+        "desired_state": "SLEEPING",
+        "drain": null,
+        "generation": 1,
+        "management_state": "SLEEPING",
+        "pod": null,
+        "reason": null,
+        "revision": 3
+      }
+    ]
+  ],
+  "owner": "carl",
+  "reached": {
+    "reason": null,
+    "state": "SLEEPING"
+  }
+}

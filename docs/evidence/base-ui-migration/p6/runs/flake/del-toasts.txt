@@ -1,0 +1,33 @@
+tree: /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del
+head: 6879542dc23a10a74417002810331a7e73778842
+case: toasts / entrance progress survives a modal transfer before its first 180ms completes / webkit-dark-desktop webkit-light-desktop x10
+load: 13.20 14.61 14.33 7/3424 2078662
+started: 2026-10-10T17:10:52Z
+
+P0 expected screenshots: 44 P0.2 originals, 165 main drift references, 43 accepted migration differences.
+
+Running 20 tests using 1 worker
+
+  ✓   1 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (908ms)
+  ✓   2 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (902ms)
+  ✓   3 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (836ms)
+  ✓   4 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (885ms)
+  ✓   5 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (848ms)
+  ✓   6 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (839ms)
+  ✓   7 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (901ms)
+  ✓   8 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (863ms)
+  ✓   9 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (913ms)
+  ✓  10 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (860ms)
+  ✓  11 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (870ms)
+  ✓  12 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (898ms)
+  ✓  13 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (876ms)
+  ✓  14 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (832ms)
+  ✓  15 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (872ms)
+  ✓  16 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (923ms)
+  ✓  17 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (903ms)
+  ✓  18 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (839ms)
+  ✓  19 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (903ms)
+  ✓  20 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:152:1 › entrance progress survives a modal transfer before its first 180ms completes (911ms)
+
+  20 passed (26.3s)
+exit=0

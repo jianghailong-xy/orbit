@@ -4,6 +4,8 @@
 // model answers at most ORBIT_WIKI_MODEL_CONCURRENCY requests at once. wikiContract.spec.ts holds every
 // constant below to the contract JSON.
 
+import type { WikiSystemModelErrorKind } from './wikiSystemModel';
+
 /**
  * What a job is (contract `jobs.kinds`): the seven pipelines, and `smoke` — a job that makes one model
  * call and writes the answer into its report, which is the queue's own end-to-end probe and runs no
@@ -35,6 +37,18 @@ export const WIKI_JOB = {
   maxConcurrentPerWorker: 4,
   /** The retryable backoff for an infra failure, in seconds, by the attempts already made (0, 10, 30). */
   retryBackoffSeconds: [0, 10, 30],
+  /**
+   * How many times a job is tried in all (contract `jobs.retry.limit`): when the attempt that makes this many
+   * fails as infra, the job ends failed instead of going back to the queue. With the backoff above, about
+   * four minutes of a runner that cannot be reached, and half an hour or more of a System model that stays away.
+   */
+  maxAttempts: 10,
+  /**
+   * The same limit for an error this build did not expect, one that is neither infra nor content: a failed
+   * assertion, a TypeError. It is retried as infra in case it was passing, but the attempt that makes this
+   * many ends the job, because another attempt would only run into it again.
+   */
+  unexpectedMaxAttempts: 3,
   /** How often the loop looks for due work when nothing has nudged it. */
   pollSeconds: 5,
 } as const;
@@ -109,20 +123,112 @@ export function wikiJobRetryDelaySeconds(attempts: number): number {
   return schedule[Math.min(Math.max(attempts, 0), schedule.length - 1)];
 }
 
-/** What the executor switch's environment names are called (contract `jobs.executor.*`). */
-export const WIKI_EXECUTOR_ENV = {
-  /** runner | canary | server. */
-  mode: 'ORBIT_WIKI_EXECUTOR',
-  canaryOwners: 'ORBIT_WIKI_EXECUTOR_CANARY_OWNERS',
-} as const;
-
 /**
- * How far the server-side execution is switched on (contract `jobs.executor.modes`): `runner` is the
- * default and the path that has always run — nothing the server executes; `canary` gives it only to the
- * accounts the canary list names; `server` gives it to every account.
+ * What a read's executor mode can name (contract `jobs.executor.modes`). A server since P11 says `server` alone:
+ * it executes every account's wiki, and there is no switch (`jobs.executor.removed`). `runner` and `canary` are
+ * what a control plane from before could say — its switch's default, and the accounts its canary list named —
+ * and the clients still read them as they did.
  */
 export const WIKI_EXECUTOR_MODES = ['runner', 'canary', 'server'] as const;
 export type WikiExecutorMode = (typeof WIKI_EXECUTOR_MODES)[number];
+
+/**
+ * What a read tells an account about who executes its wiki (contract `jobs.executor.read`): the mode, and whether
+ * the server executes THIS account's wiki. The clients draw the server's settings, Runs and reasons only while
+ * `serverExecutes` holds; from a control plane that left the account on the runner they are what they always were.
+ */
+export interface WikiExecutorView {
+  mode: WikiExecutorMode;
+  serverExecutes: boolean;
+}
+
+/** What every read says since P11 (contract `jobs.executor.read`): the server executes every account's wiki. */
+export const WIKI_EXECUTOR_READ: WikiExecutorView = { mode: 'server', serverExecutes: true };
+
+/** `GET /api/wiki/spaces/:id/jobs` (contract `jobs.read`): what Activity's Runs card and a run's page read. */
+export const WIKI_JOBS_READ = {
+  /** The space's newest runs one read answers, newest first. */
+  jobs: 10,
+  /** The newest calls of one run the read carries, oldest first; the run's `calls` counts every one. */
+  callsPerJob: 40,
+} as const;
+
+/**
+ * One model call of a run, as the call log shows it (contract `jobs.read.request`): where it is, how long it
+ * waited and ran, what it spent and how it failed — its metadata alone, never the call's system prompt, prompt,
+ * answer or partial.
+ */
+export interface WikiJobCallView {
+  id: string;
+  step: string;
+  unit: string;
+  /** Which attempt of the unit the row is, and how many times this row was tried. */
+  attempt: number;
+  attempts: number;
+  state: WikiModelRequestState;
+  enqueuedAt: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  httpStatus: number | null;
+  /** Why it failed, in the queue's own words, which name neither the model's address nor its key. */
+  error: string | null;
+  errorKind: WikiSystemModelErrorKind | null;
+  /** While it is queued: how many queued requests the deployment's queue takes before it. Null otherwise. */
+  ahead: number | null;
+}
+
+/** A run's position as its pipeline writes it (`jobs.progress`), read as one step and, when it counts, done of total. */
+export interface WikiJobProgressView {
+  step: string | null;
+  done: number | null;
+  total: number | null;
+}
+
+/** A run's calls counted by state, and the tokens they reported. */
+export interface WikiJobCallCounts {
+  total: number;
+  queued: number;
+  running: number;
+  succeeded: number;
+  failed: number;
+  cancelled: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** One server run of the space: one `wiki_job` row, as Activity reads it. */
+export interface WikiJobView {
+  id: string;
+  kind: WikiJobKind;
+  state: WikiJobState;
+  waitingFor: WikiJobWaitingFor | null;
+  priority: number;
+  attempts: number;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  /** When a run that failed as infra is tried again (`jobs.retry`); null when nothing is scheduled. */
+  nextAttemptAt: string | null;
+  failureKind: WikiJobFailureKind | null;
+  error: string | null;
+  /** While it is queued: how many queued jobs the workers take before it. Null otherwise. */
+  ahead: number | null;
+  progress: WikiJobProgressView | null;
+  calls: WikiJobCallCounts;
+  /** Of its calls that wait, the one the queue reaches first: how many are ahead of it, and since when it waits. */
+  nextCall: { ahead: number; enqueuedAt: string } | null;
+  /** Its newest calls, at most `WIKI_JOBS_READ.callsPerJob`, oldest first. */
+  requests: WikiJobCallView[];
+}
+
+/** The answer of `GET /api/wiki/spaces/:id/jobs`. */
+export interface WikiJobsRead {
+  spaceId: string;
+  jobs: WikiJobView[];
+}
 
 /**
  * The server's import (contract `import.server`, design §2.2 and §8, P5): `orbit wiki import` still reads the

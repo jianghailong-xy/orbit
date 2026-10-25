@@ -1,0 +1,675 @@
+<!doctype html>
+<!-- DESIGN MOCK (2026-10-09). An Automatic project's evidence card while the project's coordinator is
+     paused, on an iPhone. The owner's 20:02 screenshot: the coordinator hit Claude's weekly limit at
+     18:08 (run FAILED, conversation still open); a task submitted evidence at 19:59; the delivery read
+     the FAILED conversation as ended (sessionHasEnded), refused, and the revision became the owner's
+     card at once. Nothing re-delivers it when the coordinator comes back.
+     This board: today, the queued card, the rules, the two open choices (A/B), and the landing steps.
+     Design doc: docs/evidence-waits-for-coordinator-design.md.
+     Sample text: task and project names are made up in the shape of the screenshot's (a coded task
+     title, a criterion sentence, nine gaps) — the repo is public. Times are the real ones.
+     Geometry: the owner's screenshot (1179×2556 @3x → 393×852 pt). Chat: nav to 113, needs-you bar
+     113–151, "Your question" strip below it, bottom band from 591.
+     Sizes follow OrbitApp's tokens: orbitProse 17, orbitLabel 13, card padding 14 / radius 14,
+     row radius 10, blue wash 7–8 %, hairline 28 %. iOS card actions stack (ApprovalActions VStack 10).
+     Render: node /var/tmp/evidence-queue-mock/render.mjs board.html <outdir>. -->
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>协调者停着时，证据卡排队等它 — iPhone 设计图</title>
+<style>
+  :root {
+    --blue: #007AFF; --accent: #3E69F6;
+    --label: #000; --label2: rgba(60,60,67,.6); --label3: rgba(60,60,67,.36);
+    --sep: rgba(60,60,67,.29);
+    --green: #248A3D; --red: #D93025; --orange: #E8780C; --amber: #B25F00;
+    --mk: #E5484D; --mkfill: #F08A24;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 36px; background: #e9e9ee; color: #16161a; width: 1960px;
+         font: 15px/1.6 "Inter", "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  .part { background: #f7f7f9; border-radius: 26px; padding: 30px 34px 34px; }
+  .part + .part { margin-top: 30px; }
+  h1 { font-size: 27px; line-height: 1.3; margin: 0 0 12px; letter-spacing: -.01em; }
+  h2 { font-size: 21px; margin: 0 0 6px; }
+  .lede { color: #4d4d56; font-size: 15.5px; max-width: 1800px; margin: 0 0 6px; }
+  .lede b, .cap b, .cols b, .steps b, .box b { color: #16161a; }
+  code, .mono { font-family: "DejaVu Sans Mono", monospace; }
+  code { font-size: 12.5px; background: #e4e4ea; border-radius: 4px; padding: 1px 5px; }
+  .tag { display: inline-block; font: 600 12.5px/1 "Inter", "Noto Sans SC", sans-serif; padding: 5px 9px; border-radius: 7px; margin-bottom: 12px; }
+  .tag.now { background: #ffe1dc; color: #b3261e; }
+  .tag.new { background: #dfe8ff; color: #2346c4; }
+  .tag.alt { background: #efe3ff; color: #6a2bb8; }
+  .tag.open { background: #fff0d1; color: #8a5300; }
+  .row { display: flex; gap: 38px; align-items: flex-start; margin-top: 22px; }
+  figure { margin: 0; flex: none; width: 393px; }
+  .cap { margin-top: 16px; font-size: 14px; line-height: 1.68; color: #4d4d56; }
+  .cap > b:first-child { display: block; font-size: 15px; margin-bottom: 4px; }
+  .cap ol { margin: 6px 0 0; padding-left: 0; list-style: none; }
+  .cap li { margin-top: 6px; padding-left: 28px; position: relative; }
+  .cap li .n { position: absolute; left: 0; top: 2px; }
+  .n { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--mkfill);
+       color: #fff; font: 700 12px/1 "Inter", sans-serif; }
+  .box { background: #fff; border-radius: 20px; padding: 18px 22px 20px; box-shadow: 0 8px 26px rgba(0,0,0,.08);
+         font-size: 14px; line-height: 1.75; color: #4d4d56; }
+  .box h3 { margin: 0 0 8px; font-size: 15.5px; color: #16161a; }
+  .box ul, .box ol { margin: 6px 0 0; padding-left: 18px; }
+  .box li { margin-top: 4px; }
+  .box p { margin: 10px 0 0; }
+
+  /* ── the phone, 393 × 852 pt ── */
+  .phone { width: 393px; height: 852px; border-radius: 54px; overflow: hidden; position: relative; background: #fff; color: var(--label);
+           box-shadow: 0 14px 44px rgba(0,0,0,.16); border: 1px solid rgba(0,0,0,.08);
+           font-family: "Inter", "Noto Sans SC", sans-serif; line-height: 1.3; }
+  .sb { position: absolute; top: 0; left: 0; right: 0; height: 54px; display: flex; justify-content: space-between; align-items: center;
+        padding: 6px 30px 0 46px; z-index: 3; }
+  .sb .time { font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 5px; }
+  .sb .sys { display: flex; gap: 6px; align-items: center; font-size: 15px; font-weight: 600; }
+  .sb .bat { background: #000; color: #fff; border-radius: 6px; font: 700 12.5px/1 "Inter", sans-serif; padding: 3px 5px; position: relative; }
+  .sb .bat::after { content: ""; position: absolute; right: -4px; top: 6px; width: 2.5px; height: 5px; border-radius: 0 2px 2px 0; background: #b9b9be; }
+  .nav { position: absolute; top: 54px; left: 0; right: 0; height: 59px; background: #fff; z-index: 2; }
+  .circ { position: absolute; top: 5px; width: 46px; height: 46px; border-radius: 50%; background: #fff; border: 1px solid rgba(0,0,0,.07);
+          box-shadow: 0 2px 10px rgba(0,0,0,.09); display: grid; place-items: center; }
+  .circ.back { left: 16px; } .circ.more { right: 16px; }
+  .ttl { position: absolute; left: 72px; right: 72px; top: 9px; text-align: center; }
+  .t1 { display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 17px; font-weight: 600; line-height: 22px; white-space: nowrap; }
+  .t1 .cp { font-size: 12.5px; font-weight: 600; background: #EFEFF3; border-radius: 9px; padding: 1px 7px; }
+  .t2 { font-size: 12.5px; line-height: 16px; color: var(--label2); margin-top: 3px; white-space: nowrap; }
+  .ny { position: absolute; top: 113px; left: 0; right: 0; height: 38px; background: #F8EDE2; display: flex; align-items: center;
+        padding: 0 14px 0 16px; gap: 10px; font-size: 16px; z-index: 2; white-space: nowrap; }
+  .ny .dot { width: 8px; height: 8px; border-radius: 50%; background: #F08A24; flex: none; }
+  .ny .tx2 { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .strip { position: absolute; left: 0; right: 0; height: 32px; background: #F4F4F4; display: flex; align-items: center; gap: 6px;
+           padding: 0 16px; font-size: 14px; color: var(--label2); white-space: nowrap; overflow: hidden; z-index: 2; }
+  .strip b { font-weight: 400; color: var(--label); }
+  .tx { position: absolute; left: 0; right: 0; bottom: 261px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 12px; }
+  .tx.top { justify-content: flex-start; padding-bottom: 0; }
+  .msg { padding: 0 18px; font-size: 17px; line-height: 1.5; margin-top: 12px; }
+  .msg p { margin: 0 0 10px; }
+  .bub { align-self: flex-end; margin: 12px 16px 0 60px; background: #E1E9FD; border-radius: 20px; padding: 11px 15px; font-size: 16px; line-height: 1.42; }
+  .bub .cl { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .down { position: absolute; left: 177px; width: 40px; height: 40px; border-radius: 50%; background: #fff; box-shadow: 0 3px 12px rgba(0,0,0,.14);
+          display: grid; place-items: center; z-index: 2; }
+  .band { position: absolute; left: 0; right: 0; bottom: 0; height: 261px; background: #fff; z-index: 2; }
+  .band::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; transform: scaleY(.5); transform-origin: top; background: var(--sep); }
+  .brow { position: absolute; left: 16px; right: 16px; height: 29px; border: 1px solid #E3E3E6; background: #F6F6F6; border-radius: 10px;
+          display: flex; align-items: center; gap: 8px; padding: 0 11px; font-size: 14.5px; white-space: nowrap; }
+  .brow b { font-weight: 600; } .brow .v { color: var(--label2); font-size: 13.5px; } .brow .c { margin-left: auto; }
+  .brow .chip { font: 13px/1 "DejaVu Sans Mono", monospace; background: #EBEBEE; border: 1px solid #D9D9DE; border-radius: 7px; padding: 4px 7px; margin-left: -6px; }
+  .brow .add { color: #34A853; font: 14px/1 "DejaVu Sans Mono", monospace; } .brow .del { color: var(--red); font: 14px/1 "DejaVu Sans Mono", monospace; }
+  .brow .files { color: var(--label2); font: 14px/1 "DejaVu Sans Mono", monospace; }
+  .cmp { position: absolute; left: 16px; right: 16px; top: 127px; height: 88px; border: 1px solid #E3E3E6; background: #FAFAFA; border-radius: 26px; padding: 13px 16px; }
+  .cmp .ph { font-size: 17px; color: rgba(60,60,67,.3); }
+  .cmp .tb { position: absolute; left: 14px; right: 9px; bottom: 9px; display: flex; align-items: center; gap: 14px; font-size: 16px; color: #55555e; }
+  .cmp .tb .md { margin-left: auto; color: #000; font-weight: 600; white-space: nowrap; font-size: 15px; } .cmp .tb .md span { color: var(--label2); font-weight: 400; }
+  .cmp .tb .stop { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; }
+  .cmp .tb .send { width: 32px; height: 32px; border-radius: 50%; background: #D8D8DD; display: grid; place-items: center; }
+  .home { position: absolute; bottom: 8px; left: 50%; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: #000; z-index: 4; }
+
+  /* ── the usage-limit notice (Transcript quota card / AutoRetryLogic) ── */
+  .lim { margin: 12px 16px 0; border-radius: 14px; padding: 13px 14px 14px; background: #F2F2F5; flex: none; }
+  .lim .lh { display: flex; align-items: center; gap: 11px; }
+  .lim .ic { width: 26px; height: 26px; flex: none; }
+  .lim .lt { font-size: 18px; font-weight: 600; color: rgba(60,60,67,.78); }
+  .lim .lb { margin-top: 9px; font-size: 14.5px; line-height: 20px; color: var(--label2); }
+
+  /* ── the evidence card (EvidenceDecisionCard) ── */
+  .ev { margin: 12px 16px 0; border-radius: 14px; padding: 14px; background: rgba(0,122,255,.07); border: 1px solid rgba(0,122,255,.28); position: relative; flex: none; }
+  .evh { display: flex; align-items: center; gap: 9px; }
+  .chipb { width: 24px; height: 24px; border-radius: 7px; background: rgba(0,122,255,.16); display: grid; place-items: center; flex: none; }
+  .chipg { width: 24px; height: 24px; border-radius: 7px; background: rgba(120,120,128,.16); display: grid; place-items: center; flex: none; }
+  .evh .t { font-size: 17px; font-weight: 700; line-height: 22px; }
+  .evh .tm { margin-left: auto; font-size: 13px; color: var(--label2); }
+  .evp { margin-top: 10px; font-size: 13px; line-height: 18px; color: var(--label2); }
+  .evt { margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--label2); line-height: 18px; }
+  .evs { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(0,122,255,.08); }
+  .evs .k, .evg { font-size: 13px; font-weight: 700; color: var(--label2); line-height: 18px; }
+  .evs .v { margin-top: 2px; font-size: 17px; line-height: 22px; }
+  .evg { margin-top: 10px; }
+  .gap { margin-top: 6px; display: flex; gap: 9px; padding: 8px 10px; border-radius: 10px; background: rgba(255,149,0,.10); font-size: 17px; line-height: 22px; }
+  .gap .ex { color: #FF9500; font-weight: 800; flex: none; width: 7px; }
+  .fold { margin-top: 8px; display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; color: var(--accent); }
+  .evm { margin-top: 8px; font: 11.5px/16px "DejaVu Sans Mono", monospace; color: var(--label2); }
+  .acts { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .btn { height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 15px; font-weight: 600; }
+  .btn.pri { background: var(--blue); color: #fff; }
+  .btn.sec { background: rgba(120,120,128,.12); color: var(--blue); }
+  .btn.ghost { background: #fff; color: var(--blue); border: 1px solid rgba(0,122,255,.35); }
+  .hint { margin-top: 10px; font-size: 13px; line-height: 18px; color: var(--label2); }
+
+  /* ── NEW: the queued card ── */
+  .wq { margin: 12px 16px 0; border-radius: 14px; padding: 14px; background: rgba(120,120,128,.07); border: 1px solid rgba(120,120,128,.26); position: relative; flex: none; }
+  .wq .wt { margin-top: 10px; font-size: 15px; line-height: 20px; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .wq .wr { margin-top: 8px; display: flex; gap: 6px; align-items: center; font-size: 13px; line-height: 18px; color: var(--amber); }
+  .wq .wg { margin-top: 3px; font-size: 13px; line-height: 18px; color: var(--label2); }
+  .qd { height: 1px; transform: scaleY(.5); background: var(--sep); margin: 12px 0; }
+  .qm { display: flex; align-items: center; font-size: 13px; font-weight: 600; color: var(--accent); height: 18px; }
+  .qm svg { margin-left: auto; }
+  .slim { display: flex; justify-content: center; margin: 12px 16px 0; flex: none; }
+  .slim span { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--label2); background: rgba(120,120,128,.1); border-radius: 15px; padding: 6px 12px; }
+  .rc { margin: 12px 16px 0; border-radius: 14px; padding: 14px; background: rgba(0,122,255,.07); border: 1px solid rgba(0,122,255,.28); flex: none; }
+  .rc .rt { margin-top: 10px; font-size: 17px; font-weight: 700; line-height: 22px; }
+  .rc .rl { margin-top: 4px; font-size: 17px; line-height: 22px; }
+
+  /* ── the sheet ── */
+  .phone.sheetp { background: #C7C7C7; }
+  .sheet { position: absolute; top: 60px; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 30px 30px 54px 54px; overflow: hidden; }
+  .grab { position: absolute; top: 7px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: #D4D4D8; }
+  .shn { position: absolute; top: 12px; left: 0; right: 0; height: 63px; padding-top: 3px; text-align: center; font-size: 17px; font-weight: 600; line-height: 44px; background: #fff; z-index: 2; }
+  .x { z-index: 3; position: absolute; right: 16px; top: 15px; width: 44px; height: 44px; border-radius: 50%; background: #fff; border: 1px solid rgba(0,0,0,.08);
+       box-shadow: 0 2px 10px rgba(0,0,0,.08); display: grid; place-items: center; }
+  .shb { position: absolute; top: 75px; left: 0; right: 0; bottom: 0; padding: 4px 16px 0; overflow: hidden; }
+  .prov { display: flex; justify-content: space-between; font-size: 13px; line-height: 18px; color: var(--label2); }
+  .shnote { margin-top: 10px; padding: 9px 11px; border-radius: 10px; background: rgba(255,149,0,.10); font-size: 13px; line-height: 18px; color: #7a4300; display: flex; gap: 8px; }
+  .shnote svg { flex: none; margin-top: 1px; }
+  .shh { margin-top: 14px; font-size: 17px; font-weight: 700; line-height: 22px; }
+  .shbar { position: absolute; left: 0; right: 0; bottom: 0; background: #F7F7F7; padding: 12px 16px 40px; }
+  .shbar::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; transform: scaleY(.5); transform-origin: top; background: var(--sep); }
+  .shbar .acts { margin-top: 0; }
+  .shbar .hint { margin-top: 8px; }
+
+  /* ── marks: dashed outline + numbered dot, placed after layout ── */
+  .ol-mk { position: absolute; border: 2px dashed var(--mk); border-radius: 12px; z-index: 6; pointer-events: none; }
+  .dot-mk { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: var(--mkfill); color: #fff; z-index: 7;
+            font: 700 12.5px/22px "Inter", sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+
+  /* ── snippets: a card at phone width, out of its phone ── */
+  .snip { width: 393px; background: #fff; border-radius: 24px; padding: 4px 0 16px; box-shadow: 0 8px 26px rgba(0,0,0,.10); position: relative; }
+  .snip .sl { font: 600 11.5px/1 "DejaVu Sans Mono", monospace; color: #8a8a93; letter-spacing: .04em; padding: 14px 18px 2px; text-transform: uppercase; }
+
+  /* ── timeline (part 1) ── */
+  .tl { margin: 4px 0 0; padding: 0; list-style: none; }
+  .tl li { display: grid; grid-template-columns: 74px 1fr; gap: 12px; padding: 9px 0; border-top: 1px solid #ececf1; }
+  .tl li:first-child { border-top: 0; }
+  .tl .tt { font: 600 13.5px/1.6 "DejaVu Sans Mono", monospace; color: #16161a; }
+  .tl li.hot .tt { color: #b3261e; }
+  .tl li.hot { background: #fff6f4; margin: 0 -10px; padding-left: 10px; padding-right: 10px; border-radius: 10px; border-top-color: transparent; }
+
+  /* ── flow (part 3) ── */
+  .flow { display: grid; grid-template-columns: 150px 1fr; gap: 14px 18px; align-items: center; margin-top: 18px; }
+  .lane { font: 600 14px/1.4 "Inter", "Noto Sans SC", sans-serif; color: #16161a; }
+  .lane small { display: block; font-weight: 400; font-size: 12.5px; color: #6b6b75; }
+  .chain { display: flex; align-items: center; gap: 0; flex-wrap: nowrap; }
+  .nd { flex: none; background: #fff; border: 1.5px solid #d4d4dc; border-radius: 12px; padding: 9px 13px; font-size: 13.5px; line-height: 1.45; color: #2b2b31; max-width: 270px; }
+  .nd b { color: #16161a; }
+  .nd.blue { border-color: #8aa6f7; background: #f1f5ff; }
+  .nd.grey { border-color: #b9b9c2; background: #f2f2f5; }
+  .nd.you { border-color: #f0b4a9; background: #fff2ef; }
+  .nd.ok { border-color: #9fd1ac; background: #f0faf2; }
+  .nd.new { box-shadow: 0 0 0 3px rgba(62,105,246,.18); }
+  .ar { flex: none; width: 70px; text-align: center; font-size: 12px; line-height: 1.3; color: #6b6b75; position: relative; padding-bottom: 12px; }
+  .ar::after { content: ""; position: absolute; left: 6px; right: 6px; bottom: 4px; height: 2px; background: #a9a9b3; }
+  .ar::before { content: ""; position: absolute; right: 4px; bottom: 0; border: 5px solid transparent; border-left: 8px solid #a9a9b3; border-right: 0; }
+  .ar.w { width: 110px; }
+  .newtag { display: inline-block; font: 700 10.5px/1 "Inter", sans-serif; color: #2346c4; background: #dfe8ff; border-radius: 5px; padding: 3px 5px; margin-left: 6px; vertical-align: 2px; }
+
+  table.rules { border-collapse: separate; border-spacing: 0; width: 100%; margin-top: 22px; font-size: 14px; line-height: 1.6; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 6px 20px rgba(0,0,0,.06); }
+  table.rules th { text-align: left; font-size: 13px; color: #6b6b75; font-weight: 600; padding: 10px 16px; background: #f1f1f5; }
+  table.rules td { padding: 10px 16px; border-top: 1px solid #ececf1; vertical-align: top; color: #3a3a42; }
+  table.rules td:first-child { color: #16161a; width: 38%; }
+  table.rules tr.chg td { background: #f6f8ff; }
+  table.rules tr.chg td:last-child { color: #2346c4; font-weight: 600; }
+  table.rules .same { color: #8a8a93; }
+
+  .pick { border: 2px solid #3E69F6; border-radius: 18px; padding: 14px 18px; background: #fff; }
+  .pick.no { border-color: #d9d9e0; }
+  .pick ul { margin: 8px 0 0; padding-left: 18px; font-size: 14.5px; line-height: 1.72; color: #4d4d56; }
+  .steps { margin-top: 16px; font-size: 15px; line-height: 1.72; color: #4d4d56; }
+  .steps ol { margin: 0; padding-left: 0; list-style: none; counter-reset: s; }
+  .steps li { position: relative; padding: 12px 0 12px 44px; border-top: 1px solid #e0e0e6; }
+  .steps li::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: 13px; width: 28px; height: 28px; border-radius: 8px;
+                      background: #2346c4; color: #fff; font: 700 14px/28px "Inter", sans-serif; text-align: center; }
+  .steps li.opt::before { background: #9a9aa4; }
+  .steps .cost { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 6px; padding: 1px 7px; margin-left: 8px; background: #e7ecff; color: #2346c4; vertical-align: 1px; }
+  .steps li.opt .cost { background: #ececf0; color: #66666f; }
+
+  /* timeline bar (part 4, choice 2) */
+  .tbar { position: relative; height: 158px; margin: 18px 6px 0; }
+  .tbar .axis { position: absolute; left: 0; right: 0; top: 60px; height: 6px; border-radius: 3px; background: #e2e2e8; }
+  .tbar .dn { position: absolute; top: 60px; height: 6px; border-radius: 3px; background: #f3b6a6; }
+  .tbar .brk { position: absolute; top: 47px; font-size: 26px; line-height: 1; color: #9a9aa4; }
+  .tbar .lbl.l { transform: none; text-align: left; }
+  .tbar .lbl.r { transform: translateX(-100%); text-align: right; }
+  .tbar .cap2 { position: absolute; top: 134px; font-size: 11.5px; color: #9a9aa4; }
+  .tbar .tick { position: absolute; top: 44px; width: 2px; height: 38px; background: #6b6b75; }
+  .tbar .lbl { position: absolute; font-size: 12.5px; line-height: 1.35; color: #4d4d56; white-space: nowrap; transform: translateX(-50%); text-align: center; }
+  .tbar .lbl b { color: #16161a; }
+</style>
+<body>
+
+<!-- ═══════════════ 1 · today ═══════════════ -->
+<section class="part" id="part-1">
+  <h1>协调者停着时，证据卡不再找你，排队等它回来</h1>
+  <p class="lede">截图那一屏（10-09 20:02）：项目的协调者 18:08 在 claude 上撞了周额度，run 落成 FAILED，会话还开着。19:59 一个任务交了证据，平台去投递时把「停着」当成了「结束」，直接拒收，于是这一版<b>从交上来那一刻起就成了你的卡</b>。之后你把协调者换到 DeepSeek，它已经跑起来了，卡还留在你面前：<b>协调者回来时，没有任何东西会再把它投过去</b>。20:03 你按了 Confirm done。</p>
+  <p class="lede">任务名、项目名、判据和缺口是示意文本，长度和结构照截图；时间是真实的。</p>
+  <div class="row">
+    <figure>
+      <span class="tag now">现状 · 20:02 截图</span>
+      <div class="phone" id="p-today"></div>
+      <div class="cap"><b>对话里</b><ol>
+        <li><span class="n">1</span>顶上的条和会话头都把它算成「要你处理」：<i>1 open question below</i>、<i>Waiting for approval</i>，会话列表和工作区的 Needs you 计数也算它。</li>
+        <li><span class="n">2</span>额度提示只说协调者停了，没说有一张卡因此转给了你。</li>
+        <li><span class="n">3</span>卡是今天这张完整的判定卡，按钮在下面，要往下滚。</li>
+        <li><span class="n">4</span>协调者其实已经换到 DeepSeek 跑起来了（右下角是停止键），卡还是你的。</li>
+        <li><span class="n">5</span>顶上这条「Your question」其实是 18:08 平台投给协调者的另一版证据，撞限的正是这一轮。</li>
+      </ol></div>
+    </figure>
+    <div style="flex:1;display:flex;flex-direction:column;gap:22px;max-width:1340px">
+      <div>
+        <span class="tag open">时间线 · 10-09（北京时间）</span>
+        <div class="box">
+          <ul class="tl">
+            <li><span class="tt">18:08:44</span><span>平台把另一个任务的证据投给协调者；这一轮 2 秒后失败：<code>You've hit your weekly limit · resets Oct 12, 7pm</code></span></li>
+            <li><span class="tt">18:08 起</span><span>协调者的 run 是 FAILED，会话还开着，没人结束它。按额度，要等到 <b>10-12 19:00</b> 才重置</span></li>
+            <li class="hot"><span class="tt">19:59:30</span><span>又一个任务交了第 1 版证据。投递时协调者是 FAILED，<code>sessionHasEnded</code> 把它算成已结束 → <b>拒收</b> → 这一版当场进了你的 <code>pending</code><br><span style="font-size:12.5px;color:#8a8a93">这一步是按代码和转录推出来的：协调者的 claude 转录停在 18:08:46，之后没有再跑过一轮；投递记录在生产库里，这台机器上查不到。</span></span></li>
+            <li><span class="tt">20:02</span><span>截图：协调者已经换到 DeepSeek 在跑，卡还在你面前</span></li>
+            <li><span class="tt">20:03:42</span><span>你按了 Confirm done（记录上 <code>decidedByType: USER</code>）</span></li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <span class="tag open">为什么：代码里的四处</span>
+        <div class="box">
+          <ol>
+            <li><b>投递把停着当结束。</b><code>bindQueuedDelivery</code> 用 <code>sessionHasEnded</code> 判断，而它把 run FAILED 也算作结束。停着 = 拒收。</li>
+            <li><b>拒收就直接归你。</b>没有投递记录的版本，<code>readPendingEvidenceJudgments</code> 直接放进你的 <code>pending</code>：那张卡、Needs you、Waiting for approval 都来自这里。</li>
+            <li><b>投出去以后再停，也一样。</b><code>coordinatorHolds</code> 同样用 <code>sessionHasEnded</code>，协调者一停，持有就作废。更糟的是：失败时排着的消息会被直接标成已答，协调者其实没读到；它若 2 小时内被救回，卡又从你面前消失，结果谁都没在判。</li>
+            <li><b>回来也不补投。</b>证据只在「提交」和「任务换项目」两个时刻投递。</li>
+          </ol>
+          <p>对照：<b>异常待办早就分清了「停着」和「结束」</b>（<code>conversationIsDown</code>）。协调者停着时，待办仍归它，等它一轮跑完时补投（契约 §4.4 X-D4 3）。证据没走这条路。</p>
+          <p>近 7 天，Automatic 项目一共交了 385 版证据：协调者判了 333 版，你判了 31 版。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 2 · proposal ═══════════════ -->
+<section class="part" id="part-2">
+  <h2>建议：停着不算结束。卡排队等它，回来就投给它；你想自己判，随时可以</h2>
+  <p class="lede">还是截图那一晚，按建议重画三个时刻：它停着时交来一版证据（19:59）；你点开想自己判；它回来以后（换模型续跑，20:05 跑完一轮）。外观全部沿用现有的卡：灰卡用待办的收起样式，弹出页就是今天那张卡，回执也是今天的回执。</p>
+  <div class="row">
+    <figure>
+      <span class="tag new">建议 · 停着时交来一版（19:59）</span>
+      <div class="phone" id="p-queued"></div>
+      <div class="cap"><b>排队的卡</b><ol>
+        <li><span class="n">1</span>没有橙色的条，会话头也不写 Waiting for approval：这张卡不归你，Needs you 计数也不算它。</li>
+        <li><span class="n">2</span>灰卡 <b>Waiting for the coordinator</b>，放在原来那张卡的位置，右边是提交时间，下面是任务标题。</li>
+        <li><span class="n">3</span>为什么停、几点回来：原因和对话里的额度提示是同一个判断，时间取协调者的 <code>retryAt</code>。不知道几点回来就不写时间。</li>
+        <li><span class="n">4</span><b>Decide it myself</b>：想自己判就点这里，弹出的还是今天那张卡。</li>
+      </ol></div>
+    </figure>
+    <figure>
+      <span class="tag new">建议 · 点 Decide it myself</span>
+      <div class="phone sheetp" id="p-sheet"></div>
+      <div class="cap"><b>弹出页：今天那张卡，原样</b><ol>
+        <li><span class="n">1</span>顶上一句橙底提示：协调者回来就会拿到它，等不及才在这里判。</li>
+        <li><span class="n">2</span>判据、缺口、检查、提交者的说明，和今天的卡一模一样。</li>
+        <li><span class="n">3</span>按钮也一样：Confirm done、Chat about this。你在这里判了，协调者回来后就不会再收到它。</li>
+      </ol></div>
+    </figure>
+    <figure>
+      <span class="tag new">建议 · 协调者回来以后（20:07）</span>
+      <div class="phone" id="p-back"></div>
+      <div class="cap"><b>投出去，判完</b><ol>
+        <li><span class="n">1</span>它这一轮跑完（20:05），平台把排着的证据投给它，从这一刻起给它 2 小时。灰卡收成一行：<b>Sent to the coordinator · 8:05 PM</b>。</li>
+        <li><span class="n">2</span>投递消息照今天的样子，多一句：这一版是它停着时交的，一直在等它判。</li>
+        <li><span class="n">3</span>它判完，照今天的回执：<i>An agent recorded a decision</i>。它在回执之前写的那段判断理由，这里没画。</li>
+      </ol></div>
+    </figure>
+    <figure style="width:420px">
+      <span class="tag open">数据从哪来</span>
+      <div class="box" style="padding:16px 20px 18px">
+        <p style="margin:0">全部从现有的行推出来，<b>不加表，不加迁移</b>。</p>
+        <p>判定「停着」用待办已经在用的 <code>conversationIsDown</code>：run 是 FAILED，没有 endReason，会话还开着。</p>
+        <p>补投放在协调者每一轮结束的钩子上，和待办、确认复核同一处（<code>runner-api.controller.ts:5612</code>）；换协调者时也补一次。</p>
+        <p>读接口多一组 <code>waitingOnCoordinator</code>。停机原因和时间不用新字段：客户端本来就拿着协调者会话的错误文本和 <code>retryAt</code>。</p>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<!-- ═══════════════ 3 · rules ═══════════════ -->
+<section class="part" id="part-3">
+  <h2>规则一览：只改「停着」这一种，其余不变</h2>
+  <p class="lede">一版证据从交上来到有人判，按协调者当时的状态分成下面几种情况。标着「新」的是这次加的；红框是落到你面前。</p>
+  <div class="flow">
+    <div class="lane">协调者在线<small>在跑、等输入、刚收到消息还排着</small></div>
+    <div class="chain">
+      <div class="nd">任务交证据</div><div class="ar">投递</div>
+      <div class="nd blue"><b>协调者判</b><br>投递起 2 小时内归它</div><div class="ar w">2 小时没判</div>
+      <div class="nd you"><b>你的卡</b>（不变）</div>
+    </div>
+    <div class="lane">协调者停着<small>额度、429、登录过期、runner 掉线；run FAILED，会话没结束</small></div>
+    <div class="chain">
+      <div class="nd">任务交证据</div><div class="ar">投递被拒</div>
+      <div class="nd grey new"><b>排队</b><span class="newtag">新</span><br>Waiting for the coordinator<br>不归你，不计时</div><div class="ar w">它回来，<br>这一轮跑完</div>
+      <div class="nd blue new"><b>投给它</b><span class="newtag">新</span><br>从投递起重新算 2 小时</div><div class="ar">它判</div>
+      <div class="nd ok">判完</div>
+    </div>
+    <div class="lane">投出去后才停<small>那一轮没跑完</small></div>
+    <div class="chain">
+      <div class="nd blue">已投给它</div><div class="ar w">它停了，<br>那一轮没读到</div>
+      <div class="nd grey new"><b>回到排队</b><span class="newtag">新</span><br>回来时补投一次</div>
+    </div>
+    <div class="lane">排队时你等不及</div>
+    <div class="chain">
+      <div class="nd grey">排队</div><div class="ar w">Decide it<br>myself</div>
+      <div class="nd you"><b>你判</b><br>它回来后不再收到</div>
+    </div>
+    <div class="lane">协调者结束了<small>你结束或删掉；项目关了 Automatic</small></div>
+    <div class="chain">
+      <div class="nd">任务交证据 / 排着的</div><div class="ar">归你</div>
+      <div class="nd you"><b>你的卡</b>（不变）</div>
+    </div>
+    <div class="lane">换了协调者会话</div>
+    <div class="chain">
+      <div class="nd grey">排着的</div><div class="ar w">新会话接上</div>
+      <div class="nd blue new"><b>投给新的那个</b><span class="newtag">新</span><br>从投递起算 2 小时</div>
+    </div>
+  </div>
+  <table class="rules">
+    <tr><th>协调者此刻</th><th>今天</th><th>建议</th></tr>
+    <tr><td>在线：在跑、等输入，或刚收到消息还排着</td><td>投给它；2 小时内归它，过了归你</td><td class="same">不变</td></tr>
+    <tr class="chg"><td><b>停着</b>：周额度或 5 小时额度、429 或过载、登录过期、runner 掉线</td><td>当场归你</td><td>排队等它；不归你，不计时</td></tr>
+    <tr class="chg"><td>撞限后停在等输入、排着重试等重置（少见）</td><td>照投；这一轮会解除它排着的重试，再撞一次限</td><td>同「停着」，排队，不写这一轮</td></tr>
+    <tr class="chg"><td>投出去以后，那一轮没跑完就停了</td><td>当场归你；它若 2 小时内被救回，卡又消失，可它没读到</td><td>回到队列，回来时补投一次</td></tr>
+    <tr class="chg"><td>停着之后回来：自动重试、额度重置后的重试、你换模型续跑、你给它发消息</td><td>不补投，卡留在你那儿</td><td>这一轮跑完时按提交先后投给它，重新算 2 小时</td></tr>
+    <tr class="chg"><td>换了一个新的协调者会话</td><td>不补投</td><td>投给新的那个</td></tr>
+    <tr><td>被你结束，或移进废纸篓；项目关了 Automatic</td><td>归你</td><td class="same">不变</td></tr>
+    <tr><td>协调者参与过这项工作（不独立）</td><td>归你</td><td class="same">不变</td></tr>
+    <tr><td>超支熔断暂停</td><td>归你</td><td class="same">不变：熔断是你的刹车，你本来就在看</td></tr>
+  </table>
+</section>
+
+<!-- ═══════════════ 4 · the open choices ═══════════════ -->
+<section class="part" id="part-4">
+  <h2>待定 · 要你拍板</h2>
+  <p class="lede"><b>1. 协调者停着时，这张卡在你那边是什么样。</b>你那句「可以加入队列」，可以是平台自己排，也可以是卡上加个按钮、由你来排。平台自己排的话，排着的卡还有两种画法。三种并排放在下面，每张底下标着在手机上占多高。</p>
+  <div class="row" style="gap:34px">
+    <figure style="width:auto">
+      <span class="tag new">A（推荐）· 自动排队，收成一张灰卡</span>
+      <div class="snip" id="ab-a"><div class="sl">Queued · not counted</div></div>
+      <div class="cap" data-meas="ab-a"></div>
+    </figure>
+    <figure style="width:auto">
+      <span class="tag alt">B · 自动排队，整张照画</span>
+      <div class="snip" id="ab-b"><div class="sl">Queued · not counted · full card</div></div>
+      <div class="cap" data-meas="ab-b"></div>
+    </figure>
+    <figure style="width:auto">
+      <span class="tag alt">C · 卡照旧找你，你按了才排</span>
+      <div class="snip" id="ab-c"><div class="sl">Still yours · one more button</div></div>
+      <div class="cap" data-meas="ab-c"></div>
+    </figure>
+    <div style="width:470px;margin-top:38px">
+      <div class="pick">
+        <b style="font-size:16px;color:#2346c4">推荐 A</b>
+        <ul>
+          <li>停机时你要知道的是「有东西在等它」，不需要再读一遍整张卡。A 一张灰卡约 230 pt；B 和 C 都在 780 pt 以上，比截图里对话区能看到的高度（约 408 pt）还高，看上去和今天差不多。</li>
+          <li>A 用的是现成的样子：收起态加 View details 弹出页（协调者提问卡），状态行加「You can still …」那句（任务确认复核时的 Under review）。</li>
+          <li>Automatic 项目近 7 天的 385 版证据里，协调者判了 333 版。由它判是常态，停机只是让它晚一点判。</li>
+        </ul>
+      </div>
+      <div class="pick no" style="margin-top:14px">
+        <b style="font-size:16px;color:#6a2bb8">B、C 的好处</b>
+        <ul>
+          <li>B 少点一次：判据和缺口不用点开就能看到。任务确认在复核期间就是这样，整张照画，可以按，但不算你的；不过那张卡本来就短。</li>
+          <li>C 每张都过你的眼，由你决定等不等。代价是每次停机你都得一张一张按，和 10-08 你定的「协调者拿着的事由它自己办完」相反（契约修订 13）。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <p class="lede" style="margin-top:34px"><b>2. 停着期间要不要设等待上限。</b>停机能有多长：账号轮换只要 33 秒（10-09 有一个任务会话自己换了账号接着跑）；5 小时额度是几个小时；周额度要好几天。下面是截图那一晚的真实时间。</p>
+  <div class="row" style="gap:60px">
+    <div class="box" style="flex:1">
+      <div class="tbar">
+        <div class="axis" style="right:45%"></div><div class="axis" style="left:58%"></div>
+        <div class="brk" style="left:55.3%">⫽</div>
+        <div class="dn" style="left:3.6%;right:45%"></div><div class="dn" style="left:58%;right:2%"></div>
+        <div class="tick" style="left:3.6%"></div><div class="lbl l" style="left:3.6%;top:0"><b>10-09 18:08</b><br>撞了周额度</div>
+        <div class="tick" style="left:25.4%"></div><div class="lbl" style="left:22%;top:92px"><b>19:59</b><br>交证据，进队列</div>
+        <div class="tick" style="left:26.6%;background:#248A3D"></div><div class="lbl" style="left:32%;top:0;color:#1d6f31"><b style="color:#1d6f31">20:05</b> A：你换了模型，<br>它跑完一轮就投给它</div>
+        <div class="tick" style="left:48.9%;background:#b3261e"></div><div class="lbl" style="left:48.9%;top:92px;color:#b3261e"><b style="color:#b3261e">21:59</b><br>B（2 小时）：归你</div>
+        <div class="tick" style="left:71.2%;background:#8a5300"></div><div class="lbl" style="left:71.2%;top:0;color:#8a5300"><b style="color:#8a5300">10-10 19:59</b><br>B（24 小时）：归你</div>
+        <div class="tick" style="left:98%"></div><div class="lbl r" style="left:98%;top:92px"><b>10-12 19:00</b><br>额度重置，自动重试</div>
+        <div class="cap2" style="left:3.6%">10-09 晚上，按分钟画</div><div class="cap2" style="left:58%">之后几天，压缩画</div>
+      </div>
+      <p style="margin-top:12px">粉色是这个 claude 账号周额度用完、等重置的时间。那一晚你在 20:02 之前就把它换到了 DeepSeek：按 A，它 20:05 跑完一轮就会拿到这张卡，你什么都不用做。要是你没换，按 A 它会等到 10-12 19:00 额度重置；这期间卡一直排着，你随时能点 Decide it myself。</p>
+    </div>
+    <div style="width:560px">
+      <div class="pick">
+        <b style="font-size:16px;color:#2346c4">推荐 A：不设上限</b>
+        <ul>
+          <li>停机的解法是让协调者回来（换模型、换账号、等重置），而不是让你替它判。排着的卡和停机原因你都看得到；觉得等不了，换模型也只是一次操作，截图那次你就是这么做的。</li>
+          <li>设了上限，周额度这种一停好几天的情况，卡照样会全推给你，又回到了今天。</li>
+        </ul>
+      </div>
+      <div class="pick no" style="margin-top:14px">
+        <b style="font-size:16px;color:#6a2bb8">B 的好处</b>
+        <ul>
+          <li>有兜底：你几天不看手机，任务也不会一直卡着。异常待办今天就是这样（契约 §4.6 X-E1：协调者停着也照样计时，到点变成 Escalated to you）。上限可以沿用项目的 <code>exceptionEscalationSeconds</code>（默认 2 小时），也可以单独定成 24 小时。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 5 · landing ═══════════════ -->
+<section class="part" id="part-5">
+  <h2>落地（按代价排）</h2>
+  <div class="steps" style="max-width:1500px">
+    <ol>
+      <li><b>服务端：停着不算结束，回来补投，读接口多一组</b><span class="cost">服务端</span><br>
+        持有和投递改用 <code>conversationIsOver</code>；停着时不往它那儿写 turn；补投挂在每一轮结束的钩子上和换协调者的地方；投递那一轮没读到的（被失败清掉、<code>deliveredAt</code> 为空），回来时补投一次；<code>readPendingEvidenceJudgments</code> 多一组 <code>waitingOnCoordinator</code>。<b>只做这一步的话</b>：停机时卡不再来找你，回来后自动投给它；但客户端还不认识新的那一组，停机期间对话里只看得到额度提示，看不到排着的卡。</li>
+      <li><b>iOS / macOS：灰卡、弹出页、胶囊</b><span class="cost">iOS / Mac</span><br>
+        灰卡用待办的收起样式，弹出页直接复用今天的 <code>EvidenceDecisionCard</code>。新文案和 Web 共用一份，沿用现有的 copy parity 测试。</li>
+      <li><b>Web：同上</b><span class="cost">Web</span></li>
+      <li><b>Android：同上</b><span class="cost">Android</span></li>
+      <li class="opt"><b>可选 · 异常待办也改成停着不计时</b><span class="cost">服务端 + 契约修订 14</span><br>
+        今天待办在协调者停着时照样走 2 小时的表，到点变成 Escalated to you。要和证据一致，就改 §4.6 X-E1。</li>
+      <li class="opt"><b>可选 · 另外两处「停着当结束」</b><span class="cost">服务端</span><br>
+        任务确认复核：投递时协调者停着，就直接记成没复核，而且不可逆。「项目看起来做完了」：投递被拒，连 Record as done… 都不会出现。按同一条规则改。</li>
+    </ol>
+  </div>
+  <p class="lede" style="margin-top:14px">建议先做 1 和 2（一个服务端任务、一个 iOS 任务），3 和 4 跟上；5 和 6 等你说要再做。</p>
+</section>
+
+<script>
+/* ── glyphs ── */
+const IC = {
+  loc: '<svg width="13" height="13" viewBox="0 0 16 16"><path d="M14.6 1.4 1.8 7.1l5.6 1.5 1.5 5.6z" fill="#000"/></svg>',
+  signal: '<svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="8" width="3.2" height="4" rx="1"/><rect x="5.1" y="5.4" width="3.2" height="6.6" rx="1"/><rect x="10.2" y="2.7" width="3.2" height="9.3" rx="1"/><rect x="15.3" y="0" width="3.2" height="12" rx="1"/></svg>',
+  wifi: '<svg width="17" height="12" viewBox="0 0 17 12"><path d="M8.5 11.6 6 9a3.6 3.6 0 0 1 5 0zM3.6 6.6a7 7 0 0 1 9.8 0l-1.6 1.6a4.8 4.8 0 0 0-6.6 0zM1.2 4.2a10.4 10.4 0 0 1 14.6 0l-1.6 1.6a8.2 8.2 0 0 0-11.4 0z" fill="#000"/></svg>',
+  back: '<svg width="12" height="20" viewBox="0 0 12 20"><path d="M10 2 2.5 10 10 18" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  more: '<svg width="22" height="6" viewBox="0 0 22 6"><circle cx="3" cy="3" r="2.4"/><circle cx="11" cy="3" r="2.4"/><circle cx="19" cy="3" r="2.4"/></svg>',
+  chevR: (c = '#B8B8BE', h = 13) => `<svg width="${h * 0.6}" height="${h}" viewBox="0 0 8 13"><path d="M1.6 1.5 6.4 6.5 1.6 11.5" fill="none" stroke="${c}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  chevD: (c = '#3E69F6') => `<svg width="11" height="7" viewBox="0 0 11 7"><path d="M1.2 1.2 5.5 5.6 9.8 1.2" fill="none" stroke="${c}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  up: '<svg width="12" height="14" viewBox="0 0 12 14"><path d="M6 13V2M1.5 6.2 6 1.6l4.5 4.6" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  down: '<svg width="16" height="18" viewBox="0 0 16 18"><path d="M8 2v13M2.5 9.6 8 15.2l5.5-5.6" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  term: '<svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="#6b6b73" stroke-width="1.4"><rect x="1" y="1.5" width="18" height="13" rx="2.6"/><path d="M5 6l2.4 2L5 10M9.4 10.4h4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  box: '<svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="#6b6b73" stroke-width="1.4"><rect x="1.5" y="1.5" width="14" height="14" rx="2.5"/><path d="M5 8.7 7.4 11 12 6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  fork: '<svg width="12" height="14" viewBox="0 0 12 14" fill="none" stroke="#55555e" stroke-width="1.4" stroke-linecap="round"><path d="M2 1.5v3.8c0 1.8 4 1.8 4 3.6v3.6M10 1.5v3.8c0 1.8-4 1.8-4 3.6"/></svg>',
+  spin: '<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke-width="2.6"><circle cx="11" cy="11" r="8.2" stroke="#C9D6FB"/><path d="M11 2.8a8.2 8.2 0 1 1-8 10.2" stroke="#3E69F6" stroke-linecap="round"/></svg>',
+  stop: '<svg width="12" height="12" viewBox="0 0 12 12"><rect x="0" y="0" width="12" height="12" rx="2.4" fill="#fff"/></svg>',
+  sendUp: '<svg width="14" height="16" viewBox="0 0 14 16"><path d="M7 14V2.5M2 7.2 7 2.2l5 5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  xmark: '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M2.5 2.5l11 11M13.5 2.5l-11 11" stroke="#000" stroke-width="2" stroke-linecap="round"/></svg>',
+  /* SF checkmark.seal.fill */
+  seal: (c = '#007AFF') => {
+    const pts = []; const n = 12;
+    for (let i = 0; i < n * 2; i++) { const r = i % 2 ? 6.2 : 7.6; const a = Math.PI * i / n - Math.PI / 2; pts.push(`${(8 + r * Math.cos(a)).toFixed(2)},${(8 + r * Math.sin(a)).toFixed(2)}`); }
+    return `<svg width="15" height="15" viewBox="0 0 16 16"><polygon points="${pts.join(' ')}" fill="${c}" stroke="${c}" stroke-width="1.4" stroke-linejoin="round"/><path d="M5 8.2 7.1 10.3 11.2 5.9" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  },
+  /* SF hourglass */
+  hourglass: (c = '#8E8E93') => `<svg width="13" height="15" viewBox="0 0 13 15" fill="none" stroke="${c}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 1.2h9M2 13.8h9"/><path d="M3 1.4c0 3.4 3.5 4.4 3.5 6.1S3 10.2 3 13.6M10 1.4c0 3.4-3.5 4.4-3.5 6.1s3.5 2.7 3.5 6.1"/><path d="M4.6 12.4c.6-1.3 1.9-1.9 1.9-1.9s1.3.6 1.9 1.9z" fill="${c}" stroke="none"/></svg>`,
+  /* SF pause.circle */
+  pause: (c = '#B25F00') => `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="${c}" stroke-width="1.6"><circle cx="8" cy="8" r="6.6"/><path d="M6.3 5.4v5.2M9.7 5.4v5.2" stroke-linecap="round"/></svg>`,
+  /* the quota card's clock */
+  clockFill: '<svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="12" fill="#8E8E93"/><path d="M13 6.5V13l4 2.6" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  shield: '<svg width="13" height="14" viewBox="0 0 13 14" fill="none" stroke="#3E69F6" stroke-width="1.4" stroke-linejoin="round"><path d="M6.5 1 1.6 2.9v3.6c0 3.1 2.1 5.4 4.9 6.5 2.8-1.1 4.9-3.4 4.9-6.5V2.9z"/><path d="M4.4 7 6 8.6l2.9-3" stroke-linecap="round"/></svg>',
+  info: '<svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.4" fill="#E8780C"/><rect x="7.1" y="6.8" width="1.8" height="5.2" rx=".9" fill="#fff"/><circle cx="8" cy="4.6" r="1.1" fill="#fff"/></svg>',
+  ckc: (c = '#007AFF', s = 16) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.6" fill="${c}"/><path d="M4.6 8.2 7 10.5l4.4-4.9" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  send: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h11M9 3.5 13.5 8 9 12.5"/></svg>',
+};
+
+/* ── sample data: the screenshot's card in made-up words of the same shape ── */
+const PROJECT = 'Tablet 客户端…';
+const TASK = 'B07c · 卡片增量与会话提醒条（B07-1/2/3/4/5/6/7/8/9/11）';
+const CRIT = 'Tablet 的审批、询问、确认及任务 / 项目操作卡片，与 iOS 提供相同的业务操作和最终结果。';
+const GAPS = [
+  '设备旅程跑在受控的 HTTP fixture 和单台模拟器（API 36，720×1280@320dpi）上；真实服务端只覆盖了两张卡；没有在实体机上跑。',
+  '设备轮次用的是倒数第二个提交的安装包；最后一个提交只改了两个脚本，不进安装包，门禁已在末端重跑。',
+  '与基线相同的三个既有红：和本任务无关，基线上同一断言也失败，已写进任务评论。',
+];
+const DELIVERY_A05 = '【项目「Tablet 客户端：与 iOS 体验对齐」有一版完成证据等你判】 任务「B05c · 导航与会话目录增量（B05-2/3/4/8）」提交了第 1 版完成证据……';
+
+/* ── phone chrome ── */
+function statusBar(time) {
+  return `<div class="sb"><span class="time">${time}${IC.loc}</span><span class="sys">${IC.signal}${IC.wifi}<span class="bat">67</span></span></div>`;
+}
+function nav(sub) {
+  return `<div class="nav"><div class="circ back">${IC.back}</div>
+     <div class="ttl"><div class="t1">${PROJECT}<span class="cp">Coordinator</span>${IC.chevR('#8e8e93', 12)}</div>
+     <div class="t2"${sub.mk ? ` data-mk="${sub.mk}"` : ''}>${sub.text}</div></div>
+     <div class="circ more">${IC.more}</div></div>`;
+}
+function needsYou(text, mk) {
+  return `<div class="ny"${mk ? ` data-mk="${mk}"` : ''}><span class="dot"></span><span class="tx2">${text}</span>${IC.chevD('#C7C7CC')}</div>`;
+}
+function strip(top, mk) {
+  return `<div class="strip" style="top:${top}px"${mk ? ` data-mk="${mk}"` : ''}>${IC.up}<span>Your question</span><b>【项目「Tablet 客户端：与 iOS 体验对齐」有一版…</b></div>`;
+}
+function band(opts) {
+  const tail = opts.running
+    ? `<span class="md">${opts.model}</span>${IC.spin}<span class="stop">${IC.stop}</span>`
+    : `<span class="md">${opts.model}</span><span class="send">${IC.sendUp}</span>`;
+  return `<div class="band">
+    <div class="brow" style="top:13px">${IC.term}<b>Background processes</b><span class="v">49 total</span><span class="c">${IC.chevR('#8e8e93', 12)}</span></div>
+    <div class="brow" style="top:51px">${IC.box}<b>Tasks</b><span class="v">${opts.tasks || '1 running · 18/25 done'}</span><span class="c">${IC.chevR('#8e8e93', 12)}</span></div>
+    <div class="brow" style="top:89px"><span class="chip">${IC.fork} project/34…Qe7Tb2</span><span class="add">+1</span><span class="del">−0</span><span class="files">· 1 file</span></div>
+    <div class="cmp"${opts.mk ? ` data-mk="${opts.mk}"` : ''}><div class="ph">Message...</div><div class="tb"><span style="font-size:28px;font-weight:300;line-height:1;color:#55555e">+</span><span>Auto</span>${tail}</div></div>
+  </div><div class="home"></div>`;
+}
+
+/* ── transcript pieces ── */
+const limitNotice = (mk) => `<div class="lim"${mk ? ` data-mk="${mk}"` : ''}><div class="lh"><span class="ic">${IC.clockFill}</span><span class="lt">Weekly limit reached</span></div>
+  <div class="lb">The weekly quota for claude on “HPC” is used up.</div></div>`;
+
+function evidenceBody(o = {}) {
+  const mk = o.mk || {};
+  const at = (k) => (mk[k] ? ` data-mk="${mk[k]}"` : '');
+  return `<div class="evt">${TASK}</div>
+    <div${at('facts')}>
+    <div class="evs"><div class="k">WHAT IT HAS TO SATISFY</div><div class="v">${CRIT}</div></div>
+    <div class="evg">WHAT THIS EVIDENCE DOES NOT ESTABLISH · 9</div>
+    ${GAPS.map((g) => `<div class="gap"><span class="ex">!</span><span>${g}</span></div>`).join('')}
+    <div class="fold">6 more ${IC.chevD()}</div>
+    <div class="fold" style="color:var(--label2)">${IC.shield}<span style="color:var(--accent)">17 checked for you · 1 did not hold</span> ${IC.chevD()}</div>
+    <div class="fold">the submitter’s full account (1,486 characters) ${IC.chevD()}</div>
+    <div class="evm">34cB7pQx… · rev 1 · 7VNfBe…</div>
+    </div>`;
+}
+function evidenceCard(mk) {
+  return `<div class="ev"${mk ? ` data-mk="${mk}"` : ''}>
+    <div class="evh"><span class="chipb">${IC.seal()}</span><span class="t">Does this evidence settle the task?</span></div>
+    <div class="evp">From Orbit</div>
+    ${evidenceBody()}
+    <div class="acts"><div class="btn pri">Confirm done</div><div class="btn sec">Chat about this</div></div>
+    <div class="hint">Your next message is sent back as the reason — the only thing the next attempt can aim at. The task stays open.</div>
+  </div>`;
+}
+/* NEW: the queued card, collapsed like an approval review card */
+function queuedCard(o = {}) {
+  const mk = o.mk || {};
+  const at = (k) => (mk[k] ? ` data-mk="${mk[k]}"` : '');
+  return `<div class="wq"${at('card')}>
+    <div class="evh"><span class="chipg">${IC.hourglass()}</span><span class="t">Waiting for the coordinator</span><span class="tm">7:59 PM</span></div>
+    <div class="wt">${TASK}</div>
+    <div${at('why')}><div class="wr">${IC.pause()}<span>Coordinator paused · weekly limit · resets Oct 12, 7:00 PM</span></div>
+    <div class="wg">It goes to the coordinator when it’s back. You can still decide now.</div></div>
+    <div class="qd"></div><div class="qm"${at('decide')}>Decide it myself${IC.chevR('#3E69F6', 13)}</div>
+  </div>`;
+}
+
+/* ── 1 · today ── */
+document.getElementById('p-today').innerHTML = statusBar('8:02') +
+  nav({ text: 'Waiting for approval · Open · just now', mk: 1 }) +
+  needsYou('1 open question below', 1) + strip(151, 5) +
+  `<div class="tx top" style="top:183px">${limitNotice(2)}${evidenceCard(3)}</div>` +
+  `<div class="down" style="top:536px">${IC.down}</div>` +
+  band({ model: 'DeepSeek V4.1 Flash <span>Max</span>', running: true, mk: 4 });
+
+/* ── 2 · proposal ── */
+document.getElementById('p-queued').innerHTML = statusBar('7:59') +
+  nav({ text: 'Retrying · Open · 1h ago', mk: 1 }) + strip(113) +
+  `<div class="tx" style="top:145px">
+     <div class="bub"><div class="cl">${DELIVERY_A05}</div></div>
+     ${limitNotice()}
+     ${queuedCard({ mk: { card: 2, why: 3, decide: 4 } })}
+   </div>` +
+  band({ model: 'Opus 5.5 <span>Max</span>', running: false, tasks: '0 running · 18/25 done' });
+
+document.getElementById('p-sheet').innerHTML = statusBar('7:59') +
+  `<div class="sheet"><div class="grab"></div><div class="shn">Waiting for the coordinator</div><div class="x">${IC.xmark}</div>
+    <div class="shb">
+      <div class="prov"><span>FROM ORBIT</span><span>submitted 7:59 PM</span></div>
+      <div class="shnote" data-mk="1">${IC.info}<span>The coordinator is paused (weekly limit, resets Oct 12, 7:00 PM). It gets this when it’s back. Decide here only if you don’t want to wait.</span></div>
+      <div class="shh">Does this evidence settle the task?</div>
+      ${evidenceBody({ mk: { facts: 2 } })}
+    </div>
+    <div class="shbar"><div data-mk="3"><div class="acts"><div class="btn pri">Confirm done</div><div class="btn sec">Chat about this</div></div></div>
+      <div class="hint">Your next message is sent back as the reason — the only thing the next attempt can aim at. The task stays open.</div></div>
+  </div><div class="home"></div>`;
+
+document.getElementById('p-back').innerHTML = statusBar('8:07') +
+  nav({ text: 'Waiting for your reply · Open · just now' }) + strip(113) +
+  `<div class="tx top" style="top:145px">
+     ${limitNotice()}
+     <div class="slim" data-mk="1"><span>${IC.send}Sent to the coordinator · 8:05 PM${IC.chevR('#A0A0A8', 10)}</span></div>
+     <div class="bub" data-mk="2"><div class="cl" style="-webkit-line-clamp:4">【项目「Tablet 客户端：与 iOS 体验对齐」有一版完成证据等你判】 任务「B07c · 卡片增量与会话提醒条」提交了第 1 版完成证据。This revision was submitted at 2026-10-09T11:59:30Z while you were paused (weekly limit). It waited for you; nobody has decided it yet.</div></div>
+     <div class="rc" data-mk="3"><div class="evh"><span class="chipb">${IC.ckc('#007AFF', 15)}</span><span class="t">An agent recorded a decision</span></div>
+       <div class="rt" style="font-size:15px;line-height:20px">${TASK}</div><div class="rl">Confirm done · rev 1 · 8:07 PM</div></div>
+   </div>` +
+  band({ model: 'DeepSeek V4.1 Flash <span>Max</span>', running: false });
+
+/* ── 4 · the open choice, side by side ── */
+document.getElementById('ab-a').insertAdjacentHTML('beforeend',
+  `<div class="meas-in" style="padding:0 0 4px">${queuedCard()}</div>`);
+document.getElementById('ab-b').insertAdjacentHTML('beforeend',
+  `<div class="meas-in" style="padding:0 0 4px"><div class="wq">
+     <div class="evh"><span class="chipg">${IC.hourglass()}</span><span class="t">Does this evidence settle the task?</span></div>
+     <div class="wr" style="margin-top:10px">${IC.pause()}<span>Waiting for the coordinator · paused (weekly limit)</span></div>
+     <div class="wg">It goes to the coordinator when it’s back. You can still decide now.</div>
+     ${evidenceBody()}
+     <div class="acts"><div class="btn pri">Confirm done</div><div class="btn sec">Chat about this</div></div>
+   </div></div>`);
+document.getElementById('ab-c').insertAdjacentHTML('beforeend',
+  `<div class="meas-in" style="padding:0 0 4px">${evidenceCard().replace('<div class="btn sec">Chat about this</div>', '<div class="btn sec">Chat about this</div><div class="btn ghost">Leave it to the coordinator</div>')}</div>`);
+
+/* ── marks: a dashed outline round each [data-mk] inside a phone, numbered at its top right ── */
+window.drawMarks = function drawMarks() {
+  document.querySelectorAll('[data-meas]').forEach((c) => {
+    const card = document.querySelector('#' + c.dataset.meas + ' .meas-in > div');
+    if (card) c.innerHTML = `<b>在手机上约 ${Math.round(card.getBoundingClientRect().height)} pt 高</b>`;
+  });
+  document.querySelectorAll('.phone').forEach((phone) => {
+    const pr = phone.getBoundingClientRect();
+    phone.querySelectorAll('[data-mk]').forEach((el) => {
+      const r = el.getBoundingClientRect();
+      const top = Math.max(r.top, pr.top + 2), bottom = Math.min(r.bottom, pr.bottom - 2);
+      if (bottom <= top) return;
+      const o = document.createElement('div');
+      o.className = 'ol-mk';
+      o.style.left = (r.left - pr.left - 4) + 'px'; o.style.top = (top - pr.top - 4) + 'px';
+      o.style.width = (r.width + 8) + 'px'; o.style.height = (bottom - top + 8) + 'px';
+      phone.appendChild(o);
+      const d = document.createElement('div');
+      d.className = 'dot-mk'; d.textContent = el.dataset.mk;
+      d.style.left = Math.min(r.right - pr.left - 8, pr.width - 26) + 'px'; d.style.top = (top - pr.top - 14) + 'px';
+      phone.appendChild(d);
+    });
+  });
+};
+</script>
+</body>
+</html>

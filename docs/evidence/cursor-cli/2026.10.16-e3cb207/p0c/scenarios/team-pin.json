@@ -1,0 +1,41 @@
+{
+ "name": "team-pin",
+ "runId": "2026-10-17T02-34-10-602Z",
+ "startedAt": "2026-10-17T02:42:33.619Z",
+ "finishedAt": "2026-10-17T02:42:40.650Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/team-pin.ndjson",
+ "protocolLines": 8,
+ "fixtures": [
+  "team-pin/acp"
+ ],
+ "checks": [
+  {
+   "name": "first session opens",
+   "ok": true
+  },
+  {
+   "name": "after the config dir's active team changes, session/new -> -32603 \"Your team has switched…\"",
+   "ok": true,
+   "detail": {
+    "code": -32603,
+    "message": "Your team has switched to P0 Probe Team. Create a new session to continue."
+   }
+  },
+  {
+   "name": "…and the ACP process then exits with code 0",
+   "ok": true,
+   "detail": {
+    "code": 0,
+    "signal": null
+   }
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {}
+}

@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -11,6 +12,7 @@ import { Prisma, ProjectStatus, RunStatus } from '@prisma/client';
 import {
   CONTINUE_MESSAGE,
   RunEventType,
+  isAccountEngine,
   isAuthErrorText,
   isRetryableApiErrorText,
   isUsageLimitErrorText,
@@ -29,6 +31,8 @@ import {
 } from '../projects/task-aggregation';
 import { RealtimeService } from '../realtime/realtime.service';
 import { deriveSessionCapabilities } from './session-state';
+import { assertEngineSession } from './engine-session';
+import { MANAGED_RUNNER_DEMAND, type ManagedRunnerDemand } from '../managed-runners/managed-runner-demand';
 import { SessionsService, type SessionResumeAnswer } from './sessions.service';
 import { isBackgroundWakeTurn } from '../runner-api/background-job-wake';
 import { readSessionMessageCard } from './session-message';
@@ -48,13 +52,18 @@ import {
   confirmationReviewRetryTurnId,
   isConfirmationReviewContentTurn,
 } from '../tasks/owner-confirmation-review-turn';
-import { runAccount } from '../providers/plan-usage-accounts';
+import { accountAfterUsageLimitAt, runAccount } from '../providers/plan-usage-accounts';
+import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
+import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
+import { isBuiltinProvider } from '../providers/custom-provider';
+import { recordedEngine } from '../providers/session-engine';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import {
   classifyTransactionError,
   loggedRetry,
   withTransactionRetry,
 } from '../common/transaction-retry';
+import { RUNNER_BEATS } from '../runners/runner-presence';
 
 const SWEEP_INTERVAL_MS = 30_000;
 // How long a session armed by the reaper waits for its runner to come back. Covers the
@@ -255,6 +264,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
      * Nest always has one.
      */
     @Optional() private readonly queue?: QueueService,
+    /**
+     * Demand for a managed runner (managed-runners/managed-runner-demand.ts): a retry waiting on a
+     * managed runner asks it to wake. Answers `managed: false` without reading anything while the
+     * switch is off, and for every self-managed runner; absent in the specs that build this service.
+     */
+    @Optional() @Inject(MANAGED_RUNNER_DEMAND) private readonly managedDemand?: ManagedRunnerDemand,
   ) {}
 
   onModuleInit(): void {
@@ -292,6 +307,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         retryAt: { lte: now },
         deletedAt: null,
         completedAt: null,
+        // A landing is never re-sent: its AWAITING_INPUT means only that the subject is open.
+        sessionKind: 'CONVERSATION',
         OR: [
           { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
           { status: RunStatus.FAILED },
@@ -309,6 +326,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       select: {
         id: true,
         ownerId: true,
+        engine: true,
         provider: true,
         prompt: true,
         numTurns: true,
@@ -348,14 +366,30 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         startedAt: true,
         runtimeSessionId: true,
         assignedRunner: {
-          select: { planUsage: true, engines: true, status: true, lastHeartbeatAt: true },
+          select: {
+            planUsage: true, engines: true, status: true, ...RUNNER_BEATS, capabilities: true, accountPauses: true,
+            defaultRemoved: true,
+          },
         },
-        // Which of the runner's Codex, Claude or Antigravity accounts the run spends, whose quota alone
-        // can hold it back: the one picked for the session, else its workspace's.
+        // Which of the runner's Codex, Claude, Antigravity, Kimi or Cursor CLI accounts the run spends:
+        // the one picked for the session, else its workspace's. Its quota alone holds back a session
+        // somebody pinned there; one on Automatic waits only while every other account is spent too.
         codexAccount: true,
         claudeAccount: true,
         antigravityAccount: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
+        kimiAccount: true,
+        cursorAccount: true,
+        codexAccountPinned: true,
+        claudeAccountPinned: true,
+        antigravityAccountPinned: true,
+        kimiAccountPinned: true,
+        cursorAccountPinned: true,
+        providerBuiltin: true,
+        workspace: {
+          select: {
+            env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
+          },
+        },
       },
     });
     if (due.length === 0) return;
@@ -456,6 +490,21 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // re-armed for the next sweep with the attempt count untouched, which is what turns
         // this into "waiting for the runner" instead of five backoffs and a give-up.
         const capabilities = deriveSessionCapabilities(session, now.getTime());
+        // A managed runner that is not READY — asleep, draining, starting, waiting for capacity — is
+        // asked to wake, and waited for with nothing spent: no attempt (the run did not fail again),
+        // and no give-up clock (it comes back by itself; the mapping's own state and reason say what it
+        // waits for). Asked of the mapping rather than read off the heartbeat, which still looks fresh
+        // for a while after the runner went to sleep; and before the offline branch below, whose 30
+        // minutes are for a machine that may never return. A parked session too, which would otherwise
+        // spend an attempt on a re-send that only waits in the queue. With the switch off, or for any
+        // other runner, the answer is `managed: false` and nothing here changes.
+        if (this.managedDemand) {
+          const managed = await this.managedDemand.requested(session.assignedRunnerId, 'auto-retry');
+          if (managed.comingBack && managed.state !== 'READY') {
+            await this.rearm(session.id, session.status, new Date(now.getTime() + SWEEP_INTERVAL_MS), attempts, observed);
+            continue;
+          }
+        }
         if (capabilities.resumeBlockedReason === 'RUNNER_OFFLINE') {
           const waited = session.finishedAt ? now.getTime() - session.finishedAt.getTime() : 0;
           if (waited > MAX_OFFLINE_WAIT_MS) {
@@ -486,9 +535,15 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           session.provider,
           now,
         );
-        const blockedUntil = poolResumesAt
+        // The runner's own report holds only a session on the runner's sign-in to its engine — the
+        // engine's slug, on the engine it names. A key brings its own quota, which no runner reports
+        // (docs/provider-engine-contract.md §4.5).
+        const onRunnerLogin = isAccountEngine(session.provider)
+          && isBuiltinProvider(session.provider, session.providerBuiltin)
+          && (recordedEngine(session.engine) ?? session.provider) === session.provider;
+        const ownBlockedUntil = poolResumesAt
           ? (poolResumesAt > now ? poolResumesAt : null)
-          : planUsageBlockedUntil(
+          : !onRunnerLogin ? null : planUsageBlockedUntil(
               withEnginePlanUsage(
                 session.assignedRunner?.planUsage as PlanUsage | null,
                 sanitizeRunnerEngines(session.assignedRunner?.engines),
@@ -502,10 +557,36 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
                   codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
                   claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
                   antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
+                  kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
+                  cursorAccount: session.cursorAccount ?? session.workspace?.cursorAccount,
                 },
-                session.assignedRunner?.engines,
+                session.assignedRunner,
+                now,
               ),
             );
+        // A session on Automatic is not held by its own account alone, on a runner that carries its
+        // conversation to another: room on another of the runner's accounts re-sends it now — its
+        // dispatch moves it there (accountBeforeDispatch) — and with every one spent it waits for the
+        // first to free up (accountAfterUsageLimitAt), not for this one's reset, which for a weekly
+        // limit can be days after another account's 5 hours come back.
+        const engine = ownBlockedUntil
+          && isAccountEngine(session.provider)
+          && isBuiltinProvider(session.provider, session.providerBuiltin)
+          && (session.assignedRunner?.capabilities ?? []).includes(ACCOUNT_MOVE_CAPABILITY[session.provider])
+          ? session.provider
+          : null;
+        const elsewhere = engine
+          ? accountAfterUsageLimitAt(
+              engine,
+              { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] },
+              session.workspace,
+              session.assignedRunner,
+              now,
+            )
+          : null;
+        const blockedUntil = ownBlockedUntil && elsewhere && elsewhere < ownBlockedUntil
+          ? (elsewhere > now ? elsewhere : null)
+          : ownBlockedUntil;
         if (blockedUntil) {
           await this.rearm(session.id, session.status, blockedUntil, attempts, observed);
           continue;
@@ -899,13 +980,15 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     ownerId: string,
     id: string,
     // The composer's pending pick, when Retry was pressed after choosing one — see RetryIdentityDto.
-    identity: { provider?: string; account?: string } = {},
+    identity: { provider?: string; engine?: string; account?: string } = {},
   ): Promise<SessionResumeAnswer> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true, prompt: true, numTurns: true },
+      select: { id: true, prompt: true, numTurns: true, sessionKind: true },
     });
     if (!session) throw new NotFoundException('session not found');
+    // Re-sending is an engine door; a LANDING has no failed turn of its own to retry (§2.9 LS6).
+    assertEngineSession(session);
     const message = await this.messageToResend(session.id, session.prompt, session.numTurns);
     if (!message.content) {
       throw new ConflictException('this session has no message for a retry to re-send');
@@ -932,6 +1015,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // What the composer had picked when Retry was pressed. The session moves onto it here, as it
         // would have had the person sent a message instead — which is the whole point of the button.
         ...(identity.provider ? { provider: identity.provider, account: identity.account } : {}),
+        // Only the session's own engine is accepted (ENGINE_IMMUTABLE otherwise), as on resume.
+        ...(identity.engine !== undefined ? { engine: identity.engine } : {}),
       },
       {
         ...this.resendCarrying(session.id, message, false),
@@ -1677,6 +1762,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         retryAt: null,
         deletedAt: null,
         completedAt: null,
+        // Only a conversation can hold a retry claim; the landing container never gets one.
+        sessionKind: 'CONVERSATION',
         status: { in: [RunStatus.FAILED, RunStatus.AWAITING_INPUT] },
       },
       orderBy: { retryClaimedAt: 'asc' },

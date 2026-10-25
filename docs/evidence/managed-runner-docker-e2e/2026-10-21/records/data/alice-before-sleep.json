@@ -1,0 +1,40 @@
+{
+ "at": "2026-10-20T23:22:17.404Z",
+ "owner": "alice",
+ "action": "seed",
+ "label": "before-sleep",
+ "container": "mr-01a15b9c-c69f-718f-ba2a-90bd8a35230f",
+ "generation": 1,
+ "volume": "mr-data-01a15b9c-c69f-718f-ba2a-90bd8a35230f",
+ "volumeUid": "13398645-cbab-4150-ad66-3cc43e4c01e8",
+ "seeded": {
+  "files": {
+   "blob-4m.bin": "d26472186159b4cc03c826e872eb8103b78e7ef04e7af3c294c5cc8d8e9297cf",
+   "blob-64k.bin": "2d07729efc13df4efde03a294c3f97b236c347a8fb5b2872431f295286e52ec4",
+   "d4.sqlite": "f2ad1ab02eaedf22e99587a54302ed8f32bb2a5507853ebbf6106332fa9f820e",
+   "note.txt": "f85acc4c7bccf403cca67ab7ecc3e4eb6d334b1e6caf9d7cbecc5e1e39182e5e"
+  },
+  "integrity": "ok",
+  "journalMode": "wal",
+  "rows": 5000,
+  "dumpSha256": "860ef6bbfc7becc222ed60baca4615549df511a837a8490675990c3531c11ccf"
+ },
+ "runnerSqliteFiles": [],
+ "runtimeSessionId": "6f8d5692-4741-45c6-9a39-35cf6c1718d9",
+ "engine": {
+  "engineSession": {
+   "path": "/var/lib/orbit/home/.claude/projects/-var-lib-orbit-home--orbit-worktrees-01a15b9d-13d7-75a9-bf7f-0718c5fe80c3/6f8d5692-4741-45c6-9a39-35cf6c1718d9.jsonl",
+   "bytes": 749632,
+   "lines": 31,
+   "sha256": "d1a9b977705849ead7a8b3d7cc372e529b0811ed365a1fb3ff8923eaf9fa4776",
+   "prefixSha256": null
+  },
+  "d4First": [
+   {
+    "path": "/var/lib/orbit/home/.orbit/worktrees/01a15b9d-13d7-75a9-bf7f-0718c5fe80c3/d4-first.txt",
+    "sha256": "90d5c438ad344c01a44df4cd62861b409fa5bb85f1086c8d9fd3e6cbed0a595c",
+    "text": "D4-MARKER-7Q2K"
+   }
+  ]
+ }
+}

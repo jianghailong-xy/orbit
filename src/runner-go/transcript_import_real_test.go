@@ -14,7 +14,7 @@ func TestParseRealTranscript(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Skip("real transcript sample not present")
 	}
-	cwd, title, events, err := parseImportTranscript(path)
+	cwd, title, events, err := parseImportTranscript(path, nil)
 	if err != nil {
 		t.Fatalf("parseImportTranscript(real sample): %v", err)
 	}

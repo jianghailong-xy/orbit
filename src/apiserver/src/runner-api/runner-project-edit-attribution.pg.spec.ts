@@ -157,8 +157,15 @@ test('the runner sends the acting session on a project edit, and only from a ses
   // — a file that merely mentioned the header in a comment would satisfy a grep.
   assert.match(body, /doHeaders\([\s\S]*sessionHeader\(sessionID\)\)/u,
     'the PATCH does not carry sessionHeader(sessionID) — the acting session never leaves the runner');
-  assert.match(read('src/runner-go/mcp.go'), /updateProject\(s\.sessionID, id, body\)/u,
+  // The tool hands its session to the helper a merge-check change goes through
+  // (`updateProjectWithApproval`: the change is put in front of the owner first), AND the helper
+  // hands that same session to the PATCH — the card it may raise is this conversation's, and the
+  // criteria the body carries are recorded as this conversation's words. Both halves are pinned
+  // here: a call that dropped `s.sessionID` on the way to either one is the bug this asserts.
+  assert.match(read('src/runner-go/mcp.go'), /updateProjectWithApproval\(s\.t, s\.sessionID, id, body\)/u,
     'the project_update tool does not pass its calling session');
+  assert.match(read('src/runner-go/mcp.go'), /t\.updateProject\(sessionID, projectID, body\)/u,
+    'updateProjectWithApproval drops the calling session before the PATCH');
   // The headless door passes the empty string on purpose, which `sessionHeader` turns into no
   // header at all rather than an empty one the server would try to resolve as a session.
   assert.match(read('src/runner-go/project_cli.go'), /updateProject\("", id, body\)/u,

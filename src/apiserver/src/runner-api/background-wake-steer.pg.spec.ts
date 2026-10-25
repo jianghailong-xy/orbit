@@ -578,6 +578,51 @@ scenario('(d) a steer the runner hands back unread takes the queued wake with it
   }
 });
 
+scenario('(h) a Stop overtakes a wake steer the runner took before the engine read it: not delivered, its wake goes as an interrupt\'s does, and nothing runs after', async () => {
+  // Whichever runner is on the other end: one that hands the unread steer back, and one that reports
+  // it undelivered (owner, 2026-10-16). A queued wake turn the Stop deletes goes the same way.
+  for (const report of ['hands it back', 'reports it undelivered'] as const) {
+    await seed();
+    const jobId = report === 'hands it back' ? 'bgj_h00000000001' : 'bgj_h00000000002';
+    const steered = await fileWake(exitWake(jobId));
+    const taken = await take();
+    assert.equal(taken?.turnId, steered.turnId);
+    assert.equal(taken?.kind, 'steer');
+
+    await sessions.interrupt(OWNER_ID, SESSION_ID);
+    assert.equal((await take())?.kind, 'interrupt', 'the Stop was not handed to the runner');
+    if (report === 'hands it back') {
+      await complete(steered.turnId!, 'steer_requeue');
+    } else {
+      await runnerApi.turnComplete({ id: RUNNER_ID }, SESSION_ID, {
+        turnId: steered.turnId!, status: 'FAILED', subtype: 'steer',
+        result: 'steer not delivered to the engine: the turn was interrupted by Stop before the engine read this message',
+      } as never);
+    }
+    await answer(RUNNING_TURN_ID);
+    await runnerApi.turnComplete({ id: RUNNER_ID }, SESSION_ID, {
+      turnId: RUNNING_TURN_ID, status: 'INTERRUPTED', subtype: 'error_during_execution', numTurns: 1, costUsd: 0,
+    } as never);
+
+    const { rows } = await admin.query<{ kind: string; status: string; deliveryStatus: string | null; code: string | null }>(
+      `SELECT kind, status, delivery_status AS "deliveryStatus", delivery_failure_code AS code
+         FROM "conversation_turn" WHERE id = $1::uuid`,
+      [steered.turnId],
+    );
+    assert.deepEqual(rows[0], { kind: 'steer', status: 'ANSWERED', deliveryStatus: 'FAILED', code: 'CURRENT_WORK_INTERRUPTED' });
+    // Settled with the turn, as `settleUnrunWakeTurns` settles a wake turn an interrupt deletes: kept, it
+    // would be found and delivered by that job's next wake under the same key.
+    assert.deepEqual(await jobsOn(`bg-wake:${jobId}:exit`), [], `the job's wake outlived the Stop (${report})`);
+    assert.deepEqual(
+      (await wakeTurns()).filter((row) => row.status !== 'ANSWERED').map((row) => [row.id, row.kind, row.status]),
+      [],
+      `a wake turn is waiting to run after the Stop (${report})`,
+    );
+    assert.equal(await sessionStatus(), 'AWAITING_INPUT');
+    assert.equal(await take(), null, 'the inbox handed something out after the Stop');
+  }
+});
+
 /** What one wake turn says about one job: where the output it covers begins, and where it ends. */
 async function coverage(clientTurnId: string, jobId: string): Promise<Array<{ offset: string; size: string }>> {
   const { rows } = await admin.query<{ offset: string; size: string }>(

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert } from 'antd';
+import { Alert } from './ui/Alert';
 import { CardActionButton, CardActions } from './CardAction';
 import { ReviewCard } from './ReviewCard';
 import { useIsMobile } from '../lib/useMediaQuery';
@@ -845,8 +845,7 @@ export function CriteriaDecisionCard({
         <Alert
           className="criteria-decision-error"
           type="error"
-          showIcon
-          message="That decision was not recorded"
+          title="That decision was not recorded"
           description={error.message}
         />
       ) : null}

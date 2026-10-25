@@ -1,0 +1,140 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .grid3 { display: grid; grid-template-columns: repeat(3, 440px); gap: 26px 40px; align-items: start; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 440px); gap: 26px 40px; align-items: start; }
+  .lede, .foot, .wide { max-width: 1880px; }
+  table.ev { border-collapse: collapse; font-size: 13.5px; background: #fff; border-radius: 10px; overflow: hidden; }
+  table.ev th, table.ev td { padding: 7px 14px; text-align: left; border-bottom: 1px solid #ececf0; vertical-align: top; }
+  table.ev th { background: #f4f4f7; font-weight: 650; color: #16161a; }
+  table.ev td { color: #3a3a40; }
+  table.ev .bad { color: #b3261e; font-weight: 650; }
+  table.ev .ok { color: #1f7a37; font-weight: 650; }
+  .two { display: flex; gap: 40px; align-items: flex-start; }
+  #spec table.tok { width: 880px; }
+  #spec table.tok td { line-height: 1.55; }
+</style>
+<body>
+<h1>推荐组合（列表 A + 会话页 A）· 各种状态、亮色、规格、配套</h1>
+<p class="lede">01 / 02 里两个 A 合起来的细节。<b>规则一句话</b>：列表行的第二块永远两行高——有「现在」就先说现在（在做事 / 等你 / 你发出还没回），剩下的行给 recap；没有「现在」，两行都给 recap；没有 recap，给原始回复。会话页静止时，转录最后一行是一张 Recap 卡。
+数据：标题和项目取自你的列表，其余为示意。</p>
+
+<h2>① 列表行 · 每种情况（暗）</h2>
+<div class="grid3" id="rows"></div>
+
+<h2>② 列表 · 亮色</h2>
+<div class="two"><div id="light"></div><div class="cap" style="max-width:520px;margin-top:0" id="cap-light"></div></div>
+
+<h2>③ 会话页 · Recap 卡的几种样子</h2>
+<div class="grid3" id="cards"></div>
+
+<h2>④ 规格</h2>
+<div class="two" id="spec"></div>
+
+<h2>⑤ 配套 · 服务端：让 recap 跟上最后一轮</h2>
+<div class="wide" id="fix"></div>
+
+<p class="foot" id="foot"></p>
+
+<script>
+// ── ① 列表行 ───────────────────────────────────────────
+const strip = (mode, r, k) => phone(mode, `<div class="lr" style="top:15px">${rowA(mode, r)}</div>`, { h: 92, cls: 'strip' });
+const CASES = [
+  [{ title: '磁盘空间不足排查', rel: '1d ago', fail: true, tags: ['硬件诊断', '性能问题'], recap: RECAP.disk },
+   '<b>静止 · recap 长</b>：两行，末尾省略。失败的会话照旧只多一个红点。'],
+  [{ title: '抽屉阴影修复', rel: '2h ago', tags: ['前端问题'], recap: 'iPad 抽屉阴影已修好，web 和 iOS 都已合入。' },
+   '<b>静止 · recap 短</b>：一行，第二行留白——行高不变（<code>reservesSpace</code>）。'],
+  [{ title: 'Recap 展示优化', spin: true, tags: ['交互设计'], now: 'Running Bash…', tone: 'run', recap: '列表 recap 改两行、会话页尾部加 Recap 卡的效果图已出，等你选方向。' },
+   '<b>在做事</b>：第一行照旧是蓝字的现在（<code>Running Bash…</code> / <code>Running Agent…</code>）；第二行接上一次的 recap——今天这时 recap 整个消失。'],
+  [{ title: 'Plan 模式工具调用误报拒绝', needs: true, rel: '3d ago', tags: ['会话调试', '功能缺陷'], now: 'Waiting for approval', tone: 'amb', recap: RECAP.plan },
+   '<b>等你</b>：琥珀色的那句照旧在第一行（词不变，<code>waitingWord</code>）；第二行让你不点进去也知道是哪件事。'],
+  [{ title: '头像显示问题排查', spin: true, tags: ['前端问题', '功能缺陷'], now: 'You: 部署之后 session 列表变慢，帮我查一下', recap: RECAP.avatar },
+   '<b>你发出、还没回</b>：<code>You: …</code> 在第一行（还是灰字），recap 在第二行。'],
+  [{ title: '整理 Wiki 文章报告', rel: '5m ago', tags: ['功能咨询'], recap: '我先读了 articles 报表和最近三次构建的日志：失败都在 index 这一步，原因是两篇文章的 frontmatter 缺 title 字段。' },
+   '<b>还没有 recap</b>（新会话、服务端没 key，或 Settings 关了 recap）：原始回复，同样两行。'],
+  [LIST[2], '<b>项目行 · 静止</b>：进度块领头，coordinator 那句写全（今天只露十几个字）。'],
+  [{ kind: 'proj', title: '落地会话：每次落地都有自己的会话', rel: '2h ago', needs: true, meter: [9, 14], now: 'Question from coordinator · 2h', tone: 'amb', recap: 'L3 的 web 端已合入，iOS 证据还差两张截图；coordinator 在问要不要先发 beta。' },
+   '<b>项目行 · 等你</b>：同一条规则——第一行琥珀色的事，第二行接 coordinator 的 recap。'],
+  [{ title: '本地 canary 栈', rel: '40m ago', tags: ['硬件诊断'], now: 'Background process running…', recap: 'canary 栈起在 /var/tmp/p3-canary，API 和 web 都通了；等你在手机上点一遍登录。' },
+   '<b>停着、但留了后台进程</b>（同样适用于 watch、排队）：灰字的那句在第一行，recap 在第二行。'],
+];
+document.getElementById('rows').innerHTML = CASES.map(([r, k]) => `<div><p class="k">${k}</p>${strip('dark', r)}</div>`).join('');
+
+// ── ② 亮色 ─────────────────────────────────────────────
+document.getElementById('light').innerHTML = listPhone('light', 'A', { firstSep: 217, h: 740, cls: 'top' });
+document.getElementById('cap-light').innerHTML = `<h3>亮色</h3><ul>
+<li>标签底 13%、字按 <code>TagChipColor</code> 算到 4.5:1（暗色是 22%），和今天一样；recap 字是 secondaryLabel。</li>
+<li>两行块在亮色里更显「灰一片」，所以第一行（标题）保持 label 色、17pt 常规，不加粗——和今天一样，层级靠颜色不靠字重。</li>
+<li>iPad 的 regular 行今天只放一个标签：A 照样两行，标签仍是那一个。</li>
+</ul></div>`;
+
+// ── ③ 会话页的卡 ─────────────────────────────────────────
+const WHEN = 'Sat, Oct 17, 1:44 PM';
+const BOT = 956 - COMP_TOP + 14;
+const bottomOf = (mode, inner) => phone(mode, `${inner}`, { h: 380, off: 576, cls: 'strip' });
+const cardScene = (mode, o, { running = false, after = '' } = {}) =>
+  `<div class="cx">${transcript(RESEARCH_TAIL + after, 0)}</div>${o ? recapCard({ ...o, bottom: BOT }) : ''}${composer({ running })}`;
+const SC = [
+  ['dark', { when: WHEN, text: RECAP.researchNew }, {}, '<b>静止 · 进来时</b>：最后一行是卡。'],
+  ['dark', { when: WHEN, text: RECAP.researchNew, busy: true }, {}, '<b>按了 ↻</b>：转圈，正文变淡；不挡别的操作。'],
+  ['dark', { when: '6:15 AM', text: RECAP.researchNew }, {}, '<b>写好了</b>：换正文和时间（今天写的只写钟点，原 <code>recapLabel</code> 规则）。'],
+  ['dark', null, { running: true, after: '<div class="ubub">先给 Copilot CLI 建一个协议实测任务</div><div class="dots3"><i></i><i></i><i></i></div>' },
+   '<b>开始新一轮之后</b>：卡让位，这次进来不再回来；下次进来、会话又静止时再出现（那时已是新写的）。'],
+  ['light', { when: WHEN, text: RECAP.researchNew }, {}, '<b>亮色</b>：灰 10% 的底、label 色正文。'],
+  ['dark', { when: 'Sat, Oct 17, 1:20 PM', text: RECAP.research }, {}, '<b>今天的数据放进去会是这样</b>：1:20 的那句停在「正在汇总结论」，上面回复里结论早有了——这就是 ⑤ 要修的。'],
+];
+document.getElementById('cards').innerHTML = SC.map(([mode, o, opt, k], i) => `<div><p class="k">${k}</p><div data-sc="${i}">${bottomOf(mode, cardScene(mode, o, opt))}</div></div>`).join('');
+
+// ── ④ 规格 ─────────────────────────────────────────────
+document.getElementById('spec').innerHTML = `<div style="position:relative;width:960px;height:214px;flex:none">
+  <div style="zoom:2;position:absolute;left:0;top:0">${phone('dark', `<div class="sep" style="top:0;left:0;right:0"></div><div class="lr" style="top:17.6px">${rowA('dark', LIST[3])}</div><div class="sep" style="top:94.8px;left:0;right:0"></div>`, { h: 96, cls: 'strip' })}</div>
+  <div class="sl" style="left:900px;top:0;height:190px;border-left-width:1px"></div><div class="sl" style="left:895px;top:0;width:11px;border-top-width:1px"></div><div class="sl" style="left:895px;top:190px;width:11px;border-top-width:1px"></div>
+  <div class="sd" style="left:910px;top:88px;color:#2f6fe0">95</div>
+  <div class="sl" style="left:893px;top:80px;height:80px;border-left-width:1px"></div>
+  <div class="sd" style="left:858px;top:114px;color:#2f6fe0">2×20</div>
+  <div class="sd" style="left:0;top:198px;color:#6a6f78">×2 放大 · 单位 pt · 分隔线到分隔线</div>
+</div>
+<table class="tok">
+<tr><td>列表 · 第二块</td><td>15pt（subheadline）、行高 20、<b>恒占两行</b>（<code>lineLimit(2, reservesSpace: true)</code>）；离标题 0.4，上下留白不变（≈17.6 / 15.3），行距 75 → 95。</td></tr>
+<tr><td>标签</td><td>照旧 18pt 胶囊 / 11pt 字 / 左右 7 / 间距 5，最多 3 个 + <code>+N</code>；<b>内联在第一行行首</b>，离字 7；字的第二行回到左边。iOS 17：胶囊用 <code>ImageRenderer</code> 按 tag + 配色 + 字号缓存成图，拼进同一个 <code>Text</code>；web 本来就是 inline；Android <code>InlineTextContent</code>。</td></tr>
+<tr><td>在做事的行</td><td>第一行 = 今天的那句（颜色照旧：蓝 / 琥珀 / 灰），单行尾截；第二行 = recap，单行尾截、secondaryLabel。没有 recap 时第一行那句自己可以占两行。</td></tr>
+<tr><td>Recap 卡</td><td>左右 16（和转录一样）、圆角 14、底 gray 12%（亮 10%）、内边 11 / 14 / 13；头一行 footnote 13：<code>text.alignleft</code>（Settings 里 Session recaps 那一行的图标）+ <b>Recap</b> 半粗 + <code>· 时间</code>，secondaryLabel；右边 <code>arrow.clockwise</code> 17pt，点按区 44；正文 subheadline 15.5 / 22、label 色、不截断（≤80 字，三行左右）。离上一条回复 18、离输入框 14。</td></tr>
+<tr><td>卡什么时候在</td><td>会话静止（不在生成、没有待你答的卡）、有 recap、开关开着、<b>这次进来还没开始新一轮</b>。一开始新一轮就收起，这次不再回来。长按 = Copy。</td></tr>
+<tr><td>刷新</td><td><code>POST /sessions/:id/recap</code>（已有）。写成 → 换正文和时间；没写成按 <code>reason</code> 弹一句：<code>no-events</code>「The recap is already up to date.」· <code>too-few-events</code>「There's too little to recap yet.」· <code>no-key</code> / <code>disabled</code>「Recaps aren't available on this server.」· <code>llm-failed</code> / <code>error</code>「Couldn't refresh the recap. Try again.」· <code>cas-lost</code> 不说话，重新读一次（别的 pass 刚写了）。</td></tr>
+<tr><td>文案</td><td>没有新词进列表。新的只有：↻ 的读屏名 <code>Refresh recap</code>、上面四句提示；Settings 那一行的说明改成「Session lists show the summary the server writes for each conversation, and each conversation ends with it. Off: the raw last reply, and no summary in the conversation.」</td></tr>
+<tr><td>读屏</td><td>列表行：标题、标签、第二块全文连读（不截断）；卡：「Recap, Saturday October 17, 1:44 PM, …」+ 按钮「Refresh recap」。</td></tr>
+</table>`;
+
+// ── ⑤ 配套 ─────────────────────────────────────────────
+document.getElementById('fix').innerHTML = `<p class="k" style="font-size:14px">你 6:15 那张截图里的 7 条 recap，拿它们的时间和各会话最后一轮的时间（<code>lastTurnAt</code>，10-21 读的）对一下：</p>
+<table class="ev">
+<tr><th>会话</th><th>列表上的 recap 时间</th><th>最后一轮</th><th></th></tr>
+<tr><td>磁盘空间不足排查</td><td>Mon 7:31 PM</td><td>Mon 3:20 PM（7:31 结束）</td><td class="ok">跟上了（结束时那一次）</td></tr>
+<tr><td>Watching 会话合并入 Tasks 停车条设计</td><td>Sat 4:05 PM</td><td>Sat 4:07 PM</td><td class="bad">差一轮</td></tr>
+<tr><td>Wiki 服务端跳转 Workspace 预期确认</td><td>Sat 1:56 PM</td><td>Sat 1:56 PM</td><td class="ok">跟上了</td></tr>
+<tr><td>Plan 模式工具调用误报拒绝</td><td>Sat 1:52 PM</td><td>Sat 1:52 PM</td><td class="ok">跟上了</td></tr>
+<tr><td>调研其他可接入的 Coding Agent</td><td>Sat 1:20 PM</td><td>Sat 1:44 PM</td><td class="bad">差 24 分钟：结论不在 recap 里</td></tr>
+<tr><td>头像显示问题排查</td><td>Sat 1:32 PM</td><td>Sat 1:32 PM</td><td class="ok">跟上了</td></tr>
+<tr><td>Session 首次与再次打开的加载逻辑</td><td>Sat 1:20 PM</td><td>Sat 1:20 PM</td><td class="ok">跟上了</td></tr>
+</table>
+<p class="k" style="font-size:14px;margin-top:14px">7 条里 2 条停在半路。服务端只在两个地方要 recap：<code>/turn-complete</code> 之后（<code>recapAfterTurn</code>），和会话结束时（<code>RealtimeService</code> 的 finalize）。漏掉的两种：</p>
+<ul class="k" style="font-size:14px">
+<li><b>2 分钟窗里被跳过的那一轮，之后没人补</b>（<code>recapDue</code> 说 throttled 就 return）。Watching 那条：4:05 写完，4:07 又一轮，窗内跳过，会话停下后就一直停在 4:05。</li>
+<li><b>引擎自己开的一轮</b>（后台任务回报、定时唤醒）不走 <code>/turn-complete</code>，只在 ingest 里把 <code>engineTurnActive</code> 从 true 变回 false——那里没有要 recap。调研那条最可能是这种：结论是后台调研回报后它自己开的那一轮写的。（也可能是那一次 pass 失败了：失败是静默跳过，同样没人补。）</li>
+</ul>
+<p class="k" style="font-size:14px"><b>修法（只动服务端，客户端不用跟）</b>：① 被窗跳过的结算，在窗到点时补一次 pass（进程内定时，同一个队列；重启丢了也只是回到今天的样子）；② ingest 看到 <code>engineTurnActive</code> true → false 且会话停着时，和 <code>/turn-complete</code> 一样叫 <code>recapAfterTurn</code>。这样列表上不写时间才站得住：recap 说的就是最后一轮；卡上留着时间，给偶尔没写成（没 key、模型失败）的那一次。</p>`;
+
+document.getElementById('foot').innerHTML = `<b>实现顺序建议</b>：服务端 ⑤（小、独立、先上）→ OrbitKit <code>SessionLine</code>（去 label、带 recap）+ iOS / Mac 行和卡 → web → Android。全部没有新的数据字段：列表要的 <code>recapText</code> / <code>recapAt</code> 已经在列表、详情和 <code>session.updated</code> 里。`;
+
+// 卡那几格：量出卡高，转录贴在卡上面 18pt（没有卡的那格贴在输入框上面 16pt）
+document.fonts.ready.then(() => {
+  document.querySelectorAll('[data-sc]').forEach((box) => {
+    const ph = box.querySelector('.ph');
+    const card = ph.querySelector('.rcard');
+    const tx = ph.querySelector('.cx .tx');
+    tx.style.bottom = card ? `${BOT + card.getBoundingClientRect().height + 18}px` : `${956 - COMP_TOP + 16}px`;
+  });
+});
+</script>
+</body></html>

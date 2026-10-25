@@ -1,0 +1,29 @@
+{
+  "deleteRequestedAt": "2026-10-17T07:19:48.855+00:00",
+  "grace": 240,
+  "log": "/mnt/data/managed-runner-lab/test-server/state/logs/t03-runner-c4a97d84-e80e-4612-81f9-351773ca00db.log",
+  "logMarks": {
+    "detached": "2026-10-17T07:19:48.942044476Z",
+    "stopping": "2026-10-17T07:19:48.885205436Z"
+  },
+  "logTail": [
+    "2026-10-17T07:12:09.476248744Z [orbit-runner 2026-10-17T07:12:09.476Z] runner \"t03\" online -> https://10.0.2.2:13711 (max 2 concurrent)",
+    "2026-10-17T07:13:11.590670428Z [orbit-runner 2026-10-17T07:13:11.590Z] session 01a148b5-1ca5-73eb-8ffa-77f5bef212e1 \u2014 auto-initialized git repo at \"/var/lib/orbit/home/orbit-repos/default\" (autoInitGit)",
+    "2026-10-17T07:13:11.601564307Z [orbit-runner 2026-10-17T07:13:11.601Z] session 01a148b5-1ca5-73eb-8ffa-77f5bef212e1 \u2014 isolated in worktree /var/lib/orbit/home/.orbit/worktrees/01a148b5-1ca5-73eb-8ffa-77f5bef212e1 (branch orbit/t03-model-free-worktree-session-248543 @ f75c2d04)",
+    "2026-10-17T07:13:11.653055275Z [orbit-runner 2026-10-17T07:13:11.652Z] > interactive run 01a148b5-1ca5-73eb-8ffa-77f5bef212e1 \u2014 T03 model-free worktree session",
+    "2026-10-17T07:13:39.476959373Z [orbit-runner 2026-10-17T07:13:39.476Z] claude plan-usage unavailable: open /var/lib/orbit/home/.claude/.credentials.json: no such file or directory",
+    "2026-10-17T07:16:38.087085671Z [orbit-runner 2026-10-17T07:16:38.086Z] failed-turn completion handed to session supervisor for 01a148b5-1ca5-73eb-8ffa-77f5bef212e1",
+    "2026-10-17T07:16:38.248625383Z [orbit-runner 2026-10-17T07:16:38.248Z] \u25a0 interactive run 01a148b5-1ca5-73eb-8ffa-77f5bef212e1 \u2014 failed turn terminal acknowledgement settled",
+    "2026-10-17T07:18:39.897087948Z [orbit-runner 2026-10-17T07:18:39.896Z] session 01a148ba-1d44-72fc-bcd0-2ab14fdebe29 \u2014 isolated in worktree /var/lib/orbit/home/.orbit/worktrees/01a148ba-1d44-72fc-bcd0-2ab14fdebe29 (branch orbit/t03-fake-model-persistence-session-bf4fb2 @ f75c2d04)",
+    "2026-10-17T07:18:40.027478570Z [orbit-runner 2026-10-17T07:18:40.023Z] > interactive run 01a148ba-1d44-72fc-bcd0-2ab14fdebe29 \u2014 T03 fake-model persistence session",
+    "2026-10-17T07:18:44.461206064Z [orbit-runner 2026-10-17T07:18:44.460Z] failed-turn completion handed to session supervisor for 01a148ba-1d44-72fc-bcd0-2ab14fdebe29",
+    "2026-10-17T07:18:44.597868107Z [orbit-runner 2026-10-17T07:18:44.597Z] \u25a0 interactive run 01a148ba-1d44-72fc-bcd0-2ab14fdebe29 \u2014 failed turn terminal acknowledgement settled",
+    "2026-10-17T07:19:13.703872226Z [orbit-runner 2026-10-17T07:19:13.703Z] session 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 isolated in worktree /var/lib/orbit/home/.orbit/worktrees/01a148ba-a3da-7330-94bc-3ba0bd62959a (branch orbit/t03-fake-model-persistence-session-2-244d43 @ f75c2d04)",
+    "2026-10-17T07:19:13.821550132Z [orbit-runner 2026-10-17T07:19:13.821Z] > interactive run 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 T03 fake-model persistence session 2",
+    "2026-10-17T07:19:48.885205436Z [orbit-runner 2026-10-17T07:19:48.885Z] runner stopping; draining session supervisors...",
+    "2026-10-17T07:19:48.942044476Z [orbit-runner 2026-10-17T07:19:48.941Z] \u23f8 interactive run 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 detached for shutdown (resumable)"
+  ],
+  "podGoneAt": "2026-10-17T07:19:51.121+00:00",
+  "podUid": "c4a97d84-e80e-4612-81f9-351773ca00db",
+  "runnerTerminated": null
+}

@@ -1,0 +1,56 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T06:12:21.474",
+    "ingested_at": "2026-10-18T06:12:21.607143+00:00",
+    "ingested_by_runner_id": "01a14da1-4096-72b1-acfd-5b094be3f16f",
+    "seq": 8,
+    "session_id": "01a14da2-21e3-7158-b2f4-9f2f57eb0601",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T07-NIA-S1",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T06:12:21Z",
+      "kind": "text",
+      "messages": 1,
+      "n": 7,
+      "tool": null
+    },
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T06:12:21Z",
+      "kind": "text",
+      "messages": 2,
+      "n": 8,
+      "tool": null
+    }
+  ],
+  "owner": "nia",
+  "session": {
+    "assigned_runner_id": "01a14da1-4096-72b1-acfd-5b094be3f16f",
+    "created_at": "2026-10-18T06:10:33.571",
+    "engine": "claude",
+    "id": "01a14da2-21e3-7158-b2f4-9f2f57eb0601",
+    "provider": "deepseek-3",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T07-NIA-S1 a first session from the iPhone composer while the runner waits for c"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T06:12:21.622",
+      "client_turn_id": "initial-01a14da2-21e3-7158-b2f4-9f2f57eb0601",
+      "content": "T07-NIA-S1 a first session from the iPhone composer while the runner waits for capacity",
+      "created_at": "2026-10-18T06:12:21.005",
+      "delivered_at": "2026-10-18T06:12:21.265",
+      "id": "01a14da3-c58d-76a0-a871-856a888f2871",
+      "kind": "message",
+      "seq": 1,
+      "status": "ANSWERED"
+    }
+  ]
+}

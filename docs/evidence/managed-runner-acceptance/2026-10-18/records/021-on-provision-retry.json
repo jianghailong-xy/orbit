@@ -1,0 +1,317 @@
+{
+ "checks": [
+  {
+   "check": "the admission webhook is installed and refuses a Pod on an unowned managed claim",
+   "ok": true,
+   "value": {
+    "dryRunUnmanagedPod": "pod/t02a-admission-check",
+    "dryRunUnownedManagedClaim": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission"
+   }
+  },
+  {
+   "check": "ann: the owner's retry is accepted",
+   "ok": true,
+   "value": 202
+  },
+  {
+   "check": "bob: the owner's retry is accepted",
+   "ok": true,
+   "value": 202
+  },
+  {
+   "check": "ann: the same runner, PVC, PV, volume handle, RBD image and workspace after the failure and the retry",
+   "ok": true,
+   "value": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834"
+  },
+  {
+   "check": "bob: the same runner, PVC, PV, volume handle, RBD image and workspace after the failure and the retry",
+   "ok": true,
+   "value": "csi-vol-89d3b261-afdc-45cd-b89a-0fe94e3f46b8"
+  },
+  {
+   "check": "the gate saw one Pod create per account after the retry (and no second PVC)",
+   "ok": true,
+   "value": {
+    "Pod create": 2,
+    "admission probe": 2,
+    "other (reads, patches, deletes)": 109
+   }
+  }
+ ],
+ "endedAt": "2026-10-18T12:37:47.017+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "on-provision",
+ "result": {
+  "gate": {
+   "at": "2026-10-18T12:37:46.241+00:00",
+   "byKind": {
+    "Pod create": 2,
+    "admission probe": 2,
+    "other (reads, patches, deletes)": 109
+   },
+   "connections": 113,
+   "largestRecordSizes": {
+    "1111": 2,
+    "1136": 35,
+    "1147": 33,
+    "1155": 4,
+    "1170": 35,
+    "4084": 2,
+    "4111": 2
+   },
+   "since": "2026-10-18T12:37:12.317+00:00",
+   "until": null
+  },
+  "install": {
+   "apiServerFlagLines": "0",
+   "at": "2026-10-18T12:37:12.289+00:00",
+   "dryRunUnmanagedPod": {
+    "answer": "pod/t02a-admission-check",
+    "exit": 0
+   },
+   "dryRunUnownedManagedClaim": {
+    "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: UNMAPPED_MANAGED_CLAIM: no managed runner owns claim mr-data-a588e059-ce83-4722-9d2f-f6cde2ba0cc8",
+    "exit": 1
+   },
+   "k3s": "unchanged",
+   "tokenSha256": "da8d4588c7bf70f053fd26ae9e87e758fdbb12de4f25dca41e56c43029f560ad",
+   "webhook": {
+    "caBundleSha256": "50ad5749615f034a930d2b53808082c30741c24d0e8d65c6004b1784972100bf",
+    "failurePolicy": "Fail",
+    "name": "orbit-managed-runner-pods",
+    "namespaceSelector": {
+     "matchLabels": {
+      "kubernetes.io/metadata.name": "orbit-mr-test"
+     }
+    },
+    "objectSelector": {},
+    "rules": [
+     {
+      "apiGroups": [
+       ""
+      ],
+      "apiVersions": [
+       "v1"
+      ],
+      "operations": [
+       "CREATE",
+       "UPDATE"
+      ],
+      "resources": [
+       "pods",
+       "pods/ephemeralcontainers"
+      ],
+      "scope": "Namespaced"
+     }
+    ],
+    "sideEffects": "None",
+    "timeoutSeconds": 10,
+    "uid": "38ebe278-9ccf-47e6-871f-61b7130c4ea6",
+    "url": "https://10.0.2.2:13711/api/managed-runner/admission",
+    "webhook": "pods.managed-runner.orbit.dev"
+   }
+  },
+  "keys": {
+   "ann": {
+    "at": "2026-10-18T12:37:45.040+00:00",
+    "baseUrl": "http://10.0.2.2:13712/anthropic",
+    "defaultModel": "deepseek-v4-pro",
+    "enabled": true,
+    "id": "34i3W6RIN36tU5PSsvZ1s",
+    "label": "FAKE model (lab, not a model)",
+    "owner": "ann",
+    "presetSlug": "deepseek",
+    "runtime": "claude",
+    "slug": "deepseek-2"
+   },
+   "bob": {
+    "at": "2026-10-18T12:37:45.064+00:00",
+    "baseUrl": "http://10.0.2.2:13712/anthropic",
+    "defaultModel": "deepseek-v4-pro",
+    "enabled": true,
+    "id": "34i3W6TLAinNeEChUU7kD",
+    "label": "FAKE model (lab, not a model)",
+    "owner": "bob",
+    "presetSlug": "deepseek",
+    "runtime": "claude",
+    "slug": "deepseek-3"
+   }
+  },
+  "ready": {
+   "ann": {
+    "at": "2026-10-18T12:37:46.199+00:00",
+    "changes": [
+     {
+      "at": "2026-10-18T12:37:45.115+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 1,
+       "management_state": "STARTING",
+       "pod": "1ca70f34",
+       "reason": "MODEL_UNAVAILABLE",
+       "revision": 16
+      }
+     },
+     {
+      "at": "2026-10-18T12:37:46.199+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 1,
+       "management_state": "READY",
+       "pod": "1ca70f34",
+       "reason": null,
+       "revision": 17
+      }
+     }
+    ],
+    "reached": "READY",
+    "seconds": 1.1
+   },
+   "bob": {
+    "at": "2026-10-18T12:37:46.240+00:00",
+    "changes": [
+     {
+      "at": "2026-10-18T12:37:46.240+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 1,
+       "management_state": "READY",
+       "pod": "a0c62ecc",
+       "reason": null,
+       "revision": 17
+      }
+     }
+    ],
+    "reached": "READY",
+    "seconds": 0.0
+   }
+  },
+  "retries": {
+   "ann": {
+    "before": {
+     "desiredState": "RUNNING",
+     "managementState": "FAILED",
+     "revision": 9
+    },
+    "status": 202
+   },
+   "bob": {
+    "before": {
+     "desiredState": "RUNNING",
+     "managementState": "FAILED",
+     "revision": 9
+    },
+    "status": 202
+   }
+  },
+  "starting": {
+   "ann": {
+    "at": "2026-10-18T12:37:44.999+00:00",
+    "changes": [
+     {
+      "at": "2026-10-18T12:37:12.387+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 1,
+       "management_state": "STARTING",
+       "pod": null,
+       "reason": null,
+       "revision": 12
+      }
+     },
+     {
+      "at": "2026-10-18T12:37:12.921+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 1,
+       "management_state": "STARTING",
+       "pod": "1ca70f34",
+       "reason": null,
+       "revision": 15
+      }
+     },
+     {
+      "at": "2026-10-18T12:37:44.999+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 1,
+       "management_state": "STARTING",
+       "pod": "1ca70f34",
+       "reason": "MODEL_UNAVAILABLE",
+       "revision": 16
+      }
+     }
+    ],
+    "reached": "STARTING",
+    "seconds": 32.7
+   },
+   "bob": {
+    "at": "2026-10-18T12:37:45.040+00:00",
+    "changes": [
+     {
+      "at": "2026-10-18T12:37:45.040+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 1,
+       "management_state": "STARTING",
+       "pod": "a0c62ecc",
+       "reason": "MODEL_UNAVAILABLE",
+       "revision": 16
+      }
+     }
+    ],
+    "reached": "STARTING",
+    "seconds": 0.0
+   }
+  },
+  "timings": {
+   "ann": {
+    "generation": 1,
+    "initialProvider": "deepseek-2",
+    "mappingCreatedAt": "2026-10-18T12:36:59.609+00:00",
+    "node": "orbit-mr-lab",
+    "podCreatedAt": "2026-10-18T12:37:12Z",
+    "pvcCreatedAt": "2026-10-18T12:36:59Z",
+    "readyAt": "2026-10-18T12:37:46.101+00:00",
+    "runner": {
+     "capabilities_reported_at": "2026-10-18T12:37:42.862+00:00",
+     "enrolled_at": "2026-10-18T12:36:59.565",
+     "last_heartbeat_at": "2026-10-18T12:37:42.861",
+     "status": "ONLINE",
+     "version": "managed-ebf54ab8ddcb35224a4d8f0c1feae0e480186b38"
+    },
+    "runnerContainerStartedAt": "2026-10-18T12:37:23Z",
+    "secretCreatedAt": "2026-10-18T12:37:04Z"
+   },
+   "bob": {
+    "generation": 1,
+    "initialProvider": "deepseek-3",
+    "mappingCreatedAt": "2026-10-18T12:36:59.615+00:00",
+    "node": "orbit-mr-lab",
+    "podCreatedAt": "2026-10-18T12:37:12Z",
+    "pvcCreatedAt": "2026-10-18T12:36:59Z",
+    "readyAt": "2026-10-18T12:37:46.125+00:00",
+    "runner": {
+     "capabilities_reported_at": "2026-10-18T12:37:42.864+00:00",
+     "enrolled_at": "2026-10-18T12:36:59.61",
+     "last_heartbeat_at": "2026-10-18T12:37:42.864",
+     "status": "ONLINE",
+     "version": "managed-ebf54ab8ddcb35224a4d8f0c1feae0e480186b38"
+    },
+    "runnerContainerStartedAt": "2026-10-18T12:37:23Z",
+    "secretCreatedAt": "2026-10-18T12:37:04Z"
+   }
+  }
+ },
+ "seconds": 41.3,
+ "startedAt": "2026-10-18T12:37:05.692+00:00",
+ "step": "retry"
+}

@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineHealth } from '@orbit/shared';
-import { RunnerEngines, summaryOf } from './RunnerEngines';
+import { machineChipsOf, RunnerEngines, summaryOf } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -80,7 +80,7 @@ const ONE_ACCOUNT: [string, (auth: Auth) => Partial<RunnerEngineHealth>][] = [
 ];
 
 /** What the Codex row shows: its strings in reading order, the colour of its status tag, how far
- *  its quota bar is filled, and each button as `label · antd type`, with `· disabled` when it is. */
+ *  its quota bar is filled, and each button as `label · type`, with `· disabled` when it is. */
 interface CodexRow {
   text: string[];
   tag: string | null;
@@ -95,7 +95,8 @@ const ROW: {
   over?: Partial<Runner>;
   codex: CodexRow;
   count: string;
-  folded: string;
+  /** What the card's head says of Codex (MachineChips), folded or open: null for no chip at all. */
+  folded: string | null;
 }[] = [
   {
     state: 'signed in',
@@ -107,7 +108,7 @@ const ROW: {
       buttons: ['More actions · text'],
     },
     count: '1 runner · 3 signed in',
-    folded: 'All signed in',
+    folded: 'Codex',
   },
   {
     state: 'signed out',
@@ -121,7 +122,7 @@ const ROW: {
       buttons: ['Sign in · primary'],
     },
     count: '1 runner · 2 signed in',
-    folded: '2 of 3 signed in',
+    folded: 'Codex signed out',
   },
   {
     state: "the CLI wouldn't say",
@@ -133,7 +134,7 @@ const ROW: {
       buttons: ['Sign in · primary'],
     },
     count: '1 runner · 2 signed in',
-    folded: '2 of 3 signed in',
+    folded: null,
   },
   {
     state: 'signed in, on a runner that is offline',
@@ -146,7 +147,7 @@ const ROW: {
       buttons: ['More actions · text'],
     },
     count: '1 runner · 3 signed in',
-    folded: 'All signed in',
+    folded: 'Codex',
   },
 ];
 
@@ -203,16 +204,16 @@ const strings = (scope: Element) =>
     )
     .filter(Boolean);
 
-/** Which antd preset an element was drawn with: `ant-tag-green` is green, `ant-btn-text` text. */
+/** Which preset an element was drawn with: `orbit-badge-green` is green, `orbit-button-text` text. */
 const preset = (el: Element, pattern: RegExp) =>
   [...el.classList].map((c) => pattern.exec(c)?.[1]).find(Boolean) ?? null;
 
-/** A button as `label · antd type`, with `· disabled` when it is — the label being the name of a
+/** A button as `label · type`, with `· disabled` when it is — the label being the name of a
  *  mark that has no words (Re-sign in). */
 const described = (button: HTMLButtonElement) =>
   [
     button.textContent?.trim() || button.getAttribute('aria-label'),
-    preset(button, /^ant-btn-(primary|default|dashed|text|link)$/),
+    preset(button, /^orbit-button-(primary|default|dashed|text|link)$/),
     button.disabled && 'disabled',
   ]
     .filter(Boolean)
@@ -233,10 +234,11 @@ function codexRowOf(page: HTMLElement): HTMLElement {
 function codexRow(page: HTMLElement): CodexRow {
   const row = codexRowOf(page).cloneNode(true) as HTMLElement;
   addAccount(row)?.remove();
-  const tag = row.querySelector('.ant-tag');
+  // The status tag: the one label in the row's status slot.
+  const tag = row.querySelector('.re-status')?.firstElementChild;
   return {
     text: strings(row),
-    tag: tag && preset(tag, /^ant-tag-(?!filled$|outlined$|solid$|borderless$)(.+)$/),
+    tag: tag ? preset(tag, /^orbit-badge-(.+)$/) : null,
     bar: row.querySelector<HTMLElement>('.runner-util-fill')?.style.width ?? null,
     buttons: [...row.querySelectorAll('button')].map(described),
   };
@@ -251,9 +253,11 @@ describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
 
       // No account rows: none of the marks an account row or its group head carries...
       expect(page.querySelectorAll('.re-acct, .re-grp, .re-rail, .re-chip')).toHaveLength(0);
-      // ...and no row of any other kind either: the card is its head and one row per engine.
+      // ...and no row of any other kind either: the card is its head and one row per engine,
+      // DeepSeek Harness's last.
       expect([...page.querySelector('.re-card')!.children].map((el) => el.className)).toEqual([
         're-head',
+        're-row',
         're-row',
         're-row',
         're-row',
@@ -261,9 +265,15 @@ describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
       ]);
       // Pause is available inside More and adds no visible button or text to this row.
       expect(codexRow(page)).toEqual(codex);
-      // One account counts once, as the engine always did: on the section, and on a folded card.
+      // One account counts once, as the engine always did: on the section, and on the card's head —
+      // one chip, neither ×1 nor 1 of 1, and the line beside it says nothing more.
       expect(page.querySelector('.re-sec-count')?.textContent).toBe(count);
-      expect(summaryOf(box)).toBe(folded);
+      expect(
+        machineChipsOf(box)
+          .filter((chip) => chip.engine === 'codex')
+          .map((chip) => (chip.signedOut ? 'Codex signed out' : chip.logins < chip.accounts || chip.logins > 1 ? `Codex ${chip.logins}/${chip.accounts}` : 'Codex')),
+      ).toEqual(folded ? [folded] : []);
+      expect(summaryOf(box)).toBeNull();
     },
   );
 

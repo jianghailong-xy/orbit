@@ -1,0 +1,65 @@
+{
+ "ledger": "p0c",
+ "task": "P0c 34h3xGGSqUnA6DTMj1iop",
+ "cap": 10,
+ "spent": 7,
+ "model": "Auto (default[])",
+ "entries": [
+  {
+   "n": 1,
+   "at": "2026-10-17T01:55:45.410Z",
+   "scenario": "shell-wrapper-env",
+   "runId": "2026-10-17T01-55-13-333Z",
+   "note": "D4 A: P3 orbit-bash as SHELL; HOME, profile and variable names agent commands see",
+   "version": "2026.10.14-941492e"
+  },
+  {
+   "n": 2,
+   "at": "2026-10-17T01:57:26.923Z",
+   "scenario": "repo-config-baseline",
+   "runId": "2026-10-17T01-57-19-094Z",
+   "note": "repo configs (baseline)",
+   "version": "2026.10.14-941492e"
+  },
+  {
+   "n": 3,
+   "at": "2026-10-17T02:00:43.839Z",
+   "scenario": "repo-config-with-flags",
+   "runId": "2026-10-17T02-00-36-466Z",
+   "note": "repo configs (with-flags)",
+   "version": "2026.10.14-941492e"
+  },
+  {
+   "n": 4,
+   "at": "2026-10-17T02:02:57.565Z",
+   "scenario": "network-drop-mid-turn",
+   "runId": "2026-10-17T02-02-50-268Z",
+   "note": "network cut after the first text chunk",
+   "version": "2026.10.14-941492e"
+  },
+  {
+   "n": 5,
+   "at": "2026-10-17T02:05:21.828Z",
+   "scenario": "background-shell-and-commit",
+   "runId": "2026-10-17T02-05-13-878Z",
+   "note": "commit attribution + background shell",
+   "version": "2026.10.14-941492e"
+  },
+  {
+   "n": 6,
+   "at": "2026-10-17T02:08:35.850Z",
+   "scenario": "ask-question",
+   "runId": "2026-10-17T02-08-28-348Z",
+   "note": "cursor/ask_question (agent mode): unanswered 30 s then error (fallback), then answered",
+   "version": "2026.10.14-941492e"
+  },
+  {
+   "n": 7,
+   "at": "2026-10-17T02:12:12.517Z",
+   "scenario": "ask-question-plan-mode",
+   "runId": "2026-10-17T02-12-05-187Z",
+   "note": "cursor/ask_question (plan mode): unanswered 30 s then error (fallback), then answered",
+   "version": "2026.10.14-941492e"
+  }
+ ]
+}

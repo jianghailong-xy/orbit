@@ -1,0 +1,78 @@
+{
+  "at": "2026-10-17T23:38:53.168+00:00",
+  "changes": [
+    [
+      "2026-10-17T23:38:12.322+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": null,
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": null,
+        "management_state": "STARTING",
+        "pod": null,
+        "reason": null,
+        "revision": 9,
+        "runner_status": "OFFLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-17T23:38:13.370+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": null,
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": null,
+        "management_state": "STARTING",
+        "pod": "6b00386a",
+        "reason": null,
+        "revision": 11,
+        "runner_status": "OFFLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-17T23:38:50.026+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": "2026-10-17T23:38:49.021",
+        "management_state": "STARTING",
+        "pod": "6b00386a",
+        "reason": null,
+        "revision": 11,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-17T23:38:53.168+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": "2026-10-17T23:38:49.021",
+        "management_state": "STARTING",
+        "pod": "6b00386a",
+        "reason": "MODEL_UNAVAILABLE",
+        "revision": 12,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ]
+  ],
+  "owner": "hank",
+  "reached": {
+    "reason": "MODEL_UNAVAILABLE",
+    "state": "STARTING"
+  }
+}

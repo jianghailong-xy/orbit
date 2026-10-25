@@ -1,0 +1,3 @@
+tree=/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/before head=ee0b413dae848efa475227ea5945126405ec930b dirty=0
+entry=choices args=choices-submenu-geometry start=2026-10-09T00:12:35Z load=27.30 32.98 31.56 root-free=31214M
+exit=1 end=2026-10-09T00:24:15Z load=49.96 48.99 41.45

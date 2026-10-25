@@ -1,0 +1,13 @@
+2026-10-18T13:07:08Z
+host kernel modules rbd/nbd/ceph/libceph loaded: none
+VM: running, qemu pid 3635518, cgroup /system.slice/orbit-mr-lab.service
+qemu listens on: 127.0.0.1:16222 127.0.0.1:16443
+unit orbit-mr-lab: memory.current 4545 MiB, memory.peak 4992 MiB, swap 17 MiB, memory.max 6979321856
+host: MemAvailable 5838 MiB, SwapFree 33926 MiB
+guest (virtio-balloon): {"guestMiB": {"stat-available-memory": 3394, "stat-free-memory": 2057, "stat-total-memory": 5920, "stat-disk-caches": 1523}, "lastUpdate": 1792328829}
+guest: {"cephHealth":"HEALTH_OK","osdsUp":3,"osdsIn":3,"pgStates":[{"state_name":"active+clean","count":33}],"problems":[]}
+k3s node orbit-mr-lab Ready: True (v1.36.5+k3s1)
+deployment/ceph-csi-operator-controller-manager: 1/1 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 1/1 available
+daemonset/rbd.csi.ceph.com-nodeplugin: 1/1 available
+healthy: k3s, Ceph (3 OSDs, HEALTH_OK), Ceph-CSI, StorageClass runner-data, namespace orbit-mr-test

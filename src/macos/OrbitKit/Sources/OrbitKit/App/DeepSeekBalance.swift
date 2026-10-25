@@ -1,7 +1,7 @@
 import Foundation
 
-/// The DeepSeek account balance behind one of the account's own DeepSeek keys, as Settings → Providers
-/// and the key's page draw it (web's `DeepSeekBalance.tsx` and `lib/deepseekBalance.ts`). The server
+/// The DeepSeek account balance behind one of the account's own DeepSeek keys, as Infrastructure's API
+/// keys and the key's page draw it (web's `DeepSeekBalance.tsx` and `lib/deepseekBalance.ts`). The server
 /// asks DeepSeek with the stored key — which never reaches this client — and answers with the balance
 /// of the whole account, not what Orbit or a session spent: DeepSeek has no spend API to ask.
 ///
@@ -25,7 +25,7 @@ public enum DeepSeekBalance {
     public static let balance = "Balance"
     public static let unknown = "Unknown"
     public static let checking = "Checking balance…"
-    /// A DeepSeek key's row on Settings → Providers when there is no balance to put at its end.
+    /// A DeepSeek key's row on Infrastructure's API keys when there is no balance to put at its end.
     public static let unavailable = "Unavailable"
     public static let failedTitle = "Couldn't get the balance"
     public static let lowTitle = "Balance too low — DeepSeek calls will fail"
@@ -39,8 +39,13 @@ public enum DeepSeekBalance {
     public static let noAmountYet = "No amount is shown until DeepSeek answers."
     /// What to do about a rejected key from a phone, which can't change one.
     public static let changeKeyOnWeb = "Change the key on the web, then retry."
-    public static let providerHeader = "Provider"
-    public static let runsOn = "Runs on"
+    /// The web key page's list of the engines a key works with, a row each.
+    public static let worksWith = "Works with"
+    /// Under Works with on a phone (board iOS 2 ①): where the key is picked for a session.
+    public static let worksWithFooter = "Pick it for a session on any of these in the composer's model menu → Provider."
+    /// The key itself, under its engines (board iOS 2 ②): its protocol, default model and endpoint.
+    public static let keyHeader = "Key"
+    public static let protocolLabel = "Protocol"
     public static let defaultModel = "Default model"
     public static let endpoint = "Endpoint"
 
@@ -58,10 +63,10 @@ public enum DeepSeekBalance {
         return host.lowercased() == "api.deepseek.com"
     }
 
-    /// The account's own DeepSeek key a row of Settings → Providers stands for — the row that opens the
-    /// key's page and ends with its balance. The key list is the pickers' catalogue (GET /providers),
-    /// which carries no id or endpoint, so the row is matched by slug among the account's own providers
-    /// (GET /providers/mine). Nil for any other row.
+    /// The account's own DeepSeek key a row of Infrastructure's API keys stands for — the row that opens
+    /// the key's page and ends with its balance. A row of the pickers' catalogue (GET /providers) carries
+    /// no id or endpoint, so a row is matched by slug among the account's own providers (GET
+    /// /providers/mine), which the page's own list is. Nil for any other row.
     public static func key(for row: ConfiguredProvider, mine: [ConfiguredProvider]) -> ConfiguredProvider? {
         mine.first { $0.slug == row.slug && $0.providerID != nil && applies(to: $0) }
     }
@@ -118,7 +123,7 @@ public enum DeepSeekBalance {
         failure == .keyRejected ? "\(message) \(changeKeyOnWeb)" : message
     }
 
-    /// What a DeepSeek key's row says at its end on Settings → Providers: the total — every currency,
+    /// What a DeepSeek key's row says at its end on Infrastructure's API keys: the total — every currency,
     /// red once the account can't pay — or "Unavailable", orange, when there is no balance to show.
     /// Nothing while it loads.
     public static func rowValue(_ state: State) -> PoolStatus? {
@@ -196,13 +201,31 @@ public enum DeepSeekBalance {
 
     // MARK: the key itself
 
-    /// The engine a DeepSeek key's sessions run on, as Providers names it.
+    /// The engines a key's sessions can run on, by their CLIs' names, default first: a DeepSeek key's
+    /// Claude Code, OpenCode and DeepSeek Harness.
+    public static func engines(of provider: ConfiguredProvider) -> [String] {
+        ProviderEngines.of(provider).map(ProviderEngines.cliName)
+    }
+
+    /// The same engines as one value — "Claude Code · OpenCode · DeepSeek Harness" — for a row with room
+    /// for one.
     public static func engine(of provider: ConfiguredProvider) -> String {
-        switch provider.runtime {
-        case "dsh": return "DeepSeek Harness"
-        case "codex": return "Codex"
-        default: return "Claude Code"
-        }
+        engines(of: provider).joined(separator: " · ")
+    }
+
+    /// What the page's footer says after the web edits keys (board iOS 2 ③): turning a key off there stops
+    /// it on every engine it runs on — "Claude Code, OpenCode and DeepSeek Harness" — not on one of them
+    /// (contract §3.6).
+    public static func turnOffNote(_ provider: ConfiguredProvider) -> String {
+        let names = engines(of: provider)
+        guard let last = names.last else { return ProvidersOverview.editOnWeb }
+        let list = names.count > 1 ? names.dropLast().joined(separator: ", ") + " and " + last : last
+        return "\(ProvidersOverview.editOnWeb) Turning it off there stops it on \(list)."
+    }
+
+    /// A key's default model by the name its own list gives it (`DeepSeek V4 Pro`), else its id.
+    public static func defaultModelName(_ provider: ConfiguredProvider) -> String? {
+        Infrastructure.defaultModel(provider)
     }
 
     /// The host a key's endpoint is on — `api.deepseek.com` — which is all of it a phone's row has room for.

@@ -1,0 +1,36 @@
+{
+  "action": "sleep",
+  "answer": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34hkLQCpbLRvNolEcg8Ym",
+    "contractVersion": 1,
+    "desiredState": "SLEEPING",
+    "enabled": true,
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": "deepseek-2",
+    "lastHeartbeatAt": "2026-10-17T23:40:17.723Z",
+    "managementState": "READY",
+    "reason": null,
+    "retryAfter": null,
+    "revision": 14,
+    "runnerId": "34hkLQCdaTRbQff2QouEQ",
+    "runnerPublicId": "34hkLQCdaTRbQff2QouEQ",
+    "usable": true,
+    "workspaceId": "34hkLQCpbLRvNolEcg8Ym",
+    "workspacePublicId": "34hkLQCpbLRvNolEcg8Ym"
+  },
+  "at": "2026-10-17T23:40:45.411+00:00",
+  "before": {
+    "desiredState": "RUNNING",
+    "managementState": "READY",
+    "revision": 13
+  },
+  "owner": "erin",
+  "status": 202
+}

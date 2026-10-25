@@ -1,0 +1,75 @@
+{
+ "scenario": "ask-question",
+ "runId": "2026-10-16T17-45-59-200Z",
+ "recordedAt": "2026-10-16T17:51:23.181Z",
+ "reason": "The scenario expected the model to call AskQuestion. In ACP agent mode the server offered no such tool (the model said so and asked in plain text), so cursor/ask_question was never sent; its handling stays unverified.",
+ "basis": "committed protocol recording (seq numbers below) plus files the recorded turn left in its run directory",
+ "checks": [
+  {
+   "name": "no cursor/ask_question request arrived",
+   "ok": true
+  },
+  {
+   "name": "the model reported that AskQuestion is not available and asked in plain text",
+   "ok": true,
+   "detail": "e fruit options:Invoking AskQuestion for the fruit choice (one question per call).AskQuestion isn’t available in this session, so I’ll ask conversationally instead.\n\n**Pick a fruit:** apple or banana?"
+  }
+ ],
+ "facts": {
+  "text": "I'll ask the fruit question first, then the color question after that answer arrives.Calling the ask-question tool for the fruit choice.AskQuestion isn't available as a direct tool — checking the workspace for how it's expected to be invoked.Invoking the ask-question tool for the first question.Trying the AskQuestion tool with the fruit options:Invoking AskQuestion for the fruit choice (one question per call).AskQuestion isn’t available in this session, so I’ll ask conversationally instead.\n\n**Pick a fruit:** apple or banana?",
+  "permissionRequests": [
+   {
+    "title": "`find <RUN> -name '*ask*' -o -name '*question*' 2>/dev/null | head -50; ls <RUN>/slots/a/home/.cursor/skills-cursor/ 2>/dev/null; rg -l -i 'ask.question|AskQuestion' <RUN>/slots/a/home/.cursor/ 2>/dev/null | head -20`",
+    "kind": "execute"
+   },
+   {
+    "title": "`echo \"checking for AskQuestion tool availability\"`",
+    "kind": "execute"
+   },
+   {
+    "title": "`rg -i -n --no-ignore -g '!**/node_modules/**' -g '!**/.git/**' 'AskQuestion|ask_question|ask-question|askQuestion' <RUN> <RUN>/slots/a/home/.cursor 2>/dev/null | head -500; echo '---FILES---'; find <RUN> <RUN>/slots/a/home/.cursor -iname '*ask*question*' 2>/dev/null | head -100; echo '---LS---'; ls -la <RUN> 2>/dev/null; ls -la <RUN>/slots/a/home/.cursor 2>/dev/null | head -50`",
+    "kind": "execute"
+   },
+   {
+    "title": "`ls -la <RUN> && ls -la <RUN>/slots/a/home/.cursor 2>&1 | head -80`",
+    "kind": "execute"
+   },
+   {
+    "title": "`python3 -c \"\nimport os,re\nroots=['<RUN>','<RUN>/slots/a/home/.cursor']\npat=re.compile(r'AskQuestion|ask_question|ask-question|askQuestion',re.I)\nskip={'.git','node_modules'}\nfor root in roots:\n  if not os.path.exists(root):\n    print('MISSING',root); continue\n  for dirpath, dirnames, filenames in os.walk(root):\n    dirnames[:]=[d for d in dirnames if d not in skip]\n    for f in filenames:\n      p=os.path.join(dirpath,f)\n      try:\n        if os.path.getsize(p)>5_000_000: continue\n        with open(p,'r',errors='ignore') as fh:\n          for i,line in enumerate(fh,1):\n            if pat.search(line):\n              print(f'{p}:{i}:{line.rstrip()[:300]}')\n      except Exception as e:\n        pass\n\"\n`",
+    "kind": "execute"
+   },
+   {
+    "title": "`find <RUN>/slots/a/home/.cursor -type f 2>/dev/null | head -200`",
+    "kind": "execute"
+   },
+   {
+    "title": "Allow web search?",
+    "kind": "other"
+   },
+   {
+    "title": "`find <RUN> <RUN>/slots/a/home/.cursor -type f 2>/dev/null | head -500`",
+    "kind": "execute"
+   },
+   {
+    "title": "`grep -r -n -i -E 'AskQuestion|ask_question|ask-question|askQuestion' <RUN> <RUN>/slots/a/home/.cursor 2>/dev/null | head -300`",
+    "kind": "execute"
+   },
+   {
+    "title": "Edit `<RUN>/slots/a/cursor-config/cli-config.json`",
+    "kind": "edit"
+   },
+   {
+    "title": "`python3 -c \"\nimport os,re\nroots=['<RUN>','<RUN>/slots/a/home/.cursor']\npat=re.compile(r'AskQuestion|ask_question|ask-question|askQuestion',re.I)\nskip={'.git','node_modules'}\nfor root in roots:\n  for dirpath, dirnames, filenames in os.walk(root):\n    dirnames[:]=[d for d in dirnames if d not in skip]\n    for f in filenames:\n      p=os.path.join(dirpath,f)\n      try:\n        if os.path.getsize(p)>20_000_000: continue\n        with open(p,'rb') as fh:\n          data=fh.read()\n        if not pat.search(data.decode('utf-8','ignore')): continue\n        text=data.decode('utf-8','ignore')\n        for i,line in enumerate(text.splitlines(),1):\n          if pat.search(line):\n            print(f'{p}:{i}:{line.strip()[:400]}')\n      except Exception:\n        pass\n\"\n`",
+    "kind": "execute"
+   },
+   {
+    "title": "`grep -a -o -E '.{0,80}AskQuestion.{0,120}|.{0,80}ask_question.{0,120}|.{0,80}ask-question.{0,120}|.{0,80}askQuestion.{0,120}' <RUN>/slots/a/cursor-config/statsig-cache.json 2>/dev/null | head -50`",
+    "kind": "execute"
+   },
+   {
+    "title": "`python3 -c \"\nimport os,re\nroots=['<RUN>','<RUN>/slots/a/home/.cursor']\npat=re.compile(r'AskQuestion|ask_question|ask-question|askQuestion',re.I)\nskip={'.git','node_modules'}\nfor root in roots:\n  for dirpath, dirnames, filenames in os.walk(root):\n    dirnames[:]=[d for d in dirnames if d not in skip]\n    for f in filenames:\n      p=os.path.join(dirpath,f)\n      try:\n        if os.path.getsize(p)>20_000_000: continue\n        with open(p,'rb') as fh:\n          data=fh.read()\n        if not pat.search(data.decode('utf-8','ignore')): continue\n        text=data.decode('utf-8','ignore')\n        for i,line in enumerate(text.splitlines(),1):\n          if pat.search(line):\n            print(f'{p}:{i}:{line.strip()[:400]}')\n      except Exception:\n        pass\n\"\n`",
+    "kind": "execute"
+   }
+  ]
+ }
+}

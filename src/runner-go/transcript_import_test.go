@@ -107,7 +107,7 @@ func TestParseImportTranscriptRoundTrip(t *testing.T) {
 	path := filepath.Join(dir, "sample.jsonl")
 	tr.write(t, path)
 
-	gotCwd, gotTitle, events, err := parseImportTranscript(path)
+	gotCwd, gotTitle, events, err := parseImportTranscript(path, nil)
 	if err != nil {
 		t.Fatalf("parseImportTranscript: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestParseImportTranscriptLastTitleWins(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "t.jsonl")
 	tr.write(t, path)
-	_, title, _, err := parseImportTranscript(path)
+	_, title, _, err := parseImportTranscript(path, nil)
 	if err != nil {
 		t.Fatalf("parseImportTranscript: %v", err)
 	}
@@ -159,17 +159,24 @@ func TestParseImportTranscriptRefuses(t *testing.T) {
 		tr.add(map[string]interface{}{"type": "ai-title", "aiTitle": "Title only"})
 		tr.add(importMsgRow("assistant", "/ws", "2026-09-15T10:00:00Z", map[string]interface{}{"type": "text", "text": "nobody asked"}))
 		path := writeImportFixture(t, &tr)
-		if _, _, _, err := parseImportTranscript(path); err == nil || !strings.Contains(err.Error(), "holds no conversation") {
+		if _, _, _, err := parseImportTranscript(path, nil); err == nil || !strings.Contains(err.Error(), "holds no conversation") {
 			t.Errorf("err = %v, want the no-conversation refusal", err)
 		}
 	})
-	t.Run("not JSON", func(t *testing.T) {
+	// A line that is not JSON is skipped rather than refused, so a file with nothing else in it
+	// has no conversation left — and the refusal says why.
+	t.Run("not JSON at all", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "t.jsonl")
-		if err := os.WriteFile(path, []byte("this is not json\n"), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte("this is not json\n{\"neither\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if _, _, _, err := parseImportTranscript(path); err == nil || !strings.Contains(err.Error(), "not JSON") {
-			t.Errorf("err = %v, want the not-JSON refusal", err)
+		var skipped []int
+		_, _, _, err := parseImportTranscript(path, func(line int) { skipped = append(skipped, line) })
+		if err == nil || !strings.Contains(err.Error(), "holds no conversation (none of its lines is JSON)") {
+			t.Errorf("err = %v, want the no-conversation refusal saying no line is JSON", err)
+		}
+		if !reflect.DeepEqual(skipped, []int{1, 2}) {
+			t.Errorf("skipped lines %v, want [1 2]", skipped)
 		}
 	})
 }
@@ -272,6 +279,92 @@ func TestParseImportTranscriptDeterministic(t *testing.T) {
 	}
 }
 
+// A screenshot a tool returned is base64 in the transcript, hundreds of kilobytes of it, and a long
+// conversation replayed with them was too large to store. The events leave every image and document
+// out, with a note where each was, and keep the text around them; the replay self-check holds.
+func TestParseImportTranscriptLeavesImagesOut(t *testing.T) {
+	const png, pdf = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB", "JVBERi0xLjQKJcfsj6IKNSAwIG9iago"
+	var tr importTestTranscript
+	tr.add(importMsgRow("user", "/ws", "2026-09-15T10:00:00Z", map[string]interface{}{"type": "text", "text": "what does the page look like"}))
+	tr.add(importMsgRow("assistant", "/ws", "2026-09-15T10:00:01Z",
+		map[string]interface{}{"type": "tool_use", "id": "t1", "name": "Read", "input": map[string]interface{}{"file_path": "/ws/shot.png"}},
+		map[string]interface{}{"type": "tool_use", "id": "t2", "name": "Read", "input": map[string]interface{}{"file_path": "/ws/spec.pdf"}},
+		map[string]interface{}{"type": "tool_use", "id": "t3", "name": "Bash", "input": map[string]interface{}{"command": "ls"}},
+	))
+	tr.add(importMsgRow("user", "/ws", "2026-09-15T10:00:02Z",
+		map[string]interface{}{"type": "tool_result", "tool_use_id": "t1", "content": []interface{}{
+			map[string]interface{}{"type": "image", "source": map[string]interface{}{"type": "base64", "media_type": "image/png", "data": png}},
+		}},
+		map[string]interface{}{"type": "tool_result", "tool_use_id": "t2", "content": []interface{}{
+			map[string]interface{}{"type": "text", "text": "Page 1 of 3"},
+			map[string]interface{}{"type": "document", "source": map[string]interface{}{"type": "base64", "media_type": "application/pdf", "data": pdf}},
+		}},
+		map[string]interface{}{"type": "tool_result", "tool_use_id": "t3", "content": "shot.png spec.pdf"},
+	))
+	tr.add(importMsgRow("assistant", "/ws", "2026-09-15T10:00:03Z", map[string]interface{}{"type": "text", "text": "a login form"}))
+
+	events := mustParseEvents(t, writeImportFixture(t, &tr))
+	got := map[string]interface{}{}
+	for _, e := range events {
+		if e.Type == evToolResult {
+			got[asString(e.Payload["toolUseId"])] = e.Payload["content"]
+		}
+	}
+	want := map[string]interface{}{
+		"t1": []interface{}{map[string]interface{}{"type": "text", "text": "[image not imported]"}},
+		"t2": []interface{}{
+			map[string]interface{}{"type": "text", "text": "Page 1 of 3"},
+			map[string]interface{}{"type": "text", "text": "[document not imported]"},
+		},
+		"t3": "shot.png spec.pdf",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("tool results stored as %v, want %v", got, want)
+	}
+	if raw := dumpEvents(events); strings.Contains(raw, png) || strings.Contains(raw, pdf) {
+		t.Errorf("the events still carry base64: %s", raw)
+	}
+}
+
+// A record too large for a request of its own would refuse the whole import, so any record past
+// importEventMaxBytes is clipped: it keeps how it starts and every short field, and the replay
+// self-check still holds, both sides reading the record as stored.
+func TestParseImportTranscriptClipsAnOversizedRecord(t *testing.T) {
+	huge := strings.Repeat("0123456789abcdef", (3<<20)/16)
+	var tr importTestTranscript
+	tr.add(importMsgRow("user", "/ws", "2026-09-15T10:00:00Z", map[string]interface{}{"type": "text", "text": "here is the log: " + huge}))
+	tr.add(importMsgRow("assistant", "/ws", "2026-09-15T10:00:01Z", map[string]interface{}{
+		"type": "tool_use", "id": "t1", "name": "Write", "input": map[string]interface{}{"file_path": "/ws/log.txt", "content": huge},
+	}))
+	tr.add(importMsgRow("user", "/ws", "2026-09-15T10:00:02Z", map[string]interface{}{"type": "tool_result", "tool_use_id": "t1", "content": huge}))
+	tr.add(importMsgRow("assistant", "/ws", "2026-09-15T10:00:03Z", map[string]interface{}{"type": "text", "text": "saved"}))
+
+	events := mustParseEvents(t, writeImportFixture(t, &tr))
+	if len(events) != 4 {
+		t.Fatalf("parsed %d events, want 4: %v", len(events), dumpEvents(events))
+	}
+	clipped := func(what string, v interface{}, prefix string) {
+		t.Helper()
+		s := asString(v)
+		if n := jsonLen(s); n > importEventMaxBytes {
+			t.Errorf("%s stored as %d bytes, over the %d one record may take", what, n, importEventMaxBytes)
+		}
+		if !strings.HasPrefix(s, prefix+"0123456789abcdef") || !strings.HasSuffix(s, "…") {
+			t.Errorf("%s stored as %.40q…%q, want how it starts, marked as clipped", what, s, s[max(0, len(s)-8):])
+		}
+	}
+	clipped("the user's text", events[0].Payload["text"], "here is the log: ")
+	input, _ := events[1].Payload["input"].(map[string]interface{})
+	if input["file_path"] != "/ws/log.txt" {
+		t.Errorf("the Write's file_path stored as %v, want it whole", input["file_path"])
+	}
+	clipped("the Write's content", input["content"], "")
+	clipped("the tool result", events[2].Payload["content"], "")
+	if events[3].Payload["text"] != "saved" {
+		t.Errorf("a short record stored as %v, want it as written", events[3].Payload["text"])
+	}
+}
+
 func writeImportFixture(t *testing.T, tr *importTestTranscript) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "t.jsonl")
@@ -281,7 +374,7 @@ func writeImportFixture(t *testing.T, tr *importTestTranscript) string {
 
 func mustParseEvents(t *testing.T, path string) []StoredEvent {
 	t.Helper()
-	_, _, events, err := parseImportTranscript(path)
+	_, _, events, err := parseImportTranscript(path, nil)
 	if err != nil {
 		t.Fatalf("parseImportTranscript(%s): %v", path, err)
 	}
@@ -377,6 +470,119 @@ func TestRunTranscriptImportTildeWorkDir(t *testing.T) {
 		}
 		if len(events) != 0 {
 			t.Errorf("replayed %s, want nothing from a refused transcript", dumpEvents(events))
+		}
+	})
+}
+
+// Claude Code now and then runs two writes together on one transcript line. That one line used to
+// refuse the whole conversation, and the imported session went to Trash with "holds a line that is
+// not JSON". The line is skipped now, before either side of the replay self-check reads it: every
+// record before and after it imports, and the copy --resume reads still holds it as it was.
+func TestImportSkipsACorruptLine(t *testing.T) {
+	const (
+		uuid  = "4e453ab7-f37c-494d-8017-bb4e9beffeef"
+		title = "Ship the build"
+		t1    = "2026-09-15T10:00:01Z"
+		t2    = "2026-09-15T10:00:02Z"
+		t3    = "2026-09-15T10:00:03Z"
+		t5    = "2026-09-15T10:00:05Z"
+		t6    = "2026-09-15T10:00:06Z"
+		t7    = "2026-09-15T10:00:07Z"
+		// As one was found on a runner host: a hook record cut off mid-key, the next record (an
+		// assistant message) run straight onto it.
+		corrupt = `{"type":"attachment","attachment":{"type":"hook_success","hookName":"PreToolUse:Bash"},"uui` +
+			`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Running the build."}]},"timestamp":"2026-09-15T10:00:04Z"}`
+	)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
+	work := filepath.Join(home, "proj")
+
+	var tr importTestTranscript
+	tr.add(map[string]interface{}{"type": "ai-title", "aiTitle": title, "timestamp": "2026-09-15T10:00:00Z"})
+	tr.add(importMsgRow("user", work, t1, map[string]interface{}{"type": "text", "text": "check the build"}))
+	tr.add(importMsgRow("assistant", work, t2, map[string]interface{}{
+		"type": "tool_use", "id": "t1", "name": "Bash", "input": map[string]interface{}{"command": "make"},
+	}))
+	tr.add(importMsgRow("user", work, t3, map[string]interface{}{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}))
+	tr.lines = append(tr.lines, corrupt) // line 5
+	tr.add(importMsgRow("assistant", work, t5, map[string]interface{}{"type": "text", "text": "The build passes."}))
+	tr.add(importMsgRow("user", work, t6, map[string]interface{}{"type": "text", "text": "ship it"}))
+	tr.add(importMsgRow("assistant", work, t7, map[string]interface{}{"type": "text", "text": "Shipped."}))
+	src := filepath.Join(home, ".claude", "projects", claudeProjectSlug(work), uuid+".jsonl")
+	if err := os.MkdirAll(filepath.Dir(src), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tr.write(t, src)
+	// Nothing of line 5, not even its timestamp: the reply after it is stamped with its own.
+	want := []StoredEvent{
+		{Seq: 1, Type: evUser, Payload: map[string]interface{}{"text": "check the build"}, Ts: mustParseTs(t, t1)},
+		{Seq: 2, Type: evToolUse, Payload: map[string]interface{}{"id": "t1", "name": "Bash", "input": map[string]interface{}{"command": "make"}}, Ts: mustParseTs(t, t2)},
+		{Seq: 3, Type: evToolResult, Payload: map[string]interface{}{"toolUseId": "t1", "content": "ok", "isError": false}, Ts: mustParseTs(t, t3)},
+		{Seq: 4, Type: evAssistant, Payload: map[string]interface{}{"text": "The build passes."}, Ts: mustParseTs(t, t5)},
+		{Seq: 5, Type: evUser, Payload: map[string]interface{}{"text": "ship it"}, Ts: mustParseTs(t, t6)},
+		{Seq: 6, Type: evAssistant, Payload: map[string]interface{}{"text": "Shipped."}, Ts: mustParseTs(t, t7)},
+	}
+
+	t.Run("the parse skips that line and keeps the rest", func(t *testing.T) {
+		var skipped []int
+		cwd, gotTitle, events, err := parseImportTranscript(src, func(line int) { skipped = append(skipped, line) })
+		if err != nil {
+			t.Fatalf("parseImportTranscript: %v", err)
+		}
+		if !reflect.DeepEqual(skipped, []int{5}) {
+			t.Errorf("skipped lines %v, want [5]", skipped)
+		}
+		if cwd != work || gotTitle != title {
+			t.Errorf("cwd, title = %q, %q, want %q, %q", cwd, gotTitle, work, title)
+		}
+		if !reflect.DeepEqual(events, want) {
+			t.Errorf("events mismatch:\n got %s\nwant %s", dumpEvents(events), dumpEvents(want))
+		}
+	})
+
+	t.Run("the import step stores the conversation", func(t *testing.T) {
+		var posted ImportResultRequest
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+				t.Errorf("decoding the import result: %v", err)
+			}
+			w.Header().Set("content-type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"applied":true}`))
+		}))
+		defer srv.Close()
+
+		job := &ClaimedSession{SessionID: "s1", SessionUUID: uuid, WorkDir: work, ImportSourceCwd: &work}
+		var events []StoredEvent
+		emit := func(eventType string, payload map[string]interface{}) {
+			events = append(events, StoredEvent{Type: eventType, Payload: payload})
+		}
+		execDir := t.TempDir()
+		transport := &Transport{baseURL: srv.URL, client: srv.Client()}
+		if err := runTranscriptImport(context.Background(), transport, job, execDir, emit, func(context.Context) error { return nil }); err != nil {
+			t.Fatalf("runTranscriptImport: %v", err)
+		}
+		if !posted.Ok || posted.Title != title {
+			t.Errorf("import result = %+v, want ok with the transcript's title", posted)
+		}
+		if len(events) != len(want) {
+			t.Fatalf("replayed %s, want %s", dumpEvents(events), dumpEvents(want))
+		}
+		for i := range want {
+			if events[i].Type != want[i].Type || !reflect.DeepEqual(events[i].Payload, want[i].Payload) {
+				t.Errorf("event %d = %s %v, want %s %v", i+1, events[i].Type, events[i].Payload, want[i].Type, want[i].Payload)
+			}
+		}
+		dst, err := claudeTranscriptPathIn(filepath.Join(home, ".claude"), execDir, uuid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := os.ReadFile(dst)
+		if err != nil {
+			t.Fatalf("the copy --resume reads: %v", err)
+		}
+		if !strings.Contains(string(raw), "\n"+corrupt+"\n") {
+			t.Errorf("the copy --resume reads does not hold line 5 as it was:\n%s", raw)
 		}
 	})
 }

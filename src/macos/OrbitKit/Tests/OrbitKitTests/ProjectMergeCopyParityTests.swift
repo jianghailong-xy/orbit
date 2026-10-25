@@ -30,11 +30,18 @@ final class ProjectMergeCopyParityTests: XCTestCase {
             ("NEEDS_YOU", PromotionCards.needsYouBadge),
             ("DETAILS", PromotionCards.details),
             ("PAGE_NOTHING_TO_DO", PromotionCards.pageNothingToDo),
+            ("ON_PASS_MERGES", PromotionCards.onPassMerges),
+            ("ON_PASS_ASKS", PromotionCards.onPassAsks),
         ]
         for (name, copy) in constants {
             XCTAssertTrue(web.contains("export const \(name) = '\(copy)';"),
                           "\(name): the web's words drifted from \(copy.debugDescription)")
         }
+        // Who is in front of a blocked merge, in the same words on both ends.
+        XCTAssertTrue(web.contains("export const BLOCKED_BY = '\(PromotionCards.blockedByLabel)';"),
+                      "BLOCKED_BY drifted from \(PromotionCards.blockedByLabel.debugDescription)")
+        XCTAssertTrue(web.contains("`“${holding.taskTitle}” is landing on the project line`"),
+                      "the sentence that names the landing holding the branch drifted")
         XCTAssertTrue(web.contains("export const MERGE_JOB_KINDS: readonly string[] = ['CHECK_PROMOTION', 'LAND_PROMOTION'];"))
         XCTAssertEqual(ProjectMergeCard.mergeJobKinds, ["CHECK_PROMOTION", "LAND_PROMOTION"])
     }
@@ -55,9 +62,16 @@ final class ProjectMergeCopyParityTests: XCTestCase {
             "'checks failed'",
             "'by you'",
             "'automatically'",
-            "`✓ Merged into ${shortRef(promotion.upstreamRef)}`",
-            "`Merged into ${shortRef(promotion.upstreamRef)}`",
+            // The branch it goes into is the project's main branch, named the one way the project page
+            // names it.
+            "`✓ Merged into ${mainBranchName(promotion.upstreamRef)}`",
+            "`Merged into ${mainBranchName(promotion.upstreamRef)}`",
             "'the checks on the combined tree did not pass'",
+            // Why a blocked merge is blocked, when the job said so (0409).
+            "`nothing to merge — ${shortRef(promotion.sourceRef)} is already on ${mainBranchName(promotion.upstreamRef)}`",
+            "'the merge stopped on an error — no check failed'",
+            "'nothing to merge'",
+            "'check errored'",
             "'No checks recorded'",
             "'Checks timed out'",
             "'✓ Checks passed'",
@@ -74,5 +88,13 @@ final class ProjectMergeCopyParityTests: XCTestCase {
         XCTAssertEqual(PromotionCards.eventLine(asking).text, "Merge into main is waiting for you")
         XCTAssertEqual(PromotionCards.previewChecks(asking), "No checks recorded")
         XCTAssertEqual(PromotionCards.upstreamLine(asking), "no conflicts")
+        let landed = ProjectPromotionView(promotionId: "p", state: .blocked, sourceRef: "refs/heads/b", sourceSha: "",
+                                          upstreamRef: "refs/heads/main", blockedReason: "ALREADY_LANDED")
+        XCTAssertEqual(PromotionCards.blockedLine(landed), "nothing to merge — b is already on main")
+        XCTAssertEqual(PromotionCards.blockedReason(landed), "nothing to merge")
+        let errored = ProjectPromotionView(promotionId: "p", state: .blocked, sourceRef: "b", sourceSha: "",
+                                           upstreamRef: "refs/heads/main", blockedReason: "ERROR")
+        XCTAssertEqual(PromotionCards.blockedLine(errored), "the merge stopped on an error — no check failed")
+        XCTAssertEqual(PromotionCards.blockedReason(errored), "check errored")
     }
 }

@@ -116,7 +116,7 @@ const WRITES = ['ensure', 'retry', 'wake', 'sleep', 'delete'];
 const OWNER = '0199a1b2-0000-7000-8000-00000000000a';
 
 for (const said of [undefined, 'false', ' FALSE ', 'on']) {
-  test(`off with ${MANAGED_RUNNERS_ENABLED_ENV}=${JSON.stringify(said)}: no client, no timer, no write; writes are 401 then 404 MANAGED_RUNNER_DISABLED`, async () => {
+  test(`off with ${MANAGED_RUNNERS_ENABLED_ENV}=${JSON.stringify(said)}: no client, no timer, no write; writes are 401 then 404 MANAGED_RUNNER_DISABLED; the admission webhook is closed`, async () => {
     const saved = { ...process.env };
     if (said === undefined) delete process.env[MANAGED_RUNNERS_ENABLED_ENV];
     else process.env[MANAGED_RUNNERS_ENABLED_ENV] = said;
@@ -197,7 +197,26 @@ for (const said of [undefined, 'false', ' FALSE ', 'on']) {
         const malformed = await send(base, 'POST', `/api/managed-runner/${action}`, 'login', {});
         assert.equal(malformed.status, 404, `${action}: the switch is checked before the body is read`);
       }
+      // An administrator's volume switch: closed the same way, before the role is asked or the body read.
+      const volumeSwitch = `/api/admin/managed-runners/${OWNER}/volume-switch`;
+      const switchBody = { idempotencyKey: 'k', revision: 1, volumeUid: OWNER, reason: 'a restore' };
+      assert.equal((await send(base, 'POST', volumeSwitch, undefined, switchBody)).status, 401, 'the volume switch: authentication comes first');
+      for (const body of [switchBody, {}]) {
+        const closed = await send(base, 'POST', volumeSwitch, 'login', body);
+        assert.equal(closed.status, 404, 'the volume switch: refused as a server without the feature');
+        assert.equal(closed.json.code, 'MANAGED_RUNNER_DISABLED');
+      }
       assert.deepEqual(callsSince(), [], 'no managed write — and no read either — before the refusal');
+
+      // The single-Pod admission webhook: closed with or without the API server's token, before
+      // anything is read. Installed with failurePolicy Fail, this answer refuses the Pod.
+      const review = { apiVersion: 'admission.k8s.io/v1', kind: 'AdmissionReview', request: { uid: 'review', operation: 'CREATE' } };
+      for (const bearer of [undefined, 'test-admission-webhook-token']) {
+        const closed = await send(base, 'POST', '/api/managed-runner/admission', bearer, review);
+        assert.equal(closed.status, 404, 'the webhook answers as a server without the feature');
+        assert.equal(closed.json.code, 'MANAGED_RUNNER_DISABLED');
+      }
+      assert.deepEqual(callsSince(), [], 'the closed webhook read nothing');
     } finally {
       await app?.close();
       restoreTimers();

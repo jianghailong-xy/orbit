@@ -30,7 +30,7 @@ func TestPerActionHelpDocumentsEveryAdvertisedFlag(t *testing.T) {
 	for _, list := range [][]cliCapabilitySpec{
 		baseCLICapabilities, providerCLICapabilities, projectCLICapabilities,
 		notifyCLICapabilities, sessionCLICapabilities, agentCLICapabilities,
-		watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, wikiPlanCLICapabilities,
+		watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities,
 		userCLICapabilities,
 	} {
 		for _, spec := range list {
@@ -57,6 +57,36 @@ func TestPerActionHelpDocumentsEveryAdvertisedFlag(t *testing.T) {
 							strings.Join(spec.Argv, " "), flag)
 					}
 				}
+			}
+		}
+	}
+}
+
+// T5: the engine flags reach the help of every command that takes them, with the six engines a person
+// can pass named by the CLI they are — the overview's usage line included, which is where a reader of
+// `orbit task --help` first sees batch-pin's shape.
+func TestEngineFlagsAreInTheHelpOfEveryCommandThatTakesThem(t *testing.T) {
+	for _, tc := range []struct {
+		command string
+		help    string
+		want    []string
+	}{
+		{command: "orbit session create", help: sessionActionHelp["create"], want: []string{"--engine ENGINE", "PROVIDER_ENGINE_INCOMPATIBLE", "DEEPSEEK_KEY_REQUIRED"}},
+		{command: "orbit task create", help: taskActionHelp["create"], want: []string{"--engine ENGINE", "PROVIDER_ENGINE_INCOMPATIBLE"}},
+		{command: "orbit task update", help: taskActionHelp["update"], want: []string{"--engine ENGINE | --clear-engine"}},
+		{command: "orbit task batch-pin", help: taskActionHelp["batch-pin"], want: []string{"(--engine ENGINE | --clear-engine)", "--clear-engine"}},
+		{command: "orbit task", help: taskHelp, want: []string{"(--engine E | --clear-engine)"}},
+	} {
+		for _, want := range tc.want {
+			if !strings.Contains(tc.help, want) {
+				t.Errorf("`%s --help` does not say %q", tc.command, want)
+			}
+		}
+	}
+	for _, help := range []string{sessionActionHelp["create"], taskActionHelp["create"]} {
+		for _, name := range []string{"Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness", "Cursor CLI"} {
+			if !strings.Contains(strings.Join(strings.Fields(help), " "), name) {
+				t.Errorf("an --engine help does not name %s:\n%s", name, help)
 			}
 		}
 	}

@@ -1,0 +1,69 @@
+{
+ "runs": [
+  {
+   "label": "batch-reference-15b7b5609",
+   "report": "docs/evidence/base-ui-migration/webkit-scroll-lock/runs/p0-standard-reference.report.summary.json",
+   "stats": {
+    "expected": 101,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 11
+   },
+   "tests": 112,
+   "unexpected": []
+  },
+  {
+   "label": "final-round-1-821e2d501",
+   "report": "/mnt/data/tmp/34cfhmpygHQdZxRznyVH9/runs/final-round-1/report.json",
+   "stats": {
+    "expected": 101,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 11
+   },
+   "tests": 112,
+   "unexpected": []
+  },
+  {
+   "label": "final-round-2-821e2d501",
+   "report": "/mnt/data/tmp/34cfhmpygHQdZxRznyVH9/runs/final-round-2/report.json",
+   "stats": {
+    "expected": 101,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 11
+   },
+   "tests": 112,
+   "unexpected": []
+  },
+  {
+   "label": "main-merge-5376c49da",
+   "report": "/mnt/data/tmp/34cfhmpygHQdZxRznyVH9/runs/main-merge/report.json",
+   "stats": {
+    "expected": 101,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 11
+   },
+   "tests": 112,
+   "unexpected": []
+  }
+ ],
+ "againstFirst": [
+  {
+   "label": "final-round-1-821e2d501",
+   "sameTests": true,
+   "differentStatuses": []
+  },
+  {
+   "label": "final-round-2-821e2d501",
+   "sameTests": true,
+   "differentStatuses": []
+  },
+  {
+   "label": "main-merge-5376c49da",
+   "sameTests": true,
+   "differentStatuses": []
+  }
+ ]
+}

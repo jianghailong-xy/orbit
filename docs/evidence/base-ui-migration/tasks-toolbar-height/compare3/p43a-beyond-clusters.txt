@@ -1,0 +1,4 @@
+chromium-light-desktop p43a-overview-loading.png      all=    62 gt2=    37 max= 20 clusters=  1 [37px x600-615 y80-95 m20]
+chromium-light-desktop p43a-projects-loading.png      all=    62 gt2=    37 max= 20 clusters=  1 [37px x776-791 y208-223 m20]
+webkit-dark-desktop    p43a-tasks-keys-space.png      all= 31231 gt2= 30788 max=220 clusters=  1 [30788px x312-583 y184-543 m220]
+webkit-light-desktop   p43a-tasks-keys-space.png      all= 30247 gt2= 29694 max=229 clusters=  1 [29694px x312-583 y184-543 m229]

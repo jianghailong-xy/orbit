@@ -9,12 +9,22 @@ import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
+import {
+  COORDINATOR_PAUSE_SELECT,
+  DELIVERY_COORDINATOR_PAUSED,
+  type WakeDeliveryRecord,
+  conversationIsPaused,
+  wakeDeliveryRecord,
+} from './coordinator-evidence-queue';
 import { buildCoordinatorDeliveryMessage } from './coordinator-judgment-opening';
 import { WakeFact, wakeIdempotencyKey } from './coordinator-wake';
 import { CoordinatorWakeService, WakeAuthorizer } from './coordinator-wake.service';
 import { derivedUuid } from './project-dispatch-identity';
 import { readDerivedProjectDoneReading } from './project-done-derived';
-import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
+import { conversationIsOver, sessionHasEnded } from './project-open-item';
+
+export { DELIVERY_COORDINATOR_PAUSED } from './coordinator-evidence-queue';
+export type { WakeDeliveryRecord } from './coordinator-evidence-queue';
 
 /**
  * One committed fact becomes one MESSAGE to the coordinator conversation that already exists.
@@ -156,11 +166,37 @@ export type CoordinatorDeliveryOutcome =
   /** The key was given back. The same fact may be delivered again. */
   | { outcome: 'REFUSED'; wakeId: string; idempotencyKey: string; refusalCode: string };
 
-/** What a delivered wake row records about the message it carried. */
-export interface WakeDeliveryRecord {
-  /** The `conversation_turn` this delivery wrote, by the key it wrote it under. */
-  clientTurnId: string;
+/**
+ * What a re-sent delivery answered (`requeue`). There is no key to give back: the fact's wake stays
+ * DELIVERED whatever happens, and only the turn it names moves.
+ */
+export type CoordinatorRequeueOutcome =
+  /** The fact is on the coordinator's conversation again, under a turn of its own. */
+  | { outcome: 'REQUEUED'; wakeId: string; sessionId: string; clientTurnId: string }
+  /** Another re-send of the same delivery got there first; the wake already names its turn. */
+  | { outcome: 'ALREADY_REQUEUED'; wakeId: string }
+  /** Nothing was written, for the reason the code names. The wake is as it was. */
+  | { outcome: 'REFUSED'; wakeId: string; refusalCode: string };
+
+/** How `queue` treats a conversation that is only paused, and how it records the delivery. */
+export interface QueueOptions {
+  /**
+   * Do not write to a conversation that is paused (`conversationIsPaused`): refuse with
+   * DELIVERY_COORDINATOR_PAUSED instead, so the fact waits for it. Off, a paused conversation is
+   * treated as it always was — a FAILED one refuses as ended, and one parked on a retry is written
+   * to. Only evidence asks for it (`CompletionEvidenceProducer`): what it refuses is delivered when
+   * the conversation is back, which is not true of every fact on this door.
+   */
+  holdWhilePaused?: boolean;
+  /** The revision waited for this conversation before this delivery: recorded on the wake. */
+  waited?: boolean;
 }
+
+/** Thrown inside the turn's transaction to roll it back: the conversation is paused. */
+class CoordinatorPaused extends Error {}
+
+/** Thrown inside the turn's transaction to roll it back: another re-send moved the wake first. */
+class RequeueOvertaken extends Error {}
 
 /**
  * The turn key one FACT's message is written under, derived and never minted.
@@ -176,6 +212,16 @@ export interface WakeDeliveryRecord {
  */
 export function coordinatorDeliveryTurnId(wakeIdempotencyKey: string): string {
   return derivedUuid(`coordinator-wake-delivery:v1:${wakeIdempotencyKey}`);
+}
+
+/**
+ * The turn key a delivery is RE-SENT under, after the turn it wrote was taken off the queue unread:
+ * the fact's key and the turn it replaces. Derived for the reason the first one is — a re-send that
+ * is retried, or raced, collapses onto one turn — and different from it, because the first key is
+ * spent on a turn the conversation still has, answered.
+ */
+export function coordinatorRedeliveryTurnId(wakeIdempotencyKey: string, replacedClientTurnId: string): string {
+  return derivedUuid(`coordinator-wake-redelivery:v1:${wakeIdempotencyKey}:${replacedClientTurnId}`);
 }
 
 @Injectable()
@@ -259,12 +305,86 @@ export class CoordinatorDeliveryService {
    *
    * An Automatic project's evidence revision is the second fact on this door
    * (`CompletionEvidenceProducer`), and its owner's sense is the evidence card: the pending read
-   * lists every revision no conversation was handed, so a refused one is on it at once.
+   * lists every revision no conversation was handed, so a refused one is on it at once — unless it
+   * was refused because the conversation is only paused (`QueueOptions.holdWhilePaused`), in which
+   * case it waits for that conversation and is delivered once it is back.
    */
-  async queue(fact: WakeFact, authorize: WakeAuthorizer): Promise<CoordinatorDeliveryOutcome> {
+  async queue(
+    fact: WakeFact,
+    authorize: WakeAuthorizer,
+    options: QueueOptions = {},
+  ): Promise<CoordinatorDeliveryOutcome> {
     const claimed = await this.wakes.claim(fact, authorize);
     if (claimed.outcome !== 'WOKEN') return claimed;
-    return this.enqueue(fact, claimed.wakeId, claimed.idempotencyKey);
+    return this.enqueue(fact, claimed.wakeId, claimed.idempotencyKey, options);
+  }
+
+  /**
+   * Put a fact that was delivered once on the project's coordinator conversation AGAIN: its turn was
+   * taken off the queue unread — the drain of a run that failed answers it with nothing delivered,
+   * an interrupt or a withdrawal deletes it — or it went to a conversation the project has since
+   * replaced (`coordinator-evidence-queue.ts`). The fact's key stays held by its DELIVERED wake, so
+   * this claims nothing: it writes a turn under a key derived from the turn it replaces
+   * (`coordinatorRedeliveryTurnId`) and moves the wake onto it in the same transaction, which also
+   * restarts the hold's clock from now (`updatedAt`) and records that it waited.
+   *
+   * The conversation is read under the Session lock as `queue` reads it, and a paused or ended one is
+   * not written to. The wake moves only if it still names the turn this re-send replaces, so two
+   * re-sends of one delivery write one turn between them.
+   */
+  async requeue(
+    fact: WakeFact,
+    resend: { wakeId: string; idempotencyKey: string; clientTurnId: string },
+  ): Promise<CoordinatorRequeueOutcome> {
+    const { wakeId } = resend;
+    const clientTurnId = coordinatorRedeliveryTurnId(resend.idempotencyKey, resend.clientTurnId);
+    const project = await this.prisma.project.findUnique({
+      where: { id: fact.projectId },
+      select: {
+        ownerId: true,
+        title: true,
+        coordinatorSessionId: true,
+        exceptionEscalationSeconds: true,
+      },
+    });
+    if (!project) return { outcome: 'REFUSED', wakeId, refusalCode: DELIVERY_PROJECT_GONE };
+    if (!project.coordinatorSessionId) {
+      return { outcome: 'REFUSED', wakeId, refusalCode: DELIVERY_NO_COORDINATOR_SESSION };
+    }
+    const sessionId = project.coordinatorSessionId;
+    try {
+      await this.sessions.createTurn(project.ownerId, sessionId, {
+        clientTurnId,
+        content: await this.render(fact, project),
+        intent: 'NEXT_TURN',
+      }, {
+        participateSendTransaction: (tx) => bindRequeuedDelivery(tx, resend, sessionId, clientTurnId),
+      });
+    } catch (e) {
+      if (e instanceof RequeueOvertaken) return { outcome: 'ALREADY_REQUEUED', wakeId };
+      if (e instanceof CoordinatorPaused || (e instanceof SessionNotSendable && await this.paused(sessionId))) {
+        return { outcome: 'REFUSED', wakeId, refusalCode: DELIVERY_COORDINATOR_PAUSED };
+      }
+      if (
+        e instanceof NotFoundException
+        || e instanceof ConflictException
+        || e instanceof ForbiddenException
+        || e instanceof BadRequestException
+      ) {
+        return { outcome: 'REFUSED', wakeId, refusalCode: DELIVERY_COORDINATOR_SESSION_UNAVAILABLE };
+      }
+      throw e;
+    }
+    return { outcome: 'REQUEUED', wakeId, sessionId, clientTurnId };
+  }
+
+  /** Whether the conversation is paused now, read after a refusal that says only "not sendable". */
+  private async paused(sessionId: string): Promise<boolean> {
+    const conversation = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: COORDINATOR_PAUSE_SELECT,
+    });
+    return conversation !== null && conversationIsPaused(conversation);
   }
 
   /** `queue`'s half after the claim: the turn and the bind, in one transaction. */
@@ -272,9 +392,10 @@ export class CoordinatorDeliveryService {
     fact: WakeFact,
     wakeId: string,
     idempotencyKey: string,
+    options: QueueOptions,
   ): Promise<CoordinatorDeliveryOutcome> {
     const clientTurnId = coordinatorDeliveryTurnId(idempotencyKey);
-    let sessionId: string;
+    let sessionId: string | null = null;
     try {
       const project = await this.prisma.project.findUnique({
         where: { id: fact.projectId },
@@ -289,15 +410,27 @@ export class CoordinatorDeliveryService {
       if (!project.coordinatorSessionId) {
         return this.refuse(wakeId, idempotencyKey, DELIVERY_NO_COORDINATOR_SESSION);
       }
-      sessionId = project.coordinatorSessionId;
-      await this.sessions.createTurn(project.ownerId, sessionId, {
+      const standing = project.coordinatorSessionId;
+      sessionId = standing;
+      await this.sessions.createTurn(project.ownerId, standing, {
         clientTurnId,
         content: await this.render(fact, project),
         intent: 'NEXT_TURN',
       }, {
-        participateSendTransaction: (tx) => bindQueuedDelivery(tx, wakeId, sessionId, clientTurnId),
+        participateSendTransaction: (tx) => bindQueuedDelivery(tx, wakeId, standing, clientTurnId, options),
       });
     } catch (e) {
+      // A conversation that is only paused, for a fact that waits for it: refused as paused, which
+      // leaves the fact waiting rather than the owner's (`coordinator-evidence-queue.ts`). Asked
+      // first because `SessionNotSendable` is a Conflict: `createTurn` refuses a FAILED run as ended
+      // before the hook below is reached, so that refusal is read again rather than taken at its word.
+      if (
+        options.holdWhilePaused
+        && (e instanceof CoordinatorPaused
+          || (e instanceof SessionNotSendable && sessionId !== null && await this.paused(sessionId)))
+      ) {
+        return this.refuse(wakeId, idempotencyKey, DELIVERY_COORDINATOR_PAUSED);
+      }
       // The same four ordinary refusals `message` translates, `SessionNotSendable` among the
       // Conflicts: the conversation is gone, ended, its workspace cannot run it, or the key names a
       // turn written with another body. Anything else is a fault, re-raised with the key given back.
@@ -317,9 +450,13 @@ export class CoordinatorDeliveryService {
     // leave the key CLAIMED for ever; a no-op when the hook already bound it.
     await this.prisma.projectCoordinatorWake.updateMany({
       where: { id: wakeId, status: 'CLAIMED' },
-      data: { status: 'DELIVERED', sessionId, delivery: { clientTurnId } satisfies WakeDeliveryRecord },
+      data: {
+        status: 'DELIVERED',
+        sessionId,
+        delivery: wakeDeliveryRecord(clientTurnId, { waited: options.waited }),
+      },
     });
-    return { outcome: 'DELIVERED', wakeId, idempotencyKey, sessionId, clientTurnId };
+    return { outcome: 'DELIVERED', wakeId, idempotencyKey, sessionId: sessionId!, clientTurnId };
   }
 
   /**
@@ -485,6 +622,10 @@ export class CoordinatorDeliveryService {
  * `SessionNotSendable` is what `createTurn` itself throws for the narrower case, so the caller
  * translates both the same way.
  *
+ * A fact that waits for a paused conversation (`QueueOptions.holdWhilePaused`) is refused here when
+ * the conversation is paused — down, or parked on a retry the turn would disarm — and before the turn
+ * is written, so nothing reaches it and the retry it waits on stays armed.
+ *
  * Then the wake is bound, with the status it was claimed in as the condition. It is the only
  * holder of this claim, so a miss would mean the row moved under a delivery that owns it — nothing
  * does that — and the turn is still the fact's own (its key is derived from the fact).
@@ -494,16 +635,62 @@ async function bindQueuedDelivery(
   wakeId: string,
   sessionId: string,
   clientTurnId: string,
+  options: QueueOptions,
 ): Promise<void> {
   const conversation = await tx.session.findUniqueOrThrow({
     where: { id: sessionId },
-    select: SESSION_ENDING_SELECT,
+    select: COORDINATOR_PAUSE_SELECT,
   });
+  if (options.holdWhilePaused && conversationIsPaused(conversation)) {
+    throw new CoordinatorPaused('the coordinator conversation is paused');
+  }
   if (sessionHasEnded(conversation)) {
     throw new SessionNotSendable('the coordinator conversation has ended');
   }
   await tx.projectCoordinatorWake.updateMany({
     where: { id: wakeId, status: 'CLAIMED' },
-    data: { status: 'DELIVERED', sessionId, delivery: { clientTurnId } satisfies WakeDeliveryRecord },
+    data: {
+      status: 'DELIVERED',
+      sessionId,
+      delivery: wakeDeliveryRecord(clientTurnId, { waited: options.waited }),
+    },
   });
+}
+
+/**
+ * `requeue`'s ledger half, run inside the transaction that writes the turn, under the Session lock
+ * that transaction already holds: the conversation is read again, and a paused or ended one rolls
+ * the turn back. Then the wake moves onto the new turn — and onto this conversation, when the
+ * delivery it replaces went to one the project has since replaced — on the condition that it still
+ * names the turn this re-send replaces; a miss means another re-send moved it first, and rolls this
+ * turn back. The write stamps `updatedAt`, which is where the hold's window now runs from.
+ */
+async function bindRequeuedDelivery(
+  tx: Prisma.TransactionClient,
+  resend: { wakeId: string; clientTurnId: string },
+  sessionId: string,
+  clientTurnId: string,
+): Promise<void> {
+  const conversation = await tx.session.findUniqueOrThrow({
+    where: { id: sessionId },
+    select: COORDINATOR_PAUSE_SELECT,
+  });
+  if (conversationIsOver(conversation)) {
+    throw new SessionNotSendable('the coordinator conversation has ended');
+  }
+  if (conversationIsPaused(conversation)) {
+    throw new CoordinatorPaused('the coordinator conversation is paused');
+  }
+  const moved = await tx.projectCoordinatorWake.updateMany({
+    where: {
+      id: resend.wakeId,
+      status: 'DELIVERED',
+      delivery: { path: ['clientTurnId'], equals: resend.clientTurnId },
+    },
+    data: {
+      sessionId,
+      delivery: wakeDeliveryRecord(clientTurnId, { waited: true, replaces: resend.clientTurnId }),
+    },
+  });
+  if (moved.count === 0) throw new RequeueOvertaken('the delivery was re-sent by somebody else');
 }

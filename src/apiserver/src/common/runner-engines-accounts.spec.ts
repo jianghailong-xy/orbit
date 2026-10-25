@@ -158,19 +158,40 @@ test('an older runner, or a list with nothing readable, reads as the one account
 });
 
 test('only an engine whose CLI keeps a login per directory carries accounts', () => {
-  // Claude Code and Codex each keep one login per config directory; Kimi keeps a single one for the
-  // machine, so a claude- or kimi-shaped account list is not a report about anything.
+  // Claude Code and Codex each keep one login per config directory; OpenCode keeps no login Orbit
+  // reads, so an opencode-shaped account list is not a report about anything.
   const CLAUDE_DEFAULT: RunnerEngineAccount = { id: 'default', home: '/home/ada/.claude', auth: 'yes' };
   const engines = sanitizeRunnerEngines([
     { engine: 'claude', installed: true, auth: 'yes', accounts: [CLAUDE_DEFAULT] },
-    { engine: 'kimi', installed: true, auth: 'no', accounts: [WORK] },
+    { engine: 'opencode', installed: true, auth: 'no', accounts: [WORK] },
     codex([DEFAULT, WORK]),
   ])!;
   const byEngine = new Map<string, RunnerEngineHealth>(engines.map((e) => [e.engine, e]));
 
   assert.deepEqual(byEngine.get('claude')!.accounts, [CLAUDE_DEFAULT]);
-  assert.equal('accounts' in byEngine.get('kimi')!, false);
+  assert.equal('accounts' in byEngine.get('opencode')!, false);
   assert.deepEqual(byEngine.get('codex')!.accounts, [DEFAULT, WORK]);
+});
+
+test("Kimi Code carries accounts, each with the site its login is on, and no other engine's account carries one", () => {
+  // Every Kimi account is a KIMI_CODE_HOME of its own; the site beside it is kimi.com or kimi.ai.
+  const DEFAULT_KIMI: RunnerEngineAccount = { id: 'default', home: '/home/ada/.kimi-code', auth: 'yes', kimiRegion: 'mainland-cn' };
+  const WORK_KIMI: RunnerEngineAccount = {
+    id: 'c41e0b7a', name: 'Work', home: '/home/ada/.orbit/kimi-accounts/c41e0b7a', auth: 'no', kimiRegion: 'global',
+  };
+  const NEW_KIMI = { id: '9d20f6e1', home: '/home/ada/.orbit/kimi-accounts/9d20f6e1', auth: 'unknown', kimiRegion: 'kimi.moonshot.cn' };
+  const [kimi] = sanitizeRunnerEngines([
+    { engine: 'kimi', installed: true, auth: 'yes', kimiRegion: 'mainland-cn', accounts: [DEFAULT_KIMI, WORK_KIMI, NEW_KIMI] },
+  ])!;
+  // A site that is not one of the two is dropped on its own; the account stays.
+  const { kimiRegion: _unknown, ...newKimi } = NEW_KIMI;
+  assert.deepEqual(kimi.accounts, [DEFAULT_KIMI, WORK_KIMI, newKimi]);
+  assert.equal(kimi.kimiRegion, 'mainland-cn');
+
+  const [claude] = sanitizeRunnerEngines([
+    { engine: 'claude', installed: true, auth: 'yes', accounts: [{ id: 'default', home: '/home/ada/.claude', auth: 'yes', kimiRegion: 'global' }] },
+  ])!;
+  assert.equal('kimiRegion' in claude.accounts![0], false);
 });
 
 test('a Codex account keeps reporting its directory under the codex-named field as well', () => {

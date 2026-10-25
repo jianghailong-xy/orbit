@@ -77,6 +77,7 @@ function verifyDisposableDatabase(): Promise<void> {
 
 interface Stack {
   db: PrismaClient;
+  sessions: SessionsService;
   tasks: TasksService;
   projects: ProjectsService;
   api: RunnerApiController;
@@ -112,7 +113,7 @@ async function connect(): Promise<Stack> {
     openItems,
     jobs,
   );
-  return { db, tasks, projects: new ProjectsService(prisma, new ProjectAcceptanceService(prisma)), api };
+  return { db, sessions, tasks, projects: new ProjectsService(prisma, new ProjectAcceptanceService(prisma)), api };
 }
 
 interface World {
@@ -402,6 +403,16 @@ test('a DONE task’s landing through the heartbeat and result routes: every que
       assert.equal(job.state, 'QUEUED');
       assert.equal(job.generation, '1');
       assert.equal(job.phase, null);
+      // §2.9 LS1: the generation carries the address of the landing session its subject opened at
+      // enqueue — pre-generated, so the link is the same while queued, running and landed.
+      const segment = await stack.db.projectLanding.findFirstOrThrow({
+        where: { taskId: first.taskId, subject: 'TASK' },
+        select: { sessionId: true, settledAt: true },
+      });
+      assert.equal(segment.settledAt, null, 'a queued generation belongs to an open subject');
+      assert.equal(job.landingSessionId, segment.sessionId);
+      assert.equal(await stack.db.session.count({ where: { id: segment.sessionId } }), 0,
+        'the address is pre-generated: no LANDING row exists before the first claim');
       const codebase = await stack.db.projectCodebase.findFirstOrThrow({
         where: { projectId: w.projectId }, select: { integrationRef: true },
       });
@@ -426,10 +437,15 @@ test('a DONE task’s landing through the heartbeat and result routes: every que
       await stack.db.runner.update({ where: { id: w.runnerId }, data: { status: RunnerStatus.OFFLINE } });
       assert.equal((await read(stack, w, first)).landTask?.blockingReason?.summary,
         `Waiting for runner ${w.runnerName}: it is offline`);
-      // ONLINE on the row but silent past the session queue's threshold reads offline as well.
+      // ONLINE on the row but silent past the session queue's threshold reads offline as well: its
+      // own record and its presence row, which the beats above wrote, both five minutes old.
       await stack.db.runner.update({
         where: { id: w.runnerId },
         data: { status: RunnerStatus.ONLINE, lastHeartbeatAt: new Date(Date.now() - 5 * 60_000) },
+      });
+      await stack.db.runnerPresence.update({
+        where: { runnerId: w.runnerId },
+        data: { lastBeatAt: new Date(Date.now() - 5 * 60_000) },
       });
       assert.equal((await read(stack, w, first)).landTask?.blockingReason?.summary,
         `Waiting for runner ${w.runnerName}: it is offline`);
@@ -442,6 +458,8 @@ test('a DONE task’s landing through the heartbeat and result routes: every que
       const second = await doneTask(stack, w, 'second', false);
       const held = (await read(stack, w, second)).landTask!;
       assert.equal(held.state, 'QUEUED');
+      assert.notEqual(held.landingSessionId, segment.sessionId,
+        'each task owns a segment, and so its own landing session');
       assert.deepEqual(held.blockingReason, {
         code: 'WAITING_TASK_WORK',
         summary: 'Waiting to land: the task’s work session is still running, and its branch can still move',
@@ -455,6 +473,8 @@ test('a DONE task’s landing through the heartbeat and result routes: every que
       assert.equal(running.state, 'RUNNING');
       const runningJob = running.landTask!;
       assert.equal(runningJob.state, 'RUNNING');
+      assert.equal(runningJob.landingSessionId, segment.sessionId,
+        'the claim inserts the row under the id the subject was opened with');
       assert.equal(runningJob.phase, 'FETCH');
       assert.ok(runningJob.startedAt && runningJob.heartbeatAt);
       assert.equal(runningJob.blockingReason, null);
@@ -479,7 +499,8 @@ test('a DONE task’s landing through the heartbeat and result routes: every que
         leaseOwner: claimed[0]!.leaseOwner,
         phase: 'CHECK',
       });
-      assert.deepEqual(progress, { accepted: true });
+      // §2.2 J-T4: every accepted report also answers the stop signal, false while nobody asked.
+      assert.deepEqual(progress, { accepted: true, cancelRequested: false });
       const checking = await read(stack, w, first);
       assert.equal(checking.landTask?.phase, 'CHECK');
       assert.notEqual(checking.checksRunningForMs, null);
@@ -490,6 +511,8 @@ test('a DONE task’s landing through the heartbeat and result routes: every que
       const landed = await read(stack, w, first);
       assert.equal(landed.state, 'ON_INTEGRATION_LINE', 'the receipt says where the work is');
       assert.equal(landed.landTask?.state, 'LANDED');
+      assert.equal(landed.landTask?.landingSessionId, segment.sessionId,
+        'a settled generation keeps the address of the session that recorded it');
       assert.equal(landed.landTask?.generation, '1');
       assert.equal(landed.landTask?.blockingReason, null);
       assert.ok(landed.landTask?.finishedAt);
@@ -576,10 +599,14 @@ test('an open MAIN_SYNC conflict holds the next landing as a project-line sync, 
       });
       assert.deepEqual(await beat(stack, w), [], 'M2: the claim holds it too');
 
-      // A cancel asked of it is named first: the claim skips a cancelled job whatever else holds it.
-      await stack.db.projectIntegrationJob.update({ where: { id: waiting.jobId }, data: { cancelRequestedAt: new Date() } });
-      assert.equal((await read(stack, w, later)).landTask?.blockingReason?.code, 'CANCELLING');
-      await stack.db.projectIntegrationJob.update({ where: { id: waiting.jobId }, data: { cancelRequestedAt: null } });
+      // A queued attempt never carries a stop request: J-T8 ends one in the transaction that asks,
+      // so there is no CANCELLING reason to read and the row cannot be written that way.
+      await assert.rejects(
+        stack.db.projectIntegrationJob.update({
+          where: { id: waiting.jobId }, data: { cancelRequestedAt: new Date() },
+        }),
+        /project_integration_job_queued_cancel_chk/,
+      );
 
       // The conflicted task's own next generation — the one carrying the absorb (§3.1 M3) — is
       // exempt from its own item: queued as the reopen route queues it, it is next for the runner.
@@ -651,6 +678,48 @@ test('the read is scoped: another owner or another project reads nothing; a reop
       assert.deepEqual(await currentLandings(stack, w), []);
       const detail = await stack.tasks.get(w.ownerId, task.taskId) as { integration: TaskIntegrationView<Date> };
       assert.equal(detail.integration.landTask?.state, 'CHECK_FAILED');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a landing’s address is not derived from its source session: the source may be gone, the reads still answer, and session_get reports the gone source as NULL',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'land-gone-source');
+      await beat(stack, w);
+      const task = await doneTask(stack, w, 'gone-source');
+      const claimed = await beat(stack, w);
+      assert.equal(claimed.length, 1);
+      const segment = await stack.db.projectLanding.findFirstOrThrow({
+        where: { taskId: task.taskId, subject: 'TASK' },
+        select: { sessionId: true },
+      });
+      assert.equal((await read(stack, w, task)).landTask?.landingSessionId, segment.sessionId);
+
+      // 0424: `project_integration_job.session_id` is a history reference with no foreign key, so
+      // the source conversation can be purged under a landing that is still in flight.
+      await stack.db.session.delete({ where: { id: task.sessionId } });
+      assert.equal(await stack.db.session.findUnique({ where: { id: task.sessionId } }), null);
+
+      const after = await read(stack, w, task);
+      assert.equal(after.landTask?.jobId, claimed[0]!.jobId, 'the landing is still the same generation');
+      assert.equal(after.landTask?.landingSessionId, segment.sessionId,
+        'the address belongs to the subject, not to the source session that may be gone');
+      assert.equal(after.landTask?.blockingReason, null);
+
+      // The address still opens the landing: an absent session row is served from the subject.
+      const detail = await stack.sessions.get(w.ownerId, segment.sessionId) as {
+        landing?: {
+          sessionId: string;
+          currentAttempt: { jobId: string; sourceSessionId: string | null } | null;
+        };
+      };
+      assert.equal(detail.landing?.sessionId, segment.sessionId);
+      assert.equal(detail.landing?.currentAttempt?.jobId, claimed[0]!.jobId);
+      assert.equal(detail.landing?.currentAttempt?.sourceSessionId, null,
+        'a purged source session is the NULL the column means, never an error');
     } finally {
       await stack.db.$disconnect();
     }

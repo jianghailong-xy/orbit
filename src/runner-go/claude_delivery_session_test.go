@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -151,6 +152,18 @@ func (r *deliverySession) turnResult(turnID string) *TurnCompleteRequest {
 // reports that what the test was waiting for has happened.
 func runDeliverySession(t *testing.T, script []fakeStep, turns []scriptedTurn, until func(*deliverySession) bool) *deliverySession {
 	t.Helper()
+	return runDeliverySessionWith(t, script, turns, until, deliveryOptions{})
+}
+
+// deliveryOptions are what a test changes about runDeliverySession's run: the claim it starts
+// from, and a look at what the runner sends the control plane besides its inbox polls.
+type deliveryOptions struct {
+	claim     func(*ClaimedSession)
+	onRequest func(path string, body []byte)
+}
+
+func runDeliverySessionWith(t *testing.T, script []fakeStep, turns []scriptedTurn, until func(*deliverySession) bool, opts deliveryOptions) *deliverySession {
+	t.Helper()
 	fake := newFakeClaude(t, script...)
 	t.Setenv("PATH", fake.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("ORBIT_HOME", t.TempDir())
@@ -204,6 +217,10 @@ func runDeliverySession(t *testing.T, script []fakeStep, turns []scriptedTurn, u
 	}
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/inbox") {
+			if opts.onRequest != nil {
+				body, _ := io.ReadAll(r.Body)
+				opts.onRequest(r.URL.Path, body)
+			}
 			_, _ = w.Write([]byte(`{}`))
 			return
 		}
@@ -246,6 +263,9 @@ func runDeliverySession(t *testing.T, script []fakeStep, turns []scriptedTurn, u
 	ctx, cancel := context.WithTimeout(context.Background(), fakeClaudeTimeout)
 	defer cancel()
 	dir, job := t.TempDir(), claudeSpawnJob(t)
+	if opts.claim != nil {
+		opts.claim(job)
+	}
 	run.job = job
 	done := make(chan struct{})
 	go func() {
@@ -806,6 +826,59 @@ func TestSessionCurrentWorkSteerTargetFenceRefilesInsteadOfFailing(t *testing.T)
 	}
 	if settled := run.turnResult("turn-A"); settled == nil || settled.Status != stSucceeded {
 		t.Fatalf("target A settled as %+v, want its valid result preserved", settled)
+	}
+}
+
+// The same unread frame when the turn it was aimed at is STOPPED (owner, 2026-10-16: option A). The
+// fence still kills the generation, but the message does not go back to the queue: run as a turn of
+// its own, it would start the work the person just stopped. It is reported undelivered, saying the
+// Stop is why, and its own turn settles as a failed steer.
+func TestSessionCurrentWorkSteerUnreadWhenItsTurnIsStoppedIsNotDelivered(t *testing.T) {
+	// The Stop arrives once the engine holds the steer's frame: the "Waiting to be read" moment.
+	stop := interruptTurn("stop")
+	stop.afterEngineRead = "current-work"
+	run := runDeliverySession(t,
+		[]fakeStep{
+			{Await: "user"},
+			{Emit: "replay_user"},
+			{Emit: "tool_use", ToolUseID: "toolu_A", ToolName: "Bash", Input: map[string]interface{}{"command": "make"}},
+			{Await: "user"}, // CURRENT_WORK bytes reached stdin, but Claude has not replayed them
+			{Await: "control_request", Subtype: ctrlInterrupt},
+			{Emit: "control_response"},
+			{Emit: "result", Subtype: "error_during_execution", Text: "interrupted"},
+			{Await: "user"}, // nothing may reach this fenced process
+		},
+		[]scriptedTurn{
+			messageTurn("turn-A", "do A"),
+			refilableCurrentWorkSteerTurn("current-work", "turn-A", "adjust A only"),
+			stop,
+		}, nil)
+
+	settled := run.turnResult("current-work")
+	if settled == nil || settled.Status != stFailed || settled.Subtype != subtypeSteer {
+		t.Fatalf("CURRENT_WORK settled as %+v, want a failed steer receipt, not a re-file", settled)
+	}
+	states := run.deliveryStates("current-work")
+	if len(states) == 0 || states[len(states)-1] != string(deliveryFailed) {
+		t.Fatalf("CURRENT_WORK delivery states = %v, want terminal failed", states)
+	}
+	for _, state := range states {
+		if state == string(deliveryRequeued) {
+			t.Fatalf("a steer the person stopped was handed back to run as a turn of its own: %v", states)
+		}
+	}
+	reason := ""
+	for _, report := range run.deliveryReports() {
+		if report["turnId"] == "current-work" && report["delivery"] == string(deliveryFailed) {
+			reason, _ = report["reason"].(string)
+		}
+	}
+	if reason != errCurrentWorkTargetInterrupted.Error() || !strings.Contains(reason, "Stop") ||
+		!strings.Contains(settled.Result, reason) {
+		t.Fatalf("the undelivered steer says %q (settled with %q); want the Stop named as the reason", reason, settled.Result)
+	}
+	if got := run.turnResult("turn-A"); got == nil || got.Status != stInterrupted {
+		t.Fatalf("target A settled as %+v, want %s", got, stInterrupted)
 	}
 }
 

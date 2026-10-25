@@ -1,0 +1,35 @@
+{
+ "p44": {
+  "tests": {
+   "passed": 112
+  },
+  "stepsWithCensus": 708,
+  "stepsDrawingAnyClass": 0,
+  "classes": {}
+ },
+ "p51": {
+  "tests": {
+   "passed": 60,
+   "skipped": 4
+  },
+  "stepsWithCensus": 496,
+  "stepsDrawingAnyClass": 0,
+  "classes": {}
+ },
+ "p52": {
+  "tests": {
+   "passed": 56
+  },
+  "stepsWithCensus": 468,
+  "stepsDrawingAnyClass": 0,
+  "classes": {}
+ },
+ "p53": {
+  "tests": {
+   "passed": 56
+  },
+  "stepsWithCensus": 592,
+  "stepsDrawingAnyClass": 0,
+  "classes": {}
+ }
+}

@@ -57,7 +57,9 @@ func (s DshLaunchSpec) MarshalJSON() ([]byte, error) {
 var dshConfigMu sync.Mutex
 var dshSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
-const dshMissingKeyMessage = "DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key for this session; runner and workspace .env credentials are not used"
+// The key is the session's DeepSeek API key, the same one Claude Code and OpenCode sessions can run
+// on (docs/provider-engine-contract.md §4.2): there is no key of Harness's own to configure.
+const dshMissingKeyMessage = "DSH_CREDENTIAL_MISSING: DeepSeek Harness runs on a DeepSeek API key, and this session has none; connect one in Orbit (runner and workspace .env credentials are not used)"
 
 // PrepareDshSessionLaunch uses the same Agent.Env populated by encrypted provider dispatch.
 func PrepareDshSessionLaunch(ctx context.Context, job *ClaimedSession, executionDir, fileMode string) (DshLaunchSpec, error) {
@@ -78,11 +80,17 @@ func prepareDshLaunch(ctx context.Context, input DshLaunchInput, agent *DshAgent
 	if msg := ensureEngine(ctx, providerDsh, func(string) {}); msg != "" {
 		return DshLaunchSpec{}, errors.New(msg)
 	}
-	executable, err := dshExecutablePath()
+	node, executable, err := dshRuntime()
 	if err != nil {
 		return DshLaunchSpec{}, err
 	}
-	return prepareDshAgentConfig(input, agent, executable)
+	spec, err := prepareDshAgentConfig(input, agent, executable)
+	if err != nil {
+		return DshLaunchSpec{}, err
+	}
+	// Orbit's copy of Node runs the entry point itself, and stays off the PATH the agent's commands see.
+	spec.Executable, spec.Args = dshCommand(node, spec.Executable, spec.Args...)
+	return spec, nil
 }
 
 func prepareDshConfig(input DshLaunchInput, executable string) (DshLaunchSpec, error) {
@@ -224,6 +232,15 @@ func prepareDshAgentConfigAt(input DshLaunchInput, agent *DshAgentOverlay, execu
 		return DshLaunchSpec{}, errors.New("DSH_CONFIG_CONFLICT: cannot persist session identity")
 	}
 	env := dshBaseEnv()
+	// The session's Go and npm caches: the runner-owned root every engine's sessions share, rather
+	// than the $HOME/.cache the workspace-write sandbox leaves read-only, or a directory the agent
+	// invents when its build fails there (cache_root.go). The agent overlay's cache-root plugin
+	// grants that same root to the session's own sandbox, so a confined command writes it without
+	// a denial. A catalogue probe is no session and runs no toolchain, so it is handed neither;
+	// it is exactly the launch without an agent overlay.
+	if agent != nil {
+		env = append(env, runnerCacheEnv()...)
+	}
 	// DSH_AGENTS_HOME keeps the runner user's ~/.agents skills out, as P2 keeps their profile out:
 	// a session discovers its workspace's AGENTS.md and project skills only.
 	env = append(env, "DSH_HOME="+home, "DSH_AGENTS_HOME="+filepath.Join(home, "agents"), "DSH_PERMISSION_MODE="+input.FileMode,
@@ -260,38 +277,140 @@ export function apply(ctx, config) {
 }
 `
 
+// dshToolGatePlugin asks before a call acts on another system — a shell command that meets one of
+// the runner's rules, or a third-party MCP tool — in every permission mode. Its ask reaches the
+// runner as session/request_permission, which answers it for the mode (dshPermissionBridge):
+// measured on 0.2.0-rc.2, a denied or refused call never runs. An escalation is left to the
+// sandbox's own approval, which already asks once. The patterns are the runner's
+// (dshToolGateRules, dshToolGateMatch), passed in as config, so both read a command the same way.
+const dshToolGatePlugin = `// Orbit: ask before a call acts on another system, in every permission mode.
+export const name = 'orbit-tool-gate';
+export const inject = ['tools'];
+export function apply(ctx, config) {
+  const rules = config.rules.map((rule) => ({ name: rule.name, pattern: new RegExp(rule.pattern) }));
+  const heredoc = new RegExp(config.heredoc);
+  const interpreter = new RegExp(config.interpreter);
+  const message = new RegExp(config.message, 'g');
+  const gateText = (command) => {
+    const lines = command.split('\n');
+    const kept = [];
+    for (let i = 0; i < lines.length; i++) {
+      kept.push(lines[i]);
+      const match = heredoc.exec(lines[i]);
+      if (match === null || interpreter.test(lines[i].slice(0, match.index))) continue;
+      let end = i + 1;
+      while (end < lines.length && lines[end].replace(/^\t+/, '') !== match[1]) end++;
+      if (end < lines.length) i = end;
+    }
+    return kept.join('\n').replace(message, (whole, quoted) => whole.slice(0, whole.length - quoted.length) + "''");
+  };
+  ctx.on('tools/pre-execute', async (exec, next) => {
+    const decision = await next();
+    if (decision.kind !== 'allow' || exec.agent === undefined) return decision;
+    if (exec.name.startsWith('mcp__') && !exec.name.startsWith('mcp__orbit__')) {
+      return { kind: 'ask', reason: 'Orbit asks before the MCP tool ' + exec.name };
+    }
+    const args = exec.arguments ?? {};
+    if (exec.name !== 'bash' || typeof args.command !== 'string' || args.sandbox_permissions !== undefined) return decision;
+    const text = gateText(args.command);
+    const rule = rules.find((candidate) => candidate.pattern.test(text));
+    return rule === undefined ? decision : { kind: 'ask', reason: 'Orbit asks before ' + rule.name };
+  }, { prepend: true });
+}
+`
+
+// dshSandboxCacheRootPlugin adds the runner-owned shared toolchain cache root (cache_root.go) to
+// the writable roots of the session's own file sandbox. A session's commands run under
+// workspace-write, where everything outside its workspace and the platform temp areas is
+// read-only: dsh 0.2.0-rc.2 builds its bwrap mounts, Landlock grants and Seatbelt profile from
+// the workspace root and the temp areas alone, with no configuration for another root. So the
+// first confined `go build` — GOCACHE, GOMODCACHE and npm's cache all point at the shared root
+// (runnerCacheEnv) — is denied there and reaches the cache only through an escalation, which runs
+// the whole command outside the sandbox.
+//
+// This plugin wraps the sandbox seam itself (ctx.sandbox.confine) and adds the root to the
+// profile the selected platform runner already built, just before the command: a `--bind` mount
+// beside bwrap's workspace bind, a `--rw` grant beside the Landlock launcher's. Read-only mode is
+// left exactly as it was, and a profile this does not recognize is left as it was too — the
+// command then meets the same denial, and the same escalation, it met before: never a wider
+// sandbox, and never a command that fails differently.
+const dshSandboxCacheRootPlugin = `// Orbit: the runner's shared toolchain cache is a writable root of the session's own sandbox.
+export const name = 'orbit-sandbox-cache-root';
+export const inject = ['sandbox'];
+export function apply(ctx, config) {
+  const root = config.root;
+  const sandbox = ctx.sandbox;
+  if (typeof root !== 'string' || root === '' || typeof sandbox?.confine !== 'function') return;
+  const confine = sandbox.confine.bind(sandbox);
+  let told = false;
+  sandbox.confine = async (argv, policy, signal) => {
+    const wrapped = await confine(argv, policy, signal);
+    if (policy?.mode !== 'workspace-write' || !Array.isArray(wrapped?.argv)) return wrapped;
+    const separator = wrapped.argv.indexOf('--');
+    if (separator < 1) return wrapped;
+    const head = wrapped.argv.slice(0, separator);
+    const extra = head.includes('--ro-bind') ? ['--bind', root, root] : head.includes('--rw') ? ['--rw', root] : undefined;
+    if (extra === undefined) {
+      if (!told) {
+        told = true;
+        console.warn('orbit-sandbox-cache-root: unrecognized sandbox profile; ' + root + ' stays read-only inside it');
+      }
+      return wrapped;
+    }
+    return { ...wrapped, argv: [...head, ...extra, ...wrapped.argv.slice(separator)] };
+  };
+}
+`
+
 // Tools whose work runs in a child agent. A child's escalation never reaches ACP and its tool
 // calls are not projected (P4 evidence), so Orbit could neither ask about nor show them.
 var dshDisabledAgentTools = []string{"tool-subagent", "tool-subagent-fork", "tool-subagent-control",
 	"tool-subagent-list-agents", "tool-workflow"}
 
-// dshAgentOverlayPatch writes the prompt plugin with its versioned manifest (dsh refuses a named
-// package without a version) under a directory named for its code hash, and returns the patch.
+// dshAgentOverlayPatch writes Orbit's plugins with their versioned manifests (dsh refuses a named
+// package without a version) under directories named for their code hash, and returns the patch:
+// the tool gate and the shared cache root in every session, the prompt section when there is one.
 func dshAgentOverlayPatch(home string, agent DshAgentOverlay) ([]byte, error) {
 	rows := []interface{}{}
 	for _, id := range dshDisabledAgentTools {
 		rows = append(rows, map[string]interface{}{"id": id, "disabled": true})
 	}
-	if strings.TrimSpace(agent.AppendSystemPrompt) != "" {
-		digest := sha256.Sum256([]byte(dshAppendPromptPlugin))
-		dir := filepath.Join(home, "orbit-plugins", "append-system-prompt-"+hex.EncodeToString(digest[:6]))
+	insert := func(id, kind, source string, config map[string]interface{}) error {
+		digest := sha256.Sum256([]byte(source))
+		dir := filepath.Join(home, "orbit-plugins", kind+"-"+hex.EncodeToString(digest[:6]))
 		for _, path := range []string{filepath.Dir(dir), dir} {
 			if err := privateDshDir(path); err != nil {
-				return nil, err
+				return err
 			}
 		}
-		manifest, _ := json.Marshal(map[string]interface{}{"name": "orbit-dsh-append-system-prompt", "version": "1.0.0", "private": true, "type": "module"})
+		manifest, _ := json.Marshal(map[string]interface{}{"name": "orbit-dsh-" + kind, "version": "1.0.0", "private": true, "type": "module"})
 		if err := writeDshConfigFile(filepath.Join(dir, "package.json"), manifest); err != nil {
-			return nil, err
+			return err
 		}
 		entry := filepath.Join(dir, "index.mjs")
-		if err := writeDshConfigFile(entry, []byte(dshAppendPromptPlugin)); err != nil {
-			return nil, err
+		if err := writeDshConfigFile(entry, []byte(source)); err != nil {
+			return err
 		}
 		rows = append(rows, map[string]interface{}{"insert": []interface{}{map[string]interface{}{
-			"id": "orbit-append-system-prompt", "name": (&url.URL{Scheme: "file", Path: entry}).String(),
-			"config": map[string]interface{}{"text": agent.AppendSystemPrompt},
+			"id": id, "name": (&url.URL{Scheme: "file", Path: entry}).String(), "config": config,
 		}}})
+		return nil
+	}
+	if err := insert("orbit-tool-gate", "tool-gate", dshToolGatePlugin, map[string]interface{}{"rules": dshToolGateRules,
+		"heredoc": dshHeredoc.String(), "interpreter": dshHeredocInterpreter.String(), "message": dshGitMessage.String()}); err != nil {
+		return nil, err
+	}
+	// The same root runnerCacheEnv points the session's toolchains at, so the confined command and
+	// the runner name one directory.
+	if err := insert("orbit-sandbox-cache-root", "sandbox-cache-root", dshSandboxCacheRootPlugin,
+		map[string]interface{}{"root": runnerCacheRoot()}); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(agent.AppendSystemPrompt) != "" {
+		if err := insert("orbit-append-system-prompt", "append-system-prompt", dshAppendPromptPlugin,
+			map[string]interface{}{"text": agent.AppendSystemPrompt}); err != nil {
+			return nil, err
+		}
 	}
 	return json.Marshal(rows)
 }

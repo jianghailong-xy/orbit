@@ -1,0 +1,40 @@
+{
+ "name": "login-link-and-logout",
+ "runId": "2026-10-17T02-15-08-453Z",
+ "startedAt": "2026-10-17T02:30:34.919Z",
+ "finishedAt": "2026-10-17T02:30:51.224Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/login-link-and-logout.ndjson",
+ "protocolLines": 2,
+ "fixtures": [],
+ "checks": [
+  {
+   "name": "NO_OPEN_BROWSER=1 agent login prints the loginDeepControl link at once",
+   "ok": true,
+   "detail": "Starting login process...\nAuthenticating with Cursor...\nWaiting for browser authentication...\nOpen a browser and navigate to this link: https://cursor.com/loginDeepControl?challenge=<REDACTED>&uuid=<REDACTED>&mode=login&redirectTarget=cli&supportsSelectedTeamLogin=true\n"
+  },
+  {
+   "name": "…and keeps polling (still running after 15 s; the long window is measured separately)",
+   "ok": true
+  },
+  {
+   "name": "an unfinished login writes no credentials",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "status after an unfinished login": {
+   "status": "unauthenticated",
+   "isAuthenticated": false,
+   "hasAccessToken": false,
+   "hasRefreshToken": false,
+   "message": "Not logged in"
+  }
+ }
+}

@@ -1,5 +1,5 @@
 /**
- * THE THREE COUNTING READS AGREE ABOUT THE FOUR OWNER ITEMS — WITH ROWS IN THE TABLE.
+ * THE FOUR COUNTING READS AGREE ABOUT THE FOUR OWNER ITEMS — WITH ROWS IN THE TABLE.
  *
  * `push.service.spec.ts` holds the rule over a fake Prisma: which four ring a phone and which do
  * not. What a fake cannot witness is the QUERY — the nested relation filter that decides which
@@ -7,19 +7,21 @@
  * against. Empty results are what every existing spec produces for that read, and an empty result
  * is exactly what a filter that matches nothing looks like.
  *
- * So this file builds the rows a real project makes and asks all three readers:
+ * So this file builds the rows a real project makes and asks all four readers:
  *
  *   (1) the session list's `pendingApprovals` on the coordinator conversation,
  *   (2) the per-workspace `needsYou`,
  *   (3) `PushService.needsYouSessions` — the APNs badge, which is computed server-side for a phone
- *       that is not running the app and was, until this task, blind to the four (contract §7.6 V13).
+ *       that is not running the app and was, until this task, blind to the four (contract §7.6 V13),
+ *   (4) the coordinator card's `pendingApprovals` (`ProjectsService.coordinatorStatus`), which is all
+ *       the card's "Needs you" reads since a turn that merely ended reads Idle (2026-10-15).
  *
  * THE NEGATIVES COME FIRST, and each is the same fixture one fact earlier: before any item exists;
  * with an item the COORDINATOR is working through (owner decision 10 — pushing it would interrupt
  * somebody about work already being done); with an OWNER-assigned item that is NOT one of the four
  * (`ownerItemKind`'s predicate, which is the only spelling of "this one is the owner's"); and with
  * an owner item on a project that has no coordinator conversation to draw the card in (a badge that
- * opens nothing is worse than a dark one). Only then does a real question make all three light.
+ * opens nothing is worse than a dark one). Only then does a real question make all four light.
  *
  * AND ONE POSITIVE THAT USED TO BE DARK: the same item on a project whose coordinator is SWITCHED
  * OFF but whose conversation is still bound — `coordinatorEnabled = false`. The switch decides
@@ -43,6 +45,7 @@ import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
+import { ProjectsService } from '../projects/projects.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -64,7 +67,7 @@ interface Fixture {
   uncoordinatedProjectId: string;
   /**
    * A project whose coordinator is SWITCHED OFF (`coordinatorEnabled` left at its default) but whose
-   * conversation is bound and live: the card is drawn in that conversation, so all three reads have
+   * conversation is bound and live: the card is drawn in that conversation, so all four reads have
    * to count it there.
    */
   switchedOffProjectId: string;
@@ -226,11 +229,26 @@ test('the four owner items light the badge, the list and the workspace count —
   // `needsYouSessions` does not gate on the credential (the badge is computed for a phone that is
   // not running the app, not for a delivery), so an unconfigured service is the honest one here.
   const push = new PushService(prisma, { get: () => undefined } as never);
+  // The coordinator status read, with the two services it reaches answered the way its own spec
+  // answers them: the criteria summary and today's spend are not what this file is about.
+  const projects = new ProjectsService(
+    prisma,
+    { criteriaSummary: async () => ({ total: 0, passed: 0, lastRunAt: null, criteria: [] }) } as never,
+    undefined as never,
+    undefined as never,
+    undefined as never,
+    {
+      assessSpend: async () => ({
+        spend: { selfStartedTurns: 0, sessionsOpened: 0, successorRetries: 0 },
+        limits: { maxSelfStartedTurnsPerDay: 40, maxSessionsOpenedPerDay: 40, maxRetriesPerSuccessorChain: 2 },
+      }),
+    } as never,
+  );
 
   const f = await fixture(db, 'owner-item-badge');
 
-  /** All three readers at once: the row, the workspace tally, and the badge. */
-  async function reads(sessionId: string = f.coordinatorSessionId) {
+  /** All four readers at once: the row, the workspace tally, the badge, and the coordinator card. */
+  async function reads(sessionId: string = f.coordinatorSessionId, projectId: string = f.projectId) {
     const rows = await sessions.list(f.ownerId, {});
     const row = rows.find((s: { id: string }) => s.id === sessionId);
     assert.ok(row, 'the coordinator conversation is in this owner’s Open list');
@@ -240,15 +258,16 @@ test('the four owner items light the badge, the list and the workspace count —
       pendingApprovals: (row as { pendingApprovals: number }).pendingApprovals,
       workspaceNeedsYou: workspace?.needsYou ?? 0,
       badge: await push.needsYouSessions(f.ownerId),
+      coordinatorCard: (await projects.coordinatorStatus(f.ownerId, projectId)).coordination.session?.pendingApprovals,
     };
   }
 
-  // (1) The fixture before it holds anything: all three answer zero, so "greater than zero" below
+  // (1) The fixture before it holds anything: all four answer zero, so "greater than zero" below
   //     cannot be true of a read that counts every session it can find.
   const empty = await reads();
   assert.deepEqual(
     { ...empty, badge: empty.badge.includes(f.coordinatorSessionId) },
-    { pendingApprovals: 0, workspaceNeedsYou: 0, badge: false },
+    { pendingApprovals: 0, workspaceNeedsYou: 0, badge: false, coordinatorCard: 0 },
     'nothing is waiting yet',
   );
 
@@ -262,7 +281,7 @@ test('the four owner items light the badge, the list and the workspace count —
   const handling = await reads();
   assert.deepEqual(
     { ...handling, badge: handling.badge.includes(f.coordinatorSessionId) },
-    { pendingApprovals: 0, workspaceNeedsYou: 0, badge: false },
+    { pendingApprovals: 0, workspaceNeedsYou: 0, badge: false, coordinatorCard: 0 },
     'the coordinator is on it; the owner is not told',
   );
 
@@ -276,18 +295,18 @@ test('the four owner items light the badge, the list and the workspace count —
   const refused = await reads();
   assert.deepEqual(
     { ...refused, badge: refused.badge.includes(f.coordinatorSessionId) },
-    { pendingApprovals: 0, workspaceNeedsYou: 0, badge: false },
+    { pendingApprovals: 0, workspaceNeedsYou: 0, badge: false, coordinatorCard: 0 },
     'owner-assigned is not enough; it has to be one of the four',
   );
 
   // (4) One of the four on a project with NO coordinator conversation: the card exists on the
   //     project page, but there is no conversation to open, and a lit badge that opens nothing is
-  //     worse than a dark one — so none of the three counts it.
+  //     worse than a dark one — so none of the four counts it.
   await db.projectOpenItem.create({ data: item(f, f.uncoordinatedProjectId) } as never);
   const nowhere = await reads();
   assert.deepEqual(
     { ...nowhere, badge: nowhere.badge.includes(f.coordinatorSessionId) },
-    { pendingApprovals: 0, workspaceNeedsYou: 0, badge: false },
+    { pendingApprovals: 0, workspaceNeedsYou: 0, badge: false, coordinatorCard: 0 },
     'no conversation to point at, so no count',
   );
 
@@ -299,8 +318,9 @@ test('the four owner items light the badge, the list and the workspace count —
   assert.equal(waiting.pendingApprovals, 1, 'the session list counts it on the conversation');
   assert.equal(waiting.workspaceNeedsYou, 1, 'so does the workspace tally');
   assert.ok(waiting.badge.includes(f.coordinatorSessionId), 'and so does the APNs badge');
+  assert.equal(waiting.coordinatorCard, 1, 'and so does the coordinator card on the project page');
 
-  // (6) Resolving it is what puts all three back — a committed row, with the session untouched.
+  // (6) Resolving it is what puts all four back — a committed row, with the session untouched.
   await db.projectOpenItem.update({
     where: { id: ask.id },
     data: { state: 'RESOLVED', resolution: 'ANSWERED', resolvedAt: new Date(), resolvedBy: 'USER' },
@@ -308,19 +328,20 @@ test('the four owner items light the badge, the list and the workspace count —
   const after = await reads();
   assert.deepEqual(
     { ...after, badge: after.badge.includes(f.coordinatorSessionId) },
-    { pendingApprovals: 0, workspaceNeedsYou: 0, badge: false },
+    { pendingApprovals: 0, workspaceNeedsYou: 0, badge: false, coordinatorCard: 0 },
     'answered, so nothing is waiting',
   );
 
   // (7) One of the four on a project whose coordinator is SWITCHED OFF, with its conversation still
   //     bound. The switch decides whether an item can be handed to that conversation at all — which
   //     is why this one is the owner's — while the card is drawn there and the client reads the
-  //     binding, not the switch. All three follow the card.
+  //     binding, not the switch. All four follow the card.
   await db.projectOpenItem.create({ data: item(f, f.switchedOffProjectId) } as never);
-  const switchedOff = await reads(f.switchedOffSessionId);
+  const switchedOff = await reads(f.switchedOffSessionId, f.switchedOffProjectId);
   assert.equal(switchedOff.pendingApprovals, 1, 'the switched-off conversation counts it too');
   assert.equal(switchedOff.workspaceNeedsYou, 1, 'so does the workspace tally');
   assert.ok(switchedOff.badge.includes(f.switchedOffSessionId), 'and so does the APNs badge');
+  assert.equal(switchedOff.coordinatorCard, 1, 'and so does its coordinator card');
 
   // The refused row from (3) is still OPEN and still the owner's — it must not have been what lit
   // (5), which is why it stays in the table through every phase above.

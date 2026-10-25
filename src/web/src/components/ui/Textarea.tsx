@@ -32,7 +32,7 @@ export function Textarea({
         if (ref) ref.current = node;
       }}
       className={['orbit-text-control', 'orbit-textarea', className].filter(Boolean).join(' ')}
-      // The measured size wins over the caller's style, as it did for the AntD field it replaces.
+      // The measured size wins over the caller's style, as it did for the field it replaces.
       style={fitted ? { ...style, ...fitted } : style}
       disabled={disabled}
       data-variant={variant === 'borderless' ? 'borderless' : undefined}
@@ -78,7 +78,7 @@ function useAutoSize(field: { current: HTMLTextAreaElement | null }, autoSize: T
 }
 
 // What decides how tall the same text lays out. Copied onto an offstage twin of the field, with
-// the same list and arithmetic as the AntD field it replaces, so a migrated field grows to the
+// the same list and arithmetic as the field it replaces, so a migrated field grows to the
 // exact heights — and from its placeholder while empty — that it had before.
 const SIZING = ['letter-spacing', 'line-height', 'padding-top', 'padding-bottom', 'font-family', 'font-weight',
   'font-size', 'font-variant', 'text-rendering', 'text-transform', 'width', 'text-indent', 'padding-left',

@@ -128,3 +128,56 @@ func TestTaskCLIBatchPinRefusesNoSelectorAndNoPin(t *testing.T) {
 		})
 	}
 }
+
+// T5 (docs/provider-engine-contract.md §3.5): batch-pin takes the engine pin like the other two, in
+// the same three states — a value pins, --clear-engine sends an explicit null, and a re-pin naming
+// only --provider leaves the engine out, so the server writes that provider's default engine as it
+// always did. An engine alone is a write of its own: it passes the "names nothing" check.
+func TestTaskCLIBatchPinSetsClearsOrLeavesTheEnginePin(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		flags      []string
+		wantEngine interface{}
+		hasEngine  bool
+	}{
+		{name: "engine alone", flags: []string{"--engine", "dsh"}, wantEngine: "dsh", hasEngine: true},
+		{name: "engine and provider", flags: []string{"--engine", "opencode", "--provider", "deepseek-2"}, wantEngine: "opencode", hasEngine: true},
+		{name: "clear", flags: []string{"--clear-engine"}, wantEngine: nil, hasEngine: true},
+		{name: "provider alone keeps the engine it ran on", flags: []string{"--provider", "deepseek-2"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, gotPath, gotBody := batchPinServer(t)
+			args := append([]string{"batch-pin", "--project", "01a02d83-7c58-708c-8d7c-103d15523d70"}, tc.flags...)
+			var out bytes.Buffer
+			if err := cmdTaskCLI(append(args, "--json"), strings.NewReader(""), &out); err != nil {
+				t.Fatal(err)
+			}
+			if *gotPath != "/api/runner/tasks/batch-pin" {
+				t.Fatalf("path = %q", *gotPath)
+			}
+			engine, present := (*gotBody)["engine"]
+			if present != tc.hasEngine || engine != tc.wantEngine {
+				t.Fatalf("engine = %#v (present=%v), want %#v (present=%v)", engine, present, tc.wantEngine, tc.hasEngine)
+			}
+			if _, present := (*gotBody)["model"]; present {
+				t.Fatalf("model must stay absent when unnamed, got %#v", (*gotBody)["model"])
+			}
+		})
+	}
+	t.Run("set beside clear", func(t *testing.T) {
+		batchPinServer(t)
+		var out bytes.Buffer
+		err := cmdTaskCLI([]string{"batch-pin", "--project", "01a02d83-7c58-708c-8d7c-103d15523d70", "--engine", "dsh", "--clear-engine"}, strings.NewReader(""), &out)
+		if err == nil || !strings.Contains(err.Error(), "--clear-engine and --engine cannot be used together") {
+			t.Fatalf("err = %v", err)
+		}
+	})
+	t.Run("naming no pin names the engine among the choices", func(t *testing.T) {
+		batchPinServer(t)
+		var out bytes.Buffer
+		err := cmdTaskCLI([]string{"batch-pin", "--project", "01a02d83-7c58-708c-8d7c-103d15523d70"}, strings.NewReader(""), &out)
+		if err == nil || !strings.Contains(err.Error(), "--engine, --provider and/or --model") {
+			t.Fatalf("err = %v", err)
+		}
+	})
+}

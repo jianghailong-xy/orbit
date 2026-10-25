@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { RunnerEngines } from './RunnerEngines';
-import { clickRunnerMenuItem, openRunnerCards, openRunnerMenu, runnerMenuItem } from './RunnerEngines.test-helpers';
+import { clickRunnerMenuItem, openRunnerCards, runnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -77,7 +77,7 @@ let host: HTMLDivElement | null = null;
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  // Remove asks in an antd popup, which measures itself with a ResizeObserver jsdom does not have.
+  // The account menu measures its button with a ResizeObserver, which jsdom does not have.
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
 afterAll(() => {
@@ -126,13 +126,14 @@ const click = async (el: HTMLElement) => {
     el.click();
   });
 };
-/** The confirmation's own Remove, once its popup is drawn (a portal, a few frames late on a slow host). */
+/** The confirmation's own Remove, once its popup — a dialog named by its question — is drawn (a portal,
+ *  a few frames late on a slow host). */
 const confirmation = async () => {
   let ok: HTMLButtonElement | undefined;
   await act(async () => {
     await vi.waitFor(
       () => {
-        ok = [...document.querySelectorAll<HTMLButtonElement>('.ant-popconfirm button')].find(
+        ok = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
           (b) => b.textContent?.trim() === 'Remove',
         );
         expect(ok).toBeDefined();
@@ -150,11 +151,12 @@ const removals = () =>
   apiMock.mock.calls.filter(([path, options]) => (options?.method ?? 'GET') === 'DELETE' && String(path).includes('/accounts/'));
 
 describe('removing one Codex account from a runner', () => {
-  it('offers Remove account in added accounts’ menus, and never on Default', async () => {
+  it('offers Remove account in every account’s menu, Default’s from Orbit alone', async () => {
     const page = mount([runner([DEFAULT, WORK, PERSONAL])]);
     const [defaultRow, workRow, personalRow] = accountsOf(page);
 
-    expect((await openRunnerMenu(defaultRow)).textContent).not.toContain('Remove account');
+    // Default's takes it off Orbit's list and leaves the machine alone (RunnerEngines.removeDefault.test.tsx).
+    expect(await runnerMenuItem(defaultRow, 'Remove account')).toBeTruthy();
     expect(await runnerMenuItem(workRow, 'Remove account')).toBeTruthy();
     expect(await runnerMenuItem(personalRow, 'Remove account')).toBeTruthy();
   });

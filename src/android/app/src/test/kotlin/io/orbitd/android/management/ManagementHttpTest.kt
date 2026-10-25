@@ -98,6 +98,28 @@ class ManagementHttpTest {
         }
     }
 
+    /** A wiki space's link lives under its space — read, Footnotes on, turned off — and Shared links names every kind it draws,
+     * WIKI with them, as iOS's `ShareLinksAPIClientTests` see them on the wire (2ba6765d9). */
+    @Test fun aWikiSpacesLinkIsAtItsSpacesPathAndTheListNamesEveryKind() = runBlocking {
+        MockWebServer().use { server ->
+            val api = start(server)
+            val link = """{"id":"L5","token":"WikiToken","kind":"WIKI","state":"ACTIVE","root":{"id":"w1","title":"orbit","slug":"orbit"},"include":{"footnotes":true}}"""
+            server.enqueue(json("""{"link":$link,"counts":{"documents":12,"footnotes":486}}""")); server.enqueue(json(link)); server.enqueue(json("{}"))
+            sharingRead(api.get(sharingPath("WIKI", "w1")), "WIKI", "w1")
+            api.put(sharingPath("WIKI", "w1"), buildJsonObject { put("include", buildJsonObject { put("footnotes", true) }) })
+            api.delete(sharingPath("WIKI", "w1"))
+            assertEquals(listOf("GET /api/wiki/spaces/w1/share ", """PUT /api/wiki/spaces/w1/share {"include":{"footnotes":true}}""",
+                "DELETE /api/wiki/spaces/w1/share "), List(3) { server.takeRequest().let { "${it.method} ${it.path} ${it.body.readUtf8()}" } })
+            server.enqueue(json("""{"links":[$link]}"""))
+            val links = sharingLinks(api)
+            val listed = server.takeRequest()
+            assertEquals("/api/share-links", listed.requestUrl!!.encodedPath)
+            assertEquals(setOf("kind"), listed.requestUrl!!.queryParameterNames)
+            assertEquals("SESSION,TASK,PROJECT,WIKI", listed.requestUrl!!.queryParameter("kind"))
+            assertEquals(listOf("Wiki"), links.map(ShareCopy::whereLine))
+        }
+    }
+
     private suspend fun start(server: MockWebServer): ManagementApi {
         server.enqueue(MockResponse().setBody("""{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":{"id":"fixture-user","email":"fixture@example.test","name":"Fixture"}}"""))
         val session = AuthSession(OkHttpTransport(), object : CredentialStore {

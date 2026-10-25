@@ -60,7 +60,12 @@ cannot remove a newly registered binding, even with the same account and token.
 Always clear local notifications and discard the local binding on logout/server
 switch, even if offline. A queued cloud message cannot be recalled; reject its
 old registrationKey before displaying its contents. The generic auth/logout
-endpoint does not implicitly unregister devices (unchanged from iOS).
+endpoint does not remove the binding, but it ends the login session the binding
+was registered under, and the server sends nothing to a binding whose session
+has ended: signed out, revoked by refresh-token reuse detection, or expired
+([push-login-session-design.md](push-login-session-design.md)). Unregister
+first all the same: it takes effect at once, also for a binding registered
+before sessions, which names none.
 
 Legacy iOS registration remains `{token, bundleId, environment?}` with default
 platform `ios` and environment `production`; response remains `{ok:true}`. Its
@@ -142,8 +147,9 @@ OAuth uses a cached, single-flight RS256 assertion exchange at Google's fixed
 token endpoint and the `firebase.messaging` scope. Send targets only the configured
 platform/package/environment/owner; APNs additionally selects sandbox or production
 per registration. FCM requests restrict the receiving Android package. The
-registration snapshot is checked before each send/retry; invalidation deletes
-only that snapshot, never a binding replaced meanwhile.
+registration snapshot, and that its login session is still live, is checked
+before each send/retry; invalidation deletes only that snapshot, never a
+binding replaced meanwhile.
 
 FCM has at most three attempts within one 15s delivery budget, including waiting
 for OAuth, the registration check, HTTP headers/body and backoff. Each HTTP

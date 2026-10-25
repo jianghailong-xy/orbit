@@ -1,0 +1,304 @@
+{
+ "tests": {
+  "foundation-theme.browser.mjs › account adoption, preference writes and live system changes share the foundation theme › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › account adoption, preference writes and live system changes share the foundation theme › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › account adoption, preference writes and live system changes share the foundation theme › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › account adoption, preference writes and live system changes share the foundation theme › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › account adoption, preference writes and live system changes share the foundation theme › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › account adoption, preference writes and live system changes share the foundation theme › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › account adoption, preference writes and live system changes share the foundation theme › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › account adoption, preference writes and live system changes share the foundation theme › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached dark › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached dark › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached dark › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached dark › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached dark › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached dark › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached dark › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached dark › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached light › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached light › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached light › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached light › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached light › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached light › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached light › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached light › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached system › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached system › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached system › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached system › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached system › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached system › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached system › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation-theme.browser.mjs › production boot and hydration preserve cached system › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation.browser.mjs › body portals inherit theme and preserve focus ownership › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation.browser.mjs › body portals inherit theme and preserve focus ownership › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation.browser.mjs › body portals inherit theme and preserve focus ownership › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation.browser.mjs › body portals inherit theme and preserve focus ownership › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation.browser.mjs › body portals inherit theme and preserve focus ownership › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation.browser.mjs › body portals inherit theme and preserve focus ownership › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation.browser.mjs › body portals inherit theme and preserve focus ownership › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation.browser.mjs › body portals inherit theme and preserve focus ownership › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "foundation.browser.mjs › foundation states match the frozen P0 palette › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "foundation-states": {
+     "equal": false,
+     "pixels": 100218,
+     "maxChannelDiff": 223
+    }
+   }
+  },
+  "foundation.browser.mjs › foundation states match the frozen P0 palette › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "foundation-states": {
+     "equal": false,
+     "pixels": 70480,
+     "maxChannelDiff": 223
+    }
+   }
+  },
+  "foundation.browser.mjs › foundation states match the frozen P0 palette › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "foundation-states": {
+     "equal": false,
+     "pixels": 10236,
+     "maxChannelDiff": 224
+    }
+   }
+  },
+  "foundation.browser.mjs › foundation states match the frozen P0 palette › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "foundation-states": {
+     "equal": false,
+     "pixels": 9796,
+     "maxChannelDiff": 224
+    }
+   }
+  },
+  "foundation.browser.mjs › foundation states match the frozen P0 palette › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "foundation-states": {
+     "equal": false,
+     "pixels": 100224,
+     "maxChannelDiff": 223
+    }
+   }
+  },
+  "foundation.browser.mjs › foundation states match the frozen P0 palette › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "foundation-states": {
+     "equal": false,
+     "pixels": 70486,
+     "maxChannelDiff": 223
+    }
+   }
+  },
+  "foundation.browser.mjs › foundation states match the frozen P0 palette › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "foundation-states": {
+     "equal": false,
+     "pixels": 10307,
+     "maxChannelDiff": 224
+    }
+   }
+  },
+  "foundation.browser.mjs › foundation states match the frozen P0 palette › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "foundation-states": {
+     "equal": false,
+     "pixels": 9867,
+     "maxChannelDiff": 224
+    }
+   }
+  }
+ },
+ "totals": {
+  "tests": 48,
+  "bothPassed": 48,
+  "statusDiffers": 0,
+  "onlyBefore": 0,
+  "onlyAfter": 0,
+  "jsonAttachments": 48,
+  "jsonDiffering": 0,
+  "pngAttachments": 40,
+  "pngEqual": 32,
+  "pngDiffering": 8
+ }
+}

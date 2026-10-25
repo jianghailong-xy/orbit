@@ -1,0 +1,4613 @@
+{
+ "stats": {
+  "startTime": "2026-10-07T22:39:20.519Z",
+  "duration": 477705.376,
+  "expected": 200,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ },
+ "errors": [],
+ "tests": [
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 0",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1973,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7140b37403de094b18ae777321701bf1505076bcc1898bde05c5da0f015d3abb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 1",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1965,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c29f7927d9d5f4351e36e40bafc47f3a4d2d8e8d3b23581d482b5c63467ecac4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 2",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2023,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b553d152014b1d8d2f1132b3b37316a82b52b02e5a74022bf8bf85c9eb030612"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 3",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1919,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "27f00258acb09c6f0773c5e972d4feacd5f837856b9fd93d601b3fb0c654331f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 4",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1922,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "282536d61238030ffa0a6bd8b5573c385e7e022be05a9678a946c9a86ae9f126"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 5",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1921,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bae309f0fc364fcfe6d7fd1195eb592d23206701f309a55a1f3d7aa8528362e3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 6",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1929,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "70418750f300e9cc2793d161da67178c8455078cec8832ea92199e35f8a140f5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 7",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1906,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2b63fb49a999bd30ce46c084f4c91e3f7decf8c53339ae2cfee20f33b3ad25cc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 8",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2001,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c52d990e3e5af12440d0125aec03a609f38c55dcff385622b492e2f2dffb95ce"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 9",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1995,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4a3228fb153d6b914d9811406b48159e393647209efd12469a87ae7e8cc75f1b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 10",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1891,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "20733727093855a434cb85a8879acc546b109954739e80c9294e85023551a188"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 11",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1902,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "330bec7a5aeecb3a765d656257ce0f4ff5bde5b0335c7963d89f7423aef35d3a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 12",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1906,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d7624df6cdddf3c9aef3a99ff492f34d85d6c667499853051b59756e202fbc3e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 13",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1962,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "73f61162f6d07ce09f116200aa57cf0501853062e4a1a1416c9a90dba7a40dda"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 14",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1968,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "486365fec4a78e2736fdd798e6d81f795c0bb69d969beee51dbd6da57b330c57"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 15",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1909,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e036941bcdfbd946432df64cc32fc5c48106c07cb0dd9f3dbb3ab79ac7df2db7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 16",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1988,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "40c5d5890355afefabd7faf61b6b10397b1c24654405b53dfacbb1c1efba8d47"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 17",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1978,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "66e133051255db27b0b7e4ac142e1da39bea0bee28e19f0ef16b620690cd9f38"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 18",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1997,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "50ecb645d59d6bec3780235beef641ba13d6eeed066e34113da4ad9e95a43183"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape burst sample 19",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1991,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2265db5177c48e068106862405d55dec7ab20303bb0f0a80dc6fb3e54562a525"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 0",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2539,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e155f22098c0481a976921960eadf45211801b874b9574b6d995b636ef5fdc1a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 1",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2732,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e601466867f332c4e151325b101b61116a9953b5a2e436dcd1bc3614ef747c77"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 2",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2629,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "edd6edfdd1e1143417681b37dcc82726b1c80520685627b1b3f051bb75dbb4c1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 3",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2619,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ef9ad277590cf29147abd183cfeaf7b2c383de59c1823d240172c3bedc36fdac"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 4",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2577,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "78fe5044d1aba59477ba218f8af0975e13f9ad93607df9c93783527906fe4407"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 5",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2602,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "868bf66611cdc620f47432cf5fc851f12f73069743af155a682de0b6b059827b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 6",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2619,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "588fd5b8eead06db8ed9ff76fd328f45c0ae1afcb91cabe350eb36cd9a24b404"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 7",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2533,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7eac6ec6c1417a2cc2077130afa350b8b2873a4bf5b5d9f840ba4457881ebec0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 8",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2591,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c035fae78fe222a8c2b425a45a01e8a73495738d6dc15b3959ff18597fcb85b3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 9",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2626,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "319f21c69e5cd62809b7cd8a708f28542878d3da4a3d30dadbfa13a6fe7835bb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 10",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2596,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0fd4080519eccbb39885df7e103e5090273b581fa323777eaefa504aa35cf1a1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 11",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2609,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4a354bfe1126f6f2abe32a0ceda3dd88756cc41c2129b74591170115bd2192ac"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 12",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2658,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f1012220cae66b6c7200ce4fb1ad75eaaa2693ae1d456d3b8c7e00cbeeb05c86"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 13",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2650,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a35144175977d34269b005374f4acd4b0efbb0c7620b1a82ba835baed03eb905"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 14",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2506,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "160a4a69f9b8270358ef92bcc9367bfd612c8f3b4f12c9cbb9758d6e1442492c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 15",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2513,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "084dd425a2700c29adb5d9500f25a2d0b6e4b399f294cbbd0d9997c291b907be"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 16",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2593,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "542a2b85ad56efd8734c708f3c237c39c79373f2827b0239e3669154025757a3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 17",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2596,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e06f1061df4ffdabb8125daf815b2067d77ede28f68d35b676324b3582118f88"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 18",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2584,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c395d6890a23c4bbcfe3e13b36bbf28c07c1c5b9d22b20e727f7c13dda4db26c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-escape paced sample 19",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2534,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "17da923570ec2921918b946a6aa94c1e12fb1e149c4567439aa95203b2953565"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 0",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1942,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0301ea7f93280f73a37cf051a4c43d4c91194f811d7e9abfed323ec5d68b18b8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 1",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2046,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f6f2cd814f1fe2a4c7f39ae6629310f1e52ec7dcae835c5abf0caf2478f18b0d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 2",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2056,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f2aaedade188ff254b2386213056cb7ea8b5f9eff4114986ccccd5b570393776"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 3",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1973,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c95408fb87ea434cc8ed013fcc33860f11a958084ca7ece1b501897223671b15"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 4",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2066,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b28cb02846fcfa499bfc8a20a039be654f0646425d7251a6f237ac679e379426"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 5",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2040,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "13192e48ef0098474a5046aaf9db3dd2364ce94c0a479aff4e24b5610c3b5b75"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 6",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1952,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f46324b8b8bebe6db80808806bf7188037f83c7441d2720bf2bb0a8f75d2ef79"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 7",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1927,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "84ad0ce37242e5a99b89fb8cd26c672ff77196bf8319f846c581b23e44d8c998"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 8",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2013,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "62b2509175cd3a861aad6003dd0411f1c21ada10696d93b8f9402478a4cbc6dc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 9",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2035,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bba35bdd6fa90178a3c6ddc6d814467b5e537d4adb806c0af3f7b34439476607"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 10",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1898,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "effc87fe84383f09ece4b3bce2a34cf2874ba0a5b9e4243635991301b7ae502e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 11",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1916,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "376ff730acf557a40a5c32679a21c5b17dbb7e74ecc10a06ce0a33a2825ae5df"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 12",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1979,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "dc34badbfc23283b9c9c306ec70efee6ab3a367394ab8f2113a40c7bda66ba92"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 13",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2039,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1d6f7ad22570a6a130a9eb4c4332f5b9bf0d5a89b58fd2868dc8d315e3475527"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 14",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2020,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6c1db5c81712afe785e641a666a4a1afe23240112fbb204b5b89e96bdc6505e4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 15",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2009,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "aa8c315d1563e741e781290320ae0b9e9fd92bdf5a13cad894c018dcd5dd067d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 16",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1999,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "528b8c849606caf7d6acc6196478f386624ee5643fe8018e5052e6d9b623deda"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 17",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1902,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ba8e97b8fa8a7d70e9783efce123d207c8e1b3348b051b00b838f398906a55da"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 18",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2037,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "cb8dacf0985aa67546315fa88d95940c789632131c8675463546948a6efb08f5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space burst sample 19",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2010,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "598b927f6ddee475fc0c0f65e12f50dac0aabc1eb1cabbae2c8272ce7d116fc5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 0",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2607,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8d0bb5ee391ce23639644a94f67d53f1cb4e015739390410a3d7a97fc43d9abe"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 1",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2489,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "cd9cf04f570c86d14de7ceb3efa33dac6ebb0432ddd73492dae8d365f504d0fc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 2",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2593,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2c4c5e2bdefa97311533c8fccba13fb3266865a0a1179dbbd5fa8bd1bd984ee4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 3",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2570,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f190e34392cd58a262342d5c815f401330e0a09980578020ede1b5ea4da570a3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 4",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2583,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9b253f1b7549747fb63d04aea5185322aa607726eab2e80622bd9907da9195a6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 5",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2504,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1c02e81e42403ae2166c9ce87113ddadb4aeff67e5e0fc65a8454eb732d85983"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 6",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2569,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "95fc7a85b857be9f9bc9ac6ed248b5c1bd528ebbb1ef2c756372421e2fdaa887"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 7",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2600,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f0ab21de5d3a02b07fa9b650e1620a597b4f9480d0a4bc7f288bef51c2e1ad97"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 8",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2626,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c70c27b6c5f800c1933e5260061c4b630ddd947db3d87e6e4be5801b7b83daa3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 9",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2531,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2e13ffd3d7ef17f8239165dd866539ce96607e2f0870f34fcd6b9ad7938c2b24"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 10",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2669,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d4ee9efea0671f558539cc53838996255b4e3650e4bfc75bb1094a911c66ccef"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 11",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2675,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "734a02f801285f90cbc0b4b0c5ecbdb9f5227ef6d6523638112c3efe6fea9085"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 12",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2652,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "043a15220e09297d732248f0aa66b1896dcf5a38c83369d189fae9b34501fd0c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 13",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2636,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a6f7717ff9d63fa1eef8ac75fc4f642c6aac7d9ced96c753513feb1e0f872d4e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 14",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2501,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f2fd0665f84ffff737a09f3902d5e775a67743ace2780d43cbc80328f46032d7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 15",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2548,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "89d1df965a08e426f68e00502c72ab22cbef3373da99239d51199f9b4ba5105f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 16",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2649,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0fdc863f9a4df7cf4311e6a5a2321ba92d3037536ad1b8e0a7c25ef9b4781bb3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 17",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2572,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8d8aabac76f45e92c8f460d9e257d265fc5eabdf01055ace127434387dc5d7d6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 18",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2582,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a94f6b56a7685064998c4414a66b607c3eaf3af56a00c0beda43437bcdade321"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-space paced sample 19",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2478,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ec31c95bac412bda6ae67cc18d2d8bf4734797772a7ebb0a60a70a623917c1b5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 0",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1969,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "faad0a7bcf5303efc3fea3968c0e343271b2eab87667838983b25fa3952d3878"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 1",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1991,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "87db8b9a10e44a786706e96231ede7499239db22f05dba7bee1efc496312abf2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 2",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2002,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "fb85cb63d143e9885b2f4373947a2dfed3b4d7b4bb72d07da20d49899441b8b0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 3",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1976,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5353381e779cd824db835e24a7ce158260e4876e70187fa921abbae74b1e3031"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 4",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1984,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c90eb6673f949e769254a6a30e20e785819866b0c5ec8b80169e809d65ce009b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 5",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2018,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a1d67ce20f3c9f93785522d06a30be74191d7bf6e7c5424605c45c8bdae9820d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 6",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1997,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5b4fbb18cc90436e1ad83670e993f2880be461c80ecbfffb0fd8930c072805f5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 7",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1967,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "46402356a928b62072553b32b163273923732b47d6505626ceb5e72793236709"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 8",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1992,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "50b5a20748bc2abe181bdfbd8e6a701e5219b0bc7e1a7798482d4f15d9b021eb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 9",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1933,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "57a0c6e3b93e826107d98dc5fa9eba653947d93e2e263aa9cd72b405c1adec18"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 10",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1959,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a96a1ba6a3d65c1a4a82d5738a0b2f53b7c92e5f5f35c368fe78c5e38f3e40b6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 11",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2013,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5b0d13d71d0651b0d85bcab06e6f1f88d5ee5dbacf28fb1cec929eb542a05a1f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 12",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1953,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6f89e9bb97b15e87fc8c15b288186b928f9039c8ed6c43952074aaf1228d88df"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 13",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1916,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9e1e993c73fa77ce8be2d46e7b4b137cbecd81cb1a3140f6a45aeea9074794c4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 14",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1962,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c7f7e103d274a7b2194cddcaf8c5b63e2e4ffc19b949b57211726be9f642fbba"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 15",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1880,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "62d4509e4ea5c661743fa964e252accf4252fe237f2b1889d0b68e1dd99feabc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 16",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1853,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2a17e20c93c6a6cc22d894346a347f70a697b86b868cb05fa48b713496861a14"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 17",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2031,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "192c565fcbfc65ddebdbc5a3ecf5bc8a73d917769ff6327e040e0fcd653c1ca7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 18",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1896,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8e78deb6b47f48add7f1df2eb5643347a04b7002fde51e5cb5ee94b5ac2aae3e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter burst sample 19",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2005,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a35d43da800bd18627a126e477e26805f64125ad5bbdf0432ab6ea2b4cc76976"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 0",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2878,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "de468f28fe32c36e8c75d98bcafe5fc5482014a447aa5c1d62ac05043198841a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 1",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2887,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5e2a431ab8dba6410542b530a5e19a50585110f5465897966f2d88aa0962a4b5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 2",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2917,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "69132304a256fb7f00da336deb535658017712222a0535d7208301bb98e12ec2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 3",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2924,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "295358a09b344c4346589c21d6286ccdf4bd5043ef9f15e84ef642086a1b35b2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 4",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2927,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d90b80d83e602cc3a515c744f59840b17bf0c0c6726285b85fd2e22903c94bd8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 5",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2910,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2ff66103795649071030e002e8ddc034fc023fe2f7d6f21256d10e21cd836778"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 6",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2916,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e0d8f7e17539ef4a037f08aec7d738c54f2c6833c04585596c63020972ccd1c8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 7",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2817,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "49bf6191b34070d352740a276832ac0d9b780212f9455cbbfbf15b9dce501ef4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 8",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2833,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1bb4ba492c5adaefb43612c4ed9cd237416899fded00672bb1ad519c8ad346cc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 9",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2868,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "694cec39fca4e4d811f8ed13f916e5f57d609580c6fd2fabc003cff6b4b8320d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 10",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2833,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "dd5c9233f306e44845a5235bfb7795af0b6cb744577ed5a0b85c5f12d7f9528c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 11",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2844,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "dc97ec5ce21eb2e92183979791de7e2a44d19f61b0624504f9a44c854e7f980f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 12",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2931,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "83e084fec22175b8be15fea6caf1896490e8173e0011ddce918e8bde03e5910e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 13",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2913,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "774f9297aa52216d8d8da44ca85a53ee0b450dc13332bfa18be11e9bfbb21e39"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 14",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2842,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ae9702de85849e5e7d90e401841cf4509fb9b13abc305ac7d336c0838f95e23f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 15",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2926,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ad10fad774ab21f135e50302e1c8269a491409d8711ca8be6f15ec0043656e5b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 16",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2932,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d53c026da855e0adc4b803d05da937c0ba36a50763936d0ad648af89db85da3a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 17",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2863,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4cb42d0a8ff83fab6b2f6d8a4d89a9892734b60b73c1f3e69fe47b4474276d93"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 18",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2962,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "39ac15ad6756c47d5a3f379726a01e68db65664e22f37122cc30a15cea3965c2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-home-enter paced sample 19",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2962,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6e3dc9c9702b4d36b3741cf9190328400c8ae097edd6624d85d0f7b27bd2dc20"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 0",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1941,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5059bab22981faaac4815ad12d5a58332b0787ff11bf2bc7ff8fbec4ec4cb9f5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 1",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1899,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f83449dcb15c2a239d174a093c7d41138e7270c6feb53c1ade478562e0f953df"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 2",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2016,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4f7c5a1fb5650a77dfe22c1e43d4d01402d3dd15c1e86ce9ef69fda3e84b927c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 3",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2039,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5c03183a06aaef1fca2441a90c4ef8eec17e150891f306d189dfa4ad8230d607"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 4",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2062,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6b765336114b11c6c333fdae78d422a87be9add084e89a330faeb13e966d9ceb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 5",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1923,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6e69127b9d82fdb0aaf9ac7004eafb2be4e2ceeb8ba4edc0643078bf60d7524c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 6",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2020,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "57dd1fd373a3feb08d593181b3fe8ac76f8e48f8d7d10901b61b187d9181671a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 7",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2015,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "06991203d9a227fab0091e6d48e5d01b778d3b91cedef400b284ed378bd6c394"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 8",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1931,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "330af5bd6dc435730203dfedadba89859b649e23c3fd23075e78922748c55e4b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 9",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1925,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bd6e966dfa9a314f695c80524032d098e0df93bba9b104ead92c55e89ab41650"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 10",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2069,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4ca16b5c5339e0da0328e2cc947c0f10bd6d7558cbfddf19e631bb998a5c2d65"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 11",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2003,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c6fdeebfa5ac99bbb2145e9dfc52e92fa0760a8c574719e05c0fcf0bfe23b9f2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 12",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1890,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "79fb44bb078df6cdc9d0c5687ff7a74ae7ea87c7eab7ce2f7cb23a0ae561ea98"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 13",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2033,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d02ca5d36e61244a6c4c06cbcc9535882ac1ee4e16ec8ba082ace6112e9163bf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 14",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1962,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "817540300004d40668f401aeefe4bbcaec719659c7d1bab805719fa9f236551b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 15",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2031,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4eaaf36870572e813c30dd24eea6f1032f85e8c9474f5abdb7b4a199e68b31f2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 16",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1977,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "21b267fa33db8108f1b6c14d0175889cdb8dfa6751eb6966af1f08c34e98e30b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 17",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1905,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5eca8a566fb37a0edccb2915c3d38970db109ae0df370a87f6e9c0184aad959e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 18",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2032,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1968a963b850b0afde3576a51b13015b5a378814469f65caaae9216f63a09c61"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter burst sample 19",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1940,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4da683edf415067c0d80154595d490d5b295fc7e59c62ad13edd710d1ddf1f88"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 0",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2955,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "17c8d9dba1624c650b5918229c54ca37994598f66e176241a605c50a877e21a9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 1",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2960,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b1cb3896ba868cb857cb02e380f62feea9f31a1b9c323077a3ac1eb87003a8ee"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 2",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2936,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "863848506d118af55cf99e65d3a687f707381e55f6000bfbf258fc5da311342a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 3",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2925,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "501e063224b0695b8aee3e91ab6037208ccc8bf87d96f8a6c8180e4c3c8dba01"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 4",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2836,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4033546ea1c222dcff77b5d79a032e79ea1938a540ccab7c2c60cf1a78c81999"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 5",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2998,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6bd27228d8f105a74fb94011aa88e8bf1eaba3bfab27a25d09e5611b33bdec4a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 6",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2949,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "66ffb63235ce3872ea44d120cddf63e6a92eb14b0846db94aed222028846199e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 7",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2931,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5967ec82dfb155365e95b546e6b5bc86f579b818553977b92cdcea966512c352"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 8",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2934,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5b27f65a34794b0f6054fcf93ed92cff9a323157e02270b8ef287df6dca78cd8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 9",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2961,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a9cf8b6aa3771fd0a4668aeffde02d049807e3dfcd895c1a327ab1f78b3b2ad4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 10",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2940,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "69fc786aee243092b277f59bec90b4eee2137472de9e341bbe8a4cfd9247d8c8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 11",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2928,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "31484538b79c0dfbc17359904481b6f39e5f9bd167c844687407b75cc6d8d83a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 12",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2934,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b90fa0099d3811d155e6fa6c86d5a54150569e5f078a25b8b05d6d7647245f9b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 13",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2934,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "03b96066f370537aacbc5beb7eb1e57709479ac9d957bbabb4aed4c322bfecd1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 14",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2919,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "09488245def2dc620c778136867d02929875cba5c87a7c604ee29aee0ffedd8b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 15",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2799,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9c3ae0e90afb1e0b8f8d0a92760e40191934443d1d46381ca51623be02929155"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 16",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2838,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d5757c1eaa8fa00adee3f4fb03440a5164dab0c5431217628375135761f08dec"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 17",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2896,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ba696a9c1c2430efa5b8e6a7faa6fdf1ee4dce5bb8e614b3f4137793b0f792df"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 18",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2843,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0bfa986e2ee5e914060c21cab65a1fb0283405d7ecf4f0c0238680f4648ff97e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-end-enter paced sample 19",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2907,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b871ca8f9e9821baa1fd020721ef40ba8d789d49f88c411766a8254dce497f76"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 0",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1929,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "88e26753174f7808866b7e3bf8f3ffe686cce6c75320d0472846e7bf4c3c9b96"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 1",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2040,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "08b8351ee992f374d1490006c3d2897e8243362184899683f02a60302f7474ed"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 2",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1946,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c71cc7558e5fe9a5c4f6e1d40697b8fe97f0c82a529288aa49f5ef8e415ead68"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 3",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1895,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "309a32883a0f0ff0c8ea73c176aac956b4d559f55ebae76fc124c557311f637a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 4",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2019,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "366f33d75f7abe6973b2db2a36186a943835ca8288382ec6c1fb3df5550ae793"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 5",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1990,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9f2005b23d4a121fea9608f6bf7a7980b8bb64474651a8bc8023a76c2e6f0481"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 6",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2015,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6af93fc07023fd69841d3bbb82949f61956c3913d80d1c9cdfbd74fc23ffe5a2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 7",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2006,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a1932340753ae70dc7d609a8aa50afe614a79fd268ce9ce8ec50e471afe5e88f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 8",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2018,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "782e930fb3cef6916125004437a167fa93970b739f58fb7d9d55bd60a9e0e5b6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 9",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1927,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "95229b58f5a383d2246cfd06249e0404f692bad3b3d2cfccda75f471e7e112da"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 10",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2061,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5a6cc669a0444be356987339ab5900a73cf73ed2336903a635146b8f651217a1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 11",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1971,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f8f607c655e72e85365693899997b53c45a9fadb5d8ac8cc9df86da65feb56d2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 12",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2025,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5eac29b4498338141d023239040a85c26b80386f440d25aef0eaf74866afb4f4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 13",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2048,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "93bd1e1f16be28dee1a3347727f2625934554045ee1e6da19abbcb0b18a664d9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 14",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2007,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "210ffe558b23883114b2e98b3951f679f3c98cf648f19cd3cf50260743e4ae25"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 15",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1997,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9b49667b6807a874a99f75ab6d3fb9f82372e9ef9bbd054d9430fcf06a150769"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 16",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2038,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8c3aa7151a2d1d1dec9f092ceb5594c23e310f8f631ae36dc179ba4e7ba3ba66"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 17",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1995,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "780eb00a645b7f15c2bd89eaee1e199432c3ac8ad63bf4de7c98995b22892d02"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 18",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2026,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "68a367047b08025002a767296cda1fc4614168b377cfd12587b08978220be395"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter burst sample 19",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2030,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1e910ddf6595fe223853018152ea834fa1c48f0f32611b2641e38290d799702d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 0",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2897,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c422a2ab9965a33c05c5d100941406a7173e032d54a140cdba805cf34fef7b32"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 1",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2941,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b24063f1cde1d754527e517978ec631a31f404abf65cadbaadae7437fc4d6900"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 2",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2939,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "23c908152abdbbf64d8eab201327145fa9180216fba835b3161bd42a42514424"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 3",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2869,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4a549bb65357efcbf46b5b0947fa6e4dee069a59fec1b5a0ec55a582bb853c9e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 4",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2825,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "92e8dce7fc5cbae9efa4657c87c53268fcc4be15ec9aa0dcae64689515c54353"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 5",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2836,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "181797020d29d2bd781a43820114cf2cf509ddc3f48095b9e171ac3379a5e3b4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 6",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2911,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "58b1d7cafbff4c60bdd835ba51ff3720903724cda9c625db7edae1674658f606"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 7",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2915,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e7dfa9b987370337ad907d5f988bb7e0e751e299edaff9299ef7ba59a98cff62"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 8",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2911,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2fe88004296a531308ed56812ec84a0a0530b549174841a6564baa77e6673d41"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 9",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2836,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7bdb930cbe4a4c7dae2fa37e53594102c682a025915c2db131d3ec68ba458137"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 10",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2922,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "58a862bb81139a2611cb910b2671d291cb77d2547c523eedfe99ab21a9a84821"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 11",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2849,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "04aa87d418f04439c51a0e2e546f18945ca2f4ec6ce46e80a3f6ba0e06eb752c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 12",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2920,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "16d1338c46f4621f023a51d2bdbfb438cd6687e7eeb2e6672aeeec9d24c1fa0e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 13",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2892,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "303443feda777736286290a79f606d7526784d39c629e355fa215ad1f9505727"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 14",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2827,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a6c44cc8f2756d03d20ee0dfe4fd4f5a2807f600901640a2f97ef12b2208b8be"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 15",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2934,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d74e14b1db43a31a46c28316d98e9d12e136d613e7e403656997f567623c0a4a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 16",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2918,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4a45abb23eb8a975feb814ba9bd5c6f1ea6dabf75f228ba166a04e0736af6a49"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 17",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2899,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "803380300f528a11dca0bd2b538831cb8e3891b34ad7eb84692220e6acf63268"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 18",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2905,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0c10563cc0170be47db9db85695f44b9564624020c0947be26742e36579c3226"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-submenu-sample sub-right-c-enter paced sample 19",
+   "location": "keyboard-window-2.browser.mjs:198",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2893,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-window-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4fc7f0cdc33616de634fe1b0cffe66f8029adebbdc2eea6b4428e9126ef772de"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

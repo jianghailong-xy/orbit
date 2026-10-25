@@ -1,0 +1,358 @@
+{
+ "run": "mcp",
+ "agy_exit": 0,
+ "flags": [
+  "--hooks",
+  "--mcp"
+ ],
+ "files_under_home": [],
+ "workspace_after": [
+  "seed.txt"
+ ],
+ "seed_txt_after": "alpha\nbeta\n",
+ "declared_tools": [
+  {
+   "name": "read_file",
+   "additionalProperties": false,
+   "properties": [
+    "ByteOffset",
+    "EndLine",
+    "Path",
+    "StartLine"
+   ],
+   "required": [
+    "Path"
+   ]
+  },
+  {
+   "name": "run_command",
+   "additionalProperties": false,
+   "properties": [
+    "CommandLine",
+    "IsDaemon",
+    "WaitMsBeforeAsync",
+    "toolSummary"
+   ],
+   "required": [
+    "CommandLine",
+    "toolSummary",
+    "WaitMsBeforeAsync"
+   ]
+  },
+  {
+   "name": "manage_task",
+   "additionalProperties": false,
+   "properties": [
+    "Action",
+    "Input",
+    "TaskId"
+   ],
+   "required": [
+    "Action"
+   ]
+  },
+  {
+   "name": "send_message",
+   "additionalProperties": false,
+   "properties": [
+    "Message",
+    "Recipient"
+   ],
+   "required": [
+    "Recipient",
+    "Message"
+   ]
+  },
+  {
+   "name": "schedule",
+   "additionalProperties": false,
+   "properties": [
+    "CronExpression",
+    "DurationSeconds",
+    "IsDaemon",
+    "MaxIterations",
+    "Prompt",
+    "TimerCondition"
+   ],
+   "required": [
+    "Prompt"
+   ]
+  },
+  {
+   "name": "invoke_subagent",
+   "additionalProperties": false,
+   "properties": [
+    "Model",
+    "Prompt",
+    "Role",
+    "TypeName",
+    "Workspace"
+   ],
+   "required": [
+    "TypeName",
+    "Role",
+    "Prompt"
+   ]
+  },
+  {
+   "name": "define_subagent",
+   "additionalProperties": false,
+   "properties": [
+    "Description",
+    "EnableMCPTools",
+    "EnableSubagentTools",
+    "EnableWriteTools",
+    "Name",
+    "SystemPrompt"
+   ],
+   "required": [
+    "Name",
+    "Description",
+    "SystemPrompt"
+   ]
+  },
+  {
+   "name": "manage_subagents",
+   "additionalProperties": false,
+   "properties": [
+    "Action",
+    "ConversationIds"
+   ],
+   "required": [
+    "Action"
+   ]
+  },
+  {
+   "name": "write_file",
+   "additionalProperties": false,
+   "properties": [
+    "Append",
+    "ArtifactMetadata",
+    "Content",
+    "Overwrite",
+    "Path"
+   ],
+   "required": [
+    "Path",
+    "Content"
+   ]
+  },
+  {
+   "name": "edit_file",
+   "additionalProperties": false,
+   "properties": [
+    "ArtifactMetadata",
+    "Path",
+    "Replacement",
+    "Target"
+   ],
+   "required": [
+    "Path",
+    "Target",
+    "Replacement"
+   ]
+  },
+  {
+   "name": "search_web",
+   "additionalProperties": false,
+   "properties": [
+    "domain",
+    "query"
+   ],
+   "required": [
+    "query"
+   ]
+  },
+  {
+   "name": "ask_question",
+   "additionalProperties": false,
+   "properties": [
+    "questions"
+   ],
+   "required": [
+    "questions"
+   ]
+  },
+  {
+   "name": "call_mcp_tool",
+   "additionalProperties": false,
+   "properties": [
+    "Arguments",
+    "ServerName",
+    "ToolName"
+   ],
+   "required": [
+    "ServerName",
+    "ToolName",
+    "Arguments"
+   ]
+  },
+  {
+   "name": "list_resources",
+   "additionalProperties": false,
+   "properties": [
+    "ServerName"
+   ],
+   "required": [
+    "ServerName"
+   ]
+  },
+  {
+   "name": "read_resource",
+   "additionalProperties": false,
+   "properties": [
+    "ServerName",
+    "Uri"
+   ],
+   "required": null
+  }
+ ],
+ "init_tools": [
+  "ask_custom_permission",
+  "ask_permission",
+  "ask_question",
+  "browser_click_element",
+  "browser_drag_pixel_to_pixel",
+  "browser_get_dom",
+  "browser_get_network_request",
+  "browser_input",
+  "browser_list_network_requests",
+  "browser_mouse_down",
+  "browser_mouse_up",
+  "browser_move_mouse",
+  "browser_press_key",
+  "browser_refresh_page",
+  "browser_resize_window",
+  "browser_scroll",
+  "browser_scroll_dom",
+  "browser_select_option",
+  "browser_subagent",
+  "call_mcp_tool",
+  "capture_browser_console_logs",
+  "capture_browser_screenshot",
+  "click_browser_pixel",
+  "command_status",
+  "define_subagent",
+  "delete_knowledge",
+  "execute_browser_javascript",
+  "find_by_name",
+  "finish",
+  "generate_image",
+  "grep_search",
+  "invoke_subagent",
+  "list_browser_pages",
+  "list_dir",
+  "list_permissions",
+  "list_plugin_accounts",
+  "list_resources",
+  "manage_inbox",
+  "manage_subagents",
+  "manage_task",
+  "multi_replace_file_content",
+  "notebook_edit",
+  "notebook_execution",
+  "open_browser_url",
+  "read_browser_page",
+  "read_resource",
+  "read_url_content",
+  "replace_file_content",
+  "run_command",
+  "run_workflow",
+  "schedule",
+  "search_marketplace",
+  "search_web",
+  "sed_file",
+  "send_command_input",
+  "send_message",
+  "view_file",
+  "wait",
+  "wait_5_seconds",
+  "write_to_file"
+ ],
+ "permission_mode": "always-proceed",
+ "tool_steps": [
+  {
+   "state": "ACTIVE",
+   "tool_name": "call_mcp_tool",
+   "info_name": "call_mcp_tool",
+   "parameters": {
+    "Arguments": {
+     "note": "n1"
+    },
+    "ServerName": "fake",
+    "ToolName": "whoami"
+   },
+   "output": null,
+   "error": null
+  },
+  {
+   "state": "DONE",
+   "tool_name": "call_mcp_tool",
+   "info_name": "call_mcp_tool",
+   "parameters": {
+    "Arguments": {
+     "note": "n1"
+    },
+    "ServerName": "fake",
+    "ToolName": "whoami"
+   },
+   "output": "session=None note=n1",
+   "error": null
+  }
+ ],
+ "result": {
+  "status": "SUCCESS",
+  "response": "done\n",
+  "error": null,
+  "denied_actions": null
+ },
+ "hook_calls": [
+  {
+   "event": "PreInvocation",
+   "payload_keys": [
+    "artifactDirectoryPath",
+    "conversationId",
+    "initialNumSteps",
+    "invocationNum",
+    "modelName",
+    "transcriptPath",
+    "workspacePaths"
+   ]
+  },
+  {
+   "event": "PreToolUse",
+   "payload_keys": [
+    "artifactDirectoryPath",
+    "conversationId",
+    "modelName",
+    "stepIdx",
+    "toolCall",
+    "transcriptPath",
+    "workspacePaths"
+   ],
+   "toolCall": {
+    "args": {
+     "Arguments": {
+      "note": "n1"
+     },
+     "ServerName": "fake",
+     "ToolName": "whoami"
+    },
+    "name": "call_mcp_tool"
+   }
+  },
+  {
+   "event": "PreInvocation",
+   "payload_keys": [
+    "artifactDirectoryPath",
+    "conversationId",
+    "initialNumSteps",
+    "invocationNum",
+    "modelName",
+    "transcriptPath",
+    "workspacePaths"
+   ]
+  }
+ ],
+ "stderr_permission_lines": []
+}

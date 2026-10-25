@@ -1,0 +1,26 @@
+Test Case '-[KimiProbeUITests.KimiShotTests test10TheRunnerRowWithOneAccountKeepsItsSite]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test10TheRunnerRowWithOneAccountKeepsItsSite]' passed (57.908 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test11WorkSignedOut]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test11WorkSignedOut]' passed (72.927 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test1AnOlderRunnersPageIsAsItWas]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test1AnOlderRunnersPageIsAsItWas]' passed (17.776 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test2OneAccountOffersAddAccount]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test2OneAccountOffersAddAccount]' passed (21.256 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test3AddAccountNamesTheAccountThenPicksItsSite]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test3AddAccountNamesTheAccountThenPicksItsSite]' passed (161.134 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test4TwoAccountsEachSayTheirSiteAndWindowsAndDefaultIsNext]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test4TwoAccountsEachSayTheirSiteAndWindowsAndDefaultIsNext]' passed (40.640 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test5TheRunnerPageNamesTheNextAccount]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test5TheRunnerPageNamesTheNextAccount]' passed (37.401 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test6SignInAgainMarksTheAccountsOwnSite]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test6SignInAgainMarksTheAccountsOwnSite]' passed (37.919 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test7NextOnTheOtherEnginesPages]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test7NextOnTheOtherEnginesPages]' passed (39.533 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test8TheComposerMovesAKimiSessionBetweenAccounts]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test8TheComposerMovesAKimiSessionBetweenAccounts]' passed (69.527 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test9DarkPage]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test9DarkPage]' passed (29.696 seconds).
+	 Executed 11 tests, with 0 failures (0 unexpected) in 585.717 (585.730) seconds
+	 Executed 11 tests, with 0 failures (0 unexpected) in 585.717 (585.731) seconds
+	 Executed 11 tests, with 0 failures (0 unexpected) in 585.717 (585.733) seconds
+** TEST SUCCEEDED **

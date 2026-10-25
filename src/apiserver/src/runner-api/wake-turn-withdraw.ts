@@ -8,7 +8,10 @@ export type UnrunWakeTurn =
   | { turnId: string }
   /** The owner interrupted the session, and the interrupt deleted everything queued behind the
    *  turn it stops — however many wake turns that is (`SessionsService.interrupt`). */
-  | { interrupted: true };
+  | { interrupted: true }
+  /** CURRENT_WORK wake steers that same Stop overtook after a runner had taken them, before the
+   *  engine read them, written off by the completion that learned it (runnerApi.turnComplete). */
+  | { steerTurnIds: readonly string[] };
 
 /**
  * A control-plane wake turn taken off its session's queue before any runner took it — the `bg-wake:`
@@ -78,6 +81,10 @@ export type UnrunWakeTurn =
  * retires a CURRENT_WORK steer's target in place instead, and such a target is the IN_FLIGHT turn
  * the steer was to be written into, never a queued wake. A request refused after this point rolls
  * it back along with everything else.
+ *
+ * A wake steer a runner had already taken is the one reached afterwards and by name: it was no longer
+ * queued when the Stop came, and it is settled once the completion that writes it off undelivered
+ * knows the engine never read it. It is the same wake, so it is settled the same way.
  */
 export async function settleUnrunWakeTurns(
   tx: Prisma.TransactionClient,
@@ -88,7 +95,7 @@ export async function settleUnrunWakeTurns(
     where: {
       sessionId,
       ...('turnId' in unrun ? { id: unrun.turnId } : {}),
-      status: 'PENDING',
+      ...('steerTurnIds' in unrun ? { id: { in: [...unrun.steerTurnIds] } } : { status: 'PENDING' }),
       clientTurnId: { startsWith: BACKGROUND_WAKE_TURN_PREFIX },
     },
     select: { clientTurnId: true },

@@ -7,7 +7,9 @@ import { WakeFact, criterionUnlandedFact } from './coordinator-wake';
 import type { WakeAuthorization, WakeAuthorizer } from './coordinator-wake.service';
 import type { MechanicalAction } from './mechanical-disposition';
 import { criterionKeyOf } from './project-acceptance';
-import { LANDING_SERVING_WORK_SELECT, criterionLanding, landingBranchesFor } from './project-criterion-landing';
+import {
+  LANDING_SERVING_WORK_SELECT, criterionLanding, landingBranchesFor, readLandingJobsByTask,
+} from './project-criterion-landing';
 
 /** The project disappeared between the committed criterion read and the wake's authorization. */
 export const CRITERION_UNLANDED_WAKE_PROJECT_GONE = 'PROJECT_GONE';
@@ -134,10 +136,14 @@ export class CriterionUnlandedProducer {
             select: {
               id: true,
               status: true,
-              // Everything the landing fold reads, from the module that decides what "landed"
-              // means — including the answers the line gave about these branches. Spread rather
-              // than spelled, so this fact cannot come to say "still on the line" about a criterion
-              // the fold calls LANDED.
+              // Which of the task's deliveries this is: one sent back and delivered again is a new
+              // fact even when nothing else under the criterion moved (`deliveryVersion`).
+              progress: { select: { lifecycleEpoch: true } },
+              // What the landing fold reads about the task itself, from the module that decides
+              // what "landed" means. Spread rather than spelled, so this fact cannot come to say
+              // "still on the line" about a criterion the fold calls LANDED. The fold's other half
+              // — the answers the line gave about these branches — is read just below, beside these
+              // tasks rather than below them, and attached to the same rows.
               ...LANDING_SERVING_WORK_SELECT,
             },
           },
@@ -152,21 +158,36 @@ export class CriterionUnlandedProducer {
       }),
     ]);
 
+    // The line's answers about these branches, beside the tasks rather than below them: 0423 made
+    // `task_id` a history reference, so there is no relation for Prisma to nest. One statement for
+    // every project's serving tasks together, like its two siblings above.
+    const jobs = await readLandingJobsByTask(
+      this.prisma, definitions.flatMap((definition) => definition.servingTasks.map((task) => task.id)),
+    );
+    const serving = definitions.map((definition) => ({
+      ...definition,
+      servingTasks: definition.servingTasks.map((task) => ({
+        ...task, integrationJobs: jobs.get(task.id) ?? [],
+      })),
+    }));
+
     // One pass over the same rows, so the landing answer this fact carries is the one the fold
     // gives for that criterion rather than a per-criterion re-derivation that could disagree. Per
     // PROJECT, because "landed" is a question about that project's own two branches.
     const landed = new Map(
       ids.flatMap((projectId) => criterionLanding(
-        definitions.filter((definition) => definition.projectId === projectId),
+        serving.filter((definition) => definition.projectId === projectId),
         landingBranchesFor(codebases.find((codebase) => codebase.projectId === projectId) ?? null),
       )).map((answer) => [answer.definitionId, answer.landing]),
     );
 
-    return definitions
+    return serving
       .map((definition) => criterionUnlandedFact(
         definition.projectId,
         criterionKeyOf(definition.id),
-        definition.servingTasks.map((task) => ({ taskId: task.id, status: task.status })),
+        definition.servingTasks.map((task) => ({
+          taskId: task.id, status: task.status, lifecycleEpoch: task.progress?.lifecycleEpoch ?? 0,
+        })),
         landed.get(definition.id) ?? 'UNKNOWN',
       ))
       .filter((fact): fact is WakeFact => fact !== null);

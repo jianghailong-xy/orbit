@@ -52,6 +52,11 @@ var cliParityExemptTools = map[string]string{
 	// open_item_resolve, a command typed outside a session could only ever be refused; inside one,
 	// the coordinator reaches it over MCP.
 	"integration_retry": "reruns a landing as the project's coordinator session: a terminal outside one is refused by the server",
+	// integration_abandon ends a running job AS the project's coordinator conversation (contract
+	// §2.2 J-T10), and the runner door reads no missing header as the account owner — the owner's
+	// abandon is the user API's own door. A command typed outside a session could only ever be
+	// refused; inside one, the coordinator reaches it over MCP.
+	"integration_abandon": "abandons a running job as the project's coordinator session: a terminal outside one is refused by the server",
 }
 
 // Params whose CLI spelling is not the mechanical --kebab-case of the MCP name.
@@ -103,7 +108,7 @@ func TestCLICapabilitiesCoverEveryMCPToolAndParameter(t *testing.T) {
 	// One direction only: every MCP tool needs a command, and a command needs no tool. The person's
 	// own commands (userCLICapabilities: login, logout, whoami, api) have none — MCP runs only inside
 	// sessions, where the CLI never acts as the person (docs/personal-access-token-design.md §7.4).
-	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, wikiPlanCLICapabilities, userCLICapabilities} {
+	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, userCLICapabilities} {
 		for _, spec := range list {
 			specs[spec.Tool] = spec
 		}
@@ -361,4 +366,84 @@ func sortedParamNames(m map[string]interface{}) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// T5 (docs/provider-engine-contract.md §6.1–6.2): the five doors that write a provider take an engine
+// on both sides — the MCP tool's schema and the command's documented arguments — and the command's
+// parser really accepts it: a flag documented but undefined fails the parse below, as one defined but
+// undocumented fails TestPerActionHelpDocumentsEveryAdvertisedFlag.
+func TestEngineParameterStaysInParityAcrossCLIAndMCP(t *testing.T) {
+	specs := map[string]cliCapabilitySpec{}
+	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, sessionCLICapabilities} {
+		for _, spec := range list {
+			specs[spec.Tool] = spec
+		}
+	}
+	tools := toolDescriptors(false, true)
+	for _, tc := range []struct {
+		tool  string
+		flags []string
+	}{
+		{tool: "session_create", flags: []string{"--engine"}},
+		{tool: "task_create", flags: []string{"--engine"}},
+		{tool: "task_update", flags: []string{"--engine", "--clear-engine"}},
+		{tool: "task_batch_pin", flags: []string{"--engine", "--clear-engine"}},
+	} {
+		t.Run(tc.tool, func(t *testing.T) {
+			if _, ok := mcpToolProps(tools, tc.tool)["engine"]; !ok {
+				t.Fatalf("MCP %s has no engine property", tc.tool)
+			}
+			spec, ok := specs[tc.tool]
+			if !ok {
+				t.Fatalf("no CLI command for %s", tc.tool)
+			}
+			documented := strings.Join(spec.Arguments, " ")
+			if !strings.Contains(documented, engineArgument()) {
+				t.Fatalf("%s documents no %s: %v", strings.Join(spec.Argv, " "), engineArgument(), spec.Arguments)
+			}
+			for _, flag := range tc.flags {
+				if !strings.Contains(documented, flag) {
+					t.Fatalf("%s documents no %s: %v", strings.Join(spec.Argv, " "), flag, spec.Arguments)
+				}
+			}
+		})
+	}
+	// The batch door's items are task_create's: the engine is a key of each JSON item at a terminal.
+	props := mcpToolProps(tools, "task_create_batch")
+	tasks, _ := props["tasks"].(map[string]interface{})
+	items, _ := tasks["items"].(map[string]interface{})
+	if itemProps, _ := items["properties"].(map[string]interface{}); itemProps["engine"] == nil {
+		t.Fatal("MCP task_create_batch items have no engine property")
+	}
+	if !regexp.MustCompile(`\bengine, provider, model\b`).MatchString(taskActionHelp["create-batch"]) {
+		t.Fatal("orbit task create-batch --help does not name an item's engine")
+	}
+
+	// Each parser takes the flags it documents: a server that answers every request, so only an
+	// undefined flag can fail these.
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"id":"x","changed":0}`))
+	}))
+	defer api.Close()
+	configureCLITestRunner(t, api.URL)
+	t.Setenv(envMCPOrchestration, "1")
+	t.Setenv("ORBIT_SESSION_ID", "")
+	t.Setenv("ORBIT_AGENT_ID", "")
+	var out strings.Builder
+	for _, args := range [][]string{
+		{"create", "--title", "t", "--completion-criterion", "EVIDENCE_JUDGMENT", "--engine", "dsh"},
+		{"update", "task-1", "--engine", "dsh"},
+		{"update", "task-1", "--clear-engine"},
+		{"batch-pin", "--project", "p-1", "--engine", "dsh"},
+		{"batch-pin", "--project", "p-1", "--clear-engine"},
+	} {
+		if err := cmdTaskCLI(args, strings.NewReader(""), &out); err != nil {
+			t.Fatalf("orbit task %v: %v", args, err)
+		}
+	}
+	t.Setenv("ORBIT_SESSION_ID", "caller-session")
+	t.Setenv(envOrchestrationToken, "session-token")
+	if err := cmdSessionCLI([]string{"create", "--prompt", "p", "--engine", "dsh"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("orbit session create --engine: %v", err)
+	}
 }

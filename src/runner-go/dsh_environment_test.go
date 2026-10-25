@@ -249,6 +249,32 @@ func TestDshConcurrentSessionIsolationAndRestart(t *testing.T) {
 	}
 }
 
+// TestDshSessionCacheEnv: every dsh session launch — the workspace-write one included — points the
+// session's toolchains at the runner-owned shared cache root, so a build in the sandbox has one
+// cache for the whole machine to read and write rather than the read-only ~/.cache its file mode
+// leaves behind, or a directory the agent invents when that fails.
+func TestDshSessionCacheEnv(t *testing.T) {
+	_, workspace := dshEnvironmentFixture(t)
+	cacheRoot := runnerCacheRoot()
+	for _, mode := range []string{"read-only", "workspace-write"} {
+		t.Run(mode, func(t *testing.T) {
+			input := DshLaunchInput{"cache-env-" + mode, workspace, "fake-key", "https://synthetic.example", mode}
+			spec, err := prepareDshAgentConfigAt(input, &DshAgentOverlay{}, testDshExecutable(t), filepath.Join(t.TempDir(), "home"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for key, sub := range map[string]string{
+				"GOCACHE": runnerCacheGoBuild, "GOMODCACHE": runnerCacheGoMod, "npm_config_cache": runnerCacheNPM,
+			} {
+				want := filepath.Join(cacheRoot, sub)
+				if got := envValue(spec.Env, key); got != want {
+					t.Errorf("%s = %q, want %q", key, got, want)
+				}
+			}
+		})
+	}
+}
+
 func TestDshProfileAndOverlayHashesPreserveRecovery(t *testing.T) {
 	_, workspace := dshEnvironmentFixture(t)
 	input := DshLaunchInput{"hash-session", workspace, "fake-original", "https://synthetic.example", "read-only"}
@@ -803,4 +829,41 @@ func dshRecordSessionLogUpload(t *testing.T, upstream bool) {
 			t.Fatal(err)
 		}
 	}
+}
+
+// T5 (docs/provider-engine-contract.md §4.2, task comment 34cnVyNSU28FpzRwWsWfc): a Harness session runs
+// on a DeepSeek API key — the same key Claude Code and OpenCode sessions can run on — so the missing-key
+// failure and `orbit doctor`'s hint ask for that key, never for a "DeepSeek Harness API key". The code
+// still leads the message, which is what every client's repair card matches.
+func TestDshMissingKeyAsksForADeepSeekKey(t *testing.T) {
+	job := &ClaimedSession{SessionID: "missing-key-session", Agent: AgentExecConfig{Env: map[string]string{
+		"ORBIT_DSH_BASE_URL": "https://api.deepseek.com/anthropic",
+	}}}
+	_, err := PrepareDshSessionLaunch(context.Background(), job, t.TempDir(), "read-only")
+	if err == nil {
+		t.Fatal("a session with no key was prepared")
+	}
+	message := err.Error()
+	if !strings.HasPrefix(message, "DSH_CREDENTIAL_MISSING: ") || !strings.Contains(message, "DeepSeek API key") ||
+		strings.Contains(message, "DeepSeek Harness API key") {
+		t.Fatalf("missing-key message = %q", message)
+	}
+	if verdict, code := dshRequestValidation(err, false, ""); verdict != "invalid" || code != "DSH_CREDENTIAL_MISSING" {
+		t.Fatalf("health reads the message as %s/%s", verdict, code)
+	}
+	if turn := dshTurnError(err); turn != message {
+		t.Fatalf("turn error = %q, want the message as it is", turn)
+	}
+
+	for _, spec := range engineSpecs {
+		if spec.bin != providerDsh {
+			continue
+		}
+		hint := spec.loginHint()
+		if !strings.Contains(hint, "DeepSeek API key") || strings.Contains(hint, "DeepSeek Harness API key") {
+			t.Fatalf("orbit doctor's DeepSeek Harness hint = %q", hint)
+		}
+		return
+	}
+	t.Fatal("orbit doctor has no DeepSeek Harness entry")
 }

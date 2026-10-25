@@ -1,0 +1,15 @@
+cgroup: 0::/system.slice/run-p4033173-i54333331.scope oom_score_adj 500
+P0 expected screenshots: 87 P0.2 originals, 143 main drift references, 22 accepted migration differences.
+
+Running 8 tests using 1 worker
+
+  ✓  1 [chromium-light-desktop] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way (1.5s)
+  ✓  2 [chromium-light-phone] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way (961ms)
+  ✓  3 [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way (1.0s)
+  ✓  4 [chromium-dark-phone] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way (974ms)
+  ✓  5 [webkit-light-desktop] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way (810ms)
+  ✓  6 [webkit-light-phone] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way (819ms)
+  ✓  7 [webkit-dark-desktop] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way (809ms)
+  ✓  8 [webkit-dark-phone] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way (776ms)
+
+  8 passed (11.3s)

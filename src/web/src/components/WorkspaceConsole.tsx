@@ -1,10 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import { Button, Result, Spin } from 'antd';
 import { useRef } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { routeId } from '../lib/idCodec';
+import { useFollowFirstSessionProvider, useManagedRunner } from '../lib/managedRunner';
 import { sessionQuery } from '../lib/queries';
+import { Button } from './ui/Button';
+import { Result } from './ui/Result';
+import { Spinner } from './ui/Spinner';
 import { WorkspaceView } from './WorkspaceView';
 
 // The workspace console, mounted as the layout route shared by /workspaces/:id(/new) and
@@ -51,26 +54,36 @@ export function WorkspaceConsole() {
   // below forever; instead surface a clear not-found state with a way out. Gated on a
   // failed session fetch so a genuinely in-flight load still shows the spinner.
   const sessionNotFound = !!selectedSessionId && !viewRunner && sessionQ.isError;
+  // The owner's managed runner, handed to the console only when it is this console's runner: its
+  // state stands above the composer. Nothing waits on it — the console draws as before while it
+  // loads, and with the capability missing or off there is none.
+  const { managed } = useManagedRunner();
+  // The default workspace's draft starts where the workspace list says; follow it as the runner comes up.
+  useFollowFirstSessionProvider(managed);
+  const consoleManaged =
+    managed?.status.runnerId && viewRunner && routeId(managed.status.runnerId) === routeId(viewRunner.id)
+      ? managed
+      : null;
 
   return (
     <main className="app-main">
       <div className="app-view">
         {viewRunner ? (
-          <WorkspaceView runner={viewRunner} />
+          <WorkspaceView runner={viewRunner} managed={consoleManaged} fleet={runners.data} />
         ) : sessionNotFound ? (
           <Result
             status="404"
             title="Session not found"
             subTitle="This session doesn't exist or has been deleted."
             extra={
-              <Button type="primary" onClick={() => navigate('/')}>
+              <Button variant="primary" onClick={() => navigate('/')}>
                 Go home
               </Button>
             }
           />
         ) : (
           <div style={{ padding: 48, textAlign: 'center' }}>
-            <Spin />
+            <Spinner />
           </div>
         )}
       </div>

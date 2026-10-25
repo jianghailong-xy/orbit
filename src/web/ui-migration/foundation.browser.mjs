@@ -34,7 +34,7 @@ async function expectDialogInsideViewport(dialog) {
   expect(bounds.width).toBe(Math.min(520, bounds.viewport - 32));
 }
 
-test('foundation states match current AntD and the frozen P0 palette', async ({ page }, info) => {
+test('foundation states match the frozen P0 palette', async ({ page }, info) => {
   const theme = info.project.use.colorScheme;
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -42,13 +42,9 @@ test('foundation states match current AntD and the frozen P0 palette', async ({ 
   await expect(page.getByRole('status')).toHaveText(`Theme: system / ${theme}`);
   await page.evaluate(() => document.fonts.ready);
   const orbit = page.getByRole('region', { name: 'Orbit foundation', exact: true });
-  const ant = page.getByRole('region', { name: 'AntD reference', exact: true });
   const measured = {};
   for (const name of ['Primary', 'Disabled', 'Neutral', 'Small']) {
-    const actual = await style(orbit.getByRole('button', { name, exact: true }));
-    const reference = await style(ant.getByRole('button', { name, exact: true }));
-    expect(actual, `${name} computed styles`).toEqual(reference);
-    measured[name] = actual;
+    measured[name] = await style(orbit.getByRole('button', { name, exact: true }));
   }
   await expect(orbit.getByRole('button', { name: 'Disabled' })).toBeDisabled();
   // Read immutable P0 evidence, not the newly added token declarations.
@@ -59,13 +55,8 @@ test('foundation states match current AntD and the frozen P0 palette', async ({ 
   expect(measured.Primary.borderRadius).toBe(primary.style.borderRadius);
   for (const name of ['Primary', 'Neutral']) {
     const actual = orbit.getByRole('button', { name, exact: true });
-    const reference = ant.getByRole('button', { name, exact: true });
     await actual.hover();
-    const hovered = await style(actual);
-    await reference.hover();
-    await expect.poll(async () => (await style(reference)).backgroundColor).toBe(hovered.backgroundColor);
-    expect(await style(reference)).toEqual(hovered);
-    measured[`${name} hover`] = hovered;
+    measured[`${name} hover`] = await style(actual);
   }
   await page.getByRole('heading', { level: 1 }).hover();
   await page.keyboard.press('Tab');
@@ -76,15 +67,13 @@ test('foundation states match current AntD and the frozen P0 palette', async ({ 
   await orbit.getByRole('button', { name: 'Primary', exact: true }).focus();
   const focused = await focusStyle(orbit.getByRole('button', { name: 'Primary', exact: true }));
   expect(focused.visible).toBe(true);
-  await ant.getByRole('button', { name: 'Primary', exact: true }).focus();
-  expect(await focusStyle(ant.getByRole('button', { name: 'Primary', exact: true }))).toEqual(focused);
   measured.focus = focused;
   expect(errors).toEqual([]);
   await info.attach('computed-states', { body: JSON.stringify({ theme, measured, errors }, null, 2), contentType: 'application/json' });
-  await info.attach('coexistence', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });
+  await info.attach('foundation-states', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });
 });
 
-test('body and nested portals inherit theme and preserve focus ownership', async ({ page }, info) => {
+test('body portals inherit theme and preserve focus ownership', async ({ page }, info) => {
   await page.goto(fixture);
   const theme = info.project.use.colorScheme;
   await expect(page.getByRole('status')).toHaveText(`Theme: system / ${theme}`);
@@ -100,32 +89,5 @@ test('body and nested portals inherit theme and preserve focus ownership', async
   await page.keyboard.press('Escape');
   await expect(dialog).not.toBeVisible();
   await expect(trigger).toBeFocused();
-  await page.getByRole('button', { name: 'Open AntD dialog', exact: true }).click();
-  const outer = page.getByRole('dialog', { name: 'AntD dialog', exact: true });
-  await expect(outer).toBeVisible();
-  // AntD's visible prepare phase precedes its entry animation and final focus transfer.
-  await expect.poll(() => outer.evaluate((el) => {
-    const style = getComputedStyle(el);
-    return style.opacity === '1' && style.transform === 'none';
-  }), { message: 'The parent modal has finished entering before opening its child' }).toBe(true);
-  const nestedTrigger = outer.getByRole('button', { name: 'Open nested Orbit dialog' });
-  await nestedTrigger.click();
-  const nested = page.getByRole('dialog', { name: 'Nested Orbit dialog', exact: true });
-  await expect(nested).toBeVisible();
-  await expectDialogInsideViewport(nested);
-  expect(await style(nested)).toMatchObject({ backgroundColor: surface.backgroundColor, borderRadius: surface.borderRadius, boxShadow: surface.boxShadow });
-  expect(await nested.evaluate((el) => {
-    const r = el.getBoundingClientRect();
-    return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
-  })).toBe(true);
-  await checkDialogFocusCycle(page, nested);
-  await info.attach('nested-portals', { body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png' });
-  await page.keyboard.press('Escape');
-  await expect(nested).not.toBeVisible();
-  await expect(outer).toBeVisible();
-  await expect(nestedTrigger).toBeFocused();
-  await outer.getByRole('button', { name: 'Close AntD dialog', exact: true }).click();
-  await expect(outer).not.toBeVisible();
-  await expect(page.getByRole('button', { name: 'Open AntD dialog', exact: true })).toBeFocused();
   await info.attach('portal-surface', { body: JSON.stringify({ theme, surface, focusRestored: true }, null, 2), contentType: 'application/json' });
 });

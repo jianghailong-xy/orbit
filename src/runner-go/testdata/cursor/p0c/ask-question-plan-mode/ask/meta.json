@@ -1,0 +1,57 @@
+{
+ "scenario": "ask-question-plan-mode",
+ "process": "ask",
+ "version": "2026.10.14-941492e",
+ "exit": null,
+ "actions": [
+  {
+   "t": 9,
+   "channel": "spawn",
+   "value": {
+    "args": [
+     "acp"
+    ],
+    "cwd": "<RUN>/work",
+    "envKeys": [
+     "AGENT_CLI_CREDENTIAL_STORE",
+     "CURSOR_API_KEY",
+     "CURSOR_CONFIG_DIR",
+     "CURSOR_DATA_DIR",
+     "HOME",
+     "LANG",
+     "NO_OPEN_BROWSER",
+     "ORBIT_P0_CANARY",
+     "PATH",
+     "TERM",
+     "XDG_CACHE_HOME",
+     "XDG_CONFIG_HOME",
+     "XDG_DATA_HOME"
+    ]
+   }
+  },
+  {
+   "t": 9,
+   "channel": "client->agent",
+   "id": 1,
+   "method": "initialize"
+  },
+  {
+   "t": 483,
+   "channel": "client->agent",
+   "id": 2,
+   "method": "session/new"
+  },
+  {
+   "t": 7324,
+   "channel": "client->agent",
+   "id": 3,
+   "method": "session/set_mode"
+  },
+  {
+   "t": 7325,
+   "channel": "client->agent",
+   "id": 4,
+   "method": "session/prompt"
+  }
+ ]
+}

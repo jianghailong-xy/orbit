@@ -1,0 +1,15 @@
+01-start-card-main-branch.png
+03-picker.png
+05-typed.png
+06-second-project-last-choice.png
+07-picker-last-chosen.png
+08b-how-it-runs-picker.png
+08c-how-it-runs-develop.png
+08-how-it-runs.png
+09-how-it-runs-automatic.png
+10-locked.png
+11-integration-row.png
+12-line-menu.png
+13-automatic-off.png
+15-merge-check-open.png
+edge-e-no-repository.png

@@ -1,0 +1,14 @@
+mr-01a15ba9-a49e-7204-a0b2-6eae30a83d9e 4c35fb746a28 running g1 Up Less than a second
+mr-01a15b9d-4ed5-745c-b5b7-3d6e774c61c6 b6a8b1388953 running g1 Up 13 minutes
+mr-01a15b9c-5f4d-7409-9efc-efcc4e097f6b 5b6b77f2841c running g1 Up 14 minutes
+mr-boot-01a15b9c-5f4d-7409-9efc-efcc4e097f6b-g1
+mr-boot-01a15b9d-4ed5-745c-b5b7-3d6e774c61c6-g1
+mr-boot-01a15ba9-a49e-7204-a0b2-6eae30a83d9e-g1
+mr-data-01a15b9c-5f4d-7409-9efc-efcc4e097f6b
+mr-data-01a15b9c-c69f-718f-ba2a-90bd8a35230f
+mr-data-01a15b9d-4ed5-745c-b5b7-3d6e774c61c6
+mr-data-01a15ba9-a49e-7204-a0b2-6eae30a83d9e
+admin@d4.test|STARTING|RUNNING|1|6d6275bb-d95f-479c-9cc5-932eaef011e3|a703f107-6f3b-4fa8-9e47-c3acab325046|CREATE_POD|COMPLETED
+alice@d4.test|SLEEPING|SLEEPING|3|13398645-cbab-4150-ad66-3cc43e4c01e8|-|DELETE_POD|COMPLETED
+bob@d4.test|STARTING|RUNNING|1|bcd0a960-5fdd-46e6-9843-921186438c46|257c82a0-d369-49e9-bcf0-6303fdd839e5|CREATE_POD|COMPLETED
+carol@d4.test|STARTING|RUNNING|1|73a655f6-c1cb-4d49-87bc-b66c3c9715ec|-|CREATE_POD|PENDING

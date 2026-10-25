@@ -1,0 +1,254 @@
+# P5.2 merged origin/main twice: before the final round (378b7033e, main ab47a1c11) and again when main changed
+# Transcript.tsx after it (c0317ce3c, main 9498167b9: 94f61b52c, an answered agent question's record). When the
+# project line then moved to d354b64c5 (the coordinator's merge of 2fcd654d8 with the same main), P5.2 merged it too
+# (9b28cd9c0): the same tree as the base of the final round, and no file changed. Before the evidence the line moved
+# once more, to 951882866 (the Select-close and tasks-toolbar batch); merging it conflicted in one line, the P0
+# matrix's testIgnore, which both sides had appended to (211949ed8). The final round f7 runs on that merge.
+
+## 1. 378b7033e
+$ git log -1 --format="%H %P" 378b7033e
+378b7033eb8f470b0c74089bce748cb158b5aacf f77a538a923ac7e12d95df52bad28e504f1debad ab47a1c115321c737caba0f3904df4ca37d7f6fb
+
+$ git merge-tree --write-tree --name-only f77a538a9 ab47a1c11   # the dry run before the merge
+c18923b2654cb04edc1a2dc68d686df58728ce53
+src/web/src/components/WikiSettingsPage.tsx
+
+Auto-merging src/web/src/components/Transcript.tsx
+Auto-merging src/web/src/components/WikiSettingsPage.test.tsx
+Auto-merging src/web/src/components/WikiSettingsPage.tsx
+CONFLICT (content): Merge conflict in src/web/src/components/WikiSettingsPage.tsx
+Auto-merging src/web/src/index.css
+exit=1
+
+$ git show --remerge-diff --format= 378b7033e   # what the merge commit changed against git's own re-merge
+diff --git a/src/web/src/components/WikiSettingsPage.test.tsx b/src/web/src/components/WikiSettingsPage.test.tsx
+index c468d6ca3..3c71029d4 100644
+--- a/src/web/src/components/WikiSettingsPage.test.tsx
++++ b/src/web/src/components/WikiSettingsPage.test.tsx
+@@ -246,14 +246,11 @@ describe('Wiki settings', () => {
+     await mount(space());
+     await act(async () => button('Set up…', container).click());
+     await settle();
+-    const dialog = document.querySelector<HTMLElement>('.ant-modal')!;
++    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+     expect(dialog).toBeTruthy();
+-    await act(async () => {
+-      document.getElementById('wk-setup-provider')?.closest('.ant-select')?.querySelector('.ant-select-content')
+-        ?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+-    });
++    await act(async () => document.getElementById('wk-setup-provider')!.click());
+     await settle();
+-    const options = [...document.body.querySelectorAll<HTMLElement>('.ant-select-item-option')].map((node) => node.textContent ?? '');
++    const options = [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')].map((node) => node.textContent ?? '');
+     expect(options.length).toBe(2);
+     expect(options.some((option) => option.includes('local-vllm'))).toBe(true);
+     expect(options.some((option) => option.includes('deepseek'))).toBe(true);
+diff --git a/src/web/src/components/WikiSettingsPage.tsx b/src/web/src/components/WikiSettingsPage.tsx
+remerge CONFLICT (content): Merge conflict in src/web/src/components/WikiSettingsPage.tsx
+index 30c58ce19..8f2c3d8b7 100644
+--- a/src/web/src/components/WikiSettingsPage.tsx
++++ b/src/web/src/components/WikiSettingsPage.tsx
+@@ -73,7 +73,6 @@ import {
+ } from '../lib/wikiReviewMode';
+ import { updateWikiSpace, useWikiWrite, type WikiSpaceUpdate } from '../lib/wikiWrites';
+ import { WikiModelLine, WikiPrivacyNote } from './WikiSystemModel';
+-<<<<<<< f77a538a9 (docs(evidence): inventory record 2026-10-10 — main's session-list recap test goes to P5.3 (P5.2))
+ import { Button } from './ui/Button';
+ import { Card } from './ui/Card';
+ import { Dialog } from './ui/Dialog';
+@@ -81,10 +80,7 @@ import { NumberInput } from './ui/NumberInput';
+ import { Radio, RadioGroup } from './ui/Radio';
+ import { Select } from './ui/Select';
+ import { Switch } from './ui/Switch';
+-import type { ConfiguredProvider } from '../lib/workspaceDefaults';
+-=======
+ import { providerEngines, type ConfiguredProvider } from '../lib/workspaceDefaults';
+->>>>>>> ab47a1c11 (test: match ending-settled text nodes by ancestor tag in sessions shell test)
+ 
+ /**
+  * Wiki settings (criterion 8, mocks 19–20): which review mode the space runs in, whether Automatic
+
+$ git diff 2fcd654d8 378b7033e -- src/web/src/components/WikiSettingsPage.tsx src/web/src/components/WikiSettingsPage.test.tsx   # against the coordinator's promotion sync (empty: identical)
+exit=0
+
+## 2. c0317ce3c
+$ git log -1 --format="%H %P" c0317ce3c
+c0317ce3c1c591c5a8c5612750e83dd1b920fd76 924a5c564a75923f1c661d3d30caf96b16eb88ba 9498167b9082897e62a484426a43a30a4b77f083
+
+$ git merge-tree --write-tree --name-only 924a5c564 9498167b9   # the dry run before the merge: no conflict
+ebdd22efbd08ffb8b34da4a489ee0cffdf39434b
+exit=0
+
+$ git show --remerge-diff --format= c0317ce3c   # empty: no hand edits
+
+$ git diff --stat ab47a1c11 9498167b9 -- src/web   # what main changed under src/web in between
+ .../components/ApprovalPanel.questionWrap.test.tsx |  19 +-
+ .../components/Transcript.questionRecord.test.tsx  | 188 ++++++++++++++++++++
+ src/web/src/components/Transcript.tsx              | 196 ++++++++++++++-------
+ src/web/src/index.css                              |  78 +++++++-
+ 4 files changed, 414 insertions(+), 67 deletions(-)
+
+$ git log --oneline ab47a1c11..9498167b9 -- src/web src/shared
+94f61b52c feat(clients): an answered agent question says what was asked and how it was answered
+b4a5183e3 fix(web): the start dialog's close no longer sits on the card's corner
+
+## The base of the final round: the coordinator's sync 2fcd654d8 merged with the same main, local and never pushed
+$ git log -1 --format="%H %P %s" 1d97733fb
+1d97733fb12dd9d8a74814093705c8b68cbc8e82 2fcd654d84fceeafc714fa9c80a080ed5b488777 9498167b9082897e62a484426a43a30a4b77f083 P5.2 base 2 (local, never pushed): the coordinator's promotion sync 2fcd654d8 merged with origin/main 9498167b9
+
+$ git diff --stat 1d97733fb c0317ce3c -- src/web   # base to delivery: only P5.2's files
+ .../src/components/BackgroundWakeSteer.test.tsx    |   5 +-
+ src/web/src/components/QueuedUserTurn.test.tsx     |   9 +-
+ .../components/Transcript.backgroundWake.test.tsx  |   5 +-
+ .../components/Transcript.imagePreview.test.tsx    | 213 +++++++
+ .../components/Transcript.settledReply.test.tsx    |   5 +-
+ src/web/src/components/Transcript.tsx              |  52 +-
+ src/web/src/components/ui/Image.css                |  16 +
+ src/web/src/components/ui/Image.tsx                |  50 ++
+ src/web/src/components/ui/ImagePreview.css         |  66 +++
+ src/web/src/components/ui/ImagePreview.test.tsx    | 300 ++++++++++
+ src/web/src/components/ui/ImagePreview.tsx         | 406 +++++++++++++
+ src/web/src/components/ui/README.md                |  22 +
+ src/web/src/components/ui/rc-image.LICENSE         |  14 +
+ src/web/src/index.css                              |  20 +-
+ src/web/ui-migration/p52-fixtures.mjs              | 242 ++++++++
+ src/web/ui-migration/p52.browser.mjs               | 626 +++++++++++++++++++++
+ src/web/ui-migration/p52.config.mjs                |  25 +
+ src/web/ui-migration/playwright.config.mjs         |   2 +-
+ 18 files changed, 2027 insertions(+), 51 deletions(-)
+
+## 3. 9b28cd9c0 (the project line d354b64c5)
+$ git ls-remote origin refs/heads/project/34ZZeq0e3IR65GVm2kAs7 refs/heads/main
+9498167b9082897e62a484426a43a30a4b77f083	refs/heads/main
+d354b64c529c9d602d1f34503d14441265ce1374	refs/heads/project/34ZZeq0e3IR65GVm2kAs7
+
+$ git log -1 --format="%H %P %s" d354b64c5
+d354b64c529c9d602d1f34503d14441265ce1374 2fcd654d84fceeafc714fa9c80a080ed5b488777 9498167b9082897e62a484426a43a30a4b77f083 Merge refs/heads/main into refs/heads/orbit/p4-4-upstream-main-t7-wikisettingspage-8e59f1
+
+$ git rev-parse d354b64c5^{tree} 1d97733fb^{tree}   # the project tip and the base of the final round: one tree
+3793066aea1ad0a89d93c0d3b77f7ba28846a7b1
+3793066aea1ad0a89d93c0d3b77f7ba28846a7b1
+
+$ git merge-tree --write-tree d354b64c5 d9ffa6502; git rev-parse d9ffa6502^{tree}   # the dry run: no conflict, the branch's own tree
+8374f654f1111e3660b394b8a839419208f26219
+exit=0
+8374f654f1111e3660b394b8a839419208f26219
+
+$ git log -1 --format="%H %P" 9b28cd9c0
+9b28cd9c0c6b2f4e6c32dfa9f5f482d944fcbb02 d9ffa65024e72ab977fc9b0f0a655579bc2e7248 d354b64c529c9d602d1f34503d14441265ce1374
+
+$ git diff --stat d9ffa6502 9b28cd9c0   # empty: the merge changes no file
+exit=0
+
+$ git diff --name-only d354b64c5 9b28cd9c0   # the project tip to the delivery: only P5.2's files
+docs/evidence/base-ui-migration/inventory-delta/2026-10-10.json
+docs/evidence/base-ui-migration/inventory-delta/2026-10-10b.json
+docs/evidence/base-ui-migration/inventory-delta/README.md
+docs/evidence/base-ui-migration/inventory-delta/build-record-10.py
+docs/evidence/base-ui-migration/inventory-delta/build-record-10b.py
+src/web/src/components/BackgroundWakeSteer.test.tsx
+src/web/src/components/QueuedUserTurn.test.tsx
+src/web/src/components/Transcript.backgroundWake.test.tsx
+src/web/src/components/Transcript.imagePreview.test.tsx
+src/web/src/components/Transcript.settledReply.test.tsx
+src/web/src/components/Transcript.tsx
+src/web/src/components/ui/Image.css
+src/web/src/components/ui/Image.tsx
+src/web/src/components/ui/ImagePreview.css
+src/web/src/components/ui/ImagePreview.test.tsx
+src/web/src/components/ui/ImagePreview.tsx
+src/web/src/components/ui/README.md
+src/web/src/components/ui/rc-image.LICENSE
+src/web/src/index.css
+src/web/ui-migration/p52-fixtures.mjs
+src/web/ui-migration/p52.browser.mjs
+src/web/ui-migration/p52.config.mjs
+src/web/ui-migration/playwright.config.mjs
+
+## 4. 211949ed8 (the project line 951882866)
+$ git log -1 --format="%H %P %s" 951882866
+951882866f3227a8bd5c1040ba544fa1e08bf661 00675b7b26db44e3c26310f5cdb2c32818fde980 c907c8e3be0056b489470572e0df52805d06eefb Merge refs/heads/orbit/p2-select-close-antd-d927a5 into refs/heads/project/34ZZeq0e3IR65GVm2kAs7
+
+$ git log --oneline --first-parent d354b64c5..951882866
+951882866 Merge refs/heads/orbit/p2-select-close-antd-d927a5 into refs/heads/project/34ZZeq0e3IR65GVm2kAs7
+00675b7b2 docs(evidence): tasks toolbar height under WebKit's classic scrollbars
+e1dd199e4 test(web): tasks toolbar geometry under the bulk bar, repeated in fresh pages
+3a65947f9 fix(web): the tasks toolbar takes the bulk bar's height, its scrollbar included
+
+$ git merge-tree --write-tree --name-only 9b28cd9c0 951882866   # the dry run: one conflict
+b0e1f5db4ac7d7b6577ffaac03133156e12b2762
+src/web/ui-migration/playwright.config.mjs
+
+Auto-merging src/web/src/components/ui/README.md
+Auto-merging src/web/ui-migration/playwright.config.mjs
+CONFLICT (content): Merge conflict in src/web/ui-migration/playwright.config.mjs
+exit=1
+
+$ git log -1 --format="%H %P" 211949ed8
+211949ed83f7bed7530795ace579dfd685adebea 9b28cd9c0c6b2f4e6c32dfa9f5f482d944fcbb02 951882866f3227a8bd5c1040ba544fa1e08bf661
+
+$ git show --remerge-diff --format= 211949ed8   # the resolution: both entries, the line's own first
+diff --git a/src/web/ui-migration/playwright.config.mjs b/src/web/ui-migration/playwright.config.mjs
+remerge CONFLICT (content): Merge conflict in src/web/ui-migration/playwright.config.mjs
+index 05342dfce..ec07fb4e0 100644
+--- a/src/web/ui-migration/playwright.config.mjs
++++ b/src/web/ui-migration/playwright.config.mjs
+@@ -8,11 +8,7 @@ export default defineConfig({
+   // Deliberately outside Vitest's *.test.* / *.spec.* discovery.
+   testMatch: '*.browser.mjs',
+   // The development-only foundation fixture has its own server/configuration.
+-<<<<<<< 9b28cd9c0 (Merge the project line (d354b64c5) into P5.2)
+-  testIgnore: ['foundation*.browser.mjs', 'controls*.browser.mjs', 'overlays*.browser.mjs', 'choices*.browser.mjs', 'toasts*.browser.mjs', 'composer*.browser.mjs', 'pilot*.browser.mjs', 'p41*.browser.mjs', 'p42*.browser.mjs', 'p43a*.browser.mjs', 'p43b*.browser.mjs', 'p44*.browser.mjs', 'p52*.browser.mjs'],
+-=======
+-  testIgnore: ['foundation*.browser.mjs', 'controls*.browser.mjs', 'overlays*.browser.mjs', 'choices*.browser.mjs', 'toasts*.browser.mjs', 'composer*.browser.mjs', 'pilot*.browser.mjs', 'p41*.browser.mjs', 'p42*.browser.mjs', 'p43a*.browser.mjs', 'p43b*.browser.mjs', 'p44*.browser.mjs', 'tasks-toolbar*.browser.mjs'],
+->>>>>>> 951882866 (Merge refs/heads/orbit/p2-select-close-antd-d927a5 into refs/heads/project/34ZZeq0e3IR65GVm2kAs7)
++  testIgnore: ['foundation*.browser.mjs', 'controls*.browser.mjs', 'overlays*.browser.mjs', 'choices*.browser.mjs', 'toasts*.browser.mjs', 'composer*.browser.mjs', 'pilot*.browser.mjs', 'p41*.browser.mjs', 'p42*.browser.mjs', 'p43a*.browser.mjs', 'p43b*.browser.mjs', 'p44*.browser.mjs', 'tasks-toolbar*.browser.mjs', 'p52*.browser.mjs'],
+   fullyParallel: false,
+   workers: 1,
+   retries: 0,
+
+$ git diff --stat d354b64c5 951882866 -- src/web   # what the landed batch changed under src/web
+ src/web/src/components/ui/Overlay.css              |   2 +
+ src/web/src/components/ui/README.md                |   4 +-
+ src/web/src/components/ui/Select.test.tsx          | 101 +++++++++-
+ src/web/src/components/ui/Select.tsx               |  21 ++-
+ .../components/ui/__fixtures__/ChoicesFixture.tsx  |  14 +-
+ src/web/src/components/ui/foundation.css           |   2 +
+ .../src/pages/TaskListView.toolbarHeight.test.tsx  | 206 +++++++++++++++++++++
+ src/web/src/pages/TaskListView.tsx                 |  41 +++-
+ .../ui-migration/choices-first-option.browser.mjs  |  73 ++++++++
+ .../ui-migration/overlays-close-hover.browser.mjs  |  62 +++++++
+ src/web/ui-migration/playwright.config.mjs         |   2 +-
+ src/web/ui-migration/tasks-toolbar.browser.mjs     |  92 +++++++++
+ src/web/ui-migration/tasks-toolbar.config.mjs      |  22 +++
+ 13 files changed, 625 insertions(+), 17 deletions(-)
+
+$ git diff --name-only 951882866 211949ed8   # the project tip to the delivery: only P5.2's files
+docs/evidence/base-ui-migration/inventory-delta/2026-10-10.json
+docs/evidence/base-ui-migration/inventory-delta/2026-10-10b.json
+docs/evidence/base-ui-migration/inventory-delta/README.md
+docs/evidence/base-ui-migration/inventory-delta/build-record-10.py
+docs/evidence/base-ui-migration/inventory-delta/build-record-10b.py
+docs/evidence/base-ui-migration/p5.2/checks/record-10-audit.json
+docs/evidence/base-ui-migration/p5.2/checks/record-10b-audit.json
+docs/evidence/base-ui-migration/p5.2/checks/verify-record-10.txt
+docs/evidence/base-ui-migration/p5.2/checks/verify-records.txt
+src/web/src/components/BackgroundWakeSteer.test.tsx
+src/web/src/components/QueuedUserTurn.test.tsx
+src/web/src/components/Transcript.backgroundWake.test.tsx
+src/web/src/components/Transcript.imagePreview.test.tsx
+src/web/src/components/Transcript.settledReply.test.tsx
+src/web/src/components/Transcript.tsx
+src/web/src/components/ui/Image.css
+src/web/src/components/ui/Image.tsx
+src/web/src/components/ui/ImagePreview.css
+src/web/src/components/ui/ImagePreview.test.tsx
+src/web/src/components/ui/ImagePreview.tsx
+src/web/src/components/ui/README.md
+src/web/src/components/ui/rc-image.LICENSE
+src/web/src/index.css
+src/web/ui-migration/p52-fixtures.mjs
+src/web/ui-migration/p52.browser.mjs
+src/web/ui-migration/p52.config.mjs
+src/web/ui-migration/playwright.config.mjs
+

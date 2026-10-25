@@ -1,0 +1,11 @@
+$ node docs/evidence/base-ui-migration/inventory-delta/verify-record.mjs docs/evidence/base-ui-migration/p5.2/checks/record-10-audit.json 2026-10-10.json
+Record 2026-10-10.json verified: 1 file entries and 0 index.css entries match the audit; read after 9 earlier record(s), 1 points need its new/changed entries and 0 change owner without its reassignments; it leaves 0 points pending (0 questions); with all 10 records: 0 unowned, 0 pending; P0.1 baseline clean.
+exit=0
+
+$ node docs/evidence/base-ui-migration/inventory-delta/verify-record.mjs docs/evidence/base-ui-migration/p4.4/checks/record-09c-audit.json 2026-10-09c.json
+Record 2026-10-09c.json verified: 1 file entries and 0 index.css entries match the audit; read after 8 earlier record(s), 1 points need its new/changed entries and 0 change owner without its reassignments; it leaves 0 points pending (0 questions); with all 10 records: 0 unowned, 0 pending; P0.1 baseline clean.
+exit=0
+
+$ python3 -I build-record-10.py ../p5.2/checks/record-10-audit.json | cmp - 2026-10-10.json
+byte-identical
+exit=0

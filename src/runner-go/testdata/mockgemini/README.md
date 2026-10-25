@@ -57,7 +57,7 @@ env -i PATH="$PATH" HOME="$(mktemp -d)" \
 | --- | --- |
 | `mock:text <文字>` | 当前回复加一段正文（分块流式发出；`\n` 表示换行） |
 | `mock:think <文字>` | 当前回复加一段思考（`thought: true` 的 part） |
-| `mock:tool <name> <JSON 参数>` | 当前回复以一个 functionCall 结束（附带 `thoughtSignature`） |
+| `mock:tool <name> <JSON 参数>` | 当前回复以一个 functionCall 结束（附带 `thoughtSignature`）。参数只保留请求里该工具声明的属性：agy 拒收未声明的属性，而各版本声明的不同（1.4.3 去掉了 `run_command` 的 `Cwd` 和所有工具的 `toolAction`），所以剧本把各版本要的都写上。改过名的工具写成 `view_file\|read_file`，用请求声明了的第一个名字 |
 | `mock:error <状态码> <STATUS> [retryDelay=40s] <消息>` | 这次回复是一个 HTTP 错误，Gemini 的错误体形状 |
 | `mock:finish <REASON>` | 当前回复的 finishReason（默认 `STOP`） |
 | `mock:sleep <时长>` | 回复前先等，Go duration 写法（如 `6s`） |

@@ -18,6 +18,12 @@ import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerWatchesController } from './runner-watches.controller';
 import { RunnerReleaseController } from './runner-release.controller';
+import { RunnerLinkGatewayGuard, RunnerLinkTokenController } from './runner-link-token.controller';
+import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
+import { RunnerLinkModeController, RunnerLinkRequiredController } from './runner-link-required.controller';
+import { RunnerLinkRequiredInterceptor, RunnerLinkSwitch } from './runner-link-required';
+import { RunnerReleaseFeed } from './runner-release-feed';
+import { RUNNER_LINK, runnerLinkFrom } from './runner-link-token';
 import { RunnerSessionAuthGuard } from './runner-session-auth.guard';
 import {
   createServiceTokenJwt,
@@ -39,12 +45,7 @@ import { OutcomeReconcilerModule } from '../outcome-reconciler/outcome-reconcile
 import { WatchesModule } from '../watches/watches.module';
 import { WikiModule } from '../wiki/wiki.module';
 import { RunnerWikiController } from './runner-wiki.controller';
-import { RunnerWikiMaintenanceController } from './runner-wiki-maintenance.controller';
-import { RunnerWikiAnchorsController } from './runner-wiki-anchors.controller';
-import { RunnerWikiArticlesController } from './runner-wiki-articles.controller';
-import { RunnerWikiPlanController } from './runner-wiki-plan.controller';
-import { RunnerWikiDocsController } from './runner-wiki-docs.controller';
-import { RunnerWikiMaintainController } from './runner-wiki-maintain.controller';
+import { AdminRoleGuard } from '../users/admin-role.guard';
 
 @Module({
   // TasksService and TaskListsService are imported from their own modules rather than
@@ -90,24 +91,36 @@ import { RunnerWikiMaintainController } from './runner-wiki-maintain.controller'
     // Which runner release each runner is to run (runner-release.ts).
     RunnerReleaseController,
     RunnerWikiController,
-    // The maintenance run's two routes (contract `maintenance`): its own controller, so the one above
-    // injects exactly what it always did.
-    RunnerWikiMaintenanceController,
-    // The anchor re-verification's two routes (contract `anchorRules.verify`), for the same reason.
-    RunnerWikiAnchorsController,
-    // A maintenance run's articles (contract `articles`): the plan, a topic's entries, the write.
-    RunnerWikiArticlesController,
-    // The plan (contract `plan`): a maintenance run's read, draft and proposal.
-    RunnerWikiPlanController,
-    // The documents (contract `docs`): what a maintenance run has written, and its write of a document.
-    RunnerWikiDocsController,
-    // The maintenance job's routes (criterion 3): a run's start, proposals, end, and the task's check.
-    RunnerWikiMaintainController,
+    // The runner link's connection tokens and the gateway's revocation list (runner-link-token.ts).
+    RunnerLinkTokenController,
+    // What the link gateway's Welcome says of a connecting process's sessions and release (runner-link-welcome.ts).
+    RunnerLinkWelcomeController,
+    // RUNNER_LINK_REQUIRED, the cut-over switch: switched by an administrator, read by the link gateway
+    // (runner-link-required.ts).
+    RunnerLinkRequiredController,
+    RunnerLinkModeController,
   ],
   providers: [
     RunnerAuthGuard,
     RunnerSessionAuthGuard,
+    RunnerLinkGatewayGuard,
     RunnerWriteProtocolInterceptor,
+    // The cut-over switch and RunnerApiController's interceptor that answers it (runner-link-required.ts).
+    // AdminRoleGuard depends only on the global PrismaService; UsersModule does not export it.
+    RunnerLinkSwitch,
+    RunnerLinkRequiredInterceptor,
+    AdminRoleGuard,
+    {
+      provide: RUNNER_LINK,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => runnerLinkFrom(config),
+    },
+    // What /dl publishes, for the release the runner link states (runner-release-feed.ts).
+    {
+      provide: RunnerReleaseFeed,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => new RunnerReleaseFeed(config.get<string>('RUNNER_RELEASE_DL_URL')),
+    },
     {
       provide: RUNNER_ORCHESTRATION_JWT,
       inject: [ConfigService],

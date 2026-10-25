@@ -168,6 +168,12 @@ export function branchName(ref: string): string {
   return ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
 }
 
+/** A project's main branch by name, as the reads whose words say "main" carry it (`mainBranch`):
+ *  its binding's upstream, or null when it has no repository bound — and the words then say main. */
+export function mainBranchOf(codebase: { upstreamRef: string } | null | undefined): string | null {
+  return codebase ? branchName(codebase.upstreamRef) : null;
+}
+
 /** What counts as landed for one project: its binding's two branches, or the legacy pair without one. */
 export function landingBranchesFor(codebase: LandingCodebase | null): LandingBranches {
   if (!codebase) return LEGACY_LANDING_BRANCHES;
@@ -204,9 +210,14 @@ export interface LandingJobFacts {
   /** With NOTHING_TO_LAND: whether the runner measured the source tip an ancestor of that upstream
    *  tip (0346). Null when it measured nothing — every older row, and every older runner. */
   sourceOnUpstream: boolean | null;
+  /** With NOTHING_TO_LAND: whether the runner measured that the branch carried commits of its own and
+   *  the base already had every one of them (0410) — true, or false for a branch that carried none.
+   *  Null when it measured nothing, as above. */
+  sourceFullyApplied: boolean | null;
   /** The receipts the answer wrote. A NOTHING_TO_LAND writes one only when no work session of the
-   *  task had reported work of its own anywhere (J8), so an empty list there is the line saying the
-   *  task's work is on a branch it was not handed (`jobAnsweredForTheWholeTask`). */
+   *  task had reported work of its own anywhere (J8) — or, for a branch whose commits the target
+   *  already had, anywhere but on that branch — so an empty list there is the line saying the task's
+   *  work is on a branch it was not handed (`jobAnsweredForTheWholeTask`). */
   receiptIds: readonly string[];
   /** The branch the line was handed: `refs/heads/<session branch>`, frozen at enqueue (J-T1a). */
   sourceRef: string;
@@ -421,6 +432,39 @@ export function jobSawTipOnUpstream(job: LandingJobFacts): boolean {
 }
 
 /**
+ * Whether this job is the line saying that every commit the branch carried was already on the
+ * UPSTREAM: the branch had commits of its own, and the upstream had all of their changes.
+ *
+ * This is not `jobSawTipOnUpstream`. That predicate is about a tip; here the tip is NOT on the
+ * upstream, and the runner says so (`source_on_upstream` false). What is on the upstream is the work:
+ * the rebase of the branch onto the base dropped every commit it carried as "patch contents already
+ * upstream", so the replay came back at the base and nothing was pushed (`source_fully_applied`,
+ * 0410). On 2026-10-09 a line was rebuilt from main's tip after main had taken a project's work in
+ * by another route (project 34PBlWiEZytRLTcPufJht). Every task's branch was then handed to the line
+ * and answered exactly this, as LANDED with a receipt, before the runner learned to say it.
+ *
+ * The measurement is about the BASE, and it says "the upstream" only where the base was the upstream.
+ * That takes the two conditions `jobSawTipOnUpstream` reads an ALREADY_LANDED by: no merge of the
+ * upstream into the target ran, and the target tip was the upstream tip, read by the same fetch. On a
+ * line ahead of main the same answer says the work is on the LINE, which its receipt records. Main
+ * may not have it, so the task stays in the roll-up as ON_INTEGRATION_LINE, the shape any landing on
+ * the line has. A line a main sync ran on, where the base was the line plus the upstream, is read the
+ * same cautious way: the answer cannot say which of the two held the commits.
+ *
+ * `sourceFullyApplied` is the measurement, and nothing stands in for it: a NOTHING_TO_LAND that did
+ * not measure it (every older row and runner) and the empty branch's (false) are read exactly as
+ * before. Like every answer this lane reads, it is about one branch at one moment, which is what
+ * `jobSawTheFinishedBranch` and `jobAnsweredForTheWholeTask` are asked beside it for.
+ */
+export function jobSawWorkOnUpstream(job: LandingJobFacts): boolean {
+  return job.state === 'NOTHING_TO_LAND'
+    && job.sourceFullyApplied === true
+    && job.mainSyncSha === null
+    && job.targetShaBefore !== null
+    && job.targetShaBefore === job.upstreamSha;
+}
+
+/**
  * Whether the branch the line looked at is the one this task's work ENDED on, looked at after it
  * ended — the condition under which `jobSawTipOnUpstream` speaks for everything the session left,
  * and not for a branch that went on growing after the line looked.
@@ -476,6 +520,11 @@ export function jobSawTheFinishedBranch(job: LandingJobFacts): boolean {
  * and this lane reads the same fact the same way: that task has commits of its own, and the empty tip
  * being on the upstream says nothing about them.
  *
+ * A branch whose commits the target already had (`sourceFullyApplied`, 0410) is not empty: its own
+ * session reported that work, and the line measured it. So its receipt is withheld only for work
+ * reported on ANOTHER branch, or for work that ended on another branch. The question asked here is
+ * the same.
+ *
  * An ALREADY_LANDED is not asked: it writes its receipt whenever it is written down, and it is read by
  * the conditions `jobSawTipOnUpstream` already gives it.
  */
@@ -485,12 +534,14 @@ export function jobAnsweredForTheWholeTask(job: LandingJobFacts): boolean {
 
 /**
  * One job's answer that the task's work carried nothing the upstream did not already have: the tip on
- * the upstream (`jobSawTipOnUpstream`), of the branch the work ended on, after it ended
+ * the upstream (`jobSawTipOnUpstream`), or every commit of the branch already there
+ * (`jobSawWorkOnUpstream`), of the branch the work ended on, after it ended
  * (`jobSawTheFinishedBranch`), with no work of the task's reported anywhere else
  * (`jobAnsweredForTheWholeTask`).
  */
 export function jobFoundNothingOfItsOwn(job: LandingJobFacts): boolean {
-  return jobSawTipOnUpstream(job) && jobSawTheFinishedBranch(job) && jobAnsweredForTheWholeTask(job);
+  return (jobSawTipOnUpstream(job) || jobSawWorkOnUpstream(job))
+    && jobSawTheFinishedBranch(job) && jobAnsweredForTheWholeTask(job);
 }
 
 /**
@@ -650,33 +701,43 @@ export async function readLandingBranches(
  * Every criterion this project states, each with its serving work's merge receipts and the line's
  * answers about its branches.
  *
- * One call, whose nested select carries every serving task's receipts and jobs with it — not one
- * query per criterion and not one per task. It reads the criterion rows again rather than borrowing
- * the work side's, which keeps this lane genuinely bolted on: the three clauses are untouched, and
- * nothing here can change the answer they fold.
+ * Two reads, neither of them per criterion or per task: the definitions with their serving tasks'
+ * receipts, and then the integration jobs of exactly those tasks. It reads the criterion rows again
+ * rather than borrowing the work side's, which keeps this lane genuinely bolted on: the three clauses
+ * are untouched, and nothing here can change the answer they fold.
  *
  * `codeless` rides along as a scalar on the same `task` row the receipts hang off, so reading what
  * `taskHasNothingToLand` needs costs this read no statement at all — which is why the project detail
- * page's fixed cost does not move for it. The jobs cost two: their own relation beside the receipts,
- * and the sessions they were queued for one level below it — each one statement for all of the
- * project's serving tasks together (`project-get-query-count.pg.spec.ts` carries the number and the
- * argument).
+ * page's fixed cost does not move for it. The jobs are the second read rather than a nested relation
+ * because `task_id` is a history reference with no foreign key (0423) and Prisma has nothing to nest;
+ * they and the sessions they were queued for still cost one statement each for the whole project's
+ * serving tasks (`project-get-query-count.pg.spec.ts` carries the number and the argument).
  */
-export function readCriterionLandingFacts(
-  prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition'>,
+export async function readCriterionLandingFacts(
+  prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition' | 'projectIntegrationJob' | 'session'>,
   ownerId: string,
   projectId: string,
 ): Promise<CriterionWithLandingFacts[]> {
-  return prisma.projectAcceptanceCriterionDefinition.findMany({
+  const definitions = await prisma.projectAcceptanceCriterionDefinition.findMany({
     where: { projectId, project: { ownerId } },
     select: {
       id: true,
       servingTasks: {
         where: { ownerId },
-        select: LANDING_SERVING_WORK_SELECT,
+        // `id` is not the fold's to read; it is how the jobs below are keyed to these rows.
+        select: { id: true, ...LANDING_SERVING_WORK_SELECT },
       },
     },
   });
+  const jobs = await readLandingJobsByTask(
+    prisma, definitions.flatMap((definition) => definition.servingTasks.map((task) => task.id)),
+  );
+  return definitions.map((definition) => ({
+    ...definition,
+    servingTasks: definition.servingTasks.map((task) => ({
+      ...task, integrationJobs: jobs.get(task.id) ?? [],
+    })),
+  }));
 }
 
 /**
@@ -686,31 +747,79 @@ export function readCriterionLandingFacts(
  * shows, the facts the coordinator is woken for, the settled card, and the mirror those are asserted
  * against. A reader that wrote its own copy would be a second author of the fold's input, and the
  * copy that drifts is the one that quietly keeps answering a question the fold stopped asking —
- * which is what these three facts are: SR5's escape hatch, the merges recorded against the task, and
- * the answers the line gave about its branches (§2.2 J-T5), with what each branch's session had
- * reported by then.
+ * which is what these two facts are: SR5's escape hatch and the merges recorded against the task.
+ *
+ * The third one, the answers the line gave about its branches (§2.2 J-T5), is not here: it is about
+ * the task rather than ON it, and it is read beside this select by `readLandingJobsByTask`. An empty
+ * `integrationJobs` in this shape is not "the task has none" but "they have not been attached yet" —
+ * a distinction nothing can enforce, which is why every caller in this tree attaches them in the same
+ * function that ran the select.
  */
 export const LANDING_SERVING_WORK_SELECT = {
   codeless: true,
   mergeReceipts: { select: { result: true, targetBranch: true } },
-  integrationJobs: {
-    select: {
-      state: true,
-      mainSyncSha: true,
-      targetShaBefore: true,
-      upstreamSha: true,
-      sourceOnUpstream: true,
-      receiptIds: true,
-      sourceRef: true,
-      startedAt: true,
-      session: { select: { finishedAt: true, worktreeBranch: true, worktreeDirty: true } },
-    },
-  },
 } as const;
+
+/**
+ * One integration job's columns as the fold reads them, and the session it was queued for.
+ *
+ * Kept beside `LANDING_SERVING_WORK_SELECT` because the two are one input, split only by 0423: the
+ * jobs stopped being a relation on `task`, so the reader names their columns here and fetches them
+ * by `task_id`. The session stopped being one in 0424, so it is fetched by `session_id` beside them.
+ */
+const LANDING_JOB_SELECT = {
+  state: true,
+  mainSyncSha: true,
+  targetShaBefore: true,
+  upstreamSha: true,
+  sourceOnUpstream: true,
+  sourceFullyApplied: true,
+  receiptIds: true,
+  sourceRef: true,
+  startedAt: true,
+  sessionId: true,
+} as const;
+
+/**
+ * Each named task's integration jobs, keyed by the task — ONE statement for the page, and one more
+ * for the sessions those jobs were queued for.
+ *
+ * `task_id` is a history reference with no foreign key (0423): it may name a task that was deleted
+ * (that is the trace the column exists for) and a promotion job has none, so this reads a keyed map
+ * rather than a relation, and every caller attaches the result to the tasks it already has.
+ * `session_id` is one too (0424), so the sessions are read by id rather than nested: a session
+ * purged from Trash is not found, and its job's `session` reads null — what the key's SET NULL used
+ * to leave there.
+ */
+export async function readLandingJobsByTask(
+  prisma: Pick<PrismaService, 'projectIntegrationJob' | 'session'>,
+  taskIds: readonly string[],
+): Promise<Map<string, LandingJobFacts[]>> {
+  if (taskIds.length === 0) return new Map();
+  const jobs = await prisma.projectIntegrationJob.findMany({
+    where: { taskId: { in: [...taskIds] } },
+    select: { taskId: true, ...LANDING_JOB_SELECT },
+  });
+  const sessionIds = [...new Set(jobs.flatMap((job) => (job.sessionId ? [job.sessionId] : [])))];
+  const sessions = new Map((sessionIds.length === 0 ? [] : await prisma.session.findMany({
+    where: { id: { in: sessionIds } },
+    select: { id: true, finishedAt: true, worktreeBranch: true, worktreeDirty: true },
+  })).map(({ id, ...facts }) => [id, facts]));
+  const byTask = new Map<string, LandingJobFacts[]>();
+  for (const { sessionId, ...job } of jobs) {
+    // Not every job names a task: `promotion_id` is what a promotion's job carries, and 0293 gives
+    // those no task at all. They are not this fold's input — nothing here is about a promotion.
+    if (!job.taskId) continue;
+    const session = (sessionId && sessions.get(sessionId)) || null;
+    byTask.set(job.taskId, [...(byTask.get(job.taskId) ?? []), { ...job, session }]);
+  }
+  return byTask;
+}
 
 /** Every criterion this project states, and where the work filed under each has landed. */
 export async function readCriterionLanding(
-  prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition' | 'projectCodebase'>,
+  prisma: Pick<PrismaService,
+    'projectAcceptanceCriterionDefinition' | 'projectCodebase' | 'projectIntegrationJob' | 'session'>,
   ownerId: string,
   projectId: string,
 ): Promise<CriterionLandingAnswer[]> {

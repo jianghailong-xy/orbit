@@ -1,0 +1,1828 @@
+{
+ "antd": {
+  "del": {
+   "classes": [],
+   "first": [],
+   "steps": 0,
+   "tests": 0
+  },
+  "ref": {
+   "classes": [],
+   "first": [],
+   "steps": 0,
+   "tests": 0
+  }
+ },
+ "missing": [],
+ "presentation": {
+  "viewerName": {
+   "differing": 0,
+   "examples": []
+  }
+ },
+ "semantic": [
+  {
+   "fields": {
+    "pictures": [
+     [
+      {
+       "at": "2",
+       "box": [
+        26,
+        -410.09,
+        338,
+        212
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "artifact"
+      },
+      {
+       "at": "3",
+       "box": [
+        27,
+        -146.09,
+        337.98,
+        219.98
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "result"
+      },
+      {
+       "at": "8",
+       "box": [
+        27,
+        450.25,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "clipped"
+      }
+     ],
+     [
+      {
+       "at": "2",
+       "box": [
+        26,
+        -620.09,
+        338,
+        212
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "artifact"
+      },
+      {
+       "at": "3",
+       "box": [
+        27,
+        -356.09,
+        337.98,
+        219.98
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "result"
+      },
+      {
+       "at": "8",
+       "box": [
+        27,
+        240.25,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "clipped"
+      }
+     ]
+    ],
+    "placeholders": [
+     [
+      {
+       "at": "1",
+       "box": [
+        118,
+        -938.66,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      },
+      {
+       "at": "1",
+       "box": [
+        244,
+        -938.66,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -708.48,
+        338,
+        260
+       ],
+       "class": "md-image md-image-loading"
+      },
+      {
+       "at": "6",
+       "box": [
+        118,
+        138.89,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      },
+      {
+       "at": "6",
+       "box": [
+        244,
+        138.89,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      },
+      {
+       "at": "11",
+       "box": [
+        176.47,
+        740.58,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      }
+     ],
+     [
+      {
+       "at": "1",
+       "box": [
+        118,
+        -1148.66,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      },
+      {
+       "at": "1",
+       "box": [
+        244,
+        -1148.66,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -918.48,
+        338,
+        260
+       ],
+       "class": "md-image md-image-loading"
+      },
+      {
+       "at": "6",
+       "box": [
+        118,
+        -71.11,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      },
+      {
+       "at": "6",
+       "box": [
+        244,
+        -71.11,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      },
+      {
+       "at": "11",
+       "box": [
+        176.47,
+        530.58,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      }
+     ]
+    ],
+    "scroll": [
+     {
+      "gap": 210,
+      "height": 1910,
+      "top": 1063
+     },
+     {
+      "gap": 0,
+      "height": 1910,
+      "top": 1273
+     }
+    ]
+   },
+   "index": 0,
+   "step": "opened at the tail, pictures on their way",
+   "test": "chromium-dark-phone :: P5.2 the transcript’s pictures › keep the conversation on its tail while they land, and in order while a turn streams in"
+  },
+  {
+   "fields": {
+    "pictures": [
+     [
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -938.66,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userWide"
+      },
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -795.16,
+        110,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userTall"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -430.98,
+        338,
+        226
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "markdown"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -162.59,
+        338,
+        212
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "artifact"
+      },
+      {
+       "at": "3",
+       "box": [
+        27,
+        101.41,
+        337.98,
+        219.98
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "result"
+      },
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        386.39,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "8",
+       "box": [
+        27,
+        923.75,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "clipped"
+      },
+      {
+       "at": "11",
+       "box": [
+        144,
+        1214.08,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "putBack"
+      }
+     ],
+     [
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -1669.66,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userWide"
+      },
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -1526.16,
+        110,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userTall"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -1161.98,
+        338,
+        226
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "markdown"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -893.59,
+        338,
+        212
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "artifact"
+      },
+      {
+       "at": "3",
+       "box": [
+        27,
+        -629.59,
+        337.98,
+        219.98
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "result"
+      },
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        -344.61,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "8",
+       "box": [
+        27,
+        192.75,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "clipped"
+      },
+      {
+       "at": "11",
+       "box": [
+        144,
+        483.08,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "putBack"
+      }
+     ]
+    ],
+    "placeholders": [
+     [
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        612.39,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      }
+     ],
+     [
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        -118.61,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      }
+     ]
+    ],
+    "scroll": [
+     {
+      "gap": 731,
+      "height": 2431,
+      "top": 1063
+     },
+     {
+      "gap": 0,
+      "height": 2431,
+      "top": 1794
+     }
+    ]
+   },
+   "index": 1,
+   "step": "pictures landed",
+   "test": "chromium-dark-phone :: P5.2 the transcript’s pictures › keep the conversation on its tail while they land, and in order while a turn streams in"
+  },
+  {
+   "fields": {
+    "pictures": [
+     [
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -938.66,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userWide"
+      },
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -795.16,
+        110,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userTall"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -430.98,
+        338,
+        226
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "markdown"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -162.59,
+        338,
+        212
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "artifact"
+      },
+      {
+       "at": "3",
+       "box": [
+        27,
+        101.41,
+        337.98,
+        219.98
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "result"
+      },
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        386.39,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "8",
+       "box": [
+        27,
+        923.75,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "clipped"
+      },
+      {
+       "at": "11",
+       "box": [
+        144,
+        1214.08,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "putBack"
+      },
+      {
+       "at": "12",
+       "box": [
+        144,
+        1468.77,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      }
+     ],
+     [
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -2021.66,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userWide"
+      },
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -1878.16,
+        110,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userTall"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -1513.98,
+        338,
+        226
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "markdown"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -1245.59,
+        338,
+        212
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "artifact"
+      },
+      {
+       "at": "3",
+       "box": [
+        27,
+        -981.59,
+        337.98,
+        219.98
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "result"
+      },
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        -696.61,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "8",
+       "box": [
+        27,
+        -159.25,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "clipped"
+      },
+      {
+       "at": "11",
+       "box": [
+        144,
+        131.08,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "putBack"
+      },
+      {
+       "at": "12",
+       "box": [
+        144,
+        385.77,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      }
+     ]
+    ],
+    "placeholders": [
+     [
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        612.39,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      }
+     ],
+     [
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        -470.61,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      }
+     ]
+    ],
+    "scroll": [
+     {
+      "gap": 1083,
+      "height": 2783,
+      "top": 1063
+     },
+     {
+      "gap": 0,
+      "height": 2783,
+      "top": 2146
+     }
+    ]
+   },
+   "index": 2,
+   "step": "a turn with a picture, its reply streaming",
+   "test": "chromium-dark-phone :: P5.2 the transcript’s pictures › keep the conversation on its tail while they land, and in order while a turn streams in"
+  },
+  {
+   "fields": {
+    "pictures": [
+     [
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -938.66,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userWide"
+      },
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -795.16,
+        110,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userTall"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -430.98,
+        338,
+        226
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "markdown"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -162.59,
+        338,
+        212
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "artifact"
+      },
+      {
+       "at": "3",
+       "box": [
+        27,
+        101.41,
+        337.98,
+        219.98
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "result"
+      },
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        386.39,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "8",
+       "box": [
+        27,
+        923.75,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "clipped"
+      },
+      {
+       "at": "11",
+       "box": [
+        144,
+        1214.08,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "putBack"
+      },
+      {
+       "at": "12",
+       "box": [
+        144,
+        1468.77,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "14",
+       "box": [
+        27,
+        1818.16,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "markdown"
+      }
+     ],
+     [
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -2302.66,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userWide"
+      },
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -2159.16,
+        110,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userTall"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -1794.98,
+        338,
+        226
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "markdown"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -1526.59,
+        338,
+        212
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "artifact"
+      },
+      {
+       "at": "3",
+       "box": [
+        27,
+        -1262.59,
+        337.98,
+        219.98
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "result"
+      },
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        -977.61,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "8",
+       "box": [
+        27,
+        -440.25,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "clipped"
+      },
+      {
+       "at": "11",
+       "box": [
+        144,
+        -149.92,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "putBack"
+      },
+      {
+       "at": "12",
+       "box": [
+        144,
+        104.77,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "14",
+       "box": [
+        27,
+        454.16,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "markdown"
+      }
+     ]
+    ],
+    "placeholders": [
+     [
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        612.39,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      }
+     ],
+     [
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        -751.61,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      }
+     ]
+    ],
+    "scroll": [
+     {
+      "gap": 1364,
+      "height": 3064,
+      "top": 1063
+     },
+     {
+      "gap": 0,
+      "height": 3064,
+      "top": 2427
+     }
+    ]
+   },
+   "index": 3,
+   "step": "a screenshot mid-reply",
+   "test": "chromium-dark-phone :: P5.2 the transcript’s pictures › keep the conversation on its tail while they land, and in order while a turn streams in"
+  },
+  {
+   "fields": {
+    "pictures": [
+     [
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -938.66,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userWide"
+      },
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -795.16,
+        110,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userTall"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -430.98,
+        338,
+        226
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "markdown"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -162.59,
+        338,
+        212
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "artifact"
+      },
+      {
+       "at": "3",
+       "box": [
+        27,
+        101.41,
+        337.98,
+        219.98
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "result"
+      },
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        386.39,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "8",
+       "box": [
+        27,
+        923.75,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "clipped"
+      },
+      {
+       "at": "11",
+       "box": [
+        144,
+        1214.08,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "putBack"
+      },
+      {
+       "at": "12",
+       "box": [
+        144,
+        1468.77,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "14",
+       "box": [
+        27,
+        1818.16,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "markdown"
+      }
+     ],
+     [
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -2366.66,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userWide"
+      },
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -2223.16,
+        110,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userTall"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -1858.98,
+        338,
+        226
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "markdown"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -1590.59,
+        338,
+        212
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "artifact"
+      },
+      {
+       "at": "3",
+       "box": [
+        27,
+        -1326.59,
+        337.98,
+        219.98
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "result"
+      },
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        -1041.61,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "8",
+       "box": [
+        27,
+        -504.25,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "clipped"
+      },
+      {
+       "at": "11",
+       "box": [
+        144,
+        -213.92,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "putBack"
+      },
+      {
+       "at": "12",
+       "box": [
+        144,
+        40.77,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "14",
+       "box": [
+        27,
+        390.16,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "markdown"
+      }
+     ]
+    ],
+    "placeholders": [
+     [
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        612.39,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      }
+     ],
+     [
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        -815.61,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      }
+     ]
+    ],
+    "scroll": [
+     {
+      "gap": 1428,
+      "height": 3128,
+      "top": 1063
+     },
+     {
+      "gap": 0,
+      "height": 3128,
+      "top": 2491
+     }
+    ]
+   },
+   "index": 4,
+   "step": "settled",
+   "test": "chromium-dark-phone :: P5.2 the transcript’s pictures › keep the conversation on its tail while they land, and in order while a turn streams in"
+  },
+  {
+   "fields": {
+    "pictures": [
+     [
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -1511.66,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userWide"
+      },
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -1368.16,
+        110,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userTall"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -1003.98,
+        338,
+        226
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "markdown"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -735.59,
+        338,
+        212
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "artifact"
+      },
+      {
+       "at": "3",
+       "box": [
+        27,
+        -471.59,
+        337.98,
+        219.98
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "result"
+      },
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        -186.61,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "8",
+       "box": [
+        27,
+        350.75,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "clipped"
+      },
+      {
+       "at": "11",
+       "box": [
+        144,
+        641.08,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "putBack"
+      }
+     ],
+     [
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -1669.66,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userWide"
+      },
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -1526.16,
+        110,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userTall"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -1161.98,
+        338,
+        226
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "markdown"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -893.59,
+        338,
+        212
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "artifact"
+      },
+      {
+       "at": "3",
+       "box": [
+        27,
+        -629.59,
+        337.98,
+        219.98
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "result"
+      },
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        -344.61,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "8",
+       "box": [
+        27,
+        192.75,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "clipped"
+      },
+      {
+       "at": "11",
+       "box": [
+        144,
+        483.08,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "putBack"
+      }
+     ]
+    ],
+    "placeholders": [
+     [
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        39.39,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      }
+     ],
+     [
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        -118.61,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      }
+     ]
+    ],
+    "scroll": [
+     {
+      "gap": 158,
+      "height": 2431,
+      "top": 1636
+     },
+     {
+      "gap": 0,
+      "height": 2431,
+      "top": 1794
+     }
+    ]
+   },
+   "index": 0,
+   "step": "drawn",
+   "test": "chromium-dark-phone :: P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes"
+  },
+  {
+   "fields": {
+    "pictures": [
+     [
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -646.66,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userWide"
+      },
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -503.16,
+        110,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userTall"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -138.98,
+        338,
+        226
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "markdown"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        129.41,
+        338,
+        212
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "artifact"
+      },
+      {
+       "at": "3",
+       "box": [
+        27,
+        393.41,
+        337.98,
+        219.98
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "result"
+      },
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        678.39,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "8",
+       "box": [
+        27,
+        1215.75,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "clipped"
+      },
+      {
+       "at": "11",
+       "box": [
+        144,
+        1506.08,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "putBack"
+      }
+     ],
+     [
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -1669.66,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userWide"
+      },
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -1526.16,
+        110,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userTall"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -1161.98,
+        338,
+        226
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "markdown"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        -893.59,
+        338,
+        212
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "artifact"
+      },
+      {
+       "at": "3",
+       "box": [
+        27,
+        -629.59,
+        337.98,
+        219.98
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "result"
+      },
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        -344.61,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "8",
+       "box": [
+        27,
+        192.75,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "clipped"
+      },
+      {
+       "at": "11",
+       "box": [
+        144,
+        483.08,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "putBack"
+      }
+     ]
+    ],
+    "placeholders": [
+     [
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        904.39,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      }
+     ],
+     [
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        -118.61,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      }
+     ]
+    ],
+    "scroll": [
+     {
+      "gap": 1023,
+      "height": 2431,
+      "top": 771
+     },
+     {
+      "gap": 0,
+      "height": 2431,
+      "top": 1794
+     }
+    ]
+   },
+   "index": 0,
+   "step": "drawn",
+   "test": "chromium-dark-phone :: P5.2 the transcript’s pictures › open on their own: a reply’s Markdown picture, the session’s mock and a picture put back in the composer"
+  }
+ ],
+ "steps": 516,
+ "tests": 56
+}

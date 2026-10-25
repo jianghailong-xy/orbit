@@ -1,0 +1,201 @@
+<!doctype html>
+<!-- Design mock: Rename… for a session's title on the web — in the session row's ⋯ menu (and the phone's held-press
+     menu, which shares its items), editing the title in the row, plus Rename… in the open conversation's header ⋯.
+     Every frame is a screenshot of the real session page (WorkspaceView + index.css on vite, Chromium, 1280-wide
+     desktop / 390-wide phone, 3x), fed by src/web/ui-migration's fixtures plus a sidebar shaped like the owner's
+     screenshot. "现在" is main d55e9900b; "改后" is the same tree with the proposal in it (WorkspaceView.tsx +
+     index.css, ~80 lines; frame ③ flips a mock-only switch for the alternative order). Dashed outlines and numbers
+     are drawn on top. Decided 2026-10-09 (按建议落地: ②, ⑨, ④) and implemented; the implementation renders the 改后
+     frames identically apart from the running row's spinner angle. Kit: /var/tmp/session-rename-mock (patch/apply.py = the proposal as code; capture.mjs; gen.py;
+     render.mjs). -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Web · 会话标题加 Rename…</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1500px; }
+  .cols3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px; align-items: start; }
+  .cols2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .cols3 + .cols3, .cols3 + .wide, .cols2 + .wide { margin-top: 24px; }
+  .wide { display: grid; grid-template-columns: 1005px minmax(0, 1fr); gap: 26px; align-items: start; }
+  .fig { position: relative; }
+  .shot { display: block; width: 100%; border-radius: 10px; box-shadow: 0 0 0 1px rgba(15, 23, 42, .09), 0 1px 3px rgba(15, 23, 42, .06); }
+  .m-cap { font-size: 12.5px; line-height: 1.75; color: var(--text-2); margin: 10px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .side-cap { margin-top: 0; }
+  kbd { font: inherit; font-size: 11.5px; padding: 0 5px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-2); background: #fff; }
+  .ui { font-family: -apple-system, "Inter", sans-serif; font-size: 12px; padding: 0 5px; border-radius: 4px; background: #f0f2f5; color: var(--text-1); white-space: nowrap; }
+  .mk { position: absolute; border: 1.5px dashed var(--warning-solid); border-radius: 7px; pointer-events: none; }
+  .mk > .m-n { position: absolute; top: -10px; right: -10px; margin: 0; box-shadow: 0 0 0 2px #fff; }
+  .mk-l { position: absolute; top: 50%; transform: translateY(-50%); white-space: nowrap; font-size: 12px; font-weight: 700;
+          color: #fff; background: var(--warning-solid); border-radius: 5px; padding: 1px 7px; }
+  .mk-l-right { left: calc(100% + 14px); }
+  .mk-l-left { right: calc(100% + 14px); }
+  .m-k.rec { background: #e8f7ee; color: #16833a; }
+  .m-k.alt { background: #fff1e8; color: #c2410c; }
+  .phones { display: grid; grid-template-columns: 300px 300px 300px 1fr; gap: 22px; align-items: start; }
+  .ph-l { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 0 0 8px 2px; display: flex; gap: 8px; align-items: center; }
+  .rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.65; width: 100%; }
+  .rules th, .rules td { border: 1px solid #dde0e6; padding: 7px 11px; text-align: left; vertical-align: top; }
+  .rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules td:first-child { font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules code, .files code, .ask code, .m-sub code, .m-cap code { font-size: 11.5px; }
+  .bottom { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .files { margin: 0; padding: 12px 16px; list-style: none; background: #f5f6f8; border-radius: 8px;
+           font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .files li + li { margin-top: 6px; }
+  .files b { color: var(--text-1); }
+  .ask { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e;
+         font-size: 12.5px; line-height: 1.8; color: #5c4210; }
+  .ask b { color: #3d2b08; }
+  .ask ol { margin: 6px 0 0; padding-left: 20px; }
+  .ask li + li { margin-top: 4px; }
+  .ask .rec { color: #16833a; font-weight: 700; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet">
+  <h1 class="m-h1 zh">Web · 会话标题加 Rename…（行 ⋯ 菜单、标题栏 ⋯）</h1>
+  <p class="m-sub zh" style="line-height:1.8">你在会话行的 ⋯ 菜单上要「title 增加 rename」。现在 Web 只能在打开的会话里<b>双击标题栏</b>改名，菜单里没有入口，只有鼠标停在标题上时的提示 <span class="ui">Double-click to rename</span>。
+  iOS / macOS 的会话行菜单（长按 / 右键）、iOS 会话页的 ⋯ 菜单、Android 的会话操作里都已经有 Rename，只差 Web。
+  下面每一张都是真实页面的截图（vite + 仓库里 ui-migration 的 fixture，侧栏照你的截图造了三条会话）：「现在」取自 main <code>d55e9900b</code>，「改后」是同一份代码按方案改了 <code>WorkspaceView.tsx</code> 和 <code>index.css</code> 跑出来的，不是画的。虚线和编号是标注。<b>只改 Web，服务器不用动</b>（改名接口早就有）。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">桌面 Web</span>会话行的 ⋯ 菜单（你截图里的这个）</div>
+    <div class="cols3">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">现在</span>① 没有改名</div>
+        <div class="fig"><img class="shot" src="01a-row-menu-today.png" alt=""></div>
+        <p class="m-cap zh"><span class="ui">Complete ⌘D</span> <span class="ui">Pin</span> │ <span class="ui">Share…</span> <span class="ui">Move…</span> │ <span class="ui">Delete</span>。要改名只能先点开会话，再去双击标题。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">改后</span>② Rename… 和 Share… / Move… 一组 <span class="m-k rec">推荐</span></div>
+        <div class="fig"><img class="shot" src="01b-row-menu-rename.png" alt=""><span class="mk" style="left:40.234%;top:48.125%;width:53.432%;height:11.875%"><span class="m-n">2</span><span class="mk-l mk-l-right zh">新增</span></span></div>
+        <p class="m-cap zh">中间这一组都是「点了会打开东西」的 <b>…</b> 项（输入框、分享面板、移动面板）；上面一组 Complete、Pin 点了立即生效，和手机上向右滑露出的两个按钮一一对应，原样不动。键盘 <kbd>↓</kbd> 打开菜单时焦点仍落在 Complete。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k alt">备选</span>③ Rename… 放第一个</div>
+        <div class="fig"><img class="shot" src="01c-row-menu-rename-first.png" alt=""><span class="mk" style="left:40.234%;top:25.312%;width:53.432%;height:11.875%"><span class="m-n">3</span></span></div>
+        <p class="m-cap zh">和 iOS / macOS 行菜单的顺序一样（<span class="ui">Rename…</span> <span class="ui">Pin</span> <span class="ui">Tags…</span> <span class="ui">Complete</span> <span class="ui">Share…</span> <span class="ui">Move…</span> <span class="ui">Delete</span>）。代价：最常用的 Complete ⌘D 不再在最上面。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">桌面 Web</span>选了 Rename… 之后：就在这一行里改</div>
+    <div class="cols3">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">状态</span>④ 刚点开：整个标题选中</div>
+        <div class="fig"><img class="shot" src="01d-row-editing.png" alt=""><span class="mk" style="left:3.667%;top:13.565%;width:92.667%;height:28.182%"><span class="m-n">4</span></span></div>
+        <p class="m-cap zh">标题那一行变成输入框，<b>整个标题选中，从开头显示</b>；第二行换成提示 <span class="ui">Enter to save · Esc to cancel</span>。输入框和提示与<b>文件夹的 Rename…</b> 是同一个样式、同一句话。左边的运行图标保留；时间和 ⋯ 先收起；行高不变。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">状态</span>⑤ 直接打字就是替换</div>
+        <div class="fig"><img class="shot" src="01e-row-typed.png" alt=""></div>
+        <p class="m-cap zh">只想改一部分就先按 <kbd>←</kbd> / <kbd>→</kbd> 取消选中。用拼音输入法时，选词按的 <kbd>Enter</kbd> 只选词，不会保存。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">状态</span>⑥ 改的不是正打开的会话</div>
+        <div class="fig"><img class="shot" src="01f-other-row.png" alt=""><span class="mk" style="left:3.667%;top:58.494%;width:92.667%;height:28.182%"><span class="m-n">6</span></span></div>
+        <p class="m-cap zh">一样在那一行里改。不会跳过去，右边的对话不动；改名时点这一行（包括点进输入框）也不会打开它。</p>
+      </div>
+    </div>
+    <div class="wide">
+      <div class="fig"><img class="shot" src="01g-saved.png" alt=""><span class="mk" style="left:1.111%;top:64.230%;width:28.081%;height:22.143%"><span class="m-n">7</span></span><span class="mk" style="left:33.030%;top:4.286%;width:17.637%;height:12.958%"><span class="m-n">7</span></span></div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">状态</span>⑦ 按 Enter（或点到别处）之后</div>
+        <p class="m-cap side-cap zh">行和右边标题栏<b>同时</b>变成新名字：界面先改，再等服务器确认；失败就改回原名，并提示 <span class="ui">Couldn't rename the session</span>（标题栏双击改名现在就是这样）。</p>
+        <p class="m-cap zh">服务器会推一条 <code>session.updated</code>，同一账号开着的其它网页标签和 iOS / macOS 都跟着变，不用刷新。</p>
+        <p class="m-cap zh">按 <kbd>Esc</kbd>：恢复原名，什么都不发（真浏览器里核对过：Enter 只发一次 <code>PATCH /sessions/:id</code>，Esc 一次都不发）。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">桌面 Web</span>打开的会话：标题栏右上角的 ⋮</div>
+    <div class="cols2">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">现在</span>⑧ 菜单里没有改名，只能双击标题</div>
+        <div class="fig"><img class="shot" src="01h-header-menu-today.png" alt=""></div>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">改后</span>⑨ Complete 和 Move… 中间加 Rename… <span class="m-k rec">推荐</span></div>
+        <div class="fig"><img class="shot" src="01i-header-menu-rename.png" alt=""><span class="mk" style="left:60.457%;top:36.022%;width:35.505%;height:10.215%"><span class="m-n">9</span><span class="mk-l mk-l-left zh">新增</span></span></div>
+      </div>
+    </div>
+    <div class="wide">
+      <div class="fig"><img class="shot" src="01j-header-editing.png" alt=""><span class="mk" style="left:1.045%;top:12.000%;width:80.993%;height:37.281%"><span class="m-n">10</span></span></div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">状态</span>⑩ 点了标题栏的 Rename…</div>
+        <p class="m-cap side-cap zh">打开的就是现在双击出来的那个编辑框（标题下面一条蓝线），规则和行里改一样。iOS 会话页的 ⋯ 菜单里，Rename… 也和 Pin、Move… 在一组。</p>
+        <p class="m-cap zh"><b>顺带修一个现有问题：</b>长标题现在双击打开时，Chrome 里显示的是<b>结尾</b>（代码注释的本意是显示开头）。改后行里和标题栏的编辑框都从开头显示，如 ④ 和 ⑩。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">手机网页</span>长按一行弹出的就是同一份菜单</div>
+    <div class="phones">
+      <div>
+        <div class="ph-l zh"><span class="m-k">现在</span>⑪ 长按</div>
+        <div class="fig"><img class="shot" src="01k-phone-press-today.png" alt=""></div>
+      </div>
+      <div>
+        <div class="ph-l zh"><span class="m-k new">改后</span>⑫ 长按</div>
+        <div class="fig"><img class="shot" src="01l-phone-press-rename.png" alt=""><span class="mk" style="left:22.308%;top:64.800%;width:61.026%;height:7.600%"><span class="m-n">12</span></span></div>
+      </div>
+      <div>
+        <div class="ph-l zh"><span class="m-k state">状态</span>⑬ 选了 Rename…</div>
+        <div class="fig"><img class="shot" src="01m-phone-editing.png" alt=""><span class="mk" style="left:3.846%;top:43.169%;width:92.308%;height:12.400%"><span class="m-n">13</span></span></div>
+      </div>
+      <div>
+        <p class="m-cap side-cap zh">手机上长按和桌面 ⋯ 用的是同一份菜单，Rename… 自动出现在同一个位置（⑫），不用单独做。</p>
+        <p class="m-cap zh">选了之后也在行里改（⑬），系统键盘弹起来（截图里没有键盘）。</p>
+        <p class="m-cap zh"><b>左右滑露出的按钮里不加 Rename…：</b>滑动是「一下就执行」，改名要打开输入框，iOS 也是这么分的。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="bottom">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">规则</span>改名时会怎样</div>
+        <table class="rules zh">
+          <tr><th>情况</th><th>改后</th></tr>
+          <tr><td>从哪里改</td><td>行 ⋯ 或手机长按 → Rename…（②⑫）；标题栏 ⋮ → Rename…（⑨）；双击标题照旧</td></tr>
+          <tr><td>保存</td><td><kbd>Enter</kbd> 或点到别处：保存去掉首尾空格后的名字</td></tr>
+          <tr><td>放弃</td><td><kbd>Esc</kbd>：恢复原名，不发请求</td></tr>
+          <tr><td>清空了</td><td>不保存，恢复原名（服务器也不接受空标题）</td></tr>
+          <tr><td>没改就回车</td><td>也会保存一次，和现在标题栏双击一样，意思是「这个名字我定了」：项目协调者会话从此不再跟着项目名变</td></tr>
+          <tr><td>长度</td><td>最多 200 字（服务器的上限），到 200 字就输入不进去</td></tr>
+          <tr><td>改名中</td><td>点这一行不会打开会话；⋯ 和时间收起；手机上不能左右滑</td></tr>
+          <tr><td>哪些行有</td><td>Open、Completed 的会话都有；<b>Trash 没有</b>（和标题栏、iOS / macOS 一致）；项目那一行没有（它显示的是项目名）</td></tr>
+          <tr><td>正在运行的会话</td><td>照样能改，不打断运行（改名不碰 runner）</td></tr>
+          <tr><td>自动起的名字</td><td>只会替换从第一句话截出来的默认标题；你改过的名字不会被它盖掉</td></tr>
+          <tr><td>失败</td><td>改回原名，并提示 <span class="ui">Couldn't rename the session</span></td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">改动</span>只改 Web</div>
+        <ul class="files zh">
+          <li><b><code>src/web/src/components/WorkspaceView.tsx</code></b>：行菜单加 Rename…（Trash 除外）和行里的输入框；标题栏 ⋮ 加 Rename…，打开现有的编辑框；两个编辑框打开时都从开头显示。约 +80 行。</li>
+          <li><b><code>src/web/src/index.css</code></b>：<code>.session-rename</code>、<code>.session-row.renaming</code> 两条，约 +10 行；输入框和提示直接用文件夹改名的 <code>.folder-name-input</code> / <code>.session-folder-hint</code>。</li>
+          <li><b>测试</b>：<code>WorkspaceView.sessionMenu.test.tsx</code> 补菜单顺序；Rename… → 输入框 → Enter 只发一次 PATCH；Esc、清空都不发；Trash 没有；改名中点行不跳转；标题栏 Rename… 打开编辑框。</li>
+          <li><b>不改</b>：服务器（<code>PATCH /sessions/:id</code> 已有：去首尾空格、拒绝空的和超过 200 字的、只有本人能改、推送 <code>session.updated</code>）；iOS、macOS、Android（都已经有）。</li>
+        </ul>
+        <div class="ask zh">
+          <b>已定（2026-10-09）：按推荐。</b>三项都取绿色那一项，已照此实现；实现跑出来的画面和上面「改后」各帧一致（只有运行中那一行的转圈图标转到的角度不同）。
+          <ol>
+            <li>行菜单里放哪：<span class="rec">和 Share… / Move… 一组（②）</span>／放第一个，同 iOS / macOS（③）</li>
+            <li>标题栏 ⋮ 也加 Rename…：<span class="rec">加（⑨）</span>／不加，只留双击</li>
+            <li>怎么改：<span class="rec">就在行里改（④，和文件夹改名、标题栏双击一样）</span>／弹一个 Rename Session 对话框（iOS / macOS / Android 的做法）</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

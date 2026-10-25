@@ -611,6 +611,69 @@ test("a Claude session waits on the quota of the Claude account its workspace pi
   assert.deepEqual(onDefault.rows[0].retryAt, new Date(FUTURE));
 });
 
+test("a Claude session on Automatic goes as soon as another of its runner's accounts has room, not at its own reset", async () => {
+  // 2026-10-08 on HPC, in miniature: the week of the account the session ran on is spent for days,
+  // while another account's 5 hours come back within the hour.
+  const workHome = '/root/.orbit/claude-accounts/3fa91c2e';
+  const SOONER = '2026-08-03T17:00:00Z';
+  const runner = (workUsed: number, capabilities = ['claude-account-move/v1']) => ({
+    planUsage: {
+      claude: {
+        provider: 'claude',
+        sevenDay: { utilization: 100, resetsAt: FUTURE },
+        accounts: { '3fa91c2e': { provider: 'claude', fiveHour: { utilization: workUsed, resetsAt: SOONER } } },
+      },
+    },
+    engines: [
+      {
+        engine: 'claude',
+        installed: true,
+        auth: 'yes',
+        accounts: [
+          { id: 'default', home: '/root/.claude', auth: 'yes' },
+          { id: '3fa91c2e', name: 'Work', home: workHome, auth: 'yes' },
+        ],
+      },
+    ],
+    capabilities,
+    status: 'ONLINE',
+    lastHeartbeatAt: NOW,
+  });
+  const onDefault = (over: SessionRow) => row({
+    provider: 'claude',
+    providerBuiltin: true,
+    claudeAccount: 'default',
+    claudeAccountPinned: false,
+    workspace: { env: null, codexAccount: null, claudeAccount: null },
+    ...over,
+  });
+
+  // Work has room: re-sent now, and its dispatch moves it there.
+  const room = makeService([onDefault({ assignedRunner: runner(8) })]);
+  await room.service.sweep(NOW);
+  assert.deepEqual(room.resumed, [{ id: 'session-1', content: 'the original message' }], 'it waited out its own week beside an account with room');
+
+  // Work spent too: re-armed for the first account to come back, spending no attempt.
+  const spent = makeService([onDefault({ assignedRunner: runner(100) })]);
+  await spent.service.sweep(NOW);
+  assert.deepEqual(spent.resumed, []);
+  assert.deepEqual(spent.rows[0].retryAt, new Date(SOONER), "armed for its own account's reset, after another's");
+  assert.equal(spent.rows[0].retryAttempts, 0, 'a deferral is not a failed attempt');
+
+  // Pinned by hand, on a workspace that picked its account, or on a runner that cannot carry the
+  // conversation to another account: its own account's reset, as before.
+  for (const [what, over] of [
+    ['pinned', { claudeAccountPinned: true, assignedRunner: runner(8) }],
+    ['workspace pick', { claudeAccount: null, workspace: { env: null, codexAccount: null, claudeAccount: 'default' }, assignedRunner: runner(8) }],
+    ['runner that cannot move it', { assignedRunner: runner(8, []) }],
+  ] as const) {
+    const held = makeService([onDefault(over)]);
+    await held.service.sweep(NOW);
+    assert.deepEqual(held.resumed, [], what);
+    assert.deepEqual(held.rows[0].retryAt, new Date(FUTURE), what);
+  }
+});
+
 // The reaper arms these: it finalized the session as 'runner offline' mid-turn. Waiting for
 // that runner is the whole retry, so it must not look like the five-strikes dispatch backoff —
 // a runner that takes four minutes to come back would otherwise exhaust the attempts and hand

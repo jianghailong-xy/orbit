@@ -1,0 +1,145 @@
+{
+ "schemaVersion": 1,
+ "kind": "antd-inventory-delta",
+ "date": "2026-10-09",
+ "task": "34Za39GvWRQ08ZmKOpFNe",
+ "decision": {
+  "by": "coordinator",
+  "session": "34b245G3NiwgVVUj2JFJw",
+  "date": "2026-10-09",
+  "questions": [
+   "App.infrastructure.test",
+   "InfrastructurePage.overview.test",
+   "RunnerDetailPage.engines.test"
+  ]
+ },
+ "scan": {
+  "commit": "dac57baded70c4e1cc6194a4f775181fc14ac62f",
+  "scopeHash": "5f58bb8077c8fc0a2d3aa390a6bfac30c92cb2fe2a025a4858d48fee055058d1",
+  "command": "node src/web/scripts/audit-antd.mjs --json",
+  "counts": {
+   "scannedFiles": 754,
+   "productionFiles": 377,
+   "testFiles": 375,
+   "antdProductionFiles": 59,
+   "antdTestFiles": 60,
+   "antSelectorTestFiles": 29,
+   "antClassTestFiles": 30,
+   "iconProductionFiles": 110,
+   "iconTestFiles": 0,
+   "relevantSourceFiles": 249,
+   "hitLines": {
+    "ant-class": 223,
+    "ant-design-support": 19,
+    "ant-selector": 216,
+    "antd-reference": 240,
+    "icon-class": 82,
+    "icon-reference": 121,
+    "imperative-confirm": 11,
+    "imperative-feedback": 221,
+    "internal-ref": 4,
+    "provider": 73,
+    "rc-support": 233,
+    "ref-focus": 28,
+    "theme": 2,
+    "use-app": 6,
+    "use-token": 1
+   },
+   "retirementBlockingFiles": 155
+  }
+ },
+ "files": {
+  "src/web/src/App.infrastructure.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+     "short": "33e0e2e09",
+     "date": "2026-10-07",
+     "subject": "feat(web): Runners and Providers become one Infrastructure page",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "只用 antd 的 App 包裹被测组件，被测的 InfrastructurePage 与 RunnerDetailPage 本身不导入 antd；P6 去掉 ConfigProvider/AntApp 时连同这些测试包裹一起去掉。",
+   "basis": "协调者 2026-10-09 判定（P4.3a 跟上 origin/main 19c760ae4 后 --check-owners 报出：另一个项目 34bmzOkov3xN2yLPrnsCk 的 Infrastructure 页带进 main 的三个测试文件，status 记 new，记入 2026-10-09b.json；2026-10-09.json 留给 P4.3b）。先例为 2026-10-07c.json 把 ProjectDoneConversation.test.tsx 归 P6。"
+  },
+  "src/web/src/pages/InfrastructurePage.overview.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "992f5143236feed3caa654ea674bf73720ae2d0e",
+     "short": "992f51432",
+     "date": "2026-10-07",
+     "subject": "feat(web): Infrastructure opens on what needs attention and what each engine can run on",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "只用 antd 的 App 包裹被测组件，被测的 InfrastructurePage 与 RunnerDetailPage 本身不导入 antd；P6 去掉 ConfigProvider/AntApp 时连同这些测试包裹一起去掉。",
+   "basis": "协调者 2026-10-09 判定（P4.3a 跟上 origin/main 19c760ae4 后 --check-owners 报出：另一个项目 34bmzOkov3xN2yLPrnsCk 的 Infrastructure 页带进 main 的三个测试文件，status 记 new，记入 2026-10-09b.json；2026-10-09.json 留给 P4.3b）。先例为 2026-10-07c.json 把 ProjectDoneConversation.test.tsx 归 P6。"
+  },
+  "src/web/src/pages/RunnerDetailPage.engines.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "39f906344e5e6f36fbc29c6831ad121f5938bdc5",
+     "short": "39f906344",
+     "date": "2026-10-07",
+     "subject": "feat(web): a machine's page signs its engines in, and nothing points at Providers",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "只用 antd 的 App 包裹被测组件，被测的 InfrastructurePage 与 RunnerDetailPage 本身不导入 antd；P6 去掉 ConfigProvider/AntApp 时连同这些测试包裹一起去掉。",
+   "basis": "协调者 2026-10-09 判定（P4.3a 跟上 origin/main 19c760ae4 后 --check-owners 报出：另一个项目 34bmzOkov3xN2yLPrnsCk 的 Infrastructure 页带进 main 的三个测试文件，status 记 new，记入 2026-10-09b.json；2026-10-09.json 留给 P4.3b）。先例为 2026-10-07c.json 把 ProjectDoneConversation.test.tsx 归 P6。"
+  }
+ },
+ "css": [],
+ "summary": {
+  "files": 3,
+  "cssLines": 0,
+  "owners": {
+   "P6": 3
+  }
+ }
+}

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { CheckOutlined, CopyOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Card, Skeleton, Space, Tag, Typography } from 'antd';
 import { api } from '../api';
+import { copyText } from '../lib/clipboard';
 import { projectCrossingsQuery } from '../lib/queries';
 import {
   CROSSING_STATE_LABEL,
@@ -11,6 +12,13 @@ import {
   type CrossingState,
   type ProjectCrossingRow,
 } from '../lib/attribution';
+import { Alert } from './ui/Alert';
+import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
+import { Card } from './ui/Card';
+import { Skeleton } from './ui/Skeleton';
+import { Tooltip } from './ui/Tooltip';
+import './ui/Typography.css';
 
 /**
  * Unit L7: the declared crossings this project is an end of, and the one place a person answers
@@ -83,6 +91,62 @@ export function crossingConfirmPrompt(
   };
 }
 
+/** A run of the card's text: secondary (`muted`), or strong. */
+function Text({ muted = false, strong = false, children }: { muted?: boolean; strong?: boolean; children: ReactNode }) {
+  return (
+    <span className={muted ? 'orbit-typography orbit-typography-secondary' : 'orbit-typography'}>
+      {strong ? <strong>{children}</strong> : children}
+    </span>
+  );
+}
+
+/** An id or a key, as code. */
+function Code({ children }: { children: ReactNode }) {
+  return (
+    <span className="orbit-typography">
+      <code>{children}</code>
+    </span>
+  );
+}
+
+/** How long the copy press says Copied (the replaced text control's own beat). */
+const COPIED_MS = 3000;
+
+/** An id as code, with the press that copies it: named Copy, said on hover, and a check named Copied
+ *  for a few seconds once the id is on the clipboard. */
+function CopyableCode({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const copy = () =>
+    void copyText(text).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), COPIED_MS);
+    });
+  const label = copied ? 'Copied' : 'Copy';
+  return (
+    <span className="orbit-typography">
+      <code>
+        {text}
+        <span className="orbit-typography-actions">
+          <Tooltip content={label}>
+            <button
+              type="button"
+              className={`orbit-typography-copy${copied ? ' orbit-typography-copy-success' : ''}`}
+              aria-label={label}
+              onClick={copy}
+            >
+              {copied ? <CheckOutlined aria-hidden /> : <CopyOutlined aria-hidden />}
+            </button>
+          </Tooltip>
+        </span>
+      </code>
+    </span>
+  );
+}
+
 /** The server's reason for refusing an answer, under its code when it sent one. A confirmation
  *  refused because the task is being landed right then says so, and that the request still waits. */
 function RefusalReason({ error }: { error: Error }) {
@@ -91,13 +155,16 @@ function RefusalReason({ error }: { error: Error }) {
     <>
       {typeof code === 'string' ? (
         <>
-          <Typography.Text code>{code}</Typography.Text>{' '}
+          <Code>{code}</Code>{' '}
         </>
       ) : null}
       {error.message}
     </>
   );
 }
+
+/** A row's buttons, side by side as the replaced space laid them out: inline, centred, 8px apart. */
+const ACTIONS_STYLE = { display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 8 } as const;
 
 /** A crossing that is still a question is the only one that can be answered. */
 export function isAnswerable(state: CrossingState): boolean {
@@ -115,14 +182,12 @@ function ProjectEnd({
 }) {
   return (
     <span>
-      <Typography.Text strong>{title ?? 'unnamed project'}</Typography.Text>{' '}
-      <Typography.Text code copyable={{ text: id }}>
-        {id}
-      </Typography.Text>
+      <Text strong>{title ?? 'unnamed project'}</Text>{' '}
+      <CopyableCode text={id} />
       {status ? (
         <>
           {' '}
-          <Tag aria-label={`Project status ${status}`}>{status}</Tag>
+          <Badge aria-label={`Project status ${status}`}>{status}</Badge>
         </>
       ) : null}
     </span>
@@ -134,14 +199,12 @@ function MoveSubject({ row }: { row: ProjectCrossingRow }) {
   const id = row.subjectTaskPublicId ?? row.subjectTaskId;
   return (
     <div style={{ marginTop: 4 }}>
-      <Typography.Text type="secondary">{MOVE_TASK_SUBJECT_LABEL}: </Typography.Text>
-      <Typography.Text strong>{row.subjectTask?.title ?? row.title}</Typography.Text>
+      <Text muted>{MOVE_TASK_SUBJECT_LABEL}: </Text>
+      <Text strong>{row.subjectTask?.title ?? row.title}</Text>
       {id ? (
         <>
           {' '}
-          <Typography.Text code copyable={{ text: id }}>
-            {id}
-          </Typography.Text>
+          <CopyableCode text={id} />
         </>
       ) : null}
     </div>
@@ -157,17 +220,17 @@ function MoveCriteria({ row }: { row: ProjectCrossingRow }) {
     <>
       {requested ? (
         <div>
-          <Typography.Text type="secondary">{MOVE_TASK_REQUESTED_CRITERION_LABEL}: </Typography.Text>
-          <Typography.Text>{requested.text ?? MOVE_TASK_CRITERION_GONE}</Typography.Text>{' '}
-          <Typography.Text code>{requested.key}</Typography.Text>
+          <Text muted>{MOVE_TASK_REQUESTED_CRITERION_LABEL}: </Text>
+          <Text>{requested.text ?? MOVE_TASK_CRITERION_GONE}</Text>{' '}
+          <Code>{requested.key}</Code>
         </div>
       ) : null}
       {withdrawn ? (
         <div>
-          <Typography.Text type="secondary">{MOVE_TASK_WITHDRAWN_CRITERION_LABEL}: </Typography.Text>
-          <Typography.Text>{withdrawn.text}</Typography.Text>{' '}
-          <Typography.Text code>{withdrawn.key}</Typography.Text>{' '}
-          <Typography.Text type="secondary">{MOVE_TASK_WITHDRAWN_CRITERION_NOTE}</Typography.Text>
+          <Text muted>{MOVE_TASK_WITHDRAWN_CRITERION_LABEL}: </Text>
+          <Text>{withdrawn.text}</Text>{' '}
+          <Code>{withdrawn.key}</Code>{' '}
+          <Text muted>{MOVE_TASK_WITHDRAWN_CRITERION_NOTE}</Text>
         </div>
       ) : null}
     </>
@@ -206,9 +269,9 @@ export function CrossingRow({
       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
         {/* The state is a WORD before it is anything else (AC5): the tag carries the server's own
             value and the sentence beside it says what follows from it. */}
-        <Tag aria-label={`Crossing ${row.state}`}>{row.state}</Tag>
-        <Typography.Text strong>{labelFor(CROSSING_STATE_LABEL, row.state)}</Typography.Text>
-        <Tag aria-label={`Crossing kind ${row.kind}`}>{row.kind}</Tag>
+        <Badge aria-label={`Crossing ${row.state}`}>{row.state}</Badge>
+        <Text strong>{labelFor(CROSSING_STATE_LABEL, row.state)}</Text>
+        <Badge aria-label={`Crossing kind ${row.kind}`}>{row.kind}</Badge>
       </div>
       {move ? <MoveSubject row={row} /> : <div style={{ marginTop: 4 }}>{row.title}</div>}
       <div style={{ marginTop: 4 }}>
@@ -217,48 +280,47 @@ export function CrossingRow({
           id={row.fromProjectPublicId ?? row.fromProjectId}
           status={row.fromProject?.status}
         />
-        <Typography.Text type="secondary"> → </Typography.Text>
+        <Text muted> → </Text>
         <ProjectEnd
           title={row.toProject?.title}
           id={row.toProjectPublicId ?? row.toProjectId}
           status={row.toProject?.status}
         />
       </div>
-      <Typography.Text type="secondary">
+      <Text muted>
         {labelFor(move ? MOVE_TASK_STATE_MEANING : CROSSING_STATE_MEANING, row.state)}
-      </Typography.Text>
+      </Text>
       {move ? <MoveCriteria row={row} /> : null}
       {row.reason ? (
         <div>
-          <Typography.Text type="secondary">Reason given: {row.reason}</Typography.Text>
+          <Text muted>Reason given: {row.reason}</Text>
         </div>
       ) : null}
       {error ? (
         <Alert
           type="error"
-          showIcon
           style={{ marginTop: 8 }}
-          message="That answer was not recorded"
+          title="That answer was not recorded"
           description={<RefusalReason error={error} />}
         />
       ) : null}
 
       {!isAnswerable(row.state) ? null : prompt ? (
         <div style={{ marginTop: 8 }}>
-          <Typography.Text strong>
+          <Text strong>
             {`${prompt.verb} moving “${prompt.subject}” from ${prompt.from} to ${prompt.to}?`}
-          </Typography.Text>
+          </Text>
           <div>
-            <Typography.Text type="secondary">{prompt.consequence}</Typography.Text>
+            <Text muted>{prompt.consequence}</Text>
           </div>
           <div>
-            <Typography.Text type="secondary">Crossing </Typography.Text>
-            <Typography.Text code>{row.crossingKey.slice(0, 12)}</Typography.Text>
+            <Text muted>Crossing </Text>
+            <Code>{row.crossingKey.slice(0, 12)}</Code>
           </div>
-          <Space style={{ marginTop: 8 }}>
+          <div style={ACTIONS_STYLE}>
             <Button
               size="small"
-              type="primary"
+              variant="primary"
               danger={confirming === 'DENY'}
               loading={busy}
               onClick={() => onAnswer(confirming!)}
@@ -268,17 +330,17 @@ export function CrossingRow({
             <Button size="small" disabled={busy} onClick={onCancel}>
               Cancel
             </Button>
-          </Space>
+          </div>
         </div>
       ) : (
-        <Space style={{ marginTop: 8 }}>
+        <div style={ACTIONS_STYLE}>
           <Button size="small" onClick={() => onAsk('APPROVE')}>
             Approve…
           </Button>
           <Button size="small" danger onClick={() => onAsk('DENY')}>
             Refuse…
           </Button>
-        </Space>
+        </div>
       )}
     </li>
   );
@@ -322,24 +384,21 @@ export function ProjectCrossingsCard({ projectId }: { projectId: string }) {
       size="small"
       style={{ marginTop: 16 }}
       extra={
-        <Typography.Text style={{ fontVariantNumeric: 'tabular-nums' }}>
+        <span className="orbit-typography" style={{ fontVariantNumeric: 'tabular-nums' }}>
           {pending} waiting
-        </Typography.Text>
+        </span>
       }
     >
       {crossings.isPending ? (
-        <Skeleton active title={false} paragraph={{ rows: 2 }} />
+        <Skeleton rows={2} />
       ) : crossings.isError ? (
         <Alert
           type="warning"
-          showIcon
-          message="Crossings could not be loaded"
+          title="Crossings could not be loaded"
           description={crossings.error instanceof Error ? crossings.error.message : undefined}
         />
       ) : rows.length === 0 ? (
-        <Typography.Text type="secondary">
-          Nothing has been asked about work crossing into or out of this project.
-        </Typography.Text>
+        <Text muted>Nothing has been asked about work crossing into or out of this project.</Text>
       ) : (
         <ul style={{ margin: 0, padding: 0 }}>
           {rows.map((row) => (

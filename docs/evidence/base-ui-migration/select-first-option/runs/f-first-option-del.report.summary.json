@@ -1,0 +1,4718 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/port.config.mjs",
+   "ui-migration/choices-first-option.browser.mjs"
+  ],
+  "configFile": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration/port.config.mjs",
+  "rootDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-first-option-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-first-option-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-first-option-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-first-option-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-first-option-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-first-option-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-first-option-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-first-option-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-first-option-del-out/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4512 --strictPort",
+   "cwd": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/",
+   "url": "http://127.0.0.1:4512",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "choices-first-option.browser.mjs",
+   "file": "choices-first-option.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3467,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:55:59.247Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-42b611239fff7b9f52aa",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2632,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:02.905Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-fe8b78cc2c26167c013b",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2657,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:05.543Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-eab05f7c5a0d02f8d9a2",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2738,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:08.208Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-07a92f6d03aeecf86b0c",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2898,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:10.951Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-4df8168802b543f54a6c",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2503,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:13.856Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-a34ba8765c49d92629d4",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2989,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:16.364Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-f00f396a7317e57d3db4",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2661,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:19.358Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-a73ca6cf3b349eaf69e2",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2750,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:22.023Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-fbf117a3b659ec633b9f",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3143,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:24.779Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-4e4e89dfae9e07b90988",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2951,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:27.926Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-e9978d5d567f3f0e307f",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2744,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:30.883Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-acb5c1d444a23b599e7a",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3982,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:36.051Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-71d1d82577f00fc2d854",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3360,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:40.111Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-87af3bc9e6909c185bab",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4168,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:43.483Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-5bb0d7c786fb0df27315",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5359,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:47.688Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-ef63f44a5d7ac742e2a3",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3771,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:53.071Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-96add029b4fc0e57d6eb",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3409,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:56:56.848Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-40a0b1d48fd3a6ae6d57",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3037,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:00.264Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-f9db261aaca8362c4543",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2402,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:03.311Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-397bfd1966b08da8d15d",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3048,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:05.719Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-b957c8ed39bd0c611ae2",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2583,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:08.773Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-43bfb6e23ea6f336de0f",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2369,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:11.369Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-ff8aafbb8464589349ea",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3206,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:13.742Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-f92a407026ef9b1471ca",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3288,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:19.141Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-aa369a0dbcf9411505b0",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2956,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:22.508Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-d0e0becc7bd59b15cd0b",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 8043,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:25.472Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-9a6da7a3093874112481",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3252,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:33.521Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-0068d625900ba19c6e97",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3165,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:36.779Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-07f34cd01a617af35b55",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2874,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:39.954Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-6c39df8d43c42827bb2d",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2800,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:42.835Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-7aa5075a014d4ef98b08",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2483,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:45.643Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-2c27eab9094c5f8f5c12",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2716,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:48.135Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-33e64fcd490f95b7e3d9",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2432,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:50.857Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-11cd771dcfdba1a07f85",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2642,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:53.294Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-2a608da1682b063e952f",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2865,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:55.941Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-bb96739925e9271d36e5",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3233,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:57:59.626Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-cc1bcf2fc92ca0da6fc1",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2407,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:02.934Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-22877110e90d3282a264",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2779,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:05.346Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-ea203c1a87e8ab1ac663",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2490,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:08.130Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-72addde1d5a8f015a11f",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2566,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:10.628Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-edca25a5d15a7aad72fc",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2370,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:13.201Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-aa23bf87225fcaf14871",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2657,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:15.577Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-350fefad27e1395876f7",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2506,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:18.240Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-53a25af1b92f099ccff4",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2538,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:20.750Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-dd1f24f96404fa93874e",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2467,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:23.296Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-55a15b914ff06bb99a10",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2717,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:25.770Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-8590b94199a9156a312a",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2703,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:28.493Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-dae15c3068b4dc12ec8d",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2166,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:32.733Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-c75893f2df4630c2919b",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2058,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:35.032Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-a68ab206c7bd368c9641",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2018,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:37.105Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-e8b9415a8afa4b8cbd36",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2207,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:39.130Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-3a74fe51d494607685c1",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2141,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:41.343Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-2b9b81ae5e90bfc94d7a",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2075,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:43.490Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-c95b13c3d2a4db0731e3",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2306,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:45.569Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-041200a36aa2fdc640cf",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2080,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:47.880Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-b26dd1eacb890e2f70e6",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2337,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:49.965Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-7dc0701ad2a3cfb7d5c0",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2010,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:52.307Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-0f2f3ae1fa4d43e165de",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2022,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:54.321Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-a04f5037554f8cdfc934",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2029,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:56.347Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-54133b523dc1c837b535",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1958,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:58:58.782Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-b75c062642703ba5b96e",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2087,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:00.817Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-724b5f2214f67a164876",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2067,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:02.913Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-01d1aaa60a798ab62d3a",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2185,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:04.987Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-29ff074fad517f68be0b",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2167,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:07.176Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-8ef720a58aac7770d58e",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1734,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:09.348Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-7a0a2970163fd117a23e",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2255,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:11.086Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-e85bc989303a43a7af6d",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2349,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:13.345Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-5f8dd6bb1164a46e8703",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2232,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:15.699Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-d0d6a472c54ff3f6fc03",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2293,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:17.935Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-55d4f5fc043dc3a736fa",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3119,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:20.233Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-d5733b41c9485022ce1e",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2173,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:23.359Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-973b4014cff3ed33f34e",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2539,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:26.460Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-f78951c8009516ba2d94",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2754,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:29.092Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-8e9c3725b73efe60cbbd",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2522,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:31.851Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-4a495cb8714ab5d8cb4c",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2544,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:34.378Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-413d91ef1cee2b402e96",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2554,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:36.927Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-84aff5ce2ea88cf542da",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2462,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:39.487Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-f8fd95ed8c854418e2cc",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2439,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:41.954Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-69fca280682a044871fb",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2605,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:44.402Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-8a7229b5ee036ce46bed",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2297,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:47.011Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-31cb2970d570437412ca",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2169,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:49.313Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-39535261394fef09ae64",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2332,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:51.487Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-b70f7d380011de82f86d",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2662,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:53.824Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-d4f485349a36276c868a",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2449,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T20:59:57.702Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-419c9534880b3123bdcc",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2570,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T21:00:00.231Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-b1015a815e51bfd0fb4a",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2033,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T21:00:02.826Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-11744a2f3dae706049a4",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2639,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T21:00:04.864Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-13668ecfa43082b8d8bf",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 65894,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T21:00:07.509Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-7ea0dbdd91979cfc95c7",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3906,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T21:01:13.430Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-8c493a1fdafcbb98a2e8",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2121,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T21:01:17.351Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-03e85073c79b14f46c22",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2011,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T21:01:19.477Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-15eb6db050ac3998293c",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2109,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T21:01:21.491Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-8ae998382e58d8c62c5c",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2783,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T21:01:23.604Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-c5b2d87edc7b221445b1",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3615,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T21:01:26.392Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-6c1c2cc1458936910d7e",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3380,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T21:01:30.021Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-f45c129429e8ab86366f",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-09T20:54:59.127Z",
+  "duration": 394843.327,
+  "expected": 96,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

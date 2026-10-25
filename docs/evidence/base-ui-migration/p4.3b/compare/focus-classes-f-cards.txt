@@ -1,0 +1,11 @@
+31 steps with different focus, 10 kinds
+2 | P4.3b session decision cards › a criteria decision: refused | approve refused | reference body | delivery button: Approve & re-sealCtrl + Enter | chromium-light-p,webkit-light-p
+2 | P4.3b session decision cards › a criteria decision: refused | approve refused | reference button: Approve & re-sealCtrl + Enter | delivery body | chromium-dark-p,webkit-dark-p
+8 | P4.3b session decision cards › a receipt’s Reopen task: asked, refused | reopen asked | reference button: Close | delivery dialog: Reopen this task? | chromium-dark-d,chromium-dark-p,chromium-light-d,chromium-light-p,webkit-dark-d,webkit-dark-p,webkit-light-d,webkit-light-p
+1 | P4.3b session decision cards › an evidence decision: refused, then out | confirm refused | reference button: Confirm doneEnter | delivery body | webkit-light-p
+4 | P4.3b session decision cards › an evidence decision: refused, then out | confirm refused as out of date | reference body | delivery button: Confirm doneEnter | chromium-light-d,chromium-light-p,webkit-dark-d,webkit-dark-p
+1 | P4.3b session decision cards › an owner confirmation: a review questio | confirm refused | reference body | delivery button: Confirm done | webkit-dark-d
+1 | P4.3b session decision cards › an owner confirmation: a review questio | confirm refused | reference body | delivery button: Confirm doneEnter | webkit-light-p
+4 | P4.3b session decision cards › the start card in a conversation: 720px | escape in the task graph | reference button: Close | delivery button: Task graph ⤢ | chromium-dark-p,chromium-light-p,webkit-dark-p,webkit-light-p
+4 | P4.3b session decision cards › the start card in a conversation: 720px | task graph full screen | reference button: Close | delivery dialog: Task graph | chromium-dark-p,chromium-light-p,webkit-dark-p,webkit-light-p
+4 | P4.3b session decision cards › the start dialog when its request no lo | request gone | reference button: Close | delivery dialog: The plan changed after the coordinator asked, so | chromium-dark-d,chromium-light-d,webkit-dark-d,webkit-light-d

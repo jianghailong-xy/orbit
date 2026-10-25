@@ -148,7 +148,11 @@ struct AgentRowView: View {
                             .background(.quaternary, in: Capsule())
                     }
                 }
-                Text(AgentDefaults.providerName(agent.defaultProvider, configured: configuredProviders)
+                // What its next session starts on, engine and credential in one phrase (board 7):
+                // "Claude Code", "Claude Code via DeepSeek".
+                Text(SessionProviderChoices.engineVia(engine: agent.defaultEngine(configured: configuredProviders),
+                                                      provider: agent.defaultProvider,
+                                                      configured: configuredProviders)
                      + (agent.workDir.map { " · \($0)" } ?? ""))
                     .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
             }
@@ -829,8 +833,13 @@ struct AgentPanes: View {
                           accountSessions: app.sessions, allSessions: agents.allSessions,
                           folders: app.sessionFolders, projects: app.projects?.sidebarProjects ?? [],
                           watches: app.watches?.summaries ?? [:], view: view, groupByTag: groupByTag,
-                          searching: isSearching, runnerOffline: agents.runnerIsOffline(agent.runnerId))
+                          searching: isSearching, runnerOffline: agents.runnerIsOffline(agent.runnerId),
+                          recaps: accountShowsRecaps)
     }
+
+    /// The account's Session recaps switch, off only when explicitly turned off (`AppModel.user`
+    /// carries the preferences). Read here so a toggle regroups the list into the lines it asks for.
+    private var accountShowsRecaps: Bool { app.user?.preferences?.showRecaps ?? true }
 
     /// The whole grouping, from its inputs alone: static, so it cannot read a fact the memo's key
     /// does not carry.
@@ -887,7 +896,8 @@ struct AgentPanes: View {
                                       watching: Dictionary(watched.compactMap { session in
                                           inputs.watch(for: session.id).map { (session.id, $0) }
                                       }, uniquingKeysWith: { _, latest in latest }),
-                                      line: { lines.line(for: $0, watching: inputs.watch(for: $0.id)) })
+                                      line: { lines.line(for: $0, watching: inputs.watch(for: $0.id),
+                                                         recaps: inputs.recaps) })
     }
 
     private func projectRow(_ row: SessionProjectRow) -> some View {
@@ -1014,8 +1024,10 @@ struct AgentPanes: View {
             // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
             // usable hiding place on iOS 17/18 (see `AppModel.push`). `.foregroundStyle(.primary)`:
             // a button's label otherwise inherits the accent tint, and the rows are unchanged by
-            // design (only the wrapper is new).
-            Button { app.push(.console(sessionID: s.id, origin: .list)) } label: {
+            // design (only the wrapper is new). It presses through `openSessionRow`, the model's
+            // one row entry, which also lands on the owner item the row's own line names — the
+            // three-column rows get the same act from the selection setter they write.
+            Button { app.openSessionRow(s) } label: {
                 row.foregroundStyle(.primary)
             }
             // The row's actions attach to the *row*, not to what the row is made of: `.swipeActions`
@@ -1241,6 +1253,8 @@ struct AgentConsoleDetail: View {
 /// input at full parity — the `+` menu, `!`-shell, slash autocomplete, attachments, and the
 /// model/permission/effort footer — instead of the simplified field it used to carry.
 struct NewSessionView: View {
+    /// Where the status cards end, room under the last one included (see the cards' scroll view).
+    private static let statusCardsEnd = "status-cards-end"
     let agent: Agent
     /// Runtime-reported default resolved before this draft is constructed.
     let defaultModel: String
@@ -1313,7 +1327,16 @@ struct NewSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if draft.localStatusCards.isEmpty {
+            if let managed = draft.managed, managed.blocksNewSession {
+                // The managed runner's default workspace before its runner was ever ready: there is
+                // no engine for a first session yet (the server would refuse it), so the runner's
+                // state stands where the engine would, and the composer below sends nothing.
+                ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
+                    .padding(.horizontal, 24)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // The same room above the band as the hero it stands in for.
+                    .padding(.bottom, .composerBandFade)
+            } else if draft.localStatusCards.isEmpty {
                 VStack(spacing: 18) {
                     // Which engine runs this session is the hero — the native port of web's
                     // `NewSessionProviderHero`: the vendor's own mark, then the engine's name as the
@@ -1344,8 +1367,9 @@ struct NewSessionView: View {
                            currentProviderChoice.fixEngine != nil {
                             Button {
                                 if let rid = agent.runnerId {
-                                    if let url = draft.webFixURL(engine: currentProviderChoice.fixEngine ?? "", runnerID: rid) { openURL(url) }
-                                    else { app.route(to: .runner(rid)) }
+                                    let engine = currentProviderChoice.fixEngine ?? ""
+                                    if let url = draft.webFixURL(engine: engine) { openURL(url) }
+                                    else { app.openRunnerEngine(rid, engine: engine) }
                                 }
                             } label: {
                                 Text("\(blocker) on this runner · Fix it")
@@ -1376,6 +1400,8 @@ struct NewSessionView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, 24)
+                // The room above the band a list keeps under its last row (`fadesIntoComposerBand`).
+                .padding(.bottom, .composerBandFade)
             } else {
                 // Once a local command has produced output this is no longer an empty state. Replace
                 // the hero instead of showing both, and stack repeated commands vertically.
@@ -1387,20 +1413,30 @@ struct NewSessionView: View {
                             }
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(16)
+                        .padding([.horizontal, .top], 16)
+                        // The room the fade lies over (`fadesIntoComposerBand`), and where a new card
+                        // scrolls the list to: a scroll to the card itself would leave its end in the fade.
+                        Color.clear.frame(height: .composerBandFade).id(Self.statusCardsEnd)
                     }
+                    .fadesIntoComposerBand()
                     .defaultScrollAnchor(.center)
                     .onChange(of: draft.localStatusCards.count) {
-                        if let last = draft.localStatusCards.last {
-                            proxy.scrollTo(last.id, anchor: .bottom)
+                        if !draft.localStatusCards.isEmpty {
+                            proxy.scrollTo(Self.statusCardsEnd, anchor: .bottom)
                         }
                     }
                 }
             }
 
-            // Same band as the live console (its `Divider` replaces the one that used to be hand-rolled
-            // here), so the draft composer and the real one are inset and spaced identically.
+            // Same band as the live console, so the draft composer and the real one are inset and
+            // spaced identically.
             ComposerBand {
+                // The managed runner's state, as the live console shows it, unless it already stands
+                // in the hero's place above.
+                if let managed = draft.managed, managed.showsBanner, !managed.blocksNewSession {
+                    ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
+                        .padding(.bottom, .composerBandGap)
+                }
                 // createSession failures surface on the draft's statusMessage (mirrors ConsoleView).
                 if let msg = draft.statusMessage {
                     HStack {
@@ -1422,7 +1458,13 @@ struct NewSessionView: View {
             }
         }
         #endif
-        .task { await draft.prepareDraft() }
+        .task {
+            // A draft the usage-limit card asked for starts on the account it named (board iOS 5 ⑧).
+            if let pick = app.consoleRegistry?.takeDraftAccount(agentID: agent.id) {
+                draft.pickDraftAccount(pick.engine, pick.account)
+            }
+            await draft.prepareDraft()
+        }
         // @State keeps this ConsoleModel alive while the parent AgentsModel finishes its
         // best-effort provider/runner requests. Push those later snapshots into the draft so a
         // custom provider adopts its real default even if the draft's own request failed.
@@ -1458,13 +1500,13 @@ struct NewSessionView: View {
         #endif
         .sheet(isPresented: $showEnginePicker) {
             // The draft's own runnerID is only set for a live session, so take the agent's — it is
-            // the machine this draft would run on, and the one whose Engines section fixes a row.
+            // the machine this draft would run on, and the one whose engine page fixes a row.
             EngineSwitchSheet(
                 engines: engines, current: currentEngine, agentName: agent.name,
-                onSelect: { slug in draft.pickDraftProvider(slug) },
+                onSelect: { engine, provider in draft.pickDraft(engine: engine, provider: provider) },
                 onFixRunner: agent.runnerId.map { rid in { engine in
-                    if let url = draft.webFixURL(engine: engine, runnerID: rid) { openURL(url) }
-                    else { app.route(to: .runner(rid)) }
+                    if let url = draft.webFixURL(engine: engine) { openURL(url) }
+                    else { app.openRunnerEngine(rid, engine: engine) }
                 } })
         }
     }
@@ -1476,39 +1518,35 @@ struct NewSessionView: View {
     }
     #endif
 
-    /// Engines first, then this account's pools — its own and the shared ones it is in — then its
-    /// configured providers. Built from the draft's own snapshot so the list matches the model space
-    /// the pills are already resolving against.
-    private var providerChoices: [ProviderChoice] {
-        SessionProviderChoices.choices(configured: draft.configuredProviders,
-                                       catalog: draft.modelCatalog,
-                                       engines: draft.runnerEngines,
-                                       pools: draft.allPools,
-                                       planUsage: draft.runnerPlanUsage,
-                                       antigravity: draft.runnerAntigravity,
-                                       antigravityKeyAvailable: agent.antigravityKeyAvailableByRunner?[draft.runnerID ?? agent.runnerId ?? ""] == true,
-                                       dshState: draft.dshRunnerState)
+    /// What the hero judges the engines and their credentials by: the draft's own snapshot — so the
+    /// list matches the model space the pills are already resolving against — with this workspace's
+    /// Gemini key on the machine it would run on.
+    private var sources: ChoiceSources {
+        var sources = draft.choiceSources
+        sources.antigravityKeyAvailable =
+            agent.antigravityKeyAvailableByRunner?[draft.runnerID ?? agent.runnerId ?? ""] == true
+        return sources
     }
 
-    /// The engines the hero offers, each landing on the draft's pick when it holds it, else on what
-    /// this workspace last ran there (web parity).
+    /// The engines the hero offers, by their CLIs' names, each landing on the draft's pick when it is
+    /// that engine's, else on what this workspace last ran there (web parity).
     private var engines: [EngineChoice] {
-        SessionProviderChoices.engines(providerChoices, configured: draft.configuredProviders,
-                                       preferred: [draft.providerChoice, agent.defaultProvider])
+        SessionProviderChoices.engines(sources: sources, preferred: [
+            EnginePick(engine: draft.engine, provider: draft.provider),
+            EnginePick(engine: agent.defaultEngine(configured: draft.configuredProviders), provider: agent.defaultProvider),
+        ])
     }
 
-    /// The engine of the draft's pick — synthesized when no group holds it (`opencode`, a removed
-    /// provider) or holds it but cannot run it, so the hero still names what it would run.
+    /// The draft's engine on the draft's own provider, drawn as it is even where that provider is no
+    /// longer on offer (a key since removed), so the hero still names what it would run.
     private var currentEngine: EngineChoice {
-        engines.first { $0.provider.slug == draft.providerChoice }
-            ?? SessionProviderChoices.engine(for: currentProviderChoice, configured: draft.configuredProviders)
+        SessionProviderChoices.currentEngine(engine: draft.engine, provider: draft.provider, engines: engines,
+                                             sources: sources)
     }
 
     private var currentProviderChoice: ProviderChoice {
-        SessionProviderChoices.current(draft.providerChoice, in: providerChoices,
-                                       configured: draft.configuredProviders,
-                                       catalog: draft.modelCatalog,
-                                       antigravity: draft.runnerAntigravity)
+        currentEngine.provider
+            ?? SessionProviderChoices.current(engine: draft.engine, provider: draft.provider, in: [], sources: sources)
     }
 
     /// The full model name (the composer footer only carries a truncated one). No funding label:
@@ -1518,7 +1556,7 @@ struct NewSessionView: View {
     /// No account either (web parity): the composer's quota gauge names it in its detail.
     private var heroSubtitle: String {
         draft.providerCapabilitiesResolved
-            ? AgentDefaults.friendlyName(draft.modelID, for: draft.providerChoice,
+            ? AgentDefaults.friendlyName(draft.modelID, engine: draft.engine, provider: draft.provider,
                                          catalog: draft.modelCatalog,
                                          configured: draft.configuredProviders)
             : "Runtime default"
@@ -1539,9 +1577,15 @@ struct AgentSessionRow: View {
     @Environment(AppModel.self) private var app
     /// The live watches that will resume this session: what a parked row says it's doing instead.
     private var watching: WatchSessionSummary? { app.watches?.summary(for: session.id) }
-    // Second line: the last-reply / live-state preview (mirrors the web Agent console). `live` mirrors
-    // web's `openable` — false on the Trash tab (a deleted session isn't live), true elsewhere.
-    private var line: SessionLine { SessionLine.make(for: session, live: !deleted, watching: watching) }
+    // Second line: the recap / last-reply / live-state preview (mirrors the web Agent console).
+    // `live` mirrors web's `openable` — false on the Trash tab (a deleted session isn't live), true
+    // elsewhere — and `recaps` is the account's Session recaps switch, read from the same `me` every
+    // other preference comes from (absent means on). The whole line is the sentence: no tags beside
+    // it and no "Recap · <time>" before it (the owner, 2026-10-22). Tags are filed and filtered by.
+    private var line: SessionLine {
+        SessionLine.make(for: session, live: !deleted, watching: watching,
+                         recaps: app.user?.preferences?.showRecaps ?? true)
+    }
 
     var body: some View {
         #if os(iOS)
@@ -1566,10 +1610,7 @@ struct AgentSessionRow: View {
             HStack(spacing: 8) {
                 StatusGlyphView(glyph: .make(for: session, watching: watching))
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(session.title ?? "Untitled session").lineLimit(1)
-                        SessionTagDots(tags: session.tags ?? [])
-                    }
+                    Text(session.title ?? "Untitled session").lineLimit(1)
                     HStack(spacing: 7) {
                         SessionCoordinatorBadge(session: session)
                         Text(line.text).font(.orbitListSubtitle)
@@ -1598,9 +1639,7 @@ struct AgentSessionRow: View {
 
     #if os(iOS)
     /// The regular-width iPad row: two stable scan lines. Title and time own the first line; live
-    /// state takes the timestamp's slot while working. The second line spends space on at most one
-    /// named tag, then lets the preview truncate. This keeps filing metadata reachable without
-    /// letting a tag collection squeeze the session's actual identity out of the middle column.
+    /// state takes the timestamp's slot while working. The second line is the preview, truncated.
     private var regularIOSRow: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
@@ -1618,11 +1657,6 @@ struct AgentSessionRow: View {
             }
             HStack(spacing: 7) {
                 SessionCoordinatorBadge(session: session)
-                if let tags = session.tags, let first = tags.first {
-                    SessionTagChips(tags: [first])
-                        // Only one chip is visual; VoiceOver still hears the complete filing context.
-                        .accessibilityLabel("Tags: \(tags.map(\.name).joined(separator: ", "))")
-                }
                 Text(line.text)
                     .font(.orbitListSubtitle)
                     .foregroundStyle(lineColor(line.tone))
@@ -1649,16 +1683,8 @@ struct AgentSessionRow: View {
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
                 }
             }
-            // Named tags lead the second line and the preview follows them — the same trade web
-            // makes (see `session-sub`). They sat beside the title as bare dots, but the title line
-            // is already carrying the live cue and the timestamp, so chips there truncate the title;
-            // the preview is the echo of a reply rather than the handle you file a session under, so
-            // it's the one that yields (the chips are fixed-size, web's `flex: none`).
             HStack(spacing: 7) {
                 SessionCoordinatorBadge(session: session)
-                if let tags = session.tags, !tags.isEmpty {
-                    SessionTagChips(tags: tags)
-                }
                 Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
             }
         }
@@ -1690,7 +1716,7 @@ struct AgentSessionRow: View {
         switch tone {
         case .preview, .queued, .background, .watching, .review: return .secondary
         case .running:                       return .blue
-        case .approval:                      return .orange
+        case .approval, .warning:            return .orange
         }
     }
 }
@@ -1896,25 +1922,28 @@ struct AgentFormContent: View {
     @State private var modelRouting = false
     @State private var confirmingDelete = false
 
-    /// Not an editable field: an agent holds no provider. This is what the project last ran on,
-    /// and it is here only because the effort vocabulary below genuinely differs by runtime. The
+    /// Not editable fields: an agent holds no engine or provider. This is what the project last ran
+    /// on, and it is here only because the effort vocabulary below genuinely differs by engine. The
     /// choice itself lives in the composer, per session.
     private var provider: String { agent.defaultProvider }
+    private var engine: String { agent.defaultEngine(configured: agents.configuredProviders) }
 
     private var effortOptions: [Effort] {
         // `model` / `modelCatalog` were dropped when agents stopped storing a model default; the
         // Runtime-resolved `effectiveModel` and the runner's own catalog replace them.
         let catalog = agents.modelCatalog(for: agent.runnerId)
-        let options = AgentDefaults.efforts(for: provider, model: effectiveModel, catalog: catalog)
+        let options = AgentDefaults.efforts(for: engine, provider: provider, model: effectiveModel,
+                                            catalog: catalog, configured: agents.configuredProviders)
         let current = AgentDefaults.normalizedEffort(
-            effort, for: provider, model: effectiveModel, catalog: catalog)
+            effort, for: engine, provider: provider, model: effectiveModel, catalog: catalog,
+            configured: agents.configuredProviders)
         return options.contains(current) ? options : [current] + options
     }
 
     /// Agents no longer store a model default. Resolve the model this Runtime will provide, which
     /// is what the effort vocabulary above is drawn from.
     private var effectiveModel: String {
-        agents.effectiveDefaultModel(for: provider, runnerId: agent.runnerId)
+        agents.effectiveDefaultModel(engine: engine, provider: provider, runnerId: agent.runnerId)
     }
 
     var body: some View {
@@ -2022,7 +2051,7 @@ struct AgentFormContent: View {
     /// for field so a look-and-close never fires a needless PATCH.
     private var prefilledEffort: Effort {
         let saved = Effort(rawValue: agent.effort ?? "") ?? .default
-        return AgentDefaults.normalizeEffort(saved, for: provider)
+        return AgentDefaults.normalizeEffort(saved, for: engine)
     }
 
     private var isDirty: Bool {

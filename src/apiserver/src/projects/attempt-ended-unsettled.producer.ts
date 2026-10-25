@@ -414,7 +414,7 @@ export class AttemptEndedUnsettledProducer {
           SELECT ${proposedId}::uuid, ${input.projectId}::uuid,
                  ${ATTEMPT_UNJUDGED_BLOCKER_KIND}, 'USER'::"project_blocker_owner",
                  'HUMAN'::"project_blocker_recovery", 'CRITICAL'::"project_blocker_severity",
-                 ${'工作可能已经完成，但系统没有合法判定路径；请查看交付证据并明确判定任务结果。'},
+                 ${"The work may be complete, but Orbit has no valid path to decide it: review the delivered evidence and decide the task's outcome explicitly."},
                  ${nextCheckAt}, 'TASK', ${input.taskId}, ${JSON.stringify(detail)}::jsonb,
                  ${this.dedupeKey(input.taskId)},
                  coalesce(max(blocker."lifecycle_generation"), 0) + 1,
@@ -459,17 +459,17 @@ export class AttemptEndedUnsettledProducer {
   private humanSignalComment(input: HumanSignalInput, taskStatus: TaskStatus): string {
     const sessionPublicId = uuidToBase62(input.sessionId);
     const sessionLine = TERMINAL_SESSION_STATUSES.includes(input.sessionStatus)
-      ? `执行会话 ${sessionPublicId} 已到终态 ${input.sessionStatus}`
-      : `执行会话 ${sessionPublicId} 的工作回合已结束，当前停在 ${input.sessionStatus}`;
+      ? `Run session ${sessionPublicId} has reached the terminal state ${input.sessionStatus}`
+      : `Run session ${sessionPublicId} has ended its work turn and now stands at ${input.sessionStatus}`;
     return `${ATTEMPT_UNJUDGED_COMMENT_MARKER}\n`
-      + `**需要人工判定（系统自动记录）**\n\n`
-      + `${sessionLine}，但任务仍为 ${taskStatus}。\n\n`
-      + `- L0 不可用：任务没有 acceptanceCommand\n`
-      + `- L1 不可用：任务没有活跃的验证任务\n`
-      + `- L2 不可用：${input.l2RefusalCode}\n\n`
-      + `工作可能已经完成，但系统没有合法证据自动判定 DONE；任务状态未被修改。`
-      + `请查看交付证据并明确判定任务结果。\n\n`
-      + `信号来源：ATTEMPT_ENDED_UNSETTLED / ${ATTEMPT_UNJUDGED_SIGNAL_CODE}`;
+      + `**Needs a person to decide (recorded by Orbit)**\n\n`
+      + `${sessionLine}, but the task is still ${taskStatus}.\n\n`
+      + `- L0 unavailable: the task has no acceptanceCommand\n`
+      + `- L1 unavailable: the task has no active verification task\n`
+      + `- L2 unavailable: ${input.l2RefusalCode}\n\n`
+      + `The work may be complete, but Orbit has no valid evidence to decide DONE automatically; the task's status was not changed. `
+      + `Review the delivered evidence and decide the task's outcome explicitly.\n\n`
+      + `Signal source: ATTEMPT_ENDED_UNSETTLED / ${ATTEMPT_UNJUDGED_SIGNAL_CODE}`;
   }
 
   private async resolveHumanSignal(taskId: string, projectId: string | null): Promise<void> {

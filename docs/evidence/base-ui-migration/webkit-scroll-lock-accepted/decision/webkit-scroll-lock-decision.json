@@ -1,0 +1,43 @@
+{
+ "about": "The coordinator decision on the evidence of the WebKit scroll-lock batch (34cBi0yt6bFcSmbJFgDPj) that this registration cites, copied verbatim from Orbit records. evidenceRevisions: task_evidence_list(34cBi0yt6bFcSmbJFgDPj) as this registration session read it (tool_use toolu_01EmTqN3BXyzLyKH9Y8L7rz4, 2026-10-09T02:33:12.548Z; one revision; the evidence body is omitted, its digest identifies it). decisionCall: the coordinator session called task_evidence_decide on revision 1; the call input and the server response are copied from that session transcript (path in transcript).",
+ "task": "34cBi0yt6bFcSmbJFgDPj",
+ "evidenceRevisions": [
+  {
+   "revision": "1",
+   "id": "6yAK0M0DaEF7hC5Rp9n1rU",
+   "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+   "submittedAt": "2026-10-09T01:50:07.143Z",
+   "sourceSessionId": "1leTbzfgo250CLBsIDMSmr"
+  }
+ ],
+ "transcript": "/root/.orbit/claude-accounts/44bf2acd/projects/-root--orbit-worktrees-01a10f8f-a15b-7306-96d0-11c294fab7f8/9c787a99-55d7-4401-bc23-0a0df17502ad.jsonl",
+ "decisionCall": {
+  "toolUseId": "toolu_019ZsYo35BPmabogWGXJwip3",
+  "evidenceRevision": 1,
+  "call": {
+   "timestamp": "2026-10-09T01:54:05.284Z",
+   "tool": "mcp__orbit__task_evidence_decide",
+   "input": {
+    "taskId": "34cBi0yt6bFcSmbJFgDPj",
+    "evidenceRevision": "1",
+    "decision": "CONFIRM",
+    "note": "协调者独立核对了以下几项：\n1）修法：d49a8749b 相对项目 tip 只多 3 个本批文件，其中业务改动只有 src/web/src/lib/toast.tsx 给读屏 live region 加了 position: fixed（附注释），浮层组件、Base UI、全站 .sr-only 和业务页面都没改。b3e33e31d 在其上只加了证据。\n2）报告复算（runs/*.report.summary.json）：overlays-app-frame 修复前 72 个中 16 失败（八环境的「文档一个视口高」，以及 WebKit 明暗桌面 Dialog、右侧和底部 Drawer、Confirm 的滚动位置），修复后 72/72。标准 P0 分支头 92 通过、9 失败、11 跳过，失败正是 WebKit 明暗桌面和暗色手机上的 settings、profile、session 三组（9 张截图）；参照 101 通过、11 跳过。overlays 168/168，choices 648/648。\n3）P0 的 9 张变化按设计接受：webkit-light-desktop 和 webkit-dark-desktop 各 3 张（settings-saved、profile-validation、notification-error），webkit-dark-phone 3 张（settings-saved、profile-validation、notification-error，其中 profile-validation 原有 P4.1 的接受条目）。两件事解释全部 12 张：文档滚动条那一列 8px 和 (0,0) 一点消失；桌面主区按 1280 排版，居中内容右移 4px，靠右内容和通知列右移 8px。像素归类与此一致，红色只在交界处的抗锯齿边缘。低于阈值的 3 张 WebKit 明色手机截图不登记。按 p0-drift README「已接受的迁移差异」第 2、3 条，落地后由协调者另建的登记任务按同提交原件重登（before 15b7b5609，after 取本批落地后的项目线提交），P4.1 那条旧条目移入 previous。\n4）toasts 的失败：夹具页面本来就有 150vh 高，修法不改变那里的布局和锁法。同树交替对照的探针（绝对定位失败 2/80，固定定位 0/80）说明两棵树之间 13/160 对 5/160 的差别不来自修法，接受这个解释。\n5）b3e33e31d 对项目 tip 797bf06d1（已含子菜单几何修正）和 origin/main 5b794d643 干跑合并都干净。OrbitKit 的测试不读本批任何文件。\n\n后续：P4.3b 的 a0b33edff 也改 OverlaysFixture.tsx 和 overlays.browser.mjs，它落地时要合并两边的 fixture 用例，并重跑 overlays 和 overlays-app-frame 两套。"
+   }
+  },
+  "response": {
+   "timestamp": "2026-10-09T01:54:05.956Z",
+   "isError": false,
+   "text": "{\n  \"id\": \"fRJrSzK3CevsTPV4xEki6\",\n  \"taskId\": \"34cBi0yt6bFcSmbJFgDPj\",\n  \"evidenceId\": \"6yAK0M0DaEF7hC5Rp9n1rU\",\n  \"evidenceRevision\": \"1\",\n  \"criterionRevision\": \"94a98c775d27bf48ece24d2965ddbda7367bbd7ce68c9041eb9f3ad9e8016e6f\",\n  \"evidenceDigest\": \"fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c\",\n  \"decision\": \"CONFIRM\",\n  \"note\": \"协调者独立核对了以下几项：\\n1）修法：d49a8749b 相对项目 tip 只多 3 个本批文件，其中业务改动只有 src/web/src/lib/toast.tsx 给读屏 live region 加了 position: fixed（附注释），浮层组件、Base UI、全站 .sr-only 和业务页面都没改。b3e33e31d 在其上只加了证据。\\n2）报告复算（runs/*.report.summary.json）：overlays-app-frame 修复前 72 个中 16 失败（八环境的「文档一个视口高」，以及 WebKit 明暗桌面 Dialog、右侧和底部 Drawer、Confirm 的滚动位置），修复后 72/72。标准 P0 分支头 92 通过、9 失败、11 跳过，失败正是 WebKit 明暗桌面和暗色手机上的 settings、profile、session 三组（9 张截图）；参照 101 通过、11 跳过。overlays 168/168，choices 648/648。\\n3）P0 的 9 张变化按设计接受：webkit-light-desktop 和 webkit-dark-desktop 各 3 张（settings-saved、profile-validation、notification-error），webkit-dark-phone 3 张（settings-saved、profile-validation、notification-error，其中 profile-validation 原有 P4.1 的接受条目）。两件事解释全部 12 张：文档滚动条那一列 8px 和 (0,0) 一点消失；桌面主区按 1280 排版，居中内容右移 4px，靠右内容和通知列右移 8px。像素归类与此一致，红色只在交界处的抗锯齿边缘。低于阈值的 3 张 WebKit 明色手机截图不登记。按 p0-drift README「已接受的迁移差异」第 2、3 条，落地后由协调者另建的登记任务按同提交原件重登（before 15b7b5609，after 取本批落地后的项目线提交），P4.1 那条旧条目移入 previous。\\n4）toasts 的失败：夹具页面本来就有 150vh 高，修法不改变那里的布局和锁法。同树交替对照的探针（绝对定位失败 2/80，固定定位 0/80）说明两棵树之间 13/160 对 5/160 的差别不来自修法，接受这个解释。\\n5）b3e33e31d 对项目 tip 797bf06d1（已含子菜单几何修正）和 origin/main 5b794d643 干跑合并都干净。OrbitKit 的测试不读本批任何文件。\\n\\n后续：P4.3b 的 a0b33edff 也改 OverlaysFixture.tsx 和 overlays.browser.mjs，它落地时要合并两边的 fixture 用例，并重跑 overlays 和 overlays-app-frame 两套。\",\n  \"decidedAt\": \"2026-10-09T01:54:05.482Z\",\n  \"decidedByType\": \"AGENT\",\n  \"decidedById\": \"34ZHGcIxwsZUxkgh2z65V\",\n  \"decidingSessionId\": \"34b245G3NiwgVVUj2JFJw\",\n  \"publicId\": \"fRJrSzK3CevsTPV4xEki6\",\n  \"taskPublicId\": \"34cBi0yt6bFcSmbJFgDPj\",\n  \"decidedByPublicId\": \"34ZHGcIxwsZUxkgh2z65V\",\n  \"evidencePublicId\": \"6yAK0M0DaEF7hC5Rp9n1rU\",\n  \"decidingSessionPublicId\": \"34b245G3NiwgVVUj2JFJw\"\n}"
+  }
+ },
+ "cited": {
+  "taskId": "34cBi0yt6bFcSmbJFgDPj",
+  "evidenceRevision": 1,
+  "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+  "verdict": "CONFIRM",
+  "decisionRecord": "fRJrSzK3CevsTPV4xEki6",
+  "decidedAt": "2026-10-09T01:54:05.482Z",
+  "decidingSessionId": "34b245G3NiwgVVUj2JFJw",
+  "document": "webkit-scroll-lock/README.md"
+ }
+}

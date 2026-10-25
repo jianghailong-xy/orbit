@@ -397,7 +397,7 @@ test('a provider on another runtime is refused, and nothing is stopped for it',
         () => sessions.resume(f.ownerId, f.replaced, dto as never, { routeToCurrentRun: true }),
         (error: unknown) => {
           assert.ok(error instanceof BadRequestException, 'not a conflict: this cannot be confirmed');
-          assert.match(String((error as Error).message), /runs on codex/);
+          assert.match(String((error as Error).message), /cannot run on Claude Code; it runs on Codex, OpenCode/);
           return true;
         },
       );

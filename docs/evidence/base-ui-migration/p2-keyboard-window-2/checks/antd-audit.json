@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370 && bash docs/evidence/base-ui-migration/p2-keyboard-window-2/antd-audit.sh project/34ZZeq0e3IR65GVm2kAs7",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_65aad465d8a4",
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "commit": "aed0a7bab6e39a50edaeea4cf16cecdae212b6d5",
+ "webTree": "d0a53fc0735666a86981095e9efa200b8a80d62c",
+ "outputLastWritten": "2026-10-07T16:42:32.298765+00:00",
+ "exitCode": 0,
+ "outputSha256": "8d163cfa4fea8fda198b472b55f785e5237c83424d647bc1608b902c8c83a9e5",
+ "outputBytes": 614,
+ "note": "The inventory rescan (audit-antd.mjs) on this branch's start 7732f14f8 and on aed0a7bab: only scannedFiles and testFiles +1 (keyboardWindow.test.tsx, no antd text); antd production files 100 -> 100, retirement blockers 241 -> 241, dependencies unchanged; ChoicesFixture.tsx (owned by P6 in inventory-delta/2026-10-07.json) adds the antd Popconfirm import as the Popconfirm baseline reference. On the branch merged into the project tip 3aa26fb97, the tip's --check-owners exits 1 for 2 use points, neither from this branch: ProjectDoneConversation.test.tsx and RunnerEngines.accountFold.test.tsx (from main via 9f62ddcc6), reported to the coordinator."
+}

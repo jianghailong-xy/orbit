@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-18T01:55:40.754+00:00",
+  "kind": "task",
+  "owner": "ben",
+  "runAt": "2026-10-18T01:59:00Z",
+  "status": 201,
+  "task": {
+    "assigneeId": "34hnbXI6qV0xWJ7xVZrHY",
+    "code": null,
+    "id": "34hnlAFYGmZ74wheo5nbW",
+    "message": null,
+    "runAt": "2026-10-18T01:59:00.000Z",
+    "status": "OPEN"
+  }
+}

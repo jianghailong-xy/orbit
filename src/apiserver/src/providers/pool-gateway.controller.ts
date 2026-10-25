@@ -9,6 +9,7 @@ import {
   PoolGatewayService,
   refuse,
 } from './pool-gateway.service';
+import { loginGatewayAllows } from './codex-login-gateway';
 import { PoolLoginGatewayService } from './pool-login-gateway.service';
 import { POOL_LOGIN_TOKEN_PREFIX } from './shared-pool';
 
@@ -52,11 +53,15 @@ export class PoolGatewayController {
       return;
     }
     const target = gatewayTarget(req.originalUrl ?? req.url);
-    if (!gatewayAllows(req.method, target.path)) {
+    // Which upstream the session is on decides which paths it may reach: a session on one of the pool's
+    // ChatGPT accounts (loginGatewayAllows) also reaches the backend calls the CLI makes for itself, where
+    // one on one of its API keys (gatewayAllows) reaches the turn alone.
+    const onAccount = caller.accountId !== null || (login && caller.keyId === null);
+    const allowed = onAccount ? loginGatewayAllows(req.method, target.path) : gatewayAllows(req.method, target.path);
+    if (!allowed) {
       refuse(res, 403, 'orbit_gateway_path_not_allowed', `${req.method} ${target.path} is not something the Orbit pool gateway forwards`);
       return;
     }
-    const onAccount = caller.accountId !== null || (login && caller.keyId === null);
     return onAccount ? this.loginGateway.forward(req, res, caller) : this.gateway.forward(req, res, caller);
   }
 }

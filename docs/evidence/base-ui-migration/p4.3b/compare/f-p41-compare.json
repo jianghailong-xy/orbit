@@ -1,0 +1,2897 @@
+{
+ "screenshots": {
+  "chromium-dark-desktop/p41-admin-revoke.png": {
+   "equal": true,
+   "sha256": "b1afed05567e592c52141f49cb2a5e243281d656bfcf5dac0deb1f7e56fbb8a6"
+  },
+  "chromium-dark-desktop/p41-admin-tokens.png": {
+   "equal": true,
+   "sha256": "612f2cf48ac7299c640adf8c948659ac07bba641b2ea9875545a5aef4abfdbb0"
+  },
+  "chromium-dark-desktop/p41-cli-approved.png": {
+   "equal": true,
+   "sha256": "a137c0a8b711d24e67563185ef2b09756766783397a5dfd71602d8f1009faf95"
+  },
+  "chromium-dark-desktop/p41-cli-denied.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      390,
+      391
+     ],
+     "y": [
+      265,
+      267
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 3,
+   "pixelsAtMost2": 3,
+   "sha256Del": "6ad3befa715ecdb3ffdf81e2e7ce72f372a6c4568d614293df2e96541ea16fc5",
+   "sha256Ref": "047383f19f51f987254271a7aaead209107412fbb1bd480e45ba806310c53db7"
+  },
+  "chromium-dark-desktop/p41-cli-error.png": {
+   "equal": true,
+   "sha256": "be0f6b03e8a9743e1f628ff6eceabdaecf0930c2aec50708b08c6fe764e35995"
+  },
+  "chromium-dark-desktop/p41-cli-loading.png": {
+   "equal": true,
+   "sha256": "9e5bdfb1e85495f7bd68bed2e3ba332edacff6c8e0e5a3c50d72d968832b9506"
+  },
+  "chromium-dark-desktop/p41-cli-warnings.png": {
+   "equal": true,
+   "sha256": "50e1dd159b58cd87c23075e8fbd52a7410fa48dc12c74652547aa52dde972954"
+  },
+  "chromium-dark-desktop/p41-cli.png": {
+   "equal": true,
+   "sha256": "00afe41a82d275d4addd1b3ebd780cd329c1b8c927c249ffab1535296cf92a68"
+  },
+  "chromium-dark-desktop/p41-login-error.png": {
+   "equal": true,
+   "sha256": "c2529ca222883aa537af263c18a4c5cd070045d8069473084105d616b3d93727"
+  },
+  "chromium-dark-desktop/p41-login.png": {
+   "equal": true,
+   "sha256": "82c823ec5085470f3931c1e6c17e70e11787e537928baadb23c046163bb60f28"
+  },
+  "chromium-dark-desktop/p41-profile-mismatch.png": {
+   "equal": true,
+   "sha256": "5f5c64a94395ccbb4deeddfa77c831dc98fcd39d88f77b1872265a5224bea849"
+  },
+  "chromium-dark-desktop/p41-profile-photo.png": {
+   "equal": true,
+   "sha256": "4bd7db62f752bb2d7fd825f86e941e2af80ab14a5881f785dd6ade1ed2f7f505"
+  },
+  "chromium-dark-desktop/p41-profile-ready.png": {
+   "equal": true,
+   "sha256": "abebb2ac928d674ba2702e801c766702c6c8360946ae0ef38bc34bb987540a73"
+  },
+  "chromium-dark-desktop/p41-profile-reset.png": {
+   "equal": true,
+   "sha256": "9f16cd5d2c60371798a446d87c9ffe8b5b44e47f7b121d05fd8db5f31bad9221"
+  },
+  "chromium-dark-desktop/p41-profile-signin.png": {
+   "equal": true,
+   "sha256": "2e344e9461afced8fe121a264f30dd3321f1b51e4dace5fb26d5abd591acce05"
+  },
+  "chromium-dark-desktop/p41-settings-mode-open.png": {
+   "equal": true,
+   "sha256": "5def2d8266b4faab337195834934e00a92104dddd344f8c1477e03f0793b9496"
+  },
+  "chromium-dark-desktop/p41-settings-saving.png": {
+   "equal": true,
+   "sha256": "fadc8bd19b0c9328b97c59c52872d7f05fa80560f3fdd21a50a45dcfd74c806e"
+  },
+  "chromium-dark-desktop/p41-settings-theme.png": {
+   "equal": true,
+   "sha256": "6fb0f31146051efde5ab66faa55c60b79f8073da0de432b7f6c40cb4d5a2bcdd"
+  },
+  "chromium-dark-desktop/p41-setup-invalid.png": {
+   "equal": true,
+   "sha256": "a11972a3733501dd8bffe75ce995ba1d2dead292e18f346b5f4efcf96954fb05"
+  },
+  "chromium-dark-desktop/p41-setup-required.png": {
+   "equal": true,
+   "sha256": "843e3b86fd5d5bbd0915afb9c37caede5014bedd9b64845ce41c50e7bce3253b"
+  },
+  "chromium-dark-desktop/p41-setup-valid.png": {
+   "equal": true,
+   "sha256": "d48edf2bc47d20e2e55e46b6ae4e9488c6b75c2aab00133dc17c967e068ee106"
+  },
+  "chromium-dark-desktop/p41-setup.png": {
+   "equal": true,
+   "sha256": "1f720e199e6a2b9f4df1e2de108a60e6de3e336c14786d8a543977efcaa66dbf"
+  },
+  "chromium-dark-desktop/p41-tokens-empty.png": {
+   "equal": true,
+   "sha256": "f0f69d7298f879344a2eedf8f27215c4acd2d7ee5407e959c48c9a8f31f92d63"
+  },
+  "chromium-dark-desktop/p41-tokens-ended.png": {
+   "equal": true,
+   "sha256": "856edd13dd19512e4326494659e9301b86b813afe12736ef6235f53bb8dd7e8f"
+  },
+  "chromium-dark-desktop/p41-tokens-error.png": {
+   "equal": true,
+   "sha256": "c0ac5b55715b6055672d7191dfed89c2245ad6435baba40dc7aa5f87e02f249b"
+  },
+  "chromium-dark-desktop/p41-tokens-hover.png": {
+   "equal": true,
+   "sha256": "d4306e2da71745ae2ded56ae4e7288c62ac97aaa6b33cdcf6d2e777bcc872ea0"
+  },
+  "chromium-dark-desktop/p41-tokens-issued.png": {
+   "equal": true,
+   "sha256": "ae1da6cf2d9aecd6afcbffef60de146f11b778dbc3c1c52b3d4a33f04b68201e"
+  },
+  "chromium-dark-desktop/p41-tokens-loading.png": {
+   "equal": true,
+   "sha256": "5ed406116ac12aff1da012ce4fe3094f207da3bbc8d5b3189be1516bab4facb5"
+  },
+  "chromium-dark-desktop/p41-tokens-new-custom.png": {
+   "equal": true,
+   "sha256": "8661bce1b9fba797db1e0ac5667de59d9ff9f713e26d4c65929815fedfbb90ec"
+  },
+  "chromium-dark-desktop/p41-tokens-new-never.png": {
+   "equal": true,
+   "sha256": "22f8678589901cce96ee76b54797f19c89d0e925547ff6aa722f7751e7072bbd"
+  },
+  "chromium-dark-desktop/p41-tokens-new-workspaces.png": {
+   "equal": true,
+   "sha256": "b872961032f1f28159690282b6968f095f76a06053001b2c5aa4b9e4ccc04346"
+  },
+  "chromium-dark-desktop/p41-tokens-new.png": {
+   "equal": true,
+   "sha256": "7a665b5da23ecfb40c53e8783ea559ae198d68619c99b856eca088f9ecd0f6db"
+  },
+  "chromium-dark-desktop/p41-tokens-revoke.png": {
+   "equal": true,
+   "sha256": "5d528ac0e9e4169e1cc9ce3709338fdfea07f2bce7e4a20409cfd337018989d5"
+  },
+  "chromium-dark-desktop/p41-tokens.png": {
+   "equal": true,
+   "sha256": "bc48a60402df7072a6b37c5ac573f73170c75544a5f4e18f5d23df74f22f0429"
+  },
+  "chromium-dark-phone/p41-admin-revoke.png": {
+   "equal": true,
+   "sha256": "d784a39de07aa200f0be0e15b664724ed14abdbcbb45ca5b82bfbdb2aa7209e8"
+  },
+  "chromium-dark-phone/p41-admin-tokens.png": {
+   "equal": true,
+   "sha256": "5bbc8225a86df19d5fff1179ef7f30502d3d7842eb535a53b33ed67f92694124"
+  },
+  "chromium-dark-phone/p41-cli-approved.png": {
+   "equal": true,
+   "sha256": "003c4ff5bf97204ec6a23a62d10ea7356aea9e9582756bd435e771a776949479"
+  },
+  "chromium-dark-phone/p41-cli-denied.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      387,
+      388
+     ],
+     "y": [
+      237,
+      239
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 4,
+   "pixelsAtMost2": 4,
+   "sha256Del": "17c94e96d0a3b129dafd42a5c377bda77130576fe92fdd06ac6aa6465efec100",
+   "sha256Ref": "99e6730f3a2fabf9249e44864fbaa6a245b00240462eb47a82649deb97f91c6c"
+  },
+  "chromium-dark-phone/p41-cli-error.png": {
+   "equal": true,
+   "sha256": "cfc5bdede9ddc2a02652c21dac2624e6a6db422caf83bcb8c71824856b64088b"
+  },
+  "chromium-dark-phone/p41-cli-loading.png": {
+   "equal": true,
+   "sha256": "41a7d627408fd86ef4a53d050a6a133b6e0148e9131e20b66b0edf12c7c229c6"
+  },
+  "chromium-dark-phone/p41-cli-warnings.png": {
+   "equal": true,
+   "sha256": "114e345635e35646c0c2bb1632656b85ac4d5e3f1ff60bdf65489f471d1d18f7"
+  },
+  "chromium-dark-phone/p41-cli.png": {
+   "equal": true,
+   "sha256": "2b7df707765b543c56724bc0980239f3837670c618bbde45e3d7fc99615e6327"
+  },
+  "chromium-dark-phone/p41-login-error.png": {
+   "equal": true,
+   "sha256": "c721f2bae9a40e3e042a33451ddf0ccb702007a0554a02ee6c68333696a1c71d"
+  },
+  "chromium-dark-phone/p41-login.png": {
+   "equal": true,
+   "sha256": "85ba2a17c79c6877e1508b5d1755d5aa8bef3aed05a8ec2b3a36e344ffd05102"
+  },
+  "chromium-dark-phone/p41-profile-mismatch.png": {
+   "equal": true,
+   "sha256": "3ddad4b3ca6d46b60f08bf514df05b4b023e46200010f4429c6ad82f2a5fe0d0"
+  },
+  "chromium-dark-phone/p41-profile-photo.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      366,
+      373
+     ],
+     "y": [
+      95,
+      102
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      430,
+      432
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      459,
+      461
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 16,
+   "pixelsAtMost2": 16,
+   "sha256Del": "6410aa3f10adc3ca9419b1786399f1021bf9440c2b7228ce572c507efb6f0012",
+   "sha256Ref": "6aade61cc27e87d0bd917fb501d6c81a2722cab79d8f03c1e39a803727688b14"
+  },
+  "chromium-dark-phone/p41-profile-ready.png": {
+   "equal": true,
+   "sha256": "2736a7a30c817e9e32221230e71cf4870f514ba6de137957a20effe4fd62659d"
+  },
+  "chromium-dark-phone/p41-profile-reset.png": {
+   "equal": true,
+   "sha256": "3c6212a4d30b99b643a3306216150eb02251539663b72bb7146c11e3624e34ec"
+  },
+  "chromium-dark-phone/p41-profile-signin.png": {
+   "equal": true,
+   "sha256": "99ba50b14f2c917fc0fc813b8c5084784a9a1798997ab068061df24d3fba7ea1"
+  },
+  "chromium-dark-phone/p41-settings-mode-open.png": {
+   "equal": true,
+   "sha256": "db958f8a0c04aba2623dda7fc95b3a29e0289339858144a526870565aa69986d"
+  },
+  "chromium-dark-phone/p41-settings-saving.png": {
+   "equal": true,
+   "sha256": "1f962e161a0502d8567a4ef91b7c83de0c8ed36fa3d0dd1a35acbe460a6bef9b"
+  },
+  "chromium-dark-phone/p41-settings-theme.png": {
+   "equal": true,
+   "sha256": "d5474b15c3058343eb1dfc1c451ae9eb7eda86a6126a8707cfc1c42a9892aecf"
+  },
+  "chromium-dark-phone/p41-setup-invalid.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 7,
+     "x": [
+      0,
+      2
+     ],
+     "y": [
+      522,
+      525
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      0,
+      2
+     ],
+     "y": [
+      582,
+      587
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 5,
+     "x": [
+      0,
+      2
+     ],
+     "y": [
+      608,
+      611
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 21,
+   "pixelsAtMost2": 21,
+   "sha256Del": "2a097333d598e16fec28920ef0c52509606664d2e41aa9ef5aba399d23114600",
+   "sha256Ref": "75fb7d131e8d9469a66323e4cc58d8469efa2a95601dd4f863f92173c354b357"
+  },
+  "chromium-dark-phone/p41-setup-required.png": {
+   "equal": true,
+   "sha256": "b2607dba63cce16fbc1a8b0daa83c374c695a05eaf547d8b8ebc47bdd1723b13"
+  },
+  "chromium-dark-phone/p41-setup-valid.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      0,
+      2
+     ],
+     "y": [
+      319,
+      322
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 6,
+     "x": [
+      387,
+      389
+     ],
+     "y": [
+      319,
+      322
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      388,
+      389
+     ],
+     "y": [
+      347,
+      350
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 16,
+   "pixelsAtMost2": 16,
+   "sha256Del": "c27a3512eccd2d61a0f606cc319e27b9dc2c90be7d44a976ae09029ebf551083",
+   "sha256Ref": "fe4d85562e6b1f31a872c2048cb9dae387bf839d4b18b5b37fd71ca0dda32e9f"
+  },
+  "chromium-dark-phone/p41-setup.png": {
+   "equal": true,
+   "sha256": "23a8bfc243e90148afb1960686b3cd2405a3ff66312a31709d42b563b0be1caa"
+  },
+  "chromium-dark-phone/p41-tokens-empty.png": {
+   "equal": true,
+   "sha256": "4fda48233528c3c54bd63f766ca0026a3365e885bdf80ea5dea14d58aed9369e"
+  },
+  "chromium-dark-phone/p41-tokens-ended.png": {
+   "equal": true,
+   "sha256": "579574d2bfb7e8a67bf6e7e6e237c01aa501217aa027e1f8140db3aebb6c4567"
+  },
+  "chromium-dark-phone/p41-tokens-error.png": {
+   "equal": true,
+   "sha256": "7177d2033bb768ff20184b9ddff2f78777a9e474b47f9b54774d3cc76d44611e"
+  },
+  "chromium-dark-phone/p41-tokens-hover.png": {
+   "equal": true,
+   "sha256": "3bbc6905798663199d2a9319739542f2fecb3befacac29c8738d2c5aaf47cf50"
+  },
+  "chromium-dark-phone/p41-tokens-issued.png": {
+   "equal": true,
+   "sha256": "4652dc18c4c27ec6a2d0f824e57f4c33d914214ad80d2a6849a9f2687428cc42"
+  },
+  "chromium-dark-phone/p41-tokens-loading.png": {
+   "equal": true,
+   "sha256": "7a32bc94758b0ceaf699f2cb8ada40386837e12203d881550b75d1f2c837f748"
+  },
+  "chromium-dark-phone/p41-tokens-new-custom.png": {
+   "equal": true,
+   "sha256": "14e4d703a0c77ed4d26993ac2c457729ace8cb545e9c67d519c8c802f6f527c1"
+  },
+  "chromium-dark-phone/p41-tokens-new-never.png": {
+   "equal": true,
+   "sha256": "c0e8a92ff7aee9d94d5e746e2647ea6683107d70312087eb6b415e05c6e793a8"
+  },
+  "chromium-dark-phone/p41-tokens-new-workspaces.png": {
+   "equal": true,
+   "sha256": "2a5b46d7bd39d7276d99ca4fa776eb865fe0255ed4db1686164a0d5996723e65"
+  },
+  "chromium-dark-phone/p41-tokens-new.png": {
+   "equal": true,
+   "sha256": "6f8cbfdb04c3611084fbd31a8c32354d50e3d0d5a4d1a11daa19cd86906a2661"
+  },
+  "chromium-dark-phone/p41-tokens-revoke.png": {
+   "equal": true,
+   "sha256": "a4c51a3832581f624bd2f4c14ff9c16f3f479d09c92665bdcf5c5cfc6bd03a47"
+  },
+  "chromium-dark-phone/p41-tokens.png": {
+   "equal": true,
+   "sha256": "486adbda34158f769143e7bdf260bbd283aed135d78473198fa93a11dbaa633f"
+  },
+  "chromium-light-desktop/p41-admin-revoke.png": {
+   "equal": true,
+   "sha256": "ab40d9c85fb1727ec882d24a6bc6a4c479e91e872b1f4fd798e08bea5b366122"
+  },
+  "chromium-light-desktop/p41-admin-tokens.png": {
+   "equal": true,
+   "sha256": "2fac322060c45c5607037f27ea2938aeba2393134b607cb29832932f45c6137d"
+  },
+  "chromium-light-desktop/p41-cli-approved.png": {
+   "equal": true,
+   "sha256": "cfbf5ed7d673d7797c9aa55ab76ff43bb2405a3e9123e35e76fe23eaee699709"
+  },
+  "chromium-light-desktop/p41-cli-denied.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      390,
+      391
+     ],
+     "y": [
+      265,
+      267
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 4,
+   "pixelsAtMost2": 4,
+   "sha256Del": "65b0af362b5d9d081cafca99cc15128e1dbb6b9066a38225fd99832e8ce72b2f",
+   "sha256Ref": "af17743d37bff726c2e6c73d8a1d791e424d034981eae1337de1c2cc3652ea70"
+  },
+  "chromium-light-desktop/p41-cli-error.png": {
+   "equal": true,
+   "sha256": "c27b779b6b2ed33814e13156ee2e70323d37f1c83b3d49dda158b5bcad5afc45"
+  },
+  "chromium-light-desktop/p41-cli-loading.png": {
+   "equal": true,
+   "sha256": "6c7543fcd3a929a156cb7a659232784805abf9410767dacaa04cf40cc15bb704"
+  },
+  "chromium-light-desktop/p41-cli-warnings.png": {
+   "equal": true,
+   "sha256": "02d1cee7abf82111b6f11744c48c164102f144fecba0069474becf9a8d42200c"
+  },
+  "chromium-light-desktop/p41-cli.png": {
+   "equal": true,
+   "sha256": "1ff5301bcfa2c88ccf43023d5d60e8eff5e3bcaa0fe66a6f214e1f62d985787a"
+  },
+  "chromium-light-desktop/p41-login-error.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      680,
+      684
+     ],
+     "y": [
+      462,
+      463
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 2,
+   "pixelsAtMost2": 2,
+   "sha256Del": "f147921bacd38f370db785e1d629cf9388388baa14af8169bee35990d8fb48e2",
+   "sha256Ref": "d2866036a12b049848e1a074f3b4738ef3aef9ef4c8d5d3313bf65c3a8340154"
+  },
+  "chromium-light-desktop/p41-login.png": {
+   "equal": true,
+   "sha256": "49423c06c8828b5d3f075bf53ae837f1b4767a7f51123d2a83ebdbaa61a5bc87"
+  },
+  "chromium-light-desktop/p41-profile-mismatch.png": {
+   "equal": true,
+   "sha256": "20e7840129c7115e092bd201de9082de3e773a4b0f8149ccce6f19d19481cf8f"
+  },
+  "chromium-light-desktop/p41-profile-photo.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 7,
+     "x": [
+      849,
+      852
+     ],
+     "y": [
+      151,
+      153
+     ]
+    },
+    {
+     "maxChannelDiff": 32,
+     "pixels": 7,
+     "x": [
+      525,
+      527
+     ],
+     "y": [
+      155,
+      161
+     ]
+    },
+    {
+     "maxChannelDiff": 39,
+     "pixels": 6,
+     "x": [
+      526,
+      527
+     ],
+     "y": [
+      174,
+      178
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      1030,
+      1034
+     ],
+     "y": [
+      242,
+      247
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      525,
+      525
+     ],
+     "y": [
+      245,
+      247
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      1058,
+      1059
+     ],
+     "y": [
+      379,
+      381
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1058,
+      1059
+     ],
+     "y": [
+      408,
+      410
+     ]
+    },
+    {
+     "maxChannelDiff": 30,
+     "pixels": 318,
+     "x": [
+      17,
+      46
+     ],
+     "y": [
+      859,
+      875
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      500,
+      507
+     ],
+     "y": [
+      890,
+      897
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 39,
+   "pixels": 365,
+   "pixelsAtMost2": 210,
+   "sha256Del": "6aca0c6fc9c2df8f25b2be60c0c665730228a72a96f68673ad28225007fe2535",
+   "sha256Ref": "5174c8c112efca96c96e052a02ec3afc235f5ecf0b5379706cde4201f717ad87"
+  },
+  "chromium-light-desktop/p41-profile-ready.png": {
+   "equal": true,
+   "sha256": "a173f42e133d2f10a20b5a86e6fea256d4dbd036b52003455ff3d3424ca0c14b"
+  },
+  "chromium-light-desktop/p41-profile-reset.png": {
+   "equal": true,
+   "sha256": "f96ee7b5f0288b693286f9d3a3c739c91cd121e5a7965301e879c13febcfc18b"
+  },
+  "chromium-light-desktop/p41-profile-signin.png": {
+   "equal": true,
+   "sha256": "a9f7cbc5b563abd70afbadf7be6b32e3e987820e555d085558c39cdf5449c44c"
+  },
+  "chromium-light-desktop/p41-settings-mode-open.png": {
+   "equal": true,
+   "sha256": "de2971bf152e2e5b5286206aebd5fd9a91f490ce78120b356a6eca243c07f7ff"
+  },
+  "chromium-light-desktop/p41-settings-saving.png": {
+   "equal": true,
+   "sha256": "138719d3aeaff06a3bea96f31f2efffdd2d257603699ac6f806de8fc0b069fef"
+  },
+  "chromium-light-desktop/p41-settings-theme.png": {
+   "equal": true,
+   "sha256": "b221e29930f8f17174fd1be1364a0b31f998055305094a88c44abd93a9ad6927"
+  },
+  "chromium-light-desktop/p41-setup-invalid.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      445,
+      447
+     ],
+     "y": [
+      351,
+      354
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      445,
+      447
+     ],
+     "y": [
+      548,
+      550
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      445,
+      446
+     ],
+     "y": [
+      607,
+      612
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      445,
+      447
+     ],
+     "y": [
+      633,
+      636
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 24,
+   "pixelsAtMost2": 24,
+   "sha256Del": "9c4b1d9bc88661da8ea1a3b12423992d185e6aed2494941a983fdf52dd756757",
+   "sha256Ref": "0fbd3c7565cc57a2d1345c9f0f0747e0182314693599330ec64bc5498b262f0d"
+  },
+  "chromium-light-desktop/p41-setup-required.png": {
+   "equal": true,
+   "sha256": "7f89e81f32ccdae291995c755a4ec93cd985b90651fc03ff48074bb3ce5115e2"
+  },
+  "chromium-light-desktop/p41-setup-valid.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      445,
+      447
+     ],
+     "y": [
+      351,
+      354
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 7,
+   "pixelsAtMost2": 7,
+   "sha256Del": "f95dd70d0904e2ee90745793cf1d3cbb3c7996034ab8ed9292b11859eb961b41",
+   "sha256Ref": "edb8f653fe4b02ac29017ec40079e9ece0feb17914a3e9ab5ea36c25143a7776"
+  },
+  "chromium-light-desktop/p41-setup.png": {
+   "equal": true,
+   "sha256": "6c4b3af35e8ec4d1c3d0e5ada1b4d5a79a39c661e2178e65d407edb48ffc23c5"
+  },
+  "chromium-light-desktop/p41-tokens-empty.png": {
+   "equal": true,
+   "sha256": "d0d97359ae7dc94ec765f2b12dc99bbed35f1226ca5d7ce85c515ea425f4cee3"
+  },
+  "chromium-light-desktop/p41-tokens-ended.png": {
+   "equal": true,
+   "sha256": "dcebe528e81c00e8fb5f238e84336fb5707189936e8485e1e8de5795ec684c22"
+  },
+  "chromium-light-desktop/p41-tokens-error.png": {
+   "equal": true,
+   "sha256": "66b0af582f03e114cf7a2145a108b03793c657ff1ef1978c18b1ced4ab02973d"
+  },
+  "chromium-light-desktop/p41-tokens-hover.png": {
+   "equal": true,
+   "sha256": "59627bcefefc3b891232a76ba1ce3f7a2fbdc805b37fc1412901c46eff737064"
+  },
+  "chromium-light-desktop/p41-tokens-issued.png": {
+   "equal": true,
+   "sha256": "005d0b8b0d549c20ec1ea62e729e1172ed0a0adfda5871c7aebdbed149af7526"
+  },
+  "chromium-light-desktop/p41-tokens-loading.png": {
+   "equal": true,
+   "sha256": "0f3a5f270b02c8ddb7d3cd82a24615c3c43a7a0e31809f7613df98cd8ce25259"
+  },
+  "chromium-light-desktop/p41-tokens-new-custom.png": {
+   "equal": true,
+   "sha256": "de54d3827f9d1b8a6e39bfc437d00403cd6bdc5a1a7bdff8c7c7daaaf0318446"
+  },
+  "chromium-light-desktop/p41-tokens-new-never.png": {
+   "equal": true,
+   "sha256": "54a644d413fe81b40f9b4f2d2c0697aa8b2cfbd18b67580d8663ed32f2e45416"
+  },
+  "chromium-light-desktop/p41-tokens-new-workspaces.png": {
+   "equal": true,
+   "sha256": "a69e9c810f3b9df31ce534978bcc81987276413b177f7e37f728ab3134fd6295"
+  },
+  "chromium-light-desktop/p41-tokens-new.png": {
+   "equal": true,
+   "sha256": "2574b2093bc94efcad8fe377daa02cc8892c11f72dc41e591d55d6ac3bb2edc6"
+  },
+  "chromium-light-desktop/p41-tokens-revoke.png": {
+   "equal": true,
+   "sha256": "cdf765426f17424d0c39c6fcf509921c2ff75bb49541aca43daa4b9093cf1c50"
+  },
+  "chromium-light-desktop/p41-tokens.png": {
+   "equal": true,
+   "sha256": "930c17c4afc06bd21bbb8b195294b7643644baa78a71edbaaa8163a6c6010c9b"
+  },
+  "chromium-light-phone/p41-admin-revoke.png": {
+   "equal": true,
+   "sha256": "3c172cd1928924bfe7a4bc882974504b272a973482aaf377bc4ee58aa1e7d5f4"
+  },
+  "chromium-light-phone/p41-admin-tokens.png": {
+   "equal": true,
+   "sha256": "e5acd0df22c0cd462bdea4c51f4492d111ef03aa6065388c52de095859a9c8bf"
+  },
+  "chromium-light-phone/p41-cli-approved.png": {
+   "equal": true,
+   "sha256": "f5c4ab7a12983d96154a2cb93f949774e413ddc5403f185960433b5cf9e2c3a9"
+  },
+  "chromium-light-phone/p41-cli-denied.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      387,
+      388
+     ],
+     "y": [
+      237,
+      239
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 4,
+   "pixelsAtMost2": 4,
+   "sha256Del": "9812c2aede5f1e04c2a2b38fb2b72e6416a03c4a826a85af028dc37c95c2ef88",
+   "sha256Ref": "cb77de9a2aa882fe83244a04d0e74ccf982716691258653947469321bcac4a55"
+  },
+  "chromium-light-phone/p41-cli-error.png": {
+   "equal": true,
+   "sha256": "172dd063804f347de5dd6514883197011af9bc07795bed4bb4a6fc19cb21782c"
+  },
+  "chromium-light-phone/p41-cli-loading.png": {
+   "equal": true,
+   "sha256": "d8053bf2f2a1da4d82da59aed309b83aa44dd9250ad5a0e3d7428e9b1ed95d53"
+  },
+  "chromium-light-phone/p41-cli-warnings.png": {
+   "equal": true,
+   "sha256": "b14f050afd4f2dea629c899513cee4e2e85b30b0058fb7b22bfa1681d5ccbea5"
+  },
+  "chromium-light-phone/p41-cli.png": {
+   "equal": true,
+   "sha256": "dc2a6fdab4d4518e41e36076be12b3135403a069ef02f708f5dd79cbdce43978"
+  },
+  "chromium-light-phone/p41-login-error.png": {
+   "equal": true,
+   "sha256": "894d33782fba6e64d74fd14accd1ef8472470c73364ff4fdad2b75c0f288dd8e"
+  },
+  "chromium-light-phone/p41-login.png": {
+   "equal": true,
+   "sha256": "a498e1fbe9e32b99d3d9e491f4c4a69a71c60d8808d8d09dca5c9ea53b62d688"
+  },
+  "chromium-light-phone/p41-profile-mismatch.png": {
+   "equal": true,
+   "sha256": "938b100bbe9a9d2cfde9c3a4bd311422bc544a750b540ac2b7527649347a3aa9"
+  },
+  "chromium-light-phone/p41-profile-photo.png": {
+   "equal": true,
+   "sha256": "fa8202ff2841a7a727f97fe2de47b62a19ba3924e948aa68be6f0b0b33aa0139"
+  },
+  "chromium-light-phone/p41-profile-ready.png": {
+   "equal": true,
+   "sha256": "37798b2483b491aa01f21b91f193b571b29ec2900a42e5bcba867d2b223e1869"
+  },
+  "chromium-light-phone/p41-profile-reset.png": {
+   "equal": true,
+   "sha256": "f07c3bf0a2226d4a1ea300044e71da183bcc12096b784bdb642f910045fea30c"
+  },
+  "chromium-light-phone/p41-profile-signin.png": {
+   "equal": true,
+   "sha256": "b7f28ce9bbf155046bdd8191f627022140c3f59fe74da7410472a78854cd3797"
+  },
+  "chromium-light-phone/p41-settings-mode-open.png": {
+   "equal": true,
+   "sha256": "165f1c9ec6e4bc5b6a6129d12d1a32512c6a429eb7ff5c8e352013cca9faa688"
+  },
+  "chromium-light-phone/p41-settings-saving.png": {
+   "equal": true,
+   "sha256": "e23550387276088e23b6a2eee08a8ff59539dbe9c73c29510efac577fb557752"
+  },
+  "chromium-light-phone/p41-settings-theme.png": {
+   "equal": true,
+   "sha256": "bcb21807eecf5591279d6914ba8095c5c9049b4f3ac939f5cd7c9f281c36c132"
+  },
+  "chromium-light-phone/p41-setup-invalid.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      0,
+      2
+     ],
+     "y": [
+      319,
+      322
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 7,
+   "pixelsAtMost2": 7,
+   "sha256Del": "707afdc1c75284517e7301a3f05087015324bee874b334b166e5d66efe111b32",
+   "sha256Ref": "981e1bb8c5b02c38831cb684a6a526a87919ac3d1b10a3581a8f2f345f465c19"
+  },
+  "chromium-light-phone/p41-setup-required.png": {
+   "equal": true,
+   "sha256": "e352881bfc5b0dcb2782e704a1ae636f732448faa79712862cb5fece284ba623"
+  },
+  "chromium-light-phone/p41-setup-valid.png": {
+   "equal": true,
+   "sha256": "67b09e568a69aea74b4279f923f06e1d3cdf6f12ae8accd2502366939d63dd1d"
+  },
+  "chromium-light-phone/p41-setup.png": {
+   "equal": true,
+   "sha256": "14c6437ba57054caa5eb1db7ff3c0d8335d6514d774291efeb537b57ec1a8968"
+  },
+  "chromium-light-phone/p41-tokens-empty.png": {
+   "equal": true,
+   "sha256": "310a56ddaefa371e8d950a8a425ca4fa9db82ee85fa9d702951d1afaa838ee56"
+  },
+  "chromium-light-phone/p41-tokens-ended.png": {
+   "equal": true,
+   "sha256": "1f825a491980c69d5112f0e46ce461a591eae07d72a92f9b84735d0cb684eb08"
+  },
+  "chromium-light-phone/p41-tokens-error.png": {
+   "equal": true,
+   "sha256": "dfcb339b7d1d3551715dbd54b74e2022eaecdcf185fdfbfff014f5a2c2e20c5f"
+  },
+  "chromium-light-phone/p41-tokens-hover.png": {
+   "equal": true,
+   "sha256": "6d4a72a193b34f9e5cb75f48e317aeab3d794b41f860c2f0ea2f0901dc98223d"
+  },
+  "chromium-light-phone/p41-tokens-issued.png": {
+   "equal": true,
+   "sha256": "27fa967aa925dbcffa9db0ff2513070993883312699a5ad71b3e045f16687a01"
+  },
+  "chromium-light-phone/p41-tokens-loading.png": {
+   "equal": true,
+   "sha256": "2ca3f0e4223ba597501e18395daf647863e72f458c932bf2771fe03ad82cae3d"
+  },
+  "chromium-light-phone/p41-tokens-new-custom.png": {
+   "equal": true,
+   "sha256": "e1861dbfee564955d2faf7734c2c1e4f26f7d89a7a6a2eeff88e27b82de108a2"
+  },
+  "chromium-light-phone/p41-tokens-new-never.png": {
+   "equal": true,
+   "sha256": "6b0024dc45dfe43cbd0b875ebd5680e73c38b7972547531dcc12586c264221f4"
+  },
+  "chromium-light-phone/p41-tokens-new-workspaces.png": {
+   "equal": true,
+   "sha256": "a542ecd5584bf67058b62a21cf9cbffbe629e4c848bc29214039ae7ad129b6bf"
+  },
+  "chromium-light-phone/p41-tokens-new.png": {
+   "equal": true,
+   "sha256": "f8cfd5363394eb8f2809f8915f379eba260efffc3cd880c422724de3baa01050"
+  },
+  "chromium-light-phone/p41-tokens-revoke.png": {
+   "equal": true,
+   "sha256": "21f8912a863caf21cb8e980b052dff7505160371e9f96218cda16f87791e62b2"
+  },
+  "chromium-light-phone/p41-tokens.png": {
+   "equal": true,
+   "sha256": "fa0540c788581afdba126eb293644ade894e6eb58ebf21f8eff4428e9b9227d7"
+  },
+  "webkit-dark-desktop/p41-admin-revoke.png": {
+   "equal": true,
+   "sha256": "36a492d04d3d29ed14254699d9f40c0dc890cf84ea1c264e9087830c3eda13aa"
+  },
+  "webkit-dark-desktop/p41-admin-tokens.png": {
+   "equal": true,
+   "sha256": "29e86d83d286101f4c0a35e0785eef478f6782591502fe5f78c71b7e909e150e"
+  },
+  "webkit-dark-desktop/p41-cli-approved.png": {
+   "equal": true,
+   "sha256": "c43aac451073171c684d6f88079da91fab1f0a4caa3f969727f04b6d2ca4e3c4"
+  },
+  "webkit-dark-desktop/p41-cli-denied.png": {
+   "equal": true,
+   "sha256": "ac22d39973319ab88d649e31ddb88cb3a1a1cc35ae8467eb23a52693d7e0c263"
+  },
+  "webkit-dark-desktop/p41-cli-error.png": {
+   "equal": true,
+   "sha256": "c5724d9245fc822995bbfe122d06d04bb39d9ed6205457306e0538997f887eb4"
+  },
+  "webkit-dark-desktop/p41-cli-loading.png": {
+   "equal": true,
+   "sha256": "e2ed9ff7140075a02a47dfe6fca74c867309d0117c1c983c0eb90fb7f4843b9c"
+  },
+  "webkit-dark-desktop/p41-cli-warnings.png": {
+   "equal": true,
+   "sha256": "ef5b0573a3da5be5f537b0a8b39d6ede10876740169c9f7147fca9a1002cc38e"
+  },
+  "webkit-dark-desktop/p41-cli.png": {
+   "equal": true,
+   "sha256": "f74806c871fb9fd32b28b2c3ef1ba5735e4ce3dbd290b1ee4f282e772c1d2127"
+  },
+  "webkit-dark-desktop/p41-login-error.png": {
+   "equal": true,
+   "sha256": "e6366f8dd52c8900554365575bd3a0dccfa05c4f67301e6c643d42ba25e8ffed"
+  },
+  "webkit-dark-desktop/p41-login.png": {
+   "equal": true,
+   "sha256": "8afe2611d150b5a565c81e51e6e87d1c28bc05e0df7479ad8cb4bf18414c227c"
+  },
+  "webkit-dark-desktop/p41-profile-mismatch.png": {
+   "equal": true,
+   "sha256": "55b38356286728971d72cd5c3517665f4ffcfe2f81ee22a980d3e35083b0f7fe"
+  },
+  "webkit-dark-desktop/p41-profile-photo.png": {
+   "equal": true,
+   "sha256": "b7958571e5e3257e1a99fd95375d781c9f7052d0576621007216ed3a4198d16f"
+  },
+  "webkit-dark-desktop/p41-profile-ready.png": {
+   "equal": true,
+   "sha256": "583f902ab747211beb80b63b8453a2a582bbff3002b968d1bcab0b64d1cf0b2a"
+  },
+  "webkit-dark-desktop/p41-profile-reset.png": {
+   "equal": true,
+   "sha256": "d3bed2865480f2d102e04c0bd847e3b8f417ed60676f16bde1643c4b112fee32"
+  },
+  "webkit-dark-desktop/p41-profile-signin.png": {
+   "equal": true,
+   "sha256": "09df083a5843df7fdba8d8b4949dd266f233893c899524fad88c945bb6071177"
+  },
+  "webkit-dark-desktop/p41-settings-mode-open.png": {
+   "equal": true,
+   "sha256": "3e976e1686ed152fe799cac0763d74867298188a089e8ae74380d5c68ec24ca0"
+  },
+  "webkit-dark-desktop/p41-settings-saving.png": {
+   "equal": true,
+   "sha256": "a63ae87c5e3432f731bbb32716a3363769864ee6395db77dee142434a88151d2"
+  },
+  "webkit-dark-desktop/p41-settings-theme.png": {
+   "equal": true,
+   "sha256": "e6d5f59c8044e4617c779e8d38ec942e95fcbb6183fd8b5030ab185281b26f5e"
+  },
+  "webkit-dark-desktop/p41-setup-invalid.png": {
+   "equal": true,
+   "sha256": "ae05badaa5ca0b17339176f5e0db6049af393e02d0ee06a22ec5e65d2247945b"
+  },
+  "webkit-dark-desktop/p41-setup-required.png": {
+   "equal": true,
+   "sha256": "ea7fd61701c1fa6f70ca5e27bbed3ff5ee9810d04f943778f53e425e2b17e438"
+  },
+  "webkit-dark-desktop/p41-setup-valid.png": {
+   "equal": true,
+   "sha256": "711f9a84ed0b66e2190be2648dd912e654ceb06eb1310b4e8b2bdbc01ba13284"
+  },
+  "webkit-dark-desktop/p41-setup.png": {
+   "equal": true,
+   "sha256": "146daf935359b15a0c9806bb7de10a5dd37b2ff416f34cb75e28fbf187d251ec"
+  },
+  "webkit-dark-desktop/p41-tokens-empty.png": {
+   "equal": true,
+   "sha256": "1a6eacf950dc4fa0901bd0487babd4cde381db4e625fdd56e8273122aa0cd40c"
+  },
+  "webkit-dark-desktop/p41-tokens-ended.png": {
+   "equal": true,
+   "sha256": "9e627b7275d15c903f9f52e9ebb32b988c541bc877a59fabb3ca5fd3d511a5d2"
+  },
+  "webkit-dark-desktop/p41-tokens-error.png": {
+   "equal": true,
+   "sha256": "261582e431f50bebb28d18b8b179463ad539434fa173988a3e1d7471bc916c2e"
+  },
+  "webkit-dark-desktop/p41-tokens-hover.png": {
+   "equal": true,
+   "sha256": "ccf1fc231fb224d30243696f673d25c984610bd013f357b655be0e8275ce93a8"
+  },
+  "webkit-dark-desktop/p41-tokens-issued.png": {
+   "equal": true,
+   "sha256": "1ad079826a6e4ef0575020732c04c1e8b4bd931aeba907644c9c2651bfa1e690"
+  },
+  "webkit-dark-desktop/p41-tokens-loading.png": {
+   "equal": true,
+   "sha256": "fc630d32ec08af929077bd9d6516f6e6b258d7bd1fb8677f4e1081044a2c329d"
+  },
+  "webkit-dark-desktop/p41-tokens-new-custom.png": {
+   "equal": true,
+   "sha256": "6e99a91e1ed49f7f944542e512844b364da0819a2e1c227936487ec9d3c8e6a1"
+  },
+  "webkit-dark-desktop/p41-tokens-new-never.png": {
+   "equal": true,
+   "sha256": "5b57237cd2d62326e0de1e67769cd5dcd8d8e20aa4d5bdfac80743159f3879fa"
+  },
+  "webkit-dark-desktop/p41-tokens-new-workspaces.png": {
+   "equal": true,
+   "sha256": "6fef83b854eaef1ba7c948b52c573856b030867550007e5a3b9e7b5464710cbf"
+  },
+  "webkit-dark-desktop/p41-tokens-new.png": {
+   "equal": true,
+   "sha256": "51f0fcb65fdd308438956d84b2f039d85de91bfeb6bad3bc4134b7161eeafeea"
+  },
+  "webkit-dark-desktop/p41-tokens-revoke.png": {
+   "equal": true,
+   "sha256": "2a6ba4ce8c4203b69ee3d99de3c8b60edfae49adb6643782949945df976b2531"
+  },
+  "webkit-dark-desktop/p41-tokens.png": {
+   "equal": true,
+   "sha256": "9730131857e4f19653900ac9c3621b615bb94b3cffc44aed1a18bf1c0d0e26c6"
+  },
+  "webkit-dark-phone/p41-admin-revoke.png": {
+   "equal": true,
+   "sha256": "38fead736b79aeb512abc8d085ea3973ca39cd2192405c8801f12ffb0b4363d1"
+  },
+  "webkit-dark-phone/p41-admin-tokens.png": {
+   "equal": true,
+   "sha256": "26e324a8a84e1376b3bc321181f85b6b29a87200a7539d947f48e1aa9ac06244"
+  },
+  "webkit-dark-phone/p41-cli-approved.png": {
+   "equal": true,
+   "sha256": "62cb6ec3f9268147444c0e46152d99485d6f44df554fdbe6bb5d28b07ddbd7ac"
+  },
+  "webkit-dark-phone/p41-cli-denied.png": {
+   "equal": true,
+   "sha256": "d73d7b09012a82a1a158969c48f7a9e23d7ff7ee8440782b39ce42027a94a271"
+  },
+  "webkit-dark-phone/p41-cli-error.png": {
+   "equal": true,
+   "sha256": "0ab8d3fe0f4a9f606dbcc27d78e9a1d326192d8af4d4e97c2439bf3d6ddc2586"
+  },
+  "webkit-dark-phone/p41-cli-loading.png": {
+   "equal": true,
+   "sha256": "ca1f2eb47bb5ae07927966a5cdc9382338ccfd925ad9a32076e6d947a58b07c3"
+  },
+  "webkit-dark-phone/p41-cli-warnings.png": {
+   "equal": true,
+   "sha256": "a025c77b46acbb24cf9623bc8872a673a6d8883fdb080df3c1927e11b2782813"
+  },
+  "webkit-dark-phone/p41-cli.png": {
+   "equal": true,
+   "sha256": "0a176ce1277587f08a259662950cb1c18a5e03325ea41a148a19aef5e5819f5a"
+  },
+  "webkit-dark-phone/p41-login-error.png": {
+   "equal": true,
+   "sha256": "6b262d417f8ab8a80e9b5da074319b4413c85c42908710bc75f039d7f8196219"
+  },
+  "webkit-dark-phone/p41-login.png": {
+   "equal": true,
+   "sha256": "63bc076c97dd50a2b04660fbb0e7c35b25bc7de9e5fa48abfb559199bc2b4834"
+  },
+  "webkit-dark-phone/p41-profile-mismatch.png": {
+   "equal": true,
+   "sha256": "66a7677149a7b4c911a48f2eb3310565ac8cf404e25dd60b99ee222aebf0d897"
+  },
+  "webkit-dark-phone/p41-profile-photo.png": {
+   "equal": true,
+   "sha256": "fe7a1b9fa20668ea2af87b4f8aab451f37bbb6b8ae88847235e2f577e5697fe9"
+  },
+  "webkit-dark-phone/p41-profile-ready.png": {
+   "equal": true,
+   "sha256": "8f6821fa260692e6d8af2e62ca4f3642d67962f8ece7f21844473b44face8635"
+  },
+  "webkit-dark-phone/p41-profile-reset.png": {
+   "equal": true,
+   "sha256": "ab79f289d5b6c5e37ccd12f07915af4c53e2a1bf47d9ddb59896736c968f4207"
+  },
+  "webkit-dark-phone/p41-profile-signin.png": {
+   "equal": true,
+   "sha256": "06deb7fb904a8f751f978acfcc975943b2d0d9da42f3f3dae7c445292a538846"
+  },
+  "webkit-dark-phone/p41-settings-mode-open.png": {
+   "equal": true,
+   "sha256": "95f265492de8f3f71e4ed3958d774c9a92df1c929fbd6daf2072768f7d5aa58f"
+  },
+  "webkit-dark-phone/p41-settings-saving.png": {
+   "equal": true,
+   "sha256": "22ab89029325e1644bb5e9a478c45dc817d2706abf1084e015b014ae2262312f"
+  },
+  "webkit-dark-phone/p41-settings-theme.png": {
+   "equal": true,
+   "sha256": "1b53ecf33004a840e91ac3bc343bfeed12693a261b933ac28b0fed3139b7bd5f"
+  },
+  "webkit-dark-phone/p41-setup-invalid.png": {
+   "equal": true,
+   "sha256": "eb16544e4b6fc0f5edb1ec93373be9437ab153c251a46bbb76de556a44f23c72"
+  },
+  "webkit-dark-phone/p41-setup-required.png": {
+   "equal": true,
+   "sha256": "84c2e9596c20920aab545d8ff7e39fb97567ce5880118241376f815280bde2b4"
+  },
+  "webkit-dark-phone/p41-setup-valid.png": {
+   "equal": true,
+   "sha256": "16ec65aa671fe74c7ba34311e039aac75a669e1b8eb1591f84a69acad081982c"
+  },
+  "webkit-dark-phone/p41-setup.png": {
+   "equal": true,
+   "sha256": "00c0611f556d4f9a9b4fe8b548a36838ffebbbaa1b5f8f9d6c3c926058624b96"
+  },
+  "webkit-dark-phone/p41-tokens-empty.png": {
+   "equal": true,
+   "sha256": "925b627ee81edc46a8cddc766ae8aab0235f52829662df27e3b50b694c23be48"
+  },
+  "webkit-dark-phone/p41-tokens-ended.png": {
+   "equal": true,
+   "sha256": "0cdab49283ae6d36be41702ba5a4f9de07e8758671bfb2c64d85d3049d7d3d2d"
+  },
+  "webkit-dark-phone/p41-tokens-error.png": {
+   "equal": true,
+   "sha256": "72299566af733d060cafdd18fddc474749cbea5e96668493bb2bfe759b067d5b"
+  },
+  "webkit-dark-phone/p41-tokens-hover.png": {
+   "equal": true,
+   "sha256": "8bb4e0390c3037ae6ecbdceb5cd408893558d0dcd49e5dc017f13c78cedb3cbd"
+  },
+  "webkit-dark-phone/p41-tokens-issued.png": {
+   "equal": true,
+   "sha256": "3bb371096e4a643b9754bdc39d600ced47193025578a457ccff4df010b9bc5cc"
+  },
+  "webkit-dark-phone/p41-tokens-loading.png": {
+   "equal": true,
+   "sha256": "d153802aa752f455fa53933d7d1a8c8acf1840f160a7b2130c4b6918525b2d6b"
+  },
+  "webkit-dark-phone/p41-tokens-new-custom.png": {
+   "equal": true,
+   "sha256": "32644eb05a5b1ec38d55b7b06b137007dae2f61ed0d19cb464811cf795dcef02"
+  },
+  "webkit-dark-phone/p41-tokens-new-never.png": {
+   "equal": true,
+   "sha256": "f96c2222003be0ec4004608d628ffbcb6098c9b66a65da28fead39d7aa755de2"
+  },
+  "webkit-dark-phone/p41-tokens-new-workspaces.png": {
+   "equal": true,
+   "sha256": "6050112910aadeb8807c27603b93f1a8c30f3ca034ddde7f0afcb074d8fe99e3"
+  },
+  "webkit-dark-phone/p41-tokens-new.png": {
+   "equal": true,
+   "sha256": "bfe380fd97007df656e5098cb150a171156f1e86a502901eab9c997ac9c7b828"
+  },
+  "webkit-dark-phone/p41-tokens-revoke.png": {
+   "equal": true,
+   "sha256": "89403e0e1bdfcfdf58a435578a086815ff492a729ad585cd8008334265aaf731"
+  },
+  "webkit-dark-phone/p41-tokens.png": {
+   "equal": true,
+   "sha256": "b862901d69af6edc25dbf841a43cdccd30aa3919213202be337046584d317594"
+  },
+  "webkit-light-desktop/p41-admin-revoke.png": {
+   "equal": true,
+   "sha256": "88ea9c153442f469262830b43703ad28f479f8223e9a0e359cb797c3bad12551"
+  },
+  "webkit-light-desktop/p41-admin-tokens.png": {
+   "equal": true,
+   "sha256": "b458763d940e61fef04a10843337a7c813d0751bb71ad7a076ae2055db15ad14"
+  },
+  "webkit-light-desktop/p41-cli-approved.png": {
+   "equal": true,
+   "sha256": "6a2f9f06dcf3ba89cf43ecf27abba2ceda1742a6ff037640de828d8f9f3bbb95"
+  },
+  "webkit-light-desktop/p41-cli-denied.png": {
+   "equal": true,
+   "sha256": "6c6f02bbee8d930876ee634dfea6e4b7a4764e4123d183b3707c58ee4f3d0b2c"
+  },
+  "webkit-light-desktop/p41-cli-error.png": {
+   "equal": true,
+   "sha256": "d2ecd52ca5edcf40ea4c0b25f7e2e3909453edc1cf5c98cca17295e03933dad2"
+  },
+  "webkit-light-desktop/p41-cli-loading.png": {
+   "equal": true,
+   "sha256": "0dcf3e07dc96f50c8d71ea7616773a1fc004f7c2a0c3ef9d64d9774f520703a0"
+  },
+  "webkit-light-desktop/p41-cli-warnings.png": {
+   "equal": true,
+   "sha256": "a950b153ac2f7bf6bb1c2e788b4b7a003fb363bf0e32611af55146f78c3b4eb2"
+  },
+  "webkit-light-desktop/p41-cli.png": {
+   "equal": true,
+   "sha256": "bc53ff894b51de6e4577ce93696e62dbd4080f3723647604e876bc9073686944"
+  },
+  "webkit-light-desktop/p41-login-error.png": {
+   "equal": true,
+   "sha256": "e986e5dec0076f29590778c945654254fd6d7488698ff67c21a59831515dce53"
+  },
+  "webkit-light-desktop/p41-login.png": {
+   "equal": true,
+   "sha256": "eb35236be3b9ac4c2dbd48fea80e109f31f223238d6afdfefe91690abbd8dea9"
+  },
+  "webkit-light-desktop/p41-profile-mismatch.png": {
+   "equal": true,
+   "sha256": "35203e13b3290c1e6ca886eeafc6547dc0fe991bd08070495461494c043bfc17"
+  },
+  "webkit-light-desktop/p41-profile-photo.png": {
+   "equal": true,
+   "sha256": "0babbcb75d25136b1c71092eafdc9645168c444969de1c84d4df0700bf31974d"
+  },
+  "webkit-light-desktop/p41-profile-ready.png": {
+   "equal": true,
+   "sha256": "5ee381e432a1869e8bb4cab3d5d776215be5c0903b8525c78b3f81076610f512"
+  },
+  "webkit-light-desktop/p41-profile-reset.png": {
+   "equal": true,
+   "sha256": "19551dfba55bcd139705c5367875cc0b1acb5496fd8a3e0c858cbaa0d2eebcc1"
+  },
+  "webkit-light-desktop/p41-profile-signin.png": {
+   "equal": true,
+   "sha256": "1ca45d514012dd63f140b8633e80158eb41433c912e069b5599e4043e77bdfc8"
+  },
+  "webkit-light-desktop/p41-settings-mode-open.png": {
+   "equal": true,
+   "sha256": "2679a4f161b09801c9fa92380398e5fc58ce7bfa18bef39ebf335c0a30e2be9a"
+  },
+  "webkit-light-desktop/p41-settings-saving.png": {
+   "equal": true,
+   "sha256": "c045118008ba88a9fc75cdfc987967ab4311a6cc89d593298d90e3456cff3e4f"
+  },
+  "webkit-light-desktop/p41-settings-theme.png": {
+   "equal": true,
+   "sha256": "2a9542e19ab2caf2e0e1d989f026440c303a55b6742396cbe9c17dc71107e1ea"
+  },
+  "webkit-light-desktop/p41-setup-invalid.png": {
+   "equal": true,
+   "sha256": "71368fc1a4fbd19263da0b09213828f70af6832c5e38e61a7905ff7063c96e3b"
+  },
+  "webkit-light-desktop/p41-setup-required.png": {
+   "equal": true,
+   "sha256": "355ef2a83c33903954d67fa4d9379158ecbed86e801131f5abefa3fb90b87b41"
+  },
+  "webkit-light-desktop/p41-setup-valid.png": {
+   "equal": true,
+   "sha256": "750f3f2117ca1a068b0d5ba95e30f811fca935b8208d9e908a622be7dd694a17"
+  },
+  "webkit-light-desktop/p41-setup.png": {
+   "equal": true,
+   "sha256": "e8ff8c40aeb522678e0329c228f5b192ea0cb9236c1e88379052a3aad80699a0"
+  },
+  "webkit-light-desktop/p41-tokens-empty.png": {
+   "equal": true,
+   "sha256": "f1a34da7562a87a94c9e264e51ee922c70d45eb4debaa1884a1fcef73e2405fb"
+  },
+  "webkit-light-desktop/p41-tokens-ended.png": {
+   "equal": true,
+   "sha256": "c0c4530904ec5e99e195609b3d6d6d0f7b9bf2465204f3339a4cd52c61fbfcf1"
+  },
+  "webkit-light-desktop/p41-tokens-error.png": {
+   "equal": true,
+   "sha256": "f8408d2181a2f4cf540fef2f0de95db6f3a60c8b815f3138a26b22558288a691"
+  },
+  "webkit-light-desktop/p41-tokens-hover.png": {
+   "equal": true,
+   "sha256": "1951698f97d962c534d4493d0d406228e6e0faef300a332aff282685ab332f0e"
+  },
+  "webkit-light-desktop/p41-tokens-issued.png": {
+   "equal": true,
+   "sha256": "07cfc18ef30412727bf59d3ed364b37b8d1d2f2f13d161004bad50f0d61a6d72"
+  },
+  "webkit-light-desktop/p41-tokens-loading.png": {
+   "equal": true,
+   "sha256": "4667640fc265159d76877a20fed61eeafdf98dbb4ccf38155cc09103a2abcb0e"
+  },
+  "webkit-light-desktop/p41-tokens-new-custom.png": {
+   "equal": true,
+   "sha256": "e359f6c0b13c1e24017b7cb40807117b226a96aa4308e9135695ec807ef4cdbb"
+  },
+  "webkit-light-desktop/p41-tokens-new-never.png": {
+   "equal": true,
+   "sha256": "a85b66b4971012d9c5462a8a34c6e319070bed103a552f4da0a8c6a1ff730490"
+  },
+  "webkit-light-desktop/p41-tokens-new-workspaces.png": {
+   "equal": true,
+   "sha256": "7a1d6f4946e114ff16fb1550a644b0f0f382a883387e6d5197d57ec18bb7531e"
+  },
+  "webkit-light-desktop/p41-tokens-new.png": {
+   "equal": true,
+   "sha256": "8a22884b856a51d376dedd3bc06f423fcfef4e5c27a9eebb1ce0cb7ffa779a3a"
+  },
+  "webkit-light-desktop/p41-tokens-revoke.png": {
+   "equal": true,
+   "sha256": "f1734cdcd7a4c9c8c6662a4cbacecdeed0a622f72a96c670a048df9ec3082cde"
+  },
+  "webkit-light-desktop/p41-tokens.png": {
+   "equal": true,
+   "sha256": "58f4935a7ae325a6401ef550fba040ec3cd2e5ca186b0f4645bf088f8f5fd218"
+  },
+  "webkit-light-phone/p41-admin-revoke.png": {
+   "equal": true,
+   "sha256": "140a211067950a968df6c3fdc627376f43c12481e9031b0c60733b17bfb5f2d4"
+  },
+  "webkit-light-phone/p41-admin-tokens.png": {
+   "equal": true,
+   "sha256": "292fee2a8096d7f866cfa57b0df876744e5061939c414b914e879527cad7287e"
+  },
+  "webkit-light-phone/p41-cli-approved.png": {
+   "equal": true,
+   "sha256": "44568c28e1c458a7fa684908ebde3d3a4761f933e2928b09c4a1ff686eee283a"
+  },
+  "webkit-light-phone/p41-cli-denied.png": {
+   "equal": true,
+   "sha256": "872767f9270e3bf51c3de9372cc99393bfa9c3feaaaeffdb94d76c867e2394a1"
+  },
+  "webkit-light-phone/p41-cli-error.png": {
+   "equal": true,
+   "sha256": "1dfdf69751d77e0a13a2d45363635719b8a18f13146c6d07672458c3fa11e264"
+  },
+  "webkit-light-phone/p41-cli-loading.png": {
+   "equal": true,
+   "sha256": "185234aca2a9e31795da8041603514f6e4099106d60abca005d443e23c65a706"
+  },
+  "webkit-light-phone/p41-cli-warnings.png": {
+   "equal": true,
+   "sha256": "96ce3d44a59fdca590eb8e7247c3d761fcc008be2d4fb02f2720763839248fa3"
+  },
+  "webkit-light-phone/p41-cli.png": {
+   "equal": true,
+   "sha256": "8da3e789651236cf3dd53231205d0740db74685ecb93739bfeeaa3b17e54e467"
+  },
+  "webkit-light-phone/p41-login-error.png": {
+   "equal": true,
+   "sha256": "2094b85695576fa93e5bdc1cfa7a9087361540ff4ce646378ffd6b04a3278a89"
+  },
+  "webkit-light-phone/p41-login.png": {
+   "equal": true,
+   "sha256": "2280a84506c3c47f46a1936b6e1c914603cc93152a0cf66ed115b294d19b11a9"
+  },
+  "webkit-light-phone/p41-profile-mismatch.png": {
+   "equal": true,
+   "sha256": "8727a932c15c4ea136dc4e5b8c1c6ee4ca99f6cbefd143458f3b7900a25c332e"
+  },
+  "webkit-light-phone/p41-profile-photo.png": {
+   "equal": true,
+   "sha256": "9684e755f5fe843ad0dc944c79af23c861f492d0282724668ffde5865f7d797b"
+  },
+  "webkit-light-phone/p41-profile-ready.png": {
+   "equal": true,
+   "sha256": "66f2503645cfe997e48b792b42fa2c297d15af22e68e4a972f7ac8ef4875ca60"
+  },
+  "webkit-light-phone/p41-profile-reset.png": {
+   "equal": true,
+   "sha256": "7bcbbba13f8f3560d6275501132ea97021fd864031623a36443d49dfd049ab8a"
+  },
+  "webkit-light-phone/p41-profile-signin.png": {
+   "equal": true,
+   "sha256": "3834530d7e84beb7fa18d7954a2ae3b6b11aef69dc64b61679752c1a983878d5"
+  },
+  "webkit-light-phone/p41-settings-mode-open.png": {
+   "equal": true,
+   "sha256": "91e05d76131252628eefb6b6a51ca6c4c804791b150366f0656b1079912c399d"
+  },
+  "webkit-light-phone/p41-settings-saving.png": {
+   "equal": true,
+   "sha256": "5a39936850e355d903eff1a4e59378d113f94c09557985d15a80571298f3e212"
+  },
+  "webkit-light-phone/p41-settings-theme.png": {
+   "equal": true,
+   "sha256": "ebb3b4a680f585d3c8243fa1252153c280e6cbef80cf5f2beb9753db685970d9"
+  },
+  "webkit-light-phone/p41-setup-invalid.png": {
+   "equal": true,
+   "sha256": "18b931af6cae31846cadf31f692c2d38649d6e5ce4baf3e2421c5ef3bd78376c"
+  },
+  "webkit-light-phone/p41-setup-required.png": {
+   "equal": true,
+   "sha256": "a755809aea4bf30e970e9ae4d95bc32afe8bc263386aa9248f088859183ef52f"
+  },
+  "webkit-light-phone/p41-setup-valid.png": {
+   "equal": true,
+   "sha256": "3e3c8d7052316059944a857910537f6938a027a593ee52edb16ec7bc85b7879c"
+  },
+  "webkit-light-phone/p41-setup.png": {
+   "equal": true,
+   "sha256": "e47a4550a9062c793d982998972f2b12a2295a7e434439d07fb36098b5a38c22"
+  },
+  "webkit-light-phone/p41-tokens-empty.png": {
+   "equal": true,
+   "sha256": "4810698b84d65af47776137426da96f3eed5a9135f3af2067b32f5e5127c5bfa"
+  },
+  "webkit-light-phone/p41-tokens-ended.png": {
+   "equal": true,
+   "sha256": "1fd4cf710458710df9603cafc0ea372f16f809a6def49000fe3548d1baaa3c18"
+  },
+  "webkit-light-phone/p41-tokens-error.png": {
+   "equal": true,
+   "sha256": "b890c26e20b332486f4b033c19ab2c227605c62ac1e940844907dbf2c4aafe87"
+  },
+  "webkit-light-phone/p41-tokens-hover.png": {
+   "equal": true,
+   "sha256": "ca65333988b88ef21e9b0b25aeff77f521c12dae00685b81be2467d0da08601d"
+  },
+  "webkit-light-phone/p41-tokens-issued.png": {
+   "equal": true,
+   "sha256": "d7c84aad16c8e6b1c3b4bed13ec838faa2597e1af8c1bbe2547f6b09c31ceb53"
+  },
+  "webkit-light-phone/p41-tokens-loading.png": {
+   "equal": true,
+   "sha256": "3d96609c5fa4f507685e237bc6c2ee4a603dcba5894b3a825bc13d2bd358d469"
+  },
+  "webkit-light-phone/p41-tokens-new-custom.png": {
+   "equal": true,
+   "sha256": "116abdd0924a8aa75f720499ae9dcfd777849860a0338a5b60468b0c49483d16"
+  },
+  "webkit-light-phone/p41-tokens-new-never.png": {
+   "equal": true,
+   "sha256": "8b0e53a95a6b3fa67392f0e3a51441a60134e338182088e3a289ec275ef4f4cf"
+  },
+  "webkit-light-phone/p41-tokens-new-workspaces.png": {
+   "equal": true,
+   "sha256": "0a8d5d63b16b0ee903ddb510c57f0869c7405a7c5be5b976c19f679892243863"
+  },
+  "webkit-light-phone/p41-tokens-new.png": {
+   "equal": true,
+   "sha256": "434058b7395a7d333c57abe5f6ba8c139b2db0d546d7725ea7cf44faec103d92"
+  },
+  "webkit-light-phone/p41-tokens-revoke.png": {
+   "equal": true,
+   "sha256": "b1eb1b7b0fc11d44f07a8ee828f64cf4006a06a3012eca173c31025d5fc00dd1"
+  },
+  "webkit-light-phone/p41-tokens.png": {
+   "equal": true,
+   "sha256": "28dea5c082cfe1fb3a94f080a84c3555701eefc4a8f9dd91e86faf8763ce3f26"
+  }
+ },
+ "styles": {
+  "chromium-dark-desktop/p41-admin-revoke": {},
+  "chromium-dark-desktop/p41-admin-tokens": {},
+  "chromium-dark-desktop/p41-cli": {},
+  "chromium-dark-desktop/p41-cli-approved": {},
+  "chromium-dark-desktop/p41-cli-denied": {},
+  "chromium-dark-desktop/p41-cli-error": {},
+  "chromium-dark-desktop/p41-cli-loading": {},
+  "chromium-dark-desktop/p41-cli-warnings": {},
+  "chromium-dark-desktop/p41-login": {},
+  "chromium-dark-desktop/p41-login-error": {},
+  "chromium-dark-desktop/p41-profile-mismatch": {},
+  "chromium-dark-desktop/p41-profile-photo": {},
+  "chromium-dark-desktop/p41-profile-ready": {},
+  "chromium-dark-desktop/p41-profile-reset": {},
+  "chromium-dark-desktop/p41-profile-signin": {},
+  "chromium-dark-desktop/p41-settings-mode-open": {},
+  "chromium-dark-desktop/p41-settings-saving": {},
+  "chromium-dark-desktop/p41-settings-theme": {},
+  "chromium-dark-desktop/p41-setup": {},
+  "chromium-dark-desktop/p41-setup-invalid": {},
+  "chromium-dark-desktop/p41-setup-required": {},
+  "chromium-dark-desktop/p41-setup-valid": {},
+  "chromium-dark-desktop/p41-tokens": {},
+  "chromium-dark-desktop/p41-tokens-empty": {},
+  "chromium-dark-desktop/p41-tokens-ended": {},
+  "chromium-dark-desktop/p41-tokens-error": {},
+  "chromium-dark-desktop/p41-tokens-hover": {},
+  "chromium-dark-desktop/p41-tokens-issued": {},
+  "chromium-dark-desktop/p41-tokens-loading": {},
+  "chromium-dark-desktop/p41-tokens-new": {},
+  "chromium-dark-desktop/p41-tokens-new-custom": {},
+  "chromium-dark-desktop/p41-tokens-new-never": {},
+  "chromium-dark-desktop/p41-tokens-new-workspaces": {},
+  "chromium-dark-desktop/p41-tokens-revoke": {},
+  "chromium-dark-phone/p41-admin-revoke": {},
+  "chromium-dark-phone/p41-admin-tokens": {},
+  "chromium-dark-phone/p41-login": {},
+  "chromium-dark-phone/p41-login-error": {},
+  "chromium-dark-phone/p41-profile-mismatch": {},
+  "chromium-dark-phone/p41-profile-photo": {},
+  "chromium-dark-phone/p41-profile-ready": {},
+  "chromium-dark-phone/p41-profile-reset": {},
+  "chromium-dark-phone/p41-profile-signin": {},
+  "chromium-dark-phone/p41-settings-mode-open": {},
+  "chromium-dark-phone/p41-settings-saving": {},
+  "chromium-dark-phone/p41-settings-theme": {},
+  "chromium-dark-phone/p41-tokens": {},
+  "chromium-dark-phone/p41-tokens-empty": {},
+  "chromium-dark-phone/p41-tokens-ended": {},
+  "chromium-dark-phone/p41-tokens-error": {},
+  "chromium-dark-phone/p41-tokens-hover": {},
+  "chromium-dark-phone/p41-tokens-issued": {},
+  "chromium-dark-phone/p41-tokens-loading": {},
+  "chromium-dark-phone/p41-tokens-new": {},
+  "chromium-dark-phone/p41-tokens-new-custom": {},
+  "chromium-dark-phone/p41-tokens-new-never": {},
+  "chromium-dark-phone/p41-tokens-new-workspaces": {},
+  "chromium-dark-phone/p41-tokens-revoke": {},
+  "chromium-light-desktop/p41-admin-revoke": {},
+  "chromium-light-desktop/p41-admin-tokens": {},
+  "chromium-light-desktop/p41-cli": {},
+  "chromium-light-desktop/p41-cli-approved": {},
+  "chromium-light-desktop/p41-cli-denied": {},
+  "chromium-light-desktop/p41-cli-error": {},
+  "chromium-light-desktop/p41-cli-loading": {},
+  "chromium-light-desktop/p41-cli-warnings": {},
+  "chromium-light-desktop/p41-login": {},
+  "chromium-light-desktop/p41-login-error": {},
+  "chromium-light-desktop/p41-profile-mismatch": {},
+  "chromium-light-desktop/p41-profile-photo": {},
+  "chromium-light-desktop/p41-profile-ready": {},
+  "chromium-light-desktop/p41-profile-reset": {},
+  "chromium-light-desktop/p41-profile-signin": {},
+  "chromium-light-desktop/p41-settings-mode-open": {},
+  "chromium-light-desktop/p41-settings-saving": {},
+  "chromium-light-desktop/p41-settings-theme": {},
+  "chromium-light-desktop/p41-setup": {},
+  "chromium-light-desktop/p41-setup-invalid": {},
+  "chromium-light-desktop/p41-setup-required": {},
+  "chromium-light-desktop/p41-setup-valid": {},
+  "chromium-light-desktop/p41-tokens": {},
+  "chromium-light-desktop/p41-tokens-empty": {},
+  "chromium-light-desktop/p41-tokens-ended": {},
+  "chromium-light-desktop/p41-tokens-error": {},
+  "chromium-light-desktop/p41-tokens-hover": {},
+  "chromium-light-desktop/p41-tokens-issued": {},
+  "chromium-light-desktop/p41-tokens-loading": {},
+  "chromium-light-desktop/p41-tokens-new": {},
+  "chromium-light-desktop/p41-tokens-new-custom": {},
+  "chromium-light-desktop/p41-tokens-new-never": {},
+  "chromium-light-desktop/p41-tokens-new-workspaces": {},
+  "chromium-light-desktop/p41-tokens-revoke": {},
+  "chromium-light-phone/p41-admin-revoke": {},
+  "chromium-light-phone/p41-admin-tokens": {},
+  "chromium-light-phone/p41-login": {},
+  "chromium-light-phone/p41-login-error": {},
+  "chromium-light-phone/p41-profile-mismatch": {},
+  "chromium-light-phone/p41-profile-photo": {},
+  "chromium-light-phone/p41-profile-ready": {},
+  "chromium-light-phone/p41-profile-reset": {},
+  "chromium-light-phone/p41-profile-signin": {},
+  "chromium-light-phone/p41-settings-mode-open": {},
+  "chromium-light-phone/p41-settings-saving": {},
+  "chromium-light-phone/p41-settings-theme": {},
+  "chromium-light-phone/p41-tokens": {},
+  "chromium-light-phone/p41-tokens-empty": {},
+  "chromium-light-phone/p41-tokens-ended": {},
+  "chromium-light-phone/p41-tokens-error": {},
+  "chromium-light-phone/p41-tokens-hover": {},
+  "chromium-light-phone/p41-tokens-issued": {},
+  "chromium-light-phone/p41-tokens-loading": {},
+  "chromium-light-phone/p41-tokens-new": {},
+  "chromium-light-phone/p41-tokens-new-custom": {},
+  "chromium-light-phone/p41-tokens-new-never": {},
+  "chromium-light-phone/p41-tokens-new-workspaces": {},
+  "chromium-light-phone/p41-tokens-revoke": {},
+  "webkit-dark-desktop/p41-admin-revoke": {},
+  "webkit-dark-desktop/p41-admin-tokens": {},
+  "webkit-dark-desktop/p41-cli": {},
+  "webkit-dark-desktop/p41-cli-approved": {},
+  "webkit-dark-desktop/p41-cli-denied": {},
+  "webkit-dark-desktop/p41-cli-error": {},
+  "webkit-dark-desktop/p41-cli-loading": {},
+  "webkit-dark-desktop/p41-cli-warnings": {},
+  "webkit-dark-desktop/p41-login": {},
+  "webkit-dark-desktop/p41-login-error": {},
+  "webkit-dark-desktop/p41-profile-mismatch": {},
+  "webkit-dark-desktop/p41-profile-photo": {},
+  "webkit-dark-desktop/p41-profile-ready": {},
+  "webkit-dark-desktop/p41-profile-reset": {},
+  "webkit-dark-desktop/p41-profile-signin": {},
+  "webkit-dark-desktop/p41-settings-mode-open": {},
+  "webkit-dark-desktop/p41-settings-saving": {},
+  "webkit-dark-desktop/p41-settings-theme": {},
+  "webkit-dark-desktop/p41-setup": {},
+  "webkit-dark-desktop/p41-setup-invalid": {},
+  "webkit-dark-desktop/p41-setup-required": {},
+  "webkit-dark-desktop/p41-setup-valid": {},
+  "webkit-dark-desktop/p41-tokens": {},
+  "webkit-dark-desktop/p41-tokens-empty": {},
+  "webkit-dark-desktop/p41-tokens-ended": {},
+  "webkit-dark-desktop/p41-tokens-error": {},
+  "webkit-dark-desktop/p41-tokens-hover": {},
+  "webkit-dark-desktop/p41-tokens-issued": {},
+  "webkit-dark-desktop/p41-tokens-loading": {},
+  "webkit-dark-desktop/p41-tokens-new": {},
+  "webkit-dark-desktop/p41-tokens-new-custom": {},
+  "webkit-dark-desktop/p41-tokens-new-never": {},
+  "webkit-dark-desktop/p41-tokens-new-workspaces": {},
+  "webkit-dark-desktop/p41-tokens-revoke": {},
+  "webkit-dark-phone/p41-admin-revoke": {},
+  "webkit-dark-phone/p41-admin-tokens": {},
+  "webkit-dark-phone/p41-cli": {},
+  "webkit-dark-phone/p41-cli-approved": {},
+  "webkit-dark-phone/p41-cli-denied": {},
+  "webkit-dark-phone/p41-cli-error": {},
+  "webkit-dark-phone/p41-cli-loading": {},
+  "webkit-dark-phone/p41-cli-warnings": {},
+  "webkit-dark-phone/p41-login": {},
+  "webkit-dark-phone/p41-login-error": {},
+  "webkit-dark-phone/p41-profile-mismatch": {},
+  "webkit-dark-phone/p41-profile-photo": {},
+  "webkit-dark-phone/p41-profile-ready": {},
+  "webkit-dark-phone/p41-profile-reset": {},
+  "webkit-dark-phone/p41-profile-signin": {},
+  "webkit-dark-phone/p41-settings-mode-open": {},
+  "webkit-dark-phone/p41-settings-saving": {},
+  "webkit-dark-phone/p41-settings-theme": {},
+  "webkit-dark-phone/p41-setup": {},
+  "webkit-dark-phone/p41-setup-invalid": {},
+  "webkit-dark-phone/p41-setup-required": {},
+  "webkit-dark-phone/p41-setup-valid": {},
+  "webkit-dark-phone/p41-tokens": {},
+  "webkit-dark-phone/p41-tokens-empty": {},
+  "webkit-dark-phone/p41-tokens-ended": {},
+  "webkit-dark-phone/p41-tokens-error": {},
+  "webkit-dark-phone/p41-tokens-hover": {},
+  "webkit-dark-phone/p41-tokens-issued": {},
+  "webkit-dark-phone/p41-tokens-loading": {},
+  "webkit-dark-phone/p41-tokens-new": {},
+  "webkit-dark-phone/p41-tokens-new-custom": {},
+  "webkit-dark-phone/p41-tokens-new-never": {},
+  "webkit-dark-phone/p41-tokens-new-workspaces": {},
+  "webkit-dark-phone/p41-tokens-revoke": {},
+  "webkit-light-desktop/p41-admin-revoke": {},
+  "webkit-light-desktop/p41-admin-tokens": {},
+  "webkit-light-desktop/p41-cli": {},
+  "webkit-light-desktop/p41-cli-approved": {},
+  "webkit-light-desktop/p41-cli-denied": {},
+  "webkit-light-desktop/p41-cli-error": {},
+  "webkit-light-desktop/p41-cli-loading": {},
+  "webkit-light-desktop/p41-cli-warnings": {},
+  "webkit-light-desktop/p41-login": {},
+  "webkit-light-desktop/p41-login-error": {},
+  "webkit-light-desktop/p41-profile-mismatch": {},
+  "webkit-light-desktop/p41-profile-photo": {},
+  "webkit-light-desktop/p41-profile-ready": {},
+  "webkit-light-desktop/p41-profile-reset": {},
+  "webkit-light-desktop/p41-profile-signin": {},
+  "webkit-light-desktop/p41-settings-mode-open": {},
+  "webkit-light-desktop/p41-settings-saving": {},
+  "webkit-light-desktop/p41-settings-theme": {},
+  "webkit-light-desktop/p41-setup": {},
+  "webkit-light-desktop/p41-setup-invalid": {},
+  "webkit-light-desktop/p41-setup-required": {},
+  "webkit-light-desktop/p41-setup-valid": {},
+  "webkit-light-desktop/p41-tokens": {},
+  "webkit-light-desktop/p41-tokens-empty": {},
+  "webkit-light-desktop/p41-tokens-ended": {},
+  "webkit-light-desktop/p41-tokens-error": {},
+  "webkit-light-desktop/p41-tokens-hover": {},
+  "webkit-light-desktop/p41-tokens-issued": {},
+  "webkit-light-desktop/p41-tokens-loading": {},
+  "webkit-light-desktop/p41-tokens-new": {},
+  "webkit-light-desktop/p41-tokens-new-custom": {},
+  "webkit-light-desktop/p41-tokens-new-never": {},
+  "webkit-light-desktop/p41-tokens-new-workspaces": {},
+  "webkit-light-desktop/p41-tokens-revoke": {},
+  "webkit-light-phone/p41-admin-revoke": {},
+  "webkit-light-phone/p41-admin-tokens": {},
+  "webkit-light-phone/p41-cli": {},
+  "webkit-light-phone/p41-cli-approved": {},
+  "webkit-light-phone/p41-cli-denied": {},
+  "webkit-light-phone/p41-cli-error": {},
+  "webkit-light-phone/p41-cli-loading": {},
+  "webkit-light-phone/p41-cli-warnings": {},
+  "webkit-light-phone/p41-login": {},
+  "webkit-light-phone/p41-login-error": {},
+  "webkit-light-phone/p41-profile-mismatch": {},
+  "webkit-light-phone/p41-profile-photo": {},
+  "webkit-light-phone/p41-profile-ready": {},
+  "webkit-light-phone/p41-profile-reset": {},
+  "webkit-light-phone/p41-profile-signin": {},
+  "webkit-light-phone/p41-settings-mode-open": {},
+  "webkit-light-phone/p41-settings-saving": {},
+  "webkit-light-phone/p41-settings-theme": {},
+  "webkit-light-phone/p41-setup": {},
+  "webkit-light-phone/p41-setup-invalid": {},
+  "webkit-light-phone/p41-setup-required": {},
+  "webkit-light-phone/p41-setup-valid": {},
+  "webkit-light-phone/p41-tokens": {},
+  "webkit-light-phone/p41-tokens-empty": {},
+  "webkit-light-phone/p41-tokens-ended": {},
+  "webkit-light-phone/p41-tokens-error": {},
+  "webkit-light-phone/p41-tokens-hover": {},
+  "webkit-light-phone/p41-tokens-issued": {},
+  "webkit-light-phone/p41-tokens-loading": {},
+  "webkit-light-phone/p41-tokens-new": {},
+  "webkit-light-phone/p41-tokens-new-custom": {},
+  "webkit-light-phone/p41-tokens-new-never": {},
+  "webkit-light-phone/p41-tokens-new-workspaces": {},
+  "webkit-light-phone/p41-tokens-revoke": {}
+ },
+ "tests": {
+  "chromium-dark-desktop :: P4.1 access tokens \u203a a new token: presets, scopes, workspaces, never, issued once": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.1 access tokens \u203a list, tabs and the revoke question": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.1 access tokens \u203a loading, empty and a failed read": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.1 orbit login approval \u203a approve": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.1 profile \u203a password form: each check, the linked confirmation and the reset": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.1 profile \u203a photo: choose, show and remove": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.1 profile \u203a sign-in methods card beside the replaced ones": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.1 settings \u203a every control: mode, switches while saving, theme and the way to tokens": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.1 sign-in and first-run setup \u203a setup: checks, linked confirmation, submit and refusal": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.1 access tokens \u203a a new token: presets, scopes, workspaces, never, issued once": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.1 access tokens \u203a list, tabs and the revoke question": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.1 access tokens \u203a loading, empty and a failed read": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.1 orbit login approval \u203a approve": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.1 profile \u203a password form: each check, the linked confirmation and the reset": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.1 profile \u203a photo: choose, show and remove": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.1 profile \u203a sign-in methods card beside the replaced ones": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.1 settings \u203a every control: mode, switches while saving, theme and the way to tokens": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.1 sign-in and first-run setup \u203a setup: checks, linked confirmation, submit and refusal": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.1 access tokens \u203a a new token: presets, scopes, workspaces, never, issued once": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.1 access tokens \u203a list, tabs and the revoke question": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.1 access tokens \u203a loading, empty and a failed read": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.1 orbit login approval \u203a approve": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.1 profile \u203a password form: each check, the linked confirmation and the reset": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.1 profile \u203a photo: choose, show and remove": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.1 profile \u203a sign-in methods card beside the replaced ones": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.1 settings \u203a every control: mode, switches while saving, theme and the way to tokens": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.1 sign-in and first-run setup \u203a setup: checks, linked confirmation, submit and refusal": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.1 access tokens \u203a a new token: presets, scopes, workspaces, never, issued once": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.1 access tokens \u203a list, tabs and the revoke question": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.1 access tokens \u203a loading, empty and a failed read": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.1 orbit login approval \u203a approve": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.1 profile \u203a password form: each check, the linked confirmation and the reset": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.1 profile \u203a photo: choose, show and remove": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.1 profile \u203a sign-in methods card beside the replaced ones": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.1 settings \u203a every control: mode, switches while saving, theme and the way to tokens": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.1 sign-in and first-run setup \u203a setup: checks, linked confirmation, submit and refusal": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.1 access tokens \u203a a new token: presets, scopes, workspaces, never, issued once": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.1 access tokens \u203a list, tabs and the revoke question": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.1 access tokens \u203a loading, empty and a failed read": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.1 orbit login approval \u203a approve": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.1 profile \u203a password form: each check, the linked confirmation and the reset": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.1 profile \u203a photo: choose, show and remove": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.1 profile \u203a sign-in methods card beside the replaced ones": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.1 settings \u203a every control: mode, switches while saving, theme and the way to tokens": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.1 sign-in and first-run setup \u203a setup: checks, linked confirmation, submit and refusal": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.1 access tokens \u203a a new token: presets, scopes, workspaces, never, issued once": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.1 access tokens \u203a list, tabs and the revoke question": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.1 access tokens \u203a loading, empty and a failed read": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.1 orbit login approval \u203a approve": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.1 profile \u203a password form: each check, the linked confirmation and the reset": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.1 profile \u203a photo: choose, show and remove": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.1 profile \u203a sign-in methods card beside the replaced ones": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.1 settings \u203a every control: mode, switches while saving, theme and the way to tokens": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.1 sign-in and first-run setup \u203a setup: checks, linked confirmation, submit and refusal": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.1 access tokens \u203a a new token: presets, scopes, workspaces, never, issued once": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.1 access tokens \u203a list, tabs and the revoke question": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.1 access tokens \u203a loading, empty and a failed read": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.1 orbit login approval \u203a approve": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.1 profile \u203a password form: each check, the linked confirmation and the reset": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.1 profile \u203a photo: choose, show and remove": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.1 profile \u203a sign-in methods card beside the replaced ones": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.1 settings \u203a every control: mode, switches while saving, theme and the way to tokens": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.1 sign-in and first-run setup \u203a setup: checks, linked confirmation, submit and refusal": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.1 access tokens \u203a a new token: presets, scopes, workspaces, never, issued once": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.1 access tokens \u203a list, tabs and the revoke question": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.1 access tokens \u203a loading, empty and a failed read": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.1 orbit login approval \u203a approve": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.1 profile \u203a password form: each check, the linked confirmation and the reset": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.1 profile \u203a photo: choose, show and remove": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.1 profile \u203a sign-in methods card beside the replaced ones": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.1 settings \u203a every control: mode, switches while saving, theme and the way to tokens": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.1 sign-in and first-run setup \u203a setup: checks, linked confirmation, submit and refusal": {
+   "del": "passed",
+   "ref": "passed"
+  }
+ },
+ "traces": {
+  "chromium-dark-desktop :: P4.1 access tokens \u203a a new token: presets, scopes, workspaces, never, issued once": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.1 access tokens \u203a list, tabs and the revoke question": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.1 access tokens \u203a loading, empty and a failed read": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.1 orbit login approval \u203a approve": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.1 profile \u203a password form: each check, the linked confirmation and the reset": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.1 profile \u203a photo: choose, show and remove": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.1 profile \u203a sign-in methods card beside the replaced ones": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.1 settings \u203a every control: mode, switches while saving, theme and the way to tokens": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.1 sign-in and first-run setup \u203a setup: checks, linked confirmation, submit and refusal": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.1 access tokens \u203a a new token: presets, scopes, workspaces, never, issued once": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.1 access tokens \u203a list, tabs and the revoke question": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.1 access tokens \u203a loading, empty and a failed read": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.1 orbit login approval \u203a approve": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.1 profile \u203a password form: each check, the linked confirmation and the reset": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.1 profile \u203a photo: choose, show and remove": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.1 profile \u203a sign-in methods card beside the replaced ones": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.1 settings \u203a every control: mode, switches while saving, theme and the way to tokens": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.1 sign-in and first-run setup \u203a setup: checks, linked confirmation, submit and refusal": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.1 access tokens \u203a a new token: presets, scopes, workspaces, never, issued once": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.1 access tokens \u203a list, tabs and the revoke question": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.1 access tokens \u203a loading, empty and a failed read": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.1 orbit login approval \u203a approve": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.1 profile \u203a password form: each check, the linked confirmation and the reset": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.1 profile \u203a photo: choose, show and remove": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.1 profile \u203a sign-in methods card beside the replaced ones": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.1 settings \u203a every control: mode, switches while saving, theme and the way to tokens": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "manage access tokens",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Manage",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "manage access tokens",
+      "url": "/settings/access-tokens"
+     },
+     "step": "manage access tokens"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-light-desktop :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.1 sign-in and first-run setup \u203a setup: checks, linked confirmation, submit and refusal": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.1 access tokens \u203a a new token: presets, scopes, workspaces, never, issued once": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Access tokens",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "escape closes the dialog",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens"
+      ],
+      "focus": {
+       "name": "Access tokens",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "escape closes the dialog",
+      "url": "/admin"
+     },
+     "step": "escape closes the dialog"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-light-phone :: P4.1 access tokens \u203a list, tabs and the revoke question": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.1 access tokens \u203a loading, empty and a failed read": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.1 orbit login approval \u203a approve": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.1 profile \u203a password form: each check, the linked confirmation and the reset": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.1 profile \u203a photo: choose, show and remove": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.1 profile \u203a sign-in methods card beside the replaced ones": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.1 settings \u203a every control: mode, switches while saving, theme and the way to tokens": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.1 sign-in and first-run setup \u203a setup: checks, linked confirmation, submit and refusal": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.1 access tokens \u203a a new token: presets, scopes, workspaces, never, issued once": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.1 access tokens \u203a list, tabs and the revoke question": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.1 access tokens \u203a loading, empty and a failed read": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.1 orbit login approval \u203a approve": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve"
+       }
+      ],
+      "step": "approval refused",
+      "url": "/cli-login?code=WXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Approve",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve"
+       }
+      ],
+      "step": "approval refused",
+      "url": "/cli-login?code=WXYZ4-8K2QP"
+     },
+     "step": "approval refused"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-dark-desktop :: P4.1 profile \u203a password form: each check, the linked confirmation and the reset": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.1 profile \u203a photo: choose, show and remove": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.1 profile \u203a sign-in methods card beside the replaced ones": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.1 settings \u203a every control: mode, switches while saving, theme and the way to tokens": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Sign In",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "step": "wrong password"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-dark-desktop :: P4.1 sign-in and first-run setup \u203a setup: checks, linked confirmation, submit and refusal": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.1 access tokens \u203a a new token: presets, scopes, workspaces, never, issued once": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.1 access tokens \u203a list, tabs and the revoke question": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.1 access tokens \u203a loading, empty and a failed read": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.1 orbit login approval \u203a approve": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve"
+       }
+      ],
+      "step": "approval refused",
+      "url": "/cli-login?code=WXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Approve",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve"
+       }
+      ],
+      "step": "approval refused",
+      "url": "/cli-login?code=WXYZ4-8K2QP"
+     },
+     "step": "approval refused"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-dark-phone :: P4.1 profile \u203a password form: each check, the linked confirmation and the reset": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.1 profile \u203a photo: choose, show and remove": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.1 profile \u203a sign-in methods card beside the replaced ones": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.1 settings \u203a every control: mode, switches while saving, theme and the way to tokens": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Sign In",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "step": "wrong password"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-dark-phone :: P4.1 sign-in and first-run setup \u203a setup: checks, linked confirmation, submit and refusal": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.1 access tokens \u203a a new token: presets, scopes, workspaces, never, issued once": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens \u2014 dev@example.test"
+      ],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH"
+       }
+      ],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_\u2026h701\nRead & write \u00b7 everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings",
+       "Laptop script\norbit_pat_\u2026h702\nTasks: read & write \u00b7 Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+      ],
+      "step": "revoked",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens \u2014 dev@example.test"
+      ],
+      "focus": {
+       "name": "Access tokens",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH"
+       }
+      ],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_\u2026h701\nRead & write \u00b7 everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings",
+       "Laptop script\norbit_pat_\u2026h702\nTasks: read & write \u00b7 Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+      ],
+      "step": "revoked",
+      "url": "/admin"
+     },
+     "step": "revoked"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-light-desktop :: P4.1 access tokens \u203a list, tabs and the revoke question": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.1 access tokens \u203a loading, empty and a failed read": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.1 orbit login approval \u203a approve": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Approve",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve"
+       }
+      ],
+      "step": "approval refused",
+      "url": "/cli-login?code=WXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve"
+       }
+      ],
+      "step": "approval refused",
+      "url": "/cli-login?code=WXYZ4-8K2QP"
+     },
+     "step": "approval refused"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-light-desktop :: P4.1 profile \u203a password form: each check, the linked confirmation and the reset": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.1 profile \u203a photo: choose, show and remove": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.1 profile \u203a sign-in methods card beside the replaced ones": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.1 settings \u203a every control: mode, switches while saving, theme and the way to tokens": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.1 sign-in and first-run setup \u203a setup: checks, linked confirmation, submit and refusal": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.1 access tokens \u203a a new token: presets, scopes, workspaces, never, issued once": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Access tokens",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "escape closes the dialog",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens"
+      ],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "escape closes the dialog",
+      "url": "/admin"
+     },
+     "step": "escape closes the dialog"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-light-phone :: P4.1 access tokens \u203a list, tabs and the revoke question": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.1 access tokens \u203a loading, empty and a failed read": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.1 orbit login approval \u203a approve": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Approve",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve"
+       }
+      ],
+      "step": "approval refused",
+      "url": "/cli-login?code=WXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve"
+       }
+      ],
+      "step": "approval refused",
+      "url": "/cli-login?code=WXYZ4-8K2QP"
+     },
+     "step": "approval refused"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-light-phone :: P4.1 profile \u203a password form: each check, the linked confirmation and the reset": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.1 profile \u203a photo: choose, show and remove": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.1 profile \u203a sign-in methods card beside the replaced ones": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.1 settings \u203a every control: mode, switches while saving, theme and the way to tokens": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Sign In",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "step": "wrong password"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-light-phone :: P4.1 sign-in and first-run setup \u203a setup: checks, linked confirmation, submit and refusal": {
+   "equal": true
+  }
+ }
+}

@@ -27,8 +27,11 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     /// panel can tell an OWNER_CONFIRMED task from the three a run or a verifier settles without a
     /// second read (`OwnerConfirmations.panelAction`).
     public let completionCriterion: String?
-    /// Per-task run override: the provider/model this task's runs use instead of the assignee
-    /// agent's own. Both nil = inherit from the assignee (the common case).
+    /// Per-task run override: the engine/provider/model this task's runs use instead of the assignee
+    /// agent's own (docs/provider-engine-contract.md §1.2). The engine is the CLI that runs it, the
+    /// provider where its credential comes from — one that engine runs. All nil = inherit from the
+    /// assignee (the common case); a provider with no engine runs on the engine it runs on by default.
+    public let engine: String?
     public let provider: String?
     public let model: String?
     /// The tier suggested for this task's runs (S / M / L / XL), and the one sentence given for it
@@ -102,6 +105,10 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     public let runnable: Bool?
 
     // Nested relations.
+    /// Where this task's done code stands between the branch and main (§2.7, §7.3 V10) — the
+    /// detail read's `integration`, which the task page's Landing section is drawn from. Nil on a
+    /// task in no project, and from a server that predates the read.
+    public let integration: TaskIntegrationView?
     public let assignee: TaskAssignee?
     public let comments: [TaskComment]?
     public let sessions: [SessionRef]?
@@ -116,7 +123,7 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     public var commentCount: Int? { counts?.comments ?? comments?.count }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, description, status, assigneeId, listId, dueDate, provider, model
+        case id, title, description, status, assigneeId, listId, dueDate, engine, provider, model
         case modelHint, modelHintReason, modelHintOptions
         case projectId, terminalReason
         case completionCriterion
@@ -128,8 +135,56 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
         case supersededByTaskIdAbsentReason, supersedes, successorChain
         case running, queued, runningSince, awaitingOwnerConfirmation, confirmationUnderReview, blocked
         case dependencyState, runnable
+        case integration
         case assignee, comments, sessions, creatorSession, dependsOn, dependedOnBy
         case counts = "_count"
+    }
+}
+
+/// One task's integration, as `GET /tasks/:id` serves it (§2.7a, §7.3 V10) — `@orbit/shared`'s
+/// `TaskIntegrationView`: the lane the task's done work is in, who holds it, and the newest
+/// `LAND_TASK` generation the task page's Landing section prints.
+public struct TaskIntegrationView: Codable, Equatable, Sendable {
+    /// `NOT_APPLICABLE`, `QUEUED`, `RUNNING`, `CONFLICT`, `CHECK_FAILED`, `ERROR`, `AWAITING_OWNER`,
+    /// `ON_INTEGRATION_LINE` or `ON_UPSTREAM`; a value this build does not know draws nothing.
+    public let state: String
+    /// When the task entered this state.
+    public let since: String?
+    /// `COORDINATOR` or `OWNER`, while somebody has to act.
+    public let handler: String?
+    public let openItemId: String?
+    public let jobId: String?
+    /// Elapsed job time while it is in CHECK; not the duration of the check phase itself.
+    public let checksRunningForMs: Double?
+    /// The task's newest `LAND_TASK`; nil when the task never landed.
+    public let landTask: LandTaskIntegrationView?
+    /// The project's main branch by name, which `ON_UPSTREAM` is on. Absent from an older server.
+    public let mainBranch: String?
+
+    public init(state: String, since: String? = nil, handler: String? = nil,
+                openItemId: String? = nil, jobId: String? = nil,
+                checksRunningForMs: Double? = nil, landTask: LandTaskIntegrationView? = nil,
+                mainBranch: String? = nil) {
+        self.state = state
+        self.since = since
+        self.handler = handler
+        self.openItemId = openItemId
+        self.jobId = jobId
+        self.checksRunningForMs = checksRunningForMs
+        self.landTask = landTask
+        self.mainBranch = mainBranch
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        state = try c.decodeIfPresent(String.self, forKey: .state) ?? "NOT_APPLICABLE"
+        since = try? c.decodeIfPresent(String.self, forKey: .since)
+        handler = try? c.decodeIfPresent(String.self, forKey: .handler)
+        openItemId = try? c.decodeIfPresent(String.self, forKey: .openItemId)
+        jobId = try? c.decodeIfPresent(String.self, forKey: .jobId)
+        checksRunningForMs = try? c.decodeIfPresent(Double.self, forKey: .checksRunningForMs)
+        landTask = try? c.decodeIfPresent(LandTaskIntegrationView.self, forKey: .landTask)
+        mainBranch = try? c.decodeIfPresent(String.self, forKey: .mainBranch)
     }
 }
 
@@ -452,7 +507,7 @@ public struct CreateTaskRequest: Encodable, Sendable {
     }
 }
 
-/// PATCH /tasks/:id — `assigneeId`/`listId`/`dueDate`/`provider`/`model`/`modelHint`/
+/// PATCH /tasks/:id — `assigneeId`/`listId`/`dueDate`/`engine`/`provider`/`model`/`modelHint`/
 /// `modelHintReason` are three-state (omit / null=clear / set), mirroring `UpdateTaskDto` where
 /// they're typed `string | null`.
 /// `dependsOnTaskIds` replaces the complete prerequisite set when present: nil omits the field,
@@ -464,6 +519,9 @@ public struct UpdateTaskRequest: Encodable, Sendable {
     public var assigneeId: FieldUpdate<String>
     public var listId: FieldUpdate<String>
     public var dueDate: FieldUpdate<String>
+    /// The engine pin and the provider pin of it: a provider named without an engine pins the engine it
+    /// runs on by default; an engine named alone keeps the provider pin, which has to be one it runs.
+    public var engine: FieldUpdate<String>
     public var provider: FieldUpdate<String>
     public var model: FieldUpdate<String>
     public var dependsOnTaskIds: [String]?
@@ -489,7 +547,8 @@ public struct UpdateTaskRequest: Encodable, Sendable {
 
     public init(title: String? = nil, description: String? = nil, status: TaskStatus? = nil,
                 assigneeId: FieldUpdate<String> = .keep, listId: FieldUpdate<String> = .keep,
-                dueDate: FieldUpdate<String> = .keep, provider: FieldUpdate<String> = .keep,
+                dueDate: FieldUpdate<String> = .keep, engine: FieldUpdate<String> = .keep,
+                provider: FieldUpdate<String> = .keep,
                 model: FieldUpdate<String> = .keep, dependsOnTaskIds: [String]? = nil,
                 autoRunWhenReady: Bool? = nil,
                 supersededByTaskId: FieldUpdate<String> = .keep,
@@ -506,6 +565,7 @@ public struct UpdateTaskRequest: Encodable, Sendable {
         self.assigneeId = assigneeId
         self.listId = listId
         self.dueDate = dueDate
+        self.engine = engine
         self.provider = provider
         self.model = model
         self.dependsOnTaskIds = dependsOnTaskIds
@@ -521,7 +581,7 @@ public struct UpdateTaskRequest: Encodable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case title, description, status, assigneeId, listId, dueDate, provider, model
+        case title, description, status, assigneeId, listId, dueDate, engine, provider, model
         case dependsOnTaskIds, autoRunWhenReady
         case supersededByTaskId, terminalReason
         case runAt, acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode
@@ -536,6 +596,7 @@ public struct UpdateTaskRequest: Encodable, Sendable {
         try assigneeId.encode(into: &c, forKey: .assigneeId)
         try listId.encode(into: &c, forKey: .listId)
         try dueDate.encode(into: &c, forKey: .dueDate)
+        try engine.encode(into: &c, forKey: .engine)
         try provider.encode(into: &c, forKey: .provider)
         try model.encode(into: &c, forKey: .model)
         try c.encodeIfPresent(dependsOnTaskIds, forKey: .dependsOnTaskIds)

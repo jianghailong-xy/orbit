@@ -1,0 +1,20 @@
+argv: --project webkit-dark-phone --grep the\ popover\ by\ hover\ and\ by\ press,\ the\ reset\ credit\ and\ its\ confirmation
+tree: /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/ref
+head: 72fc42d85175a97095e3cc88347cbd009719e2ce
+load: 14.09 11.52 11.89 45/3608 2185203
+started: 2026-10-10T07:04:49Z
+
+
+Running 1 test using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-shots/webkit-dark-phone/p51-usage.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-shots/webkit-dark-phone/p51-reset-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-shots/webkit-dark-phone/p51-reset-unanswered.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-shots/webkit-dark-phone/p51-reset-started.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-shots/webkit-dark-phone/p51-reset-done.png, writing actual.
+  ✓  1 [webkit-dark-phone] › ui-migration/p51.browser.mjs:560:3 › P5.1 Plan usage › the popover by hover and by press, the reset credit and its confirmation (21.4s)
+
+  1 passed (23.5s)
+exit=0
+load: 19.55 13.27 12.47 6/3575 2191552
+ended: 2026-10-10T07:05:15Z

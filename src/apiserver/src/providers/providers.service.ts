@@ -1,6 +1,22 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AgentProvider, providerPreset, RunEventType, type PlanUsageSnapshot, type ProviderPreset } from '@orbit/shared';
+import {
+  AgentProvider,
+  credentialEngines,
+  CURSOR_KEY_CHECK_STATES,
+  ENGINE_CLI_NAMES,
+  isEngine,
+  keyDialect,
+  providerPreset,
+  RunEventType,
+  type CursorKeyCheckAnswer,
+  type CursorKeyCheckOutcome,
+  type CursorKeyCheckState,
+  type CursorKeyRecheckAnswer,
+  type PlanUsageSnapshot,
+  type ProviderKeyUsage,
+  type ProviderPreset,
+} from '@orbit/shared';
 import { CLAUDE_EFFORT_ORDER } from '../common/runtime-provider';
 import { GENERATING_SESSION_FILTER } from '../common/session-generating';
 import { accountPauseUntil } from '../common/account-pause';
@@ -19,35 +35,39 @@ import {
   type PoolAdmissionRow,
   type PoolMemberRefusal,
 } from './pool-admission';
+import { readLastUsed } from './provider-last-used';
 import { selectPoolMember, spentUntil } from './pool-select';
 import { withPreset } from './preset-overlay';
-import { runsOnOpenCode, usableProviderScope } from './custom-provider';
-import { pickFreeSlug, slugBase } from './provider-slug';
+import { keyCredential, keyRowEngine, usableProviderScope } from './custom-provider';
+import { cursorKeyCheckers, cursorKeyCheckRelay } from './cursor-key-check-relay';
+import { RUNNER_BEATS } from '../runners/runner-presence';
+import { openCodeKeyModel } from '@orbit/shared';
+import { storedCredential } from './engine-provider';
+import { geminiApiModel, isInternalHost } from './held-key';
+import { keyFingerprint } from './provider-engine-resolution';
+import { LANDING_PROVIDER_SLUG, pickFreeSlug, slugBase } from './provider-slug';
+import { assertEngineSession } from '../sessions/engine-session';
 
 /**
- * The Gemini API model agy calls for one of its own model names, which is what the connection test
- * has to ask for to probe the model a session runs. agy names a model by family and thinking level
- * (`gemini-3.8-flash-high`, or the base name and `--effort`) and maps it onto an API id itself;
- * measured on agy 1.2.16 that id is the base name for every model it lists except 3.1 Pro, which the
- * API still serves only as a preview (docs/antigravity-runtime-contract.md §9.2). A name agy does
- * not list is asked for as it is.
- */
-function geminiApiModel(model: string): string {
-  const base = model.replace(/-(low|medium|high|xhigh|max)$/, '');
-  return base === 'gemini-3.1-pro' ? 'gemini-3.1-pro-preview' : base;
-}
-
-/**
- * The slugs whose `model_provider` row is a compatibility guard, not a provider: migrations 0080 and
- * 0367 parked one on `opencode` and one on `antigravity` when each became a built-in runtime, to
+ * The slugs whose `model_provider` row is a compatibility guard, not a provider: migrations 0080, 0367
+ * and 0426 parked one on `opencode`, `antigravity` and `cursor` when each became a built-in runtime, to
  * fence an older control plane through a rolling deploy (and to keep it from creating a provider
  * under the name). The built-in runtime is what answers to the slug, so no list, lookup or write
- * here ever treats either row as a provider.
+ * here ever treats any of those rows as a provider.
  */
 export const COMPATIBILITY_GUARD_SLUGS: string[] = [
   AgentProvider.OPENCODE,
   AgentProvider.ANTIGRAVITY,
+  AgentProvider.CURSOR,
+  // 0436: the LANDING session's provider, reserved like a built-in engine's name.
+  LANDING_PROVIDER_SLUG,
 ];
+
+/** The DeepSeek preset, and the retired one an older client still connects DeepSeek Harness with. */
+const DEEPSEEK_PRESET = 'deepseek';
+const HARNESS_PRESET = 'deepseek-harness';
+/** The label that retired preset's form fills in, which names an engine rather than the key. */
+const HARNESS_LABEL = 'DeepSeek Harness';
 
 /**
  * One entry of ProvidersService.listUsable. The last three are absent on a built-in engine
@@ -57,12 +77,144 @@ export const COMPATIBILITY_GUARD_SLUGS: string[] = [
  */
 export interface UsableProvider {
   slug: string;
-  /** The engine that ends up running it — a configured provider borrows one (`moonshot` → `kimi`). */
+  /** A built-in engine's own name; a configured key's protocol (its row's `runtime`, the engine it runs
+   *  on by default); a pool's engine. Kept for older readers — `engines` is what runs it. */
   runtime: string;
+  /** Every engine this credential can run on, the one a caller naming only the slug gets first
+   *  (docs/provider-engine-contract.md §6.3): a built-in engine's sign-in on itself, the built-in
+   *  `dsh` on DeepSeek Harness (over the default DeepSeek key), a key by the compatibility table, a
+   *  pool on its engine. */
+  engines: AgentProvider[];
   builtin: boolean;
   label?: string;
   models?: unknown;
   defaultModel?: string | null;
+}
+
+/** Why a Cursor key check came to NO_RUNNER: no runner of the caller's can check one, those that can are
+ *  all busy checking other keys, or the one asked did not answer in time. */
+type CursorKeyCheckMiss = 'none' | 'busy' | 'silent';
+
+/** What a Cursor key check came to, in words a client may show as they stand: for a key being connected,
+ *  or for a saved one checked again. Never the key. */
+function cursorKeyCheckAnswer(outcome: CursorKeyCheckOutcome, why: CursorKeyCheckMiss | undefined, saved: boolean): CursorKeyCheckAnswer {
+  const message = (() => {
+    switch (outcome) {
+      case 'VALID':
+        return 'Cursor accepted this key.';
+      case 'INVALID':
+        return saved
+          ? 'Cursor rejected this key: “The provided API key is invalid.” Save a new key for it, then check it again.'
+          : 'Cursor rejected this key: “The provided API key is invalid.” Check it on cursor.com and paste it again.';
+      case 'UNREACHABLE':
+        return 'Couldn’t reach Cursor from the runner that checks keys. The key itself may be fine.';
+      case 'NO_RUNNER':
+        if (why === 'busy') return 'Your runners are already checking other Cursor keys. Try again in a moment.';
+        if (why === 'silent') {
+          return saved
+            ? 'The runner asked to check this key didn’t answer in time. Try again.'
+            : 'The runner asked to check this key didn’t answer in time. Save the key anyway, or try again.';
+        }
+        return 'No runner of yours can check Cursor keys right now: that takes one that is online, with Cursor CLI '
+          + 'installed and an Orbit runner new enough to check keys. '
+          + (saved ? 'The key is checked before a session starts on it.' : 'Save the key anyway, and it is checked before a session starts on it.');
+    }
+  })();
+  return { ok: outcome === 'VALID', keyCheck: outcome, message };
+}
+
+/** The engines a key's row runs on (shared providerEngines.ts): its protocol, its preset and endpoint,
+ *  and whether its key is a Claude subscription token — which only this side can say, holding the key. */
+function keyEngines(row: { runtime: string; presetSlug: string | null; baseUrl: string; apiKeyEnc: string }): AgentProvider[] {
+  return credentialEngines(keyCredential(row));
+}
+
+/** What uses a key, per engine (docs/provider-engine-contract.md §3.6): the open sessions spending it and
+ *  the task pins naming it. One read serves the key-usage door and the refusal to change a key in use. */
+export type KeyUsage = Omit<ProviderKeyUsage, 'providerId'>;
+
+/**
+ * How a key is used right now, per engine: the open sessions on it (`completed_at` and `deleted_at`
+ * both NULL) and the tasks still to run (not DONE or CANCELLED) whose pin names it — by its slug, or by
+ * an OpenCode model naming it in the old form (`provider: opencode`, `orbit-<slug>/<model>`). A row
+ * with no engine recorded (an older replica's) counts as the engine the old rules give it: the key's
+ * own, or OpenCode for the old OpenCode form. A personal key counts its owner's rows; a shared one,
+ * everyone's that names it.
+ */
+export async function readKeyUsage(
+  db: Pick<Prisma.TransactionClient, '$queryRaw'>,
+  row: { slug: string; runtime: string; ownerId: string | null },
+): Promise<KeyUsage> {
+  const fallback = keyRowEngine(row.runtime);
+  const prefix = openCodeKeyModel(row.slug, '');
+  const owner = row.ownerId;
+  const ownerScope = (alias: string) => owner
+    ? Prisma.sql`${Prisma.raw(alias)}."owner_id" = ${owner}::uuid`
+    : Prisma.sql`TRUE`;
+  const names = (alias: string) => Prisma.sql`(
+    ${Prisma.raw(alias)}."provider" = ${row.slug}
+    OR (${Prisma.raw(alias)}."provider" = 'opencode'
+        AND left(${Prisma.raw(alias)}."model", ${prefix.length}::int) = ${prefix}))`;
+  const engineOf = (alias: string) => Prisma.sql`COALESCE(
+    ${Prisma.raw(alias)}."engine",
+    CASE WHEN ${Prisma.raw(alias)}."provider" = 'opencode' THEN 'opencode' ELSE ${fallback} END)`;
+  const sessions = await db.$queryRaw<Array<{ engine: string | null; n: number }>>(Prisma.sql`
+    SELECT ${engineOf('s')} AS "engine", count(*)::int AS "n"
+      FROM "session" s
+     WHERE s."completed_at" IS NULL AND s."deleted_at" IS NULL
+       AND ${ownerScope('s')}
+       AND ${names('s')}
+       AND NOT (s."provider" = ${row.slug} AND s."provider_builtin")
+     GROUP BY 1`);
+  const tasks = await db.$queryRaw<Array<{ engine: string | null; n: number }>>(Prisma.sql`
+    SELECT ${engineOf('t')} AS "engine", count(*)::int AS "n"
+      FROM "task" t
+     WHERE t."status"::text NOT IN ('DONE', 'CANCELLED')
+       AND ${ownerScope('t')}
+       AND ${names('t')}
+     GROUP BY 1`);
+  const byEngine = new Map<AgentProvider, { engine: AgentProvider; sessions: number; tasks: number }>();
+  const entry = (engine: AgentProvider) => {
+    if (!byEngine.has(engine)) byEngine.set(engine, { engine, sessions: 0, tasks: 0 });
+    return byEngine.get(engine)!;
+  };
+  for (const r of sessions) if (isEngine(r.engine)) entry(r.engine).sessions += Number(r.n);
+  for (const r of tasks) if (isEngine(r.engine)) entry(r.engine).tasks += Number(r.n);
+  const engines = [...byEngine.values()].sort((a, b) => a.engine.localeCompare(b.engine));
+  return {
+    engines,
+    sessions: engines.reduce((sum, e) => sum + e.sessions, 0),
+    tasks: engines.reduce((sum, e) => sum + e.tasks, 0),
+  };
+}
+
+/** PATCH that would move a key onto the retired `dsh` runtime (§3.7). */
+function dshRuntimeRetired(): BadRequestException {
+  return new BadRequestException({
+    code: 'PROVIDER_RUNTIME_DSH_RETIRED',
+    message:
+      'DeepSeek Harness is an engine now, not a kind of provider: keep the key as DeepSeek, then pick ' +
+      'DeepSeek Harness as the engine',
+  });
+}
+
+/** An edit that would leave a key's open sessions or task pins on an engine it no longer runs (§3.6). */
+function dialectInUse(
+  label: string,
+  stranded: KeyUsage['engines'],
+  what: 'protocol' | 'endpoint' | 'key',
+): ConflictException {
+  const sessions = stranded.reduce((sum, e) => sum + e.sessions, 0);
+  const tasks = stranded.reduce((sum, e) => sum + e.tasks, 0);
+  return new ConflictException({
+    code: 'PROVIDER_DIALECT_IN_USE',
+    message:
+      `provider "${label}" is in use on ${stranded.map((e) => ENGINE_CLI_NAMES[e.engine]).join(', ')} by ` +
+      `${sessions} open sessions and ${tasks} task pins; its ${what} can't change while they use it`,
+    engines: stranded.map((e) => e.engine),
+    sessions,
+    tasks,
+  });
 }
 
 /** The refusal every write that puts a provider in a pool, or keeps it there, answers with: the same
@@ -100,12 +252,6 @@ function assertReasoningLevels(runtime: string, models: unknown): void {
         `model "${value}": reasoningLevels must list only ${CLAUDE_EFFORT_ORDER.join(', ')}`,
       );
     }
-  }
-}
-
-function assertDshRuntimeCatalog(runtime: string, models: unknown, defaultModel?: string): void {
-  if (runtime === AgentProvider.DSH && ((Array.isArray(models) && models.length > 0) || defaultModel?.trim())) {
-    throw new BadRequestException('DeepSeek Harness models and default come from the runtime ACP catalogue');
   }
 }
 
@@ -239,7 +385,8 @@ export class ProvidersService {
         enabled: true,
         ...(await usableProviderScope(this.prisma, userId)),
       },
-      orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+      // Position, then age, then id: the order the default DeepSeek key is picked in (§3.3).
+      orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }],
       select: {
         id: true,
         ownerId: true,
@@ -261,13 +408,19 @@ export class ProvidersService {
     // machine running the session: a runner reports the account its own CLI is logged into, which
     // is a different account from a BYOK key. id/ownerId/baseUrl/apiKeyEnc are selected only to
     // ask that credential and are dropped here — this payload stays keyless and endpointless.
-    return rows.map(({ id, ownerId, baseUrl, apiKeyEnc, ...picker }) => ({
-      ...withPreset(picker),
-      planUsage: this.planUsage.snapshot({ id, ownerId, runtime: picker.runtime, baseUrl, apiKeyEnc }),
-      // Whether an OpenCode session may spend this key as well as its own engine (shared
-      // `openCodeKeys`): the clients list it under OpenCode on this, and only this.
-      runsOnOpenCode: runsOnOpenCode({ runtime: picker.runtime, enabled: true, apiKeyEnc }),
-    }));
+    return rows.map(({ id, ownerId, baseUrl, apiKeyEnc, ...picker }) => {
+      // Every engine this key runs on, its default first (docs/provider-engine-contract.md §6.3):
+      // whether it holds a Claude subscription token is this side's to say, holding the key.
+      const engines = keyEngines({ ...picker, baseUrl, apiKeyEnc });
+      return {
+        ...withPreset(picker),
+        planUsage: this.planUsage.snapshot({ id, ownerId, runtime: picker.runtime, baseUrl, apiKeyEnc }),
+        engines,
+        // Whether an OpenCode session may spend this key as well as its own engine: kept for clients
+        // that read it rather than `engines`, and the same answer.
+        runsOnOpenCode: engines.includes(AgentProvider.OPENCODE),
+      };
+    });
   }
 
   /**
@@ -292,13 +445,13 @@ export class ProvidersService {
   async listUsable(ownerId: string): Promise<UsableProvider[]> {
     const rows = await this.prisma.modelProvider.findMany({
       where: {
-        // The built-in entries below already name `opencode` and `antigravity`; the compatibility
-        // guard rows that hold those slugs are not second providers to choose between.
+        // The built-in entries below already name `opencode`, `antigravity` and `cursor`; the
+        // compatibility guard rows that hold those slugs are not second providers to choose between.
         slug: { notIn: COMPATIBILITY_GUARD_SLUGS },
         AND: [{ OR: [{ enabled: true }, { slug: AgentProvider.DSH }] }],
         ...(await usableProviderScope(this.prisma, ownerId)),
       },
-      orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+      orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }],
       select: {
         slug: true,
         label: true,
@@ -308,6 +461,9 @@ export class ProvidersService {
         presetSlug: true,
         followsPreset: true,
         enabled: true,
+        // Read only to say which engines the key runs on; never part of the answer.
+        baseUrl: true,
+        apiKeyEnc: true,
       },
     });
     const pools = await this.prisma.providerPool.findMany({
@@ -319,26 +475,27 @@ export class ProvidersService {
     });
     return [
       // A built-in engine carries no label: the slug is the engine's name, and it runs on itself.
+      // The built-in `dsh` is DeepSeek Harness on the caller's default DeepSeek key (§3.3).
       ...Object.values(AgentProvider)
         .filter((slug) => slug !== AgentProvider.DSH || ![...rows, ...pools].some((row) => row.slug === slug))
-        .map((slug) => ({ slug, runtime: slug, builtin: true })),
+        .map((slug) => ({ slug, runtime: slug, engines: [slug], builtin: true })),
       // Same preset resolution the pickers get, so the models named here are the ones the
       // provider currently offers rather than the copy stored when it was connected. Which
-      // preset backs the row is the picker's business, not the caller's: dropped here.
+      // preset backs the row is the picker's business, not the caller's: dropped here, with the
+      // endpoint and the key, which were read only to say which engines run it.
       ...rows.filter((row) => row.enabled !== false).map((row) => {
-        const { presetSlug, followsPreset, enabled, ...view } = withPreset(row);
-        return { ...view, builtin: false };
+        const { presetSlug, followsPreset, enabled, baseUrl, apiKeyEnc, ...view } = withPreset(row);
+        return { ...view, engines: keyEngines({ ...row }), builtin: false };
       }),
       // A pool runs on its members' Claude subscriptions, whose models are the Claude CLI's own —
       // so, like a built-in engine, it names no model list of its own. A shared pool runs Codex on
       // OpenAI's own endpoint, whose models are the Codex CLI's; so does a pool of one's own that holds
       // a ChatGPT login the server signed in (migration 0323) — it is Codex throughout, and its account
       // is what a session on it spends.
-      ...pools.map(({ shared, engine, ...pool }) => ({
-        ...pool,
-        runtime: shared || engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE,
-        builtin: false,
-      })),
+      ...pools.map(({ shared, engine, ...pool }) => {
+        const runtime = shared || engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
+        return { ...pool, runtime, engines: [runtime], builtin: false };
+      }),
     ];
   }
 
@@ -347,7 +504,7 @@ export class ProvidersService {
   async listShared() {
     const rows = await this.prisma.modelProvider.findMany({
       where: { ownerId: null, slug: { notIn: COMPATIBILITY_GUARD_SLUGS } },
-      orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+      orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }],
     });
     return rows.map((r) => this.desensitize(r));
   }
@@ -362,17 +519,21 @@ export class ProvidersService {
 
   /** The caller's personal (BYOK) providers, disabled ones included — each with why it may not join an
    *  account pool (`poolRefusal`, null when it may). The browser never sees a key, so this verdict is
-   *  the only way the pool form can say which rows it will turn away, and why, before anyone asks. */
+   *  the only way the pool form can say which rows it will turn away, and why, before anyone asks.
+   *  Each row also carries `lastUsedAt`: when a session last ran on that key, or null for never
+   *  (provider-last-used.ts states exactly what counts). */
   async listMine(ownerId: string) {
     const rows = await this.prisma.modelProvider.findMany({
       where: { ownerId, slug: { notIn: COMPATIBILITY_GUARD_SLUGS } },
-      orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+      orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }],
     });
+    const lastUsed = await readLastUsed(this.prisma, ownerId, rows.map((row) => ({ id: row.id, slug: row.slug })));
     return rows.map((r) => {
       const reason = poolMemberRefusal(r);
       return {
         ...this.desensitize(r),
         poolRefusal: reason && { reason, message: POOL_MEMBER_REFUSALS[reason] },
+        lastUsedAt: lastUsed.get(r.id) ?? null,
       };
     });
   }
@@ -389,14 +550,30 @@ export class ProvidersService {
 
   /** Create a provider. ownerId null = shared (admin area); set = the caller's personal one. */
   async create(ownerId: string | null, dto: CreateModelProviderDto) {
+    // DeepSeek Harness is an engine now, not a kind of key (docs/provider-engine-contract.md §3.6): an
+    // older client connecting one — the `deepseek-harness` preset, or the `dsh` runtime — is connecting
+    // a DeepSeek key, and gets one. It runs on Claude Code, OpenCode and DeepSeek Harness alike, so the
+    // models are DeepSeek's own list and the ones the request named (a Harness form names none) go.
+    const harness = dto.runtime === AgentProvider.DSH || dto.presetSlug === HARNESS_PRESET;
+    if (harness) {
+      dto = {
+        ...dto,
+        presetSlug: DEEPSEEK_PRESET,
+        runtime: AgentProvider.CLAUDE,
+        followsPreset: true,
+        models: undefined,
+        defaultModel: undefined,
+        slug: undefined,
+        label: dto.label.trim() === HARNESS_LABEL ? await this.freeDeepSeekLabel(ownerId) : dto.label,
+      };
+    }
     const preset = this.assertPreset(dto.presetSlug);
     const runtime = dto.runtime ?? preset?.runtime ?? AgentProvider.CLAUDE;
-    assertDshRuntimeCatalog(runtime, dto.models, dto.defaultModel);
     // Following means the catalogue supplies the models — a list sent alongside it would only be a
     // stale copy of the same thing. What's stored is then a snapshot: reads serve the preset, so it
     // only ever surfaces if we stop shipping that preset.
     const follows = !!preset && dto.followsPreset !== false;
-    const models = runtime === AgentProvider.DSH ? [] : follows
+    const models = follows
       ? catalogModels(preset!).map((m) => ({
           value: m.value,
           label: m.label,
@@ -410,7 +587,7 @@ export class ProvidersService {
       baseUrl: dto.baseUrl,
       apiKeyEnc: encryptSecret(dto.apiKey),
       models: models as Prisma.InputJsonValue,
-      defaultModel: runtime === AgentProvider.DSH ? null : (follows ? catalogDefaultModel(preset!) : dto.defaultModel) ?? dto.models?.[0]?.value ?? null,
+      defaultModel: (follows ? catalogDefaultModel(preset!) : dto.defaultModel) ?? dto.models?.[0]?.value ?? null,
       // Identity outlives ownership: a row that maintains its own list is still an Anthropic one.
       presetSlug: preset?.slug ?? null,
       followsPreset: follows,
@@ -444,17 +621,35 @@ export class ProvidersService {
   }
 
   /** An unused slug for this base — see pickFreeSlug for why a collision is routine. A pool dispatches
-   *  under the same field a provider does, so what's taken is both tables' slugs. */
+   *  under the same field a provider does, and a retired provider name (migration 0415) still resolves
+   *  to the key it was folded into, so what's taken is all three tables' slugs. */
   private async freeSlug(base: string) {
     const where = { slug: { startsWith: base } };
-    const [providers, pools] = await Promise.all([
+    const [providers, pools, aliases] = await Promise.all([
       this.prisma.modelProvider.findMany({ where, select: { slug: true } }),
       this.prisma.providerPool.findMany({ where, select: { slug: true } }),
+      this.prisma.providerSlugAlias.findMany({ where, select: { slug: true } }),
     ]);
     return pickFreeSlug(
       base,
-      [...providers, ...pools].map((r) => r.slug),
+      [...providers, ...pools, ...aliases].map((r) => r.slug),
     );
+  }
+
+  /**
+   * The label a DeepSeek key connected under the retired "DeepSeek Harness" name gets (§3.6, §7.2): the
+   * vendor's own name, `DeepSeek`, or — when one of the same owner's DeepSeek keys already carries it —
+   * `DeepSeek 2`, `DeepSeek 3`…, the first one free. Compared without case or surrounding spaces, among
+   * the rows of the same vendor, as the connect page's own suggestion is (suggestProviderName).
+   */
+  private async freeDeepSeekLabel(ownerId: string | null): Promise<string> {
+    const siblings = await this.prisma.modelProvider.findMany({
+      where: { ownerId, presetSlug: DEEPSEEK_PRESET },
+      select: { label: true },
+    });
+    const taken = new Set(siblings.map((row) => row.label.trim().toLowerCase()));
+    if (!taken.has('deepseek')) return 'DeepSeek';
+    for (let n = 2; ; n++) if (!taken.has(`deepseek ${n}`)) return `DeepSeek ${n}`;
   }
 
   /** Update a provider within one ownership scope: admins pass null (shared rows),
@@ -462,15 +657,8 @@ export class ProvidersService {
   async update(ownerId: string | null, id: string, dto: UpdateModelProviderDto) {
     const current = await this.getScoped(ownerId, id);
     const runtime = dto.runtime ?? current.runtime;
-    assertDshRuntimeCatalog(runtime, dto.models, dto.defaultModel);
-    if (
-      dto.runtime && dto.runtime !== current.runtime &&
-      (dto.runtime === AgentProvider.DSH || current.runtime === AgentProvider.DSH)
-    ) {
-      // A history read can race a session created on the previous runtime. Keep the identity
-      // stable and require a separate provider instead of moving its future resume ids.
-      throw new BadRequestException('provider runtime cannot change into or out of dsh; create a separate provider');
-    }
+    // DeepSeek Harness is an engine, not a protocol: a key does not become one (§3.6, §3.7).
+    if (dto.runtime === AgentProvider.DSH && current.runtime !== AgentProvider.DSH) throw dshRuntimeRetired();
     if (runtime !== AgentProvider.DSH) assertReasoningLevels(runtime, dto.models ?? current.models);
     const data: Prisma.ModelProviderUpdateInput = {
       label: dto.label,
@@ -486,12 +674,35 @@ export class ProvidersService {
     // Only re-encrypt when a new key is supplied; an omitted key keeps the stored one.
     const apiKeyEnc = dto.apiKey ? encryptSecret(dto.apiKey) : undefined;
     if (apiKeyEnc) data.apiKeyEnc = apiKeyEnc;
+    // A Cursor key's last check was of the key it held then (recordCursorKeyCheck): a new key, or a row
+    // moved off Cursor's dialect, has not been checked.
+    if (apiKeyEnc || (dto.runtime && dto.runtime !== current.runtime)) {
+      data.keyCheckState = null;
+      data.keyCheckedAt = null;
+    }
     await this.assertPoolMemberEdit(current, {
       ...current,
       runtime: dto.runtime ?? current.runtime,
       baseUrl: dto.baseUrl ?? current.baseUrl,
       apiKeyEnc: apiKeyEnc ?? current.apiKeyEnc,
     });
+    const protocolMoves = !!dto.runtime && dto.runtime !== current.runtime;
+    const endpointMoves = !!dto.baseUrl && dto.baseUrl !== current.baseUrl;
+    if (protocolMoves || endpointMoves || apiKeyEnc) {
+      // An edit that would leave a session or a task pin on an engine this key no longer runs is
+      // refused while they use it (§3.6): what runs a session is its engine, so a key may not change
+      // its protocol, its endpoint (one that stops being DeepSeek's strands DeepSeek Harness) or its
+      // secret (a Claude subscription token runs nowhere but Claude Code) out from under them.
+      const runs = credentialEngines(keyCredential(
+        { runtime, presetSlug: current.presetSlug, baseUrl: dto.baseUrl ?? current.baseUrl, apiKeyEnc: apiKeyEnc ?? current.apiKeyEnc },
+        dto.apiKey,
+      ));
+      const stranded = (await readKeyUsage(this.prisma, current)).engines.filter((e) => !runs.includes(e.engine));
+      if (stranded.length > 0) {
+        throw dialectInUse(current.label, stranded, protocolMoves ? 'protocol' : endpointMoves ? 'endpoint' : 'key');
+      }
+      await this.recordSessionEngines(current);
+    }
     const row = await this.prisma.modelProvider.update({ where: { id }, data });
     this.publishChanged(ownerId, row.id);
     return this.desensitize(row);
@@ -509,11 +720,150 @@ export class ProvidersService {
     return row.id;
   }
 
+  /**
+   * How one of the caller's own keys is in use, per engine: its open sessions and the task pins naming it
+   * (readKeyUsage) — what a client asks before disabling or deleting the key, which every one of them
+   * on every engine then waits on. The same read the refusal to change a key in use asks. Scoped like
+   * every write: a shared row, or another user's, reads as not-found.
+   */
+  async usage(ownerId: string, id: string): Promise<ProviderKeyUsage> {
+    const row = await this.getScoped(ownerId, id);
+    return { providerId: row.id, ...(await readKeyUsage(this.prisma, row)) };
+  }
+
+  /**
+   * What Cursor CLI on a runner answered `agent models` with, asked with the Cursor key one of that
+   * runner's sessions is dispatched on (docs/cursor-runtime-contract.md §9): kept on the key as its last
+   * check, which is what tells a key Cursor refuses apart from a Cursor API that could not be reached —
+   * the CLI's own handshake succeeds either way, and `session/new` refuses both with one -32603 (§12).
+   *
+   * Only from the runner the session is assigned to, and only about a Cursor key the session runs Cursor
+   * CLI on. The runner names the key it checked by its fingerprint (keyFingerprint), and the answer is
+   * kept only while the row still holds that key: one about a key replaced since is about nothing here.
+   * Anything else changes nothing and says so (`recorded: false`).
+   */
+  async recordCursorKeyCheck(
+    runnerId: string,
+    sessionId: string,
+    report: { state?: unknown; keyFingerprint?: unknown },
+    /** The runner's account, so another account's landing id is not answered as one. */
+    ownerId?: string,
+  ): Promise<{ recorded: boolean }> {
+    const state = report?.state as CursorKeyCheckState;
+    if (!CURSOR_KEY_CHECK_STATES.includes(state)) throw new BadRequestException('Unknown Cursor key check state');
+    const fingerprint = report.keyFingerprint;
+    if (typeof fingerprint !== 'string' || !/^[0-9a-f]{16}$/.test(fingerprint)) {
+      throw new BadRequestException('keyFingerprint must be the 16 hex digits of the checked key\'s fingerprint');
+    }
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { assignedRunnerId: true, ownerId: true, provider: true, providerBuiltin: true, engine: true, sessionKind: true },
+    });
+    // Before the ownership answer, but only for a row of this runner's own account: another
+    // account's landing id is answered exactly as any other id of theirs (§2.9 LS6 + tenant scope).
+    if (session && (ownerId === undefined || session.ownerId === ownerId)) assertEngineSession(session);
+    if (!session || session.assignedRunnerId !== runnerId) {
+      throw new ForbiddenException('session does not belong to this runner');
+    }
+    if (session.engine !== AgentProvider.CURSOR) return { recorded: false };
+    const credential = await storedCredential(this.prisma, session);
+    if (credential?.kind !== 'key' || keyDialect(credential.row.runtime) !== 'cursor') return { recorded: false };
+    const row = credential.row;
+    let key: string;
+    try {
+      key = decryptSecret(row.apiKeyEnc);
+    } catch {
+      return { recorded: false };
+    }
+    if (keyFingerprint(key) !== fingerprint) return { recorded: false };
+    // Compare-and-set on the key read: one saved since the runner checked this one is not what it checked.
+    const { count } = await this.prisma.modelProvider.updateMany({
+      where: { id: row.id, apiKeyEnc: row.apiKeyEnc, runtime: AgentProvider.CURSOR },
+      data: { keyCheckState: state, keyCheckedAt: new Date() },
+    });
+    if (count > 0) this.publishChanged(row.ownerId, row.id);
+    return { recorded: count > 0 };
+  }
+
+  /**
+   * Check one of the caller's own Cursor keys again ("Check Again"): asked of a runner of theirs as a key
+   * being connected is (checkCursorKey), and what Cursor answered kept on the key as its last check, by
+   * recordCursorKeyCheck's rule — a compare-and-set on the ciphertext read before asking, so an answer
+   * about a key replaced while it was being checked is kept on nothing. NO_RUNNER keeps nothing: no check
+   * was made. Scoped like every write: a shared row, or another user's, reads as not-found.
+   */
+  async recheckCursorKey(ownerId: string, id: string): Promise<CursorKeyRecheckAnswer> {
+    const row = await this.getScoped(ownerId, id);
+    if (keyDialect(row.runtime) !== 'cursor') {
+      throw new BadRequestException({ code: 'NOT_A_CURSOR_KEY', message: 'Only a Cursor API key is checked on a runner' });
+    }
+    let key: string;
+    try {
+      key = decryptSecret(row.apiKeyEnc).trim();
+    } catch {
+      throw new ConflictException('This key cannot be read here any more; save it again');
+    }
+    const { outcome, why } = await this.checkCursorKey(ownerId, key);
+    let recorded = false;
+    if (outcome !== 'NO_RUNNER') {
+      const { count } = await this.prisma.modelProvider.updateMany({
+        where: { id: row.id, apiKeyEnc: row.apiKeyEnc, runtime: AgentProvider.CURSOR },
+        data: { keyCheckState: outcome, keyCheckedAt: new Date() },
+      });
+      recorded = count > 0;
+      if (recorded) this.publishChanged(row.ownerId, row.id);
+    }
+    const now = await this.prisma.modelProvider.findUnique({
+      where: { id: row.id },
+      select: { keyCheckState: true, keyCheckedAt: true },
+    });
+    return {
+      ...cursorKeyCheckAnswer(outcome, why, true),
+      recorded,
+      keyCheckState: (now?.keyCheckState as CursorKeyCheckState | null | undefined) ?? null,
+      keyCheckedAt: now?.keyCheckedAt?.toISOString() ?? null,
+    };
+  }
+
+  /** A runner's answer to a Cursor key it was handed to check (POST /runner/cursor-key-check-result):
+   *  settles the check somebody is waiting on, when it is that runner's and about that key. */
+  answerCursorKeyCheck(runnerId: string, result: { checkId: string; state: string; keyFingerprint: string }): { accepted: boolean } {
+    return { accepted: cursorKeyCheckRelay.answer(runnerId, result) };
+  }
+
+  /**
+   * Whether Cursor accepts `apiKey`, asked of a runner of `ownerId`'s by Cursor CLI's `agent models`
+   * (cursor-key-check-relay.ts): the most recently heard from of those that can ask, woken to take it on a
+   * heartbeat now. NO_RUNNER, and why, when none can, when they are all busy checking other keys, or when
+   * the one asked did not answer in time.
+   */
+  private async checkCursorKey(
+    ownerId: string,
+    apiKey: string,
+  ): Promise<{ outcome: CursorKeyCheckOutcome; why?: CursorKeyCheckMiss }> {
+    const runners = await this.prisma.runner.findMany({
+      where: { ownerId },
+      select: { id: true, status: true, ...RUNNER_BEATS, capabilities: true, capabilitiesReportedAt: true, engines: true },
+    });
+    const checkers = cursorKeyCheckers(runners);
+    if (checkers.length === 0) return { outcome: 'NO_RUNNER', why: 'none' };
+    const runner = checkers.find((r) => cursorKeyCheckRelay.hasRoom(r.id));
+    if (!runner) return { outcome: 'NO_RUNNER', why: 'busy' };
+    const answer = cursorKeyCheckRelay.ask(runner.id, apiKey);
+    this.realtime.notifyRunnerWake(runner.id);
+    const state = await answer;
+    return state ? { outcome: state } : { outcome: 'NO_RUNNER', why: 'silent' };
+  }
+
+  /**
+   * Delete a key. Allowed whatever used it (§3.6): a session keeps the engine it runs on — recorded
+   * first for one an older replica wrote — and waits, as on a disabled key, until it is moved onto
+   * another credential that engine runs; it never falls back to the runner's own sign-in. The retired
+   * names that resolved to the key go with it (provider_slug_alias, ON DELETE CASCADE).
+   */
   async remove(ownerId: string | null, id: string) {
     const current = await this.getScoped(ownerId, id);
-    if ((current.runtime === AgentProvider.DSH || current.slug === AgentProvider.DSH) && await this.hasProviderHistory(current)) {
-      throw new BadRequestException('DeepSeek Harness provider has session or task history and cannot be removed');
-    }
+    await this.recordSessionEngines(current);
     await this.prisma.modelProvider.delete({ where: { id } });
     this.publishChanged(ownerId, id);
     return { ok: true };
@@ -668,6 +1018,25 @@ export class ProvidersService {
 
   /** Push a provider change to the clients whose picker it affects: just the owner for a personal
    *  row, everyone for a shared one (ownerId null = the admin-managed catalog). */
+  /**
+   * Record the engine of every session on this key that has none recorded yet — one an older API
+   * replica wrote — before the key's protocol, endpoint or secret changes, or the key goes. Such a
+   * session's engine is derived from the key's runtime (providers/session-engine.ts), so after the
+   * change it would be derived from the new protocol, or from nothing: no edit of a key may move a
+   * session onto another CLI (docs/provider-engine-contract.md §1.1, §3.6). Ahead of the edit and
+   * not atomic with it: a session it records keeps the engine it already ran on whether or not the
+   * edit then lands. Every session of the key's owner names it by slug; a shared key's, anyone's.
+   */
+  private async recordSessionEngines(row: { slug: string; runtime: string; ownerId: string | null }): Promise<void> {
+    const engine = keyRowEngine(row.runtime);
+    if (!engine) return;
+    await this.prisma.$executeRaw`
+      UPDATE "session" SET "engine" = ${engine}
+      WHERE "engine" IS NULL AND "provider" = ${row.slug} AND NOT "provider_builtin"
+        AND (${row.ownerId}::uuid IS NULL OR "owner_id" = ${row.ownerId}::uuid)
+    `;
+  }
+
   private publishChanged(ownerId: string | null, id: string): void {
     if (ownerId) this.realtime.publishForUser(ownerId, RunEventType.PROVIDER_CHANGED, id);
     else this.realtime.publishForAllUsers(RunEventType.PROVIDER_CHANGED, id);
@@ -681,15 +1050,30 @@ export class ProvidersService {
    * for antigravity: the Gemini API's own method, whose streaming twin is what agy calls.
    * Stateless — the browser passes the freshly-typed key, nothing is persisted. Never throws on a
    * network/HTTP failure; returns a structured verdict the picker renders inline.
+   *
+   * The probe is the key's protocol's, whichever engine it will run on: a DeepSeek key speaks
+   * Anthropic's on Claude Code, OpenCode and DeepSeek Harness alike, so one sent as the retired `dsh`
+   * runtime is probed exactly as one sent as `claude` (docs/provider-engine-contract.md §3.7).
    */
-  async testConnection(dto: {
-    baseUrl: string;
-    apiKey: string;
-    model?: string;
-    runtime?: string;
-  }): Promise<{ ok: boolean; status?: number; message: string }> {
-    if (dto.runtime === AgentProvider.DSH) {
-      throw new BadRequestException('DeepSeek Harness requires runtime prompt validation');
+  async testConnection(
+    dto: {
+      baseUrl: string;
+      apiKey: string;
+      model?: string;
+      runtime?: string;
+    },
+    ownerId?: string,
+  ): Promise<{ ok: boolean; status?: number; message: string; keyCheck?: CursorKeyCheckOutcome }> {
+    // A Cursor key is no model API this side can probe, and is never sent anywhere from here: a runner of
+    // the caller's asks Cursor CLI's `agent models` with it (checkCursorKey).
+    if (dto.runtime === AgentProvider.CURSOR) {
+      const key = dto.apiKey.trim();
+      if (!key) throw new BadRequestException('Paste the Cursor API key to check');
+      // Checked on a runner of the caller's own: asked on nobody's behalf, there is none to ask.
+      const { outcome, why } = ownerId
+        ? await this.checkCursorKey(ownerId, key)
+        : { outcome: 'NO_RUNNER' as const, why: 'none' as const };
+      return cursorKeyCheckAnswer(outcome, why, false);
     }
     const base = this.assertTestableUrl(dto.baseUrl).replace(/\/+$/, '');
     const model = (dto.model ?? '').trim();
@@ -778,15 +1162,6 @@ export class ProvidersService {
     });
     if (!row) throw new NotFoundException('provider not found');
     return row;
-  }
-
-  private async hasProviderHistory(row: { slug: string; ownerId: string | null }): Promise<boolean> {
-    const where = { provider: row.slug, ...(row.ownerId === null ? {} : { ownerId: row.ownerId }) };
-    const [session, task] = await Promise.all([
-      this.prisma.session.findFirst({ where: { ...where, providerBuiltin: false }, select: { id: true } }),
-      this.prisma.task.findFirst({ where, select: { id: true } }),
-    ]);
-    return !!session || !!task;
   }
 
   private async getScopedPool(ownerId: string, id: string) {
@@ -1015,18 +1390,7 @@ export class ProvidersService {
     if (u.protocol !== 'http:' && u.protocol !== 'https:') {
       throw new BadRequestException('Base URL must be http(s)');
     }
-    const host = u.hostname.toLowerCase();
-    const isInternal =
-      host === 'localhost' ||
-      host.endsWith('.localhost') ||
-      host === '0.0.0.0' ||
-      host === '::1' ||
-      /^127\./.test(host) ||
-      /^169\.254\./.test(host) ||
-      /^10\./.test(host) ||
-      /^192\.168\./.test(host) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(host);
-    if (isInternal) throw new BadRequestException('Base URL host is not allowed');
+    if (isInternalHost(u.hostname)) throw new BadRequestException('Base URL host is not allowed');
     return raw;
   }
 
@@ -1046,6 +1410,7 @@ export class ProvidersService {
   // management surfaces read the same preset-resolved catalogue the pickers do, so the form shows
   // what a session would actually get.
   private desensitize({ apiKeyEnc, ...rest }: Prisma.ModelProviderGetPayload<object>) {
-    return { ...withPreset(rest), hasApiKey: !!apiKeyEnc };
+    // `engines`: which engines the key runs on (§6.3), decided with the key, which stays here.
+    return { ...withPreset(rest), engines: keyEngines({ ...rest, apiKeyEnc }), hasApiKey: !!apiKeyEnc };
   }
 }

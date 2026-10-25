@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
-import type { WikiDocsDirectory, WikiPlanJob, WikiPlanProposal, WikiPlanState, WikiPlanVersion } from '@orbit/shared';
+import { WIKI_EXECUTOR_READ, type WikiDocsDirectory, type WikiPlanJob, type WikiPlanProposal, type WikiPlanState, type WikiPlanVersion } from '@orbit/shared';
 import { ThemeProvider } from '../lib/theme';
 import type { WikiChangeset, WikiEntry, WikiSpaceRow, WikiSpaceWithUsage, WikiTimeline } from '../lib/wiki';
 import { wikiSeenKey } from '../lib/wiki';
@@ -63,6 +63,19 @@ function planFixture(): { versions: { v1: WikiPlanVersion; v2: WikiPlanVersion }
 }
 
 const PLAN = planFixture();
+
+/** The server-execution fixture (P9): the Plan card's line while the server executes this account's wiki. */
+function serverFixture(): { plan: { note: string } } {
+  const candidates = [
+    resolve(process.cwd(), '../shared/src/wiki-server-execution.fixture.json'),
+    resolve(process.cwd(), 'src/shared/src/wiki-server-execution.fixture.json'),
+  ];
+  const path = candidates.find((candidate) => existsSync(candidate));
+  if (!path) throw new Error(`wiki-server-execution.fixture.json not found from ${process.cwd()}`);
+  return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+const SERVER = serverFixture();
 const ORBIT = '0196e100-0000-7000-8000-000000000001';
 const WIKOVA = '0196e100-0000-7000-8000-000000000002';
 const WIKIDS = '0196e100-0000-7000-8000-000000000003';
@@ -294,6 +307,54 @@ describe('Activity', () => {
     expect(html).not.toContain('>Principles<');
   });
 
+  it('draws the server’s runs after Review and Plan while the server runs the wiki, and no card before the read says so (mock 35 ④)', () => {
+    const cache = client();
+    const maintenance = {
+      look: 'off', enabled: false, lastOkAt: null, lastRunAt: null, consecutiveFailures: 0, backlog: 0, oldestPendingAt: null,
+      lagSeconds: 0, dailyLimitReached: false, held: null, running: null, lastRun: null, lastFailure: null,
+    };
+    cache.setQueryData(['wiki', 'space', ORBIT, 'health'], {
+      spaceId: ORBIT, entries: 3, maintenance,
+      executor: WIKI_EXECUTOR_READ,
+      systemModel: { state: 'up', model: 'qwen3.8-27b-fp8', since: null, checkedAt: null, workerSeenAt: null },
+    });
+    cache.setQueryData(['wiki', 'space', ORBIT, 'jobs'], {
+      spaceId: ORBIT,
+      jobs: [{
+        id: 'job-1', kind: 'verify', state: 'succeeded', waitingFor: null, priority: 1, attempts: 0, createdAt: new Date(NOW - HOUR).toISOString(),
+        updatedAt: new Date(NOW - HOUR).toISOString(), startedAt: new Date(NOW - HOUR).toISOString(), endedAt: new Date(NOW - HOUR + 48_000).toISOString(),
+        nextAttemptAt: null, failureKind: null, error: null, ahead: null, progress: null,
+        calls: { total: 4, queued: 0, running: 0, succeeded: 4, failed: 0, cancelled: 0, inputTokens: 5000, outputTokens: 1120 }, nextCall: null, requests: [],
+      }],
+    });
+    const html = wiki('/wiki/orbit/activity', cache);
+    const order = ['wk-review-card', 'wk-plan-card', 'wk-jobs-card', '>Runs<', '>Verification<', '>Recent decisions<', '>Recently changed<']
+      .map((needle) => at(html, needle));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(html).toContain('<b>Done</b> · 4 calls · 6,120 tokens · took 48s');
+    // No health read yet: no card at all.
+    expect(wiki('/wiki/orbit/activity')).not.toContain('wk-jobs-card');
+  });
+
+  it('names the System model under Draft plan, whatever provider the space named before server execution (mock 35’s Plan card)', () => {
+    const spaces = [row(ORBIT, 'github.com/jianghailong-xy/orbit', 0, 0, 0)];
+    spaces[0].settings = { ...spaces[0].settings, maintenance: { provider: 'local-vllm', workspaceId: null } };
+    const cache = client(spaces);
+    cache.setQueryData(['wiki', 'space', ORBIT, 'plan'], { spaceId: ORBIT, confirmed: null, draft: null, proposals: [], job: null } satisfies WikiPlanState);
+    const note = (html: string): string => card(html, 'wk-plan-card').match(/<span class="hint">([^<]*)<\/span>/)![1];
+    // The shared fixture's line, before the health read answers and after.
+    expect(note(wiki('/wiki/orbit/activity', cache))).toBe(SERVER.plan.note);
+    cache.setQueryData(['wiki', 'space', ORBIT, 'health'], {
+      spaceId: ORBIT, entries: 0,
+      maintenance: {
+        look: 'off', enabled: false, lastOkAt: null, lastRunAt: null, consecutiveFailures: 0, backlog: 0, oldestPendingAt: null,
+        lagSeconds: 0, dailyLimitReached: false, held: null, running: null, lastRun: null, lastFailure: null,
+      },
+      executor: WIKI_EXECUTOR_READ,
+    });
+    expect(note(wiki('/wiki/orbit/activity', cache))).toBe(SERVER.plan.note);
+  });
+
   it('stands under the home’s head on a desktop: the title, the line saying what the space holds, the search (mock 33 ④)', () => {
     const cache = client();
     cache.setQueryData(['wiki', 'space', ORBIT, 'docs'], {
@@ -357,7 +418,7 @@ describe('one number in four places, over two spaces whose plans wait', () => {
     expect(wikiPlanPending(ORBIT_PLAN, null) + wikiPlanPending(WIKOVA_PLAN, null)).toBe(3);
 
     expect(side).toContain(`title="${waiting} waiting on you" aria-label="${waiting} waiting on you">${waiting}</span>`);
-    const badge = page.match(/class="ant-btn[^"]*wk-activity-btn[^"]*"[\s\S]*?class="tp-rail-badge needs-you" title="(\d+) waiting on you" aria-label="\d+ waiting on you">(\d+)</);
+    const badge = page.match(/class="orbit-button[^"]*wk-activity-btn[^"]*"[\s\S]*?class="tp-rail-badge needs-you" title="(\d+) waiting on you" aria-label="\d+ waiting on you">(\d+)</);
     expect(badge?.[1]).toBe(String(waiting));
     expect(badge?.[2]).toBe(String(waiting));
 
@@ -428,7 +489,7 @@ describe('a desktop over two spaces: what waits elsewhere is on it too', () => {
     expect(review).toContain('Secret redaction lets ENV_VAR=value secrets through');
     expect(review).not.toContain('A wikova pitfall');
     // Its button is Review over every space, the first banner's door.
-    expect(review).toMatch(/<button[^>]*class="ant-btn[^"]*ant-btn-primary[^"]*"[^>]*><span>Review<\/span><\/button>/);
+    expect(review).toMatch(/<button[^>]*class="orbit-button orbit-button-primary[^"]*"[^>]*><span>Review<\/span><\/button>/);
   });
 
   it('draws the other spaces’ plan banners, and only theirs, over the cards', () => {
@@ -488,8 +549,8 @@ describe('the head’s Activity button', () => {
     const home = wiki('/wiki/orbit');
     const order = ['wk-contents-btn', 'wk-activity-btn', 'aria-label="Settings"', 'aria-label="New entry"'].map((needle) => at(home, needle));
     expect(order).toEqual([...order].sort((a, b) => a - b));
-    expect(home).toMatch(/<button aria-label="Activity" aria-describedby="[^"]+" type="button" class="[^"]*wk-activity-btn">/);
+    expect(home).toMatch(/<button(?=[^>]*aria-label="Activity")(?=[^>]*aria-describedby="[^"]+")[^>]*class="[^"]*wk-activity-btn">/);
     const activity = wiki('/wiki/orbit/activity');
-    expect(activity).toMatch(/<button aria-label="Activity" aria-current="page" aria-describedby="[^"]+" type="button" class="[^"]*wk-activity-btn on">/);
+    expect(activity).toMatch(/<button(?=[^>]*aria-label="Activity")(?=[^>]*aria-current="page")(?=[^>]*aria-describedby="[^"]+")[^>]*class="[^"]*wk-activity-btn on">/);
   });
 });

@@ -32,6 +32,7 @@ import io.orbitd.android.directory.LoadingMessage
 import io.orbitd.android.directory.StatusMessage
 import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.ui.LocalOrbitColors
+import io.orbitd.android.toast.OrbitToasts
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 import java.time.Instant
@@ -69,7 +70,7 @@ internal fun WikiReviewScreen(store: WikiStore, route: OrbitRoute, data: Directo
         if (answer != null) notice = answer
         else {
             val entry = card.op.entryId?.let { store.state.value.detail(it)?.entry }
-            WikiToast.show(WikiLogic.decidedToast(card.op.op, action), renamed ?: WikiLogic.knownTitle(card, entry))
+            OrbitToasts.show(WikiLogic.decidedToast(card.op.op, action), renamed ?: WikiLogic.knownTitle(card, entry))
         }
     }
     val actions = WikiReviewActions(
@@ -106,7 +107,7 @@ internal fun WikiReviewScreen(store: WikiStore, route: OrbitRoute, data: Directo
             }
         }
     }
-    WikiRefusalAlert(notice) { notice = null }
+    WikiRefusalAlert(WikiCopy.decideFailed, notice) { notice = null }
 }
 
 /** "Review" over how many proposals from how many sessions, and how old the oldest is. */

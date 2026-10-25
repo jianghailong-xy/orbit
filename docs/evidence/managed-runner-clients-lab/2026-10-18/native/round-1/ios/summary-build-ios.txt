@@ -1,0 +1,41 @@
+Test Case '-[T07ProbeUITests.ReplayTests test01OffUnsetCompose]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test01OffUnsetCompose]' passed (63.387 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test01OffUnsetSession]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test01OffUnsetSession]' passed (35.851 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test02OffFalseCompose]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test02OffFalseCompose]' passed (19.831 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test02OffFalseSession]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test02OffFalseSession]' passed (16.504 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test03OffMissingCompose]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test03OffMissingCompose]' passed (14.926 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test03OffMissingSession]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test03OffMissingSession]' passed (15.778 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test04WenFirstSessionOffered]' started.
+/Users/runner/work/orbit/orbit/.t07-probe/UITests/ReplayTests.swift:25: error: -[T07ProbeUITests.ReplayTests test04WenFirstSessionOffered] : failed - 04-wen-first-session-offered-01: "DeepSeek" never showed in 90.0 s
+Test Case '-[T07ProbeUITests.ReplayTests test04WenFirstSessionOffered]' failed (107.598 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test05WenPreparingAnswered]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test05WenPreparingAnswered]' passed (114.624 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test06WenSleepWake]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test06WenSleepWake]' passed (105.459 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test07WenRestartsFailedRetried]' started.
+    t =   154.28s Added attachment named '07b-failed-stopped-too-often'
+    t =   255.03s Added attachment named 'verdict-07-wen-restarts-failed-retried.json'
+Test Case '-[T07ProbeUITests.ReplayTests test07WenRestartsFailedRetried]' passed (257.261 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test08NiaFirstSession]' started.
+/Users/runner/work/orbit/orbit/.t07-probe/UITests/ReplayTests.swift:25: error: -[T07ProbeUITests.ReplayTests test08NiaFirstSession] : failed - 08-nia-first-session-01: "DeepSeek" never showed in 90.0 s
+/Users/runner/work/orbit/orbit/.t07-probe/UITests/ProbeCase.swift:70: error: -[T07ProbeUITests.ReplayTests test08NiaFirstSession] : XCTAssertTrue failed - 08-nia-first-session: the app sent what the scene does not hold: [["fields": {
+Test Case '-[T07ProbeUITests.ReplayTests test08NiaFirstSession]' failed (243.256 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test09NiaSleepWake]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test09NiaSleepWake]' passed (120.467 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test10NiaOutOfMemoryRetry]' started.
+    t =   162.04s Added attachment named '10b-failed-kept-running-out-of-memory'
+Test Case '-[T07ProbeUITests.ReplayTests test10NiaOutOfMemoryRetry]' passed (185.454 seconds).
+Test Case '-[T07ProbeUITests.ReplayTests test11NiaQuotaWait]' started.
+Test Case '-[T07ProbeUITests.ReplayTests test11NiaQuotaWait]' passed (101.754 seconds).
+Test Suite 'ReplayTests' failed at 2026-10-18 06:58:50.051.
+	 Executed 14 tests, with 3 failures (0 unexpected) in 1402.151 (1402.179) seconds
+Test Suite 'T07ProbeUITests.xctest' failed at 2026-10-18 06:58:50.052.
+	 Executed 14 tests, with 3 failures (0 unexpected) in 1402.151 (1402.180) seconds
+Test Suite 'All tests' failed at 2026-10-18 06:58:50.052.
+	 Executed 14 tests, with 3 failures (0 unexpected) in 1402.151 (1402.181) seconds
+** TEST FAILED **

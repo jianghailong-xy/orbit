@@ -11,7 +11,7 @@ const fixtureRoot = resolve(uiRoot, '__fixtures__');
 const inside = (file: string, directory: string) => file === directory || file.startsWith(`${directory}${sep}`);
 
 // Include type-only coupling; migration runners outside src may import the private fixture.
-it('keeps Base UI inside Orbit components, fixtures private, and public components free of AntD', () => {
+it('keeps Base UI inside Orbit components and fixtures private', () => {
   const api = new API({ cwd: webRoot });
   const violations: { file: string; specifier: string; reason: string }[] = [];
   let importCount = 0;
@@ -38,9 +38,6 @@ it('keeps Base UI inside Orbit components, fixtures private, and public componen
           if (/^@base-ui\/react(?:\/|$)/.test(specifier) && !inside(file, uiRoot)) report('Base UI outside ui');
           if (!inside(file, fixtureRoot) && (inside(resolve(dirname(file), specifier), fixtureRoot)
             || /(?:^|\/)ui\/__fixtures__(?:\/|$)/.test(specifier))) report('Private fixture in production');
-          if (inside(file, uiRoot) && !inside(file, fixtureRoot) && /^antd(?:\/|$)/.test(specifier)) {
-            report('AntD inside public ui');
-          }
         }
         node.forEachChild(visit);
       };

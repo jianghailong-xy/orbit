@@ -1,0 +1,110 @@
+{
+ "name": "mcp-and-hook-sources-at-startup",
+ "runId": "2026-10-17T02-34-10-602Z",
+ "startedAt": "2026-10-17T02:42:40.650Z",
+ "finishedAt": "2026-10-17T02:44:46.217Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/mcp-and-hook-sources-at-startup.ndjson",
+ "protocolLines": 39,
+ "fixtures": [],
+ "checks": [
+  {
+   "name": "an ACP-injected stdio server gets only HOME, PATH and its declared env (no CURSOR_API_KEY, no CLI variables)",
+   "ok": true
+  },
+  {
+   "name": "session/new succeeds even when an injected http MCP server is unreachable",
+   "ok": true
+  },
+  {
+   "name": "at session/new, servers from ACP mcpServers and $HOME/.cursor/mcp.json start (no approval)",
+   "ok": true
+  },
+  {
+   "name": "the repo's .cursor/mcp.json server does not start without a prior approval, even with --approve-mcps",
+   "ok": true
+  },
+  {
+   "name": "$CURSOR_CONFIG_DIR/mcp.json and <data>/projects/<slug>/.cursor/mcp.json are not read",
+   "ok": true
+  },
+  {
+   "name": "no hook in any location runs during initialize + session/new",
+   "ok": true
+  },
+  {
+   "name": "after `agent mcp enable`, ACP starts the repo's MCP server too",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "environment an ACP-injected stdio MCP server receives": [
+   "HOME",
+   "P0_MCP_LOG",
+   "P0_MCP_NAME",
+   "PATH"
+  ],
+  "planted slot config locations": {
+   "home-cursor": "<RUN>/slots/default/home/.cursor",
+   "config-dir": "<RUN>/slots/default/cursor-config",
+   "data-project": "<RUN>/slots/default/cursor-data/projects/mnt-data-cursor-p0-runs-2026-10-17T02-34-10-602Z-mcp-and-hook-sources-at-startup-repo/.cursor",
+   "home-project": "<RUN>/slots/default/home/.cursor/projects/mnt-data-cursor-p0-runs-2026-10-17T02-34-10-602Z-mcp-and-hook-sources-at-startup-repo/.cursor"
+  },
+  "per run": {
+   "default": {
+    "newOk": true,
+    "newError": null,
+    "servers": [
+     "acp-injected",
+     "home-cursor-mcp"
+    ],
+    "listed": [
+     "home-cursor-mcp"
+    ],
+    "markers": []
+   },
+   "--approve-mcps": {
+    "newOk": true,
+    "newError": null,
+    "servers": [
+     "acp-injected",
+     "home-cursor-mcp"
+    ],
+    "listed": [
+     "home-cursor-mcp"
+    ],
+    "markers": []
+   },
+   "--disable-project-configs": {
+    "newOk": true,
+    "newError": null,
+    "servers": [
+     "acp-injected",
+     "home-cursor-mcp"
+    ],
+    "listed": [
+     "home-cursor-mcp"
+    ],
+    "markers": []
+   }
+  },
+  "agent mcp list / enable / list": {
+   "before": "home-cursor-mcp: ready\nrepo-mcp: not loaded (needs approval)",
+   "enable": "✓ Enabled and approved MCP server: repo-mcp",
+   "after": "home-cursor-mcp: ready\nrepo-mcp: ready"
+  },
+  "servers started after `agent mcp enable repo-mcp`": [
+   "home-cursor-mcp",
+   "repo-mcp"
+  ],
+  "approval store": [
+   "projects/mnt-data-cursor-p0-runs-2026-10-17T02-34-10-602Z-mcp-and-hook-sources-at-startup-repo/mcp-approvals.json 644 33"
+  ]
+ }
+}

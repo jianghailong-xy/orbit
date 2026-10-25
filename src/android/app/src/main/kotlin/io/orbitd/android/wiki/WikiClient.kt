@@ -6,6 +6,7 @@ import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.projects.failureReason
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.*
@@ -24,10 +25,20 @@ internal class WikiClient(private val api: OrbitApi, private val handle: Session
 
     suspend fun spaces(): List<WikiSpace> = get(listOf("wiki", "spaces"), ListSerializer(WikiSpace.serializer()))
     suspend fun space(id: String): WikiSpace = get(spacePath(id), WikiSpace.serializer(), listOf("include" to "usage"))
-    suspend fun entries(spaceId: String, limit: Int = 200): List<WikiEntry> =
-        get(spacePath(spaceId, "entries"), ListSerializer(WikiEntry.serializer()), listOf("limit" to limit.toString()))
+    /** A space's entries of every status, newest recorded first — of one kind when [kind] is given. The server answers
+     * 200 at most. */
+    suspend fun entries(spaceId: String, kind: String? = null, limit: Int = 200): List<WikiEntry> =
+        get(spacePath(spaceId, "entries"), ListSerializer(WikiEntry.serializer()),
+            listOfNotNull(kind?.let { "kind" to it }, "limit" to limit.toString()))
     suspend fun timeline(spaceId: String): WikiTimeline = get(spacePath(spaceId, "timeline"), WikiTimeline.serializer())
     suspend fun health(spaceId: String): WikiSpaceHealth = WikiSpaceHealth.decode(json(spacePath(spaceId, "health")))
+    /** `GET /wiki/system-model`: the deployment's System model and the executor switch for this account (P9). */
+    suspend fun systemModel(): WikiSystemModelStatus = WikiSystemModelStatus.read(json(listOf("wiki", "system-model")))
+    /** `GET /wiki/spaces/:id/jobs`: the space's newest server runs with their newest calls (P9). */
+    suspend fun jobs(spaceId: String): WikiJobsRead = WikiJobsRead.decode(json(spacePath(spaceId, "jobs")))
+    /** `GET /wiki/spaces/:id/share`: the space's public link — null when it has none — with what its layers hold, as
+     * `{link, counts}` (share-links §10). */
+    suspend fun share(spaceId: String): JsonObject = json(spacePath(spaceId, "share")).jsonObject
     suspend fun articleDirectory(spaceId: String) = get(spacePath(spaceId, "articles"), WikiArticleDirectory.serializer())
     suspend fun article(spaceId: String, slug: String, part: Int): WikiArticle =
         get(if (part > 0) spacePath(spaceId, "articles", slug, part.toString()) else spacePath(spaceId, "articles", slug), WikiArticle.serializer())
@@ -93,15 +104,19 @@ internal class WikiClient(private val api: OrbitApi, private val handle: Session
             putJsonArray("refs") { refs.forEach { (kind, id) -> add(buildJsonObject { put("kind", kind); put("id", id) }) } }
         })["previews"] as? JsonArray ?: JsonArray(emptyList())
 
-    /** The options a maintenance form offers: the account's workspaces and runners, and its providers. */
+    /** `GET /projects/:id`: the workspace the project's coordinator runs in — the space the Wiki opens from the project's
+     * pages is the one bound to it (design §12.3.4). Null from a server that did not say. */
+    suspend fun coordinatorWorkspace(projectId: String): String? = json(listOf("projects", projectId))["coordinatorWorkspaceId"].text()
+
+    /** The options a maintenance form offers: the account's workspaces and runners. */
     suspend fun workspaces(): JsonArray = json(listOf("workspaces")) as? JsonArray ?: JsonArray(emptyList())
     suspend fun runners(): JsonArray = json(listOf("runners")) as? JsonArray ?: JsonArray(emptyList())
-    suspend fun providers(): JsonArray = json(listOf("providers")) as? JsonArray ?: JsonArray(emptyList())
 }
 
-/** What the server said when it refused a write — its own sentence — or the web's fallback (`WikiModel.refusal`). */
+/** What the server said when it refused a write — its own sentence — or, when it said none, what kind of failure it was
+ * (`WikiModel.refusal`, d625d9809: `APIClient.failureReason`). */
 internal fun wikiRefusal(error: Throwable): String =
-    (error as? ApiError)?.let { (it.body as? JsonObject)?.get("message").text()?.takeIf { m -> m.isNotEmpty() } } ?: WikiCopy.refused
+    (error as? ApiError)?.let { (it.body as? JsonObject)?.get("message").text()?.takeIf { m -> m.isNotEmpty() } } ?: failureReason(error)
 
 /** A plan write the gate refused (`WIKI_PLAN_GATE`), with every error it found (`WikiPlanLogic.gateErrors`). */
 internal fun wikiGateErrors(error: Throwable): List<WikiPlanGateError>? {

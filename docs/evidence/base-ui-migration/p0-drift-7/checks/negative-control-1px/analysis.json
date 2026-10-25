@@ -1,0 +1,478 @@
+{
+ "command": {
+  "stats": {
+   "startTime": "2026-10-09T16:24:11.293Z",
+   "duration": 314173.763,
+   "expected": 61,
+   "skipped": 11,
+   "unexpected": 40,
+   "flaky": 0
+  },
+  "passed": 61,
+  "skipped": 11,
+  "failures": [
+   {
+    "project": "chromium-light-desktop",
+    "test": "both sides of existing 600, 640 and 960px rules",
+    "screenshot": "breakpoint-959-session.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A13+A14",
+    "differentPixels": 99
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "both sides of existing 600, 640 and 960px rules",
+    "screenshot": "breakpoint-959-session.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A13+A14",
+    "differentPixels": 106
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "both sides of existing 600, 640 and 960px rules",
+    "screenshot": "breakpoint-959-session.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A13+A14",
+    "differentPixels": 97
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "both sides of existing 600, 640 and 960px rules",
+    "screenshot": "breakpoint-959-session.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A13+A14",
+    "differentPixels": 105
+   },
+   {
+    "project": "chromium-light-desktop",
+    "test": "task",
+    "screenshot": "task-detail.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 238
+   },
+   {
+    "project": "chromium-light-desktop",
+    "test": "projects",
+    "screenshot": "projects-list.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 238
+   },
+   {
+    "project": "chromium-light-desktop",
+    "test": "wiki",
+    "screenshot": "wiki-home.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 238
+   },
+   {
+    "project": "chromium-light-desktop",
+    "test": "settings",
+    "screenshot": "settings.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 238
+   },
+   {
+    "project": "chromium-light-desktop",
+    "test": "profile",
+    "screenshot": "profile.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 238
+   },
+   {
+    "project": "chromium-light-desktop",
+    "test": "session",
+    "screenshot": "session-idle.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12+A13+A14",
+    "differentPixels": 337
+   },
+   {
+    "project": "chromium-light-phone",
+    "test": "session",
+    "screenshot": "session-idle.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A13+A14",
+    "differentPixels": 99
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "task",
+    "screenshot": "task-detail.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 216
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "projects",
+    "screenshot": "projects-list.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 216
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "wiki",
+    "screenshot": "wiki-home.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 216
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "settings",
+    "screenshot": "settings.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 216
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "profile",
+    "screenshot": "profile.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 216
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "session",
+    "screenshot": "session-idle.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12+A13+A14",
+    "differentPixels": 322
+   },
+   {
+    "project": "chromium-dark-phone",
+    "test": "session",
+    "screenshot": "session-idle.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A13+A14",
+    "differentPixels": 106
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "task",
+    "screenshot": "task-detail.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 242
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "projects",
+    "screenshot": "projects-list.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 242
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "wiki",
+    "screenshot": "wiki-home.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 242
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "screenshot": "settings.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 242
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "profile",
+    "screenshot": "profile.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 242
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "session",
+    "screenshot": "session-idle.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12+A13+A14",
+    "differentPixels": 339
+   },
+   {
+    "project": "webkit-light-phone",
+    "test": "session",
+    "screenshot": "session-idle.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A13+A14",
+    "differentPixels": 97
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "task",
+    "screenshot": "task-detail.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 210
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "projects",
+    "screenshot": "projects-list.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 210
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "wiki",
+    "screenshot": "wiki-home.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 210
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "settings",
+    "screenshot": "settings.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 210
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "profile",
+    "screenshot": "profile.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 210
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "session",
+    "screenshot": "session-idle.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12+A13+A14",
+    "differentPixels": 315
+   },
+   {
+    "project": "webkit-dark-phone",
+    "test": "session",
+    "screenshot": "session-idle.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A13+A14",
+    "differentPixels": 105
+   },
+   {
+    "project": "chromium-light-desktop",
+    "test": "projects loading and release",
+    "screenshot": "projects-loading.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 238
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "projects loading and release",
+    "screenshot": "projects-loading.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 216
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "projects loading and release",
+    "screenshot": "projects-loading.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 242
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "projects loading and release",
+    "screenshot": "projects-loading.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 210
+   },
+   {
+    "project": "chromium-light-desktop",
+    "test": "projects error and retry",
+    "screenshot": "projects-error.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 238
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "projects error and retry",
+    "screenshot": "projects-error.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 216
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "projects error and retry",
+    "screenshot": "projects-error.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 242
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "projects error and retry",
+    "screenshot": "projects-error.png",
+    "expectedLayer": "p0-drift",
+    "registeredBy": "A12",
+    "differentPixels": 210
+   }
+  ]
+ },
+ "updateMode": {
+  "registeredByBatch7": 132,
+  "comparatorFails": 128,
+  "registeredFailing": 128,
+  "registeredPassing": [
+   "chromium-dark-desktop/project-graph-fullscreen.png",
+   "chromium-light-desktop/project-graph-fullscreen.png",
+   "webkit-dark-desktop/project-graph-fullscreen.png",
+   "webkit-light-desktop/project-graph-fullscreen.png"
+  ],
+  "otherFailing": [],
+  "failingPixels": {
+   "chromium-dark-desktop/breakpoint-959-session.png": 419,
+   "chromium-dark-desktop/breakpoint-961-session.png": 1009,
+   "chromium-dark-desktop/breakpoint-961-wiki.png": 590,
+   "chromium-dark-desktop/notification-error.png": 1428,
+   "chromium-dark-desktop/profile-validation.png": 637,
+   "chromium-dark-desktop/profile.png": 590,
+   "chromium-dark-desktop/project-graph.png": 590,
+   "chromium-dark-desktop/project-overview.png": 605,
+   "chromium-dark-desktop/projects-error.png": 590,
+   "chromium-dark-desktop/projects-list.png": 590,
+   "chromium-dark-desktop/projects-loading.png": 590,
+   "chromium-dark-desktop/projects-search-empty.png": 590,
+   "chromium-dark-desktop/session-attachment-menu.png": 1428,
+   "chromium-dark-desktop/session-attachment-staged.png": 1428,
+   "chromium-dark-desktop/session-composer-focus.png": 1428,
+   "chromium-dark-desktop/session-idle.png": 1009,
+   "chromium-dark-desktop/session-streaming.png": 1009,
+   "chromium-dark-desktop/settings-saved.png": 628,
+   "chromium-dark-desktop/settings.png": 590,
+   "chromium-dark-desktop/task-action-focus.png": 593,
+   "chromium-dark-desktop/task-action-hover.png": 593,
+   "chromium-dark-desktop/task-action-menu.png": 590,
+   "chromium-dark-desktop/task-detail.png": 593,
+   "chromium-dark-desktop/task-share-dialog.png": 590,
+   "chromium-dark-desktop/wiki-home.png": 590,
+   "chromium-dark-desktop/wiki-new-entry.png": 590,
+   "chromium-dark-phone/notification-error.png": 838,
+   "chromium-dark-phone/session-attachment-menu.png": 838,
+   "chromium-dark-phone/session-attachment-staged.png": 838,
+   "chromium-dark-phone/session-composer-focus.png": 838,
+   "chromium-dark-phone/session-idle.png": 419,
+   "chromium-dark-phone/session-streaming.png": 419,
+   "chromium-light-desktop/breakpoint-959-session.png": 420,
+   "chromium-light-desktop/breakpoint-961-session.png": 1012,
+   "chromium-light-desktop/breakpoint-961-wiki.png": 599,
+   "chromium-light-desktop/notification-error.png": 1432,
+   "chromium-light-desktop/profile-validation.png": 648,
+   "chromium-light-desktop/profile.png": 592,
+   "chromium-light-desktop/project-graph.png": 596,
+   "chromium-light-desktop/project-overview.png": 592,
+   "chromium-light-desktop/projects-error.png": 592,
+   "chromium-light-desktop/projects-list.png": 592,
+   "chromium-light-desktop/projects-loading.png": 592,
+   "chromium-light-desktop/projects-search-empty.png": 595,
+   "chromium-light-desktop/session-attachment-menu.png": 1432,
+   "chromium-light-desktop/session-attachment-staged.png": 1432,
+   "chromium-light-desktop/session-composer-focus.png": 1432,
+   "chromium-light-desktop/session-idle.png": 1012,
+   "chromium-light-desktop/session-streaming.png": 1012,
+   "chromium-light-desktop/settings-saved.png": 592,
+   "chromium-light-desktop/settings.png": 592,
+   "chromium-light-desktop/task-action-focus.png": 597,
+   "chromium-light-desktop/task-action-hover.png": 597,
+   "chromium-light-desktop/task-action-menu.png": 592,
+   "chromium-light-desktop/task-detail.png": 597,
+   "chromium-light-desktop/task-share-dialog.png": 592,
+   "chromium-light-desktop/wiki-home.png": 592,
+   "chromium-light-desktop/wiki-new-entry.png": 592,
+   "chromium-light-phone/notification-error.png": 840,
+   "chromium-light-phone/session-attachment-menu.png": 840,
+   "chromium-light-phone/session-attachment-staged.png": 840,
+   "chromium-light-phone/session-composer-focus.png": 840,
+   "chromium-light-phone/session-idle.png": 420,
+   "chromium-light-phone/session-streaming.png": 420,
+   "webkit-dark-desktop/breakpoint-959-session.png": 427,
+   "webkit-dark-desktop/breakpoint-961-session.png": 1033,
+   "webkit-dark-desktop/breakpoint-961-wiki.png": 606,
+   "webkit-dark-desktop/notification-error.png": 2614,
+   "webkit-dark-desktop/profile-validation.png": 606,
+   "webkit-dark-desktop/profile.png": 606,
+   "webkit-dark-desktop/project-graph.png": 606,
+   "webkit-dark-desktop/project-overview.png": 606,
+   "webkit-dark-desktop/projects-error.png": 606,
+   "webkit-dark-desktop/projects-list.png": 606,
+   "webkit-dark-desktop/projects-loading.png": 606,
+   "webkit-dark-desktop/projects-search-empty.png": 606,
+   "webkit-dark-desktop/session-attachment-menu.png": 1460,
+   "webkit-dark-desktop/session-attachment-staged.png": 1460,
+   "webkit-dark-desktop/session-composer-focus.png": 1460,
+   "webkit-dark-desktop/session-idle.png": 1033,
+   "webkit-dark-desktop/session-streaming.png": 1033,
+   "webkit-dark-desktop/settings-saved.png": 606,
+   "webkit-dark-desktop/settings.png": 606,
+   "webkit-dark-desktop/task-action-focus.png": 606,
+   "webkit-dark-desktop/task-action-hover.png": 606,
+   "webkit-dark-desktop/task-action-menu.png": 606,
+   "webkit-dark-desktop/task-detail.png": 606,
+   "webkit-dark-desktop/task-share-dialog.png": 605,
+   "webkit-dark-desktop/wiki-home.png": 606,
+   "webkit-dark-desktop/wiki-new-entry.png": 605,
+   "webkit-dark-phone/notification-error.png": 1737,
+   "webkit-dark-phone/session-attachment-menu.png": 854,
+   "webkit-dark-phone/session-attachment-staged.png": 854,
+   "webkit-dark-phone/session-composer-focus.png": 854,
+   "webkit-dark-phone/session-idle.png": 427,
+   "webkit-dark-phone/session-streaming.png": 427,
+   "webkit-light-desktop/breakpoint-959-session.png": 428,
+   "webkit-light-desktop/breakpoint-961-session.png": 1036,
+   "webkit-light-desktop/breakpoint-961-wiki.png": 608,
+   "webkit-light-desktop/notification-error.png": 2133,
+   "webkit-light-desktop/profile-validation.png": 608,
+   "webkit-light-desktop/profile.png": 608,
+   "webkit-light-desktop/project-graph.png": 608,
+   "webkit-light-desktop/project-overview.png": 608,
+   "webkit-light-desktop/projects-error.png": 608,
+   "webkit-light-desktop/projects-list.png": 608,
+   "webkit-light-desktop/projects-loading.png": 608,
+   "webkit-light-desktop/projects-search-empty.png": 608,
+   "webkit-light-desktop/session-attachment-menu.png": 1464,
+   "webkit-light-desktop/session-attachment-staged.png": 1464,
+   "webkit-light-desktop/session-composer-focus.png": 1464,
+   "webkit-light-desktop/session-idle.png": 1036,
+   "webkit-light-desktop/session-streaming.png": 1036,
+   "webkit-light-desktop/settings-saved.png": 608,
+   "webkit-light-desktop/settings.png": 608,
+   "webkit-light-desktop/task-action-focus.png": 608,
+   "webkit-light-desktop/task-action-hover.png": 608,
+   "webkit-light-desktop/task-action-menu.png": 608,
+   "webkit-light-desktop/task-detail.png": 608,
+   "webkit-light-desktop/task-share-dialog.png": 608,
+   "webkit-light-desktop/wiki-home.png": 608,
+   "webkit-light-desktop/wiki-new-entry.png": 608,
+   "webkit-light-phone/notification-error.png": 1251,
+   "webkit-light-phone/session-attachment-menu.png": 856,
+   "webkit-light-phone/session-attachment-staged.png": 856,
+   "webkit-light-phone/session-composer-focus.png": 856,
+   "webkit-light-phone/session-idle.png": 428,
+   "webkit-light-phone/session-streaming.png": 428
+  }
+ }
+}
