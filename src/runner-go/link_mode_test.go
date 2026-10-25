@@ -146,7 +146,7 @@ func TestTheLinkIsNotUsedUntilTheControlPlaneAsks(t *testing.T) {
 // timeout; from then on daemon calls go over the link and nothing else changes way: the agent tool API stays on
 // HTTPS.
 func TestUpgradeRequiredMovesTheWorkToTheLink(t *testing.T) {
-	r := newLinkWorkRig(t)
+	r, in := newLinkEventsRig(t)
 	r.cp.status = func(path string) int {
 		if path == "/api/runner/agents" {
 			return 0
@@ -172,7 +172,7 @@ func TestUpgradeRequiredMovesTheWorkToTheLink(t *testing.T) {
 	if n := len(r.cp.requests("/api/runner/sessions/session-a/events")); n != 0 {
 		t.Errorf("%d event batches went over HTTPS after the cutover", n)
 	}
-	if n := len(r.g.rpcsTo("/runner/sessions/session-a/events")); n != 1 {
+	if n := len(in.batchesOf("session-a")); n != 1 {
 		t.Errorf("%d event batches over the link", n)
 	}
 	var agents json.RawMessage

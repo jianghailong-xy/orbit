@@ -56,6 +56,8 @@ type fakeLinkControlPlane struct {
 	// discardBodies keeps the work path's requests without their bodies.
 	discardBodies bool
 	received      []fakeLinkRequest
+	// delegate, when set, answers every request but the link-token one, in place of 200.
+	delegate http.HandlerFunc
 }
 
 type fakeLinkRequest struct {
@@ -102,6 +104,13 @@ func (cp *fakeLinkControlPlane) serve(w http.ResponseWriter, r *http.Request) {
 		rec.body = nil
 	}
 	cp.received = append(cp.received, rec)
+	if cp.delegate != nil {
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		cp.mu.Unlock()
+		cp.delegate(w, r)
+		cp.mu.Lock()
+		return
+	}
 	if cp.status != nil {
 		if code := cp.status(r.URL.Path); code != 0 {
 			w.WriteHeader(code)
