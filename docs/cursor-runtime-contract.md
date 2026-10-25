@@ -1,4 +1,4 @@
-# Cursor CLI（`agent acp`）运行时契约（P0a、P0c，Linux；P0b，macOS）
+# Cursor CLI（`agent acp`）运行时契约（P0a、P0c，Linux；P0b 及其跟进，macOS）
 
 **状态**：项目「Cursor CLI 原生接入」（`34gyHIZv301nDWxKP9XkO`）P0a 的产物，P0c（`34h3xGGSqUnA6DTMj1iop`）补测后修订，P0b（macOS）补了 §18。T0、P1–P6 按这份文件实现。
 文档收尾（`34hJAyWIuEl2rXy6q9HlL`，2026-10-19）补上实现任务交付说明里的实测结论和协调会话的裁定：P4b、P5b 跟进、P5c、P6a、P6b、P6b 跟进（§3.3、§3.4、§4、§5、§6、§9、§11–§13、§16、§17）。
@@ -103,7 +103,7 @@ D-P8-1 收尾（`34iSsJHzTeI5uzhcGSmlI`，2026-10-19）按 P8、P5c 的录制改
     - registry.npmjs.org：worker 跑 `npx -y typescript-language-server`，条件见 §14.3。repo42.cursor.sh：索引上传，只在隐私模式 4 时发生。
     - `NODE_USE_ENV_PROXY=1` 加 `HTTPS_PROXY` 后，所有连接都走代理。**ACP 路径没有自动更新检查。**
 15. **隐藏的 agent-cli-local / `--authless`** 不能当测试替身：只有另行分发的 agent-cli-local 构建能开，ACP 不走它（§15）。
-16. **macOS（§18）**：协议行为与 Linux 相同；差异在凭据——默认存储是 Keychain（条目 `cursor-user`/`cursor-*-token`，per-user 全局，多账号会互相覆盖，且 `/usr/bin/security` 按 `$HOME` 解析：账号 HOME 下保存会弹框或挂 30 s）。所以 macOS 一律用 `file`（登录进程，`$HOME/.cursor/auth.json`）或 `memory`（会话注入），别碰 Keychain。quarantine 不影响 curl+tar 安装的启动。D4 方案 A 的 SHELL 规则在 macOS 相同（源码），实测待补。
+16. **macOS（§18）**：协议行为与 Linux 相同；差异在凭据——默认存储是 Keychain（条目 `cursor-user`/`cursor-*-token`，per-user 全局，多账号会互相覆盖，且 `/usr/bin/security` 按 `$HOME` 解析：账号 HOME 下保存会弹框或挂起）。所以 macOS 一律用 `file`（登录进程，`$HOME/.cursor/auth.json`）或 `memory`（会话注入），别碰 Keychain。quarantine 不影响 curl+tar 安装的启动。**D4 方案 A 在 macOS 实测成立**（P0b 跟进，§18.7）。
 
 ---
 
@@ -770,7 +770,7 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
   读 hooks（§7.2），P3 让两者都是会话自己的目录（P4b 的账号会话也一样，只借用账号的登录，§16.2），仓库放不进 hook。
 - **依赖与风险**：CLI 只在 `$SHELL` 的路径含 `bash`、不含 `zsh` 时用它（§8.3）。新版 `2026.10.16-e3cb207` 的这段代码不变（§1.3）。
   每次升级都要回归 `shell-wrapper-env`。
-- macOS 上的表现由 P0b 验证。
+- macOS 上的表现：P0b 跟进已实测（`macos/shell-wrapper-env`，§18.7），结论与 Linux 相同。
 
 **其他方案**（A 不成立时的退路，Linux 上不再需要）：
 
@@ -1173,7 +1173,8 @@ P8 的两次提交（Auto 路由到 `grok-4.7-high`）都有。
   会话只借用账号的登录，读出 accessToken 以 `CURSOR_AUTH_TOKEN` 加 memory 存储交给 CLI，什么都不写回账号目录。
   会话的记录（`meta.json` 的 `cursorAccountDir`）写下借用的账号，移除时据此拒绝；同一份记录的 `cursorIdentity` 固定对话开局时的身份（P6b 跟进，§13.4）。
   runner 只读已存的登录，从不刷新（§8.4 第 4 条）。
-  只在 Linux 上保留 Default 以外的账号（D4 方案 A）；其他平台不声明 `cursor-account-login/v1`、`cursor-account-remove/v1`，只有 Default（方案 D），等 P0b。
+  只在 Linux 上保留 Default 以外的账号（D4 方案 A）；其他平台不声明 `cursor-account-login/v1`、`cursor-account-remove/v1`，只有 Default（方案 D）。
+  P0b 跟进（2026-10-25）实测方案 A 在 macOS 同样成立（§18.7）：macOS runner 支持任务按 §18.7 的两条差异实现，再声明这两个能力。
 - API key 凭据（P2）不建账号目录。会话用自己的 `config/`、`data/`（放在会话 scratch 下，续聊时复用），key 以 `CURSOR_API_KEY` 注入，用 memory 存储。
 
 ### 16.3 启动参数
@@ -1277,7 +1278,7 @@ env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、
 | D1 索引 | §14.3：只在隐私模式 4 时上传完整文件内容；本账号 0 字节；`--disable-indexing` 不影响功能 | 默认加 `--disable-indexing`（所有者已定，P3 已实现）；worker 的 npx：P5c 的 15 个真实会话都没出现，不加 `--disable-codebase-ref`（§14.3） |
 | D2 署名 | §14.4：客户端只发开关，文本由服务端定；实测带不带 trailer 因模型而异（P0c 没有；P8 的 `grok-4.7-high` 自己加了 `Co-authored-by: Cursor <cursoragent@cursor.com>`） | 沿用默认；不承诺提交里有署名；要关就写账号 cli-config |
 | D3 显示名 | CLI 自称 "Cursor Agent" / "Cursor CLI"（`about` 标题 "About Cursor CLI"） | 采用 "Cursor CLI"，内部名 `cursor` |
-| D4 隔离 | §8.4：只有 HOME 能挪走 `~/.cursor`；方案 A（SHELL 包装）在 Linux 实测成立：命令拿回真 HOME，看不到 key 和 token | Linux 用 A；macOS 等 P0b，A 不成立再请所有者在 B 和 D 之间选 |
+| D4 隔离 | §8.4：只有 HOME 能挪走 `~/.cursor`；方案 A（SHELL 包装）在 Linux 实测成立：命令拿回真 HOME，看不到 key 和 token | Linux 用 A；macOS：P0b 跟进实测 A 同样成立（§18.7），不用在 B 和 D 之间选 |
 | D5 换账号 | §13：同一身份下搬运加续聊实测可行；团队固定在进程上；跨账号没测 | 验证前只允许没说过话的会话换账号（所有者 2026-10-17 定方案 A；P6b 和它的跟进已实现：说过话的会话三个入口拒绝，runner 固定开局身份，§13.3、§13.4） |
 
 ---
@@ -1305,7 +1306,9 @@ P5c（2026-10-17，经 Orbit 的 runner，16 次 prompt）又做完第 7 条和�
    `.cursor/rules/` 是否进上下文；Claude 格式的用户 hooks（`$HOME/.claude/settings.json`）在 ACP 的工具事件上会不会运行（§7.2）。
 9. 后台命令在 CLI 退出或被杀之后的去向（§3.2）。Orbit 不依赖它：每会话进程作用域在 CLI 结束时回收全部后代（§3.4，假 CLI 验证），真 CLI 上的复测放到 P8。
 10. 付费套餐下非 Auto 模型会不会推动用量百分比（§11）。
-11. macOS：P0b 交付了 §18（安装、quarantine、目录、Keychain 机制与 launchd 行为、登录、D4 建议）。P0b 运行期所有者的 key 没放到 orbit-macos，带凭据的场景未跑（清单见 §18.8），由 macOS 跟进任务补测：核心场景（4 次 Auto prompt）、零 prompt 批次、Keychain 条目实测。Linux arm64、其他发行版。
+11. **macOS：P0b 跟进已补完（2026-10-25，§18.8）**：P0b 交付了 §18 的无需凭据部分；跟进任务用所有者的 Premium key 跑完了带凭据的场景
+    （4 次 Auto prompt，账本 p0bm 4/10，§18.8），**D4 方案 A 在 macOS 成立**（§18.7）。macOS 上仍待验的：远程设备完成登录（与 Linux 同一条，随 P8 做）；
+    Keychain 默认存储不稳定行为的触发条件仍未定位，但结论不变（任何路径显式设 `AGENT_CLI_CREDENTIAL_STORE`，§18.4）。Linux arm64、其他发行版。
 
 P0c 跑过的命令（固定版本，P0c 账本）：
 
@@ -1346,6 +1349,8 @@ P0c 的 21 个场景运行期断言全部成立，没有事后分析。P0c 改�
 - Auto 会路由到不同的模型，正文措辞每次不同。断言只看 CLI 的行为（权限请求、工具卡、文件、副作用日志），不看模型说了什么，例外都注明了。
 - P0a 的真实 prompt 账本：20 次。第 2、3 次是脚本缺陷造成的（`--selftest` 驱动了真 CLI），它们的协议录制丢失，产物事后检查过（见 [exploration/README.md](evidence/cursor-cli/2026.10.14-941492e/exploration/README.md)）。
 - P0c 的真实 prompt 账本：7 次，每次对应一个场景，录制都在 `p0c/protocol/`。
+- P0b 跟进（macOS，2026-10-25）的真实 prompt 账本：4 次（cap 10，账本 `p0bm`，`Auto (default[])`），Premium 套餐（`usage-api` 录制里
+  `GetPlanInfo.planName=Premium`），录制在 `macos-2026.10.14-941492e/protocol/`。
 - P5c 的【实测】来自同一个账号的付费套餐和同一把 key，Auto 模型，CLI 由 Orbit 的 runner 启动和驱动（P0a、P0c 是 P0 的工具包直接驱动）。
   真实 prompt 账本 16 次，其中第 1、3、10 次的场景第一版被重跑替换，录制不保留（[`p5c/README.md`](../src/runner-go/testdata/cursor/p5c/README.md)）。
 - 实现任务的其余结论（P4b、P5b 跟进、P6a、P6b 及其跟进）用假 CLI、回放和 PG 用例验证，条目里标【约定】并写明用例或验收脚本；
@@ -1353,7 +1358,7 @@ P0c 的 21 个场景运行期断言全部成立，没有事后分析。P0c 改�
 
 ---
 
-## 18. macOS（P0b，darwin/arm64，macOS 27.0.1 / Apple M2）
+## 18. macOS（P0b 及其跟进，darwin/arm64，macOS 27.0.1 / Apple M2）
 
 平台：orbit-macos（8 GB，GUI 登录会话 `long`）。CLI 版本与 Linux 相同（`2026.10.14-941492e`），tarball 哈希见页首。
 证据：`docs/evidence/cursor-cli/macos-2026.10.14-941492e/`，复现命令同 README（macOS 无 strace/unshare，相关断言以「skipped」记录）。
@@ -1394,7 +1399,7 @@ P0c 的 21 个场景运行期断言全部成立，没有事后分析。P0c 改�
 - 真实 HOME 下即使只跑 `--version` 也会写 `~/.cursor/cli-config.json`（和联网时 `statsig-cache.json`）【实测】——§8.4 事实 3 在 macOS 同样成立。
 - worker socket 的长路径回退公式与 Linux 相同（`/tmp/.cursor/<slug>-<hash>/`）【源码 `paths.js` 同段代码】。
 
-### 18.4 凭据存储（对照 §8.2）【实测（探针，见 evidence/probe/）+ 源码】
+### 18.4 凭据存储（对照 §8.2）【实测 `macos-keychain-store`、`credential-stores`、`directory-variables`、探针（evidence/probe/）+ 源码】
 
 | `AGENT_CLI_CREDENTIAL_STORE` | macOS 上的结果 |
 | --- | --- |
@@ -1402,8 +1407,11 @@ P0c 的 21 个场景运行期断言全部成立，没有事后分析。P0c 改�
 | `memory` | 什么都不写 |
 | 不设（`default`） | **Keychain**。实现是 shell out 到 `/usr/bin/security` 的 generic password【源码 `keychain/dist/index.js`】。条目：**acct `cursor-user`，svce `cursor-access-token`、`cursor-refresh-token`、`cursor-api-key`**（另有 `cursor-bedrock-*` 三个） |
 
-- **条目名是常量**【源码】：credential manager 以 `domain:"cursor"` 构造（`jo({domain:"cursor",store})`，`index.js` 主入口），
-  名字与 HOME、CURSOR_CONFIG_DIR、XDG_CONFIG_HOME 都无关。条目在真实钥匙串里的实测观察（`macos-keychain-store`）需要有效 key，P0b 运行期 key 未到，未做（§17.1、§18.8）。
+- **条目名是常量**【源码 + 实测 `macos-keychain-store`】：credential manager 以 `domain:"cursor"` 构造（`jo({domain:"cursor",store})`，`index.js` 主入口），
+  名字与 HOME、CURSOR_CONFIG_DIR、XDG_CONFIG_HOME 都无关。实测（有效 key、default 存储、真 HOME，两轮分别带不同 CURSOR_CONFIG_DIR / XDG_CONFIG_HOME 布局）：
+  `session/new` 后钥匙串出现且只出现三个条目，acct 一律 `cursor-user`，svce `cursor-access-token` / `cursor-refresh-token` / `cursor-api-key`——
+  **key 本身也写进 Keychain**（与 Linux file 存储把 key 写进 auth.json 同语义）；不写 auth.json；`status --format json` 能读到已存登录（`isAuthenticated:true`）。
+  场景在跑完后删除全部条目并恢复真实 `~/.cursor`（before/added/after 快照见证据目录）。
 - **Keychain 是 per-user 全局的**：同机多个 Cursor 账号共享同一组条目，后保存的覆盖先前的。**多账号隔离不能用默认 Keychain 存储**，必须 `file`（按账号 HOME 分目录）或 `memory`（注入，不落盘）。
 - **`/usr/bin/security` 按 `$HOME` 解析用户钥匙串**【实测矩阵】：
   - 真 HOME：写条目即时成功，无对话框（GUI 登录会话、钥匙串已解锁时）。
@@ -1417,6 +1425,13 @@ P0c 的 21 个场景运行期断言全部成立，没有事后分析。P0c 改�
     `Error: Cursor couldn't save your login to the macOS keychain. The keychain item is stuck. Delete it and sign in again: security delete-generic-password -s cursor-access-token -a cursor-user` + `agent login`。
   - 模式三（卡 30 s + 打印上述警告 + 仍写出 `auth.json`）：也观察到过。
   - 三种模式都对 runner 不可接受（卡 30 s，或把凭据写到预期之外的位置）。**结论：任何路径都显式设 `AGENT_CLI_CREDENTIAL_STORE`（会话 `memory`、登录 `file`），绝不依赖 default。** 触发条件（疑似钥匙串守护进程状态或服务端下发配置）留给 macOS 跟进任务再测。
+- **跟进重测（2026-10-25，真实 key，GUI 会话，`keychain-default-mode-probe`，证据 probe/）**：外来 HOME + default 存储下连续 3 次
+  `initialize → session/new` 全部一致地走钥匙串路径——`security add-generic-password -a cursor-user -s cursor-access-token` 弹框挂起，
+  CLI 打印 `Error: Cursor couldn't save your login to the macOS keychain. The keychain item is stuck. …`，**不写 auth.json**；
+  对话框没被关掉的 45 s 内 `session/new` 一直不应答（P0b 观察到的快速回落和 auth.json 混写两种模式只在无效 token 的运行里出现过，真实凭据下未复现）。
+  触发条件仍未定位，但真实凭据的形态是稳定的：就是「挂起」这一种。`CURSOR_ASSUME_SSH=1` 时启动探针 3 s 失败 exit 1（同 §18.4 的启动探针段）。
+- **保存时的 token 在命令行上**：CLI 调 `/usr/bin/security add-generic-password … -w <access token>`，同机同用户的其他进程在保存期间
+  用 `ps` 能看到该 token（实测进程树观察）。凭据敏感度上，default 存储的 macOS 与 Linux 的 file 存储没有本质区别。
 - **启动探针**（只在「判定为 SSH 会话 + darwin + default 存储 + 非 CI」时）【源码 `keychain-check.ts`、`credential-store.ts`】：
   - SSH 判定：`SSH_CONNECTION`/`SSH_CLIENT`/`SSH_TTY`/`SSH2_*`、`MOSH_*`、`VSCODE_SSH_*`、`TERM` 含 mosh 任一即算；
     `CURSOR_*_ASSUME_SSH`/`CURSOR_*_FORCE_SSH`（真值）可强制。
@@ -1452,27 +1467,47 @@ runner 以 launchd 服务运行时（本机 orbit runner 就运行在 `gui/501` 
 
 **事实**（macOS 新增的，其余同 §8.4）：
 
-1. **SHELL 选择规则与 Linux 相同**【源码 darwin 包同一段代码】：`$SHELL` 路径含 `bash` 就用它，否则从 PATH 找 bash；每条命令先 `-ilc` 快照环境再执行。所以 orbit-bash 包装（路径含 `bash`）会被采用——**Linux 上 P0c 已实测成立（§8.4）**；macOS 的实测（`shell-wrapper-env`，1 次 prompt）在 P0b 运行期 key 未到，**未运行**（§17.1，并入 macOS 跟进任务）。
-2. **方案 A 的「CLI 用账号 HOME」与默认 Keychain 存储冲突**：`/usr/bin/security` 按 HOME 解析钥匙串，账号 HOME 下保存凭据会弹框或挂 30 s（§18.4）。但这不影响 §16.3 的既定设计——契约本来就固定 `AGENT_CLI_CREDENTIAL_STORE=memory` 加注入 token/key，根本不碰 Keychain。
+1. **SHELL 选择规则与 Linux 相同**【源码 darwin 包同一段代码 + 实测 `shell-wrapper-env`】：`$SHELL` 路径含 `bash` 就用它，否则从 PATH 找 bash；每条命令先 `-ilc` 快照环境再执行。
+   macOS 实测（P0b 跟进，1 次 Auto prompt，11/11 断言）与 Linux 的 P0c 结果一致：
+   - CLI 用 orbit-bash 跑登录快照和每条命令（darwin 无 strace，包装脚本自记日志证明 `-ilc` 和 `-c` 两条路径都经过它）；
+   - agent 命令看到的 HOME 是包装还原的真 HOME，登录快照读的也是真 HOME 的 profile（真 HOME 的 `.bash_profile` 里 export 的变量出现，账号 HOME 的没有）；
+   - 命令环境里**没有** `CURSOR_API_KEY`、`CURSOR_AUTH_TOKEN`、`CURSOR_CONFIG_DIR`、`CURSOR_DATA_DIR`、`XDG_CONFIG_HOME`；工作区变量照常可见；
+   - CLI 自己仍跑在账号 HOME 上（`agent-cli-state.json` 写在账号 HOME）；真 HOME 里没有新增 `.cursor`、`.config/cursor`。
+2. **方案 A 的「CLI 用账号 HOME」与默认 Keychain 存储冲突**：`/usr/bin/security` 按 HOME 解析钥匙串，账号 HOME 下保存凭据会弹框或挂起（§18.4；2026-10-25 用真实 key 重测仍是稳定挂起）。但这不影响 §16.3 的既定设计——契约本来就固定 `AGENT_CLI_CREDENTIAL_STORE=memory` 加注入 token/key，根本不碰 Keychain。
 3. **Keychain 不能用于多账号隔离**（条目 per-user 全局，§18.4）。macOS 上三种凭据的落盘方案：
    - API key：`CURSOR_API_KEY` + memory 存储（同 Linux）。
    - 登录账号：登录进程用账号 HOME + `AGENT_CLI_CREDENTIAL_STORE=file`（token 落 `<账号 home>/.cursor/auth.json`，0600）；会话运行时读出 accessToken 以 `CURSOR_AUTH_TOKEN` + memory 注入（同 Linux §8.4）。
    - Default 账号同理。**macOS 布局与 §16.2 的差异只有一条：auth.json 跟随 HOME（`<账号>/home/.cursor/auth.json`），`xdg-config/` 在 macOS 上对 auth.json 无效。**
-4. 命令环境继承同 Linux（§8.3；wrapper 生效性待实测，风险与升级回归点相同）。
+4. 命令环境继承同 Linux（§8.3；wrapper 生效性已实测，见上）。
 
-**D4 建议（P0b 结论）**：macOS 与 Linux 一样选**方案 A**（账号 HOME + orbit-bash 包装还原真 HOME），并固定 **memory + 注入**（会话）与 **file（登录进程）** 两种存储，任何路径都不依赖 Keychain。若某天 A 被推翻需要选 B（真 HOME），macOS 的副作用与 Linux 相同（写读真 `~/.cursor`），且同样别用 Keychain。
+**D4 结论（P0b 跟进实测，2026-10-25）**：**方案 A 在 macOS 上成立**。macOS runner 与 Linux 用同一套方案（账号 HOME + orbit-bash 包装还原真 HOME、会话 `memory` + 注入、登录进程 `file`）。
+实现 macOS runner 支持时按这两条差异做（其余与 Linux 相同）：
+1. 登录进程的 `auth.json` 恒为 `<账号 home>/.cursor/auth.json`（0700/0600；`XDG_CONFIG_HOME`、`CURSOR_CONFIG_DIR` 对 macOS 的 auth.json 无效，§18.3）——读账号登录、过期判断的路径按平台取。
+2. 任何路径都显式设 `AGENT_CLI_CREDENTIAL_STORE`（会话 `memory`、登录 `file`），绝不依赖 default（Keychain，§18.4）；default 存储还多一个把 token 放在 `security` 命令行 `-w` 参数上、同机同用户进程可见的风险点。
+
+若某天 A 被推翻需要选 B（真 HOME），macOS 的副作用与 Linux 相同（写读真 `~/.cursor`），且同样别用 Keychain。
 
 ### 18.8 macOS 复现的核心场景
 
-已实测（无需凭据，8/8 场景通过，证据目录同名 `scenarios/*.json`）：initialize 与未登录握手（`signed-out-handshake` 12/12）、进程信号（`process-signals`）、
-调试日志（`debug-log-location`）、登录链接与未完成登录（`login-link-and-logout`，完整超时 §18.5）、失败形状（`failure-shapes-without-prompt`：
-无效 key 的 `-32603`/`agent models` 报错、坏 cli.json 启动即退、`--authless` 拒绝；断网项 Linux-only 跳过）、
-安装与版本（`install-and-version`）、quarantine（`macos-quarantine`）、launchd 里的 Keychain（`macos-launchd-keychain`）。
+P0b（无需凭据，8/8）与 P0b 跟进（有效 key，12/12 场景通过）都已跑完，证据在目录同名 `scenarios/*.json`：
 
-**未运行（gaps）**：需要凭据的场景在 P0b 运行期因 key 未放到本机（所有者在协调会话的卡片上确认会放，但直到 2026-10-17T08:00Z 协调会话定的期限都没到）而没有跑成。这些场景的脚本已写好、在 macOS 上可用，由后续 macOS 跟进任务补测：
-- 真实 prompt：`multi-turn-tools-default`（2 次 Auto：initialize → new → prompt → load、一次工具调用、一次 MCP 调用）、`cancel-mid-tool`（1 次）、`shell-wrapper-env`（1 次，D4 方案 A 的实测）。
-- 零 prompt：`credential-stores`、`directory-variables`、`api-key-session-management`、`parameterized-model-picker`、`usage-api`（含 GetPlanInfo 的套餐核对）、`team-pin`、`mcp-and-hook-sources-at-startup`、`startup-processes-and-network`、`macos-keychain-store`（Keychain 条目的实测观察与清理）。
-- macOS 真实 prompt 账本：0/30（Linux 账本 20 次另计）。
+- P0b：initialize 与未登录握手（`signed-out-handshake` 12/12）、进程信号（`process-signals`）、调试日志（`debug-log-location`）、
+  登录链接与未完成登录（`login-link-and-logout`，完整超时 §18.5）、失败形状（`failure-shapes-without-prompt`：无效 key 的 `-32603`/`agent models` 报错、
+  坏 cli.json 启动即退、`--authless` 拒绝；断网项 Linux-only 跳过）、安装与版本（`install-and-version`）、quarantine（`macos-quarantine`）、
+  launchd 里的 Keychain（`macos-launchd-keychain`）。
+- P0b 跟进零 prompt（2026-10-25，所有者的 Premium key；`usage-api` 的录制里 `GetPlanInfo.planName=Premium`）：
+  `credential-stores`（10/10：file 落 `$HOME/.cursor/auth.json` 且含 apiKey 字段、memory 不落盘、logout 语义同 Linux）、
+  `directory-variables`（9/9：§18.3 的目录规则）、`api-key-session-management`（32/32）、`parameterized-model-picker`（7/7）、
+  `usage-api`（5/5：用量与套餐读数同 Linux）、`team-pin`（4/4）、`mcp-and-hook-sources-at-startup`（8/8：MCP 源、注入服务器的环境、
+  `agent mcp enable` 审批与 hooks 行为同 Linux，§6/§7）、`startup-processes-and-network`（12/12）、
+  `macos-keychain-store`（13/13：三条目写入、条目名不变性、场景内清理，§18.4）。
+- P0b 跟进真实 prompt（4 次 Auto，账本 p0bm 4/10）：
+  `multi-turn-tools-default`（24/24，2 次：initialize → new → 两轮 prompt → load；read/execute/edit/fetch/MCP 各出现，权限请求、
+  allow-always 落 cli-config、被拒 MCP 不执行、orbit MCP 的 `task_get`、load 重放与标题同 Linux）、
+  `cancel-mid-tool`（5/5，1 次：`session/cancel` 3 ms 内回 `cancelled`，sleep 进程被杀、工具卡停在 in_progress）、
+  `shell-wrapper-env`（11/11，1 次：D4 方案 A 的实测，§18.7）。
+
+复现命令见 README；macOS 上的证据目录属于账本 `p0bm`（`prompts-ledger.json`），回放样本在 `CURSOR_P0_ROOT/macos-fixtures/`（不进仓库，P0b 约定）。
 
 ---
 
@@ -1494,6 +1529,6 @@ runner 以 launchd 服务运行时（本机 orbit runner 就运行在 `gui/501` 
 | [`src/runner-go/testdata/cursor/p5c/`](../src/runner-go/testdata/cursor/p5c/README.md) | P5c：Orbit 的 runner 在真 CLI 上的 12 个场景（每个一份 `summary.json` 加双向录制）、恶意夹具仓库、手工构造的 `synthetic/` 样本、P5c 账本副本 |
 | [`src/runner-go/testdata/cursor/p8/`](../src/runner-go/testdata/cursor/p8/README.md) | P8：Orbit 的 runner 在真 CLI 上用 strace 截下的线上录制 `key-allow-reject`，被拒的 shell 调用只有 `{status:"completed"}`（§5.2） |
 | [`docs/evidence/cursor-cli/2026.10.16-e3cb207/p0c/`](evidence/cursor-cli/2026.10.16-e3cb207/p0c/README.md) | 新版 `2026.10.16-e3cb207` 的不花 prompt 场景，以及和固定版本的对比 `comparison.json`（§1.3） |
-| [`evidence/cursor-cli/macos-2026.10.14-941492e/`](evidence/cursor-cli/macos-2026.10.14-941492e/) | P0b 的 macOS 证据：自己的 `summary.json`、`scenarios/`、`protocol/`、`prompts-ledger.json`、`login-timing/`、`probe/` |
+| [`evidence/cursor-cli/macos-2026.10.14-941492e/`](evidence/cursor-cli/macos-2026.10.14-941492e/) | P0b 及其跟进的 macOS 证据：自己的 `summary.json`、`scenarios/`、`protocol/`、`prompts-ledger.json`（账本 `p0bm`）、`login-timing/`、`probe/` |
 
 复现命令见 [`scripts/cursor-p0/README.md`](../scripts/cursor-p0/README.md)。

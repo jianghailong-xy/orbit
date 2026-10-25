@@ -1,0 +1,369 @@
+{
+ "name": "api-key-session-management",
+ "runId": "2026-10-24T23-11-13-703Z",
+ "startedAt": "2026-10-24T23:11:13.704Z",
+ "finishedAt": "2026-10-24T23:11:56.334Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/api-key-session-management.ndjson",
+ "protocolLines": 65,
+ "fixtures": [
+  "api-key-session-management/acp"
+ ],
+ "checks": [
+  {
+   "name": "CURSOR_API_KEY alone opens a session (no authenticate call)",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "name": "configOptions are exactly [mode, model]",
+   "ok": true
+  },
+  {
+   "name": "default model is Auto = \"default[]\"",
+   "ok": true
+  },
+  {
+   "name": "modes agent/plan/ask, current agent",
+   "ok": true
+  },
+  {
+   "name": "set_config_option(model, listed variant) returns configOptions",
+   "ok": true
+  },
+  {
+   "name": "set_config_option(model, unlisted variant) -> -32602 Invalid model value",
+   "ok": true,
+   "detail": {
+    "code": -32602,
+    "message": "Invalid params",
+    "data": {
+     "message": "Invalid model value: gpt-5.5[context=1m]"
+    }
+   }
+  },
+  {
+   "name": "set_config_option(model, the alias \"auto\") -> -32602 Invalid model value",
+   "ok": true,
+   "detail": {
+    "code": -32602,
+    "message": "Invalid params",
+    "data": {
+     "message": "Invalid model value: auto"
+    }
+   }
+  },
+  {
+   "name": "set_config_option(model, an unknown model) -> -32602 Invalid model value",
+   "ok": true,
+   "detail": {
+    "code": -32602,
+    "message": "Invalid params",
+    "data": {
+     "message": "Invalid model value: no-such-model[]"
+    }
+   }
+  },
+  {
+   "name": "unknown configId -> -32602 Unknown config option",
+   "ok": true,
+   "detail": {
+    "code": -32602,
+    "message": "Invalid params",
+    "data": {
+     "message": "Unknown config option: effort"
+    }
+   }
+  },
+  {
+   "name": "set_config_option(mode, plan) works",
+   "ok": true
+  },
+  {
+   "name": "session/set_mode returns {}",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "name": "set_mode with an unknown mode -> -32603 (plain error)",
+   "ok": true,
+   "detail": {
+    "code": -32603,
+    "message": "Internal error",
+    "data": {
+     "details": "Invalid mode ID: yolo. Valid modes: agent, plan, ask"
+    }
+   }
+  },
+  {
+   "name": "session/set_model returns {}",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "name": "a model chosen in session A shows up as session B's model (process-global)",
+   "ok": true,
+   "detail": "claude-sonnet-4-6[thinking=true,context=200k,effort=medium]"
+  },
+  {
+   "name": "a later session/new starts on that model too",
+   "ok": true
+  },
+  {
+   "name": "two or more sessions can live in one process",
+   "ok": true
+  },
+  {
+   "name": "session/list {cwd} lists the sessions (even never-prompted ones)",
+   "ok": true,
+   "detail": 3
+  },
+  {
+   "name": "session/list filters by cwd",
+   "ok": true
+  },
+  {
+   "name": "session/list relative cwd -> -32602",
+   "ok": true,
+   "detail": {
+    "code": -32602,
+    "message": "Invalid params",
+    "data": {
+     "message": "Session list cwd filter must be an absolute path"
+    }
+   }
+  },
+  {
+   "name": "session/list pagination cursor -> -32602 (unsupported)",
+   "ok": true,
+   "detail": {
+    "code": -32602,
+    "message": "Invalid params",
+    "data": {
+     "message": "ACP session/list pagination cursors are not currently supported by the CLI agent"
+    }
+   }
+  },
+  {
+   "name": "session/load of a never-prompted session -> -32602 not found (no store.db yet)",
+   "ok": true,
+   "detail": {
+    "code": -32602,
+    "message": "Invalid params",
+    "data": {
+     "message": "Session \"<UUID_1>\" not found"
+    }
+   }
+  },
+  {
+   "name": "a never-prompted session has meta.json but no store.db",
+   "ok": true
+  },
+  {
+   "name": "session/load unknown id -> -32602",
+   "ok": true,
+   "detail": {
+    "code": -32602,
+    "message": "Invalid params",
+    "data": {
+     "message": "Session \"<UUID_3>\" not found"
+    }
+   }
+  },
+  {
+   "name": "session/close -> -32601 Method not found",
+   "ok": true,
+   "detail": {
+    "code": -32601,
+    "message": "\"Method not found\": session/close",
+    "data": {
+     "method": "session/close"
+    }
+   }
+  },
+  {
+   "name": "session/resume -> -32601 Method not found",
+   "ok": true,
+   "detail": {
+    "code": -32601,
+    "message": "\"Method not found\": session/resume",
+    "data": {
+     "method": "session/resume"
+    }
+   }
+  },
+  {
+   "name": "session/fork -> -32601 Method not found",
+   "ok": true,
+   "detail": {
+    "code": -32601,
+    "message": "\"Method not found\": session/fork",
+    "data": {
+     "method": "session/fork"
+    }
+   }
+  },
+  {
+   "name": "session/prompt for an unknown session -> -32603 (rejected locally; never reaches a model)",
+   "ok": true,
+   "detail": {
+    "code": -32603,
+    "message": "Internal error",
+    "data": {
+     "details": "Session <UUID_4> not found"
+    }
+   }
+  },
+  {
+   "name": "session/new without mcpServers -> -32603 with zod issues",
+   "ok": true,
+   "detail": {
+    "code": -32603,
+    "message": "Internal error",
+    "data": [
+     {
+      "expected": "array",
+      "code": "invalid_type",
+      "path": [
+       "mcpServers"
+      ],
+      "message": "Invalid input"
+     }
+    ]
+   }
+  },
+  {
+   "name": "session/cancel for an unknown session is ignored (no reply, process alive)",
+   "ok": true
+  },
+  {
+   "name": "available_commands_update arrives without a prompt",
+   "ok": true
+  },
+  {
+   "name": "stdout carried only JSON-RPC lines",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "session/new ms": 6049,
+  "session/new result (model list truncated)": {
+   "sessionId": "<UUID_1>",
+   "modes": {
+    "currentModeId": "agent",
+    "availableModes": [
+     {
+      "id": "agent",
+      "name": "Agent",
+      "description": "Full agent capabilities with tool access"
+     },
+     {
+      "id": "plan",
+      "name": "Plan",
+      "description": "Read-only mode for planning and designing before implementation"
+     },
+     {
+      "id": "ask",
+      "name": "Ask",
+      "description": "Q&A mode - no edits or command execution"
+     }
+    ]
+   },
+   "models": {
+    "currentModelId": "default[]",
+    "count": 46,
+    "first": [
+     {
+      "modelId": "default[]",
+      "name": "Auto"
+     },
+     {
+      "modelId": "grok-4.7[context=256k,reasoning_effort=high,fast=true]",
+      "name": "grok-4.7"
+     },
+     {
+      "modelId": "grok-4.6[effort=high,fast=true]",
+      "name": "grok-4.6"
+     },
+     {
+      "modelId": "composer-2.5[fast=true]",
+      "name": "composer-2.5"
+     }
+    ]
+   },
+   "configOptions": [
+    {
+     "id": "mode",
+     "name": "Mode",
+     "description": "Controls how the agent executes tasks",
+     "category": "mode",
+     "type": "select",
+     "currentValue": "agent",
+     "options": [
+      {
+       "value": "agent",
+       "name": "Agent",
+       "description": "Full agent capabilities with tool access"
+      },
+      {
+       "value": "plan",
+       "name": "Plan",
+       "description": "Read-only mode for planning and designing before implementation"
+      },
+      {
+       "value": "ask",
+       "name": "Ask",
+       "description": "Q&A mode - no edits or command execution"
+      }
+     ]
+    },
+    {
+     "id": "model",
+     "name": "Model",
+     "description": "Controls which model variant is used for responses",
+     "category": "model",
+     "type": "select",
+     "currentValue": "default[]",
+     "options": [
+      {
+       "value": "default[]",
+       "name": "Auto"
+      },
+      {
+       "value": "grok-4.7[context=256k,reasoning_effort=high,fast=true]",
+       "name": "grok-4.7"
+      },
+      {
+       "value": "grok-4.6[effort=high,fast=true]",
+       "name": "grok-4.6"
+      },
+      {
+       "value": "composer-2.5[fast=true]",
+       "name": "composer-2.5"
+      },
+      "… 46 total"
+     ]
+    }
+   ]
+  },
+  "session/list entry": {
+   "sessionId": "<UUID_2>",
+   "cwd": "<RUN>/work",
+   "updatedAt": "2026-10-24T23:11:32.868Z"
+  },
+  "updates without any prompt": [
+   "available_commands_update",
+   "current_mode_update",
+   "current_mode_update",
+   "available_commands_update",
+   "current_mode_update",
+   "available_commands_update"
+  ]
+ }
+}
