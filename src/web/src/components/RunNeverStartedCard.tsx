@@ -80,14 +80,16 @@ export const NEVER_STARTED_TITLE = 'This run never started';
  * failure the engine itself reported — a spent quota, a rejected key mid-turn — keeps the card it
  * already has (the transcript's, or the auto-retry one) and never this one. A session the runner
  * has not claimed at all (QUEUED) has not started either, and is in scope for the causes that stop
- * a claim happening at all (an engine this runner cannot run).
+ * a claim happening at all (an engine this runner cannot run) — whatever an EARLIER run's engine
+ * said: only a claim clears the column, so on a queued row it is still the last run's, and a
+ * conversation that has talked waits on those causes exactly as a new one does (P9 §8.1).
  */
 function applies(
   session: NeverStartedSession & { engineStartedAt?: string | null },
 ): boolean {
   const state = sessionRunStateOf(session);
   if (state !== 'QUEUED' && state !== 'RUNNING' && state !== 'FAILED') return false;
-  if (session.engineStartedAt != null) return false;
+  if (state !== 'QUEUED' && session.engineStartedAt != null) return false;
   return !sessionRetryPending(session);
 }
 
@@ -166,6 +168,9 @@ const MACHINE_COPY = {
   /** AntigravityRepairCard's updateRunner body's second sentence, with this card's one subject. */
   upgradeClause: 'The runner updates itself when no session is running on it, and this run starts then.',
   notInstalledBody: 'Install it from Infrastructure, then send your message again.', // both repair cards
+  /** The same install, for a run still in the queue: it is claimed once the engine is there, so a
+   *  second send would only be a second turn. The queue notice's own promise (runnerSlots). */
+  notInstalledWaitingBody: 'Install it from Infrastructure, and this run starts as soon as it’s installed.',
   unsupportedWhy: (machine: string) => `DeepSeek Harness can’t run on ${machine}`, // DshRepairCard
   unsupportedBody:
     'DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only. Move this work to a runner that can.',
@@ -315,7 +320,10 @@ function machineCause(input: NeverStartedInput, error: string): NeverStartedFact
       // Both repair cards name the machine this way; "on this runner" is the fallback for a
       // session whose runner the caller could not name.
       why: `${engineName(runtime)} isn’t installed on ${machine}`,
-      body: MACHINE_COPY.notInstalledBody,
+      body:
+        sessionRunStateOf(session) === 'QUEUED'
+          ? MACHINE_COPY.notInstalledWaitingBody
+          : MACHINE_COPY.notInstalledBody,
       next: null,
       // The install is a machine's engine-row press, and only the host knows whether it can make
       // one for this engine — an id it cannot perform draws no button at all.

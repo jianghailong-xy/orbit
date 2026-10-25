@@ -247,8 +247,8 @@ import {
 } from '../managed-runners/managed-runner-demand';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
 import {
-  CURSOR_RUNNER_UPGRADE_ERROR,
   DSH_RUNNER_UPGRADE_ERROR,
+  cursorRunnerRefusal,
   dshRuntimeUnavailable,
 } from '../runner-api/runner-provider-support';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
@@ -1238,7 +1238,7 @@ export class SessionsService {
     // named one for starts in one it does (cursorDefaultPermissionMode, below).
     if (runtime === AgentProvider.CURSOR) {
       if (!targetRunner?.capabilitiesReportedAt || !targetRunner.capabilities?.includes('provider:cursor')) {
-        throw new ConflictException(CURSOR_RUNNER_UPGRADE_ERROR);
+        throw new ConflictException(cursorRunnerRefusal(targetRunner));
       }
       if (dto.permissionMode) normalizeBuiltinPermissionMode(runtime, model ?? '', dto.permissionMode as PermissionMode);
     }
@@ -8485,7 +8485,7 @@ export class SessionsService {
       const resumeRuntime = next.engine;
       if (resumeRuntime === AgentProvider.CURSOR) {
         if (!current.assignedRunner?.capabilitiesReportedAt || !current.assignedRunner.capabilities?.includes('provider:cursor')) {
-          throw new ConflictException(CURSOR_RUNNER_UPGRADE_ERROR);
+          throw new ConflictException(cursorRunnerRefusal(current.assignedRunner));
         }
         // D5, as on a live switch (updateConfig): revived on another key or sign-in, a conversation it
         // has would have to go with it.
@@ -9055,7 +9055,7 @@ export class SessionsService {
       }
       if (exec.provider === AgentProvider.CURSOR && (!session.assignedRunner?.capabilitiesReportedAt ||
         !session.assignedRunner.capabilities?.includes('provider:cursor'))) {
-        throw new ConflictException(CURSOR_RUNNER_UPGRADE_ERROR);
+        throw new ConflictException(cursorRunnerRefusal(session.assignedRunner));
       }
       const requestedPermissionMode =
         (dto.permissionMode as PermissionMode | undefined) ??

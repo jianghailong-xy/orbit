@@ -33,6 +33,33 @@ export function runnerKnowsCursor(runner: {
   return !!sanitizeRunnerEngines(runner.engines)?.some((engine) => engine.engine === 'cursor');
 }
 
+/** Cursor CLI on a runner whose release knows it but that does not declare it: the pinned build is not
+ *  ready there, which that runner's Install puts right (src/runner-go/cursor_health.go cursorDeclared).
+ *  Spelled the way every client's not-installed card already reads one: web's RunNeverStartedCard, and
+ *  OrbitKit's and Android's SessionRunStart.notInstalled. */
+export const CURSOR_NOT_INSTALLED_ERROR =
+  `${ENGINE_CLI_NAMES[AgentProvider.CURSOR]} isn't installed on this runner; install it from Infrastructure, then try again`;
+
+/** Declared by a release that knows Cursor CLI, the CLI installed or not (CURSOR_ACCOUNT_LOGIN_V1 in
+ *  runner-api.controller.ts, which this module does not import). */
+const CURSOR_ACCOUNT_LOGIN_CAPABILITY = 'cursor-account-login/v1';
+
+/**
+ * Why a runner that does not declare provider:cursor cannot take a Cursor CLI session, in the words a
+ * refusal of one and the sessions waiting on it carry. A release that knows Cursor CLI reports it among
+ * its engines and declares its account sign-in whether the CLI is installed or not, so a runner that does
+ * either is missing the CLI (P9 §8.2); only one that does neither predates Cursor CLI and needs an update.
+ */
+export function cursorRunnerRefusal(runner: {
+  capabilities?: readonly string[] | null;
+  capabilitiesReportedAt?: Date | null;
+  engines?: unknown;
+} | null | undefined): string {
+  const reported = !!sanitizeRunnerEngines(runner?.engines)?.some((engine) => engine.engine === 'cursor');
+  const signsIn = !!runner?.capabilitiesReportedAt && !!runner.capabilities?.includes(CURSOR_ACCOUNT_LOGIN_CAPABILITY);
+  return reported || signsIn ? CURSOR_NOT_INSTALLED_ERROR : CURSOR_RUNNER_UPGRADE_ERROR;
+}
+
 /**
  * Why a runner that declares dsh still cannot start it, by what its last engine report says. Each
  * leads with the runner's own `DSH_*` code, which the clients' repair reads (web `dshRepair`,

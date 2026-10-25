@@ -204,6 +204,7 @@ import { accountIsPaused } from '../lib/accountPause';
 import { cursorUsageLimit, sessionPlanUsage } from '../lib/planUsage';
 import {
   CURSOR_AUTO_NOTE,
+  CURSOR_CLI,
   CURSOR_CONTEXT_UNAVAILABLE,
   CURSOR_MOVE_BLOCKED_NOTE,
   CURSOR_QUEUE_NOTE,
@@ -212,6 +213,7 @@ import {
   cursorConversationStarted,
   cursorModelPick,
   cursorSettingRows,
+  runnerKnowsCursor,
   type CursorRunnerFacts,
 } from '../lib/cursorRuntime';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
@@ -317,6 +319,7 @@ import { DshRepairCard } from './Transcript';
 import {
   RunNeverStartedCard,
   runNeverStarted,
+  type NeverStartedActions,
   type NeverStartedSession,
 } from './RunNeverStartedCard';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
@@ -8308,6 +8311,13 @@ export function WorkspaceView({
     onSuccess: () => qc.invalidateQueries({ queryKey: ['runners'] }),
     onError: (e: Error) => void message.error("Couldn't install DeepSeek Harness", e.message),
   });
+  // The never-started card's Install for a Cursor CLI session: the engine row's own request, offered
+  // only on a runner whose release knows Cursor CLI (one that does not is told to update instead).
+  const installCursor = useMutation({
+    mutationFn: () => api(`/runners/${encodeId(runner.id)}/install`, { method: 'POST', body: { engine: 'cursor' } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['runners'] }),
+    onError: (e: Error) => void message.error(`Couldn't install ${CURSOR_CLI}`, e.message),
+  });
   // Hand an undelivered message back to the composer, so a message the engine never received can
   // be re-sent without being retyped out of a bubble. Explicitly user-initiated, so unlike the
   // interrupt/withdraw fold-backs (which fire on their own and therefore only write into an empty
@@ -9176,6 +9186,37 @@ export function WorkspaceView({
       navigate,
     ],
   );
+  // What the never-started card's presses do, in either of the places it stands (see its render).
+  const neverStartedActions: NeverStartedActions = {
+    // SR34: a refused run is not re-resolved, it is replaced by a NEW run of the
+    // task — the same write the task panel's Run now makes, under the same
+    // request token so a lost answer is resent rather than duplicated.
+    startAgain: selectedSession?.taskId
+      ? () =>
+          startRunAgain.mutate({
+            taskId: selectedSession.taskId as string,
+            triggerId: newRunRequestToken(),
+          })
+      : undefined,
+    // An ordinary session is resumable as it stands, so the message goes again —
+    // the transcript's own retry, whose words it would carry.
+    sendAgain: authErrorHelp.onRetry,
+    install:
+      selectedRuntime === AgentProvider.DSH
+        ? authErrorHelp.onInstallDsh
+        : selectedRuntime === AgentProvider.CURSOR
+          ? runner.online && runnerKnowsCursor(runner) ? () => installCursor.mutate() : undefined
+          : authErrorHelp.onInstall,
+    openProviders:
+      selectedRuntime === AgentProvider.DSH
+        ? authErrorHelp.onEditDshKey
+        : authErrorHelp.onOpenProviders,
+    openRunner: () => navigate(`/runners/${encodeId(runner.id)}`),
+    // The conversation is the other way to answer a refusal, so this only arms it:
+    // the reader's own words are the point, and nothing is sent for them.
+    chatAbout: () => setTimeout(() => taRef.current?.focus(), 0),
+    busy: retryInFlight || startRunAgain.isPending || installCursor.isPending,
+  };
   const pickModel = (v: string): void => {
     // A re-selection is still a preference, even when the session config already matches it.
     qc.setQueryData<Me>(meQuery().queryKey, (prev) =>
@@ -10935,39 +10976,10 @@ export function WorkspaceView({
               {/* A run that never became one says why, in place of the waiting notice that would
                   otherwise promise it is still coming. It takes the slot the two notices below
                   take, and suppresses them: the same empty transcript cannot be both a start that
-                  is on its way and a start that was refused. */}
-              {selected && !selectedTrashed && neverStarted && (
-                <RunNeverStartedCard
-                  never={neverStarted}
-                  actions={{
-                    // SR34: a refused run is not re-resolved, it is replaced by a NEW run of the
-                    // task — the same write the task panel's Run now makes, under the same
-                    // request token so a lost answer is resent rather than duplicated.
-                    startAgain: selectedSession?.taskId
-                      ? () =>
-                          startRunAgain.mutate({
-                            taskId: selectedSession.taskId as string,
-                            triggerId: newRunRequestToken(),
-                          })
-                      : undefined,
-                    // An ordinary session is resumable as it stands, so the message goes again —
-                    // the transcript's own retry, whose words it would carry.
-                    sendAgain: authErrorHelp.onRetry,
-                    install:
-                      selectedRuntime === AgentProvider.DSH
-                        ? authErrorHelp.onInstallDsh
-                        : authErrorHelp.onInstall,
-                    openProviders:
-                      selectedRuntime === AgentProvider.DSH
-                        ? authErrorHelp.onEditDshKey
-                        : authErrorHelp.onOpenProviders,
-                    openRunner: () => navigate(`/runners/${encodeId(runner.id)}`),
-                    // The conversation is the other way to answer a refusal, so this only arms it:
-                    // the reader's own words are the point, and nothing is sent for them.
-                    chatAbout: () => setTimeout(() => taRef.current?.focus(), 0),
-                    busy: retryInFlight || startRunAgain.isPending,
-                  }}
-                />
+                  is on its way and a start that was refused. Under a transcript that already has
+                  content it stands where their one-line forms do, below the last turn. */}
+              {selected && !selectedTrashed && neverStarted && transcriptEvents.length === 0 && (
+                <RunNeverStartedCard never={neverStarted} actions={neverStartedActions} />
               )}
               {placeholder === 'queued' && showQueuedNotice && !neverStarted && (
                 dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-queued-state">
@@ -11185,9 +11197,16 @@ export function WorkspaceView({
                   </LandingLink>
                 </div>
               ) : null}
+              {/* A conversation that has talked, whose next message waits on something only the
+                  reader or the machine can change (P9 §8.1): the card, in place of the queued
+                  note, which would read as an ordinary wait for a slot. */}
+              {selected && !selectedTrashed && neverStarted && transcriptEvents.length > 0 && (
+                <RunNeverStartedCard never={neverStarted} actions={neverStartedActions} />
+              )}
               {selected &&
                 !selectedTrashed &&
                 showQueuedNotice &&
+                !neverStarted &&
                 transcriptEvents.length > 0 && (
                 dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-note chat-slot-wait">
                   <span>{queuedTitle(selectedSession ?? selected)}</span>

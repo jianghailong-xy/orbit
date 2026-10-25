@@ -214,6 +214,32 @@ is the version reviewed above, at the same release as the runner's:
 
 Decision: accepted, with no override or audit exception. GO-2026-5932 needs none, since its package is not imported.
 
+## Runner link client dependencies (2026-10-25)
+
+The runner's link client and its shadow connection (`src/runner-go/link_*.go`, `docs/runner-link-design.md` §7 and
+§11.2) give the `orbit` binary its first compiled-in external modules. Both are the versions reviewed above:
+
+| Module | Version | Purpose | License |
+| --- | --- | --- | --- |
+| `github.com/coder/websocket` | v1.8.15 | The link's WebSocket dialer. New in `src/runner-go/go.mod`. | ISC |
+| `google.golang.org/protobuf` | v1.36.12 | The runtime of `src/runner-go/linkpb`, which the binary now imports. | BSD-3-Clause |
+
+- **Source and integrity.** The same releases the link gateway builds with. `github.com/coder/websocket` requires no
+  module of its own, so `go.sum` gains its two hashes and nothing else, and `go mod verify` passes.
+- **Known vulnerabilities.** OSV lists nothing for either module at these versions, nor for `github.com/coder/websocket`
+  at any version (`nhooyr.io/websocket` included). govulncheck v1.9.0 with the scanning host's go1.27.1 finds nothing in
+  either module. What it reports for the runner is standard-library advisories of that toolchain: ten reachable from the
+  runner's code, fourteen in its module scan, all fixed in go1.27.2. These are the gateway's toolchain findings above.
+- **Reach.** The runner only dials. It reads frames from the connections it opened itself, over TLS verified against the
+  system's roots, to the link address the control plane hands out with the link token. A message is capped at 256 KiB
+  (a frame in pieces at 8 MiB), and compression is off. During the shadow period nothing it reads changes the runner's
+  work: it counts answers, and follows Drain and Close. With the shadow off (`ORBIT_LINK_SHADOW=0`), only
+  `orbit doctor` dials the link.
+- **Updates.** Dependabot's existing `gomod` entry for `/src/runner-go` covers both. Keep them at the gateway's
+  versions.
+
+Decision: accepted, with no override or audit exception.
+
 ## NATS clients for runner link hints (2026-10-25)
 
 The runner link's hints (`docs/runner-link-design.md` §5.5, §6.3; task B1) are published by the apiserver on NATS and
