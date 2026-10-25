@@ -7574,7 +7574,9 @@ export class RunnerApiController {
       }
 
       if (Object.keys(sessionData).length > 0) {
-        await tx.session.update({ where: { id: sessionId }, data: sessionData });
+        // The row comes back as its id alone: nothing here reads it, and all 140 of its columns, returned, made this
+        // the batch's costliest statement for both the database and Prisma (task O2's measurement).
+        await tx.session.update({ where: { id: sessionId }, data: sessionData, select: { id: true } });
       }
       // A Claude session its account's usage limit just moved (retryPlanFor) still has its engine up on
       // the old account. A reload naming the provider re-spawns it with the new account's
