@@ -187,6 +187,9 @@ func (l *linkState) forwardHeartbeat(hb *linkpb.Heartbeat) {
 		if hints != nil {
 			// An answer without them says nothing about what waits, which is not the same as nothing waiting.
 			ack.Hints = c.g.hintState(c.claims.RunnerID, hints)
+			if r := hints.Release; r != nil && r.Version != "" {
+				ack.Release = &linkpb.AssignedRelease{Version: r.Version, Rollback: r.Rollback}
+			}
 		}
 		m.heartbeatForwards.inc("forwarded")
 		m.heartbeatDuration.observe(time.Since(started))
@@ -263,6 +266,12 @@ type linkHints struct {
 			Watchers  uint32 `json:"watchers"`
 		} `json:"sessions"`
 	} `json:"watchers"`
+	// Release is the release the runner is assigned, as GET /runner/release would answer it
+	// (src/apiserver/src/runner-api/runner-release-feed.ts); absent when the apiserver can state none now.
+	Release *struct {
+		Version  string `json:"version"`
+		Rollback bool   `json:"rollback"`
+	} `json:"release"`
 }
 
 // splitLinkHints parts the route's answer into today's HeartbeatResponse, which goes to the runner as it is, and the

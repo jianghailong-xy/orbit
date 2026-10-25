@@ -17,6 +17,10 @@
 #   4. Retry: heartbeats and reads keep being answered while the second apiserver is killed and started again.
 #   5. Slow consumer: a runner that stops reading loses frames of the live tier and keeps its connection, then is
 #      closed as a slow consumer when what it does not read passes its bound.
+#   6. Resume: a session's event stream cut with batches in flight; the runner back on a new connection, whose Welcome
+#      states how far the session is stored and that the process still holds it, resumes from there with no
+#      EVENT_SEQ_GAP, and the database holds every seq once. Then a Welcome naming the session states its last seq, and
+#      the release GET /api/runner/release assigns is the one Welcome and HeartbeatAck name.
 #
 # Run it with the stack in MODE_LINK with two apiservers (ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_BACKENDS=2
 # staging-up.sh), in the files TLS mode, with no other runner connected; it needs Go for step 1. It exits non-zero at
@@ -181,5 +185,24 @@ deltas "$out/5-metrics-before.txt" "$out/5-metrics-after.txt" \
   'link_disconnects_total{reason="slow_consumer"} == 1' 'link_queue_full_total{queue="normal",result="closed"} >= 1'
 node -e 'const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.error("    " + s.steps.map((x) => x.detail).join("\n    "));' "$out/5-slow.json"
 
+step "6. resume: the event stream cut with batches in flight, resumed on a new connection from Welcome's durable_seq"
+snapshot "$out/6-metrics-before.txt"
+client -drill resume "${owner[@]}" -report "$out/6-resume.json" > "$out/6-resume.log" 2>&1 || fail "the resume drill"
+snapshot "$out/6-metrics-after.txt"
+check_json "$out/6-resume.json" 's.ok && s.steps.length >= 11 && s.steps.every((x) => x.ok)'
+node -e 'const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  for (const x of s.steps) console.error(`    ok   ${x.name} (${x.ms} ms): ${x.detail}`);' "$out/6-resume.json"
+deltas "$out/6-metrics-before.txt" "$out/6-metrics-after.txt" \
+  'link_event_batches_total{result="gap"} == 0' 'link_welcome_lookups_total{result="answered"} >= 3' \
+  'link_welcome_lookups_total{result="failed"} + link_welcome_lookups_total{result="refused"} + link_welcome_lookups_total{result="malformed"} == 0' \
+  'link_disconnects_total{reason="connection_lost"} >= 1'
+resume_session="$(json_field "$out/6-resume.json" 'facts.sessionUuid')"
+final="$(json_field "$out/6-resume.json" 'facts.finalSeq')"
+rows="$(psql_value "SELECT count(*) || ' ' || count(DISTINCT seq) || ' ' || COALESCE(min(seq), 0) || ' ' || COALESCE(max(seq), 0) FROM run_event WHERE session_id = '$resume_session'")"
+printf 'session %s: acknowledged through %s, sent through %s when cut; Welcome said durable_seq %s; rows, distinct seqs, min, max: %s\n' \
+  "$resume_session" "$(json_field "$out/6-resume.json" 'facts.ackedAtCut')" "$(json_field "$out/6-resume.json" 'facts.sentThrough')" \
+  "$(json_field "$out/6-resume.json" 'facts.welcomeDurableSeq')" "$rows" | tee "$out/6-db.txt" >&2
+[ "$rows" = "$final $final 1 $final" ] || fail "the session's stored seqs are not 1..$final, each once"
+
 snapshot "$out/metrics-final.txt"
-log "all five steps hold; records in $out"
+log "all six steps hold; records in $out"

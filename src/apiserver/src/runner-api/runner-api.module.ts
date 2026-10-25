@@ -19,6 +19,8 @@ import { RunnerServiceTokensController } from './runner-service-tokens.controlle
 import { RunnerWatchesController } from './runner-watches.controller';
 import { RunnerReleaseController } from './runner-release.controller';
 import { RunnerLinkGatewayGuard, RunnerLinkTokenController } from './runner-link-token.controller';
+import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
+import { RunnerReleaseFeed } from './runner-release-feed';
 import { RUNNER_LINK, runnerLinkFrom } from './runner-link-token';
 import { RunnerSessionAuthGuard } from './runner-session-auth.guard';
 import {
@@ -88,6 +90,8 @@ import { RunnerWikiController } from './runner-wiki.controller';
     RunnerWikiController,
     // The runner link's connection tokens and the gateway's revocation list (runner-link-token.ts).
     RunnerLinkTokenController,
+    // What the link gateway's Welcome says of a connecting process's sessions and release (runner-link-welcome.ts).
+    RunnerLinkWelcomeController,
   ],
   providers: [
     RunnerAuthGuard,
@@ -98,6 +102,12 @@ import { RunnerWikiController } from './runner-wiki.controller';
       provide: RUNNER_LINK,
       inject: [ConfigService],
       useFactory: (config: ConfigService) => runnerLinkFrom(config),
+    },
+    // What /dl publishes, for the release the runner link states (runner-release-feed.ts).
+    {
+      provide: RunnerReleaseFeed,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => new RunnerReleaseFeed(config.get<string>('RUNNER_RELEASE_DL_URL')),
     },
     {
       provide: RUNNER_ORCHESTRATION_JWT,

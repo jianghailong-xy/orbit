@@ -357,6 +357,7 @@ import {
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { CurrentRunnerLink, type RunnerLinkContext } from './runner-link-call';
 import { readRunnerLinkHints, type RunnerLinkHints } from './runner-link-hints';
+import { RunnerReleaseFeed } from './runner-release-feed';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { ListEventsService } from '../task-lists/list-events.service';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
@@ -1107,6 +1108,12 @@ export class RunnerApiController {
      * reaper of a control plane built without it cannot hear about a failed one.
      */
     @Optional() private readonly presence?: RunnerPresenceService,
+    /**
+     * What /dl publishes, for the release a link heartbeat's answer states (runner-release-feed.ts). `@Optional()` for
+     * the same reason as the rest of this list: without it, a link heartbeat states no release, and the runner asks
+     * GET /runner/release over HTTPS as it always has.
+     */
+    @Optional() private readonly releases?: RunnerReleaseFeed,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -1803,13 +1810,15 @@ export class RunnerApiController {
       ? cursorKeyCheckRelay.take(runner.id)
       : [];
     // A beat the link gateway forwarded is also answered with what waits for the runner (runner-link-hints.ts), which
-    // the gateway states in HeartbeatAck.hints. Read last, and only for a link call; a read that fails leaves it out,
-    // and the gateway then states nothing rather than that nothing waits.
+    // the gateway states in HeartbeatAck.hints, and with the release the runner is assigned, which it states in
+    // HeartbeatAck.release. Read last, and only for a link call; a read that fails leaves it out, and the gateway then
+    // states nothing rather than that nothing waits.
     const linkHints = link
       ? await readRunnerLinkHints(this.prisma, runner.id).then(
           (waiting): RunnerLinkHints => {
             const watchers = this.realtime.linkWatchersOf(supervisedSessionIds);
-            return { ...waiting, ...(watchers ? { watchers } : {}) };
+            const release = this.releases?.assignedTo(runner.id);
+            return { ...waiting, ...(watchers ? { watchers } : {}), ...(release ? { release } : {}) };
           },
           () => undefined,
         )

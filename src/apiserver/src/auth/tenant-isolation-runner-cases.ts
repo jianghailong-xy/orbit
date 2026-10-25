@@ -777,6 +777,11 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: RUNNER,
     request: (of) => ({ params: {}, body: heartbeat({ agentDirProbes: [{ agentId: of.workspaceId, exists: true, isGitRepo: false }] }) }),
   },
+  // What the link gateway's Welcome says of a process's sessions: B's own process, asking after A's leased session.
+  'POST /runner/link/welcome body sessionIds[]': {
+    as: RUNNER,
+    request: (of, mine) => ({ params: {}, body: { leaseOwner: mine.runner.leaseOwner, sessionIds: [of.runner.activateSessionId] } }),
+  },
   // B's own claim of an operation of its own, but A's operation named.
   'POST /runner/codex-rate-limit-reset-result body operationId': {
     as: RUNNER,

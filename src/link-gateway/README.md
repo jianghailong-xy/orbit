@@ -116,10 +116,12 @@ Welcome carries:
 - protocol version 1 and the gateway's mode;
 - `heartbeat_interval_ms` 30000, `max_frame_bytes` 262144, and the [credit](#durable-events-and-credit) a connection
   gets now;
+- in `MODE_LINK`, where each session Hello names stands and the runner's release, as the apiserver answers them
+  ([Welcome](#welcome)); nothing of either in `MODE_HTTP`;
 - an empty `HintState` and a `connection_id` (`c-` followed by 16 hex digits).
 
-Welcome lists no `SessionState` and no `HintState` yet: a runner sends its first Heartbeat as soon as it has read
-Welcome, and in `MODE_LINK` that beat's HeartbeatAck carries the `HintState`. A runner in `MODE_HTTP` ignores both.
+Welcome lists no `HintState` yet: a runner sends its first Heartbeat as soon as it has read Welcome, and in `MODE_LINK`
+that beat's HeartbeatAck carries the `HintState`. A runner in `MODE_HTTP` ignores it.
 
 ## Connections
 
@@ -246,6 +248,47 @@ a few seconds. A call is sent again on the next backend, for up to 5s, when that
 
 An answer, whatever its status, is never retried: the route decided.
 
+### Welcome
+
+Before it writes a connection's Welcome, the gateway asks `POST /runner/link/welcome`
+(`src/apiserver/src/runner-api/runner-link-welcome.ts`) about the sessions Hello names, by their UUIDs, with the headers
+every forwarded call carries. A Hello naming no session is asked about too, for the release. The route answers, for each
+session in the order asked:
+
+- `durableSeq`: the highest seq up to which every one of the session's events is stored, counting from 1, a refused
+  event's tombstone counting as stored. 0 when the first is missing, and for a session that is not this runner's.
+- `leaseHeld`: whether this process holds the session's lease, by the rule the heartbeat's `leaseLostSessionIds`
+  follows: the session is this runner's, open, a conversation, and its inbox leased to the process.
+
+And `release`, the release `GET /runner/release` would assign the runner, from the two releases the apiserver reads
+off /dl (`runner-release-feed.ts`), when it can state one. Welcome carries the sessions as `SessionState`s, under the ids
+Hello used, and the release as `AssignedRelease`. The call writes nothing and is retried across backends like any
+idempotent call, within 3s in all, well inside the 10s a runner waits for Welcome. It is made before the new connection
+supersedes the process's older one, which carries the work meanwhile.
+
+**When the route cannot answer**, the Welcome goes without sessions and without a release, and the connection opens as
+usual. That covers no backend reached, a refusal (404 from an apiserver older than the route, 5xx from a database that is
+down), an answer that does not state each session in order, and no answer within the 3s. The handshake is not refused:
+an apiserver released after the gateway, or a database outage, must not keep every runner off the link or turn its
+reconnects into a storm. `link_welcome_lookups_total` counts each outcome. A runner reads such a Welcome this way:
+
+- **No entries means unknown, not lost.** A Welcome without sessions says nothing about them: neither that their events
+  are not stored nor that the process lost their leases. The runner keeps every event no EventAck has covered and sends
+  each again; the ingest stores each seq once, and the EventAcks say how far each session is stored. It keeps working
+  on its sessions, and a lease it lost is named in the next heartbeat's `leaseLostSessionIds`, as it always was.
+- **No release means asking over HTTPS.** The runner asks `GET /runner/release`, as it did before the link.
+
+Whether or not the route answered:
+
+- `durable_seq` can be too low, never too high. It is read while the process's older connection may still be storing
+  a batch, so the runner may send events at or below it again, and they are stored once. Over HTTPS every live event and
+  noise ping took a seq and was never stored, so for a session older than link mode the mark stops at the first of them.
+  A runner never numbers new events from it alone: it starts after the largest of `durable_seq`, its own last seq and
+  the claim's MaxSeq.
+- The gateway does not hold the runner to it. A connection's first batch of a session may start anywhere, and
+  `EVENT_SEQ_GAP` guards the batches after it on that connection, as before
+  ([durable events and credit](#durable-events-and-credit)).
+
 ### Requests
 
 An `Rpc` carries a `TunnelRequest`: method, path and JSON body of a runner route. The gateway forwards only `GET`,
@@ -287,7 +330,10 @@ of a forwarded beat carries the mode, the route's answer as `reconcile_json`, an
   `reconcile_json`, which stays today's response, and states the approvals as `HintState.approvals`;
 - `HintState.watchers` is the gateway's sum across apiserver instances.
 
-A beat that gets no 2xx answer is acknowledged with nothing to apply: no reconcile, no hints.
+It carries `release` too when `linkHints` names one: the release the runner is assigned, as in
+[Welcome](#welcome). An answer naming none states none, and the runner asks `GET /runner/release` over HTTPS.
+
+A beat that gets no 2xx answer is acknowledged with nothing to apply: no reconcile, no hints, no release.
 
 ### Durable events and credit
 
@@ -509,12 +555,13 @@ Every metric is served at `/metrics` on `LINK_METRICS_ADDR`, in Prometheus text 
 | `link_rpcs_total` | counter | `result`: shadow, not_forwarded, forwarded |
 | `link_rpc_results_total` | counter | `result`: the route's status class (2xx, 4xx, 5xx), or the Failure code when there was no answer (`BACKEND_*`, `RPC_*`, `CANCELLED`) |
 | `link_rpc_duration_seconds` | histogram | — (from a forwarded request's start to its route's answer) |
-| `link_backend_calls_total` | counter | `kind`: rpc, heartbeat, events; `result`: answered, timeout, cancelled, cut_off, unavailable, too_large |
+| `link_backend_calls_total` | counter | `kind`: rpc, heartbeat, events, welcome; `result`: answered, timeout, cancelled, cut_off, unavailable, too_large |
 | `link_backend_retries_total` | counter | `kind`; `reason`: not_delivered (no handler ran), lost (an idempotent call's answer was lost) |
 | `link_backend_call_duration_seconds` | histogram | — (retries included) |
 | `link_heartbeat_forwards_total` | counter | `result`: forwarded, want_facts, refused, failed, superseded, other_process, unencodable |
 | `link_heartbeat_forward_duration_seconds` | histogram | — |
 | `link_heartbeat_facts_total` | counter | `result`: whole, cached, unknown_digest, invalid_json, digest_mismatch, ignored |
+| `link_welcome_lookups_total` | counter | `result`: answered, failed (no answer), refused (not 2xx), malformed; all but answered send a Welcome without sessions and release |
 | `link_event_batches_total` | counter | `result`: stored, credit_exceeded, gap, malformed, no_answer, refused, refused_retryable, failed_behind, empty |
 | `link_events_stored_total` | counter | — (events stored and acknowledged) |
 | `link_event_ack_duration_seconds` | histogram | — (from a batch's arrival to its EventAck: the acknowledgement latency) |

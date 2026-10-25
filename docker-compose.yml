@@ -234,6 +234,11 @@ services:
       RUNNER_LINK_INTERNAL_PORT: "${RUNNER_LINK_INTERNAL_PORT:-3001}"
       RUNNER_LINK_INTERNAL_HOST: "${RUNNER_LINK_INTERNAL_HOST:-0.0.0.0}"
       RUNNER_LINK_NATS_SEED: "${RUNNER_LINK_NATS_APISERVER_SEED:-}"
+      # What /dl publishes, read from the web container beside the apiserver for the runner link
+      # (src/apiserver/src/runner-api/runner-release-feed.ts): a runner working over the link is told its release in
+      # Welcome and HeartbeatAck, assigned from these two manifests as GET /api/runner/release assigns it. Read at most once
+      # a minute, for at most 2 s; while it cannot be read, no release is stated and runners ask that route over HTTPS.
+      RUNNER_RELEASE_DL_URL: "${RUNNER_RELEASE_DL_URL:-http://web/dl/}"
       # Optional: managed runners (docs/self-hosting.md, "Managed runners"): every account gets a runner of its own,
       # a container on this host's Docker, at sign-in. Off unless the host's .env says true. A fresh install
       # (scripts/install-server.sh) writes that line and an upgrade never does, so a deployment that predates managed

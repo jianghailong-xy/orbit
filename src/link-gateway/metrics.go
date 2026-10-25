@@ -236,6 +236,7 @@ type gatewayMetrics struct {
 	heartbeatForwards *counter
 	heartbeatDuration *histogram
 	heartbeatFacts    *counter
+	welcomeLookups    *counter
 	eventBatches      *counter
 	eventsStored      *counter
 	eventAckDuration  *histogram
@@ -297,6 +298,7 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 		heartbeatForwards: newCounter("link_heartbeat_forwards_total", "Heartbeats in MODE_LINK, by what became of them.", "result"),
 		heartbeatDuration: newHistogram("link_heartbeat_forward_duration_seconds", "From a heartbeat's forwarding to the route's answer.", linkDurationBounds...),
 		heartbeatFacts:    newCounter("link_heartbeat_facts_total", "Heartbeat facts, by how the gateway read them: whole, cached (a digest it held), unknown_digest, invalid_json, digest_mismatch, ignored.", "result"),
+		welcomeLookups:    newCounter("link_welcome_lookups_total", "What the welcome route answered for a Welcome in MODE_LINK; anything but answered sends a Welcome without its sessions and release.", "result"),
 		eventBatches:      newCounter("link_event_batches_total", "Event batches in MODE_LINK, by what became of them.", "result"),
 		eventsStored:      newCounter("link_events_stored_total", "Durable events the ingest route stored and the gateway acknowledged."),
 		eventAckDuration:  newHistogram("link_event_ack_duration_seconds", "From an event batch's arrival to its EventAck.", linkDurationBounds...),
@@ -336,7 +338,7 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 		}
 	}
 	m.hints.preset("unknown", "malformed")
-	for _, kind := range []string{"rpc", "heartbeat", "events"} {
+	for _, kind := range []string{"rpc", "heartbeat", "events", "welcome"} {
 		for _, result := range []string{"answered", "timeout", "cancelled", "cut_off", "unavailable"} {
 			m.backendCalls.preset(kind, result)
 		}
@@ -349,6 +351,9 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 	}
 	for _, r := range []string{"stored", "credit_exceeded", "gap", "no_answer", "refused", "refused_retryable", "failed_behind"} {
 		m.eventBatches.preset(r)
+	}
+	for _, r := range []string{"answered", "failed", "refused", "malformed"} {
+		m.welcomeLookups.preset(r)
 	}
 	for _, r := range []string{"published", "no_watchers", "nats_down"} {
 		m.liveEvents.preset(r)
@@ -369,7 +374,7 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 		m.rpcs, m.shadowPairs, m.shadowMismatches, m.shadowUnpaired, m.shadowEvents, m.shadowPendingBytes,
 		m.hints, m.hintsSlow, m.hintSubscriptions, m.natsConnected, m.natsReconnects,
 		m.backendCalls, m.backendRetries, m.backendDuration, m.rpcResults, m.rpcDuration,
-		m.heartbeatForwards, m.heartbeatDuration, m.heartbeatFacts,
+		m.heartbeatForwards, m.heartbeatDuration, m.heartbeatFacts, m.welcomeLookups,
 		m.eventBatches, m.eventsStored, m.eventAckDuration, m.ingestEvents, m.ingestBytes, m.creditReduced, m.creditChanges,
 		m.liveEvents, m.watchedSessions, m.prefixRequests, m.queueFull,
 	}

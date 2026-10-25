@@ -59,7 +59,7 @@ func clientMain(args []string) int {
 	fs.StringVar(&o.summaryFile, "summary", "", "write the JSON summary here as well as to standard output")
 	fs.StringVar(&o.captureFile, "capture", "", "append every frame sent and received to this file, length-delimited, for link-gateway dump")
 	var d drillOptions
-	fs.StringVar(&d.name, "drill", "", "run a drill against a gateway in MODE_LINK instead: link, cancel, retry or slow (client_link.go)")
+	fs.StringVar(&d.name, "drill", "", "run a drill against a gateway in MODE_LINK instead: link, cancel, retry, slow or resume (client_link.go)")
 	fs.StringVar(&d.ownerEmail, "owner-email", "", "drills: the account that owns the runner, which creates and watches sessions")
 	fs.StringVar(&d.ownerPasswordFile, "owner-password-file", "", "drills: a file holding that account's password")
 	fs.StringVar(&d.natsURL, "nats-url", "", "drills: NATS, to read a session's live subject as the apiserver does")

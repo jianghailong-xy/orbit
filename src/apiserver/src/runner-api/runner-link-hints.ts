@@ -17,6 +17,11 @@ export interface RunnerLinkHints {
   approvals: Array<{ sessionId: string; approvalId: string }>;
   /** This apiserver instance's count of each watched session's live streams (RunnerHints.watchersOf). */
   watchers?: { instance: string; sessions: Array<{ sessionId: string; watchers: number }> };
+  /**
+   * The release the runner is assigned, as GET /runner/release would answer it (runner-release-feed.ts), which the
+   * gateway states in HeartbeatAck.release; absent when none can be stated now.
+   */
+  release?: { version: string; rollback: boolean };
 }
 
 /** At most this many sessions are named: a runner fetches what it is told of, and the next beat names the rest. */
