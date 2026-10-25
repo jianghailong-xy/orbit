@@ -1,0 +1,19 @@
+# The runner link protocol (docs/runner-link-design.md §5). CI runs `buf lint` and `buf breaking`
+# against main on this module; see .github/workflows/ci.yml.
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+    # Every message, field, enum, value and oneof carries a comment saying what it means.
+    - COMMENTS
+  except:
+    # The package is orbit.runnerlink.v1 so its names cannot collide with another v1 package's,
+    # while the files live under v1/ as the design lays them out.
+    - PACKAGE_DIRECTORY_MATCH
+breaking:
+  use:
+    # Wire and JSON compatibility: field numbers and names are never reused, and a field is removed
+    # only by reserving both (§5.1).
+    - WIRE_JSON

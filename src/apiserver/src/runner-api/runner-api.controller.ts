@@ -153,6 +153,7 @@ import {
   isAccountEngine,
   withEnginePlanUsage,
   type AccountEngine,
+  toUuid,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
@@ -180,6 +181,7 @@ import {
   wrapCoordinatorDeliveryContext,
 } from '../projects/coordinator-opening';
 import { modelRoutingEnabled } from '../common/model-routing-switch';
+import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
@@ -343,6 +345,7 @@ import {
   type CompletionCriterionSnapshotInput,
 } from '../tasks/task-completion-evidence.service';
 import { RunnerAuthGuard } from './runner-auth.guard';
+import { CurrentRunnerLink, type RunnerLinkContext } from './runner-link-call';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { ListEventsService } from '../task-lists/list-events.service';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
@@ -826,12 +829,22 @@ export function parseRunnerCapabilities(
     .slice(0, 128);
 }
 
-function parseLeaseGeneration(value?: string, field = 'leaseGeneration'): string | null {
+export function parseLeaseGeneration(value?: string, field = 'leaseGeneration'): string | null {
   if (value == null || value === '') return null;
   if (!LEASE_GENERATION_RE.test(value)) {
     throw new BadRequestException(`${field} must be a UUID`);
   }
   return value.toLowerCase();
+}
+
+/** The inbox's `runningTurnId`: a conversation-turn id in either spelling, and empty for none. */
+function parseRunningTurnId(value: string): string | null {
+  if (value === '') return null;
+  try {
+    return toUuid(value);
+  } catch {
+    throw new BadRequestException('runningTurnId must be a turn id, or empty for none');
+  }
 }
 
 /**
@@ -1429,8 +1442,9 @@ export class RunnerApiController {
     }
     // The platform's own git work, claimed the same way and for the same reason: the claim is a
     // compare-and-set on a row, so a job named here is already RUNNING and is nobody else's to take
-    // (contract §2.3 J-T2). On its own try, like the relay above — a failure costs this beat's jobs,
-    // which the next beat claims again from the queue.
+    // (contract §2.3 J-T2). On its own try, like the relay above — a failure costs this beat's jobs:
+    // one still queued is claimed by a later beat, and one this beat had already claimed is handed
+    // to this process again once its lease has run out without a report (J-T3a).
     let integrationJobs: RunnerHeartbeatResponse['integrationJobs'];
     try {
       const claimed = (await this.integrationJobs?.dispatch({
@@ -2738,7 +2752,11 @@ export class RunnerApiController {
 
   // ── Interactive sessions (Route B) ──
 
-  /** Long-poll: returns one claimed session, or null when nothing is available. */
+  /**
+   * Long-poll: returns one claimed session, or null when nothing is available. A link call answers at
+   * once (runner-link-call.ts), and one sent again under the request id of a claim that claimed is
+   * answered with that claim's session (QueueService.trySessionClaim).
+   */
   @UseGuards(RunnerAuthGuard)
   @Get('sessions/claim')
   async claim(
@@ -2748,6 +2766,7 @@ export class RunnerApiController {
     @Res({ passthrough: true }) res?: Response,
     /** A managed runner's authorized instance: the claim re-checks it where work is handed out. */
     @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
+    @CurrentRunnerLink() link?: RunnerLinkContext,
   ): Promise<ClaimedSession | null> {
     // The long poll outlives the request otherwise: a runner that stopped — a self-update re-exec, a
     // restart, its own claim timeout — leaves it waiting here, and the session it claims next is
@@ -2802,8 +2821,9 @@ export class RunnerApiController {
         supportedProviders,
         ...(dshUnavailable ? { dshUnavailable } : {}),
         ...(managedInstance ? { managedInstance } : {}),
+        ...(link?.requestId ? { claimRequestId: link.requestId } : {}),
       },
-      LONG_POLL_MS,
+      link ? 0 : LONG_POLL_MS,
       supportsTerminalHandoff,
       supportsSourcePin,
       hungUp,
@@ -2837,6 +2857,8 @@ export class RunnerApiController {
   async wake(
     @CurrentRunner() runner: { id: string },
     @Res({ passthrough: true }) res?: Response,
+    /** A link call answers at once: whether a wake is owed now (runner-link-call.ts). */
+    @CurrentRunnerLink() link?: RunnerLinkContext,
   ): Promise<{ wake: boolean }> {
     // A runner that stopped polling must not take a wake with it: the next poll is owed that one.
     let hungUp: AbortSignal | undefined;
@@ -2845,7 +2867,7 @@ export class RunnerApiController {
       res.once('close', () => hangUp.abort());
       hungUp = hangUp.signal;
     }
-    return { wake: await this.realtime.waitForRunnerWake(runner.id, LONG_POLL_MS, hungUp) };
+    return { wake: await this.realtime.waitForRunnerWake(runner.id, link ? 0 : LONG_POLL_MS, hungUp) };
   }
 
   /** Retain every open checkout on restart; the payload status tells the runner which is active. */
@@ -3731,10 +3753,20 @@ export class RunnerApiController {
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     /** A managed runner's authorized instance, asked again before every later round of the poll. */
     @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
+    /** On a link call, the message or shell turn this process is running in the session, and empty
+     *  for none: a turn its own generation leased that it is not running is one whose answer was lost,
+     *  and is handed to it again now rather than when the lease runs out (dequeueTurn). Not read over
+     *  HTTPS, where a poller that does not say so may well be running it. */
+    @Query('runningTurnId') runningTurnId?: string,
+    @CurrentRunnerLink() link?: RunnerLinkContext,
   ): Promise<RunInboxResponse> {
     const generation = parseLeaseGeneration(leaseGeneration);
     const declared = parseRunnerCapabilities(capabilities) ?? [];
-    const deadline = Date.now() + INBOX_LONG_POLL_MS;
+    const redelivery = link && runningTurnId !== undefined
+      ? { leaseOwner: link.leaseOwner, runningTurnId: parseRunningTurnId(runningTurnId) }
+      : undefined;
+    // A link call answers at once (wait=0): a hint says when there is something to fetch.
+    const deadline = Date.now() + (link ? 0 : INBOX_LONG_POLL_MS);
     for (let round = 0; ; round += 1) {
       // The guard answered when the poll began; an instance fenced or superseded during it is
       // refused before it is handed a turn (managed-runner-instance.ts).
@@ -3745,6 +3777,7 @@ export class RunnerApiController {
         generation,
         acceptsSteer === '1',
         declared,
+        redelivery,
       );
       if (turn) return turn;
       const remaining = deadline - Date.now();
@@ -3881,10 +3914,15 @@ export class RunnerApiController {
      *  THIS session's engine. Absent is a runner that declared nothing: claude steers as it
      *  always has, and every gated runtime withholds. */
     declaredCapabilities: readonly string[] = [],
+    /** A link poller's word about what it is running — see the inbox route — and the process the
+     *  link call came from. Absent over HTTPS, where only an expired lease is handed out again. */
+    redelivery?: { leaseOwner: string; runningTurnId: string | null },
   ): Promise<RunInboxResponse | null> {
     let pauseRequeued = false;
     // Requeued because the engine is resident on a Default its owner removed from Orbit, not for a pause.
     let defaultRequeued = false;
+    // Requeued because the runner dispatch pause holds the turn this run would start next.
+    let dispatchRequeued = false;
     // A reload answered without being handed out, its environment one nothing can build any more: the
     // poll goes on to what was queued behind it.
     let reloadRefused = false;
@@ -3896,6 +3934,7 @@ export class RunnerApiController {
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       pauseRequeued = false;
       defaultRequeued = false;
+      dispatchRequeued = false;
       reloadRefused = false;
       // More than one inbox poller can briefly exist around a warm activation or runner
       // restart. Serialize them on the Session row so their NOT EXISTS(in-flight) checks
@@ -3911,12 +3950,14 @@ export class RunnerApiController {
           providerBuiltin: boolean;
           engine: string | null;
           taskId: string | null;
+          /** The runner dispatch pause (queue/dispatch-pause.ts), read with the lock. */
+          dispatchPaused?: boolean;
         }>
       >`
         SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
                "inbox_lease_owner" AS "inboxLeaseOwner", status,
                "owner_id" AS "ownerId", provider, "provider_builtin" AS "providerBuiltin", engine
-               , "task_id" AS "taskId"
+               , "task_id" AS "taskId", ${DISPATCH_PAUSED} AS "dispatchPaused"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runnerId}::uuid
         FOR UPDATE
@@ -3953,6 +3994,17 @@ export class RunnerApiController {
           throw new ConflictException('inbox lease generation is missing or retired');
         }
       }
+      // A link poller of the process that holds this session's inbox lease, polling under the
+      // generation the running turn was leased to, says it is not running that turn: the answer that
+      // carried it was lost on its way (a connection that dropped, a gateway that never relayed it).
+      // It is handed out again now, as an expired lease is to the process that replaced its own,
+      // rather than after INBOX_LEASE_MS. The runner drops a turn it is already running by its id
+      // (src/runner-go/session.go, `inflight`), so a second copy runs nothing twice.
+      const redeliverOwnLease =
+        redelivery != null
+        && leaseGeneration != null
+        && owned[0].inboxLeaseOwner != null
+        && owned[0].inboxLeaseOwner === redelivery.leaseOwner;
       // "Can this poller act on a steer" is not a property of the poller alone: it is this
       // runner's word about the runtime this session actually executes on. A binary that
       // knows the kind but not this engine's mid-turn call refuses every steer it is handed,
@@ -4062,6 +4114,50 @@ export class RunnerApiController {
             return null;
           }
         }
+        // The runner dispatch pause (queue/dispatch-pause.ts) hands out no turn that would start. A run
+        // with nothing in flight and its next message or shell queued — claimed just before the switch,
+        // or holding the slot a finished turn passed to its follow-up — would otherwise sit RUNNING with
+        // no turn, keeping its runner's slot, and an engine that starts its process with the first
+        // message (agy, OpenCode) would be ended by the reaper's startup watchdog. It goes back to the
+        // queue the way the account pause above puts a run back, and a claim hands it out again once the
+        // pause is off. A turn in flight keeps its run, its lease expired or not: an expired one is the
+        // turn a replacement process takes up below.
+        if (owned[0].dispatchPaused) {
+          const held = await tx.$queryRaw<Array<{ id: string }>>`
+            SELECT s.id FROM "session" s
+            WHERE s.id = ${sessionId}::uuid
+              AND s."cancel_requested_at" IS NULL
+              AND EXISTS (SELECT 1 FROM "conversation_turn" t WHERE t."session_id" = s.id
+                AND t.kind IN ('message', 'shell') AND t.status = 'PENDING')
+              AND NOT EXISTS (SELECT 1 FROM "conversation_turn" t WHERE t."session_id" = s.id
+                AND t.kind IN ('message', 'shell') AND t.status = 'IN_FLIGHT')
+          `;
+          if (held.length) {
+            // As above: retire this process under the same lock, then a committed ownership-loss 409.
+            const fence = owned[0].inboxLeaseGeneration ?? randomUUID();
+            await tx.$executeRaw`
+              INSERT INTO "inbox_lease_generation"
+                ("generation", "session_id", "lease_owner", "retired_at")
+              VALUES (${fence}::uuid, ${sessionId}::uuid, ${owned[0].inboxLeaseOwner}::uuid, now())
+              ON CONFLICT ("generation") DO UPDATE
+                SET "retired_at" = COALESCE("inbox_lease_generation"."retired_at", now())
+              WHERE "inbox_lease_generation"."session_id" = EXCLUDED."session_id"
+            `;
+            await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+            await tx.session.update({
+              where: { id: sessionId },
+              data: {
+                status: RunStatus.PENDING,
+                inboxLeaseGeneration: fence,
+                inboxLeaseOwner: null,
+                engineTurnActive: false,
+              },
+            });
+            pauseRequeued = true;
+            dispatchRequeued = true;
+            return null;
+          }
+        }
       }
       const rows = await tx.$queryRaw<Array<{
         id: string;
@@ -4107,12 +4203,13 @@ export class RunnerApiController {
                 AND turn."created_at" > now() - (${STEER_WITHDRAW_DELIVERY_WINDOW_MS} * interval '1 millisecond'))
               -- A reload is ordered between executable turns, but does not itself consume
               -- an active-turn slot. A cold runtime can leave it queued until the next claim.
+              -- It replaces the engine's process, so the runner dispatch pause holds it.
               OR (turn."kind" = 'reload' AND turn."status" = 'PENDING' AND NOT EXISTS (
                 SELECT 1 FROM "conversation_turn" inflight
                 WHERE inflight."session_id" = ${sessionId}::uuid
                   AND inflight."kind" IN ('message', 'shell')
                   AND inflight."status" = 'IN_FLIGHT'
-              ))
+              ) AND NOT ${DISPATCH_PAUSED})
               -- A steer is the mirror image of an executable turn: it is deliverable
               -- BECAUSE one is already running, and it is written into that turn instead of
               -- waiting for its result. It neither occupies the single in-flight slot (the
@@ -4157,12 +4254,20 @@ export class RunnerApiController {
                 )
                 AND (
                   (turn."status" = 'IN_FLIGHT' AND turn."lease_deadline_at" < now())
+                  -- A PENDING one starts a turn, which the runner dispatch pause holds. The expired
+                  -- lease above is a turn already running, handed to the process that replaced its own.
                   OR (turn."status" = 'PENDING' AND NOT EXISTS (
                     SELECT 1 FROM "conversation_turn" inflight
                     WHERE inflight."session_id" = ${sessionId}::uuid
                       AND inflight."kind" IN ('message', 'shell')
                       AND inflight."status" = 'IN_FLIGHT'
-                  ))
+                  ) AND NOT ${DISPATCH_PAUSED})
+                  -- The turn this link poller's own generation leased and it says it is not running
+                  -- (redeliverOwnLease): a turn already running, like the expired lease above, so the
+                  -- dispatch pause does not hold it either — a cut-over waits for it to finish.
+                  OR (${redeliverOwnLease}::boolean AND turn."status" = 'IN_FLIGHT'
+                    AND turn."lease_generation" = ${leaseGeneration}::uuid
+                    AND turn.id IS DISTINCT FROM ${redelivery?.runningTurnId ?? null}::uuid)
                 ))
             )
           ORDER BY (CASE WHEN turn."kind" IN ('interrupt', 'end', 'diff', 'withdraw') THEN 0 WHEN turn."kind" = 'setconfig' THEN 1 WHEN turn."kind" IN ('reload', 'steer') THEN 2 ELSE 3 END), turn."seq" ASC
@@ -4444,14 +4549,16 @@ export class RunnerApiController {
       this.realtime.publishSessionUpdated(sessionId);
       this.queue.notifySessionQueued();
       // Outside the transaction: throwing before commit would roll back the pause and its fence.
-      throw new ConflictException(defaultRequeued
-        ? 'the account this engine runs on is no longer used by Orbit; inbox lease ownership was released'
-        : 'account is paused; inbox lease ownership was released');
+      throw new ConflictException(dispatchRequeued
+        ? 'runner dispatch is paused; inbox lease ownership was released'
+        : defaultRequeued
+          ? 'the account this engine runs on is no longer used by Orbit; inbox lease ownership was released'
+          : 'account is paused; inbox lease ownership was released');
     }
     if (reloadRefused) {
       this.realtime.publishSessionUpdated(sessionId);
       // What was queued behind it is this poll's to hand out.
-      return this.dequeueTurn(sessionId, runnerId, leaseGeneration, acceptsSteer, declaredCapabilities);
+      return this.dequeueTurn(sessionId, runnerId, leaseGeneration, acceptsSteer, declaredCapabilities, redelivery);
     }
     return outcome ?? null;
   }
@@ -4776,9 +4883,11 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
     @Param('approvalId', PublicIdPipe) approvalId: string,
+    /** A link call reads the decision once and answers (wait=0): a hint says when there is one. */
+    @CurrentRunnerLink() link?: RunnerLinkContext,
   ): Promise<ApprovalDecisionResponse> {
     await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
-    const deadline = Date.now() + APPROVAL_LONG_POLL_MS;
+    const deadline = Date.now() + (link ? 0 : APPROVAL_LONG_POLL_MS);
     for (;;) {
       const a = await this.prisma.approval.findFirst({
         where: { id: approvalId, sessionId },

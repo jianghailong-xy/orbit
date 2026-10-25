@@ -235,9 +235,9 @@ describe('Account pools on /infrastructure', { timeout: 30_000 }, () => {
     expect(section()!.querySelector('.pool-card')).toBeNull();
     const hint = container.querySelector<HTMLElement>('.pool-hint');
     expect(hint?.textContent).toContain('2 of your keys are Claude subscriptions.');
-    // At the top of the keys section: after its heading, before the keys table.
+    // At the top of the keys section: after its heading, before the keys' cards.
     expect(before(heading('API keys')!, hint!)).toBe(true);
-    expect(before(hint!, container.querySelector('.provider-keys')!)).toBe(true);
+    expect(before(hint!, container.querySelector('.vk-cards')!)).toBe(true);
   });
 
   it("heads a pool with the next account's own gauge, not an average, after the machines and the keys", async () => {

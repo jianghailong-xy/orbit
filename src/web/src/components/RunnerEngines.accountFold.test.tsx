@@ -259,10 +259,10 @@ describe("a runner's card", () => {
   const card = () => host!.querySelector<HTMLElement>('.re-runner-card')!;
   const folded = () => card().classList.contains('collapsed');
 
-  it('folds from anywhere on its head — its summary too — and leaves Manage a link', async () => {
+  it('folds from anywhere on its head — its engines’ chips too — and leaves Manage a link', async () => {
     mount([runner()], { cards: false });
     expect(folded()).toBe(true);
-    await click(card().querySelector<HTMLElement>('.re-summary')!);
+    await click(card().querySelector<HTMLElement>('.mc-chip')!);
     expect(folded()).toBe(false);
     await click(card().querySelector<HTMLElement>('.re-head')!);
     expect(folded()).toBe(true);

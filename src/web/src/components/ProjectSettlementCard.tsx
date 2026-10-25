@@ -55,8 +55,10 @@ import { Textarea } from './ui/Textarea';
  * 2026-10-07 04:20Z took that question out of the conversation: nothing draws either card now, and
  * `SessionProjectSettlementCard` at the bottom of this file — the only thing that ever did — draws
  * the owner's card, its receipt, or nothing at all. What survives of `ProjectWhyNotDoneCard` is its
- * TERMINAL state, the record Orbit writes itself. The components, their presses and their words stay
- * in the tree as the projection's own unit-tested rendering; removing them is a cleanup of its own.
+ * TERMINAL state, the record Orbit writes itself — the project page's ending, where its progress
+ * card was (`pageSettledDoc` in WorkspaceView.tsx); since the owner's ruling of 2026-10-25 no
+ * conversation draws that either. The components, their presses and their words stay in the tree
+ * as the projection's own unit-tested rendering; removing them is a cleanup of its own.
  *
  * THE QUESTION THIS ASKS, AND THE ONE IT REPLACED
  * -----------------------------------------------
@@ -643,8 +645,8 @@ export function ProjectSettlementCard({
  * file is the ONE that belongs to the owner: "Is this project done?", drawn where the coordinator
  * asked (a DONE_REQUEST), where the row says Record as done…, or where this conversation's own
  * press has just recorded it — and the receipt that press leaves, or the one the document itself
- * carries. Orbit's own DONE is the terminal state, read off the document so that it survives a
- * refresh.
+ * carries. Orbit's own DONE draws nothing here either (the owner's ruling of 2026-10-25): the
+ * project's ending is drawn once, on its sessions page where the progress card was.
  *
  * The gaps that used to be listed here are not lost: they are the project page's Open items row
  * and the Needs you hint, which is where the ruling puts them and where an owner goes to act.
@@ -764,18 +766,10 @@ export function SessionProjectSettlementCard({
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useCardKeyClaim(asking, anchor);
 
-  // A DONE Orbit recorded itself is the old question's terminal state — "This project is done ·
-  // recorded by Orbit" — read off the project document so that it survives a refresh. It is drawn
-  // only from the unified read (`counts`); an older projection keeps drawing nothing here.
-  if (
-    !doneDelivered
-    && document?.status === 'DONE'
-    && document.doneBy !== 'OWNER'
-    && document.derivedDone != null
-    && 'counts' in document.derivedDone
-  ) {
-    return <ProjectWhyNotDoneCard project={document as unknown as ProjectDoneDocument} />;
-  }
+  // A DONE Orbit recorded itself draws nothing here. Until 2026-10-25 it was the old question's
+  // terminal state — "This project is done · recorded by Orbit" — read off the document; the
+  // owner's ruling of that day leaves the project's ending to its sessions page, which draws that
+  // card where the progress card was (`pageSettledDoc` in WorkspaceView.tsx).
 
   // The owner's DONE is a durable record on the project document, so its receipt is drawn from
   // that read too — a refresh loses the local receipt and the answered request, not the record.
@@ -1279,9 +1273,10 @@ export interface ProjectWhyNotDoneCardProps {
  * client-side count.
  *
  * Only its settled branch — a project that IS done, "This project is done · recorded by Orbit" —
- * is drawn anywhere any more (the conversation, for a DONE Orbit recorded itself). The open branch
- * above it is the card the 2026-10-07 ruling took out of the conversation and is kept, tested,
- * unrendered: see this file's header.
+ * is drawn anywhere any more: the project's sessions page, where its progress card was (owner,
+ * 2026-10-10). The conversation drew it too, for a DONE Orbit recorded itself, until the owner's
+ * ruling of 2026-10-25. The open branch above it is the card the 2026-10-07 ruling took out of the
+ * conversation and is kept, tested, unrendered: see this file's header.
  */
 export function ProjectWhyNotDoneCard({
   project,

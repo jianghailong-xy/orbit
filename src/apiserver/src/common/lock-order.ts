@@ -143,7 +143,7 @@ export const LOCK_ORDER = [
   },
   {
     rank: 60,
-    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_integration_job_log, project_integration_job_event, project_landing, project_promotion, project_task_status_count, project_fuse_episode, project_fuse_held_action',
+    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_integration_job_log, project_integration_job_event, project_landing, project_promotion, project_task_status_count, project_rollup_candidate, project_fuse_episode, project_fuse_held_action',
     modes: 'INSERT/UPDATE/DELETE · on `project_integration_job` also FOR UPDATE SKIP LOCKED (the claim, one job), FOR NO KEY UPDATE (the progress, release and output gates) and FOR SHARE SKIP LOCKED (the X-E5 insert) · on `project_promotion` also FOR KEY SHARE SKIP LOCKED (the X-E5 tick\'s hold)',
     why:
       'Child rows whose FK parents are already held by this point, so they add no wait edge of their '
@@ -188,6 +188,12 @@ export const LOCK_ORDER = [
       + 'projects cannot take the same pair in opposite orders. No other taker exists: the detail '
       + 'read only SELECTs it, and the UPDATE branch nets inserted against deleted, so a statement '
       + 'that moves no task between projects reaches this table not at all. '
+      + '`project_rollup_candidate` (0441) is reached from that same Task write (50), and from an edge '
+      + 'DELETE or UPDATE (60), by four statement triggers that only ever INSERT new rows into it. It has '
+      + 'no unique key and no foreign key, so an append takes no lock another transaction can hold and '
+      + 'waits for nothing: it adds no wait edge. Its one other taker is the periodic rebuild '
+      + '(`rebuildProjectRollupCandidates`), one autocommit statement that deletes the rows its snapshot '
+      + 'sees — rows nothing else updates or deletes — and holds nothing else while it does. '
       + 'X-E5\'s clock (§4.6) is the same rank: one INSERT … SELECT, run in a transaction of its own '
       + 'under a `lock_timeout` of 200 ms (`LEASE_ALARM_LOCK_TIMEOUT_MS`), that writes one '
       + '`project_open_item` per claim whose lease has expired for more than fifteen minutes, and that '

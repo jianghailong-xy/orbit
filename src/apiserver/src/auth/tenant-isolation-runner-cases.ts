@@ -1145,6 +1145,10 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     + 'answered is read back by (id, the caller\'s owner, the path\'s space, kind import), so another account\'s job '
     + 'under that id is neither read nor written (wiki-import-jobs.ts:115)',
   // ── the machine protocol: tokens the machine or the engine makes up, and the machine's own snapshots ──
+  'GET /runner/sessions/:id/inbox query runningTurnId':
+    'which turn the polling process says it is running, read on a runner link call only: compared, for inequality, '
+    + 'with the turns of the path\'s session, already locked as this runner\'s, so another account\'s turn under that '
+    + 'id is neither read nor written (runner-api.controller.ts:4270)',
   'POST /runner/integration-jobs/:jobId/result body unknownPushes[].jobId':
     'the earlier landing the control plane itself listed in this claim\'s command (J12), re-read only inside the '
     + 'reporting account and on the claiming job\'s own serial key: another account\'s job under that id is not '
@@ -1466,4 +1470,10 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
     + 'its body is an AdmissionReview whose ids are Kubernetes UIDs and names, and it reads only the managed_runner '
     + 'rows owning the claims the reviewed Pod names, in the configured cluster and namespace, answering allowed or '
     + 'not — managed-runner-admission.controller.ts:97',
+  'GET /runner/link-token/revocations':
+    'the runner link gateway\'s door, protected by the gateway service secret: the bearer must be '
+    + 'RUNNER_LINK_GATEWAY_TOKEN, compared in constant time (404 with the link off) — '
+    + 'runner-link-token.controller.ts:61, runner-link-token.ts:241; it takes no id, and answers only the '
+    + 'fingerprints of the runner credentials revoked within a token\'s lifetime, which name no account and no '
+    + 'runner — runner-link-token.controller.ts:122',
 };

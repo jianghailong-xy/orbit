@@ -11,11 +11,11 @@ import type { ProviderRow } from '../lib/providerAdmin';
 import { InfrastructurePage } from './InfrastructurePage';
 
 /**
- * /infrastructure as a page (docs/mocks/infrastructure-page/02-after-*.png): its name, its line and
- * Add, then what the agents can run on (InfrastructurePage.overview.test.tsx), Machines, API keys and
- * Account pools in that order — each with what it says before there
- * is anything in it — a key's own Edit and Delete, and a machine's engines with every way in they
- * had on Providers.
+ * /infrastructure as a page (docs/mocks/infrastructure-focus): its name, its line and Add, then
+ * Machines, API keys and Account pools in that order — each with what it says before there is anything
+ * in it — and last what each engine can run on (InfrastructurePage.overview.test.tsx); a key's own Edit
+ * and Delete, the vendors not connected yet under the keys, and a machine's engines with every way in
+ * they had on Providers.
  */
 
 vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
@@ -185,17 +185,19 @@ const card = (name: string) =>
   [...document.body.querySelectorAll<HTMLElement>('.re-runner-card')].find((el) => text(el.querySelector('.re-runner')) === name)!;
 
 describe('/infrastructure', () => {
-  it('heads the page with its name, its line and Add, then what the agents can run on, Machines, API keys and Account pools in that order', async () => {
+  it('heads the page with its name, its line and Add, then Machines, API keys, Account pools and By engine in that order', async () => {
     await mount();
     expect(text(document.body.querySelector('h1'))).toBe('Infrastructure');
     expect(text(document.body.querySelector('.prov-page-sub'))).toBe('Where your agents run, and whose model quota they spend.');
     expect(button('Add')).not.toBeNull();
     expect([...document.body.querySelectorAll('.re-sec-head h3')].map(text)).toEqual([
-      'What your agents can run on',
       'Machines',
       'API keys',
       'Account pools',
+      'By engine',
     ]);
+    // Nothing above the machines but the page's own head.
+    expect(document.body.querySelector('.prov-page-head')?.nextElementSibling?.id).toBe('machines');
     expect(text(sectionHead('Machines')?.querySelector('.re-sec-sub'))).toBe(
       'Subscriptions signed in here are spent only by sessions on that machine.',
     );
@@ -204,6 +206,7 @@ describe('/infrastructure', () => {
     expect(text(sectionHead('API keys')?.querySelector('.re-sec-sub'))).toBe(
       'On your account and usable from every machine — billed per token.',
     );
+    expect(text(sectionHead('API keys')?.querySelector('.re-sec-count'))).toBe('1 key');
     expect(text(sectionHead('Account pools')?.querySelector('.re-sec-sub'))).toBe('Several accounts under one name.');
     // Each machine's card says how busy it is, and leads to its page.
     expect(text(card('Mac Studio').querySelector('.re-runner-meta'))).toBe('2 / 4 running · mac-studio.local · v0.1.240');
@@ -252,12 +255,15 @@ describe('/infrastructure', () => {
     expect(button('New pool', document.body.querySelector('.pool-sec')!)).not.toBeNull();
   });
 
-  it('keeps the gallery under the keys there are, edits a key on its page, and deletes one once asked', async () => {
+  it('puts the vendors not connected yet under the keys there are, edits a key on its page, and deletes one once asked', async () => {
     await mount();
-    const row = document.body.querySelector<HTMLElement>('.provider-keys tbody tr.prov-key')!;
-    expect(text(row.querySelector('.prov-cell-name'))).toBe('Anthropic');
-    expect(text(document.body.querySelector('.provider-more h3'))).toBe('Connect another provider');
-    expect(document.body.querySelector('.provider-more a[href="/providers/new/openai"]')).not.toBeNull();
+    const row = document.body.querySelector<HTMLElement>('.vk-card .vk-row')!;
+    expect(text(row.querySelector('.vk-name'))).toBe('Anthropic');
+    expect(text(document.body.querySelector('.pv-more .pv-more-l'))).toBe('Connect another provider');
+    expect(document.body.querySelector('.pv-more a[href="/providers/new/openai"]')).not.toBeNull();
+    // Anthropic is connected: another of its keys is added from its own card.
+    expect(document.body.querySelector('.pv-more a[href="/providers/new/anthropic"]')).toBeNull();
+    expect(document.body.querySelector('.vk-card a[href="/providers/new/anthropic"]')).not.toBeNull();
 
     await click(button('Delete', row));
     expect(sent).toEqual([]);

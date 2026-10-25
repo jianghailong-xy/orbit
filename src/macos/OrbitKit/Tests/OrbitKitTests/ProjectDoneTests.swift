@@ -215,16 +215,17 @@ final class ProjectDoneTests: XCTestCase {
                        .done(requestID: nil),
                        "a project that looks finished and was not asked about in time gets the card unasked")
         // DONE: the owner's record keeps its receipt in the conversation; a DONE Orbit recorded
-        // itself is the old card's terminal state, "This project is done · recorded by Orbit"
-        // (the coordinator's ruling, 2026-10-06; the browser since ccb406ad0).
+        // itself draws nothing there since the owner's ruling of 2026-10-25 — until then the old
+        // card's terminal state, "This project is done · recorded by Orbit" (the coordinator's
+        // ruling, 2026-10-06; the browser since ccb406ad0), which the project page draws now.
         let ownerDone = ProjectDoneSubject(title: "t", status: "DONE", derivedDone: open.derivedDone,
                                            doneBy: .owner)
         XCTAssertEqual(ProjectDone.slot(subject: ownerDone, request: nil, waitingKind: nil, record: nil),
                        .done(requestID: nil),
                        "the owner's DONE keeps its receipt in the conversation")
         let orbitDone = closeout(status: "DONE", done: true)
-        XCTAssertEqual(ProjectDone.slot(subject: orbitDone, request: nil, waitingKind: nil, record: nil), .notDone,
-                       "Orbit's DONE is the old card's terminal state")
+        XCTAssertEqual(ProjectDone.slot(subject: orbitDone, request: nil, waitingKind: nil, record: nil), .none,
+                       "Orbit's DONE draws nothing in the conversation; the page draws its ending")
         XCTAssertTrue(ProjectDone.WhyNotDone(subject: orbitDone, withCoordinator: 0, requested: false)
                         .settled(orbitDone))
         XCTAssertEqual(ProjectDone.slot(subject: closeout(done: true), request: nil, waitingKind: nil,

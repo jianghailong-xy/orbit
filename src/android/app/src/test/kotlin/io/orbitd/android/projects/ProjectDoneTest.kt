@@ -153,7 +153,8 @@ class ProjectDoneTest {
             ProjectDone.slot(open, null, "RECORD_AS_DONE", null))
         assertEquals("the owner's DONE keeps its receipt in the conversation", ProjectDone.Slot.Done(null),
             ProjectDone.slot(closeout(status = "DONE", extra = ""","doneBy":"OWNER""""), null, null, null))
-        assertEquals("Orbit's DONE is the old card's terminal state", ProjectDone.Slot.NotDone, ProjectDone.slot(closeout(status = "DONE", done = true), null, null, null))
+        assertEquals("Orbit's DONE draws nothing in the conversation since 2026-10-25: the page draws the ending", ProjectDone.Slot.None,
+            ProjectDone.slot(closeout(status = "DONE", done = true), null, null, null))
         assertEquals("an OPEN project the projection already calls done is asked nothing", ProjectDone.Slot.None, ProjectDone.slot(closeout(done = true), null, null, null))
         assertEquals("a server without counts draws no card", ProjectDone.Slot.None,
             ProjectDone.slot(j("""{"status":"OPEN","derivedDone":{"done":false}}"""), asking(), "DONE_REQUEST", null))

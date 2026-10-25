@@ -22,13 +22,15 @@ import {
  * are the project page's Open items row and the Needs you hint (`ProjectProgressStatus.tsx`), which
  * this file leaves where they are.
  *
- * Three drawings stay, and each is asserted here with the words it puts on screen:
+ * Two drawings stay, and each is asserted here with the words it puts on screen:
  *   • a DONE_REQUEST (or the row's Record as done…, or this conversation's own press) → "Is this
  *     project done?", whose press records the project and leaves its receipt;
- *   • status DONE recorded by Orbit → "This project is done · recorded by Orbit";
  *   • status DONE recorded by the owner → "You recorded this project done".
+ * A DONE Orbit recorded itself drew "This project is done · recorded by Orbit" here until the
+ * owner's ruling of 2026-10-25; it draws nothing now — the project's ending is its sessions page's
+ * card (`WorkspaceView.projectSessions.test.tsx`).
  *
- * The native clients hold the same rule and the same three drawings in
+ * The native clients hold the same rule and the same two drawings in
  * `ProjectDoneConversationTests.swift` and `ProjectWhyNotDoneGateTests.swift`, whose words
  * `ProjectDoneCopyParityTests` reads back against this source.
  */
@@ -336,9 +338,26 @@ describe('the coordinator conversation', () => {
         nothingDrawn();
       }
     });
+
+    it.each([['DERIVED' as const], [null]])('draws nothing for Orbit’s DONE either — the project page has its ending (doneBy %s)', async (doneBy) => {
+      server.document = finished({
+        status: 'DONE',
+        doneBy,
+        doneAt: '2026-10-06T09:00:00.000Z',
+        derivedDone: { ...finished().derivedDone!, status: 'DONE', done: true, withheld: [] },
+      });
+      await mount();
+      // Until 2026-10-25 this was "This project is done · recorded by Orbit", the old card's
+      // terminal state; the owner's ruling of that day leaves it to the project page.
+      nothingDrawn();
+      expect(node!.querySelector('.project-done-card')).toBeNull();
+      expect(text()).not.toContain(PROJECT_DONE_COPY.thisProjectIsDone);
+      expect(text()).not.toContain(PROJECT_DONE_COPY.recordedByOrbit);
+      expect(text()).not.toContain(PROJECT_DONE_COPY.receiptPrefix);
+    });
   });
 
-  describe('the three drawings that stay', () => {
+  describe('the two drawings that stay', () => {
     it('draws the owner’s card for a DONE_REQUEST, whose press leaves its receipt', async () => {
       server.document = antdMigration({ tasksByStatus: { IN_PROGRESS: 2 } });
       server.openItems = DONE_REQUEST;
@@ -367,21 +386,6 @@ describe('the coordinator conversation', () => {
       await until(() => text().includes(PROJECT_DONE_COPY.heading), 'the unasked owner card');
       expect(text()).toContain(PROJECT_DONE_COPY.noRequestMeta);
       expect(text()).not.toContain(PROJECT_DONE_COPY.askedByCoordinator);
-    });
-
-    it.each([['DERIVED' as const], [null]])('draws This project is done · recorded by Orbit for Orbit’s DONE (doneBy %s)', async (doneBy) => {
-      server.document = finished({
-        status: 'DONE',
-        doneBy,
-        doneAt: '2026-10-06T09:00:00.000Z',
-        derivedDone: { ...finished().derivedDone!, status: 'DONE', done: true, withheld: [] },
-      });
-      await mount();
-      const card = node!.querySelector('.project-why-not-done.is-settled');
-      expect(card).not.toBeNull();
-      expect(card?.querySelector('.project-settlement-heading')?.textContent).toBe(PROJECT_DONE_COPY.thisProjectIsDone);
-      expect(card?.querySelector('.criteria-provenance')?.textContent).toBe(PROJECT_DONE_COPY.recordedByOrbit);
-      expect(text()).not.toContain(PROJECT_DONE_COPY.receiptPrefix);
     });
 
     it('keeps the owner’s receipt for the owner’s DONE, criteria unmet or not', async () => {

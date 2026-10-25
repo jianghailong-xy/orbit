@@ -15888,88 +15888,54 @@ button.chat-jump-start:hover {
   font-size: 12px;
   color: var(--text-3);
 }
-/* Infrastructure's top: what needs a person, a line each with its way out at the end — amber for what
-   is broken, grey for a machine that is only away. A sign-in opens under its own line. */
-.infra-attn {
-  margin-top: 18px;
-  padding: 4px 14px;
-  border: 1px solid var(--warning-border);
-  border-radius: 12px;
-  background: var(--warning-bg);
-}
-.infra-attn-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-  padding: 9px 0;
-  font-size: 13px;
-  color: var(--text-1);
-}
-.infra-attn-row + .infra-attn-row {
-  border-top: 1px solid color-mix(in srgb, var(--warning-border) 60%, transparent);
-}
-.infra-attn-dot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--warning-solid);
-}
-.infra-attn-dot.idle {
-  background: var(--text-4);
-}
-.infra-attn-text {
-  flex: 1;
-  min-width: 0;
-}
-.infra-attn-text b {
-  font-weight: 600;
-}
-.infra-attn-sub {
-  font-size: 12px;
-  color: var(--text-3);
-}
-.infra-attn-row > .re-panel {
-  flex-basis: 100%;
-  margin: 2px 0 0 17px;
-  background: var(--bg-raised);
-}
-/* What each engine can run on: a card per engine, two to a row. */
+/* By engine, at the end of Infrastructure: a row per engine in one card — its name and state in a column
+   of their own, then what can pay for it on one line, a dot between. */
 .infra-engines {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-@media (max-width: 640px) {
-  .infra-engines {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  overflow: hidden;
 }
 .infra-engine {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-raised);
+  padding: 8px 14px;
+}
+.infra-engine + .infra-engine {
+  border-top: 1px solid var(--border-subtle);
 }
 .infra-engine.none {
   background: var(--bg-subtle);
 }
 .infra-engine-main {
   flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px 12px;
   min-width: 0;
 }
 .infra-engine-name {
+  flex: none;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  font-size: 13.5px;
+  width: 214px;
+  font-size: 12.5px;
   font-weight: 600;
+  line-height: 20px;
   color: var(--text-1);
+}
+@media (max-width: 640px) {
+  .infra-engine-main {
+    flex-direction: column;
+  }
+  .infra-engine-name {
+    justify-content: flex-start;
+    width: auto;
+  }
 }
 .infra-engine-state {
   padding: 0 7px;
@@ -15985,12 +15951,18 @@ button.chat-jump-start:hover {
   color: var(--success);
 }
 .infra-engine-src {
+  flex: 1;
   display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-top: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
   font-size: 12px;
+  line-height: 20px;
   color: var(--text-2);
+}
+.infra-engine-src > div + div::before {
+  content: '·';
+  margin: 0 7px;
+  color: var(--text-4);
 }
 .infra-engine-src b {
   font-weight: 600;
@@ -16003,7 +15975,7 @@ button.chat-jump-start:hover {
 .infra-engine-src a {
   color: var(--brand);
 }
-/* The model a key starts on, beside the key's own name. */
+/* The model a key starts on, on its row in its vendor's card. */
 .infra-model {
   padding: 0 5px;
   border-radius: 4px;
@@ -16067,17 +16039,7 @@ button.chat-jump-start:hover {
   color: var(--success);
   font-weight: 500;
 }
-/* The provider name in the keys table: when the endpoint column is hidden on narrow
-   screens the name gets the leftover width, so a long custom label ellipsizes instead
-   of stretching the table past the viewport. */
-.prov-cell-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 600;
-}
-/* The engines a key runs on, under its name in the keys table, each beside its mark. */
+/* The engines a key runs on, under its name on its row, each beside its mark. */
 .prov-engines {
   display: flex;
   flex-wrap: wrap;
@@ -16093,52 +16055,6 @@ button.chat-jump-start:hover {
 .prov-engine-sep {
   color: var(--text-4);
 }
-/* A vendor's head over its keys, and the keys indented under it past the head's mark. The head keeps
-   its tint under the pointer: it is a heading, not a row to pick. */
-.provider-keys .orbit-table tbody tr.prov-group > td,
-.provider-keys .orbit-table tbody tr.prov-group:hover > td {
-  padding-top: 8px;
-  padding-bottom: 8px;
-  background: var(--bg-sunken);
-}
-.prov-group-in {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 13px;
-}
-.prov-group-in b {
-  font-weight: 600;
-  color: var(--text-1);
-}
-.prov-group-in span {
-  color: var(--text-3);
-  font-size: 12px;
-}
-.prov-group-in .prov-group-add {
-  margin-left: auto;
-  color: var(--brand);
-  font-size: 13px;
-}
-.provider-keys .orbit-table tr.prov-key > td:first-child {
-  padding-left: 46px;
-}
-@media (max-width: 640px) {
-  .provider-keys .orbit-table tr.prov-key > td:first-child {
-    padding-left: 20px;
-  }
-}
-/* A long custom base URL is the one cell that can't ellipsize (a truncated URL reads as a
-   different one), so it wraps at any character instead of setting the column's width. */
-.prov-endpoint {
-  font-size: 12px;
-  color: var(--text-3);
-  overflow-wrap: anywhere;
-}
-/* A key nobody has run on, in the Last used column: a state, not a time, so it sits back. */
-.prov-never {
-  color: var(--text-3);
-}
 /* A row's Edit and Delete side by side, and the provider form's own buttons. */
 .prov-actions {
   display: inline-flex;
@@ -16150,27 +16066,6 @@ button.chat-jump-start:hover {
   display: inline-flex;
   flex-direction: column;
   width: 100%;
-}
-/* The enabled state's mobile stand-in, inside the provider cell: same signal as the tag,
-   in the width of a punctuation mark. */
-.prov-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-4);
-}
-.prov-dot.on {
-  background: var(--success-solid);
-}
-@media (max-width: 640px) {
-  /* With the endpoint and models columns hidden, the remaining cells only need half the
-     gutter — and that padding is what still pushed the table a few pixels past a phone.
-     Qualified with the table's class so this outranks its default cell padding. */
-  .provider-keys .orbit-table th,
-  .provider-keys .orbit-table td {
-    padding-inline: 10px;
-  }
 }
 
 .provider-card .pc-logo {
@@ -16285,22 +16180,119 @@ button.chat-jump-start:hover {
   color: var(--text-3);
 }
 
-/* The gallery below an existing list. */
-.provider-more {
-  margin-top: 28px;
-}
-.provider-more h3 {
-  margin: 0 0 12px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-2);
-}
-
 /* A vendor whose CLI is already signed in on one of the user's machines — the cheaper route,
    pointed at in the brand colour so it reads as a hint rather than a status. */
 .provider-card .pc-sub.pc-local {
   color: var(--brand);
   font-weight: 500;
+}
+
+/* Infrastructure's API keys (ProviderKeyCards): a card per vendor, drawn as a machine's and a pool's are,
+   and a row per key — what it is and runs on, the model it starts on, whether it is on and when it was
+   last used, and its Edit and Delete. The name column gives way first; the model's keeps one width so
+   each card's rows line up. */
+.vk-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 236px 120px auto;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 10px 14px;
+}
+.vk-row + .vk-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.vk-id {
+  min-width: 0;
+}
+.vk-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.vk-model {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.vk-model .infra-model {
+  font-size: 11.5px;
+  color: var(--text-2);
+  white-space: normal;
+}
+.vk-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+/* When a session last ran on it; a key nobody has run on says so, a state rather than a time. */
+.vk-used {
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.vk-act {
+  gap: 8px;
+  justify-content: flex-end;
+}
+.vk-loading {
+  display: grid;
+  place-items: center;
+  min-height: 64px;
+}
+/* A narrow card stacks the row: the key, then the model, then its state beside its buttons. */
+@container re-card (max-width: 620px) {
+  .vk-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .vk-id,
+  .vk-model {
+    grid-column: 1 / -1;
+  }
+  .vk-state {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+}
+
+/* The vendors with no key yet, in one line under the keys (ProviderPills). */
+.pv-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.pv-more-l {
+  margin-right: 2px;
+}
+.pv-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 12px;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.pv-pill:hover {
+  border-color: var(--brand-border);
+  color: var(--brand);
 }
 
 /* ============================================================================
@@ -16455,8 +16447,56 @@ button.chat-jump-start:hover {
 .re-runner-card .re-head {
   /* What the handle stands against, in the card's left margin (below). */
   position: relative;
+  flex-wrap: wrap;
   gap: 0;
   padding: 0;
+}
+/* What a machine's sessions can run on, a chip per engine on a line of its own under the name
+   (MachineChips) — amber for one signed out, beside its Sign in. */
+.mc-row {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  /* Under the name: past the chevron's column, the dot and the gaps beside them. */
+  padding: 0 14px 11px 71px;
+}
+.mc-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.mc-n {
+  color: var(--text-3);
+}
+.mc-chip.out {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.mc-out {
+  font-weight: 600;
+}
+.mc-signin {
+  margin-right: 4px;
+}
+/* An offline machine's are what it last said, as its rows are. */
+.re-card.offline .mc-row {
+  opacity: 0.62;
 }
 .re-runner-card.offline .re-head {
   background: var(--bg-subtle);
@@ -16623,6 +16663,10 @@ button.chat-jump-start:hover {
     grid-column: 4;
     align-self: center;
     margin: 0 -6px 0 0;
+  }
+  .mc-row {
+    grid-column: 2 / -1;
+    padding: 0 0 10px;
   }
 }
 
