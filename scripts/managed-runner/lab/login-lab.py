@@ -495,7 +495,8 @@ def cmd_provisioned(args):
     secret = sw.kget('secret', f'mr-boot-{runner}')
     pod = sw.kget('pod', f'mr-{runner}')
     statuses = ((pod or {}).get('status', {}).get('initContainerStatuses') or []) + ((pod or {}).get('status', {}).get('containerStatuses') or [])
-    runner_row = json.loads(table_rows(f"select id, name, status, enrolled_at, last_heartbeat_at, version, capabilities, engines "
+    runner_row = json.loads(table_rows(f"select id, name, status, enrolled_at, {sw.runner_last_beat()} as last_heartbeat_at, "
+                                       f"version, capabilities, engines "
                                        f"from runner where id = '{runner}'")[0])
     workspace = json.loads(table_rows(f"select id, name, runner_id, target_runner_id, work_dir, position, auto_init_git, enable_worktree, created_at "
                                       f"from workspace where id = '{mapping['default_workspace_id']}'")[0])
@@ -577,7 +578,8 @@ def cmd_intent_fault(args):
 
 def record_line():
     rows = table_rows('select m.owner_id, u.email, m.management_state, m.desired_state, m.generation, m.attempt, m.initial_provider, '
-                      "m.last_error->>'code' as reason, m.pod_uid, m.revision, r.status as runner_status, r.last_heartbeat_at, "
+                      "m.last_error->>'code' as reason, m.pod_uid, m.revision, r.status as runner_status, "
+                      f"{sw.runner_last_beat('r')} as last_heartbeat_at, "
                       "(select string_agg((e->>'engine') || ':' || coalesce(e->>'auth', '?') || (case when (e->>'installed')::boolean then '' else '(absent)' end), ',') "
                       "   from jsonb_array_elements(case when jsonb_typeof(r.engines) = 'array' then r.engines else '[]'::jsonb end) e) as engines, "
                       'w.runner_id = m.runner_id as workspace_bound '

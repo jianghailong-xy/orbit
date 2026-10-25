@@ -13,7 +13,10 @@ import { ReaperService } from './reaper.service';
  *  - for three minutes after it starts,
  *  - while a fifth or more of the cell's runners have gone quiet at once, and for a window after,
  *  - while heartbeat writes have been failing in this process,
- * and each of those holds only that: a cancel nobody honored is still finalized.
+ * and each of those holds only verdicts read from silence: a cancel nobody honored is still finalized,
+ * and the run of a runner that signed off (OFFLINE) is reaped as it always was. Which runners count
+ * toward "a fifth" — only those that can lose contact — is a query, pinned on a real PostgreSQL in
+ * runners/runner-presence.pg.spec.ts.
  *
  * Every case runs one RUNNING session whose runner was last heard from five minutes ago — offline
  * by any reading — on a clock the test moves.
@@ -37,7 +40,14 @@ interface Fleet {
   silent: number;
 }
 
-function world(opts: { fleet?: Fleet | (() => Fleet); fleetFails?: unknown; cancelRequestedAgoMs?: number } = {}) {
+function world(opts: {
+  fleet?: Fleet | (() => Fleet);
+  fleetFails?: unknown;
+  cancelRequestedAgoMs?: number;
+  /** What the runner row says: OFFLINE is a runner that signed off. */
+  runnerStatus?: string;
+} = {}) {
+  const runnerStatus = opts.runnerStatus ?? 'ONLINE';
   const finalized: Array<Record<string, unknown>> = [];
   const warns: string[] = [];
   const fleetReads: number[] = [];
@@ -50,7 +60,7 @@ function world(opts: { fleet?: Fleet | (() => Fleet); fleetFails?: unknown; canc
       },
       count: async () => 0,
     },
-    runner: { findUnique: async () => ({ status: 'ONLINE', lastHeartbeatAt: lastBeat(), presence: { lastBeatAt: lastBeat() } }) },
+    runner: { findUnique: async () => ({ status: runnerStatus, lastHeartbeatAt: lastBeat(), presence: { lastBeatAt: lastBeat() } }) },
     task: { updateMany: async () => ({ count: 1 }), findUnique: async () => null },
     $executeRaw: async () => 1,
     conversationTurn: { updateMany: async () => ({ count: 1 }), findFirst: async () => null, findMany: async () => [] },
@@ -76,7 +86,7 @@ function world(opts: { fleet?: Fleet | (() => Fleet); fleetFails?: unknown; canc
         startsTaskWork: true,
         task: null,
         // Its own record of its beats ten minutes old; its presence row five.
-        assignedRunner: { status: 'ONLINE', lastHeartbeatAt: new Date(clock - 10 * MINUTE), presence: { lastBeatAt: lastBeat() } },
+        assignedRunner: { status: runnerStatus, lastHeartbeatAt: new Date(clock - 10 * MINUTE), presence: { lastBeatAt: lastBeat() } },
       }],
     },
     runEvent: { findFirst: async () => null },
@@ -260,4 +270,23 @@ test('a hold covers only what silence decides: a cancel nobody honored is still 
   } finally {
     w.reaper.onModuleDestroy();
   }
+});
+
+test('a runner that signed off is reaped as it always was, whatever holds silence', async () => {
+  onTheClock();
+  // A fifth of the cell silent and a reaper that has only just started: both hold a silent runner's run.
+  const w = world({ runnerStatus: 'OFFLINE', fleet: { heard: 10, silent: 5 } });
+  w.reaper.onModuleInit();
+  try {
+    await w.sweep();
+    assert.equal(w.finalized.length, 1, 'OFFLINE is the runner saying it left: no silence to hold');
+    assert.equal(w.finalized[0]?.error, 'runner offline');
+    assert.deepEqual(w.fleetReads, [], 'and the cell is not asked about it');
+  } finally {
+    w.reaper.onModuleDestroy();
+  }
+
+  const silent = world({ fleet: { heard: 10, silent: 5 } });
+  await silent.sweep();
+  assert.deepEqual(silent.finalized, [], 'the control: the same cell holds a runner that only went quiet');
 });

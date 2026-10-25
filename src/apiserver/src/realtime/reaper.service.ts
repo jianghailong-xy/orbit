@@ -124,6 +124,16 @@ function runnerLooksOffline(
   return now - (runnerLastBeatAt(runner)?.getTime() ?? 0) > OFFLINE_AFTER_MS;
 }
 
+/**
+ * Whether an offline verdict was read from silence: the runner is there and has not signed off. The
+ * other two ways `runnerLooksOffline` says offline are facts on the record — a runner marked OFFLINE
+ * (reported by a runner about itself as it leaves, or a managed runner's row before it ever beat), or
+ * no runner at all — and `silenceHold`, which is about silence, does not hold them.
+ */
+function offlineFromSilence(runner: { status: string } | null | undefined): boolean {
+  return !!runner && runner.status !== 'OFFLINE';
+}
+
 /** `runnerLooksOffline`'s claim clause as the finalizing write's WHERE: not claimed inside the window. */
 function claimedLongAgo(now: number) {
   return { OR: [{ runClaimedAt: null }, { runClaimedAt: { lt: new Date(now - OFFLINE_AFTER_MS) } }] };
@@ -332,8 +342,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             }
             // The same rule, widened to the rest of what makes silence ours (`silenceHold`): just
             // started, heartbeat writes failing, or a fifth of the cell gone quiet at once. Logged
-            // once for the sweep below — a mass silence holds every such session at once.
-            if (await silenceHeld()) {
+            // once for the sweep below — a mass silence holds every such session at once. A runner
+            // that signed off said so itself, which is no silence, and is reaped as it always was.
+            if (offlineFromSilence(s.assignedRunner) && await silenceHeld()) {
               held.push(s.id);
               continue;
             }
@@ -478,12 +489,18 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    *  - A fifth of the cell's runners crossed the offline line together (MASS_SILENCE_SHARE,
    *    MASS_SILENCE_WINDOW_MS). Read again every sweep that needs it, and held for OFFLINE_AFTER_MS
    *    past the last sweep that saw it, so the runners whose beats were lost get a whole window to be
-   *    heard again before their silence counts.
+   *    heard again before their silence counts. Only runners that can lose contact are counted
+   *    (RunnerPresenceService.fleetSilence): one that signed off, or a managed runner its manager is
+   *    putting to sleep, is quiet on purpose. In a cell of one to four runners one crashed runner is
+   *    already a fifth, which holds its sessions for up to MASS_SILENCE_WINDOW_MS past the line — the
+   *    price of not reaping a small cell's sessions through a partition on this side, and the window
+   *    in which a restarted runner takes its sessions back.
    *
    * None of them is a latch. The grace ends; a failed write ages out; a silence that does not lift
    * leaves the count MASS_SILENCE_WINDOW_MS past the line, and its sessions are then reaped like any
    * others. Nothing else here waits on it: a cancel or an end the runner never honored is still
-   * finalized, since that verdict is not read from silence.
+   * finalized, and so is the run of a runner that signed off (`offlineFromSilence`), since neither
+   * verdict is read from silence.
    */
   private async silenceHold(now: number): Promise<string | null> {
     const s = (ms: number) => `${Math.round(ms / 1000)}s`;

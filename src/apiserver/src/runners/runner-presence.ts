@@ -186,6 +186,12 @@ export class RunnerPresenceService {
    * The cell's runners last heard from within `windowMs` before the offline line — at most
    * RUNNER_OFFLINE_AFTER_MS + windowMs ago — and how many of those are past the line now: silent for
    * longer than RUNNER_OFFLINE_AFTER_MS. Read on Postgres' clock, like every SQL liveness reading.
+   *
+   * Only runners that can LOSE contact are counted, in either number. Not one marked OFFLINE: that is
+   * written when a managed runner's row is created, before it has beaten, or reported by a runner about
+   * itself as it leaves — never by a runner cut off. And not a managed runner its manager is putting to
+   * sleep or has put to sleep (`managed_runner.management_state` DRAINING or SLEEPING): its silence is
+   * the manager's own doing. A fleet of those going quiet together is no outage.
    */
   async fleetSilence(windowMs: number): Promise<FleetSilence> {
     const [row] = await this.prisma.$queryRaw<Array<{ heard: number; silent: number }>>(Prisma.sql`
@@ -193,7 +199,15 @@ export class RunnerPresenceService {
              (count(*) FILTER (
                WHERE beats."at" < now() - (${RUNNER_OFFLINE_AFTER_MS} * interval '1 millisecond')
              ))::int AS "silent"
-        FROM (SELECT ${runnerLastBeatSql('r')} AS "at" FROM "runner" r) beats
+        FROM (
+          SELECT ${runnerLastBeatSql('r')} AS "at"
+            FROM "runner" r
+           WHERE r."status" <> 'OFFLINE'
+             AND NOT EXISTS (
+               SELECT 1 FROM "managed_runner" mr
+                WHERE mr."runner_id" = r."id" AND mr."management_state" IN ('DRAINING', 'SLEEPING')
+             )
+        ) beats
        WHERE beats."at" >= now() - (${RUNNER_OFFLINE_AFTER_MS + windowMs} * interval '1 millisecond')
     `);
     return { heard: row?.heard ?? 0, silent: row?.silent ?? 0 };
