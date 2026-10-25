@@ -31,7 +31,8 @@ What follows, and where to see it:
   forwarding it and refuses each call `LINK_MODE_HTTP`; its event batches are still stored, each seq once.
 - Each runner logs `runner link mode: off — <what said it> said MODE_HTTP; daemon calls go over HTTPS`, at its next
   heartbeat (every 30 s) or its next call, whichever comes first. Its presence row (`runner_presence.link_state`) says
-  `HTTP` from its next heartbeat. In the drill an idle runner heard it from its next HeartbeatAck, 2.9 s after the PUT.
+  `HTTP` from its next heartbeat. In the drill's two runs the runner heard it 2.9 s after the PUT from its next
+  HeartbeatAck, and 9.8 s after it from a call the gateway refused.
 
 ## 2. The version rollback
 
@@ -80,8 +81,8 @@ What follows, and where to see it:
 
 - vN-1's link gateway tells every connection `MODE_HTTP` and forwards nothing. Each runner on the link reconnects after
   the old gateway's drain, logs `runner link mode: off — the Welcome of <connection> said MODE_HTTP`, and works over
-  HTTPS, still on vN. In the drill the recreate took 48 s, and the runner had no way to the server for about as long:
-  the old gateway drained it and refused it `503 DRAINING`, and the new one started once the apiserver was healthy.
+  HTTPS, still on vN. In the drill the recreate took 48 and 57 s, and the runner had no way to the server for about as
+  long: the old gateway drained it and refused it `503 DRAINING`, and the new one started once the apiserver was healthy.
 - At its next release check, every 10 minutes and never while a turn runs, each runner asks
   `GET /api/runner/release?latest=<vN>&previous=<vN-1>` and is assigned `{"version":"<vN-1>","rollback":true}`. The
   apiserver logs `runner release <vN> is rolled back: every runner is assigned <vN-1>`. The runner drains, downloads
@@ -89,7 +90,8 @@ What follows, and where to see it:
   it: `orbit <vN> -> <vN-1>: the control plane rolled <vN> back; downloading...`, then
   `orbit updated to <vN-1>; restarting...`. Its idle sessions are detached for the restart and reclaimed by the new
   process. The Runners page's Update Runner Now (`POST /api/runners/:id/self-update`) makes a runner check at once. In
-  the drill the runner's own check came 6 minutes after the server went back, and it ran vN-1 0.35 s later.
+  the drill's two runs the runner's own check came 6 and 7 minutes after the server went back, and it ran vN-1 under
+  half a second later.
 - On vN-1 the runner's release check keeps it there: it runs the release it is assigned.
 
 **Afterwards: the switch's row.** vN-1 neither reads nor writes `runner_link_switch`, so the row keeps what it said when
