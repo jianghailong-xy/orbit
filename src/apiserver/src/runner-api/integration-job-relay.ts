@@ -241,8 +241,8 @@ export interface IntegrationDispatchHeartbeat {
   capabilities: string[] | undefined;
 }
 
-/** The row the claim returns, joined with what the runner needs to act on it. */
-interface ClaimedRow {
+/** A claim this process holds, joined with what the runner needs to act on it. */
+interface HeldClaim {
   id: string;
   /** The account the job belongs to: J12's unknown-push list is that account's own queue. */
   ownerId: string;
@@ -276,18 +276,32 @@ interface ClaimedRow {
   progressProtocol: string | null;
   /** The landing subject this attempt belongs to (§2.9 SQL): what the claim's session row is for. */
   landingId: string | null;
+}
+
+/** The row the claim statement returns: the claim it made, and what the row was before it. */
+interface ClaimedRow extends HeldClaim {
   /** The job's state in the statement that claimed it: RUNNING means this claim is a takeover. */
   previousState: string;
 }
 
 /**
- * The jobs this heartbeat's process has just claimed (§2.3 J-T2, J-T3).
+ * The jobs this heartbeat's process has just claimed (§2.3 J-T2, J-T3), after the claims it already
+ * holds and has gone silent on (J-T3a).
  *
  * A claim IS the serialisation: the row moves to RUNNING inside one statement, and the partial unique
  * index over RUNNING rows means the second claimer of a repository-and-target-ref loses at the
  * database rather than by agreement between two runners. Two per beat at most, with distinct serial
  * keys, because a runner that took three would be holding the third's slot while it worked on the
  * first.
+ *
+ * A COMMITTED CLAIM CAN STILL FAIL TO REACH ITS RUNNER. Its command travels in the answer to the
+ * one beat that made it: an answer the runner never reads, or a beat that fails after the claim
+ * committed (`unresolvedUnknownPushes` below can throw, and the controller then answers without
+ * this beat's jobs), leaves the row RUNNING under a process that is alive, beating and not running
+ * it. `claimOne`'s takeover is for ANOTHER process, so on 2026-10-19 that held main's serial slot
+ * for 31 hours, until the runner was restarted. So before claiming anything, this hands the process
+ * the claims it holds and has not been heard from on, under the claim they were made under —
+ * `silentClaimsOf` says which, and why that is safe for a job the runner IS running.
  *
  * A process with no lease owner, a draining one, or one that has not declared `integration-job/v1`
  * is handed nothing — never an error, because those are all ordinary states of a runner and none of
@@ -314,6 +328,28 @@ export async function dispatchIntegrationJobs(
   // said so is never handed one — it would check a moved main again and merge it, which the
   // Automatic setting does not authorize.
   const landsAutomatically = heartbeat.capabilities?.includes(PROMOTION_AUTOMATIC_LAND) === true;
+  // J-T3a: what this process already holds and has not been heard from on, handed to it again
+  // before anything new is claimed. It claims nothing — no row is written — so it takes none of
+  // this beat's claims, and a failure in it costs that one hand-out and nothing else: the next beat
+  // reads the same rows again, and a beat must never stop claiming because a held row cannot be
+  // handed out.
+  const silent = await silentClaimsOf(prisma, heartbeat.runnerId, heartbeat.leaseOwner)
+    .catch((error) => {
+      log.warn(`integration jobs held by this process not read again: ${error?.message ?? error}`);
+      return [] as HeldClaim[];
+    });
+  for (const row of silent) {
+    taken.push(row.serialKey);
+    const command = await handOut(prisma, row, heartbeat.leaseOwner, landsAutomatically, log, openItems)
+      .catch((error) => {
+        log.warn(`integration job ${row.id} not handed again this beat: ${error?.message ?? error}`);
+        return null;
+      });
+    if (!command) continue;
+    log.log(`integration job ${row.id} handed again to the process holding claim ${row.claimGeneration}: `
+      + 'it has not reported for longer than the lease');
+    commands.push(command);
+  }
   // Resolved once, on the first claim of a beat that has one: the claim's timeline line names the
   // runner, and a beat that is handed nothing must not pay for a read it will not use.
   let runnerName: string | null | undefined;
@@ -339,73 +375,92 @@ export async function dispatchIntegrationJobs(
         .catch(() => null);
     }
     await backfillClaimEvent(prisma, row, heartbeat, runnerName ?? null, log);
-    // §2.9 LS1's compensation point: the claim is committed, so the subject's session row is owed
-    // — at the latest before this command is handed out. Only a claimed subject can reach here; a
-    // candidate superseded while QUEUED never does. A failure does not cost the runner its command
-    // (the row is a record of the claim, not part of it) and the next progress/result compensates.
-    await ensureLandingSessionAfterClaim(prisma, row.id);
-    if (!row.workDir) {
-      // Nothing to work in. Ended here rather than handed over, so it opens an item instead of
-      // being redelivered every 30 seconds to a runner that cannot act on it — and the item is
-      // handed on from here too, because this beat is the only door that knows it was opened.
-      const after = await finishUnworkable(prisma, row.id, heartbeat.leaseOwner, row.claimGeneration);
+    const command = await handOut(prisma, row, heartbeat.leaseOwner, landsAutomatically, log, openItems);
+    if (command) commands.push(command);
+  }
+  return commands;
+}
+
+/**
+ * What a claim this process holds is handed out as, or null when it was ended here instead: right
+ * after the claim statement committed (J-T2, J-T3), or again, for a claim the process has gone
+ * silent on (J-T3a). The steps are the same either way, because handing a claim out again is its
+ * own hand-out happening late — the authorization read once more, the repairs it is owed listed
+ * afresh.
+ */
+async function handOut(
+  prisma: PrismaService,
+  row: HeldClaim,
+  leaseOwner: string,
+  landsAutomatically: boolean,
+  log: Logger,
+  openItems?: Pick<ProjectOpenItemService, 'deliverForItems'>,
+): Promise<IntegrationJobCommand | null> {
+  // §2.9 LS1's compensation point: the claim is committed, so the subject's session row is owed
+  // — at the latest before this command is handed out. Only a claimed subject can reach here; a
+  // candidate superseded while QUEUED never does. A failure does not cost the runner its command
+  // (the row is a record of the claim, not part of it) and the next progress/result compensates.
+  await ensureLandingSessionAfterClaim(prisma, row.id);
+  if (!row.workDir) {
+    // Nothing to work in. Ended here rather than handed over, so it opens an item instead of
+    // being redelivered every 30 seconds to a runner that cannot act on it — and the item is
+    // handed on from here too, because this beat is the only door that knows it was opened.
+    const after = await finishUnworkable(prisma, row.id, leaseOwner, row.claimGeneration);
+    if (after && after.openItemIds.length > 0) {
+      await openItems?.deliverForItems(after.openItemIds);
+    }
+    return null;
+  }
+  if (row.confirmedAutomatically && row.promotionId) {
+    // M-T11 read again at the last moment the platform decides anything: the owner may have
+    // taken the Automatic setting back since the check. A landing it no longer covers is ended
+    // here as the owner's card (M-T12) instead of going out on a yes that was withdrawn — and one
+    // whose authorization cannot be read at all is not sent either.
+    const refusal = await automaticLandingRefusal(prisma, row.promotionId, landsAutomatically)
+      .catch((error) => `the authorization could not be read: ${error?.message ?? error}`);
+    if (refusal) {
+      log.log(`automatic landing ${row.id} handed back to the owner: ${refusal}`);
+      const after = await finishHandedBack(prisma, row.id, leaseOwner, row.claimGeneration);
       if (after && after.openItemIds.length > 0) {
         await openItems?.deliverForItems(after.openItemIds);
       }
-      continue;
+      return null;
     }
-    if (row.confirmedAutomatically && row.promotionId) {
-      // M-T11 read again at the last moment the platform decides anything: the owner may have
-      // taken the Automatic setting back since the check. A landing it no longer covers is ended
-      // here as the owner's card (M-T12) instead of going out on a yes that was withdrawn — and one
-      // whose authorization cannot be read at all is not sent either.
-      const refusal = await automaticLandingRefusal(prisma, row.promotionId, landsAutomatically)
-        .catch((error) => `the authorization could not be read: ${error?.message ?? error}`);
-      if (refusal) {
-        log.log(`automatic landing ${row.id} handed back to the owner: ${refusal}`);
-        const after = await finishHandedBack(prisma, row.id, heartbeat.leaseOwner, row.claimGeneration);
-        if (after && after.openItemIds.length > 0) {
-          await openItems?.deliverForItems(after.openItemIds);
-        }
-        continue;
-      }
-    }
-    // J12's receipt repair: the earlier landings on this serial key whose push outcome nobody could
-    // read, so this job's fetch can check whether they landed after all. Not a check's business —
-    // a CHECK_PROMOTION never pushes.
-    const unknownPushes = row.kind === 'CHECK_PROMOTION'
-      ? []
-      : await unresolvedUnknownPushes(prisma, row);
-    commands.push({
-      jobId: row.id,
-      kind: row.kind as IntegrationJobCommand['kind'],
-      claimGeneration: row.claimGeneration.toString(),
-      leaseOwner: heartbeat.leaseOwner,
-      workDir: row.workDir,
-      remoteName: row.remoteName,
-      refAuthority: row.refAuthority as 'REMOTE' | 'RUNNER_LOCAL',
-      targetRef: row.targetRef,
-      upstreamRef: row.upstreamRef,
-      sourceRef: row.sourceRef,
-      ...(row.sessionBaseSha ? { sessionBaseSha: row.sessionBaseSha } : {}),
-      // A promotion names the exact commit the owner is being asked about, so the runner works from
-      // that rather than from wherever the branch has got to since (§3.4 M-S1). A TASK_BRANCH
-      // candidate's first check has none to name and resolves the ref itself (0293).
-      ...(row.jobSourceSha ? { sourceSha: row.jobSourceSha } : {}),
-      ...(row.promotionSourceKind
-        ? { promotionSourceKind: row.promotionSourceKind as 'PROJECT_BRANCH' | 'TASK_BRANCH' }
-        : {}),
-      ...(row.upstreamShaChecked ? { upstreamShaChecked: row.upstreamShaChecked } : {}),
-      ...(row.mergeTreeSha ? { mergeTreeSha: row.mergeTreeSha } : {}),
-      ...(row.confirmedAutomatically ? { automatic: true } : {}),
-      checks: checksFor(row),
-      cancelRequested: row.cancelRequestedAt != null,
-      ...(unknownPushes.length > 0 ? { unknownPushes } : {}),
-      // §2.2 J-T4: only a v2 claim is asked to report PUSH synchronously and wait for the answer.
-      ...(row.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL ? { reportBeforePush: true as const } : {}),
-    });
   }
-  return commands;
+  // J12's receipt repair: the earlier landings on this serial key whose push outcome nobody could
+  // read, so this job's fetch can check whether they landed after all. Not a check's business —
+  // a CHECK_PROMOTION never pushes.
+  const unknownPushes = row.kind === 'CHECK_PROMOTION'
+    ? []
+    : await unresolvedUnknownPushes(prisma, row);
+  return {
+    jobId: row.id,
+    kind: row.kind as IntegrationJobCommand['kind'],
+    claimGeneration: row.claimGeneration.toString(),
+    leaseOwner,
+    workDir: row.workDir,
+    remoteName: row.remoteName,
+    refAuthority: row.refAuthority as 'REMOTE' | 'RUNNER_LOCAL',
+    targetRef: row.targetRef,
+    upstreamRef: row.upstreamRef,
+    sourceRef: row.sourceRef,
+    ...(row.sessionBaseSha ? { sessionBaseSha: row.sessionBaseSha } : {}),
+    // A promotion names the exact commit the owner is being asked about, so the runner works from
+    // that rather than from wherever the branch has got to since (§3.4 M-S1). A TASK_BRANCH
+    // candidate's first check has none to name and resolves the ref itself (0293).
+    ...(row.jobSourceSha ? { sourceSha: row.jobSourceSha } : {}),
+    ...(row.promotionSourceKind
+      ? { promotionSourceKind: row.promotionSourceKind as 'PROJECT_BRANCH' | 'TASK_BRANCH' }
+      : {}),
+    ...(row.upstreamShaChecked ? { upstreamShaChecked: row.upstreamShaChecked } : {}),
+    ...(row.mergeTreeSha ? { mergeTreeSha: row.mergeTreeSha } : {}),
+    ...(row.confirmedAutomatically ? { automatic: true } : {}),
+    checks: checksFor(row),
+    cancelRequested: row.cancelRequestedAt != null,
+    ...(unknownPushes.length > 0 ? { unknownPushes } : {}),
+    // §2.2 J-T4: only a v2 claim is asked to report PUSH synchronously and wait for the answer.
+    ...(row.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL ? { reportBeforePush: true as const } : {}),
+  };
 }
 
 /**
@@ -445,6 +500,14 @@ async function unresolvedUnknownPushes(
  * The two are one statement because they are one decision — "which row becomes this process's" —
  * and because splitting them opens a window in which the takeover and the claim each see the other's
  * slot as free.
+ *
+ * A SILENT CLAIM OF THIS SAME PROCESS IS NOT TAKEN OVER HERE (`claim_lease_owner IS DISTINCT FROM`
+ * below). The takeover is for a claim whose process is gone: its new generation is what fences the
+ * old process's reports off. The process asking is not gone — it is beating — and the runner tells
+ * the jobs it runs apart by job id alone (`runloop.go`'s `integratingNow`), so a new generation
+ * handed to a process that IS running the job would be skipped while the running job's next report
+ * was refused STALE_CLAIM. Such a claim is handed to its process again under the generation it was
+ * made under, by `silentClaimsOf` (J-T3a), and this statement leaves it alone.
  *
  * WHAT IT LOCKS IS THE JOB ROW, AND NOTHING ELSE (`FOR UPDATE OF c`). The candidate joins the job to
  * its source session and that session's workspace to decide WHAT may be claimed, but those rows are
@@ -590,6 +653,23 @@ async function claimOne(
        AND cb."id" = j."codebase_id"
        AND s."id" = j."session_id"
     RETURNING
+      ${HELD_CLAIM_COLUMNS},
+      -- What the row was before this statement: RUNNING means the candidate was a silent claim and
+      -- this one takes it over (J-T3). Read from the CTE the UPDATE just consumed, so the claim
+      -- event's claim/takeover distinction is the statement's own fact and not a second reading of
+      -- a row another runner may already have moved.
+      (SELECT c."state" FROM candidate c) AS "previousState"
+  `);
+  return rows[0] ?? null;
+}
+
+/**
+ * The columns a `HeldClaim` is read from, over the aliases both statements that read one use: the
+ * job as `j`, its codebase as `cb`, its source session as `s`, that session's workspace as `w` and
+ * the session's task as `t`. One list, because a claim handed out again (J-T3a) must be handed the
+ * very command the claim itself was.
+ */
+const HELD_CLAIM_COLUMNS = Prisma.sql`
       j."id" AS "id",
       j."owner_id" AS "ownerId",
       j."kind" AS "kind",
@@ -625,14 +705,73 @@ async function claimOne(
       (SELECT p."upstream_sha_checked" FROM "project_promotion" p
         WHERE p."id" = j."promotion_id") AS "upstreamShaChecked",
       (SELECT p."merge_tree_sha" FROM "project_promotion" p
-        WHERE p."id" = j."promotion_id") AS "mergeTreeSha",
-      -- What the row was before this statement: RUNNING means the candidate was a silent claim and
-      -- this one takes it over (J-T3). Read from the CTE the UPDATE just consumed, so the claim
-      -- event's claim/takeover distinction is the statement's own fact and not a second reading of
-      -- a row another runner may already have moved.
-      (SELECT c."state" FROM candidate c) AS "previousState"
-  `);
-  return rows[0] ?? null;
+        WHERE p."id" = j."promotion_id") AS "mergeTreeSha"`;
+
+/**
+ * The claims this process holds and has gone silent on, to be handed to it again under the claim
+ * they were made under (§2.3 J-T3a): RUNNING under this lease owner on this runner, in a checkout of
+ * this runner, whose current claim §7.2 V6 reads `LEASE_EXPIRED` — and which is either a v2 claim or
+ * one that has never reported since it was made.
+ *
+ * WHY IT IS SAFE FOR A JOB THE RUNNER IS RUNNING. The runner starts a job its process is not
+ * already running and skips one it is (`runloop.go`'s `integratingNow`, kept by job id for exactly
+ * this: the heartbeat is at-least-once). So the same command handed out again starts a claim that
+ * never reached its runner, and changes nothing about one that is running. That is why the claim
+ * generation does not move: a new one would be skipped by a runner that has the job, and the next
+ * report of the job it is running would be refused STALE_CLAIM.
+ *
+ * WHY NOTHING IS WRITTEN. The lease is not renewed, so §7.2 V6, X-E5's owner item and the abandon
+ * door go on reading the silence the claim really has: a runner that never picks the job up — its
+ * job id stuck in that map, say — is still the owner's after fifteen minutes. Only the claim's own
+ * report ends the hand-outs, which is the at-least-once delivery the runner was built for: the same
+ * claim, handed out on every beat until it is heard from.
+ *
+ * WHY A LEGACY CLAIM ONLY WHEN IT NEVER REPORTED. A legacy runner reads no answer to its reports
+ * and pushes without asking, so a hand-out racing the end of one long, silent step — the result
+ * applied and the job gone from that map just before the answer is read — would start a second run
+ * that nothing can stop before its push. A legacy claim that never reported is not yet at its first
+ * step: it reports FETCH as soon as it holds the local lock, and what can end it before that (a stop
+ * requested, a checkout that is not one) pushes nothing. A v2 claim's every report is answered, and
+ * its synchronous PUSH report is refused once the job is written down, so a second run of it stops
+ * before it pushes. 2026-10-19's claim was legacy: runner 0.1.232 declared no v2.
+ *
+ * The limit is V6's for both: a v2 claim's is always the lease, and a legacy claim that never
+ * reported is still in the FETCH its claim wrote. V6's local-lock rule holds too — a claim queued
+ * behind an older job of the same runner, repository and ref is waiting, not silent.
+ */
+async function silentClaimsOf(
+  prisma: PrismaService,
+  runnerId: string,
+  leaseOwner: string,
+): Promise<HeldClaim[]> {
+  return prisma.$queryRaw<HeldClaim[]>(Prisma.sql`
+    SELECT ${HELD_CLAIM_COLUMNS}
+      FROM "project_integration_job" j
+      JOIN "project_codebase" cb ON cb."id" = j."codebase_id"
+      JOIN "session" s ON s."id" = j."session_id"
+      JOIN "workspace" w ON w."id" = s."workspace_id"
+      LEFT JOIN "task" t ON t."id" = s."task_id"
+     WHERE j."state" = 'RUNNING'
+       AND j."runner_id" = ${runnerId}::uuid
+       AND j."claim_lease_owner" = ${leaseOwner}
+       AND w."runner_id" = ${runnerId}::uuid
+       AND COALESCE(j."heartbeat_at", j."claimed_at")
+           < now() - (${INTEGRATION_CLAIM_STALE_MS}::int * interval '1 millisecond')
+       AND (j."progress_protocol" = ${INTEGRATION_PROGRESS_V2_PROTOCOL}
+            OR j."heartbeat_at" <= j."claimed_at")
+       -- readInFlightJobs' local-lock rule, spelled as it and X-E5 spell it.
+       AND NOT COALESCE(
+         j."heartbeat_at" <= j."claimed_at"
+         AND EXISTS (
+           SELECT 1 FROM "project_integration_job" o
+             JOIN "project_codebase" ocb ON ocb."id" = o."codebase_id"
+            WHERE o."state" = 'RUNNING'
+              AND o."runner_id" = j."runner_id"
+              AND o."target_ref" = j."target_ref"
+              AND ocb."canonical_repo_url" = cb."canonical_repo_url"
+              AND o."claimed_at" < j."claimed_at"
+              AND o."id" <> j."id"), false)
+     ORDER BY j."claimed_at", j."id"`);
 }
 
 /**

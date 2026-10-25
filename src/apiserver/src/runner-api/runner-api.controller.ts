@@ -1429,8 +1429,9 @@ export class RunnerApiController {
     }
     // The platform's own git work, claimed the same way and for the same reason: the claim is a
     // compare-and-set on a row, so a job named here is already RUNNING and is nobody else's to take
-    // (contract §2.3 J-T2). On its own try, like the relay above — a failure costs this beat's jobs,
-    // which the next beat claims again from the queue.
+    // (contract §2.3 J-T2). On its own try, like the relay above — a failure costs this beat's jobs:
+    // one still queued is claimed by a later beat, and one this beat had already claimed is handed
+    // to this process again once its lease has run out without a report (J-T3a).
     let integrationJobs: RunnerHeartbeatResponse['integrationJobs'];
     try {
       const claimed = (await this.integrationJobs?.dispatch({
