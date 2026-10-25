@@ -41,7 +41,7 @@ import {
 } from '../projects/task-checkpoint.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
-import { randomUUID, type KeyObject } from 'crypto';
+import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
 import {
@@ -337,6 +337,7 @@ import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
 import { SessionNamingDto } from './session-naming';
 import { normalizeToolOutputEvent } from './tool-output';
+import type { KeyObject } from 'node:crypto';
 import {
   admitLinkCallConnections,
   linkCallCutShort,
