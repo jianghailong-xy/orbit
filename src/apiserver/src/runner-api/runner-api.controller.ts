@@ -1332,8 +1332,8 @@ export class RunnerApiController {
     return { ok: true };
   }
 
-  @UseGuards(RunnerAuthGuard)
   // A beat the link gateway forwarded is admitted in the statement that answers it (linkHeartbeat).
+  @UseGuards(RunnerAuthGuard)
   @AdmitsLinkCallItself()
   @Post('heartbeat')
   async heartbeat(
