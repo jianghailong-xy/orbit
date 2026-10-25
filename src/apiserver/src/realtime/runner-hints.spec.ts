@@ -1,0 +1,299 @@
+import assert from 'node:assert/strict';
+import { generateKeyPairSync } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { test } from 'node:test';
+import { QueueService } from '../queue/queue.service';
+import { RealtimeService } from './realtime.service';
+import { RunnerHints, runnerHintMessage, runnerHintSubject, type HintBus, type RunnerHint } from './runner-hints';
+
+/**
+ * The runner link's hints (runner-hints.ts; docs/runner-link-design.md §5.5): each wake signal is published on
+ * rnr.<runnerId> for the one runner it concerns, after the commit it announces, beside the in-process and NOTIFY
+ * wakes the HTTP long polls park on, which do exactly what they did before.
+ */
+
+const RUNNER_A = '0190a0b0-0000-7000-8000-00000000000a';
+const RUNNER_B = '0190a0b0-0000-7000-8000-00000000000b';
+const SESSION_ON_A = '0190a0b0-0000-7000-8000-0000000000a1';
+const SESSION_ON_B = '0190a0b0-0000-7000-8000-0000000000b1';
+const SESSION_WITHOUT_RUNNER = '0190a0b0-0000-7000-8000-0000000000c1';
+
+// From build/realtime back to the repository root, as the compose specs read the repository.
+const ROOT = path.resolve(__dirname, '../../../..');
+
+/** A NATS stand-in that records what is published, up or down as the test says. */
+function fakeBus(up = true): HintBus & { sent: Array<[string, string]>; up: boolean } {
+  const sent: Array<[string, string]> = [];
+  return { up, sent, publish: (subject, message) => void sent.push([subject, message]), close: async () => undefined };
+}
+
+/** Sessions and the runners they are assigned to, and every lookup the hints make. */
+function sessionsTable() {
+  const assigned = new Map<string, string | null>([
+    [SESSION_ON_A, RUNNER_A],
+    [SESSION_ON_B, RUNNER_B],
+    [SESSION_WITHOUT_RUNNER, null],
+  ]);
+  const lookups: string[] = [];
+  const prisma = {
+    session: {
+      findUnique: async ({ where }: { where: { id: string } }) => {
+        lookups.push(where.id);
+        return assigned.has(where.id) ? { assignedRunnerId: assigned.get(where.id) ?? null } : null;
+      },
+    },
+  };
+  return { prisma, assigned, lookups };
+}
+
+/** Hints over the stand-in, with a clock the test moves. */
+function hintsOver(bus: HintBus, prisma = sessionsTable().prisma) {
+  let now = 1_000_000;
+  const hints = new RunnerHints(prisma as never, 'nats://nats.test:4222', () => bus, () => now);
+  const warnings: string[] = [];
+  (hints as unknown as { log: { log(): void; warn(line: string): void } }).log = {
+    log: () => undefined,
+    warn: (line: string) => void warnings.push(line),
+  };
+  hints.onModuleInit();
+  return { hints, warnings, advance: (ms: number) => { now += ms; } };
+}
+
+/** Let the hints' own lookups settle. */
+const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+const message = (hint: RunnerHint) => runnerHintMessage(hint);
+
+test('a hint is a link Frame carrying only that Hint, in protobuf JSON, on its runner\'s subject', () => {
+  assert.equal(runnerHintSubject(RUNNER_A), `rnr.${RUNNER_A}`);
+  assert.equal(message({ claim: {} }), '{"hint":{"claim":{}}}');
+  assert.equal(message({ commands: {} }), '{"hint":{"commands":{}}}');
+  assert.equal(message({ inbox: { sessionId: SESSION_ON_A } }), `{"hint":{"inbox":{"sessionId":"${SESSION_ON_A}"}}}`);
+});
+
+test('the gateway\'s fixtures are what this encoder writes, case by case', () => {
+  const fixture = JSON.parse(readFileSync(path.join(ROOT, 'src/link-gateway/testdata/b1-hints.json'), 'utf8')) as {
+    cases: Array<{ name: string; runnerId: string; hint: RunnerHint; subject: string; message: string }>;
+  };
+  assert.deepEqual(fixture.cases.map((c) => Object.keys(c.hint)[0]).sort(), ['claim', 'commands', 'inbox'],
+    'every kind of hint the apiserver publishes has a fixture the gateway decodes');
+  for (const c of fixture.cases) {
+    assert.equal(runnerHintSubject(c.runnerId), c.subject, c.name);
+    assert.equal(runnerHintMessage(c.hint), c.message,
+      `${c.name}: regenerate with node scripts/runner-link/gen-hint-fixtures.mjs`);
+  }
+});
+
+test('off, nothing is opened, looked up or published', async () => {
+  const table = sessionsTable();
+  let opened = 0;
+  const hints = new RunnerHints(table.prisma as never, null, () => {
+    opened += 1;
+    return fakeBus();
+  });
+  hints.onModuleInit();
+  hints.claim(RUNNER_A);
+  hints.commands(RUNNER_A);
+  hints.inbox(SESSION_ON_A);
+  await settle();
+  assert.equal(hints.enabled, false);
+  assert.equal(opened, 0, 'no NATS connection is made');
+  assert.deepEqual(table.lookups, [], 'no session is looked up');
+  assert.deepEqual(hints.stats(), { published: 0, dropped: 0 });
+  await hints.onModuleDestroy();
+});
+
+test('on only while the runner link is configured and RUNNER_LINK_NATS_URL names a server', () => {
+  const signingKey = Buffer.from(generateKeyPairSync('ed25519').privateKey.export({ format: 'pem', type: 'pkcs8' }))
+    .toString('base64');
+  const link = {
+    RUNNER_LINK_SIGNING_KEY: signingKey,
+    RUNNER_LINK_URL: 'wss://link.example.invalid',
+    RUNNER_LINK_GATEWAY_TOKEN: 'g'.repeat(32),
+  };
+  const config = (values: Record<string, string>) => ({ get: <T>(name: string) => values[name] as T });
+  const prisma = sessionsTable().prisma as never;
+  assert.equal(RunnerHints.fromConfig(prisma, config({ ...link, RUNNER_LINK_NATS_URL: 'nats://nats:4222' })).enabled, true);
+  assert.equal(RunnerHints.fromConfig(prisma, config({ RUNNER_LINK_NATS_URL: 'nats://nats:4222' })).enabled, false,
+    'a deployment without the link publishes nothing, whatever the URL says');
+  assert.equal(RunnerHints.fromConfig(prisma, config({ ...link, RUNNER_LINK_NATS_URL: '  ' })).enabled, false);
+  assert.equal(RunnerHints.fromConfig(prisma, config(link)).enabled, false);
+});
+
+test('each signal is published once, for the runner it concerns and no other', async () => {
+  const bus = fakeBus();
+  const { hints } = hintsOver(bus);
+  hints.claim(RUNNER_A);
+  hints.commands(RUNNER_B);
+  hints.inbox(SESSION_ON_A);
+  hints.inbox(SESSION_ON_B);
+  hints.inbox(SESSION_WITHOUT_RUNNER);
+  hints.inbox('0190a0b0-0000-7000-8000-0000000000ff'); // no such session
+  await settle();
+  assert.deepEqual(bus.sent, [
+    [`rnr.${RUNNER_A}`, '{"hint":{"claim":{}}}'],
+    [`rnr.${RUNNER_B}`, '{"hint":{"commands":{}}}'],
+    [`rnr.${RUNNER_A}`, `{"hint":{"inbox":{"sessionId":"${SESSION_ON_A}"}}}`],
+    [`rnr.${RUNNER_B}`, `{"hint":{"inbox":{"sessionId":"${SESSION_ON_B}"}}}`],
+  ]);
+  assert.deepEqual(hints.stats(), { published: 4, dropped: 0 });
+  await hints.onModuleDestroy();
+});
+
+test('a session\'s runner is read once and remembered for 30 s, and forgotten when the session moves', async () => {
+  const bus = fakeBus();
+  const table = sessionsTable();
+  const { hints, advance } = hintsOver(bus, table.prisma);
+  hints.inbox(SESSION_ON_A);
+  await settle();
+  hints.inbox(SESSION_ON_A);
+  await settle();
+  assert.deepEqual(table.lookups, [SESSION_ON_A], 'the second hint is answered from memory');
+
+  advance(30_000);
+  hints.inbox(SESSION_ON_A);
+  await settle();
+  assert.deepEqual(table.lookups, [SESSION_ON_A, SESSION_ON_A], 'read again once 30 s have passed');
+
+  // Moved to runner B: the replica that moved it forgets at once, and the next hint goes to B.
+  table.assigned.set(SESSION_ON_A, RUNNER_B);
+  hints.forgetSession(SESSION_ON_A);
+  hints.inbox(SESSION_ON_A);
+  await settle();
+  assert.equal(table.lookups.length, 3);
+  assert.deepEqual(bus.sent.map(([subject]) => subject), [`rnr.${RUNNER_A}`, `rnr.${RUNNER_A}`, `rnr.${RUNNER_A}`, `rnr.${RUNNER_B}`]);
+  await hints.onModuleDestroy();
+});
+
+test('while NATS is down a hint is dropped and counted, nothing is looked up, and the count is logged once per report', async () => {
+  const bus = fakeBus(false);
+  const table = sessionsTable();
+  const { hints, warnings } = hintsOver(bus, table.prisma);
+  hints.claim(RUNNER_A);
+  hints.commands(RUNNER_A);
+  hints.inbox(SESSION_ON_A);
+  for (let i = 0; i < 100; i += 1) hints.claim(RUNNER_B);
+  await settle();
+  assert.deepEqual(bus.sent, []);
+  assert.deepEqual(table.lookups, [], 'an outage costs the database nothing');
+  assert.deepEqual(hints.stats(), { published: 0, dropped: 103 });
+  assert.deepEqual(warnings, [], 'nothing is logged per hint');
+  hints.reportDrops();
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /^dropped 103 runner link hints since the last report/);
+  hints.reportDrops();
+  assert.equal(warnings.length, 1, 'a report with nothing dropped since says nothing');
+
+  bus.up = true;
+  hints.claim(RUNNER_A);
+  assert.deepEqual(bus.sent, [[`rnr.${RUNNER_A}`, '{"hint":{"claim":{}}}']], 'published again once it is back');
+  await hints.onModuleDestroy();
+});
+
+test('a publish or a lookup that fails is a dropped hint, never an error for the caller', async () => {
+  const bus = fakeBus();
+  bus.publish = () => {
+    throw new Error('connection closed');
+  };
+  const failing = { session: { findUnique: async () => { throw new Error('the database is down'); } } };
+  const { hints } = hintsOver(bus, failing as never);
+  assert.doesNotThrow(() => hints.claim(RUNNER_A));
+  assert.doesNotThrow(() => hints.inbox(SESSION_ON_A));
+  await settle();
+  assert.deepEqual(hints.stats(), { published: 0, dropped: 2 });
+  await hints.onModuleDestroy();
+});
+
+/** RealtimeService over doubles: what it NOTIFYs, and its hints. */
+function realtimeWithHints() {
+  const bus = fakeBus();
+  const table = sessionsTable();
+  const { hints } = hintsOver(bus, table.prisma);
+  const notified: Array<[string, string]> = [];
+  const prisma = {
+    ...table.prisma,
+    $executeRawUnsafe: async (_sql: string, channel: string, payload: string) => {
+      notified.push([channel, payload]);
+      return 0;
+    },
+  };
+  const realtime = new RealtimeService(prisma as never, {} as never, hints);
+  const deliver = (channel: string, payload: unknown) =>
+    (realtime as unknown as { onNotify(channel: string, payload: string): void }).onNotify(channel, JSON.stringify(payload));
+  return { realtime, hints, bus, notified, table, deliver };
+}
+
+test('notifyInbox still wakes the parked inbox poll and the other replicas, and hints the session\'s runner', async () => {
+  const { realtime, hints, bus, notified } = realtimeWithHints();
+  const parked = realtime.waitForInbox(SESSION_ON_A, 5_000);
+  realtime.notifyInbox(SESSION_ON_A);
+  await parked;
+  await settle();
+  assert.deepEqual(notified.map(([channel]) => channel), ['orbit_inbox']);
+  assert.deepEqual(bus.sent, [[`rnr.${RUNNER_A}`, `{"hint":{"inbox":{"sessionId":"${SESSION_ON_A}"}}}`]]);
+  await hints.onModuleDestroy();
+});
+
+test('notifyRunnerWake still wakes the parked wake poll and the other replicas, and hints that runner', async () => {
+  const { realtime, hints, bus, notified } = realtimeWithHints();
+  const parked = realtime.waitForRunnerWake(RUNNER_B, 5_000);
+  realtime.notifyRunnerWake(RUNNER_B);
+  assert.equal(await parked, true);
+  assert.deepEqual(notified.map(([channel]) => channel), ['orbit_runner_wake']);
+  assert.deepEqual(bus.sent, [[`rnr.${RUNNER_B}`, '{"hint":{"commands":{}}}']]);
+  await hints.onModuleDestroy();
+});
+
+test('a wake committed inside a transaction is hinted when its NOTIFY arrives; one another replica emitted is not hinted twice', async () => {
+  const { realtime, hints, bus, deliver } = realtimeWithHints();
+  deliver('orbit_runner_wake', { r: RUNNER_A, c: true });
+  deliver('orbit_runner_wake', { i: 'another-replica', r: RUNNER_B });
+  deliver('orbit_inbox', { i: 'another-replica', r: SESSION_ON_B });
+  await settle();
+  assert.deepEqual(bus.sent, [[`rnr.${RUNNER_A}`, '{"hint":{"commands":{}}}']],
+    'the replica that emitted a wake or an inbox notice hinted it already');
+  // The NOTIFY bridge still does what it did: B's wake is held for its next poll.
+  assert.equal(await realtime.waitForRunnerWake(RUNNER_B, 5_000), true);
+  await hints.onModuleDestroy();
+});
+
+test('a moved session is forgotten with its owner, so its next inbox hint goes to its new runner', async () => {
+  const { realtime, hints, bus, table } = realtimeWithHints();
+  realtime.notifyInbox(SESSION_ON_A);
+  await settle();
+  table.assigned.set(SESSION_ON_A, RUNNER_B);
+  realtime.forgetSessionOwner(SESSION_ON_A);
+  realtime.notifyInbox(SESSION_ON_A);
+  await settle();
+  assert.deepEqual(bus.sent.map(([subject]) => subject), [`rnr.${RUNNER_A}`, `rnr.${RUNNER_B}`]);
+  await hints.onModuleDestroy();
+});
+
+test('a queued session still wakes every claim poll of this process once, and hints only the runner it is queued for', async () => {
+  const bus = fakeBus();
+  const { hints } = hintsOver(bus);
+  const queue = new QueueService({} as never, {} as never, undefined, undefined, hints);
+  const signal = (queue as unknown as { signal: import('node:events').EventEmitter }).signal;
+  let emitted = 0;
+  signal.on('queued', () => { emitted += 1; });
+  const waitForSignal = (ms: number) =>
+    (queue as unknown as { waitForSignal(ms: number): Promise<void> }).waitForSignal(ms);
+
+  // A claim long poll of runner B parks too: the in-process signal wakes it as before (it re-reads the
+  // queue and finds nothing of its own), while only runner A is hinted over the link.
+  const parkedForB = waitForSignal(5_000);
+  queue.notifySessionQueued(RUNNER_A);
+  await parkedForB;
+  assert.equal(emitted, 1);
+  assert.deepEqual(bus.sent, [[`rnr.${RUNNER_A}`, '{"hint":{"claim":{}}}']]);
+
+  queue.notifySessionQueued(null);
+  assert.equal(emitted, 2, 'a session with no runner still wakes the polls');
+  assert.equal(bus.sent.length, 1, 'and hints nobody');
+
+  queue.notifySessionQueued([RUNNER_A, RUNNER_B]);
+  assert.equal(emitted, 3, 'several runners, one wake of the polls');
+  assert.deepEqual(bus.sent.slice(1).map(([subject]) => subject), [`rnr.${RUNNER_A}`, `rnr.${RUNNER_B}`]);
+  await hints.onModuleDestroy();
+});

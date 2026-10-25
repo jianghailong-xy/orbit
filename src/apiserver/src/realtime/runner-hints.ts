@@ -1,0 +1,304 @@
+import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import type { ConfigService } from '@nestjs/config';
+import { connect, type NatsConnection } from '@nats-io/transport-node';
+import type { PrismaService } from '../prisma/prisma.service';
+import { readRunnerLink } from '../runner-api/runner-link-token';
+
+/**
+ * Hints for the runner link (docs/runner-link-design.md §5.5, §6.3). Each of the three wake signals is also
+ * published on NATS, on `rnr.<runnerId>` for the one runner it concerns, where the link gateway holding that runner's
+ * connection relays it as a Hint frame:
+ *
+ *   - a message waiting in a session's inbox (RealtimeService.notifyInbox), for the runner the session is assigned to;
+ *   - a session queued for a runner (QueueService.notifySessionQueued), for that runner;
+ *   - something a heartbeat delivers (RealtimeService.notifyRunnerWake), for that runner.
+ *
+ * It is a path beside the in-process EventEmitter and the Postgres NOTIFY that the HTTP long polls park on, never in
+ * place of them: those stay as they are until the cut-over (D15), and nothing here changes what an HTTP runner is
+ * handed or when.
+ *
+ * At most once, and best effort. Every caller publishes after the commit it announces, the rule the signals already
+ * keep, and a lost hint costs the runner at most a heartbeat interval: the heartbeat carries the same news. So
+ * nothing here waits on NATS or throws. While NATS is unreachable a hint is dropped and counted, and the count is
+ * logged once a minute, never once per hint. The client would buffer what is published while it reconnects, without
+ * bound, so a hint is only published while the connection is up.
+ *
+ * On only while the runner link is configured (the three RUNNER_LINK_* settings, runner-link-token.ts) and
+ * RUNNER_LINK_NATS_URL names a server. A deployment without the link opens no connection and looks nothing up.
+ */
+
+/** What a hint says: one member of the link protocol's `Hint` (contracts/runner-link/v1/runner_link.proto). */
+export type RunnerHint =
+  | { inbox: { sessionId: string } }
+  | { claim: Record<string, never> }
+  | { commands: Record<string, never> };
+
+/** The subject a runner's hints are published on. Runner ids are the UUIDs the link token names. */
+export function runnerHintSubject(runnerId: string): string {
+  return `rnr.${runnerId}`;
+}
+
+/**
+ * The message published for a hint: a link `Frame` with only `hint` set, in protobuf's canonical JSON (fields in
+ * lowerCamelCase, an empty message as `{}`), which the gateway decodes and relays. The gateway's tests decode what
+ * this writes (src/link-gateway/testdata/b1-hints.json, from scripts/runner-link/gen-hint-fixtures.mjs), so a field
+ * renamed in the proto turns them red instead of dropping hints.
+ */
+export function runnerHintMessage(hint: RunnerHint): string {
+  return JSON.stringify({ hint });
+}
+
+/** NATS as the hints use it. */
+export interface HintBus {
+  /** Whether a publish now reaches the server. */
+  readonly up: boolean;
+  publish(subject: string, message: string): void;
+  close(): Promise<void>;
+}
+
+/** How long a session's runner is remembered. A moved session is forgotten at once on the replica that moved it
+ *  (forgetSession); elsewhere its inbox hints go to the runner it left for at most this long, one heartbeat. */
+const SESSION_RUNNER_TTL_MS = 30_000;
+const SESSION_RUNNER_MAX = 10_000;
+/** How often dropped hints are reported. */
+const DROP_REPORT_MS = 60_000;
+
+export class RunnerHints implements OnModuleInit, OnModuleDestroy {
+  private readonly log = new Logger('RunnerHints');
+  private bus: HintBus | null = null;
+  private dropReport?: ReturnType<typeof setInterval>;
+  /** sessionId → the runner it is assigned to (null: none), and when that was read. */
+  private readonly sessionRunners = new Map<string, { runnerId: string | null; at: number }>();
+  private dropped = 0;
+  private droppedSinceReport = 0;
+  private published = 0;
+
+  /** `url` null leaves hints off. `openBus` is NATS outside the specs. */
+  constructor(
+    private readonly prisma: Pick<PrismaService, 'session'>,
+    private readonly url: string | null,
+    private readonly openBus: (url: string, log: Logger) => HintBus = (url, log) => new NatsHintBus(url, log),
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  /** On when the runner link is configured and RUNNER_LINK_NATS_URL is set. A link without the URL says so once. */
+  static fromConfig(prisma: PrismaService, config: Pick<ConfigService, 'get'>): RunnerHints {
+    const url = config.get<string>('RUNNER_LINK_NATS_URL')?.trim() || null;
+    const link = readRunnerLink({
+      signingKey: config.get<string>('RUNNER_LINK_SIGNING_KEY'),
+      linkUrl: config.get<string>('RUNNER_LINK_URL'),
+      gatewayToken: config.get<string>('RUNNER_LINK_GATEWAY_TOKEN'),
+    });
+    if (link.config && !url) {
+      new Logger('RunnerHints').warn('RUNNER_LINK_NATS_URL is not set: no runner link hints are published, and runners on the link learn of work at their heartbeat');
+    }
+    return new RunnerHints(prisma, link.config ? url : null);
+  }
+
+  get enabled(): boolean {
+    return this.url !== null;
+  }
+
+  onModuleInit(): void {
+    if (!this.url) return;
+    this.bus = this.openBus(this.url, this.log);
+    this.dropReport = setInterval(() => this.reportDrops(), DROP_REPORT_MS);
+    this.dropReport.unref?.();
+    this.log.log(`runner link hints: publishing to ${redactUrl(this.url)}`);
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    if (this.dropReport) clearInterval(this.dropReport);
+    this.reportDrops();
+    await this.bus?.close();
+    this.bus = null;
+  }
+
+  /** A message is waiting in this session's inbox: hint the runner the session is assigned to. */
+  inbox(sessionId: string): void {
+    if (!this.ready()) return;
+    void this.runnerOf(sessionId).then(
+      (runnerId) => {
+        if (runnerId) this.publish(runnerId, { inbox: { sessionId } });
+      },
+      // Counted with the rest rather than logged one by one: a database that cannot answer would fail every one.
+      () => this.drop(),
+    );
+  }
+
+  /** A session is queued for this runner. */
+  claim(runnerId: string): void {
+    if (this.ready()) this.publish(runnerId, { claim: {} });
+  }
+
+  /** Something this runner's heartbeat delivers is waiting. */
+  commands(runnerId: string): void {
+    if (this.ready()) this.publish(runnerId, { commands: {} });
+  }
+
+  /** Forget the runner a session was assigned to: it has just moved to another one. */
+  forgetSession(sessionId: string): void {
+    this.sessionRunners.delete(sessionId);
+  }
+
+  /** What was published and dropped since start, for the specs. */
+  stats(): { published: number; dropped: number } {
+    return { published: this.published, dropped: this.dropped };
+  }
+
+  /** Log the hints dropped since the last report, if any: one line per interval, whatever the count. */
+  reportDrops(): void {
+    if (this.droppedSinceReport === 0) return;
+    const count = this.droppedSinceReport;
+    this.droppedSinceReport = 0;
+    this.log.warn(`dropped ${count} runner link hint${count === 1 ? '' : 's'} since the last report; their runners learn of that work at their next heartbeat`);
+  }
+
+  /** On, and connected; a hint asked for while disconnected is counted as dropped. */
+  private ready(): boolean {
+    if (!this.bus) return false;
+    if (this.bus.up) return true;
+    this.drop();
+    return false;
+  }
+
+  private publish(runnerId: string, hint: RunnerHint): void {
+    const bus = this.bus;
+    if (!bus?.up) {
+      this.drop();
+      return;
+    }
+    try {
+      bus.publish(runnerHintSubject(runnerId), runnerHintMessage(hint));
+      this.published += 1;
+    } catch {
+      this.drop();
+    }
+  }
+
+  private drop(): void {
+    this.dropped += 1;
+    this.droppedSinceReport += 1;
+  }
+
+  /** The runner a session is assigned to, remembered for SESSION_RUNNER_TTL_MS. */
+  private async runnerOf(sessionId: string): Promise<string | null> {
+    const at = this.now();
+    const hit = this.sessionRunners.get(sessionId);
+    if (hit && at - hit.at < SESSION_RUNNER_TTL_MS) {
+      this.sessionRunners.delete(sessionId); // re-insert to mark most-recently-used
+      this.sessionRunners.set(sessionId, hit);
+      return hit.runnerId;
+    }
+    const row = await this.prisma.session.findUnique({ where: { id: sessionId }, select: { assignedRunnerId: true } });
+    const runnerId = row?.assignedRunnerId ?? null;
+    this.sessionRunners.delete(sessionId);
+    this.sessionRunners.set(sessionId, { runnerId, at });
+    if (this.sessionRunners.size > SESSION_RUNNER_MAX) {
+      const oldest = this.sessionRunners.keys().next().value; // insertion order
+      if (oldest !== undefined) this.sessionRunners.delete(oldest);
+    }
+    return runnerId;
+  }
+}
+
+/** A NATS URL with any credentials in it masked, for the log. */
+function redactUrl(url: string): string {
+  return url.replace(/\/\/[^@/]*@/, '//***@');
+}
+
+/** How long to wait before dialing again after a connection could not be made. */
+const REDIAL_MS = 5_000;
+
+/**
+ * The NATS connection, kept up for as long as the process runs. Once connected, the client reconnects by itself and
+ * `up` follows its status; a first connection that fails is dialed again every REDIAL_MS, logged once until it
+ * succeeds.
+ */
+class NatsHintBus implements HintBus {
+  up = false;
+  private nc?: NatsConnection;
+  private redial?: ReturnType<typeof setTimeout>;
+  private stopped = false;
+  private failing = false;
+
+  constructor(
+    private readonly url: string,
+    private readonly log: Logger,
+  ) {
+    void this.dial();
+  }
+
+  publish(subject: string, message: string): void {
+    if (!this.nc) throw new Error('not connected');
+    this.nc.publish(subject, message);
+  }
+
+  async close(): Promise<void> {
+    this.stopped = true;
+    this.up = false;
+    if (this.redial) clearTimeout(this.redial);
+    const nc = this.nc;
+    this.nc = undefined;
+    await nc?.close().catch(() => undefined);
+  }
+
+  private async dial(): Promise<void> {
+    if (this.stopped) return;
+    let nc: NatsConnection;
+    try {
+      nc = await connect({
+        servers: this.url,
+        name: 'orbit-apiserver',
+        maxReconnectAttempts: -1,
+        reconnectTimeWait: 2_000,
+        pingInterval: 20_000,
+        maxPingOut: 3,
+      });
+    } catch (error) {
+      if (!this.failing) {
+        this.failing = true;
+        this.log.warn(`NATS at ${redactUrl(this.url)} is unreachable (${(error as Error)?.message ?? error}); runner link hints are dropped until it answers`);
+      }
+      this.scheduleRedial();
+      return;
+    }
+    if (this.stopped) {
+      await nc.close().catch(() => undefined);
+      return;
+    }
+    this.nc = nc;
+    this.up = true;
+    this.failing = false;
+    this.log.log(`connected to NATS at ${nc.getServer()}`);
+    void this.follow(nc);
+    void nc.closed().then((error) => {
+      if (this.nc !== nc) return;
+      this.nc = undefined;
+      this.up = false;
+      if (this.stopped) return;
+      this.log.warn(`the NATS connection closed${error ? ` (${error.message})` : ''}; dialing again`);
+      this.scheduleRedial();
+    });
+  }
+
+  /** Track the connection's state: down from a disconnect until the client has reconnected. */
+  private async follow(nc: NatsConnection): Promise<void> {
+    for await (const status of nc.status()) {
+      if (this.nc !== nc) return;
+      if (status.type === 'disconnect') {
+        this.up = false;
+        this.log.warn(`disconnected from NATS at ${status.server}; reconnecting, and runner link hints are dropped meanwhile`);
+      } else if (status.type === 'reconnect') {
+        this.up = true;
+        this.log.log(`reconnected to NATS at ${status.server}`);
+      }
+    }
+  }
+
+  private scheduleRedial(): void {
+    if (this.stopped) return;
+    this.redial = setTimeout(() => void this.dial(), REDIAL_MS);
+    this.redial.unref?.();
+  }
+}

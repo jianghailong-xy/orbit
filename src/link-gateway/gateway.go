@@ -36,6 +36,9 @@ type gateway struct {
 	now         func() time.Time
 	draining    atomic.Bool
 
+	// hints relays runner hints from NATS (hints.go); nil when LINK_NATS_URL is not set.
+	hints *hintRelay
+
 	// forward hands an Rpc to a backend. Version 0 has none: the gateway forwards nothing, and B4 adds it behind
 	// mayForward.
 	forward func(c *conn, rpc *linkpb.Rpc)
@@ -294,6 +297,14 @@ func serveMain(args []string) int {
 	}
 	go poller.run(ctx, cfg.RevocationInterval)
 
+	if cfg.NATSURL == "" {
+		logger.Warn("LINK_NATS_URL is not set: no runner hints are relayed, and runners learn of work at their heartbeat")
+	} else if relay, err := startHintRelay(g, cfg.NATSURL); err != nil {
+		logger.Error("runner hints not relayed: NATS refused the configuration", "err", err)
+	} else {
+		g.hints = relay
+	}
+
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)
 	go tlsSetup.run(ctx, hup)
@@ -334,7 +345,7 @@ func serveMain(args []string) int {
 		}
 	}()
 	logger.Info("link gateway serving", "version", version, "listen", cfg.ListenAddr, "metrics", cfg.MetricsAddr,
-		"tls", cfg.TLSMode, "cell", cfg.CellID, "keys", len(cfg.PublicKeys), "mode", cfg.Mode.String())
+		"tls", cfg.TLSMode, "cell", cfg.CellID, "keys", len(cfg.PublicKeys), "mode", cfg.Mode.String(), "hints", g.hints != nil)
 
 	sig := make(chan os.Signal, 2)
 	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
@@ -354,6 +365,9 @@ func serveMain(args []string) int {
 	case s := <-sig:
 		logger.Warn("second signal: exiting without waiting for the drain", "signal", s.String())
 		return 1
+	}
+	if g.hints != nil {
+		g.hints.close()
 	}
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelShutdown()

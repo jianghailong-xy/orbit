@@ -126,9 +126,12 @@ test('(z) no compose service or resident process is added', () => {
   // link-gateway is the runner link's WebSocket gateway, which the runner link project added on 2026-10-25 under a Compose
   // profile of its own that no install switches on (docs/runner-link-design.md §6.1 and D1; project 34bc0CsOzPh9KshG7H3DW,
   // task A4), not this removal; test/compose-topology.test.mjs (o) pins it.
+  // nats is the runner link's message bus, which the runner link project added on 2026-10-25 beside link-gateway,
+  // under the same Compose profile (docs/runner-link-design.md §6.3; project 34bc0CsOzPh9KshG7H3DW, task B1), not
+  // this removal; test/compose-topology.test.mjs (p) pins it.
   assert.deepEqual(names,
     ['postgres', 'pgbackup', 'apiserver', 'wiki-worker', 'web', 'gateway', 'docker-channel', 'managed-runner-firewall',
-      'link-gateway'],
+      'link-gateway', 'nats'],
     `compose declares ${names.length} services: ${names.join(', ')}`);
   assert.equal(/judgment|judgement/i.test(compose), false,
     'the removal must add no judgment compose service');

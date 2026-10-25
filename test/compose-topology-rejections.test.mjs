@@ -123,6 +123,23 @@ const cases = [
   ['the Docker socket given to the link gateway', 'is given to the Docker channel and to no other service',
     replace('      - "${RUNNER_LINK_GATEWAY_DIR:-/dev/null}:/var/lib/orbit-link-gateway"\n',
       '      - "${RUNNER_LINK_GATEWAY_DIR:-/dev/null}:/var/lib/orbit-link-gateway"\n      - /var/run/docker.sock:/var/run/docker.sock\n')],
+  // The runner link's NATS of 2026-10-25 (task B1): off unless the gateway's profile is on, pinned whole, storing nothing,
+  // on no port of the host and never reading the image's configuration file; and where the apiserver publishes hints.
+  ['NATS outside its profile', "the runner link's NATS is exactly the service",
+    replace('  nats:\n    profiles: [runner-link]\n', '  nats:\n')],
+  ['JetStream on NATS', "the runner link's NATS is exactly the service",
+    replace('    command: ["--http_port", "8222"]\n', '    command: ["--http_port", "8222", "--jetstream"]\n')],
+  ["NATS reading the image's configuration file", "the runner link's NATS is exactly the service",
+    replace('    command: ["--http_port", "8222"]\n', '    command: ["--config", "/etc/nats/nats-server.conf"]\n')],
+  ['a NATS port on the host', "the runner link's NATS is exactly the service",
+    replace('    expose:\n      - "4222"\n', '    expose:\n      - "4222"\n    ports:\n      - "4222:4222"\n')],
+  ['a store for NATS', "the runner link's NATS is exactly the service",
+    replace('    expose:\n      - "4222"\n', '    expose:\n      - "4222"\n    volumes:\n      - ./data/nats:/data\n')],
+  ['hints published to another NATS by default', 'nothing beyond the approved configuration was added',
+    replace('${RUNNER_LINK_NATS_URL:-nats://nats:4222}', '${RUNNER_LINK_NATS_URL:-nats://elsewhere.example:4222}')],
+  ['the hints address given to the wiki worker', 'NATS is named to the apiserver and the link gateway alone',
+    replace('      ORBIT_WIKI_MODEL_CONCURRENCY:',
+      '      RUNNER_LINK_NATS_URL: "${RUNNER_LINK_NATS_URL:-nats://nats:4222}"\n      ORBIT_WIKI_MODEL_CONCURRENCY:')],
 ];
 
 test('the topology checks accept the control and reject deployment counterexamples', async (t) => {

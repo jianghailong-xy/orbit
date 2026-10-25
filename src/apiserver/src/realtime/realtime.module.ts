@@ -1,9 +1,12 @@
 import { Global, Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
 import { CoordinatorJudgmentModule } from '../projects/coordinator-judgment.module';
 import { PushModule } from '../push/push.module';
 import { RunnerPresenceService } from '../runners/runner-presence';
 import { RealtimeService } from './realtime.service';
 import { ReaperService } from './reaper.service';
+import { RunnerHints } from './runner-hints';
 
 @Global()
 @Module({
@@ -13,7 +16,17 @@ import { ReaperService } from './reaper.service';
   imports: [PushModule, CoordinatorJudgmentModule],
   // RunnerPresenceService beside the reaper that asks it whether a runner's silence is evidence, and
   // exported so the heartbeat that writes presence tells the same instance when a write fails.
-  providers: [RealtimeService, ReaperService, RunnerPresenceService],
-  exports: [RealtimeService, RunnerPresenceService],
+  providers: [
+    RealtimeService,
+    ReaperService,
+    RunnerPresenceService,
+    // The runner link's hints on NATS (runner-hints.ts), read from configuration once.
+    {
+      provide: RunnerHints,
+      inject: [PrismaService, ConfigService],
+      useFactory: (prisma: PrismaService, config: ConfigService) => RunnerHints.fromConfig(prisma, config),
+    },
+  ],
+  exports: [RealtimeService, RunnerPresenceService, RunnerHints],
 })
 export class RealtimeModule {}

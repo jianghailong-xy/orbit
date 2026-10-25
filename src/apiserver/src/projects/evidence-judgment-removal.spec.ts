@@ -208,9 +208,12 @@ test('(q) no compose service, no resident process, and the human step is gone fr
   // link-gateway is the runner link's WebSocket gateway, which the runner link project added on 2026-10-25 under a Compose
   // profile of its own that no install switches on (docs/runner-link-design.md §6.1 and D1; project 34bc0CsOzPh9KshG7H3DW,
   // task A4), not this removal; test/compose-topology.test.mjs (o) pins it.
+  // nats is the runner link's message bus, which the runner link project added on 2026-10-25 beside link-gateway,
+  // under the same Compose profile (docs/runner-link-design.md §6.3; project 34bc0CsOzPh9KshG7H3DW, task B1), not
+  // this removal; test/compose-topology.test.mjs (p) pins it.
   assert.deepEqual(services, [
     'postgres', 'pgbackup', 'apiserver', 'wiki-worker', 'web', 'gateway', 'docker-channel', 'managed-runner-firewall',
-    'link-gateway', 'pg-socket',
+    'link-gateway', 'nats', 'pg-socket',
   ], 'the removal must not have added a service');
 
   const apiPackage = JSON.parse(read('src/apiserver/package.json')) as {

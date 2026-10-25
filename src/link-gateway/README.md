@@ -6,9 +6,10 @@ its own, never through Cloudflare or the web gateway (decision D1). Frames are t
 [contracts/runner-link/v1](../../contracts/runner-link/v1/runner_link.proto); `linkpb/` is their generated Go.
 
 Version 0 is the connection layer for the shadow period (§11.2). It authenticates connections, greets runners,
-keeps connections alive, records heartbeats, drains connections, and compares what runners mirror to it. **It forwards
-nothing to the control plane**. Every Welcome and HeartbeatAck says `MODE_HTTP`, so runners keep doing their work over
-HTTPS. Forwarding requests and events is task B4.
+keeps connections alive, records heartbeats, drains connections, and compares what runners mirror to it. It also
+subscribes to the [hints](#hints) the apiserver publishes on NATS for the runners it holds. **It forwards nothing to the
+control plane**. Every Welcome and HeartbeatAck says `MODE_HTTP`, so runners keep doing their work over HTTPS. Forwarding
+requests and events is task B4.
 
 It is one static binary with these subcommands:
 
@@ -38,6 +39,7 @@ It is one static binary with these subcommands:
 | `LINK_ACME_CACHE_DIR` | required in `acme` mode | Where the account key and certificates are kept across restarts. |
 | `LINK_ACME_CA_FILE` | — | An extra PEM root to trust for the ACME directory's own TLS, for example a test CA. |
 | `LINK_REVOCATION_INTERVAL` | `30s` | How often the revocation list is read. |
+| `LINK_NATS_URL` | — | The NATS server the apiserver publishes [hints](#hints) to, as a `nats://` address. Unset, the gateway relays no hints and says so when it starts. |
 | `LINK_HELLO_TIMEOUT` | `10s` | How long after the upgrade a Hello may take. |
 | `LINK_HANDSHAKE_TIMEOUT` | `5s` | How long the TLS handshake and the upgrade request may take, together. |
 | `LINK_IP_RATE`, `LINK_IP_BURST` | `1`, `20` | New connections per second per client address, and the burst allowed. |
@@ -136,6 +138,36 @@ On `SIGTERM` (`docker compose stop`, `up --force-recreate`, or a deploy), the ga
 
 On a single-node deployment, a runner whose delay ends while the old process is still draining is refused with `503`
 and retries with backoff until the new process is up.
+
+### Hints
+
+A hint tells a runner that something is waiting for it, so that it asks now instead of at its next heartbeat (§5.5).
+The apiserver publishes each one on NATS, after the commit it announces, on the subject of the one runner it concerns:
+`rnr.<runnerId>`, the runner's UUID as the link token names it. The message is a link `Frame` with only `hint` set, in
+protobuf's canonical JSON:
+
+| Hint | Message | Published when |
+| --- | --- | --- |
+| `claim` | `{"hint":{"claim":{}}}` | A session is queued for the runner, or a slot it waits for frees up. |
+| `inbox` | `{"hint":{"inbox":{"sessionId":"<uuid>"}}}` | A message is waiting in a session assigned to the runner. |
+| `commands` | `{"hint":{"commands":{}}}` | Something its heartbeat delivers is waiting: a sign-in, a merge, an update. |
+
+`testdata/b1-hints.json` holds those messages as the apiserver's encoder writes them
+(`src/apiserver/src/realtime/runner-hints.ts`), and `TestHintFixturesDecodeStrictly` decodes each one with unknown fields
+refused, so a field renamed in the proto fails a test instead of dropping hints.
+
+The gateway subscribes to `rnr.<runnerId>` from the Welcome of a runner's first connection to the end of its last one,
+and to no other runner's subject. It writes each hint as a `Hint` frame to every connection of that runner in
+`MODE_LINK`, behind control frames and never ahead of Welcome. In `MODE_HTTP`, which every connection is in until the
+gateway forwards (B4), a hint is counted and not sent: a runner working over HTTPS is woken by its long polls. With
+`LINK_FRAME_LOG=all`, each hint that is not sent is logged with its runner, kind and result.
+
+A hint is sent at most once (§5.2). One that finds no connection of its runner, a full queue, or no NATS is counted and
+dropped, never waited for, and a full queue does not close the connection the way a full queue of other frames does. The
+runner's next heartbeat carries the same news. The gateway serves whether or not NATS is up. Its client dials until NATS
+answers and subscribes again after every reconnect. A message on a hint subject that is not a hint is counted as
+`malformed` and logged at most once a minute. A field or hint kind the gateway does not know is ignored, as the protocol
+asks.
 
 ### Frames a runner may send in version 0
 
@@ -297,6 +329,10 @@ Every metric is served at `/metrics` on `LINK_METRICS_ADDR`, in Prometheus text 
 | `link_tls_certificate_not_after_timestamp_seconds`, `link_tls_reloads_total`, `link_tls_handshake_errors_total` | gauge, counter, counter | `result`: ok, error |
 | `link_rpcs_total` | counter | `result`: shadow, not_forwarded, forwarded |
 | `link_shadow_pairs_total`, `link_shadow_mismatches_total`, `link_shadow_unpaired_total`, `link_shadow_events_compared_total`, `link_shadow_pending_bytes` | | see [Shadow comparison](#shadow-comparison) |
+| `link_hints_total` | counter | `kind`: inbox, claim, commands, approval, watchers, unknown; `result`: sent, mode_http, no_connection, dropped, malformed |
+| `link_hints_slow_total` | counter | — (hints NATS dropped because the relay was not keeping up) |
+| `link_hint_subscriptions` | gauge | — (runners whose hint subject is subscribed to) |
+| `link_nats_connected`, `link_nats_reconnects_total` | gauge, counter | — |
 | `link_gateway_build_info`, `link_gateway_start_time_seconds` | gauge | `version` |
 
 The handshake success rate is `link_handshakes_total{result="ok"}` over the sum of all results.
@@ -349,8 +385,12 @@ The staging stack's scripts ([scripts/runner-link](../../scripts/runner-link/REA
 cd src/link-gateway && go test ./...                  # CI runs it with -race
 npm run generate:runner-link -w @orbit/shared         # after a change to contracts/runner-link/v1 (writes linkpb/)
 npx tsc -p src/apiserver/tsconfig.json && node scripts/runner-link/gen-token-fixtures.mjs   # testdata/a3-tokens.json
+npx tsc -p src/apiserver/tsconfig.json && node scripts/runner-link/gen-hint-fixtures.mjs    # testdata/b1-hints.json
+docker run -d --rm -p 127.0.0.1:14222:4222 nats:2.15-alpine &&
+  LINK_TEST_NATS_URL=nats://127.0.0.1:14222 go test -race -run TestHintsOverARealNATSServer .   # against a real NATS
 ```
 
 The image (`Dockerfile`) is built with Go 1.27.3, the first release that carries every standard-library fix govulncheck
-reports for this module. The dependency review is in
-[docs/dependency-security.md](../../docs/dependency-security.md#link-gateway-dependencies-2026-10-25).
+reports for this module. The dependency reviews are in
+[docs/dependency-security.md](../../docs/dependency-security.md#link-gateway-dependencies-2026-10-25), and for the NATS
+client in [its own section](../../docs/dependency-security.md#nats-clients-for-runner-link-hints-2026-10-25).

@@ -240,6 +240,75 @@ The runner's link client and its shadow connection (`src/runner-go/link_*.go`, `
 
 Decision: accepted, with no override or audit exception.
 
+## NATS clients for runner link hints (2026-10-25)
+
+The runner link's hints (`docs/runner-link-design.md` §5.5, §6.3; task B1) are published by the apiserver on NATS and
+relayed by the link gateway, so each side gains NATS's own client. Both were reviewed before they were added. The server
+is the official image.
+
+| Package | Version | Added to | Purpose | License |
+| --- | --- | --- | --- | --- |
+| `@nats-io/transport-node` | 3.4.0 | `@orbit/apiserver` dependencies | The client the apiserver publishes hints with (`src/apiserver/src/realtime/runner-hints.ts`). | Apache-2.0 |
+| `@nats-io/nats-core` | 3.4.0 | its dependency | The protocol client under the Node transport. | Apache-2.0 |
+| `@nats-io/nkeys` | 2.0.3 | its dependency | NKey and JWT authentication, for a server that asks for it; this deployment's does not. | Apache-2.0 |
+| `@nats-io/nuid` | 3.0.0 | its dependency | Unique ids for request inboxes. | Apache-2.0 |
+| `tweetnacl` | 1.0.3 | through `@nats-io/nkeys` | Ed25519 for NKeys. | Unlicense |
+| `github.com/nats-io/nats.go` | v1.55.0 | `src/link-gateway/go.mod` | The client the gateway subscribes with (`src/link-gateway/hints.go`). | Apache-2.0 |
+| `github.com/nats-io/nkeys` | v0.4.16 | indirect | NKey authentication, unused here. | Apache-2.0 |
+| `github.com/nats-io/nuid` | v1.0.1 | indirect | Unique ids for inboxes. | Apache-2.0 |
+| `github.com/klauspost/compress` | v1.20.0 | indirect | `flate`, for the client's WebSocket transport, which a `nats://` address does not use. | BSD-3-Clause for `flate`; the module holds Apache-2.0 parts too |
+| `golang.org/x/sys` | v0.49.0 | indirect | `cpu`, read by x/crypto's `blake2b` through nkeys. `golang.org/x/crypto` v0.58.0 already asked for this version. | BSD-3-Clause |
+| `nats` (Docker image) | `2.15-alpine` (nats-server v2.15.1) | `docker-compose.yml` | The server, under the `runner-link` profile. | Apache-2.0 |
+
+- **Not the package named `nats`.** The task named the npm package `nats`. Its last release, 2.29.3 (2026-05-08), is
+  deprecated with "Package moved. Use @nats-io/transport-node". `@nats-io/transport-node` is the same NATS.io client,
+  the line that gets fixes. The runner link's coordinator agreed to the substitution.
+- **Not a client of the gateway's own.** The gateway's other protocols are written in its own code. NATS is not,
+  because the coordinator decided that the reconnects, re-subscriptions, keepalives, partial reads, payload limits and
+  slow consumers a client must get right are better left to nats.go.
+- **Source and integrity.**
+  - The npm packages are NATS.io's, published from nats-io/nats.js, nats-io/nkeys.js and nats-io/nuid.js. `tweetnacl`
+    is the widely used port of TweetNaCl. `package-lock.json` pins each by integrity. The change to the lockfile is
+    the 52 lines of those five entries and the apiserver's dependency, and `npm ci` leaves it as it is.
+  - The Go modules are NATS.io's, Klaus Post's and the Go project's. `go.sum` records each module's hash, which the Go
+    checksum database vouched for when it was downloaded, and `go mod verify` passes. The image build verifies again.
+- **Known vulnerabilities: none at these versions.**
+  - OSV lists nothing for any package above at its locked version, nats-server v2.15.1 included.
+  - The advisories OSV holds for earlier versions are fixed before these, or lie in code that is not imported:
+    - nkeys GO-2023-2163, fixed in v0.4.6;
+    - klauspost/compress GO-2026-5841, in `s2`, fixed in v1.18.7;
+    - two for the deprecated `nats`, in 2.0.0 pre-releases;
+    - 51 for nats-server, none of which affects 2.15.1.
+  - `npm audit` reports the same 11 findings with and without these packages: the set already on main, all in
+    other packages.
+  - govulncheck v1.9.0 with Go 1.27.3, the gateway image's Go, finds no vulnerability in the gateway's code. Its module
+    scan lists only GO-2026-5932, as before.
+- **Reach.**
+  - In the apiserver, only `runner-hints.ts` imports the client. It connects only while the runner link is configured,
+    to `RUNNER_LINK_NATS_URL` (the `nats` service in this project's network), and it only publishes. It subscribes to
+    nothing, so the only input from the server it parses is the protocol's own lines: INFO, PING, PONG and errors. No
+    authentication is configured: nkeys and tweetnacl are loaded with the client and sign nothing.
+  - In the gateway, nats.go dials only `LINK_NATS_URL` and subscribes to `rnr.<runnerId>` for the runners connected
+    there. What it hands over is decoded with `protojson` into a Frame, and only a Hint is used. That puts `protojson`
+    on the serving path for messages the apiserver published, never for anything a runner sends. GO-2024-2611, the
+    `protojson` loop, predates v1.36.12. Nothing a runner sends reaches NATS's code.
+  - The gateway binary (linux/amd64, stripped) grows from 10,690,720 to 11,460,768 bytes.
+- **The server.** The official image on its 2.15 line, run from flags alone. The image's configuration file opens a
+  cluster port with the route password it publishes, and it is never read. JetStream is off, and nothing is stored.
+  The container runs read-only, with every capability dropped and `no-new-privileges`. Its client port is exposed only
+  to this project's network, and its monitoring port is reached there too, by its health check. It asks for no
+  authentication: the project's network is the boundary, as it is for Postgres. `test/compose-topology.test.mjs` (p)
+  pins the definition.
+- **Install scripts.** None of the five npm packages runs anything when installed (`hasInstallScript` is absent from
+  the lockfile). `@nats-io/nkeys` declares `prepare`, which npm runs only when it installs a package from a Git
+  checkout, never from the registry's tarball.
+- **Runtime.** `@nats-io/nuid` asks for Node 22 or later. The apiserver runs on Node 26.
+- **Updates.** Dependabot's `npm` (`/`) and `gomod` (`/src/link-gateway`) entries cover every package above. The image
+  tag takes 2.15's patch releases. A minor or major version is a change to `docker-compose.yml`, which (p) refuses until
+  it is decided.
+
+Decision: accepted, with no override or audit exception.
+
 ## Verification
 
 Run from a clean checkout:

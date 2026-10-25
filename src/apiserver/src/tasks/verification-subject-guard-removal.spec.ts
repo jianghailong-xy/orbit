@@ -435,9 +435,12 @@ test('(i) this is subtraction: no new service, no new resident process, less ins
   // link-gateway is the runner link's WebSocket gateway, which the runner link project added on 2026-10-25 under a Compose
   // profile of its own that no install switches on (docs/runner-link-design.md §6.1 and D1; project 34bc0CsOzPh9KshG7H3DW,
   // task A4), not this removal; test/compose-topology.test.mjs (o) pins it.
+  // nats is the runner link's message bus, which the runner link project added on 2026-10-25 beside link-gateway,
+  // under the same Compose profile (docs/runner-link-design.md §6.3; project 34bc0CsOzPh9KshG7H3DW, task B1), not
+  // this removal; test/compose-topology.test.mjs (p) pins it.
   assert.deepEqual(services,
-    ['apiserver', 'docker-channel', 'gateway', 'link-gateway', 'managed-runner-firewall', 'pgbackup', 'postgres', 'web',
-      'wiki-worker'],
+    ['apiserver', 'docker-channel', 'gateway', 'link-gateway', 'managed-runner-firewall', 'nats', 'pgbackup', 'postgres',
+      'web', 'wiki-worker'],
     'the removal may not add a Compose service');
   const apiScripts = JSON.parse(read('src/apiserver/package.json')).scripts as Record<string, string>;
   assert.deepEqual(Object.keys(apiScripts).filter((name) => name.startsWith('start:')).sort(),

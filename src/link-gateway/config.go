@@ -69,6 +69,9 @@ type config struct {
 	DrainGrace         time.Duration
 	DrainTimeout       time.Duration
 
+	// NATSURL is where the apiserver publishes runner hints (hints.go); empty, the gateway relays none.
+	NATSURL string
+
 	// FrameLog is "lifecycle" (Hello, Welcome, Drain, Close and anything refused), "all" (a summary of every frame
 	// either way) or "off".
 	FrameLog string
@@ -159,6 +162,7 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		DrainReconnectMax:  dur("LINK_DRAIN_RECONNECT_MAX", 30*time.Second),
 		DrainGrace:         dur("LINK_DRAIN_GRACE", 15*time.Second),
 		DrainTimeout:       dur("LINK_DRAIN_TIMEOUT", 80*time.Second),
+		NATSURL:            str("LINK_NATS_URL", ""),
 		FrameLog:           str("LINK_FRAME_LOG", "lifecycle"),
 		Mode:               linkpb.Mode_MODE_HTTP,
 	}
@@ -203,6 +207,11 @@ func configFromEnv(getenv func(string) string) (config, error) {
 	}
 	if c.GatewayToken == "" {
 		problems = append(problems, "LINK_GATEWAY_TOKEN is required: the apiserver's RUNNER_LINK_GATEWAY_TOKEN")
+	}
+	if c.NATSURL != "" {
+		if u, err := url.Parse(c.NATSURL); err != nil || u.Scheme != "nats" || u.Host == "" {
+			problems = append(problems, fmt.Sprintf("LINK_NATS_URL=%q is not a nats:// address", c.NATSURL))
+		}
 	}
 	if c.DrainReconnectMax < c.DrainReconnectMin {
 		problems = append(problems, "LINK_DRAIN_RECONNECT_MAX is shorter than LINK_DRAIN_RECONNECT_MIN")
