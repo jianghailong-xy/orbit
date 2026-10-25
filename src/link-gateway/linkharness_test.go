@@ -31,15 +31,34 @@ type fakeBackend struct {
 	got []backendRequest
 	// handle answers a call; nil answers 200 {}.
 	handle func(w http.ResponseWriter, r *http.Request, body []byte)
+	// welcome answers the welcome route, which every MODE_LINK connection calls before its Welcome (welcome.go); nil
+	// answers each session asked about at durable seq 0, held, and no release. Those calls are recorded apart, in
+	// welcomes, so that a test of another route counts that route's calls alone.
+	welcome  func(w http.ResponseWriter, r *http.Request, body []byte)
+	welcomes []backendRequest
 }
+
+const welcomePath = "/api/runner/link/welcome"
 
 func newFakeBackend(t testing.TB, handle func(w http.ResponseWriter, r *http.Request, body []byte)) *fakeBackend {
 	t.Helper()
 	b := &fakeBackend{t: t, handle: handle}
 	b.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		got := backendRequest{Method: r.Method, Path: r.URL.RequestURI(), Header: r.Header.Clone(), Body: body}
+		if r.URL.Path == welcomePath {
+			b.mu.Lock()
+			b.welcomes = append(b.welcomes, got)
+			welcome := b.welcome
+			b.mu.Unlock()
+			if welcome == nil {
+				welcome = welcomeEveryoneHeld
+			}
+			welcome(w, r, body)
+			return
+		}
 		b.mu.Lock()
-		b.got = append(b.got, backendRequest{Method: r.Method, Path: r.URL.RequestURI(), Header: r.Header.Clone(), Body: body})
+		b.got = append(b.got, got)
 		handle := b.handle
 		b.mu.Unlock()
 		if handle == nil {
@@ -75,6 +94,32 @@ func (b *fakeBackend) setHandler(handle func(w http.ResponseWriter, r *http.Requ
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.handle = handle
+}
+
+func (b *fakeBackend) setWelcome(welcome func(w http.ResponseWriter, r *http.Request, body []byte)) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.welcome = welcome
+}
+
+func (b *fakeBackend) welcomeCalls() []backendRequest {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return slices.Clone(b.welcomes)
+}
+
+// welcomeEveryoneHeld is the welcome route's answer for a process holding every session it names, none of whose events
+// are stored yet, with no release assigned.
+func welcomeEveryoneHeld(w http.ResponseWriter, _ *http.Request, body []byte) {
+	var asked struct {
+		SessionIDs []string `json:"sessionIds"`
+	}
+	_ = json.Unmarshal(body, &asked)
+	sessions := []map[string]any{}
+	for _, id := range asked.SessionIDs {
+		sessions = append(sessions, map[string]any{"sessionId": id, "durableSeq": 0, "leaseHeld": true})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": sessions})
 }
 
 func cutQuery(p string) (string, string, bool) {
