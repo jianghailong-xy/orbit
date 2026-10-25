@@ -157,6 +157,12 @@ func (c *conn) handshake() bool {
 		old.closeWith(linkpb.CloseCode_CLOSE_CODE_SUPERSEDED, "a newer connection of this process took over", 0,
 			websocket.StatusNormalClosure, "superseded")
 	}
+	// Counted, queued and marked as sent under one lock. offer takes the same lock, so a hint relayed while this Welcome
+	// is on its way to the runner waits and follows it, rather than being dropped for a connection the runner already
+	// has. And a runner that holds its Welcome is already counted.
+	c.mu.Lock()
+	m.connections.add(1)
+	m.handshakes.inc("ok")
 	c.send(&linkpb.Frame{Body: &linkpb.Frame_Welcome{Welcome: &linkpb.Welcome{
 		ProtocolVersion:     1,
 		Mode:                c.mode,
@@ -166,11 +172,8 @@ func (c *conn) handshake() bool {
 		Hints:               &linkpb.HintState{},
 		ConnectionId:        c.id,
 	}}}, true)
-	c.mu.Lock()
 	c.welcomed = true
 	c.mu.Unlock()
-	m.connections.add(1)
-	m.handshakes.inc("ok")
 	// Subscribed once Welcome is queued, so no hint can be written ahead of it.
 	if c.g.hints != nil {
 		c.g.hints.hold(c.claims.RunnerID)

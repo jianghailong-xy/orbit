@@ -306,6 +306,7 @@ func TestHintsReachTheRunnerTheyNameAndNoOther(t *testing.T) {
 		kind string
 		want float64
 	}{{"claim", 1}, {"inbox", 1}, {"commands", 1}} {
+		eventually(t, 5*time.Second, "the "+c.kind+" hint counted", func() bool { return m.hints.get(c.kind, "sent") >= c.want })
 		if got := m.hints.get(c.kind, "sent"); got != c.want {
 			t.Fatalf("link_hints_total{kind=%q,result=\"sent\"} = %v, want %v", c.kind, got, c.want)
 		}
@@ -316,16 +317,20 @@ func TestEveryConnectionOfTheRunnerIsSentItsHints(t *testing.T) {
 	nats := listenNATS(t, "127.0.0.1:0")
 	h := newHarness(t, func(c *config) { c.Mode = linkpb.Mode_MODE_LINK })
 	relayTo(t, h, nats.url())
-	// Two processes of one runner across a self-update: either may be the one to act, and the runner dedupes.
+	// Two processes of one runner across a self-update: either may be the one to act, and the runner dedupes. The hint
+	// is published the moment the second has its Welcome, on the subscription the first holds: it reaches both.
 	oldProcess, _ := h.connect(runnerA, processA)
-	newProcess, _ := h.connect(runnerA, processC)
 	eventually(t, 5*time.Second, "A's subject subscribed", func() bool { return nats.subscribers("rnr."+runnerA) == 1 })
+	newProcess, _ := h.connect(runnerA, processC)
 	nats.publish("rnr."+runnerA, claimHint())
 	for _, tc := range []*testConn{oldProcess, newProcess} {
 		if tc.expect("hint", 5*time.Second).GetHint().GetClaim() == nil {
 			t.Fatal("a connection of A was not sent the claim hint")
 		}
 	}
+	// Counted once the relay has offered it to every connection, which can be just after both have it.
+	eventually(t, 5*time.Second, "the hint counted", func() bool { return h.g.metrics.hints.get("claim", "sent") >= 1 })
+	newProcess.quiet(300 * time.Millisecond)
 	if got := h.g.metrics.hints.get("claim", "sent"); got != 1 {
 		t.Fatalf("one hint counted %v times", got)
 	}
@@ -343,6 +348,9 @@ func TestTheSubscriptionLastsFromTheFirstConnectionToTheLast(t *testing.T) {
 	first, _ := h.connect(runnerA, processA)
 	second, _ := h.connect(runnerA, processC)
 	eventually(t, 5*time.Second, "A's subject subscribed", func() bool { return nats.subscribers("rnr."+runnerA) == 1 })
+	// The gauge moves just after the client has the subscription, which can carry it to the server first.
+	eventually(t, 5*time.Second, "link_hint_subscriptions 1", func() bool { return h.g.metrics.hintSubscriptions.get() == 1 })
+	second.quiet(100 * time.Millisecond)
 	if got := h.g.metrics.hintSubscriptions.get(); got != 1 {
 		t.Fatalf("link_hint_subscriptions = %v with one runner connected twice", got)
 	}
@@ -356,9 +364,7 @@ func TestTheSubscriptionLastsFromTheFirstConnectionToTheLast(t *testing.T) {
 
 	_ = second.ws.CloseNow()
 	eventually(t, 5*time.Second, "A's subject unsubscribed", func() bool { return nats.subscribers("rnr."+runnerA) == 0 })
-	if got := h.g.metrics.hintSubscriptions.get(); got != 0 {
-		t.Fatalf("link_hint_subscriptions = %v with no runner connected", got)
-	}
+	eventually(t, 5*time.Second, "link_hint_subscriptions 0", func() bool { return h.g.metrics.hintSubscriptions.get() == 0 })
 	if got, want := nats.opsLog(), []string{"SUB rnr." + runnerA, "UNSUB rnr." + runnerA}; !slices.Equal(got, want) {
 		t.Fatalf("NATS saw %v, want %v", got, want)
 	}
@@ -379,9 +385,10 @@ func TestInModeHTTPAHintIsCountedAndNotSent(t *testing.T) {
 		return h.g.metrics.hints.get("claim", "mode_http") == 1 && h.g.metrics.hints.get("inbox", "mode_http") == 1
 	})
 	a.quiet(300 * time.Millisecond)
-	if !strings.Contains(h.logs.String(), "kind=claim result=mode_http") {
-		t.Fatalf("the hint is not in the frame log:\n%s", h.logs.String())
-	}
+	// Logged just after it is counted.
+	eventually(t, 5*time.Second, "the hint in the frame log", func() bool {
+		return strings.Contains(h.logs.String(), "kind=claim result=mode_http")
+	})
 }
 
 func TestWhatIsNotAHintIsCountedAndTheConnectionStays(t *testing.T) {
