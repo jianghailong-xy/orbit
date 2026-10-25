@@ -46,6 +46,8 @@ import (
 //	         connection closed as a slow consumer.
 //	resume   a session's event stream cut with batches in flight, and the runner back on a new connection resuming
 //	         from the durable_seq its Welcome states (client_resume.go).
+//	switch   against a gateway that follows the server's RUNNER_LINK_REQUIRED switch: an administrator (the owner)
+//	         flips it on, then off in the middle of a session's event stream (client_switch.go).
 
 // drillOptions are the client's flags for drills.
 type drillOptions struct {
@@ -135,6 +137,8 @@ func runDrill(ctx context.Context, cl *client, o drillOptions) int {
 		d.slowDrill(ctx, o)
 	case "resume":
 		d.resumeDrill(ctx, o)
+	case "switch":
+		d.switchDrill(ctx, o)
 	default:
 		d.record("drill", false, time.Now(), "unknown drill "+o.name)
 	}

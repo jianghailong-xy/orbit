@@ -1481,4 +1481,9 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
     + 'runner-link-token.controller.ts:61, runner-link-token.ts:241; it takes no id, and answers only the '
     + 'fingerprints of the runner credentials revoked within a token\'s lifetime, which name no account and no '
     + 'runner — runner-link-token.controller.ts:122',
+  'GET /runner/link/mode':
+    'the runner link gateway\'s door, behind the same gateway service secret (RunnerLinkGatewayGuard, 404 with the '
+    + 'link off) — runner-link-required.controller.ts:58, runner-link-token.controller.ts:61, runner-link-token.ts:241; '
+    + 'it takes no id, and answers only whether RUNNER_LINK_REQUIRED is on, read from the deployment\'s one switch row, '
+    + 'which names no account and no runner — runner-link-required.controller.ts:64, runner-link-required.ts:129',
 };

@@ -18,6 +18,7 @@ import (
 const (
 	maxFrameBytes            = 256 << 10
 	defaultHeartbeatInterval = 30 * time.Second
+	defaultModeInterval      = time.Second
 	defaultPingInterval      = 20 * time.Second
 	defaultPingTimeout       = 60 * time.Second
 	defaultMaxConnsPerRunner = 2
@@ -45,10 +46,13 @@ type config struct {
 	PublicKeys []ed25519.PublicKey
 	CellID     string
 
-	// APIURL is the apiserver's base address; the gateway reads the revoked credentials from it with GatewayToken.
+	// APIURL is the apiserver's base address; the gateway reads the revoked credentials from it with GatewayToken, and
+	// the RUNNER_LINK_REQUIRED switch (mode.go).
 	APIURL             string
 	GatewayToken       string
 	RevocationInterval time.Duration
+	// ModeInterval is how often the switch is read; a field only so that tests can shorten it.
+	ModeInterval time.Duration
 
 	HeartbeatInterval time.Duration
 	PingInterval      time.Duration
@@ -79,9 +83,10 @@ type config struct {
 	// either way) or "off".
 	FrameLog string
 
-	// Mode is what Welcome and HeartbeatAck tell runners, and so whether a connection's work is forwarded (MODE_LINK)
-	// or only compared (MODE_HTTP, the shadow period). LINK_MODE sets it until the server's RUNNER_LINK_REQUIRED switch
-	// decides it (task D0).
+	// Mode is LINK_MODE. MODE_LINK (link) pins what Welcome and HeartbeatAck tell runners, whatever the server's
+	// RUNNER_LINK_REQUIRED switch says: the staging drills. MODE_HTTP (http, the default) is what they are told until
+	// that switch is on, and again once it is off (mode.go). The mode decides whether a connection's work is forwarded
+	// (MODE_LINK) or only compared (MODE_HTTP, the shadow period).
 	Mode linkpb.Mode
 
 	// InternalAPIURLs are the apiserver's internal listeners for runner link calls (RUNNER_LINK_INTERNAL_PORT), one per
@@ -204,6 +209,7 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		APIURL:             strings.TrimRight(str("LINK_API_URL", ""), "/"),
 		GatewayToken:       str("LINK_GATEWAY_TOKEN", ""),
 		RevocationInterval: dur("LINK_REVOCATION_INTERVAL", 30*time.Second),
+		ModeInterval:       defaultModeInterval,
 		HeartbeatInterval:  defaultHeartbeatInterval,
 		PingInterval:       defaultPingInterval,
 		PingTimeout:        defaultPingTimeout,

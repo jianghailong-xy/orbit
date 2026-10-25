@@ -512,6 +512,22 @@ model DispatchPause {
   @@map("dispatch_pause")
 }
 
+/// The runner link's cut-over switch, RUNNER_LINK_REQUIRED (docs/runner-link-design.md §11.3, §11.4, D15;
+/// migration 0446): at most one row, id 1, written only by an administrator through
+/// PUT /api/admin/runner-link-required (runner-api/runner-link-required.ts). While `required`, the runner
+/// daemon's routes answer HTTPS 426 UPGRADE_REQUIRED and the link gateway tells runners MODE_LINK. No row is
+/// the same as a row that is off. `runner_link_switch_one_row_chk` (`id` = 1) lives only in the migration.
+model RunnerLinkSwitch {
+  id          Int      @id @default(1) @db.SmallInt
+  required    Boolean
+  /// When `required` was last switched. A request for the state it is already in writes nothing.
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+  /// The administrator who switched it. An id rather than a relation, so deleting them writes nothing here.
+  updatedById String?  @map("updated_by_id") @db.Uuid
+
+  @@map("runner_link_switch")
+}
+
 /// The Google account an Orbit account signs in with (docs/google-sign-in-design.md §5.1, migration
 /// 0391). Found by Google's `sub` — stable and never reused — and never by the email, which is kept
 /// only to show. One Orbit account per Google account, and in v1 one Google account per Orbit
