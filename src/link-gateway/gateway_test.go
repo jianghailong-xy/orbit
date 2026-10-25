@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -265,7 +266,8 @@ func TestUnansweredPingsDisconnect(t *testing.T) {
 
 func TestTokenExpiryEndsTheConnection(t *testing.T) {
 	h := newHarness(t, nil)
-	tc, _, err := h.dial(h.keys.sign(tokenClaims(runnerA, processA, time.Now().Add(1500*time.Millisecond))))
+	// exp is in whole seconds, so this token lasts between 1.5 and 2.5 s.
+	tc, _, err := h.dial(h.keys.sign(tokenClaims(runnerA, processA, time.Now().Add(2500*time.Millisecond))))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,14 +316,11 @@ func TestDrainInBatchesWithRandomDelays(t *testing.T) {
 	if err == nil || resp.StatusCode != http.StatusServiceUnavailable || resp.Header.Get("Retry-After") == "" {
 		t.Fatalf("upgrade while draining: %v %v", err, resp)
 	}
-	// The third connection is in the second batch.
-	late := 0
-	for _, a := range arrivals {
-		if a >= 350*time.Millisecond {
-			late++
-		}
-	}
-	if late != 1 {
+	// Two in the first batch and the third one batch interval (400ms) later: compared with each other rather than
+	// with the clock, so a slow machine delays all three alike.
+	sorted := append([]time.Duration(nil), arrivals...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	if sorted[1]-sorted[0] > 150*time.Millisecond || sorted[2]-sorted[1] < 300*time.Millisecond {
 		t.Fatalf("drain arrivals %v: want two in the first batch and one 400ms later", arrivals)
 	}
 	// None of them reconnects, so the gateway closes each after its delay and the grace.
