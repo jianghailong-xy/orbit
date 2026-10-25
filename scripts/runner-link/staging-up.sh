@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Starts the runner link staging stack, or brings a running one up to this checkout: postgres, the apiserver, web, the
-# web gateway and the link gateway, from the root docker-compose.yml under a Compose project of its own (README.md beside
-# this file). Running it again converges: images are rebuilt from this checkout and changed containers recreated, while
-# the database, the secrets, the TLS material and the seeded account are kept. staging-down.sh stops it.
+# web gateway, the link gateway and NATS, from the root docker-compose.yml under a Compose project of its own (README.md
+# beside this file). Running it again converges: images are rebuilt from this checkout and changed containers
+# recreated, while the database, the secrets, the TLS material and the seeded account are kept. staging-down.sh stops
+# it.
 #
 #   scripts/runner-link/staging-up.sh                # build, start, seed, smoke-check
 #   scripts/runner-link/staging-up.sh --rotate-cert  # also give the link gateway a new certificate, in place
@@ -17,7 +18,8 @@
 #   ORBIT_LINK_STAGING_LINK_PORT     the link gateway                             18443
 #   ORBIT_LINK_STAGING_METRICS_PORT  the link gateway's metrics, on 127.0.0.1     19464
 #   ORBIT_LINK_STAGING_TLS           files (a staging CA), or acme (Pebble)       files
-#   ORBIT_LINK_STAGING_NATS          1 also starts NATS (nothing uses it yet)     0
+#   ORBIT_LINK_STAGING_NATS_PORT     NATS's client port, on the bind address      14222
+#   ORBIT_LINK_STAGING_NATS_MONITOR_PORT  NATS's monitoring, on 127.0.0.1         18222
 set -euo pipefail
 # shellcheck source=staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/staging-lib.sh"
@@ -28,7 +30,7 @@ for arg in "$@"; do
   case "$arg" in
     --rotate-cert) rotate=1 ;;
     --no-build) build=0 ;;
-    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
     *) die "unknown option $arg (see --help)" ;;
   esac
 done
@@ -43,7 +45,6 @@ http_port="${ORBIT_LINK_STAGING_HTTP_PORT:-$(setting STAGING_HTTP_PORT 18086)}"
 link_port="${ORBIT_LINK_STAGING_LINK_PORT:-$(setting STAGING_LINK_PORT 18443)}"
 metrics_port="${ORBIT_LINK_STAGING_METRICS_PORT:-$(setting STAGING_METRICS_PORT 19464)}"
 tls_mode="${ORBIT_LINK_STAGING_TLS:-$(setting STAGING_TLS files)}"
-nats="${ORBIT_LINK_STAGING_NATS:-$(setting STAGING_NATS 0)}"
 nats_port="${ORBIT_LINK_STAGING_NATS_PORT:-$(setting STAGING_NATS_PORT 14222)}"
 nats_monitor_port="${ORBIT_LINK_STAGING_NATS_MONITOR_PORT:-$(setting STAGING_NATS_MONITOR_PORT 18222)}"
 pebble_port="${ORBIT_LINK_STAGING_PEBBLE_PORT:-$(setting STAGING_PEBBLE_MGMT_PORT 15000)}"
@@ -137,7 +138,6 @@ STAGING_HOST=$host
 STAGING_HTTP_PORT=$http_port
 STAGING_LINK_PORT=$link_port
 STAGING_METRICS_PORT=$metrics_port
-STAGING_NATS=$nats
 STAGING_NATS_PORT=$nats_port
 STAGING_NATS_MONITOR_PORT=$nats_monitor_port
 STAGING_PEBBLE_MGMT_PORT=$pebble_port
@@ -156,13 +156,9 @@ EOF
   mv -f "$env_file.new" "$env_file"
 )
 
-# --- Build and start. The runner-link profile is named here explicitly: it is what starts the link gateway. ----------
+# --- Build and start. The runner-link profile is named here explicitly: it is what starts the link gateway and NATS. --
 profiles=(--profile runner-link)
-services=(postgres apiserver web gateway link-gateway)
-if [ "$nats" = 1 ]; then
-  profiles+=(--profile nats)
-  services+=(nats)
-fi
+services=(postgres apiserver web gateway link-gateway nats)
 [ "$tls_mode" = acme ] && services+=(pebble)
 if [ "$build" = 1 ]; then
   log "building the apiserver, web and link gateway images from $(git -C "$repo" rev-parse --short HEAD)"
@@ -183,6 +179,19 @@ node "$here/staging-seed.mjs" "$origin" "$state" "$metrics" "$project" > "$state
 curl -fsS "$metrics" > "$state/metrics.txt" || die "the link gateway's metrics do not answer at $metrics"
 grep -q '^link_revocation_fetches_total{result="ok"} [1-9]' "$state/metrics.txt" ||
   die "the link gateway has not read the revocation list (see: $(basename "$0") logs, or docker logs $project-link-gateway)"
+# Hints: the gateway and the apiserver are both connected to NATS.
+for _ in $(seq 1 30); do
+  curl -fsS "$metrics" | grep -q '^link_nats_connected 1$' && break
+  sleep 1
+done
+curl -fsS "$metrics" | grep -q '^link_nats_connected 1$' || die "the link gateway is not connected to NATS (docker logs $project-link-gateway)"
+# The apiserver dials again every 5 s when NATS came up after it.
+for _ in $(seq 1 30); do
+  docker logs "$project-apiserver" 2>&1 | grep -q 'connected to NATS at ' && break
+  sleep 1
+done
+docker logs "$project-apiserver" 2>&1 | grep -q 'connected to NATS at ' ||
+  die "the apiserver is not connected to NATS (docker logs $project-apiserver | grep RunnerHints)"
 if [ "$tls_mode" = files ]; then
   # The link answers TLS for the name clients use, with the staging CA, and refuses a plain request with 426.
   code="$(curl -s -o /dev/null -w '%{http_code}' --cacert "$tls/ca.pem" --resolve "$host:$link_port:$bind" "https://$host:$link_port/")"
@@ -194,6 +203,7 @@ cat <<EOF
   web and API      $origin            (owner: owner@orbit-staging.test, password in $secrets/owner_password)
   runner link      $link_url
   link metrics     $metrics
+  NATS             nats://$bind:$nats_port, monitoring http://127.0.0.1:$nats_monitor_port
   state            $state             (staging.json describes all of it)
   test client      $here/staging-client.sh -duration 60s
   stop             $here/staging-down.sh

@@ -43,14 +43,11 @@ services:
     image: ${STAGING_PROJECT}-apiserver:local
     container_name: ${STAGING_PROJECT}-wiki-worker
 
-  # NATS (docs/runner-link-design.md §6.3): the place kept for the task that wires the gateway and the apiserver to it.
-  # Core NATS only, no JetStream (D3). staging-up.sh starts it when ORBIT_LINK_STAGING_NATS=1; nothing uses it yet.
+  # NATS, where the apiserver publishes runner hints and the link gateway subscribes (docs/runner-link-design.md §6.3):
+  # root Compose's service, with its client port on the staging bind address and its monitoring on this host's loopback,
+  # for drills. staging-check.sh step 6 reads its subscriptions and message counts there.
   nats:
-    profiles: [nats]
-    image: nats:2.12-alpine
     container_name: ${STAGING_PROJECT}-nats
-    restart: unless-stopped
-    command: ["--http_port", "8222"]
     ports:
       - ${STAGING_BIND}:${STAGING_NATS_PORT}:4222
       - 127.0.0.1:${STAGING_NATS_MONITOR_PORT}:8222

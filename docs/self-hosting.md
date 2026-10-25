@@ -359,11 +359,20 @@ the queue until it is started again.
 
 Runners reach the control plane over HTTPS. The runner link is the connection that is to replace those requests: one
 WebSocket per runner, to a link gateway that serves the runners of its cell. The gateway is part of this stack, as the
-`link-gateway` service under the `runner-link` Compose profile, and it runs only where `.env` turns that profile on.
+`link-gateway` service under the `runner-link` Compose profile, with the `nats` service beside it under the same
+profile. Both run only where `.env` turns that profile on.
 
 For now the link runs in shadow. Runners keep working over HTTPS. The gateway authenticates their connections, keeps
 them alive, and compares the heartbeats and event batches runners mirror to it with what the HTTPS side received. It
 forwards nothing to the control plane, so turning it off changes no runner's work.
+
+Whenever work waits for a runner (a queued session, a message in its inbox, or a sign-in, merge or update that its
+heartbeat delivers), the apiserver also publishes a hint on NATS, on the subject of that runner alone. The gateway
+subscribes for the runners it holds connections of and relays each hint to that runner. While the link runs in shadow,
+hints are counted and not sent. NATS keeps nothing: no JetStream, no volume. It has no port on the host, and a hint lost
+while it is down costs a runner one heartbeat interval. The apiserver publishes only while the connection tokens below
+are configured, to `nats://nats:4222` unless `RUNNER_LINK_NATS_URL` names another server. With NATS unreachable, it
+logs the hints it dropped once a minute and goes on.
 [src/link-gateway/README.md](../src/link-gateway/README.md) describes the gateway in full.
 
 ### Connection tokens
@@ -451,15 +460,16 @@ the link's. Set it up in this order.
 5. **Start and check.**
 
    ```bash
-   docker compose up -d --build apiserver link-gateway
-   docker compose ps link-gateway
+   docker compose up -d --build apiserver link-gateway nats
+   docker compose ps link-gateway nats
    docker compose logs --tail=50 link-gateway
-   curl -s http://127.0.0.1:9464/metrics | grep -E '^link_(connections|handshakes_total|revocation_fetches_total)'
+   docker compose logs apiserver | grep RunnerHints
+   curl -s http://127.0.0.1:9464/metrics | grep -E '^link_(connections|handshakes_total|revocation_fetches_total|nats_connected)'
    curl -sI https://link.orbit.example.com   # 426: the gateway speaks WebSocket only
    ```
 
    `link_revocation_fetches_total{result="ok"}` rising every 30 seconds shows that the gateway reads the apiserver
-   with the right secret.
+   with the right secret. `link_nats_connected 1`, and `connected to NATS` in the apiserver's log, show that hints flow.
 
 ### Operate the link gateway
 
@@ -477,13 +487,14 @@ the link's. Set it up in this order.
   2. Switch the apiserver to the new `RUNNER_LINK_SIGNING_KEY`.
   3. After an hour, when every old token has expired, drop the old public key.
 - **Monitoring.** `/metrics` on the metrics port counts connections, handshakes by result and their duration,
-  disconnects by reason, ping round trips, token refusals by reason, revocation reads and the shadow comparison.
+  disconnects by reason, ping round trips, token refusals by reason, revocation reads, the shadow comparison, and
+  hints by kind and by what became of them.
   [The gateway's README](../src/link-gateway/README.md#metrics) lists them all.
 - **Logs.** `docker compose logs link-gateway` shows one line per connection event. Set `LINK_FRAME_LOG=all` in the
   service's environment to log a summary of every frame, too. The gateway decodes frames that it or a runner logged:
   `docker compose logs link-gateway | docker compose exec -T link-gateway /link-gateway dump`.
 - **Turning it off.** Remove `runner-link` from `COMPOSE_PROFILES`, then run
-  `docker compose stop link-gateway && docker compose rm -f link-gateway`. Runners keep working over HTTPS.
+  `docker compose stop link-gateway nats && docker compose rm -f link-gateway nats`. Runners keep working over HTTPS.
 
 ## Managed runners
 

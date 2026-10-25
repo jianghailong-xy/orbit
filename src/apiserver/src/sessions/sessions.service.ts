@@ -1426,7 +1426,7 @@ export class SessionsService {
     // as an imported transcript's and lays no turn down, so without this the files would never
     // reach the engine.
     if (attachmentsAlone) await this.seedOpeningTurn(session);
-    this.queue.notifySessionQueued();
+    this.queue.notifySessionQueued(session.assignedRunnerId);
     // A task run, a delegation or a message opening a session on a sleeping managed runner wakes it.
     await this.wakeManagedRunner(session.assignedRunnerId, 'session');
     // Push the new session to the owner's control-plane stream (GET /api/events) so other
@@ -1621,7 +1621,7 @@ export class SessionsService {
       },
       loggedRetry(this.logger, 'session.import'),
     );
-    this.queue.notifySessionQueued();
+    this.queue.notifySessionQueued(session.assignedRunnerId);
     await this.wakeManagedRunner(session.assignedRunnerId, 'session');
     this.realtime.publishSessionCreated(session.id);
     return withSessionState(session);
@@ -5873,7 +5873,7 @@ export class SessionsService {
       // is shorter than a legitimate contender can hold it, so make the deadline explicit.
       transaction: { maxWait: 10_000, timeout: 30_000 },
     }));
-    if (queued.wakeQueue) this.queue.notifySessionQueued();
+    if (queued.wakeQueue) this.queue.notifySessionQueued(turnRunnerId);
     if (queued.wakeInbox) this.realtime.notifyInbox(id);
     // A message, a scheduled wakeup, a watch or a task's prompt that left the session waiting for its
     // runner wakes a sleeping managed runner. A turn joining a running one needs no wake.
@@ -5964,6 +5964,7 @@ export class SessionsService {
         })
       : undefined;
     // Retried whole: the interrupt is decided from the Session row re-read under its lock.
+    let interruptRunnerId: string | null = null;
     const queued = await withTransactionRetry(this.prisma, async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "session"
@@ -5971,6 +5972,7 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      interruptRunnerId = session.assignedRunnerId;
       // Keyed on the interrupt rather than on the message, because only the interrupt is
       // certainly still there: a later interrupt may have dropped the follow-up, and a
       // retry must not then re-file it. A control turn is never deleted, so its presence
@@ -6124,7 +6126,7 @@ export class SessionsService {
     }, loggedRetry(this.logger, 'sessions.interrupt'));
     // The inbox is woken unconditionally: the interrupt turn is what it is waiting for, and
     // it is deliverable the moment this commits, whatever the follow-up's status implies.
-    if (queued.wakeQueue) this.queue.notifySessionQueued();
+    if (queued.wakeQueue) this.queue.notifySessionQueued(interruptRunnerId);
     if (queued.wakeInbox) this.realtime.notifyInbox(id);
     if (!queued.idempotent) this.realtime.publishQueuedTurnsChanged(id);
     return queued.turn
@@ -8645,7 +8647,7 @@ export class SessionsService {
     // failure and only re-opens once the client believes the session is live again.
     if (revived.wasCompleted) this.realtime.publishSessionCreated(id);
     else if (revived.wasRevived) this.realtime.publishSessionUpdated(id);
-    this.queue.notifySessionQueued();
+    this.queue.notifySessionQueued(session.assignedRunnerId);
     // A revived run waits for its runner like any queued turn: a managed one not asked above — its
     // heartbeat still looked fresh — is asked now.
     if (revived.wasRevived && !askedManagedRunner) await this.wakeManagedRunner(session.assignedRunnerId, 'resume');

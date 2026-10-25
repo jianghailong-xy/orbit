@@ -97,13 +97,24 @@ export class DispatchPauseService {
    * After the pause is turned off, the claim, the inbox and the heartbeat hand out what it held on their
    * next round; this wakes each of them once rather than leaving it to that round. This replica's claim
    * long polls at once — the signal never leaves the process, so another replica's claims follow within
-   * their 5 s re-poll — the inbox of every session holding a turn the pause kept back, and every runner a
-   * queued integration job waits for, which then beats at once. Best effort: the switch has committed, and
-   * nothing here is what delivers the work.
+   * their 5 s re-poll — and, over the runner link, every runner a PENDING session is queued for; the inbox
+   * of every session holding a turn the pause kept back, and every runner a queued integration job waits
+   * for, which then beats at once. Best effort: the switch has committed, and nothing here is what
+   * delivers the work.
    */
   private async wake(): Promise<void> {
     try {
-      this.queue.notifySessionQueued();
+      // Read first and woken either way: a read that fails still wakes this replica's claims, hinting no runner.
+      const queuedFor = await this.prisma.$queryRaw<Array<{ runnerId: string }>>`
+        SELECT DISTINCT s."assigned_runner_id"::text AS "runnerId"
+          FROM "session" s
+         WHERE s."status" = 'PENDING'
+           AND s."assigned_runner_id" IS NOT NULL`
+        .catch((error: unknown) => {
+          this.logger.warn(`dispatch resumed; the runners to hint could not be read: ${error instanceof Error ? error.message : error}`);
+          return [];
+        });
+      this.queue.notifySessionQueued(queuedFor.map(({ runnerId }) => runnerId));
       const held = await this.prisma.$queryRaw<Array<{ id: string }>>`
         SELECT DISTINCT s."id"::text AS "id"
           FROM "session" s

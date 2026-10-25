@@ -1,0 +1,34 @@
+{
+  "generatedBy": "scripts/runner-link/gen-hint-fixtures.mjs, with src/apiserver/src/realtime/runner-hints.ts",
+  "cases": [
+    {
+      "name": "claim: a session is queued for the runner",
+      "runnerId": "0190a0b0-0000-7000-8000-000000000001",
+      "hint": {
+        "claim": {}
+      },
+      "subject": "rnr.0190a0b0-0000-7000-8000-000000000001",
+      "message": "{\"hint\":{\"claim\":{}}}"
+    },
+    {
+      "name": "commands: something its heartbeat delivers is waiting",
+      "runnerId": "0190a0b0-0000-7000-8000-000000000001",
+      "hint": {
+        "commands": {}
+      },
+      "subject": "rnr.0190a0b0-0000-7000-8000-000000000001",
+      "message": "{\"hint\":{\"commands\":{}}}"
+    },
+    {
+      "name": "inbox: a message is waiting in one of its sessions",
+      "runnerId": "0190a0b0-0000-7000-8000-000000000001",
+      "hint": {
+        "inbox": {
+          "sessionId": "0190a0b0-0000-7000-8000-0000000000a1"
+        }
+      },
+      "subject": "rnr.0190a0b0-0000-7000-8000-000000000001",
+      "message": "{\"hint\":{\"inbox\":{\"sessionId\":\"0190a0b0-0000-7000-8000-0000000000a1\"}}}"
+    }
+  ]
+}

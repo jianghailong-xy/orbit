@@ -1,7 +1,8 @@
 # Runner link staging stack
 
 These scripts run a complete Orbit deployment for runner link drills on one host: postgres, the apiserver, web, the web
-gateway and the link gateway ([src/link-gateway](../../src/link-gateway/README.md)). It is the root
+gateway, the link gateway ([src/link-gateway](../../src/link-gateway/README.md)) and NATS, which carries the runner hints
+between the last two. It is the root
 `docker-compose.yml`, under a Compose project of its own, with `staging.compose.yml` on top. Every container is renamed,
 every host port is moved to the staging bind address (127.0.0.1 by default), and every data directory moves into the
 staging state directory. The images it builds are tagged with the project's name. Nothing it runs, writes or builds can
@@ -12,7 +13,8 @@ be taken for a deployment's.
 | `staging-up.sh` | Build from this checkout, start, seed and smoke-check. Run it again to converge: images are rebuilt, changed containers recreated, and the database, secrets, certificates and seeded account kept. `--rotate-cert` gives the link gateway a new certificate in place. `--no-build` reuses the last images. |
 | `staging-down.sh` | Stop and remove the containers and the project's network, keeping the state directory. `--purge` also deletes the state directory and the project's volume. `--rmi` also deletes the images. |
 | `staging-client.sh` | Run the gateway's test client as the seeded probe runner. Arguments go to `link-gateway client`. |
-| `staging-check.sh` | Check the running stack's link gateway end to end, in five steps: refusals and TLS; a mirroring runner with heartbeats and pings; a gateway release that drains the runner, which then reconnects; a certificate rotation under a live connection; and a revocation that closes a live connection. Each step's records go to `<state>/client/check/`. Run it on a quiet stack, in the files TLS mode. Step 5 leaves the probe runner with a new token. |
+| `staging-check.sh` | Check the running stack's link gateway end to end, in six steps: refusals and TLS; a mirroring runner with heartbeats and pings; a gateway release that drains the runner, which then reconnects; a certificate rotation under a live connection; a revocation that closes a live connection; and hints over NATS, published on each runner's own subject and relayed only for the runner the gateway holds. Each step's records go to `<state>/client/check/`. Run it on a quiet stack, in the files TLS mode. Step 5 leaves the probe runner with a new token, and step 6 registers a second runner the first time it runs (its token is kept in `secrets/hint_peer_token`). |
+| `gen-hint-fixtures.mjs` | Regenerate `src/link-gateway/testdata/b1-hints.json` from the apiserver's hint encoder. |
 | `gen-token-fixtures.mjs` | Regenerate `src/link-gateway/testdata/a3-tokens.json` from the apiserver's token code. |
 
 ```bash
@@ -37,7 +39,8 @@ else the default:
 | `ORBIT_LINK_STAGING_LINK_PORT` | `18443` | The link gateway. |
 | `ORBIT_LINK_STAGING_METRICS_PORT` | `19464` | The link gateway's metrics, on 127.0.0.1. |
 | `ORBIT_LINK_STAGING_TLS` | `files` | `files`: a staging CA and a certificate from it. `acme`: Pebble issues the certificate over ACME. |
-| `ORBIT_LINK_STAGING_NATS` | `0` | `1` also starts NATS, on `ORBIT_LINK_STAGING_NATS_PORT` (14222). Nothing uses it yet: it is the place kept for the NATS work. |
+| `ORBIT_LINK_STAGING_NATS_PORT` | `14222` | NATS's client port, on the bind address. |
+| `ORBIT_LINK_STAGING_NATS_MONITOR_PORT` | `18222` | NATS's monitoring, on 127.0.0.1. |
 
 Two stacks can run side by side under different projects, state directories and ports. Compose runs with an empty
 environment plus the env file the scripts write, so nothing from the calling shell reaches the stack. That includes an
@@ -67,6 +70,10 @@ agent session's `ORBIT_*` variables, which Compose would otherwise prefer to the
 - **A revocation.** Rotate the probe runner's token (`POST /api/runners/<id>/rotate-token` as the owner). The gateway
   closes the runner's open connections at its next revocation read and refuses the old token from then on.
   `staging-up.sh` registers a new probe runner when it finds the old token dead.
+- **Hints.** Every hint the apiserver publishes can be watched as it goes by, with NATS's own CLI inside the project's
+  network: `docker run --rm --network <project>_default natsio/nats-box nats sub -s nats://nats:4222 'rnr.>'`.
+  `curl -s 'http://127.0.0.1:18222/subsz?subs=1'` lists the subjects the gateway subscribes to, one per connected
+  runner, and `link_hints_total` counts what the gateway did with each hint.
 - **Metrics.** `curl -s http://127.0.0.1:19464/metrics | grep ^link_`.
 - **Logs and frames.** `docker logs <project>-link-gateway` summarizes every frame in both directions; staging sets
   `LINK_FRAME_LOG=all`. `link-gateway dump` decodes a frame from its log line.
