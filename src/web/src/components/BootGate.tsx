@@ -15,8 +15,9 @@ import {
 } from '../lib/queries';
 import { workspaceRunnerId, firstOpenableWorkspace } from '../lib/workspaceOrder';
 
-// Routes that render their own loaders and have no first-screen data to wait on.
-const BYPASS = ['/login', '/enroll', '/setup'];
+// Routes that render their own loaders and have no first-screen data to wait on. The privacy policy
+// has no data at all, and opens on any deployment — even one still waiting for its first-run setup.
+const BYPASS = ['/login', '/enroll', '/setup', '/privacy'];
 // The public share page (/s/<token>) is signed-out and self-loading — never gate it behind
 // the splash or the setup-status check.
 const isBypass = (pathname: string) => BYPASS.includes(pathname) || pathname.startsWith('/s/');
