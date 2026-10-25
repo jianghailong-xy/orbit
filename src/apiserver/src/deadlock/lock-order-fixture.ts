@@ -91,6 +91,13 @@ export const LOCK_LINK_CALL_SESSIONS = `
          FOR UPDATE OF s SKIP LOCKED
     `;
 
+/** A merged link call's one run_event insert: an event of each session it wrote, in one statement, after their writes. */
+const INSERT_RUN_EVENTS = `
+  INSERT INTO "run_event" ("id", "session_id", "seq", "type", "payload", "created_at")
+  SELECT r.id, r.session_id, 1, 'assistant', '{"text":"fixture"}'::jsonb, CURRENT_TIMESTAMP
+    FROM unnest($1::uuid[], $2::uuid[]) AS r(id, session_id)
+  ON CONFLICT DO NOTHING`;
+
 /** Whether another transaction holds a row lock on any of these sessions: refused at once rather than waited for. */
 const PROBE_SESSIONS_FREE = 'SELECT "id" FROM "session" WHERE "id" = ANY($1::uuid[]) FOR UPDATE NOWAIT';
 
@@ -505,18 +512,24 @@ export type MergedArrival = 'merged-first' | 'single-first';
 
 export const MERGED_ARRIVALS: readonly MergedArrival[] = ['merged-first', 'single-first'];
 
-/** A merged link call's statements over both fixture sessions (or the first alone): the lock, then each one's writes. */
+/**
+ * A merged link call's statements over both fixture sessions (or the first alone): the lock, each one's session write,
+ * then the run_event rows of all of them in one insert.
+ */
 function mergedIngestSteps(ids: FixtureIds, prefix: string, order: string[], write: string[]): Step[] {
   const lock = {
     label: `${prefix}1 lock-link-call-sessions`,
     sql: LOCK_LINK_CALL_SESSIONS,
     values: [order, order.map(() => ids.runnerId), order.map(() => null)],
   };
-  return [lock, ...write.flatMap((sessionId, i) => [
-    { label: `${prefix}${2 + 2 * i} insert-run-event`, sql: INSERT_RUN_EVENT, values: [randomUUID(), sessionId] },
-    { label: `${prefix}${3 + 2 * i} session-batch-update`, sql: SESSION_BATCH_UPDATE,
-      values: [sessionId, ids.survivorTurnAt, `${ids.label}-merged`, null] },
-  ])];
+  if (write.length === 0) return [lock];
+  return [
+    lock,
+    ...write.map((sessionId, i) => ({ label: `${prefix}${2 + i} session-batch-update`, sql: SESSION_BATCH_UPDATE,
+      values: [sessionId, ids.survivorTurnAt, `${ids.label}-merged`, null] })),
+    { label: `${prefix}${2 + write.length} insert-run-events`, sql: INSERT_RUN_EVENTS,
+      values: [write.map(() => randomUUID()), write] },
+  ];
 }
 
 /**

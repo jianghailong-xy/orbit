@@ -528,16 +528,19 @@ interface IngestOutcome {
 }
 /**
  * A merged link call's own transaction, as each of its batches' ingest runs inside it (ingestLinkEventCall): the
- * session's row and stored seqs, read for every session of the call at once under the locks the call took.
+ * session's row and stored seqs, read for every session of the call at once under the locks the call took, and the
+ * call's run_event rows, which the ingest adds its own to rather than inserting them, for the call to insert every
+ * session's in one statement once all are derived. Absent, it inserts them itself.
  */
 interface MergedIngest {
   tx: Prisma.TransactionClient;
   session: IngestSessionRow;
   stored: Set<number>;
+  runEvents?: Prisma.RunEventCreateManyInput[];
 }
 // A merged link call's transaction is run again without a batch whose ingest failed, at most this many times: past
 // that, every batch it still holds is sent alone. So a call of many batches the database refuses values of costs three
-// runs of it, never one per batch.
+// runs of it, never one per batch. A failure of its one run_event insert, which names no batch, spends one of them.
 const LINK_CALL_RERUNS = 2;
 // The merged transaction waits for no session another writer holds (SKIP LOCKED: that batch is sent alone and waits
 // there). Anything else it would wait on, and any statement of it that runs long, is cut short, and every batch it
@@ -555,10 +558,19 @@ interface LinkCallBatch {
   sessionId: string;
   read: LinkEventBatch;
 }
-/** A batch of a merged link call whose ingest failed: the call's transaction is run again without it. */
+/** The database failing, or a merged link call's transaction cut short: the call's failure, every batch's alike. */
+function linkCallFault(error: unknown): boolean {
+  const { family } = classifyTransactionFault(error);
+  return family === 'TRANSIENT' || family === 'RESOURCE' || linkCallCutShort(error);
+}
+/**
+ * A batch of a merged link call whose ingest failed: the call's transaction is run again without it. With no batch, the
+ * call's one run_event insert failed, which cannot say whose rows it refused: the call is run again with each batch
+ * inserting its own, so that the one that fails is found.
+ */
 class LinkCallBatchFailed extends Error {
   constructor(
-    readonly batch: LinkCallBatch,
+    readonly batch: LinkCallBatch | null,
     /** The failure, kept apart from `cause` so that no retry reads it as the transaction's. */
     readonly failure: unknown,
   ) {
@@ -6751,6 +6763,7 @@ export class RunnerApiController {
    *     in one statement (admitLinkCallConnections);
    *   - the sessions: all of them locked in one statement, sorted by id, under lockSessionLeaseOwner's fence
    *     (lockLinkCallSessions), and their rows and stored seqs read in one statement each;
+   *   - their run_event rows, inserted in one statement once every batch is derived;
    *   - the other replicas' notice of each batch, sent by the transaction itself, so they hear of each batch once, at
    *     its commit (§6.7).
    *
@@ -6758,7 +6771,8 @@ export class RunnerApiController {
    * the transaction is run again without it, at most LINK_CALL_RERUNS times, and past that every batch left is sent
    * alone. So is every batch of a call its transaction's own timeouts cut short. The gateway forwards such a batch to
    * the events route on its own, which refuses or stores it exactly as it always has, tombstones and EVENT_UNSTORABLE
-   * included. Nothing of a batch answered `sendAlone` was written.
+   * included. Nothing of a batch answered `sendAlone` was written. When the one run_event insert fails, which cannot
+   * say whose rows it refused, the next run has each batch insert its own, so that the batch is found as above.
    */
   async ingestLinkEventCall(call: LinkEventCall, publicKey: KeyObject): Promise<LinkEventCallAnswer> {
     const results: LinkEventCallResult[] = call.batches.map(() => ({ sendAlone: true }));
@@ -6784,10 +6798,14 @@ export class RunnerApiController {
       }
       candidates.push({ index, connection: batch.connection, sessionId, read });
     });
+    // Whether each batch inserts its own run_event rows, as alone, rather than the call all of them in one statement:
+    // from the run after that one statement failed, which cannot say whose rows it refused.
+    let insertEach = false;
     // One run of the call's transaction: what of the call it took, and when it began to hold its sessions.
     const instance = this.realtime.instance;
     const ingestCall = async (tx: Prisma.TransactionClient) => {
       const ingested: Array<{ batch: LinkCallBatch; outcome: IngestOutcome; coordinator: boolean }> = [];
+      const runEvents: Prisma.RunEventCreateManyInput[] | undefined = insertEach ? undefined : [];
       // It holds every session of the call, so what it would wait on, and any statement of it that runs long, is cut
       // short, and the call sends every batch alone instead.
       await tx.$queryRaw`
@@ -6844,15 +6862,24 @@ export class RunnerApiController {
             leaseOwner,
             batch.read.events,
             { tombstones: batch.read.tombstones },
-            { tx, session: sessions.get(batch.sessionId)!, stored: stored.get(batch.sessionId)! },
+            { tx, session: sessions.get(batch.sessionId)!, stored: stored.get(batch.sessionId)!, runEvents },
           );
           ingested.push({ batch, outcome, coordinator: locked.get(batch.sessionId)!.coordinator });
         } catch (error) {
-          // The database failing, or this transaction cut short, is the call's: every batch goes the same way.
-          // Anything else is this batch's own, a value the database refuses among it: the call is run again without it.
-          const { family } = classifyTransactionFault(error);
-          if (family === 'TRANSIENT' || family === 'RESOURCE' || linkCallCutShort(error)) throw error;
+          // Anything but the call's own failure is this batch's, a value the database refuses among it: the call is run
+          // again without it.
+          if (linkCallFault(error)) throw error;
           throw new LinkCallBatchFailed(batch, error);
+        }
+      }
+      // Every session's run_event rows in one statement, session by session as the ingests built them: nothing in an
+      // ingest reads them back, and every session they belong to is held (rank 60 after rank 30).
+      if (runEvents) {
+        try {
+          await chunkedCreateMany((data) => tx.runEvent.createMany({ data, skipDuplicates: true }), runEvents as never[]);
+        } catch (error) {
+          if (linkCallFault(error)) throw error;
+          throw new LinkCallBatchFailed(null, error);
         }
       }
       // The other replicas hear of each batch once, at this commit, of what was stored while the session is open: what
@@ -6885,6 +6912,12 @@ export class RunnerApiController {
       } catch (error) {
         if (error instanceof LinkCallBatchFailed) {
           const { evidence } = classifyTransactionFault(error.failure);
+          if (error.batch === null) {
+            this.logger.warn(`the run_event insert of a merged runner link call of ${candidates.length} batches failed `
+              + `(${refusedValueState(error.failure) ?? evidence ?? 'no SQLSTATE'}); run again with each batch inserting its own`);
+            insertEach = true;
+            continue;
+          }
           this.logger.warn(`session ${error.batch.sessionId}: its batch failed inside a merged runner link call `
             + `(${refusedValueState(error.failure) ?? evidence ?? 'no SQLSTATE'}); sent alone, the other `
             + `${candidates.length - 1} run again without it`);
@@ -7072,19 +7105,22 @@ export class RunnerApiController {
         // leaves it BELOW what the dead process had counted to. The slots it fell behind by were
         // never stored, so a runner resuming at max+1 re-uses empty ones and `skipDuplicates`
         // has nothing to swallow. A batch that is nothing but pings stores nothing at all
-        // (chunkedCreateMany's loop does not run on an empty list).
-        await chunkedCreateMany(
+        // (chunkedCreateMany's loop does not run on an empty list). A merged link call inserts
+        // the rows built here itself, every session's in one statement (MergedIngest.runEvents).
+        const rows = durable.filter((e) => !isNoiseSystemEvent(e)).map((e) => ({
+          sessionId,
+          seq: e.seq,
+          type: e.type,
+          payload: e.payload as Prisma.InputJsonValue,
+          turnId: e.turnId ?? null,
+          createdAt: new Date(e.ts),
+          ingestedByRunnerId: runner.id,
+          ingestedUnderLeaseGeneration: leaseOwner,
+        }));
+        if (merged?.runEvents) merged.runEvents.push(...rows);
+        else await chunkedCreateMany(
           (data) => tx.runEvent.createMany({ data, skipDuplicates: true }),
-          durable.filter((e) => !isNoiseSystemEvent(e)).map((e) => ({
-            sessionId,
-            seq: e.seq,
-            type: e.type,
-            payload: e.payload as Prisma.InputJsonValue,
-            turnId: e.turnId ?? null,
-            createdAt: new Date(e.ts),
-            ingestedByRunnerId: runner.id,
-            ingestedUnderLeaseGeneration: leaseOwner,
-          })) as never[],
+          rows as never[],
         );
         // Persisted conversation/background activity is liveness. Session-level system events
         // are different: every reclaimed idle session emits init/resumed when its runner restarts,
@@ -7102,10 +7138,9 @@ export class RunnerApiController {
       // (NON_REPLAYABLE_EVENT_TYPES), and it keeps `max(seq)` past the refused event, so a resumed runner never
       // reuses that seq.
       if (tombstones.length > 0) {
-        await tx.runEvent.createMany({
-          data: tombstones.map((tombstone) => tombstoneRow(tombstone, sessionId, runner.id, leaseOwner)),
-          skipDuplicates: true,
-        });
+        const rows = tombstones.map((tombstone) => tombstoneRow(tombstone, sessionId, runner.id, leaseOwner));
+        if (merged?.runEvents) merged.runEvents.push(...rows);
+        else await tx.runEvent.createMany({ data: rows, skipDuplicates: true });
       }
 
       // Dynamic runtimes report their session id in an init/resumed event; unlike Claude

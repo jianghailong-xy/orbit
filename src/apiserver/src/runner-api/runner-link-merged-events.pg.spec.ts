@@ -18,7 +18,8 @@
  *       this replica's streams of every event; the spend fuse is asked only about the session coordinating a project.
  *   (2) A batch the call cannot take is answered `sendAlone`, and nothing of it is written: another process's lease, a
  *       session no longer open, a landing, a batch that is not one, a revoked connection, a value the database refuses
- *       (the call runs again without it). The others are stored. Sent alone, each is answered as the events route has
+ *       (the call's one run_event insert fails, the next run has each batch insert its own and finds it, and the call
+ *       runs again without it). The others are stored. Sent alone, each is answered as the events route has
  *       always answered it, the refused value as EVENT_UNSTORABLE behind its tombstone.
  *   (3) Tenants: one account's connection naming the other account's session is sent alone, refused there, and that
  *       session gets nothing written and nothing derived, while both accounts' own batches in the call are stored.
@@ -376,6 +377,13 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
       ...of.connection.headers,
     }, { leaseOwner: of.leaseOwner, events });
 
+  /** How many times the merged call's transaction has committed and failed, by outcome (db-conflict-metrics). */
+  function linkCallUnits(): Record<string, number> {
+    return dbConflictMetricsSnapshot().units
+      .filter((u) => u.labels.operation === 'runnerApi.linkEvents')
+      .reduce((counts, u) => ({ ...counts, [u.labels.outcome]: (counts[u.labels.outcome] ?? 0) + u.value }), {} as Record<string, number>);
+  }
+
   async function storedRows(sessionId: string) {
     const { rows } = await sql.query<{ seq: number; type: string; payload: Record<string, unknown> }>(
       `SELECT seq, type, payload FROM "run_event" WHERE session_id = $1 ORDER BY seq`,
@@ -542,12 +550,18 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
       { of: revoked, sessionId: revokedSession.sessionId, events: [ev(1, RunEventType.ASSISTANT, { text: 'revoked' }, revokedSession.turnId)] },
       { of: b, sessionId: goodToo.sessionId, events: [ev(1, RunEventType.ASSISTANT, { text: 'B, one' }, goodToo.turnId)] },
     ];
+    const before = linkCallUnits();
     const answer = await merged(door.linkPort, batches);
     assert.deepEqual(answersOf(answer), [
       { ok: true, durableSeq: 2, rejected: [] },
       SEND_ALONE, SEND_ALONE, SEND_ALONE, SEND_ALONE, SEND_ALONE, SEND_ALONE,
       { ok: true, durableSeq: 1, rejected: [] },
     ]);
+    // The refused value fails the call's one run_event insert, which names no batch; the next run, each batch inserting
+    // its own, finds it; the third commits without it.
+    const after = linkCallUnits();
+    assert.equal((after.failed ?? 0) - (before.failed ?? 0), 2, 'the one insert, then the batch found');
+    assert.equal((after.committed ?? 0) - (before.committed ?? 0), 1);
     await assertContiguous(good.sessionId, 2);
     await assertContiguous(goodToo.sessionId, 1);
     for (const { sessionId } of [leased, ended, landing, malformed, unstorable, revokedSession]) {
@@ -801,18 +815,16 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
   await t.test('(6) a call whose batches the database refuses values of runs three times at most, then sends every batch left alone', async () => {
     const ids = Array.from({ length: 5 }, () => randomUUID()).sort();
     const sessions = await Promise.all(ids.map((id, i) => liveSession(a, `rerun ${i}`, { id })));
-    const units = () => dbConflictMetricsSnapshot().units
-      .filter((u) => u.labels.operation === 'runnerApi.linkEvents')
-      .reduce((counts, u) => ({ ...counts, [u.labels.outcome]: (counts[u.labels.outcome] ?? 0) + u.value }), {} as Record<string, number>);
-    const before = units();
-    // The four lowest ids, which the call's transaction ingests first, carry a value the database refuses.
+    const before = linkCallUnits();
+    // The four lowest ids, which the call's transaction ingests first, carry a value the database refuses: the first
+    // run's one run_event insert fails, and each run after it finds one of them.
     const answer = await merged(door.linkPort, sessions.map((s, i) => ({
       of: a,
       sessionId: s.sessionId,
       events: [ev(1, RunEventType.ASSISTANT, { text: i < 4 ? `a lone surrogate \ud800 ${i}` : 'a good batch' }, s.turnId)],
     })));
     assert.deepEqual(answersOf(answer), sessions.map(() => SEND_ALONE), 'past two reruns every batch left goes alone, the good one too');
-    const after = units();
+    const after = linkCallUnits();
     assert.equal((after.failed ?? 0) - (before.failed ?? 0), 3, 'the transaction ran three times');
     assert.equal((after.committed ?? 0) - (before.committed ?? 0), 0);
     for (const s of sessions) assert.deepEqual(await storedRows(s.sessionId), []);
