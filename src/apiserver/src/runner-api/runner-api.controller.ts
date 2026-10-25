@@ -412,6 +412,13 @@ import {
   storedWorkloadFor,
   type ManagedHeartbeatAnswer,
 } from '../managed-runners/managed-runner-sleep';
+import {
+  RUNNER_OFFLINE_AFTER_MS,
+  RunnerPresenceService,
+  durableBeatDue,
+  recordRunnerBeat,
+  runnerLastBeatAt,
+} from '../runners/runner-presence';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -476,8 +483,6 @@ async function chunkedCreateMany(
 const LONG_POLL_MS = 25_000;
 const DEVICE_TTL_MS = 10 * 60 * 1000;
 const DEVICE_POLL_INTERVAL_S = 3;
-// Three missed 30s heartbeats — must match RunnersService's offline window.
-const OFFLINE_AFTER_MS = 90_000;
 // Interactive sessions (Route B): per-session input long-poll + at-least-once lease.
 const INBOX_LONG_POLL_MS = 25_000;
 const INBOX_LEASE_MS = 300_000;
@@ -1072,6 +1077,13 @@ export class RunnerApiController {
      * next turn end, and on the task service's tick.
      */
     @Optional() private readonly evidenceQueue?: CoordinatorEvidenceQueueService,
+    /**
+     * Told when a heartbeat's writes fail, so the reaper — which reads the same instance — does not
+     * take that runner's silence for its death (runners/runner-presence.ts). `@Optional()` for the
+     * same reason as the rest of this list; the presence row is written either way, and only the
+     * reaper of a control plane built without it cannot hear about a failed one.
+     */
+    @Optional() private readonly presence?: RunnerPresenceService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -1210,7 +1222,15 @@ export class RunnerApiController {
       maxConcurrent: number;
     },
   ) {
-    const fresh = !!runner.lastHeartbeatAt && Date.now() - runner.lastHeartbeatAt.getTime() < OFFLINE_AFTER_MS;
+    // The guard read the runner's own record; its latest beat is in its presence row.
+    const lastBeatAt = runnerLastBeatAt({
+      lastHeartbeatAt: runner.lastHeartbeatAt,
+      presence: await this.prisma.runnerPresence.findUnique({
+        where: { runnerId: runner.id },
+        select: { lastBeatAt: true },
+      }),
+    });
+    const fresh = !!lastBeatAt && Date.now() - lastBeatAt.getTime() < RUNNER_OFFLINE_AFTER_MS;
     const workspaces = await this.prisma.workspace.findMany({
       where: { runnerId: runner.id, deletedAt: null },
       select: {
@@ -1233,7 +1253,7 @@ export class RunnerApiController {
       name: runner.name,
       status: runner.status,
       online: runner.status !== 'OFFLINE' && fresh,
-      lastHeartbeatAt: runner.lastHeartbeatAt,
+      lastHeartbeatAt: lastBeatAt,
       version: runner.version,
       labels: runner.labels,
       maxConcurrent: runner.maxConcurrent,
@@ -1260,13 +1280,17 @@ export class RunnerApiController {
   @UseGuards(RunnerAuthGuard)
   @Post('heartbeat')
   async heartbeat(
-    @CurrentRunner() runner: { id: string; version: string | null },
+    // `lastHeartbeatAt` is the runner's own record of its beats, as the guard read the row: what
+    // decides whether this beat rewrites it (durableBeatDue).
+    @CurrentRunner() runner: { id: string; version: string | null; lastHeartbeatAt?: Date | null },
     @Body() dto: RunnerHeartbeatRequest,
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
     @Headers(RUNNER_OS_HEADER) osHeader?: string,
     /** A managed runner's authorized instance: its workload is stored and its sleep is negotiated here. */
     @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
+    /** Set when the link gateway forwarded this beat (runner-link-call.ts): presence records it as LINK. */
+    @CurrentRunnerLink() link?: RunnerLinkContext,
   ): Promise<RunnerHeartbeatResponse> {
     const heartbeatLeaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     // Idle sleep (managed-runners/managed-runner-sleep.ts), only for an authorized managed instance
@@ -1317,12 +1341,22 @@ export class RunnerApiController {
           )?.engines,
         )
       : null;
+    // The beat is two writes, in this order: the runner row — what this heartbeat reports, and the
+    // runner's own record of its beats once that is RUNNER_DURABLE_BEAT_EVERY_MS old — then its
+    // presence row (runners/runner-presence.ts), which every reading of "online" asks. Presence
+    // follows the row, so a beat whose report the database refused is not heard, as when the beat was
+    // one column of that one write. Either failing is told to the presence service before the error
+    // reaches the runner: the reaper must not read the silence it leaves as the runner's.
+    const beatLost = (error: unknown): never => {
+      this.presence?.beatNotRecorded(error);
+      throw error;
+    };
     const updated = await this.prisma.runner.update({
       where: { id: runner.id },
       data: {
         status: dto?.status ?? 'ONLINE',
         version: dto?.version ?? runner.version ?? undefined,
-        lastHeartbeatAt: beatAt,
+        lastHeartbeatAt: durableBeatDue(runner.lastHeartbeatAt, beatAt) ? beatAt : undefined,
         // Refresh the `/` autocomplete catalog; older runners omit these (leave as-is).
         // Cast: a typed interface[] isn't structurally an InputJsonValue (no index sig).
         // Stripped (see strip-nul): these are read off the machine's disk — a command or skill
@@ -1388,7 +1422,17 @@ export class RunnerApiController {
           }
           : {}),
       },
-    });
+    }).catch(beatLost);
+    // Heard over HTTPS, or forwarded by the link gateway: either way this beat sent its facts in full
+    // above, so none of the hashes a link heartbeat may carry instead. Which gateway node holds the
+    // connection is not something a forwarded call says yet.
+    await recordRunnerBeat(this.prisma, {
+      runnerId: runner.id,
+      processId: heartbeatLeaseOwner,
+      gatewayId: null,
+      linkState: link ? 'LINK' : 'HTTP',
+      at: beatAt,
+    }).catch(beatLost);
     // Whether this instance's mapping is draining to sleep, and what it is told about it. Advisory
     // like the relays below: a read that fails hands out this beat's work as usual, and the instance,
     // busy, then declines the sleep it would have been asked for.

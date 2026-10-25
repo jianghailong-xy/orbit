@@ -20,6 +20,7 @@ function harness(
   const commitDrainCalls: unknown[][] = [];
   const abandonedSweeps: unknown[][] = [];
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: {
       update: async () => ({ maxConcurrent: 4 }),
       findUnique: async () => null,

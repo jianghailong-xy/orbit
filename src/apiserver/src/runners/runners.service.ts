@@ -48,32 +48,12 @@ import { ENGINE_LABELS } from '../sessions/engine-signin-preflight';
 import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
 import { accountPauseUntil } from '../common/account-pause';
 import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
+import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
 
-// Three missed 30s heartbeats — a runner quieter than this reads as offline.
-const OFFLINE_AFTER_MS = 90_000;
 // Cap device-enrollment userCode lookups per user, so an authenticated insider
 // cannot brute-force another user's pending enrollment code online.
 const DEVICE_LOOKUP_WINDOW_MS = 5 * 60_000;
 const DEVICE_LOOKUP_MAX = 20;
-
-/**
- * Is this machine reachable right now?
- *
- * Exported because "online" has to mean the same thing everywhere it decides something. The
- * runners list renders it; the clone-target list REFUSES on it (a clone runs on the machine, so an
- * offline one is not a slower choice, it is not a choice). Two spellings of this rule would drift
- * into a picker that offers a machine the create call then rejects.
- */
-export function isRunnerOnline(
-  runner: { status: string; lastHeartbeatAt: Date | null },
-  now: number = Date.now(),
-): boolean {
-  return (
-    runner.status !== 'OFFLINE' &&
-    !!runner.lastHeartbeatAt &&
-    runner.lastHeartbeatAt.getTime() >= now - OFFLINE_AFTER_MS
-  );
-}
 
 @Injectable()
 export class RunnersService {
@@ -132,7 +112,8 @@ export class RunnersService {
         status: true,
         maxConcurrent: true,
         version: true,
-        lastHeartbeatAt: true,
+        // When it was last heard from (runners/runner-presence.ts), shown as `lastHeartbeatAt`.
+        ...RUNNER_BEATS,
         enrolledAt: true,
         position: true,
         availableCommands: true,
@@ -221,9 +202,12 @@ export class RunnersService {
       codexAccountRemoveStatus,
       codexAccountRemoveMessage,
       selfUpdate,
+      presence,
       ...r
     }, index) => ({
       ...r,
+      // Its last beat, from either record of it: what every client reads "last seen" from.
+      lastHeartbeatAt: runnerLastBeatAt({ lastHeartbeatAt: r.lastHeartbeatAt, presence }),
       // Without the part of a removed Default, as the engines are.
       planUsage: usedPlanUsage(r.planUsage, used[index]),
       // Never expose null or malformed JSON: clients can always index this as a provider map.
@@ -244,7 +228,7 @@ export class RunnersService {
         codexAccountRemoveStatus,
         codexAccountRemoveMessage,
       }),
-      online: isRunnerOnline(r, now),
+      online: runnerIsOnline({ status: r.status, lastHeartbeatAt: r.lastHeartbeatAt, presence }, now),
       activeSessions: activeByRunner.get(r.id) ?? 0,
       // Surface the `/` autocomplete catalog under clean names (mirrors the heartbeat DTO).
       commands: (availableCommands ?? []) as unknown as SlashCommandInfo[],

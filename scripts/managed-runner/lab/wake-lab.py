@@ -427,7 +427,7 @@ def record_line():
     rows = sql_json('select m.owner_id, u.email, u.disabled_at, m.management_state, m.desired_state, m.generation, m.attempt, m.revision, '
                     "m.demand_revision, m.last_error->>'code' as reason, m.pod_uid, m.next_attempt_at, m.stop_requested_at, m.stop_acknowledged_at, "
                     "m.reservation->'compute' is not null and m.reservation->'compute' <> 'null'::jsonb as compute_held, "
-                    "r.status as runner_status, r.last_heartbeat_at, r.managed_workload "
+                    f"r.status as runner_status, {sw.runner_last_beat('r')} as last_heartbeat_at, r.managed_workload "
                     'from managed_runner m join "user" u on u.id = m.owner_id join runner r on r.id = m.runner_id order by m.created_at')
     line = {}
     for m in rows:
@@ -526,7 +526,8 @@ def snapshot(name):
     pv = next((p for p in objects['pvs'] if pvc and p['metadata']['name'] == pvc['spec'].get('volumeName')), None)
     pod = next((p for p in objects['pods'] if p['metadata']['name'] == f'mr-{runner}'), None)
     attachments = [va for va in objects['attachments'] if pv and va['spec']['source'].get('persistentVolumeName') == pv['metadata']['name']]
-    runner_row = sql_json(f"select id, name, status, enrolled_at, last_heartbeat_at, left(token_hash, 12) as token_hash_prefix, capabilities "
+    runner_row = sql_json(f"select id, name, status, enrolled_at, {sw.runner_last_beat()} as last_heartbeat_at, "
+                          f"left(token_hash, 12) as token_hash_prefix, capabilities "
                           f"from runner where id = {quote(runner)}")[0]
     workspace = sql_json(f"select id, name, runner_id, target_runner_id, work_dir, auto_init_git, enable_worktree from workspace "
                          f"where id = {quote(m['default_workspace_id'])}")[0]
