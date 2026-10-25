@@ -21,11 +21,17 @@ import (
 // runner's connections as a Hint frame.
 //
 // Only to connections in MODE_LINK. A connection in MODE_HTTP is a runner that works over HTTPS and is woken by its
-// long polls, and the shadow period sends it nothing new (§11.2): there a hint is counted and dropped. Every
-// connection is in MODE_HTTP until the gateway forwards (B4).
+// long polls, and the shadow period sends it nothing new (§11.2): there a hint is counted and dropped.
 //
 // A hint is sent at most once (§5.2). One that finds no NATS, no connection of its runner or a full queue is counted
 // and dropped, never waited for: the runner's next heartbeat carries the same news.
+//
+// Two more things arrive on a runner's subject (live.go): a WatchersHint, which counts one apiserver instance's
+// watchers of a session (the Orbit-Instance header names the instance) and is summed across instances before the
+// runner is told, and a turn prefix request, a Frame with only turn_prefix_request set, which comes with a reply
+// subject and is relayed to the runner.
+//
+// The gateway connects as its own NATS user, with the nkey seed in LINK_NATS_SEED (nkey.go, nats.conf).
 
 const (
 	hintSubjectPrefix = "rnr."
@@ -62,7 +68,22 @@ func startHintRelay(g *gateway, url string) (*hintRelay, error) {
 		subs: map[string]*nats.Subscription{},
 	}
 	m := g.metrics
-	nc, err := nats.Connect(url,
+	var auth []nats.Option
+	if g.cfg.NATSSeed != "" {
+		kp, err := natsUserKey(g.cfg.NATSSeed)
+		if err != nil {
+			return nil, err
+		}
+		pub, err := kp.PublicKey()
+		if err != nil {
+			return nil, err
+		}
+		// The seed stays in the key pair, which signs the server's nonce at every connect; it is never logged.
+		auth = append(auth, nats.Nkey(pub, kp.Sign))
+	} else {
+		h.log.Warn("LINK_NATS_SEED is not set: connecting to NATS without credentials, which a server with authorization refuses")
+	}
+	nc, err := nats.Connect(url, append(auth,
 		nats.Name("orbit-link-gateway "+nodeName()),
 		nats.RetryOnFailedConnect(true),
 		nats.MaxReconnects(-1),
@@ -90,7 +111,7 @@ func startHintRelay(g *gateway, url string) (*hintRelay, error) {
 			}
 			h.log.Warn("NATS error", "err", err)
 		}),
-	)
+	)...)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +123,9 @@ func startHintRelay(g *gateway, url string) (*hintRelay, error) {
 	return h, nil
 }
 
-// hold subscribes to the runner's hints for one more of its connections; the first one subscribes.
+// hold subscribes to the runner's hints for one more of its connections; the first one subscribes. One subscription
+// per runner is also what lets the gateway answer a turn prefix request: nats-server lets a connection answer a request
+// once (nats.conf, allow_responses), and one that got it on two subscriptions may answer it on neither.
 func (h *hintRelay) hold(runnerID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -132,6 +155,8 @@ func (h *hintRelay) release(runnerID string) {
 		delete(h.subs, runnerID)
 		h.g.metrics.hintSubscriptions.add(-1)
 	}
+	// No connection of the runner is left to tell who watches its sessions.
+	h.g.watchers.drop(runnerID)
 }
 
 // subscribed is the runners whose hints are subscribed to, for the tests.
@@ -149,7 +174,7 @@ func (h *hintRelay) run() {
 	for {
 		select {
 		case msg := <-h.msgs:
-			h.deliver(strings.TrimPrefix(msg.Subject, hintSubjectPrefix), msg.Data)
+			h.deliver(strings.TrimPrefix(msg.Subject, hintSubjectPrefix), msg)
 		case <-h.done:
 			return
 		}
@@ -157,16 +182,35 @@ func (h *hintRelay) run() {
 }
 
 // deliver writes one hint to the runner's connections in MODE_LINK, and counts what became of it.
-func (h *hintRelay) deliver(runnerID string, data []byte) {
+func (h *hintRelay) deliver(runnerID string, msg *nats.Msg) {
+	data := msg.Data
 	var f linkpb.Frame
 	// A field or body of a newer apiserver is ignored, as the protocol asks of every receiver.
-	if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(data, &f); err != nil || f.GetHint().GetKind() == nil {
+	err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(data, &f)
+	if err == nil && f.GetTurnPrefixRequest() != nil {
+		h.g.relayPrefixRequest(runnerID, f.GetTurnPrefixRequest(), msg.Reply)
+		return
+	}
+	if err != nil || f.GetHint().GetKind() == nil {
 		h.g.metrics.hints.inc("unknown", "malformed")
 		h.malformed(runnerID, data, err)
 		return
 	}
 	hint := f.GetHint()
 	kind := hintKind(hint)
+	if w := hint.GetWatchers(); w != nil {
+		// One apiserver instance's count: the runner is told the sum across instances, when it moves.
+		instance := ""
+		if msg.Header != nil {
+			instance = msg.Header.Get(instanceHeader)
+		}
+		result := h.g.watchersFromHint(runnerID, instance, w)
+		h.g.metrics.hints.inc(kind, result)
+		if h.g.cfg.FrameLog == "all" && result != "sent" {
+			h.log.Info("hint", "runner", runnerID, "kind", kind, "result", result)
+		}
+		return
+	}
 	result := "no_connection"
 	for _, c := range h.g.reg.connsOf(runnerID) {
 		if c.mode != linkpb.Mode_MODE_LINK {

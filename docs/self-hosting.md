@@ -364,7 +364,9 @@ profile. Both run only where `.env` turns that profile on.
 
 For now the link runs in shadow. Runners keep working over HTTPS. The gateway authenticates their connections, keeps
 them alive, and compares the heartbeats and event batches runners mirror to it with what the HTTPS side received. It
-forwards nothing to the control plane, so turning it off changes no runner's work.
+forwards nothing to the control plane, so turning it off changes no runner's work. Once the link is switched over, the
+gateway forwards each runner's requests, heartbeats and events to the apiserver's
+[internal listener](#runner-link-calls), and its live stream to NATS while someone watches the session.
 
 Whenever work waits for a runner (a queued session, a message in its inbox, or a sign-in, merge or update that its
 heartbeat delivers), the apiserver also publishes a hint on NATS, on the subject of that runner alone. The gateway
@@ -372,7 +374,9 @@ subscribes for the runners it holds connections of and relays each hint to that 
 hints are counted and not sent. NATS keeps nothing: no JetStream, no volume. It has no port on the host, and a hint lost
 while it is down costs a runner one heartbeat interval. The apiserver publishes only while the connection tokens below
 are configured, to `nats://nats:4222` unless `RUNNER_LINK_NATS_URL` names another server. With NATS unreachable, it
-logs the hints it dropped once a minute and goes on.
+logs the hints it dropped once a minute and goes on. Session content crosses NATS too (the live stream, and the text a
+turn has streamed so far), so NATS admits only the apiserver and the gateway, each by its own
+[nkey](#nats-credentials).
 [src/link-gateway/README.md](../src/link-gateway/README.md) describes the gateway in full.
 
 ### Connection tokens
@@ -417,6 +421,61 @@ How the tokens work:
   with `Authorization: Bearer <RUNNER_LINK_GATEWAY_TOKEN>` and refuses those tokens; one it has not yet heard of
   stops working when it expires.
 
+### Runner link calls
+
+Once the link carries the runners' work, the gateway calls the runner routes on the apiserver's behalf, through a
+listener of their own that serves the gateway alone: every call must present `RUNNER_LINK_GATEWAY_TOKEN`, and only the
+runner routes answer there. Compose sets it up:
+
+```dotenv
+RUNNER_LINK_INTERNAL_PORT=3001       # the listener's port; Compose's default
+RUNNER_LINK_INTERNAL_HOST=0.0.0.0    # every interface of the apiserver's container; Compose's default
+```
+
+The listener opens only while the connection tokens above are configured; without them the apiserver logs
+`runner link calls are not served: the runner link is off` and opens nothing. Inside its container, `0.0.0.0` means this
+project's network: the gateway reaches it as `apiserver:3001` (its `LINK_INTERNAL_API_URLS`). **Never publish this
+port** on the host or put it behind the web gateway. Outside Compose, the apiserver binds `127.0.0.1` unless
+`RUNNER_LINK_INTERNAL_HOST` says otherwise; give it an address only the gateway's network reaches.
+
+### NATS credentials
+
+NATS admits two users, each by an nkey, an Ed25519 key pair: the apiserver, which publishes hints and reads live
+streams, and the gateway, which reads hints and publishes live streams. `src/link-gateway/nats.conf`, which the `nats`
+service reads, allows each nothing else, and a client without a key cannot connect. Make two pairs:
+
+```bash
+docker compose --profile runner-link build link-gateway
+docker compose --profile runner-link run --rm --no-deps link-gateway nkey   # the apiserver's pair
+docker compose --profile runner-link run --rm --no-deps link-gateway nkey   # the gateway's pair
+```
+
+Each run prints a new pair once, `seed=SU…` and `public=U…`, and keeps no copy. Put the four values in `.env`:
+
+```dotenv
+RUNNER_LINK_NATS_APISERVER_SEED=SU...   # the apiserver's seed: given to the apiserver alone
+RUNNER_LINK_NATS_APISERVER_KEY=U...     # its public key: given to nats alone
+RUNNER_LINK_NATS_GATEWAY_SEED=SU...     # the gateway's seed: given to the link gateway alone
+RUNNER_LINK_NATS_GATEWAY_KEY=U...       # its public key: given to nats alone
+```
+
+A seed is a credential: keep it with the deployment's other secrets. To replace a pair, make a new one, set both its
+values and recreate `apiserver` (or `link-gateway`) and `nats`.
+
+What missing values look like:
+
+- Either public key empty or unset: `nats` refuses to start, and `docker compose logs nats` says
+  `User entry requires a user` (empty) or `variable reference for 'RUNNER_LINK_NATS_…_KEY' … can not be found`
+  (unset). Hints, and the live stream once the link is switched over, stop; runners on HTTPS are not affected.
+- The apiserver's seed unset: its log warns `RUNNER_LINK_NATS_SEED is not set` and then that NATS is unreachable
+  (`Authorization Violation`); it drops hints and counts them.
+- The gateway's seed unset: its log warns `LINK_NATS_SEED is not set`, `link_nats_connected` stays `0`, and no hint is
+  relayed.
+
+> **Upgrading a deployment that already runs the `runner-link` profile:** add the four values above to `.env` before
+> you upgrade. From this release on, `nats` reads `src/link-gateway/nats.conf` and refuses to start without the two
+> public keys, and the apiserver and the gateway connect only with their seeds.
+
 ### Deploy the link gateway
 
 Runners connect to the gateway directly, on a host name and a port of its own. A proxying CDN or the web gateway
@@ -454,6 +513,8 @@ the link's. Set it up in this order.
    RUNNER_LINK_ACME_EMAIL=ops@example.com
    ```
 
+   and the four [NATS credentials](#nats-credentials).
+
    `RUNNER_LINK_URL` carries the port when it is not 443, as in `wss://link.orbit.example.com:8443`. Create
    `RUNNER_LINK_GATEWAY_DIR` before starting, with `tls/` inside it when certificates come from files. The gateway
    runs as root in its container, with every capability dropped, so root-owned certificate files are readable.
@@ -469,7 +530,9 @@ the link's. Set it up in this order.
    ```
 
    `link_revocation_fetches_total{result="ok"}` rising every 30 seconds shows that the gateway reads the apiserver
-   with the right secret. `link_nats_connected 1`, and `connected to NATS` in the apiserver's log, show that hints flow.
+   with the right secret. `link_nats_connected 1`, and `connected to NATS` in the apiserver's log, show that hints flow,
+   both clients signed in with their seeds. `runner link calls are served on 0.0.0.0:3001` in the apiserver's log shows
+   the listener the gateway forwards to once the link is switched over.
 
 ### Operate the link gateway
 
@@ -488,7 +551,10 @@ the link's. Set it up in this order.
   3. After an hour, when every old token has expired, drop the old public key.
 - **Monitoring.** `/metrics` on the metrics port counts connections, handshakes by result and their duration,
   disconnects by reason, ping round trips, token refusals by reason, revocation reads, the shadow comparison, and
-  hints by kind and by what became of them.
+  hints by kind and by what became of them. Once the link is switched over it also counts forwarded calls by result and
+  their latency, retries across apiserver instances, events stored and their acknowledgement latency, the ingest queue
+  and the credit it grants, the live stream by what became of it, and frames dropped or connections closed for slow
+  reading.
   [The gateway's README](../src/link-gateway/README.md#metrics) lists them all.
 - **Logs.** `docker compose logs link-gateway` shows one line per connection event. Set `LINK_FRAME_LOG=all` in the
   service's environment to log a summary of every frame, too. The gateway decodes frames that it or a runner logged:

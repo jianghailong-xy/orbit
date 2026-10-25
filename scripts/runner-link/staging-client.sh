@@ -8,7 +8,8 @@
 #   scripts/runner-link/staging-client.sh -until-drains 1 -summary /tmp/summary.json
 #
 # The client's summary file and capture, when asked for, are written under <state>/client/ (that directory is
-# mounted at the same path in the container).
+# mounted at the same path in the container). The state's secrets are mounted read-only at their own path, for drills
+# (-drill, client_link.go) that sign in as the owner or read NATS as the apiserver.
 set -euo pipefail
 # shellcheck source=staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/staging-lib.sh"
@@ -35,6 +36,6 @@ fi
 
 # The defaults come first, so an argument given here overrides them (-http=false, -events 0).
 exec docker run --rm "${network[@]}" \
-  -v "$state/client:$state/client" -v "$ca:/etc/orbit-link-staging/ca.pem:ro" \
+  -v "$state/client:$state/client" -v "$ca:/etc/orbit-link-staging/ca.pem:ro" -v "$state/secrets:$state/secrets:ro" \
   -e LINK_CLIENT_RUNNER_TOKEN="$(cat "$token_file")" \
   "$image" client -api "$api" -ca /etc/orbit-link-staging/ca.pem -http -events 2 "$@"

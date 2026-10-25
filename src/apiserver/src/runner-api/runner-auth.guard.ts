@@ -16,6 +16,7 @@ import { authorizeManagedRunnerInstance } from '../managed-runners/managed-runne
 import { PrismaService } from '../prisma/prisma.service';
 import {
   assertAfterSeqStored,
+  parseRunnerLinkGatewayId,
   parseRunnerLinkRequest,
   RUNNER_LINK_TOKEN_HEADER,
   type RunnerLinkContext,
@@ -128,7 +129,12 @@ export class RunnerAuthGuard implements CanActivate {
     const { requestId, afterSeq } = parseRunnerLinkRequest(req.headers);
     req.managedRunnerInstance = await authorizeManagedRunnerInstance(this.prisma, admitted.id, req.headers);
     req.runner = admitted;
-    req.runnerLink = { leaseOwner: claims.leaseOwner, requestId, afterSeq } satisfies RunnerLinkContext;
+    req.runnerLink = {
+      leaseOwner: claims.leaseOwner,
+      requestId,
+      afterSeq,
+      gatewayId: parseRunnerLinkGatewayId(req.headers),
+    } satisfies RunnerLinkContext;
     if (afterSeq) await assertAfterSeqStored(this.prisma, admitted.id, afterSeq);
     return true;
   }

@@ -28,7 +28,7 @@ import {
   SourceRefusalCode,
   SourceState,
 } from '@orbit/shared';
-import { Observable, Subject, filter, map, mergeMap } from 'rxjs';
+import { Observable, Subject, filter, map, merge, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { sessionEngine } from '../providers/session-engine';
 import { PushService } from '../push/push.service';
@@ -44,7 +44,7 @@ import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
 import { RUNNER_WAKE_CHANNEL } from './runner-wake';
-import { RunnerHints } from './runner-hints';
+import { RunnerHints, type LinkLiveEvent, type LinkTurnPrefix } from './runner-hints';
 import {
   ownerItemsForRow,
   readOwnerDecisionsBySession,
@@ -75,6 +75,9 @@ const CANCEL_MAX_AGE_MS = 60 * 60_000; // stop redelivering a cancel after an ho
  * backfill exists to remove, so the honest degradation is back to handing over nothing.
  */
 const TURN_PREFIX_MAX_CHARS = 64_000;
+
+/** Live events from the runner link held while a stream's turn prefix is asked of the runner (linkStream). */
+const LINK_LIVE_HOLD_CAP = 500;
 
 /**
  * How much of a reply preview rides in a summary. The list row clips its own two previews to the
@@ -489,12 +492,68 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   streamForRun(runId: string): Observable<NormalizedRunEvent> {
-    return this.hub.asObservable().pipe(
+    const hub$ = this.hub.asObservable().pipe(
       // Lifecycle signals (session_created/ended) are control-plane-internal: they ride the hub
       // for the NOTIFY bridge but must never leak into a per-session transcript stream.
       filter((m) => m.runId === runId && !isLifecycleType(m.event.type)),
       map((m) => m.event),
     );
+    // Without the runner link the stream is the hub alone, exactly as before.
+    if (!this.hints?.enabled) return hub$;
+    return merge(hub$, this.linkStream(this.hints, runId));
+  }
+
+  /**
+   * The half of a session's stream the runner link carries (docs/runner-link-design.md §5.9; runner-hints.ts): while
+   * it is open, this stream counts as one of the session's watchers, so the runner sends its live stream; it starts
+   * with what the runner's current turn has streamed so far, asked of the runner, and goes on with the live events
+   * after it. Events that arrive while the runner is asked are held, and those the prefix already folds in are left
+   * out, so a delta reaches the client once. A runner that works over HTTPS answers nothing here, and its stream is
+   * the hub's, its prefix this replica's own (`turnPrefix`).
+   */
+  private linkStream(hints: RunnerHints, runId: string): Observable<NormalizedRunEvent> {
+    return new Observable<NormalizedRunEvent>((subscriber) => {
+      const release = hints.watch(runId);
+      let prefix: LinkTurnPrefix | null | undefined; // undefined while the runner is asked
+      let held: LinkLiveEvent[] = [];
+      // Only the prefix's own turn is cut at its live_seq: another turn's events are all new.
+      const fresh = (e: LinkLiveEvent): boolean =>
+        !prefix || e.event.turnId !== prefix.turnId || e.liveSeq > prefix.throughLiveSeq;
+      const stop = hints.liveEvents(runId, (e) => {
+        if (prefix === undefined) {
+          if (held.length < LINK_LIVE_HOLD_CAP) held.push(e);
+          return;
+        }
+        if (fresh(e)) subscriber.next(e.event);
+      });
+      let closed = false;
+      void hints.turnPrefix(runId).then((answer) => {
+        if (closed) return;
+        prefix = answer;
+        if (answer?.turnId) {
+          const ts = new Date().toISOString();
+          // Thinking first, as the replay hands a held prefix over (sessions.controller.ts prefixEvents).
+          if (answer.thinking) {
+            subscriber.next({ seq: 0, type: RunEventType.THINKING_DELTA, payload: { text: answer.thinking }, turnId: answer.turnId, ts });
+          }
+          if (answer.text) {
+            subscriber.next({ seq: 0, type: RunEventType.TEXT_DELTA, payload: { text: answer.text }, turnId: answer.turnId, ts });
+          }
+        }
+        for (const e of held) if (fresh(e)) subscriber.next(e.event);
+        held = [];
+      });
+      return () => {
+        closed = true;
+        stop();
+        release();
+      };
+    });
+  }
+
+  /** This instance's watcher counts of the sessions given, which the heartbeat route answers a link call with. */
+  linkWatchersOf(sessionIds: Iterable<string>): { instance: string; sessions: Array<{ sessionId: string; watchers: number }> } | null {
+    return this.hints?.enabled ? this.hints.watchersOf(sessionIds) : null;
   }
 
   /**

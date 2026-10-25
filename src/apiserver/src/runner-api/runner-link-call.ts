@@ -34,6 +34,8 @@ import { isRunnerLinkGateway, RUNNER_LINK, type RunnerLinkConfig, type RunnerLin
  *                              session the first one claimed, not another (QueueService.trySessionClaim).
  *   X-Orbit-Link-Session-Id    Rpc.session_id and Rpc.after_seq: the call is handled only once that
  *   X-Orbit-Link-After-Seq     session's events are stored through after_seq (`assertAfterSeqStored`).
+ *   X-Orbit-Link-Gateway-Id    the gateway node holding the runner's connection, which the heartbeat
+ *                              records in the runner's presence.
  *
  * plus the headers Hello declared, which today's runner sends on every request (doVia,
  * src/runner-go/transport.go): capabilities, supported providers, OS, write contract, CLI version and
@@ -52,6 +54,7 @@ export const RUNNER_LINK_TOKEN_HEADER = 'x-orbit-runner-link-token';
 export const LINK_REQUEST_ID_HEADER = 'x-orbit-link-request-id';
 export const LINK_SESSION_ID_HEADER = 'x-orbit-link-session-id';
 export const LINK_AFTER_SEQ_HEADER = 'x-orbit-link-after-seq';
+export const LINK_GATEWAY_ID_HEADER = 'x-orbit-link-gateway-id';
 
 /** What a link call says beyond the route's own request, as RunnerAuthGuard read it. */
 export interface RunnerLinkContext {
@@ -61,6 +64,8 @@ export interface RunnerLinkContext {
   requestId: string | null;
   /** Rpc.session_id and Rpc.after_seq; null when the call depends on no session's events. */
   afterSeq: { sessionId: string; seq: number } | null;
+  /** The gateway node that forwarded the call; null when it named none. */
+  gatewayId?: string | null;
 }
 
 /** The link call this request is, or undefined for one that came over HTTPS. */
@@ -73,6 +78,15 @@ export const CurrentRunnerLink = createParamDecorator(
 const REQUEST_ID_RE = /^[A-Za-z0-9._:-]{1,128}$/;
 /** `run_event.seq` is an int4: no event is ever stored past this. */
 const MAX_SEQ = 2_147_483_647;
+
+/** The gateway node's name, as the gateway sends it (its container's hostname). Anything else names none. */
+const GATEWAY_ID_RE = /^[A-Za-z0-9._:-]{1,128}$/;
+
+/** The gateway node that forwarded a call, or null. */
+export function parseRunnerLinkGatewayId(headers: IncomingHttpHeaders): string | null {
+  const value = single(headers[LINK_GATEWAY_ID_HEADER]);
+  return value !== undefined && GATEWAY_ID_RE.test(value) ? value : null;
+}
 
 /** The link's own fields of a call: its request id and the events it waits for. */
 export function parseRunnerLinkRequest(headers: IncomingHttpHeaders): Pick<RunnerLinkContext, 'requestId' | 'afterSeq'> {
@@ -207,7 +221,8 @@ export async function listenForRunnerLinkCalls(
   }
   const link = app.get<RunnerLinkState>(RUNNER_LINK, { strict: false });
   if (!link.config) {
-    log.error('RUNNER_LINK_INTERNAL_PORT is set while the runner link is off: runner link calls are not served');
+    // Compose sets the port whether or not the link is on, so this is how a deployment without the link starts.
+    log.log('runner link calls are not served: the runner link is off');
     return null;
   }
   const host = settings.host?.trim() || RUNNER_LINK_INTERNAL_DEFAULT_HOST;

@@ -226,6 +226,27 @@ type gatewayMetrics struct {
 	hintSubscriptions     *gauge
 	natsConnected         *gauge
 	natsReconnects        *counter
+
+	// Forwarding, in MODE_LINK (backend.go, forward.go, heartbeat.go, events.go, live.go).
+	backendCalls      *counter
+	backendRetries    *counter
+	backendDuration   *histogram
+	rpcResults        *counter
+	rpcDuration       *histogram
+	heartbeatForwards *counter
+	heartbeatDuration *histogram
+	heartbeatFacts    *counter
+	eventBatches      *counter
+	eventsStored      *counter
+	eventAckDuration  *histogram
+	ingestEvents      *gauge
+	ingestBytes       *gauge
+	creditReduced     *gauge
+	creditChanges     *counter
+	liveEvents        *counter
+	watchedSessions   *gauge
+	prefixRequests    *counter
+	queueFull         *counter
 }
 
 // Every label value a counter can take that a dashboard or a report reads, so their series exist from the start.
@@ -267,6 +288,26 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 		hintSubscriptions:     newGauge("link_hint_subscriptions", "Runners whose hint subject this gateway subscribes to."),
 		natsConnected:         newGauge("link_nats_connected", "1 while the gateway is connected to NATS."),
 		natsReconnects:        newCounter("link_nats_reconnects_total", "Times the NATS connection was established again after it was lost."),
+
+		backendCalls:      newCounter("link_backend_calls_total", "Calls forwarded to the apiserver's internal listener, by what they were for and how they ended.", "kind", "result"),
+		backendRetries:    newCounter("link_backend_retries_total", "Calls sent again on the next backend, by what they were for and why: not_delivered (no handler ran) or lost (an idempotent call whose answer was lost).", "kind", "reason"),
+		backendDuration:   newHistogram("link_backend_call_duration_seconds", "From a forwarded call's start to its backend's answer, retries included.", linkDurationBounds...),
+		rpcResults:        newCounter("link_rpc_results_total", "RpcResults of forwarded requests: the route's status class, or the Failure code when it gave no answer.", "result"),
+		rpcDuration:       newHistogram("link_rpc_duration_seconds", "From a forwarded request's start to its route's answer.", linkDurationBounds...),
+		heartbeatForwards: newCounter("link_heartbeat_forwards_total", "Heartbeats in MODE_LINK, by what became of them.", "result"),
+		heartbeatDuration: newHistogram("link_heartbeat_forward_duration_seconds", "From a heartbeat's forwarding to the route's answer.", linkDurationBounds...),
+		heartbeatFacts:    newCounter("link_heartbeat_facts_total", "Heartbeat facts, by how the gateway read them: whole, cached (a digest it held), unknown_digest, invalid_json, digest_mismatch, ignored.", "result"),
+		eventBatches:      newCounter("link_event_batches_total", "Event batches in MODE_LINK, by what became of them.", "result"),
+		eventsStored:      newCounter("link_events_stored_total", "Durable events the ingest route stored and the gateway acknowledged."),
+		eventAckDuration:  newHistogram("link_event_ack_duration_seconds", "From an event batch's arrival to its EventAck.", linkDurationBounds...),
+		ingestEvents:      newGauge("link_ingest_queue_events", "Durable events queued for or in flight to the apiserver, across connections: the depth credit is granted by."),
+		ingestBytes:       newGauge("link_ingest_queue_bytes", "The payload bytes of those events."),
+		creditReduced:     newGauge("link_credit_reduced", "1 while the ingest queue is past its high-water mark and every connection's credit is reduced."),
+		creditChanges:     newCounter("link_credit_changes_total", "Times every connection's credit was reduced or restored.", "to"),
+		liveEvents:        newCounter("link_live_events_total", "Live stream events, by what became of them: published, no_watchers, nats_down, publish_failed, bad_session.", "result"),
+		watchedSessions:   newGauge("link_watched_sessions", "Sessions of connected runners that someone watches live now."),
+		prefixRequests:    newCounter("link_turn_prefix_requests_total", "Turn prefix requests from the apiserver, by how they were answered.", "result"),
+		queueFull:         newCounter("link_queue_full_total", "Frames that found their write queue full, by queue and what became of them: closed (the connection, slow_consumer) or dropped.", "queue", "result"),
 	}
 	for _, r := range handshakeResults {
 		m.handshakes.preset(r)
@@ -295,6 +336,30 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 		}
 	}
 	m.hints.preset("unknown", "malformed")
+	for _, kind := range []string{"rpc", "heartbeat", "events"} {
+		for _, result := range []string{"answered", "timeout", "cancelled", "cut_off", "unavailable"} {
+			m.backendCalls.preset(kind, result)
+		}
+	}
+	for _, r := range []string{"2xx", "4xx", "5xx", "BACKEND_UNAVAILABLE", "BACKEND_TIMEOUT", "BACKEND_CUT_OFF", "RPC_BAD_REQUEST", "RPC_TOO_MANY_IN_FLIGHT", "CANCELLED"} {
+		m.rpcResults.preset(r)
+	}
+	for _, r := range []string{"forwarded", "want_facts", "failed", "refused", "superseded"} {
+		m.heartbeatForwards.preset(r)
+	}
+	for _, r := range []string{"stored", "credit_exceeded", "gap", "no_answer", "refused", "refused_retryable", "failed_behind"} {
+		m.eventBatches.preset(r)
+	}
+	for _, r := range []string{"published", "no_watchers", "nats_down"} {
+		m.liveEvents.preset(r)
+	}
+	for _, r := range []string{"answered", "timeout", "dropped", "mode_http", "no_connection"} {
+		m.prefixRequests.preset(r)
+	}
+	for _, q := range tierNames {
+		m.queueFull.preset(q, "closed")
+		m.queueFull.preset(q, "dropped")
+	}
 	m.all = []collector{
 		&infoGauge{name: "link_gateway_build_info", help: "The gateway's version.", labels: []string{"version"}, values: []string{version}},
 		&gauge{name: "link_gateway_start_time_seconds", help: "When this process started, in Unix seconds.", v: float64(time.Now().Unix())},
@@ -303,9 +368,17 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 		m.revocations, m.revocationFetches, m.revocationLastSuccess, m.tlsNotAfter, m.tlsReloads, m.tlsHandshakeErrors,
 		m.rpcs, m.shadowPairs, m.shadowMismatches, m.shadowUnpaired, m.shadowEvents, m.shadowPendingBytes,
 		m.hints, m.hintsSlow, m.hintSubscriptions, m.natsConnected, m.natsReconnects,
+		m.backendCalls, m.backendRetries, m.backendDuration, m.rpcResults, m.rpcDuration,
+		m.heartbeatForwards, m.heartbeatDuration, m.heartbeatFacts,
+		m.eventBatches, m.eventsStored, m.eventAckDuration, m.ingestEvents, m.ingestBytes, m.creditReduced, m.creditChanges,
+		m.liveEvents, m.watchedSessions, m.prefixRequests, m.queueFull,
 	}
 	return m
 }
+
+// linkDurationBounds are the buckets of the forwarding paths' durations, in seconds: an event acknowledgement's p99 is
+// held under one second (§9).
+var linkDurationBounds = []float64{0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60}
 
 func (m *gatewayMetrics) writeTo(out io.Writer) error {
 	w := bufio.NewWriter(out)

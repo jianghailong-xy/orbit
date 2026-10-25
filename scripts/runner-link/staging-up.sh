@@ -20,6 +20,8 @@
 #   ORBIT_LINK_STAGING_TLS           files (a staging CA), or acme (Pebble)       files
 #   ORBIT_LINK_STAGING_NATS_PORT     NATS's client port, on the bind address      14222
 #   ORBIT_LINK_STAGING_NATS_MONITOR_PORT  NATS's monitoring, on 127.0.0.1         18222
+#   ORBIT_LINK_STAGING_MODE          http (shadow) or link (forwarding)           http
+#   ORBIT_LINK_STAGING_BACKENDS      apiservers the gateway forwards to: 1 or 2   1
 set -euo pipefail
 # shellcheck source=staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/staging-lib.sh"
@@ -30,7 +32,7 @@ for arg in "$@"; do
   case "$arg" in
     --rotate-cert) rotate=1 ;;
     --no-build) build=0 ;;
-    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
     *) die "unknown option $arg (see --help)" ;;
   esac
 done
@@ -48,8 +50,13 @@ tls_mode="${ORBIT_LINK_STAGING_TLS:-$(setting STAGING_TLS files)}"
 nats_port="${ORBIT_LINK_STAGING_NATS_PORT:-$(setting STAGING_NATS_PORT 14222)}"
 nats_monitor_port="${ORBIT_LINK_STAGING_NATS_MONITOR_PORT:-$(setting STAGING_NATS_MONITOR_PORT 18222)}"
 pebble_port="${ORBIT_LINK_STAGING_PEBBLE_PORT:-$(setting STAGING_PEBBLE_MGMT_PORT 15000)}"
+mode="${ORBIT_LINK_STAGING_MODE:-$(setting STAGING_MODE http)}"
+backends="${ORBIT_LINK_STAGING_BACKENDS:-$(setting STAGING_BACKENDS 1)}"
 acme_domain="link.orbit-staging.test"
 case "$tls_mode" in files|acme) ;; *) die "ORBIT_LINK_STAGING_TLS must be files or acme, not $tls_mode" ;; esac
+case "$mode" in http|link) ;; *) die "ORBIT_LINK_STAGING_MODE must be http or link, not $mode" ;; esac
+case "$backends" in 1) backend_urls="http://apiserver:3001" ;; 2) backend_urls="http://apiserver:3001,http://apiserver-b:3001" ;;
+  *) die "ORBIT_LINK_STAGING_BACKENDS must be 1 or 2, not $backends" ;; esac
 
 # --- Secrets: made once and kept, so a rerun keeps the database's tokens valid. -----------------------------------
 secrets="$state/secrets"
@@ -126,7 +133,23 @@ else
   acme_domains=""
 fi
 
+# --- NATS's two nkey users (src/link-gateway/nats.conf): made once, by the gateway image, and kept. ------------------
+nats_key() { [ -s "$secrets/nats_$1_seed" ] && [ -s "$secrets/nats_$1_key" ]; }
+make_nats_keys() {
+  local who pair
+  for who in apiserver gateway; do
+    nats_key "$who" && continue
+    pair="$(docker run --rm "$project-link-gateway:local" nkey)" || die "the link gateway image made no nkey"
+    (umask 077
+      sed -n 's/^seed=//p' <<<"$pair" > "$secrets/nats_${who}_seed"
+      sed -n 's/^public=//p' <<<"$pair" > "$secrets/nats_${who}_key")
+    log "NATS user $who: a new nkey, public $(cat "$secrets/nats_${who}_key")"
+  done
+}
+read_nats() { [ -s "$secrets/nats_$1_$2" ] && tr -d '\n' < "$secrets/nats_$1_$2"; }
+
 # --- The env file Compose reads (and nothing else: see staging-lib.sh). -----------------------------------------------
+write_env() {
 (
   umask 077
   cat > "$env_file.new" <<EOF
@@ -152,19 +175,43 @@ RUNNER_LINK_GATEWAY_TOKEN=$(cat "$secrets/gateway_token")
 RUNNER_LINK_PUBLIC_KEY=$public_key
 RUNNER_LINK_GATEWAY_DIR=$gw
 RUNNER_LINK_ACME_DOMAINS=$acme_domains
+STAGING_REPO=$repo
+STAGING_MODE=$mode
+STAGING_BACKENDS=$backends
+STAGING_BACKEND_URLS=$backend_urls
+RUNNER_LINK_NATS_APISERVER_SEED=$(read_nats apiserver seed || true)
+RUNNER_LINK_NATS_APISERVER_KEY=$(read_nats apiserver key || true)
+RUNNER_LINK_NATS_GATEWAY_SEED=$(read_nats gateway seed || true)
+RUNNER_LINK_NATS_GATEWAY_KEY=$(read_nats gateway key || true)
 EOF
   mv -f "$env_file.new" "$env_file"
 )
+}
+write_env
 
 # --- Build and start. The runner-link profile is named here explicitly: it is what starts the link gateway and NATS. --
 profiles=(--profile runner-link)
 services=(postgres apiserver web gateway link-gateway nats)
 [ "$tls_mode" = acme ] && services+=(pebble)
+if [ "$backends" = 2 ]; then
+  profiles+=(--profile staging-backend-b)
+  services+=(apiserver-b)
+fi
 if [ "$build" = 1 ]; then
   log "building the apiserver, web and link gateway images from $(git -C "$repo" rev-parse --short HEAD)"
   compose "${profiles[@]}" build apiserver web link-gateway
+elif ! docker image inspect "$project-link-gateway:local" >/dev/null 2>&1; then
+  compose "${profiles[@]}" build link-gateway
 fi
-log "starting ${services[*]} as project $project"
+if ! nats_key apiserver || ! nats_key gateway; then
+  make_nats_keys
+  write_env
+fi
+if [ "$backends" = 1 ]; then
+  # A second apiserver left from a run with two is stopped: the gateway no longer names it.
+  compose --profile staging-backend-b rm -sf apiserver-b >/dev/null 2>&1 || true
+fi
+log "starting ${services[*]} as project $project, the link gateway in MODE_${mode^^} over $backends backend(s)"
 compose "${profiles[@]}" up -d --wait --wait-timeout 1500 "${services[@]}"
 
 # --- Seed and check. --------------------------------------------------------------------------------------------------
@@ -181,17 +228,26 @@ grep -q '^link_revocation_fetches_total{result="ok"} [1-9]' "$state/metrics.txt"
   die "the link gateway has not read the revocation list (see: $(basename "$0") logs, or docker logs $project-link-gateway)"
 # Hints: the gateway and the apiserver are both connected to NATS.
 for _ in $(seq 1 30); do
-  curl -fsS "$metrics" | grep -q '^link_nats_connected 1$' && break
+  grep -q '^link_nats_connected 1$' <(curl -fsS "$metrics") && break
   sleep 1
 done
-curl -fsS "$metrics" | grep -q '^link_nats_connected 1$' || die "the link gateway is not connected to NATS (docker logs $project-link-gateway)"
+grep -q '^link_nats_connected 1$' <(curl -fsS "$metrics") || die "the link gateway is not connected to NATS (docker logs $project-link-gateway)"
 # The apiserver dials again every 5 s when NATS came up after it.
 for _ in $(seq 1 30); do
-  docker logs "$project-apiserver" 2>&1 | grep -q 'connected to NATS at ' && break
+  grep -q 'connected to NATS at ' <(docker logs "$project-apiserver" 2>&1) && break
   sleep 1
 done
-docker logs "$project-apiserver" 2>&1 | grep -q 'connected to NATS at ' ||
+grep -q 'connected to NATS at ' <(docker logs "$project-apiserver" 2>&1) ||
   die "the apiserver is not connected to NATS (docker logs $project-apiserver | grep RunnerHints)"
+# The listener the gateway forwards runner calls to.
+for name in "$project-apiserver" $([ "$backends" = 2 ] && echo "$project-apiserver-b"); do
+  for _ in $(seq 1 30); do
+    grep -q 'runner link calls are served on 0.0.0.0:3001' <(docker logs "$name" 2>&1) && break
+    sleep 1
+  done
+  grep -q 'runner link calls are served on 0.0.0.0:3001' <(docker logs "$name" 2>&1) ||
+    die "$name does not serve runner link calls (docker logs $name | grep RunnerLink)"
+done
 if [ "$tls_mode" = files ]; then
   # The link answers TLS for the name clients use, with the staging CA, and refuses a plain request with 426.
   code="$(curl -s -o /dev/null -w '%{http_code}' --cacert "$tls/ca.pem" --resolve "$host:$link_port:$bind" "https://$host:$link_port/")"
@@ -203,7 +259,8 @@ cat <<EOF
   web and API      $origin            (owner: owner@orbit-staging.test, password in $secrets/owner_password)
   runner link      $link_url
   link metrics     $metrics
-  NATS             nats://$bind:$nats_port, monitoring http://127.0.0.1:$nats_monitor_port
+  NATS             nats://$bind:$nats_port, monitoring http://127.0.0.1:$nats_monitor_port (nkey users: $secrets/nats_*)
+  link mode        MODE_${mode^^}, forwarding to $backend_urls
   state            $state             (staging.json describes all of it)
   test client      $here/staging-client.sh -duration 60s
   stop             $here/staging-down.sh

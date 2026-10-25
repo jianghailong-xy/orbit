@@ -223,10 +223,13 @@ test('a link call is the runner its link token names, with the process the token
     'x-orbit-link-request-id': requestId,
     'x-orbit-link-session-id': sessionId,
     'x-orbit-link-after-seq': '9',
+    'x-orbit-link-gateway-id': 'orbit-link-gateway',
   });
   assert.equal(await guardOf(fixture).canActivate(contextOf(request)), true);
   assert.equal((request.runner as { id: string }).id, fixture.runnerId);
-  assert.deepEqual(request.runnerLink, { leaseOwner: fixture.leaseOwner, requestId, afterSeq: { sessionId, seq: 9 } });
+  assert.deepEqual(request.runnerLink, {
+    leaseOwner: fixture.leaseOwner, requestId, afterSeq: { sessionId, seq: 9 }, gatewayId: 'orbit-link-gateway',
+  });
   assert.equal(request.managedRunnerInstance, undefined);
 });
 

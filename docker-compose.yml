@@ -226,6 +226,14 @@ services:
       # configured; otherwise nothing connects. With NATS unreachable a hint is dropped and counted in the log, and the
       # runner learns of its work at its next heartbeat.
       RUNNER_LINK_NATS_URL: "${RUNNER_LINK_NATS_URL:-nats://nats:4222}"
+      # The runner link's calls (src/apiserver/src/runner-api/runner-link-call.ts): the runner routes, served to the link
+      # gateway alone on a listener of their own, which opens only while the link above is configured. It binds every
+      # interface of this container, so the gateway reaches it over this project's network; the port is published
+      # nowhere, and every call must present RUNNER_LINK_GATEWAY_TOKEN. Then the apiserver's NATS credential: the seed of
+      # its nkey user (src/link-gateway/nats.conf; generate with: docker compose run --rm --no-deps link-gateway nkey).
+      RUNNER_LINK_INTERNAL_PORT: "${RUNNER_LINK_INTERNAL_PORT:-3001}"
+      RUNNER_LINK_INTERNAL_HOST: "${RUNNER_LINK_INTERNAL_HOST:-0.0.0.0}"
+      RUNNER_LINK_NATS_SEED: "${RUNNER_LINK_NATS_APISERVER_SEED:-}"
       # Optional: managed runners (docs/self-hosting.md, "Managed runners"): every account gets a runner of its own,
       # a container on this host's Docker, at sign-in. Off unless the host's .env says true. A fresh install
       # (scripts/install-server.sh) writes that line and an upgrade never does, so a deployment that predates managed
@@ -401,9 +409,11 @@ services:
   # endpoint runners connect to, on a port of its own published straight from this host, never through the web gateway
   # above or a proxying CDN. It checks each connection token with the public half of the apiserver's signing key and
   # reads revoked runner credentials from the apiserver with the gateway secret; it holds no signing key and no database
-  # connection. Until the link is switched over it keeps connections, answers heartbeats and compares what runners
-  # mirror to it, and forwards nothing (src/link-gateway/README.md). It runs only under the runner-link profile, which no
-  # install switches on, so a deployment whose .env does not name that profile runs exactly what it ran.
+  # connection. Until the link is switched over (MODE_HTTP, as LINK_MODE is unset here) it keeps connections, answers
+  # heartbeats and compares what runners mirror to it, and forwards nothing; once switched, it forwards their calls to
+  # the apiserver's internal listener and their live streams to NATS (src/link-gateway/README.md). It runs only under the
+  # runner-link profile, which no install switches on, so a deployment whose .env does not name that profile runs
+  # exactly what it ran.
   link-gateway:
     profiles: [runner-link]
     build:
@@ -426,8 +436,12 @@ services:
       LINK_PUBLIC_KEYS: "${RUNNER_LINK_PUBLIC_KEY:-}"
       LINK_GATEWAY_TOKEN: "${RUNNER_LINK_GATEWAY_TOKEN:-}"
       LINK_API_URL: http://apiserver:3000
-      # Where the apiserver publishes runner hints; the gateway subscribes for the runners it holds connections of.
+      # The apiserver's listener for runner link calls (RUNNER_LINK_INTERNAL_PORT above), inside this project's network.
+      LINK_INTERNAL_API_URLS: "http://apiserver:${RUNNER_LINK_INTERNAL_PORT:-3001}"
+      # Where the apiserver publishes runner hints; the gateway subscribes for the runners it holds connections of, and
+      # connects as its own nkey user (src/link-gateway/nats.conf) with this seed.
       LINK_NATS_URL: nats://nats:4222
+      LINK_NATS_SEED: "${RUNNER_LINK_NATS_GATEWAY_SEED:-}"
       # Certificates: from files in RUNNER_LINK_GATEWAY_DIR/tls, reloaded when they change, unless
       # RUNNER_LINK_ACME_DOMAINS names the link's host, when the gateway obtains and renews them itself (TLS-ALPN-01,
       # which needs RUNNER_LINK_PORT=443) and keeps them in RUNNER_LINK_GATEWAY_DIR/acme.
@@ -453,11 +467,14 @@ services:
       start_period: 10s
 
   # The runner link's message bus (docs/runner-link-design.md §6.3): NATS, its core publish and subscribe and nothing
-  # else. It stores nothing: no JetStream, no volume. The apiserver publishes a hint for a runner on rnr.<runnerId> after
+  # else. It stores nothing: no JetStream, no store. The apiserver publishes a hint for a runner on rnr.<runnerId> after
   # the commit it announces, and the link gateway holding that runner's connection relays it; a hint lost while NATS is
-  # down costs that runner one heartbeat interval. Flags only, so the image's own configuration file, which opens a
-  # cluster port with a well-known route password, is never read. It is reached inside this project's network and on no
-  # port of the host, monitoring included, and runs only under the runner-link profile, beside the gateway.
+  # down costs that runner one heartbeat interval. Live streams travel on ses.<sessionId>.live while a client watches.
+  # Its whole configuration is src/link-gateway/nats.conf, mounted read-only and the only file read, so the image's own,
+  # which opens a cluster port with a well-known route password, never is: two nkey users, the apiserver and the
+  # gateway, each allowed only what it does, by the public keys below. With either key unset nats-server refuses to
+  # start, and a client without a seed cannot connect. It is reached inside this project's network and on no port of
+  # the host, monitoring included, and runs only under the runner-link profile, beside the gateway.
   nats:
     profiles: [runner-link]
     image: nats:2.15-alpine
@@ -467,7 +484,12 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
-    command: ["--http_port", "8222"]
+    command: ["--config", "/etc/orbit-nats/nats.conf"]
+    environment:
+      RUNNER_LINK_NATS_APISERVER_KEY: "${RUNNER_LINK_NATS_APISERVER_KEY:-}"
+      RUNNER_LINK_NATS_GATEWAY_KEY: "${RUNNER_LINK_NATS_GATEWAY_KEY:-}"
+    volumes:
+      - ./src/link-gateway/nats.conf:/etc/orbit-nats/nats.conf:ro
     expose:
       - "4222"
     healthcheck:

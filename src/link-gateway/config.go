@@ -71,14 +71,68 @@ type config struct {
 
 	// NATSURL is where the apiserver publishes runner hints (hints.go); empty, the gateway relays none.
 	NATSURL string
+	// NATSSeed is the gateway's NATS user nkey seed (an "SU…" seed), from LINK_NATS_SEED: the credential the gateway
+	// connects with. Never logged.
+	NATSSeed string
 
 	// FrameLog is "lifecycle" (Hello, Welcome, Drain, Close and anything refused), "all" (a summary of every frame
 	// either way) or "off".
 	FrameLog string
 
-	// Mode is what Welcome and HeartbeatAck tell runners. Version 0 forwards nothing, so it is always MODE_HTTP;
-	// the field exists for the tests that pin what a MODE_LINK connection may forward.
+	// Mode is what Welcome and HeartbeatAck tell runners, and so whether a connection's work is forwarded (MODE_LINK)
+	// or only compared (MODE_HTTP, the shadow period). LINK_MODE sets it until the server's RUNNER_LINK_REQUIRED switch
+	// decides it (task D0).
 	Mode linkpb.Mode
+
+	// InternalAPIURLs are the apiserver's internal listeners for runner link calls (RUNNER_LINK_INTERNAL_PORT), one per
+	// apiserver instance: the backends every forwarded call goes to (backend.go). Required in MODE_LINK.
+	InternalAPIURLs []string
+	// RPCTimeout bounds one forwarded call to a backend, retries included.
+	RPCTimeout time.Duration
+
+	// The rest is fixed by the design or by this version; fields only so that tests can shorten them.
+	link linkTuning
+}
+
+// linkTuning holds what the forwarding paths are bound by (forward.go, events.go, live.go).
+type linkTuning struct {
+	// MaxRPCsInFlight bounds one connection's forwarded calls at once; a call past it is answered retryable.
+	MaxRPCsInFlight int
+	// MaxIngestPerConn bounds how many sessions' event batches one connection forwards at once.
+	MaxIngestPerConn int
+	// Credit is what each connection may have unacknowledged while the gateway's ingest queue is short, and Reduced
+	// what it may have once the queue is past HighWater; it is restored below LowWater (events.go).
+	Credit, Reduced     creditLevel
+	HighWater, LowWater creditLevel
+	// RetryBudget is how long a call keeps being retried on other backends, and BackendDownFor how long a backend
+	// that could not be dialed is passed over.
+	RetryBudget, BackendDownFor time.Duration
+	// WatchersTTL is how long an apiserver instance's count of a session's watchers stands without being repeated
+	// (live.go).
+	WatchersTTL time.Duration
+	// PrefixTimeout is how long a turn prefix request waits for the runner's answer.
+	PrefixTimeout time.Duration
+}
+
+// creditLevel is an amount of durable events: a count and their payload bytes.
+type creditLevel struct {
+	Events uint32
+	Bytes  uint64
+}
+
+func defaultLinkTuning() linkTuning {
+	return linkTuning{
+		MaxRPCsInFlight:  64,
+		MaxIngestPerConn: 8,
+		Credit:           creditLevel{Events: 10_000, Bytes: 64 << 20},
+		Reduced:          creditLevel{Events: 1_000, Bytes: 8 << 20},
+		HighWater:        creditLevel{Events: 100_000, Bytes: 512 << 20},
+		LowWater:         creditLevel{Events: 50_000, Bytes: 256 << 20},
+		RetryBudget:      5 * time.Second,
+		BackendDownFor:   5 * time.Second,
+		WatchersTTL:      60 * time.Second,
+		PrefixTimeout:    10 * time.Second,
+	}
 }
 
 // letsEncrypt is the ACME directory used unless LINK_ACME_DIRECTORY_URL names another.
@@ -163,8 +217,19 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		DrainGrace:         dur("LINK_DRAIN_GRACE", 15*time.Second),
 		DrainTimeout:       dur("LINK_DRAIN_TIMEOUT", 80*time.Second),
 		NATSURL:            str("LINK_NATS_URL", ""),
+		NATSSeed:           strings.TrimSpace(getenv("LINK_NATS_SEED")),
 		FrameLog:           str("LINK_FRAME_LOG", "lifecycle"),
 		Mode:               linkpb.Mode_MODE_HTTP,
+		InternalAPIURLs:    splitList(getenv("LINK_INTERNAL_API_URLS")),
+		RPCTimeout:         dur("LINK_RPC_TIMEOUT", 60*time.Second),
+		link:               defaultLinkTuning(),
+	}
+	switch mode := str("LINK_MODE", "http"); mode {
+	case "http":
+	case "link":
+		c.Mode = linkpb.Mode_MODE_LINK
+	default:
+		problems = append(problems, fmt.Sprintf("LINK_MODE=%q is not http or link", mode))
 	}
 
 	if c.TLSMode == "" {
@@ -211,7 +276,26 @@ func configFromEnv(getenv func(string) string) (config, error) {
 	if c.NATSURL != "" {
 		if u, err := url.Parse(c.NATSURL); err != nil || u.Scheme != "nats" || u.Host == "" {
 			problems = append(problems, fmt.Sprintf("LINK_NATS_URL=%q is not a nats:// address", c.NATSURL))
+		} else if u.User != nil {
+			problems = append(problems, "LINK_NATS_URL carries credentials: give the gateway its nkey seed in LINK_NATS_SEED instead")
 		}
+	}
+	if c.NATSSeed != "" {
+		// The seed itself is never repeated in a problem: it is a credential.
+		if _, err := natsUserKey(c.NATSSeed); err != nil {
+			problems = append(problems, "LINK_NATS_SEED is not a NATS user nkey seed (link-gateway nkey makes one): "+err.Error())
+		}
+	}
+	for _, raw := range c.InternalAPIURLs {
+		if u, err := url.Parse(raw); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || (u.Path != "" && u.Path != "/") {
+			problems = append(problems, fmt.Sprintf("LINK_INTERNAL_API_URLS: %q is not an http:// or https:// address without a path", raw))
+		}
+	}
+	if c.Mode == linkpb.Mode_MODE_LINK && len(c.InternalAPIURLs) == 0 {
+		problems = append(problems, "LINK_MODE=link needs LINK_INTERNAL_API_URLS: the apiserver's internal listener (RUNNER_LINK_INTERNAL_PORT) that runner calls are forwarded to")
+	}
+	for i, raw := range c.InternalAPIURLs {
+		c.InternalAPIURLs[i] = strings.TrimRight(raw, "/")
 	}
 	if c.DrainReconnectMax < c.DrainReconnectMin {
 		problems = append(problems, "LINK_DRAIN_RECONNECT_MAX is shorter than LINK_DRAIN_RECONNECT_MIN")
