@@ -138,8 +138,9 @@ type linkMode struct {
 // seq a call depending on its events waits for (after_seq).
 type linkSession struct {
 	// sent is the highest event seq handed to the control plane for the session, stored or not; stored, the highest
-	// it acknowledged storing.
-	sent, stored uint64
+	// it acknowledged storing. sentRow and storedRow are the same of the events it stores as rows (linkRowEvent).
+	sent, stored       uint64
+	sentRow, storedRow uint64
 	// turn is the message or shell turn the inbox handed this process that no turn completion has ended yet.
 	turn    string
 	touched time.Time
@@ -350,10 +351,13 @@ func (m *linkMode) call(ctx context.Context, route, method, path string, body, o
 		// A turn completion is handled once the session's events it follows are stored (§5.6): its delivery receipt
 		// among them. Whatever of them the session's event stream still holds goes at once.
 		session = linkPathSegment(path, 2)
-		rpc.SessionId, rpc.AfterSeq = session, m.sentSeq(session)
+		if after := m.afterSeq(session); after > 0 {
+			rpc.SessionId, rpc.AfterSeq = session, after
+		}
 		m.events.hurry(session)
 	}
 	var pendingSince time.Time
+	lowered := false
 	for {
 		resp, err := m.work.rpc(ctx, rpc)
 		if err != nil {
@@ -365,14 +369,18 @@ func (m *linkMode) call(ctx context.Context, route, method, path string, body, o
 				pendingSince = now
 			}
 			if now.Sub(pendingSince) >= linkAfterSeqWait {
-				stored := m.storedSeq(session)
-				m.log(fmt.Sprintf("runner link: %s %s waited %s for the session's events through seq %d; it now depends only on those the control plane acknowledged, through seq %d",
-					method, path, linkAfterSeqWait, rpc.GetAfterSeq(), stored))
-				rpc.AfterSeq = min(rpc.GetAfterSeq(), stored)
-				if rpc.GetAfterSeq() == 0 {
+				// First it depends only on the events the control plane acknowledged storing; should even those not
+				// satisfy it after another wait, on none.
+				after := uint64(0)
+				if !lowered {
+					after = min(rpc.GetAfterSeq(), m.storedRowSeq(session))
+				}
+				m.log(fmt.Sprintf("runner link: %s %s waited %s for the session's events through seq %d; it now depends only on those the control plane acknowledged storing, through seq %d",
+					method, path, linkAfterSeqWait, rpc.GetAfterSeq(), after))
+				rpc.AfterSeq, lowered, pendingSince = after, true, now
+				if after == 0 {
 					rpc.SessionId = ""
 				}
-				continue
 			}
 			wait := time.Duration(resp.GetRetryAfterMs()) * time.Millisecond
 			if wait <= 0 {
@@ -445,6 +453,9 @@ func (m *linkMode) sentEvents(sessionID string, events []RunEvent) {
 	for _, e := range events {
 		if e.Seq > 0 {
 			s.sent = max(s.sent, uint64(e.Seq))
+			if linkRowEvent(e.Type, e.Payload) {
+				s.sentRow = max(s.sentRow, uint64(e.Seq))
+			}
 		}
 	}
 }
@@ -460,6 +471,9 @@ func (m *linkMode) storedEvents(sessionID string, events []RunEvent) {
 	for _, e := range events {
 		if e.Seq > 0 {
 			s.stored = max(s.stored, uint64(e.Seq))
+			if linkRowEvent(e.Type, e.Payload) {
+				s.storedRow = max(s.storedRow, uint64(e.Seq))
+			}
 		}
 	}
 }
@@ -502,24 +516,27 @@ func (m *linkMode) supervising(ids []string) {
 	m.gates.keepInbox(ids)
 }
 
-// sentSeq is the highest event seq handed to the control plane for a session, over HTTPS or to its event stream on
-// the link: what a call depending on its events waits for (after_seq).
-func (m *linkMode) sentSeq(sessionID string) uint64 {
-	tail, _ := m.events.tail(sessionID)
+// afterSeq is what a call depending on a session's events waits for (after_seq): the highest seq handed to the control
+// plane, over HTTPS or to its event stream on the link, of an event it stores as a row. The control plane counts a
+// call's events stored once a row holds a seq at or past after_seq (assertAfterSeqStored, runner-link-call.ts); a
+// live event or a bare ping is stored as nothing, and a call that waited for one would wait for ever. storedRowSeq is
+// the highest of those it acknowledged storing.
+func (m *linkMode) afterSeq(sessionID string) uint64 {
+	handed, _ := m.events.rowSeqs(sessionID)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if s := m.sessions[sessionID]; s != nil {
-		return max(s.sent, tail)
+		return max(s.sentRow, handed)
 	}
-	return tail
+	return handed
 }
 
-func (m *linkMode) storedSeq(sessionID string) uint64 {
-	_, stored := m.events.tail(sessionID)
+func (m *linkMode) storedRowSeq(sessionID string) uint64 {
+	_, stored := m.events.rowSeqs(sessionID)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if s := m.sessions[sessionID]; s != nil {
-		return max(s.stored, stored)
+		return max(s.storedRow, stored)
 	}
 	return stored
 }

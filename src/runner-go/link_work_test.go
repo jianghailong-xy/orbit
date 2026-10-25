@@ -478,7 +478,7 @@ func TestEventsGoOverTheLinkAsEventBatches(t *testing.T) {
 	if n := len(r.g.rpcsTo("/runner/sessions/session-a/events")); n != 0 {
 		t.Errorf("%d event batches went as calls", n)
 	}
-	if got := r.m.storedSeq("session-a"); got != 6 {
+	if got := r.m.storedRowSeq("session-a"); got != 6 {
 		t.Errorf("stored through %d", got)
 	}
 }

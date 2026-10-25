@@ -878,6 +878,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				return err
 			}
 		}
+		if linkStream != nil && linkStream.onLink() {
+			// The link came back in use while this flush waited its turn: its stream sends what it holds, and
+			// the buffer goes to it, behind that.
+			return errLinkEventsMoved
+		}
 		rest, err := sendOverHTTPS(flushCtx, takeBuffered(flushCtx), func(sent []RunEvent) { backlog.settled(len(sent)) })
 		if isLeaseOwnershipError(err) {
 			// Another process owns the session now: none of this will ever be sent from here.

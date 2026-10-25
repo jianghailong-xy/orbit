@@ -68,14 +68,35 @@ type linkLiveStream struct {
 	// waits until it is stored.
 	holdText, holdThinking uint64
 
-	// The turn prefix: the reply text and the thinking streamed since the last boundary, each given up (gone) once it
-	// passes linkTurnPrefixMaxChars, until the next boundary; the turn they belong to; the live_seq of the last delta
-	// folded in.
-	turn                string
-	text, thinking      string
-	textGone, thinkGone bool
-	through             uint64
+	// The turn prefix: the reply text and the thinking streamed since the last boundary, each with its length in UTF-16
+	// units and given up (gone) once that passes linkTurnPrefixMaxChars, until the next boundary; the turn they belong
+	// to; the live_seq of the last delta folded in. Folding a delta in costs what the delta is long, however long the
+	// prefix: it happens under the session's buffer lock, for every delta, in HTTP mode too.
+	turn           string
+	text, thinking linkTurnPrefixPart
+	through        uint64
 }
+
+// linkTurnPrefixPart is the reply text or the thinking of a turn prefix.
+type linkTurnPrefixPart struct {
+	b    []byte
+	n    int // UTF-16 units
+	gone bool
+}
+
+// add folds a delta in, or gives the part up once it would pass linkTurnPrefixMaxChars.
+func (p *linkTurnPrefixPart) add(chunk string) {
+	if p.gone {
+		return
+	}
+	if n := linkUTF16Len(chunk); p.n+n <= linkTurnPrefixMaxChars {
+		p.b, p.n = append(p.b, chunk...), p.n+n
+		return
+	}
+	*p = linkTurnPrefixPart{gone: true}
+}
+
+func (p *linkTurnPrefixPart) String() string { return string(p.b) }
 
 // emitted takes an event as its session emits it, in emission order, under the session's buffer lock, and says what
 // becomes of it, with the payload it goes with: in link mode, by linkEventFateOf, and otherwise durable as over HTTPS.
@@ -206,31 +227,26 @@ func linkSupersededPrefix(eventType string, payload map[string]interface{}) stri
 func (l *linkLiveStream) foldLocked(turnID, eventType string, payload map[string]interface{}) {
 	switch linkSupersededPrefix(eventType, payload) {
 	case "both":
-		l.text, l.textGone, l.thinking, l.thinkGone = "", false, "", false
+		l.text, l.thinking = linkTurnPrefixPart{}, linkTurnPrefixPart{}
 		return
 	case "thinking":
-		l.thinking, l.thinkGone = "", false
+		l.thinking = linkTurnPrefixPart{}
 		return
 	}
-	var held *string
-	var gone *bool
+	var part *linkTurnPrefixPart
 	switch eventType {
 	case evTextDelta:
-		held, gone = &l.text, &l.textGone
+		part = &l.text
 	case evThinkingDelta:
-		held, gone = &l.thinking, &l.thinkGone
+		part = &l.thinking
 	default:
 		return
 	}
 	chunk, _ := payload["text"].(string)
-	if chunk == "" || *gone {
+	if chunk == "" || part.gone {
 		return
 	}
-	if linkUTF16Len(*held)+linkUTF16Len(chunk) > linkTurnPrefixMaxChars {
-		*held, *gone = "", true
-	} else {
-		*held += chunk
-	}
+	part.add(chunk)
 	l.turn, l.through = turnID, l.seq
 }
 
@@ -416,8 +432,8 @@ func (e *linkEvents) turnPrefix(req *linkpb.TurnPrefixRequest) *linkpb.TurnPrefi
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.watched = true
-	if l.text != "" || l.thinking != "" {
-		resp.TurnId, resp.Text, resp.Thinking = l.turn, l.text, l.thinking
+	if len(l.text.b) > 0 || len(l.thinking.b) > 0 {
+		resp.TurnId, resp.Text, resp.Thinking = l.turn, l.text.String(), l.thinking.String()
 	}
 	resp.ThroughLiveSeq = l.through
 	e.poke()

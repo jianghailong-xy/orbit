@@ -89,6 +89,14 @@ func linkNoiseSystemEvent(eventType string, payload map[string]interface{}) bool
 	return true
 }
 
+// linkRowEvent reports whether the control plane stores an event, as it was sent, as a row of run_event: over HTTPS and
+// over the link alike, a live-only event and a noise ping are stored as nothing. Only a row can satisfy a call's
+// after_seq (assertAfterSeqStored, runner-link-call.ts): a turn completion that depended on a seq held by nothing but a
+// ping would wait for ever.
+func linkRowEvent(eventType string, payload map[string]interface{}) bool {
+	return !linkLiveOnlyTypes[eventType] && !linkNoiseSystemEvent(eventType, payload)
+}
+
 // linkEventFateOf is what becomes of an event in link mode, and the payload it goes with: a ping-shaped
 // coordinator-context boundary goes with "provider" added.
 func linkEventFateOf(eventType string, payload map[string]interface{}, provider string) (linkEventFate, map[string]interface{}) {
