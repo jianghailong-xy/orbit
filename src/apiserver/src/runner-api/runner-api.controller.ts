@@ -153,6 +153,7 @@ import {
   isAccountEngine,
   withEnginePlanUsage,
   type AccountEngine,
+  type NormalizedRunEvent,
   toUuid,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
@@ -335,6 +336,15 @@ import { stripNul } from './strip-nul';
 import { SessionNamingDto } from './session-naming';
 import { normalizeToolOutputEvent } from './tool-output';
 import {
+  readLinkEventBatch,
+  refusedValueState,
+  rejectionOf,
+  tombstoneRow,
+  unstorableTombstone,
+  type LinkEventsAnswer,
+  type LinkTombstone,
+} from './link-events';
+import {
   deriveTaskCompletionStatus,
   type TaskCompletionCriterionValue,
 } from '../tasks/task-completion-criterion';
@@ -354,6 +364,7 @@ import {
   isNoiseSystemEvent,
   NON_REPLAYABLE_EVENT_TYPES,
   replayableEventSql,
+  TOMBSTONE_EVENT_TYPE,
 } from '../common/system-noise';
 import { isInstallEngine, isKimiRegion, isLoginEngine, sanitizeRunnerEngines, usedRunnerEngines } from '../common/runner-engines';
 import { antigravityGoogleLoginRefusal, antigravitySignInUnderWay } from '../common/antigravity-readiness';
@@ -6527,8 +6538,14 @@ export class RunnerApiController {
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/events')
   @HttpCode(202)
-  async events(@CurrentRunner() runner: { id: string }, @Param('id', PublicIdPipe) sessionId: string, @Body() batch: RunEventBatch) {
+  async events(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Body() batch: RunEventBatch,
+    @CurrentRunnerLink() link?: RunnerLinkContext,
+  ) {
     await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
+    if (link) return this.linkEvents(runner, sessionId, batch, link);
     const leaseOwner = parseLeaseGeneration(batch?.leaseOwner);
     // Sanitized here, at the edge, so nothing downstream can carry a byte Postgres refuses:
     // every write below — run_event.payload, tool_call, the denormalized preview columns — is
@@ -6539,29 +6556,127 @@ export class RunnerApiController {
     // it as payload.snapshotSeq for snapshot ordering). An older client that ignores the unknown
     // event therefore cannot advance its durable resume cursor past an event we never store.
     const events = stripNul(batch?.events ?? []).map(normalizeToolOutputEvent);
+    await this.ingestEvents(runner, sessionId, leaseOwner, events);
+    return { ok: true };
+  }
 
-    // Persist idempotently — RunEvent has @@unique([sessionId, seq]) + skipDuplicates.
-    // text_delta / thinking_delta are streaming-animation increments: broadcast them
-    // live (below) but DON'T persist them — the full reply is durably saved as the
-    // trailing `assistant` / `thinking` event, so replay/refresh still shows complete
-    // text without piling up rows. background_output is the live tail of a background
-    // shell's file, and tool_output is the current output snapshot of an in-flight foreground
-    // shell — same deal (ephemeral animation; their durable records are background_task / the
-    // final tool_result respectively). The shared deny-list also fences control-plane nudges such
-    // as approvals/resync if a newer or misbehaving runner ever sends one through this generic
-    // event ingress; the read paths use the same list for rolling-deployment history compatibility.
-    const durable = events.filter((e) => !NON_REPLAYABLE_EVENT_TYPES.includes(e.type));
+  /**
+   * A batch of durable events over the runner link (docs/runner-link-design.md §5.8, §6.6; link-events.ts), stored by
+   * the ingest HTTPS uses with two differences:
+   *
+   *   - an event the server will not store fails on its own. A tombstone holds its seq and the answer names it in
+   *     `rejected`, while the events after it are stored as usual, so the session's events stay numbered without a
+   *     hole and the answer's `durableSeq` covers the whole batch;
+   *   - it is stored once per seq with everything derived from it, so a batch sent again, or two copies of it on two
+   *     backends, write no row twice (ingestEvents). A batch found stored is answered as it was the first time: the
+   *     same durableSeq, and the same `rejected`, read back from its tombstones.
+   *
+   * The answer is what the gateway's EventAck says. An event is refused for what readLinkEventBatch finds in it, or
+   * because the database refuses one of its values (storeLinkEvents). Any other failure fails the batch as it does over
+   * HTTPS: the session closed, the lease lost, the database unavailable, a fault in the ingest itself. Nothing is
+   * tombstoned for such a failure, because it is not the event's own.
+   */
+  private async linkEvents(
+    runner: { id: string },
+    sessionId: string,
+    batch: unknown,
+    link: RunnerLinkContext,
+  ): Promise<LinkEventsAnswer> {
+    // The process the link token was minted for: the connection is its, whatever the body says.
+    const leaseOwner = parseLeaseGeneration(link.leaseOwner, 'leaseOwner');
+    const { events, tombstones, firstSeq, lastSeq } = readLinkEventBatch(batch);
+    const { unstorable, alreadyStored } = await this.storeLinkEvents(runner, sessionId, leaseOwner, events, tombstones);
+    if (alreadyStored === 0 && tombstones.length + unstorable.length === 0) return { ok: true, durableSeq: lastSeq, rejected: [] };
+    // What the session's tombstones say of the batch's seqs, whichever delivery wrote them.
+    const rejected = (await this.prisma.runEvent.findMany({
+      where: { sessionId, seq: { gte: firstSeq, lte: lastSeq }, type: TOMBSTONE_EVENT_TYPE },
+      orderBy: { seq: 'asc' },
+      select: { seq: true, payload: true },
+    })).map(rejectionOf);
+    if (alreadyStored === 0) {
+      this.logger.warn(`session ${sessionId}: ${rejected.length} event(s) refused over the runner link and held by tombstones: `
+        + rejected.slice(0, 10).map((r) => `seq ${r.seq} ${r.code}`).join(', ')
+        + (rejected.length > 10 ? ', …' : ''));
+    }
+    return { ok: true, durableSeq: lastSeq, rejected };
+  }
+
+  /**
+   * Stores link events with the tombstones of those already refused. When the database refuses a value of one of them,
+   * the events are stored in halves, and those halves in halves, until the one it refuses is found and tombstoned
+   * (EVENT_UNSTORABLE). Storing a batch in parts is what a runner does anyway when it flushes a batch in pieces, and
+   * every part is the same ingest, stored once per seq. Returns the events tombstoned that way, and how many of the
+   * batch's seqs were found already stored.
+   */
+  private async storeLinkEvents(
+    runner: { id: string },
+    sessionId: string,
+    leaseOwner: string | null,
+    events: NormalizedRunEvent[],
+    tombstones: LinkTombstone[],
+  ): Promise<{ unstorable: LinkTombstone[]; alreadyStored: number }> {
+    try {
+      const { alreadyStored } = await this.ingestEvents(runner, sessionId, leaseOwner, events, { tombstones });
+      return { unstorable: [], alreadyStored };
+    } catch (error) {
+      const sqlState = events.length > 0 ? refusedValueState(error) : null;
+      if (sqlState === null) throw error;
+      if (events.length === 1) {
+        const refused = unstorableTombstone(events[0], sqlState);
+        const { alreadyStored } = await this.ingestEvents(runner, sessionId, leaseOwner, [], { tombstones: [...tombstones, refused] });
+        return { unstorable: [refused], alreadyStored };
+      }
+    }
+    const half = Math.ceil(events.length / 2);
+    const first = await this.storeLinkEvents(runner, sessionId, leaseOwner, events.slice(0, half), tombstones);
+    const rest = await this.storeLinkEvents(runner, sessionId, leaseOwner, events.slice(half), []);
+    return { unstorable: [...first.unstorable, ...rest.unstorable], alreadyStored: first.alreadyStored + rest.alreadyStored };
+  }
+
+  /**
+   * Stores one batch of a session's events and derives the session's state from them: the one ingest of both doors,
+   * HTTPS (`events`) and the runner link (`linkEvents`). A link batch also carries the tombstones of the events it
+   * refused, and is stored once per seq with everything derived from it (`link`). Says how many of the batch's seqs
+   * were already stored.
+   */
+  private async ingestEvents(
+    runner: { id: string },
+    sessionId: string,
+    leaseOwner: string | null,
+    batch: NormalizedRunEvent[],
+    link?: { tombstones: readonly LinkTombstone[] },
+  ): Promise<{ alreadyStored: number }> {
     // Retried whole. This is the durable event batch, and it is the clearest case for a retry there
     // is: every write in it is already idempotent (`run_event` by `(sessionId, seq)` with
     // skipDuplicates, the tool_call outcome by tool_use id, the running sets by set semantics),
-    // `durable` and `events` are derived from the request body above, and the ONE Session write is
-    // accumulated from a row re-read under its lock on every attempt. The live broadcast below is
-    // outside the loop, so a retried batch is published once, after the attempt that committed.
+    // `durable` and `events` are derived from the request body on every attempt, and the ONE
+    // Session write is accumulated from a row re-read under its lock on every attempt. The live
+    // broadcast below is outside the loop, so a retried batch is published once, after the attempt
+    // that committed.
     const eventOutcome = await withTransactionRetry(this.prisma, async (tx) => {
       // Take the Session lock before any event-side write. Besides fencing stale runner
       // processes, a consistent lock order prevents event writes from racing a takeover
       // outside the transaction and later deadlocking when they touch Session.
       await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
+      // A link batch is stored once per seq, and so is everything derived from it: an event whose seq the session
+      // already holds is left out before anything is written, tool calls and session state included. That covers a
+      // batch sent again after its answer was lost, and a copy of it another backend took while this one waited for
+      // the lock above. Read after the lock, so such a copy sees the rows the first committed. Over HTTPS a batch is
+      // taken whole, as it always was.
+      const stored = link ? await this.storedSeqs(tx, sessionId, batch, link.tombstones) : new Set<number>();
+      const events = stored.size > 0 ? batch.filter((e) => !stored.has(e.seq)) : batch;
+      const tombstones = link ? link.tombstones.filter((t) => !stored.has(t.seq)) : [];
+      // Persist idempotently — RunEvent has @@unique([sessionId, seq]) + skipDuplicates.
+      // text_delta / thinking_delta are streaming-animation increments: broadcast them
+      // live (below) but DON'T persist them — the full reply is durably saved as the
+      // trailing `assistant` / `thinking` event, so replay/refresh still shows complete
+      // text without piling up rows. background_output is the live tail of a background
+      // shell's file, and tool_output is the current output snapshot of an in-flight foreground
+      // shell — same deal (ephemeral animation; their durable records are background_task / the
+      // final tool_result respectively). The shared deny-list also fences control-plane nudges such
+      // as approvals/resync if a newer or misbehaving runner ever sends one through this generic
+      // event ingress; the read paths use the same list for rolling-deployment history compatibility.
+      const durable = events.filter((e) => !NON_REPLAYABLE_EVENT_TYPES.includes(e.type));
       const session = await tx.session.findUniqueOrThrow({
         where: { id: sessionId },
         select: {
@@ -6716,6 +6831,16 @@ export class RunnerApiController {
         if (hasSessionActivity(durable) && session.cancelRequestedAt == null) {
           sessionData.lastTurnAt = new Date();
         }
+      }
+      // The seqs of the events a link batch refused (linkEvents): a tombstone holds each one, written with the events
+      // around it and as idempotently, so a batch sent again finds it there. It is never read back as an event
+      // (NON_REPLAYABLE_EVENT_TYPES), and it keeps `max(seq)` past the refused event, so a resumed runner never
+      // reuses that seq.
+      if (tombstones.length > 0) {
+        await tx.runEvent.createMany({
+          data: tombstones.map((tombstone) => tombstoneRow(tombstone, sessionId, runner.id, leaseOwner)),
+          skipDuplicates: true,
+        });
       }
 
       // Dynamic runtimes report their session id in an init/resumed event; unlike Claude
@@ -7207,8 +7332,10 @@ export class RunnerApiController {
           },
         });
       }
-      return { session, currentWorkAcknowledged, abandonedApprovals, accountReload };
+      return { session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size };
     }, loggedRetry(this.logger, 'runnerApi.events', { transaction: { timeout: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS, maxWait: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS } }));
+    // What the attempt that committed stored: the whole batch, or for a link batch what was not already stored.
+    const { events, durable } = eventOutcome;
 
     if (eventOutcome.accountReload) this.realtime.notifyInbox(sessionId);
     // One frame per collected card, as a takeover sends: the clients re-read the conversation's
@@ -7235,13 +7362,11 @@ export class RunnerApiController {
       this.realtime.publishQueuedTurnsChanged(sessionId);
     }
     if (OPEN.includes(eventOutcome.session.status)) {
-      for (const e of events) {
-        // Persisted above either way — but a `system` progress ping renders as nothing on every
-        // client, so spending a frame on it only costs the reader bandwidth. The replay paths
-        // drop the same events (notNoiseSql), so live and replayed transcripts agree.
-        if (isNoiseSystemEvent(e)) continue;
-        this.realtime.publish(sessionId, e);
-      }
+      // Persisted above either way — but a `system` progress ping renders as nothing on every
+      // client, so spending a frame on it only costs the reader bandwidth. The replay paths
+      // drop the same events (notNoiseSql), so live and replayed transcripts agree. Published
+      // as one batch: the other replicas hear of it once, not once per event (publishBatch).
+      this.realtime.publishBatch(sessionId, events.filter((e) => !isNoiseSystemEvent(e)));
     }
     // Two of the three facts the spend fuse is read on (contract §6.1 F5): this batch committed a
     // turn nobody delivered, or a call that opened a session. Decided from the batch already in
@@ -7256,7 +7381,29 @@ export class RunnerApiController {
     } else if (events.some((e) => e.type === RunEventType.TOOL_USE)) {
       await this.fuse?.afterCoordinatorSpend(sessionId, 'tool_call');
     }
-    return { ok: true };
+    return { alreadyStored: eventOutcome.alreadyStored };
+  }
+
+  /**
+   * Which seqs of a link batch the session already holds a row at, an event's or a tombstone's: read inside the ingest's
+   * transaction, under the session lock.
+   */
+  private async storedSeqs(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    events: readonly NormalizedRunEvent[],
+    tombstones: readonly LinkTombstone[],
+  ): Promise<Set<number>> {
+    const seqs = [...events.map((e) => e.seq), ...tombstones.map((t) => t.seq)];
+    if (seqs.length === 0) return new Set();
+    const rows = await tx.runEvent.findMany({
+      where: {
+        sessionId,
+        seq: { gte: seqs.reduce((a, b) => Math.min(a, b)), lte: seqs.reduce((a, b) => Math.max(a, b)) },
+      },
+      select: { seq: true },
+    });
+    return new Set(rows.map((row) => row.seq));
   }
 
   @UseGuards(RunnerAuthGuard)

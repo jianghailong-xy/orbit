@@ -36,6 +36,7 @@ import { enqueueRecap } from '../sessions/recap';
 import { deriveSessionCapabilities } from '../sessions/session-state';
 import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { isNoiseSystemEvent, NON_REPLAYABLE_EVENT_TYPES } from '../common/system-noise';
 import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { readOpenRequestPeers } from '../sessions/session-request';
@@ -189,7 +190,8 @@ function endedSessionStates(
  * Realtime fan-out. Within a process it uses an in-memory RxJS hub (events) and an
  * EventEmitter (inbox wakeups) — zero latency. Across replicas it bridges those over
  * Postgres LISTEN/NOTIFY: every publish/notifyInbox also NOTIFYs (tagged with this
- * instance id), and a dedicated listener connection re-emits notifications from OTHER
+ * instance id) — a runner's event batch once, and its live-only events not at all
+ * (publishBatch) — and a dedicated listener connection re-emits notifications from OTHER
  * instances into the local hub/inbox. The own-instance tag means single-replica
  * behaviour is unchanged (a process ignores its own notifications; clients also dedup
  * by seq as a backstop).
@@ -309,7 +311,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   private onNotify(channel: string, payload?: string): void {
     if (!payload) return;
-    let m: { i?: string; r: string; c?: true; e?: NormalizedRunEvent; s?: number };
+    let m: { i?: string; r: string; c?: true; e?: NormalizedRunEvent; s?: number; b?: NormalizedRunEvent[]; f?: number; t?: number };
     try {
       m = JSON.parse(payload);
     } catch {
@@ -333,6 +335,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     if (channel === EVENT_CHANNEL) {
       if (m.e) {
         this.hub.next({ runId: m.r, event: m.e });
+      } else if (Array.isArray(m.b)) {
+        // A batch the ingest stored, whole (publishBatch).
+        for (const event of m.b) this.hub.next({ runId: m.r, event });
+      } else if (typeof m.f === 'number' && typeof m.t === 'number') {
+        // A batch too big to ride along: read back what the ingest stored of it.
+        this.relayStoredBatch(m.r, m.f, m.t);
       } else if (typeof m.s === 'number') {
         // Oversized event was sent as a signal — fetch it from the durable log.
         this.prisma.runEvent
@@ -354,6 +362,32 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
           .catch(() => undefined);
       }
     }
+  }
+
+  /**
+   * Another replica's batch, from the rows the ingest stored, in seq order (publishBatch's range): what that replica
+   * published of it and nothing else, so neither a noise ping nor a live-only row (a tombstone, a legacy delta).
+   */
+  private relayStoredBatch(runId: string, from: number, to: number): void {
+    this.prisma.runEvent
+      .findMany({
+        where: { sessionId: runId, seq: { gte: from, lte: to }, type: { notIn: [...NON_REPLAYABLE_EVENT_TYPES] } },
+        orderBy: { seq: 'asc' },
+        select: { seq: true, type: true, payload: true, turnId: true, createdAt: true },
+      })
+      .then((rows) => {
+        for (const row of rows) {
+          const event: NormalizedRunEvent = {
+            seq: row.seq,
+            type: row.type as RunEventType,
+            payload: row.payload as Record<string, unknown>,
+            turnId: row.turnId ?? undefined,
+            ts: row.createdAt.toISOString(),
+          };
+          if (!isNoiseSystemEvent(event)) this.hub.next({ runId, event });
+        }
+      })
+      .catch(() => undefined);
   }
 
   private notifyRaw(channel: string, payload: string): void {
@@ -441,9 +475,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   // ── run events (SSE) ────────────────────────────────────────────────────
 
   publish(runId: string, event: NormalizedRunEvent): void {
-    this.retainTurnPrefix(runId, event); // before the hub, so no subscriber can read it stale
-    this.hub.next({ runId, event }); // same replica
-    this.published.next({ runId, event });
+    this.publishHere(runId, event);
     const payload = JSON.stringify({ i: this.instanceId, r: runId, e: event });
     // NOTE: NOTIFY's limit is 8000 BYTES — measure UTF-8 bytes, not string length
     // (a multibyte CJK/emoji event can be < 7000 chars but > 8000 bytes).
@@ -454,6 +486,43 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // (already-persisted) RunEvent row.
       this.notifyRaw(EVENT_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId, s: event.seq }));
     }
+  }
+
+  /**
+   * A batch of a session's events as the ingest took them (RunnerApiController.ingestEvents). Each one reaches this
+   * replica's streams as `publish` hands it over. The other replicas hear of the batch ONCE, not once per event
+   * (docs/runner-link-design.md §6.7), and only of what was stored:
+   *
+   *   - live-only events (NON_REPLAYABLE_EVENT_TYPES: reply and thinking deltas, tool output snapshots, background
+   *     output) are not announced at all. A runner on the link sends them on its live stream, which reaches every
+   *     replica a client watches from over NATS (`ses.<id>.live`, runner-hints.ts). One on HTTPS reaches the streams
+   *     of the replica it posts to, which with one replica is every stream there is.
+   *   - the stored events ride the notification whole when it fits (MAX_NOTIFY_BYTES), and otherwise as the seq range
+   *     the other replicas read back from run_event, where the ingest has already stored them.
+   */
+  publishBatch(runId: string, events: readonly NormalizedRunEvent[]): void {
+    const stored: NormalizedRunEvent[] = [];
+    for (const event of events) {
+      this.publishHere(runId, event);
+      if (!NON_REPLAYABLE_EVENT_TYPES.includes(event.type)) stored.push(event);
+    }
+    if (stored.length === 0) return;
+    const whole = JSON.stringify({ i: this.instanceId, r: runId, b: stored });
+    if (Buffer.byteLength(whole, 'utf8') <= MAX_NOTIFY_BYTES) {
+      this.notifyRaw(EVENT_CHANNEL, whole);
+      return;
+    }
+    const seqs = stored.map((event) => event.seq);
+    const from = seqs.reduce((a, b) => Math.min(a, b));
+    const to = seqs.reduce((a, b) => Math.max(a, b));
+    this.notifyRaw(EVENT_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId, f: from, t: to }));
+  }
+
+  /** One event to this replica's own streams and consumers; `publish` and `publishBatch` add the other replicas. */
+  private publishHere(runId: string, event: NormalizedRunEvent): void {
+    this.retainTurnPrefix(runId, event); // before the hub, so no subscriber can read it stale
+    this.hub.next({ runId, event }); // same replica
+    this.published.next({ runId, event });
     // Locally-originated only — NOTIFY-bridged events from other replicas arrive via onNotify →
     // hub, not here — so the owner's badge is reconciled and synced exactly once, on the origin.
     if (RealtimeService.BADGE_EVENTS.has(event.type)) {

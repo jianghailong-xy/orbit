@@ -148,7 +148,10 @@ function makeController(
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   };
-  const realtime = { publish: (_sessionId: string, event: any) => publishedEvents.push(event) };
+  const realtime = {
+    publish: (_sessionId: string, event: any) => publishedEvents.push(event),
+    publishBatch: (_sessionId: string, events: any[]) => publishedEvents.push(...events),
+  };
   return {
     calls,
     published: () => publishedEvents.length,

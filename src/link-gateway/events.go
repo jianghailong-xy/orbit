@@ -13,8 +13,11 @@ import (
 
 // Durable events (docs/runner-link-design.md §5.8, §6.6). An EventBatch is stored by the apiserver's existing ingest
 // route, POST /runner/sessions/<id>/events, as the batch a runner posts over HTTPS today (the inverse of the shadow
-// mapping); B5 gives the link an ingest entry of its own. The route stores each event once per seq, so a batch sent
-// again stores nothing twice.
+// mapping). The route stores each event once per seq, so a batch sent again stores nothing twice. Called by the link,
+// the route refuses a bad event on its own (runner-api/link-events.ts): a tombstone holds its seq, the events after it
+// are stored, and the answer's durableSeq and rejected are what EventAck says. A payload_json that is not JSON is
+// passed as a JSON string, which the route refuses as that one event's payload, so one bad event never holds back the
+// session's others.
 //
 // One session's batches are forwarded one after another, in the order they came, so they are stored in seq order.
 // EventAck.durable_seq says every event up to it is stored, so it may only cover a batch whose predecessors are
@@ -56,13 +59,13 @@ func (l *linkState) onEvents(eb *linkpb.EventBatch) {
 	sessionID, ok := sessionUUID(named)
 	if !ok {
 		m.eventBatches.inc("malformed")
-		l.ack(named, 0, failure("EVENT_BATCH_MALFORMED", "the session id is neither a UUID nor a public id", false, 0))
+		l.ack(named, 0, nil, failure("EVENT_BATCH_MALFORMED", "the session id is neither a UUID nor a public id", false, 0))
 		return
 	}
 	if gap := batchGap(events); gap != "" {
 		m.eventBatches.inc("malformed")
 		l.logFailure("an event batch is not in increasing seq order without gaps; refused", "session", sessionID, "detail", gap)
-		l.ack(named, 0, failure("EVENT_BATCH_MALFORMED", "the batch's events are not in increasing seq order without gaps: "+gap, true, time.Second))
+		l.ack(named, 0, nil, failure("EVENT_BATCH_MALFORMED", "the batch's events are not in increasing seq order without gaps: "+gap, true, time.Second))
 		return
 	}
 	amount := creditLevel{Events: uint32(len(events))}
@@ -97,7 +100,7 @@ func (l *linkState) onEvents(eb *linkpb.EventBatch) {
 			q.next = first
 		}
 		l.mu.Unlock()
-		l.ack(named, acked, refusal)
+		l.ack(named, acked, nil, refusal)
 		return
 	}
 	l.unacked.Events += amount.Events
@@ -150,7 +153,7 @@ func (l *linkState) ingestLoop(sessionID string, q *sessionIngest) {
 			l.release(b)
 			continue
 		}
-		durable, fail, answered := l.store(sessionID, b.eb)
+		durable, rejected, fail, answered := l.store(sessionID, b.eb)
 		<-l.ingestSlots
 		if !answered {
 			// The connection ended: nobody to acknowledge.
@@ -179,10 +182,10 @@ func (l *linkState) ingestLoop(sessionID string, q *sessionIngest) {
 		l.mu.Unlock()
 		l.release(append([]*queuedBatch{b}, rest...)...)
 		c.g.metrics.eventAckDuration.observe(time.Since(b.accepted))
-		l.ack(b.eb.GetSessionId(), acked, fail)
+		l.ack(b.eb.GetSessionId(), acked, rejected, fail)
 		for _, r := range rest {
 			c.g.metrics.eventBatches.inc("failed_behind")
-			l.ack(r.eb.GetSessionId(), acked, fail)
+			l.ack(r.eb.GetSessionId(), acked, nil, fail)
 		}
 	}
 }
@@ -204,14 +207,14 @@ func (l *linkState) release(batches ...*queuedBatch) {
 	l.c.g.credit.give(total)
 }
 
-// store forwards one batch. It returns the durable seq the batch brings the session to, or why it was not stored,
-// and false when the connection ended before an answer.
-func (l *linkState) store(sessionID string, eb *linkpb.EventBatch) (uint64, *linkpb.Failure, bool) {
+// store forwards one batch. It returns the durable seq the batch brings the session to and the events of it the route
+// refused, or why it was not stored, and false when the connection ended before an answer.
+func (l *linkState) store(sessionID string, eb *linkpb.EventBatch) (uint64, []*linkpb.RejectedEvent, *linkpb.Failure, bool) {
 	c, m := l.c, l.c.g.metrics
 	body, err := json.Marshal(eventsRequestBody(eb, c.claims.LeaseOwner))
 	if err != nil {
 		m.eventBatches.inc("unencodable")
-		return 0, failure("EVENT_BATCH_MALFORMED", "an event's payload_json is not JSON", true, time.Second), true
+		return 0, nil, failure("EVENT_BATCH_MALFORMED", "the batch could not be encoded: "+err.Error(), true, time.Second), true
 	}
 	events := eb.GetEvents()
 	answer, err := c.g.backends.do(c.ctx, backendCall{
@@ -222,16 +225,21 @@ func (l *linkState) store(sessionID string, eb *linkpb.EventBatch) (uint64, *lin
 	})
 	if err != nil {
 		if errors.Is(err, errCallCancelled) {
-			return 0, nil, false
+			return 0, nil, nil, false
 		}
 		m.eventBatches.inc("no_answer")
 		l.logFailure("an event batch got no answer", "session", sessionID, "failure", err.Error())
-		return 0, failure(err.Error(), failureMessage(err), !errors.Is(err, errAnswerTooLarge), retryAfterFor(err)), true
+		return 0, nil, failure(err.Error(), failureMessage(err), !errors.Is(err, errAnswerTooLarge), retryAfterFor(err)), true
 	}
 	if answer.status/100 == 2 {
+		durable, rejected := storedAnswer(answer.body, events[len(events)-1].GetSeq())
 		m.eventBatches.inc("stored")
-		m.eventsStored.add(float64(len(events)))
-		return events[len(events)-1].GetSeq(), nil, true
+		m.eventsStored.add(float64(len(events) - len(rejected)))
+		if len(rejected) > 0 {
+			l.logFailure("the ingest route refused events of a batch; tombstones hold their seqs", "session", sessionID,
+				"rejected", len(rejected), "first_seq", rejected[0].GetSeq(), "first_code", rejected[0].GetCode())
+		}
+		return durable, rejected, nil, true
 	}
 	// The route's own refusal: its code and whether sending again may help, as it states them. A refusal that does
 	// not say is final for a 4xx (the session is no longer open, or this process lost its lease) and retryable for
@@ -249,19 +257,44 @@ func (l *linkState) store(sessionID string, eb *linkpb.EventBatch) (uint64, *lin
 		m.eventBatches.inc("refused")
 	}
 	l.logFailure("the ingest route refused an event batch", "session", sessionID, "status", answer.status, "code", code)
-	return 0, failure(code, "the ingest route answered "+uitoa(uint64(answer.status)), retryable,
+	return 0, nil, failure(code, "the ingest route answered "+uitoa(uint64(answer.status)), retryable,
 		time.Duration(answerRetryAfterMs(answer))*time.Millisecond), true
 }
 
-// ack sends the session's EventAck: how far its events are stored, and why the last batch was not, when it was not.
-func (l *linkState) ack(sessionID string, durable uint64, fail *linkpb.Failure) {
+// ack sends the session's EventAck: how far its events are stored, which of the last batch's the route refused, and
+// why the last batch was not stored, when it was not.
+func (l *linkState) ack(sessionID string, durable uint64, rejected []*linkpb.RejectedEvent, fail *linkpb.Failure) {
 	l.c.send(&linkpb.Frame{Body: &linkpb.Frame_EventAck{EventAck: &linkpb.EventAck{
-		SessionId: sessionID, DurableSeq: durable, Failure: fail,
+		SessionId: sessionID, DurableSeq: durable, Rejected: rejected, Failure: fail,
 	}}}, true)
 }
 
+// storedAnswer reads what the route said of a batch it stored: the durable seq and the events it refused. An answer that
+// says neither (an apiserver from before the link had its ingest entry) stored the whole batch: through its last seq,
+// refusing nothing.
+func storedAnswer(body []byte, last uint64) (uint64, []*linkpb.RejectedEvent) {
+	var answer struct {
+		DurableSeq *uint64 `json:"durableSeq"`
+		Rejected   []struct {
+			Seq     uint64 `json:"seq"`
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"rejected"`
+	}
+	if json.Unmarshal(body, &answer) != nil || answer.DurableSeq == nil {
+		return last, nil
+	}
+	var rejected []*linkpb.RejectedEvent
+	for _, r := range answer.Rejected {
+		rejected = append(rejected, &linkpb.RejectedEvent{Seq: r.Seq, Code: r.Code, Message: r.Message})
+	}
+	return *answer.DurableSeq, rejected
+}
+
 // eventsRequestBody is the POST /runner/sessions/<id>/events body an EventBatch stands for (RunEventBatch): the process the
-// connection belongs to, and each event with its ts in RFC 3339 to the millisecond and its payload as it was sent.
+// connection belongs to, and each event with its ts in RFC 3339 to the millisecond and its payload as it was sent. A
+// payload_json that is not JSON goes as a JSON string of its bytes, which the route refuses as that event's payload
+// while it stores the others.
 func eventsRequestBody(eb *linkpb.EventBatch, process string) map[string]any {
 	type httpEvent struct {
 		Seq     uint64          `json:"seq"`
@@ -273,8 +306,11 @@ func eventsRequestBody(eb *linkpb.EventBatch, process string) map[string]any {
 	events := make([]httpEvent, 0, len(eb.GetEvents()))
 	for _, e := range eb.GetEvents() {
 		payload := json.RawMessage(e.GetPayloadJson())
-		if len(payload) == 0 {
+		switch {
+		case len(payload) == 0:
 			payload = json.RawMessage("null")
+		case !json.Valid(payload):
+			payload, _ = json.Marshal(string(payload))
 		}
 		events = append(events, httpEvent{
 			Seq: e.GetSeq(), Type: e.GetType(), TurnID: e.GetTurnId(), Payload: payload,
