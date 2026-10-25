@@ -52,6 +52,14 @@ for (const r of [hb, ev]) {
 if (hb.steady.counters.batchesAcked !== 0) throw new Error(`${hb.dir} sent events: run it with -event-rate 0`);
 const round = (v, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
 const cores = (r, svc) => r.report.components[svc]?.meanCores ?? 0;
+// A host swapping during a run inflates its CPU figures: on 2026-10-25 a heartbeats-only run swapping in about 1,100
+// pages/s measured 12% more database CPU than its repeat at 2 pages/s. Each run's swap-in over its steady window is
+// reported, and a run past HEAVY_SWAP_IN pages/s is to be run again rather than compared.
+const HEAVY_SWAP_IN = 100;
+const swapInPerSec = (r) => {
+  const secs = (Number(new Date(r.report.steadyTo)) - Number(new Date(r.report.steadyFrom))) / 1000;
+  return r.report.host?.swapInPages == null || !(secs > 0) ? null : round(r.report.host.swapInPages / secs, 0);
+};
 
 // Per heartbeat, from the heartbeats-only run.
 const beatsPerSec = hb.steady.heartbeatAcksPerSecond;
@@ -119,6 +127,7 @@ const baseline = {
     activeSessions: ev.report.loadgen.config.activeSessions, perSessionEventsPerSecond: ev.report.loadgen.config.perSessionRate },
   rates: { heartbeatsOnly: { beatsPerSec }, withEvents: { beatsPerSec: evBeatsPerSec, batchesPerSec, eventsPerSec: ev.steady.eventsAckedPerSecond } },
   hostOtherCores: [hb.report.host.otherCgroupCores, ev.report.host.otherCgroupCores],
+  swapInPagesPerSec: [swapInPerSec(hb), swapInPerSec(ev)],
   perHeartbeat: perBeat, perBatch, perEvent, ingest, projected, merged,
   eventAck: { runnerBatch: ev.steady.ackBatch, gateway: gwOf.eventAck },
   heartbeatStatements: hbQueries.map((q) => ({ perOp: round(q.perOp, 2), meanMs: q.meanMs, query: q.query.slice(0, 200) })),
@@ -128,7 +137,10 @@ if (jsonOut) writeFileSync(jsonOut, JSON.stringify(baseline, null, 2) + '\n');
 
 const out = [];
 out.push(`Commit \`${run.sha.slice(0, 12)}\`, runs ${baseline.runs.join(' and ')}: ${baseline.fleet.runners} runners, ${baseline.fleet.activeSessions} running sessions.`);
-out.push(`Heartbeats only: ${beatsPerSec} beats/s. With events: ${evBeatsPerSec} beats/s, ${batchesPerSec} batches/s (${perBatch.eventsPerBatch} events each, ${ev.steady.eventsAckedPerSecond} events/s).`, '');
+out.push(`Heartbeats only: ${beatsPerSec} beats/s. With events: ${evBeatsPerSec} beats/s, ${batchesPerSec} batches/s (${perBatch.eventsPerBatch} events each, ${ev.steady.eventsAckedPerSecond} events/s).`);
+const heavy = [hb, ev].filter((r, i) => baseline.swapInPagesPerSec[i] > HEAVY_SWAP_IN).map((r) => r.report.run);
+out.push(`Host swap-in over the steady windows: ${baseline.swapInPagesPerSec.join(' and ')} pages/s`
+  + (heavy.length ? `: **${heavy.join(' and ')} swapped past ${HEAVY_SWAP_IN} pages/s, which inflates CPU; run it again**.` : '.'), '');
 out.push('| Per operation | apiserver CPU ms | database CPU ms | gateway CPU ms | SQL statements | commits |');
 out.push('| --- | --- | --- | --- | --- | --- |');
 out.push(`| heartbeat | ${perBeat.apiserverCpuMs} | ${perBeat.databaseCpuMs} | ${perBeat.gatewayCpuMs} | ${perBeat.sqlStatements} | ${perBeat.commits} |`);

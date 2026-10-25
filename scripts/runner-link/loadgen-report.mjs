@@ -83,7 +83,7 @@ for (const key of [...STACK, 'loadgen']) {
   const psi = cpuSeries(key, 'psiSomeUsec');
   const thr = cpuSeries(key, 'throttledUsec');
   components[key] = {
-    meanCores: round(mean(cpu), 2),
+    meanCores: round(mean(cpu), 3),
     peak10sCores: round(peak(cpu, 10_000), 2),
     peak60sCores: round(peak(cpu, 60_000), 2),
     peakMemMiB: round(Math.max(...cpu.map((p) => p.mem ?? 0)) / 2 ** 20, 0),
