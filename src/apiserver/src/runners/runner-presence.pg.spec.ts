@@ -4,7 +4,8 @@
  * `build/main.js`, the whole AppModule — where a route is what is being held to. What it is held to:
  *
  *   (1) 0444 made what it describes: `runner_presence` is UNLOGGED, with its columns, nullability,
- *       primary key, link_state CHECK and a foreign key to `runner` that cascades;
+ *       primary key, link_state CHECK and a foreign key to `runner` that cascades; 0447 added the two
+ *       columns a link heartbeat's fast path reads (`changes`, `reconciled_at`);
  *   (2) RunnerPresenceService.fleetSilence counts the cell's runners heard from within the window and
  *       those of them now past the offline line, leaving out a runner that signed off and managed
  *       runners their manager is putting to sleep or has — read before anything else here makes
@@ -134,6 +135,9 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
       ['link_state', 'text', 'NO'],
       ['facts_hash', 'text', 'YES'],
       ['reconcile_hash', 'text', 'YES'],
+      // 0447: what a link heartbeat answers from this row alone needs (runner-api/link-heartbeat.ts).
+      ['changes', 'bigint', 'NO'],
+      ['reconciled_at', 'timestamp without time zone', 'YES'],
     ]);
     const { rows: [pk] } = await sql.query(
       `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'runner_presence_pkey'`,

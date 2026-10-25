@@ -22,6 +22,8 @@ if (args.length !== 2) {
 }
 const load = (dir) => {
   const read = (name) => JSON.parse(readFileSync(join(dir, name), 'utf8'));
+  // The database's counters every 15 s (loadgen-run.sh), for what the steady window alone committed.
+  const samples = readFileSync(join(dir, 'db.jsonl'), 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
   const report = read('report.json');
   const summary = read('summary.json');
   const before = read('db-before.json');
@@ -33,7 +35,17 @@ const load = (dir) => {
     calls: statements.reduce((n, q) => n + q.calls, 0),
     steady: summary.steady,
     whole: summary.whole.counters,
+    samples,
+    steadyFrom: Date.parse(summary.steadyStartedAt),
+    steadyTo: Date.parse(summary.steadyEndedAt),
   };
+};
+/** xact_commit at `at`, read off the samples either side of it. */
+const commitsAt = (r, at) => {
+  const after = r.samples.findIndex((s) => s.t >= at);
+  if (after <= 0) return r.samples[Math.max(after, 0)]?.xactCommit ?? NaN;
+  const [a, b] = [r.samples[after - 1], r.samples[after]];
+  return a.xactCommit + ((b.xactCommit - a.xactCommit) * (at - a.t)) / (b.t - a.t);
 };
 const [hb, ev] = args.map(load);
 for (const r of [hb, ev]) {
@@ -52,6 +64,12 @@ const perBeat = {
   gatewayCpuMs: round((cores(hb, 'link-gateway') * 1000) / beatsPerSec, 3),
   sqlStatements: round(hb.calls / hb.whole.heartbeatAcks, 1),
   commits: round(hb.commits / hb.whole.heartbeatAcks, 1),
+  // Over the steady window alone: no ramp, so no first connect, no first beat of a connection; renewals and the
+  // reaper's sweeps are in it. And how many beats were answered with a full reconcile (task O1; null before it).
+  steadyCommits: round((commitsAt(hb, hb.steadyTo) - commitsAt(hb, hb.steadyFrom)) / hb.steady.counters.heartbeatAcks, 2),
+  reconciledShare: hb.steady.counters.heartbeatsReconciled === undefined
+    ? null
+    : round(hb.steady.counters.heartbeatsReconciled / hb.steady.counters.heartbeatAcks, 3),
 };
 // Per batch: what the second run adds, its heartbeats' share taken out at the first run's cost per beat.
 const evBeatsPerSec = ev.steady.heartbeatAcksPerSecond;
@@ -93,6 +111,9 @@ out.push('| Per operation | apiserver CPU ms | database CPU ms | gateway CPU ms 
 out.push('| --- | --- | --- | --- | --- | --- |');
 out.push(`| heartbeat | ${perBeat.apiserverCpuMs} | ${perBeat.databaseCpuMs} | ${perBeat.gatewayCpuMs} | ${perBeat.sqlStatements} | ${perBeat.commits} |`);
 out.push(`| event batch (${perBatch.eventsPerBatch} events) | ${perBatch.apiserverCpuMs} | ${perBatch.databaseCpuMs} | ${perBatch.gatewayCpuMs} | ${perBatch.sqlStatements} | ${perBatch.commits} |`);
+out.push('', `Over the heartbeats-only run's steady window: ${perBeat.steadyCommits} commits a beat, renewals and the reaper included` +
+  (perBeat.reconciledShare === null ? '.' : `; ${round(perBeat.reconciledShare * 100, 1)}% of the beats were answered with a full reconcile.`) +
+  (hb.report.loadgen.config.volatile ? ` The runners moved their reports as production does (-volatile, edits ${hb.report.loadgen.config.volatileEdits}).` : ''));
 for (const [name, list] of [['heartbeat', hbQueries], ['event batch', batchQueries]]) {
   out.push('', `Statements per ${name}, most database time first (times per ${name}, mean ms):`, '');
   for (const q of list.slice(0, 40)) out.push(`- ${round(q.perOp, 2)} × ${q.meanMs} ms: \`${q.query.slice(0, 140).replace(/`/g, "'")}\``);

@@ -289,6 +289,11 @@ test('the quiet answer hands out nothing and states the runner\'s settings, with
   assert.equal(quietHeartbeatAnswer({ maxConcurrent: 1, minFreeDiskMb: null }, {}).minFreeDiskMb, null);
 });
 
+test('the quiet answer is, to the byte, what the runner\'s own test applies (src/runner-go/testdata/o1-quiet-answer.json)', () => {
+  const fixture = readFileSync(path.resolve(__dirname, '../../../runner-go/testdata/o1-quiet-answer.json'), 'utf8').trim();
+  assert.equal(JSON.stringify(quietHeartbeatAnswer({ maxConcurrent: 4, minFreeDiskMb: 2048 }, {})), fixture);
+});
+
 test('an answer that carries any command, cancellation or lost lease hands something out', () => {
   const base: RunnerHeartbeatResponse = { cancelSessionIds: [], maxConcurrent: 2, agentDirs: [{ agentId: SESSION_A, workDir: '/w' }] };
   assert.equal(heartbeatAnswerHandsOut(base), false, 'the directory list and the settings are no command');
