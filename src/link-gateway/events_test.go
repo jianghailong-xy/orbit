@@ -182,6 +182,85 @@ func TestABatchThatWouldLeaveAGapIsRefused(t *testing.T) {
 	}
 }
 
+// linkIngestRoute stands in for the route a link batch is stored by, with its rule for one bad event
+// (src/apiserver/src/runner-api/link-events.ts): a payload that is not a JSON object is refused, a tombstone holds its
+// seq, and the rest of the batch is stored. It records the seqs it stored, and answers what EventAck says.
+func linkIngestRoute(mu *sync.Mutex, storedSeqs *[]uint64) func(w http.ResponseWriter, r *http.Request, body []byte) {
+	return func(w http.ResponseWriter, r *http.Request, body []byte) {
+		var b struct {
+			Events []struct {
+				Seq     uint64          `json:"seq"`
+				Payload json.RawMessage `json:"payload"`
+			} `json:"events"`
+		}
+		if err := json.Unmarshal(body, &b); err != nil || len(b.Events) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "EVENT_BATCH_MALFORMED", "retryable": true})
+			return
+		}
+		rejected := []map[string]any{}
+		mu.Lock()
+		for _, e := range b.Events {
+			if !strings.HasPrefix(string(e.Payload), "{") {
+				rejected = append(rejected, map[string]any{"seq": e.Seq, "code": "EVENT_PAYLOAD_INVALID", "message": "the payload is not a JSON object"})
+				continue
+			}
+			*storedSeqs = append(*storedSeqs, e.Seq)
+		}
+		mu.Unlock()
+		writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "durableSeq": b.Events[len(b.Events)-1].Seq, "rejected": rejected})
+	}
+}
+
+// One event whose payload_json is not JSON reaches the route as a JSON string, which the route refuses as that event
+// alone: EventAck names exactly its seq in rejected, durable_seq goes past it, and the rest of the batch is stored.
+func TestOneBadPayloadIsRejectedAloneAndTheRestOfItsBatchIsStored(t *testing.T) {
+	var mu sync.Mutex
+	var storedSeqs []uint64
+	backend := newFakeBackend(t, linkIngestRoute(&mu, &storedSeqs))
+	h := newLinkHarness(t, []*fakeBackend{backend}, nil)
+	tc, _ := h.connectLink(runnerA, processA)
+	eb := batch(eventSession, 1, 5)
+	eb.Events[2].PayloadJson = []byte(`{"text": "cut off`)
+	tc.send(eventsFrame(eb))
+	ack := tc.eventAck(5 * time.Second)
+	if ack.GetFailure() != nil || ack.GetDurableSeq() != 5 {
+		t.Fatalf("ack %v", ack)
+	}
+	if r := ack.GetRejected(); len(r) != 1 || r[0].GetSeq() != 3 || r[0].GetCode() != "EVENT_PAYLOAD_INVALID" || r[0].GetMessage() == "" {
+		t.Fatalf("rejected %v", r)
+	}
+	calls := backend.requestsTo(eventsPath(eventSession))
+	if len(calls) != 1 {
+		t.Fatalf("%d calls", len(calls))
+	}
+	var sent struct {
+		Events []struct {
+			Seq     uint64          `json:"seq"`
+			Payload json.RawMessage `json:"payload"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(calls[0].Body, &sent); err != nil || len(sent.Events) != 5 {
+		t.Fatalf("the batch did not reach the route whole: %v %s", err, calls[0].Body)
+	}
+	var asString string
+	if err := json.Unmarshal(sent.Events[2].Payload, &asString); err != nil || asString != `{"text": "cut off` {
+		t.Fatalf("the bad payload went as %s", sent.Events[2].Payload)
+	}
+	mu.Lock()
+	if fmt.Sprint(storedSeqs) != "[1 2 4 5]" {
+		t.Fatalf("stored %v", storedSeqs)
+	}
+	mu.Unlock()
+	if got := h.g.metrics.eventsStored.get(); got != 4 {
+		t.Fatalf("link_events_stored_total %v", got)
+	}
+	// The session's stream goes on after it.
+	tc.send(eventsFrame(batch(eventSession, 6, 7)))
+	if ack := tc.eventAck(5 * time.Second); ack.GetDurableSeq() != 7 || len(ack.GetRejected()) != 0 || ack.GetFailure() != nil {
+		t.Fatalf("ack %v", ack)
+	}
+}
+
 func TestTheRoutesRefusalIsFinalOrRetryableAsItSays(t *testing.T) {
 	backend := newFakeBackend(t, func(w http.ResponseWriter, r *http.Request, body []byte) {
 		writeJSON(w, http.StatusConflict, map[string]any{"code": "CONFLICT", "retryable": false, "message": "session is no longer open"})
