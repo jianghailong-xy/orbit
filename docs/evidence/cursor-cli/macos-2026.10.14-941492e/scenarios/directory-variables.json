@@ -1,0 +1,205 @@
+{
+ "name": "directory-variables",
+ "runId": "2026-10-24T23-27-49-229Z",
+ "startedAt": "2026-10-24T23:27:49.236Z",
+ "finishedAt": "2026-10-24T23:30:16.872Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/directory-variables.ndjson",
+ "protocolLines": 54,
+ "fixtures": [],
+ "checks": [
+  {
+   "name": "HOME only: config under ~/.cursor, auth under ~/.cursor/auth.json (macOS ignores XDG for auth)",
+   "ok": true
+  },
+  {
+   "name": "CURSOR_CONFIG_DIR moves cli-config, statsig cache and acp-sessions, not auth.json",
+   "ok": true
+  },
+  {
+   "name": "XDG_CONFIG_HOME moves the config dir but auth.json stays in $HOME/.cursor",
+   "ok": true
+  },
+  {
+   "name": "agent-cli-state.json stays in $HOME/.cursor under every layout",
+   "ok": true
+  },
+  {
+   "name": "built-in skills are synced into $HOME/.cursor/skills-cursor under every layout",
+   "ok": true
+  },
+  {
+   "name": "the Node compile cache goes to $HOME/Library/Caches on macOS, not XDG_CACHE_HOME",
+   "ok": true
+  },
+  {
+   "name": "XDG_DATA_HOME gets nothing the CLI writes at startup",
+   "ok": true
+  },
+  {
+   "name": "CURSOR_DATA_DIR gets nothing at startup (projects/<slug>/ appears only when something creates it, e.g. `agent mcp enable`)",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "files per layout (after initialize + session/new)": {
+   "home-only": [
+    "cursor-config/",
+    "cursor-data/",
+    "home/",
+    "home/.cursor/",
+    "home/.cursor/acp-sessions/",
+    "home/.cursor/acp-sessions/<UUID_1>/",
+    "home/.cursor/acp-sessions/<UUID_1>/meta.json 644 111",
+    "home/.cursor/agent-cli-state.json 644 59",
+    "home/.cursor/auth.json 600 1050",
+    "home/.cursor/cli-config.json 644 1297",
+    "home/.cursor/skills-cursor/",
+    "home/.cursor/statsig-cache.json 644 976958",
+    "home/Library/",
+    "home/Library/Caches/",
+    "xdg-cache/",
+    "xdg-config/",
+    "xdg-data/"
+   ],
+   "home-only:exists": {
+    "compileCacheHome": true,
+    "compileCacheXdg": false,
+    "skillsInHome": true,
+    "xdgCacheEmpty": true
+   },
+   "home+CURSOR_CONFIG_DIR": [
+    "cursor-config/",
+    "cursor-config/acp-sessions/",
+    "cursor-config/acp-sessions/<UUID_2>/",
+    "cursor-config/acp-sessions/<UUID_2>/meta.json 644 111",
+    "cursor-config/cli-config.json 644 1297",
+    "cursor-config/statsig-cache.json 644 976958",
+    "cursor-data/",
+    "home/",
+    "home/.cursor/",
+    "home/.cursor/agent-cli-state.json 644 59",
+    "home/.cursor/auth.json 600 1050",
+    "home/.cursor/skills-cursor/",
+    "home/Library/",
+    "home/Library/Caches/",
+    "xdg-cache/",
+    "xdg-config/",
+    "xdg-data/"
+   ],
+   "home+CURSOR_CONFIG_DIR:exists": {
+    "compileCacheHome": true,
+    "compileCacheXdg": false,
+    "skillsInHome": true,
+    "xdgCacheEmpty": true
+   },
+   "home+CURSOR_DATA_DIR": [
+    "cursor-config/",
+    "cursor-data/",
+    "home/",
+    "home/.cursor/",
+    "home/.cursor/acp-sessions/",
+    "home/.cursor/acp-sessions/<UUID_3>/",
+    "home/.cursor/acp-sessions/<UUID_3>/meta.json 644 111",
+    "home/.cursor/agent-cli-state.json 644 59",
+    "home/.cursor/auth.json 600 1050",
+    "home/.cursor/cli-config.json 644 1297",
+    "home/.cursor/skills-cursor/",
+    "home/.cursor/statsig-cache.json 644 976958",
+    "home/Library/",
+    "home/Library/Caches/",
+    "xdg-cache/",
+    "xdg-config/",
+    "xdg-data/"
+   ],
+   "home+CURSOR_DATA_DIR:exists": {
+    "compileCacheHome": true,
+    "compileCacheXdg": false,
+    "skillsInHome": true,
+    "xdgCacheEmpty": true
+   },
+   "home+XDG_CONFIG_HOME": [
+    "cursor-config/",
+    "cursor-data/",
+    "home/",
+    "home/.cursor/",
+    "home/.cursor/agent-cli-state.json 644 59",
+    "home/.cursor/auth.json 600 1050",
+    "home/.cursor/skills-cursor/",
+    "home/Library/",
+    "home/Library/Caches/",
+    "xdg-cache/",
+    "xdg-config/",
+    "xdg-config/cursor/",
+    "xdg-config/cursor/acp-sessions/",
+    "xdg-config/cursor/acp-sessions/<UUID_4>/",
+    "xdg-config/cursor/acp-sessions/<UUID_4>/meta.json 644 111",
+    "xdg-config/cursor/cli-config.json 644 1297",
+    "xdg-config/cursor/statsig-cache.json 644 976958",
+    "xdg-data/"
+   ],
+   "home+XDG_CONFIG_HOME:exists": {
+    "compileCacheHome": true,
+    "compileCacheXdg": false,
+    "skillsInHome": true,
+    "xdgCacheEmpty": true
+   },
+   "home+XDG_DATA_HOME+XDG_CACHE_HOME": [
+    "cursor-config/",
+    "cursor-data/",
+    "home/",
+    "home/.cursor/",
+    "home/.cursor/acp-sessions/",
+    "home/.cursor/acp-sessions/<UUID_5>/",
+    "home/.cursor/acp-sessions/<UUID_5>/meta.json 644 111",
+    "home/.cursor/agent-cli-state.json 644 59",
+    "home/.cursor/auth.json 600 1050",
+    "home/.cursor/cli-config.json 644 1297",
+    "home/.cursor/skills-cursor/",
+    "home/.cursor/statsig-cache.json 644 976958",
+    "home/Library/",
+    "home/Library/Caches/",
+    "xdg-cache/",
+    "xdg-config/",
+    "xdg-data/"
+   ],
+   "home+XDG_DATA_HOME+XDG_CACHE_HOME:exists": {
+    "compileCacheHome": true,
+    "compileCacheXdg": false,
+    "skillsInHome": true,
+    "xdgCacheEmpty": true
+   },
+   "all-variables": [
+    "cursor-config/",
+    "cursor-config/acp-sessions/",
+    "cursor-config/acp-sessions/<UUID_6>/",
+    "cursor-config/acp-sessions/<UUID_6>/meta.json 644 111",
+    "cursor-config/cli-config.json 644 1297",
+    "cursor-config/statsig-cache.json 644 976958",
+    "cursor-data/",
+    "home/",
+    "home/.cursor/",
+    "home/.cursor/agent-cli-state.json 644 59",
+    "home/.cursor/auth.json 600 1050",
+    "home/.cursor/skills-cursor/",
+    "home/Library/",
+    "home/Library/Caches/",
+    "xdg-cache/",
+    "xdg-config/",
+    "xdg-data/"
+   ],
+   "all-variables:exists": {
+    "compileCacheHome": true,
+    "compileCacheXdg": false,
+    "skillsInHome": true,
+    "xdgCacheEmpty": true
+   }
+  }
+ }
+}

@@ -4,8 +4,8 @@
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, rmSync, readdirSync, existsSync, readFileSync, writeFileSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
-import { AcpProcess, Recorder } from '/Users/long/.orbit/worktrees/5ec52a16-7b33-54df-b6c0-d3dced12cf9d/scripts/cursor-p0/lib/acp.mjs';
-import { makeSlot, cursorEnv, AGENT } from '/Users/long/.orbit/worktrees/5ec52a16-7b33-54df-b6c0-d3dced12cf9d/scripts/cursor-p0/lib/env.mjs';
+import { AcpProcess, Recorder } from '../lib/acp.mjs';
+import { makeSlot, cursorEnv, AGENT } from '../lib/env.mjs';
 
 const base = '/Users/long/.orbit/cursor-p0/probe/runs-store';
 rmSync(base, { recursive: true, force: true });

@@ -54,25 +54,29 @@ function restoreRealCursorState(before) {
 }
 
 // svce/acct pairs of generic passwords, as `security dump-keychain` reports them (login keychain first).
+// The dump prints each item as a block that starts with a `keychain:` header line; svce/acct are paired
+// per block. (P0b's first version walked lines across item boundaries and mis-paired an svce with the
+// next item's acct — an unrelated network-password item whose acct is the hex blob 0xE697A0… "no user
+// account" looked like a cursor-api-key entry.)
 function keychainGenericPairs() {
   const r = spawnSync('/usr/bin/security', ['dump-keychain'], { encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'] });
-  const lines = (r.stdout ?? '').split('\n');
+  const unq = s => (/^"(.*)"$/.test(s) ? s.slice(1, -1) : s);
   const out = [];
-  let cur = null;
-  for (const l of lines) {
-    const sv = l.match(/"svce"<blob>=(.*)/);
-    if (sv) { cur = { svce: sv[1] }; out.push(cur); continue; }
-    const ac = l.match(/"acct"<blob>=(.*)/);
-    if (ac && cur && !('acct' in cur)) cur.acct = ac[1];
+  for (const block of (r.stdout ?? '').split(/\n(?=keychain:)/)) {
+    if (!/class: "genp"/.test(block)) continue;
+    const sv = block.match(/"svce"<blob>=(.*)/);
+    const ac = block.match(/"acct"<blob>=(.*)/);
+    if (sv) out.push({ svce: unq(sv[1]), ...(ac ? { acct: unq(ac[1]) } : {}) });
   }
   return out;
 }
 
-const cursorPairs = pairs => pairs.filter(p => p.svce?.startsWith('"cursor-') && p.acct === '"cursor-user"').map(p => p.svce);
+const cursorPairs = pairs => pairs.filter(p => p.svce?.startsWith('cursor-')).map(p => p.svce);
 
 function deleteCursorEntries() {
   for (const svce of ['cursor-access-token', 'cursor-refresh-token', 'cursor-api-key', 'cursor-bedrock-access-key', 'cursor-bedrock-secret-key', 'cursor-bedrock-session-token']) {
-    spawnSync('/usr/bin/security', ['delete-generic-password', '-a', 'cursor-user', '-s', svce], { timeout: 15000, stdio: 'ignore' });
+    // By service only (no -a): whatever account the CLI wrote the entry under is what gets removed.
+    spawnSync('/usr/bin/security', ['delete-generic-password', '-s', svce], { timeout: 15000, stdio: 'ignore' });
   }
 }
 
@@ -88,10 +92,11 @@ export const macos = [
     async run(ctx) {
       const work = ctx.repo('work');
       const home = process.env.HOME;
-      const before = cursorPairs(keychainGenericPairs());
+      const beforeAll = keychainGenericPairs();
+      const before = cursorPairs(beforeAll);
       ctx.check('no leftover cursor-* entries in the login keychain before the run', before.length === 0, before);
       const realBefore = realCursorPathList();
-      const seen = [];
+      const added = [];
       for (const label of ['config-A', 'config-B']) {
         const slot = ctx.slot(label);
         const env = { PATH: '/usr/local/bin:/usr/bin:/bin', LANG: 'C.UTF-8', TERM: 'dumb', NO_OPEN_BROWSER: '1', HOME: home,
@@ -104,12 +109,17 @@ export const macos = [
         ctx.note(`${label} session/new ms`, Date.now() - t0);
         ctx.check(`${label}: session/new succeeds with the default store`, !!n.result?.sessionId, n.error);
         await p.dispose();
-        seen.push(cursorPairs(keychainGenericPairs()).sort());
-        ctx.check(`${label}: the Keychain holds the three token entries (account cursor-user)`, JSON.stringify(seen[seen.length - 1]) === '["cursor-access-token","cursor-api-key","cursor-refresh-token"]', seen[seen.length - 1]);
+        const allNow = keychainGenericPairs();
+        const newEntries = allNow.filter(p => !beforeAll.some(b => b.svce === p.svce && b.acct === p.acct));
+        added.push(newEntries.filter(p => p.svce?.startsWith('cursor-')).map(p => p.svce).sort());
+        ctx.note(`${label} new keychain entries during the run`, newEntries);
+        ctx.check(`${label}: the Keychain gets the three token entries (account cursor-user) and nothing else with a cursor-* name`,
+          JSON.stringify(added[added.length - 1]) === '["cursor-access-token","cursor-api-key","cursor-refresh-token"]' && newEntries.filter(p => p.svce?.startsWith('cursor-')).every(p => p.acct === 'cursor-user'), newEntries);
         ctx.check(`${label}: no auth.json is written (that is the file store)`, !existsSync(join(home, '.cursor', 'auth.json')) && !existsSync(join(slot.home, '.cursor', 'auth.json')));
         ctx.check(`${label}: the status command sees the saved login`, JSON.parse(ctx.cli(slot, ['status', '--format', 'json'], { envOpts: { store: null, extra: { HOME: home } } }).stdout || 'null').isAuthenticated === true);
+        ctx.note(`${label} slot tree (any other place the key could have landed)`, ctx.tree(slot.root).filter(l => /home\/\.cursor\//.test(l)));
       }
-      ctx.check('the entry names do not change with CURSOR_CONFIG_DIR / XDG_CONFIG_HOME (both runs wrote the same set)', JSON.stringify(seen[0]) === JSON.stringify(seen[1]) && seen[0].length === 3, seen);
+      ctx.check('the entry names do not change with CURSOR_CONFIG_DIR / XDG_CONFIG_HOME (both runs wrote the same set)', JSON.stringify(added[0]) === JSON.stringify(added[1]) && added[0].length === 3, added);
       // The flip side: `security` is keyed to $HOME, so under a foreign HOME (D4 option A's account
       // home) the keychain write would hang on a GUI dialog instead of completing.
       const foreign = ctx.slot('foreign-home');
@@ -122,7 +132,7 @@ export const macos = [
       // Restore the real ~/.cursor state the real-HOME runs touched (agent-cli-state.json, synced
       // skills, the ai-tracking db): delete whatever appeared, keep whatever was there before.
       restoreRealCursorState(realBefore);
-      ctx.note('keychain entries seen', { before, during: seen, after, realCursorDirsRestored: JSON.stringify(realBefore) === JSON.stringify(realCursorPathList()) });
+      ctx.note('keychain entries seen', { before, added, after, realCursorDirsRestored: JSON.stringify(realBefore) === JSON.stringify(realCursorPathList()) });
     },
   },
   {

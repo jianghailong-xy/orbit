@@ -1,0 +1,70 @@
+{
+ "at": "2026-10-24T23:40:17.288Z",
+ "cli": "<P0_ROOT>/cli/2026.10.14-941492e/cursor-agent",
+ "runs": [
+  {
+   "label": "foreign-home",
+   "ms": 45446,
+   "newOk": false,
+   "newErr": null,
+   "securityChildren": [
+    "/usr/bin/security add-generic-password -a cursor-user -s cursor-access-token -w <REDACTED>"
+   ],
+   "authJsonWritten": false,
+   "stderr": [
+    "Error: Cursor couldn't save your login to the macOS keychain.",
+    "The keychain item is stuck. Delete it and sign in again:",
+    "  security delete-generic-password -s cursor-access-token -a cursor-user",
+    "  agent login"
+   ]
+  },
+  {
+   "label": "foreign-home-2",
+   "ms": 45471,
+   "newOk": false,
+   "newErr": null,
+   "securityChildren": [
+    "/usr/bin/security add-generic-password -a cursor-user -s cursor-access-token -w <REDACTED>"
+   ],
+   "authJsonWritten": false,
+   "stderr": [
+    "Error: Cursor couldn't save your login to the macOS keychain.",
+    "The keychain item is stuck. Delete it and sign in again:",
+    "  security delete-generic-password -s cursor-access-token -a cursor-user",
+    "  agent login"
+   ]
+  },
+  {
+   "label": "foreign-home-3",
+   "ms": 45472,
+   "newOk": false,
+   "newErr": null,
+   "securityChildren": [
+    "/usr/bin/security add-generic-password -a cursor-user -s cursor-access-token -w <REDACTED>",
+    "(security)"
+   ],
+   "authJsonWritten": false,
+   "stderr": [
+    "Error: Cursor couldn't save your login to the macOS keychain.",
+    "The keychain item is stuck. Delete it and sign in again:",
+    "  security delete-generic-password -s cursor-access-token -a cursor-user",
+    "  agent login"
+   ]
+  },
+  {
+   "label": "foreign-home+ASSUME_SSH",
+   "ms": 3391,
+   "newOk": false,
+   "newErr": null,
+   "securityChildren": [
+    "/usr/bin/security add-generic-password -a cursor-keychain-probe -s cursor-keychain-probe -",
+    "(security)"
+   ],
+   "authJsonWritten": false,
+   "stderr": [
+    "\u001b[33mError: Your macOS login keychain is locked.\u001b[0m",
+    "Run \u001b[36msecurity unlock-keychain\u001b[0m and try again."
+   ]
+  }
+ ]
+}

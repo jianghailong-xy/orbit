@@ -308,7 +308,7 @@ export const zeroA = [
         ctx.check('HOME only: config under ~/.cursor, auth under ~/.cursor/auth.json (macOS ignores XDG for auth)', has('home-only', /^home\/\.cursor\/cli-config\.json/) && has('home-only', /^home\/\.cursor\/auth\.json/));
         ctx.check('CURSOR_CONFIG_DIR moves cli-config, statsig cache and acp-sessions, not auth.json', has('home+CURSOR_CONFIG_DIR', /^cursor-config\/cli-config\.json/) && has('home+CURSOR_CONFIG_DIR', /^cursor-config\/acp-sessions\//) && has('home+CURSOR_CONFIG_DIR', /^home\/\.cursor\/auth\.json/));
         ctx.check('XDG_CONFIG_HOME moves the config dir but auth.json stays in $HOME/.cursor', has('home+XDG_CONFIG_HOME', /^xdg-config\/cursor\/cli-config\.json/) && has('home+XDG_CONFIG_HOME', /^home\/\.cursor\/auth\.json/));
-        ctx.check('agent-cli-state.json stays in $HOME/.cursor under every layout', Object.keys(trees).every(l => !l.endsWith(':exists') && has(l, /^home\/\.cursor\/agent-cli-state\.json/)));
+        ctx.check('agent-cli-state.json stays in $HOME/.cursor under every layout', Object.keys(trees).filter(l => !l.endsWith(':exists')).every(l => has(l, /^home\/\.cursor\/agent-cli-state\.json/)));
         ctx.check('built-in skills are synced into $HOME/.cursor/skills-cursor under every layout', Object.keys(trees).filter(l => !l.endsWith(':exists')).every(l => ex(l, 'skillsInHome')));
         ctx.check('the Node compile cache goes to $HOME/Library/Caches on macOS, not XDG_CACHE_HOME', Object.keys(trees).filter(l => !l.endsWith(':exists')).every(l => ex(l, 'compileCacheHome') && !ex(l, 'compileCacheXdg')));
         ctx.check('XDG_DATA_HOME gets nothing the CLI writes at startup', !trees['home+XDG_DATA_HOME+XDG_CACHE_HOME'].some(l => /^xdg-(data|cache)\/./.test(l)));
@@ -316,7 +316,7 @@ export const zeroA = [
         ctx.check('HOME only: config under ~/.cursor, auth under ~/.config/cursor', has('home-only', /^home\/\.cursor\/cli-config\.json/) && has('home-only', /^home\/\.config\/cursor\/auth\.json/));
         ctx.check('CURSOR_CONFIG_DIR moves cli-config, statsig cache and acp-sessions, not auth.json', has('home+CURSOR_CONFIG_DIR', /^cursor-config\/cli-config\.json/) && has('home+CURSOR_CONFIG_DIR', /^cursor-config\/acp-sessions\//) && has('home+CURSOR_CONFIG_DIR', /^home\/\.config\/cursor\/auth\.json/));
         ctx.check('XDG_CONFIG_HOME (without CURSOR_CONFIG_DIR) moves both config and auth.json to $XDG_CONFIG_HOME/cursor', has('home+XDG_CONFIG_HOME', /^xdg-config\/cursor\/cli-config\.json/) && has('home+XDG_CONFIG_HOME', /^xdg-config\/cursor\/auth\.json/));
-        ctx.check('agent-cli-state.json stays in $HOME/.cursor under every layout', Object.keys(trees).every(l => !l.endsWith(':exists') && has(l, /^home\/\.cursor\/agent-cli-state\.json/)));
+        ctx.check('agent-cli-state.json stays in $HOME/.cursor under every layout', Object.keys(trees).filter(l => !l.endsWith(':exists')).every(l => has(l, /^home\/\.cursor\/agent-cli-state\.json/)));
         ctx.check('built-in skills are synced into $HOME/.cursor/skills-cursor under every layout', Object.keys(trees).filter(l => !l.endsWith(':exists')).every(l => ex(l, 'skillsInHome')));
         ctx.check('XDG_DATA_HOME / XDG_CACHE_HOME move nothing the CLI writes at startup', !trees['home+XDG_DATA_HOME+XDG_CACHE_HOME'].some(l => /^xdg-(data|cache)\/./.test(l)));
       }
