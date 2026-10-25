@@ -116,8 +116,8 @@ holds_lock() {
   for svc in "${services[@]}"; do
     [ "$first" = 1 ] || printf ','
     first=0
-    printf '"%s":{"image":"%s","cgroup":"%s","cpuMax":"%s","memoryMax":"%s"}' "$svc" "$(docker inspect -f '{{.Config.Image}}' "$project-$svc")" \
-      "$(basename "${cgroup[$svc]}")" "$(cat "${cgroup[$svc]}/cpu.max")" "$(cat "${cgroup[$svc]}/memory.max")"
+    printf '"%s":{"image":"%s","cgroup":"%s","cpuMax":"%s","memoryMax":"%s","cpuset":"%s"}' "$svc" "$(docker inspect -f '{{.Config.Image}}' "$project-$svc")" \
+      "$(basename "${cgroup[$svc]}")" "$(cat "${cgroup[$svc]}/cpu.max")" "$(cat "${cgroup[$svc]}/memory.max")" "$(cat "${cgroup[$svc]}/cpuset.cpus")"
   done
   printf '}}\n'
 } > "$out/run.json"

@@ -38,7 +38,7 @@ const load = (dir) => {
   const after = read('db-after.json');
   const statements = read('pgss.json');
   return {
-    dir, report, summary, statements,
+    dir, report, summary, statements, run: read('run.json'),
     commits: after.xactCommit - before.xactCommit,
     calls: statements.reduce((n, q) => n + q.calls, 0),
     steady: summary.steady,
@@ -154,6 +154,9 @@ const out = [];
 out.push(`Commit \`${run.sha.slice(0, 12)}\`, runs ${baseline.runs.join(' and ')}: ${baseline.fleet.runners} runners, ${baseline.fleet.activeSessions} running sessions.`);
 const unlocked = [hb, ev, full].filter(Boolean).filter((r) => r.report.loadTestLock !== true).map((r) => r.report.run);
 out.push(unlocked.length === 0 ? "Every run held the host's load test lock." : `Not under the host's load test lock: ${unlocked.join(', ')}.`);
+// The CPUs the stack's containers were confined to, run by run: a light run's CPU time depends on the kind of core.
+const cpusets = [hb, ev, full].filter(Boolean).map((r) => [...new Set(Object.values(r.run.containers ?? {}).map((c) => c.cpuset || 'any'))].join('/'));
+out.push(new Set(cpusets).size === 1 ? `The containers ran on CPUs ${cpusets[0]} in every run.` : `The containers ran on CPUs ${cpusets.join(', ')}, run by run.`);
 out.push(`Heartbeats only: ${beatsPerSec} beats/s. With events: ${evBeatsPerSec} beats/s, ${batchesPerSec} batches/s (${perBatch.eventsPerBatch} events each, ${ev.steady.eventsAckedPerSecond} events/s).`, '');
 out.push('| Per operation | apiserver CPU ms | database CPU ms | gateway CPU ms | SQL statements | commits |');
 out.push('| --- | --- | --- | --- | --- | --- |');
