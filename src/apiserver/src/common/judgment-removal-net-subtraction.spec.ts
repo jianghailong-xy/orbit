@@ -123,8 +123,12 @@ test('(z) no compose service or resident process is added', () => {
   // managed-runner-firewall is the managed runners' host firewall, which the account owner decided on
   // 2026-10-19 under a Compose profile of its own (docs/managed-runner-design.md, "Implementation record: the
   // managed runners' host firewall"), not this removal; test/compose-topology.test.mjs (n) pins it.
+  // link-gateway is the runner link's WebSocket gateway, which the runner link project added on 2026-10-25 under a Compose
+  // profile of its own that no install switches on (docs/runner-link-design.md §6.1 and D1; project 34bc0CsOzPh9KshG7H3DW,
+  // task A4), not this removal; test/compose-topology.test.mjs (o) pins it.
   assert.deepEqual(names,
-    ['postgres', 'pgbackup', 'apiserver', 'wiki-worker', 'web', 'gateway', 'docker-channel', 'managed-runner-firewall'],
+    ['postgres', 'pgbackup', 'apiserver', 'wiki-worker', 'web', 'gateway', 'docker-channel', 'managed-runner-firewall',
+      'link-gateway'],
     `compose declares ${names.length} services: ${names.join(', ')}`);
   assert.equal(/judgment|judgement/i.test(compose), false,
     'the removal must add no judgment compose service');

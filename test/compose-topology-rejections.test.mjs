@@ -104,6 +104,25 @@ const cases = [
   ['a Kubernetes template mounted by the Docker channel', 'Compose names nothing of Kubernetes',
     replace('      - /var/run/docker.sock:/var/run/docker.sock\n',
       '      - /var/run/docker.sock:/var/run/docker.sock\n      - ./deploy/managed-runner/storage:/templates:ro\n')],
+  // The runner link gateway of 2026-10-25: off unless its profile is on, pinned whole, given the token signing key's
+  // public half and never the key itself.
+  ['the link gateway outside its profile', 'the runner link gateway is exactly the service',
+    replace('    profiles: [runner-link]\n', '')],
+  ['the runner link profile on another service', 'nothing was added back:',
+    replace('  web:\n', '  web:\n    profiles: [runner-link]\n')],
+  ['the token signing key given to the link gateway', 'the link token signing key is given to the apiserver alone',
+    replace('      LINK_API_URL: http://apiserver:3000\n',
+      '      LINK_API_URL: http://apiserver:3000\n      LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:-}"\n')],
+  ['a database for the link gateway', 'the runner link gateway is exactly the service',
+    replace('      LINK_API_URL: http://apiserver:3000\n',
+      '      LINK_API_URL: http://apiserver:3000\n      DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"\n')],
+  ['the link gateway metrics on every interface', 'the runner link gateway is exactly the service',
+    replace('      - "127.0.0.1:${RUNNER_LINK_METRICS_PORT:-9464}:9464"', '      - "${RUNNER_LINK_METRICS_PORT:-9464}:9464"')],
+  ['a writable root for the link gateway', 'the runner link gateway is exactly the service',
+    replace('    stop_grace_period: 90s\n    read_only: true\n', '    stop_grace_period: 90s\n')],
+  ['the Docker socket given to the link gateway', 'is given to the Docker channel and to no other service',
+    replace('      - "${RUNNER_LINK_GATEWAY_DIR:-/dev/null}:/var/lib/orbit-link-gateway"\n',
+      '      - "${RUNNER_LINK_GATEWAY_DIR:-/dev/null}:/var/lib/orbit-link-gateway"\n      - /var/run/docker.sock:/var/run/docker.sock\n')],
 ];
 
 test('the topology checks accept the control and reject deployment counterexamples', async (t) => {

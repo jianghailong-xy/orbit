@@ -337,8 +337,12 @@ test('(e) the removal adds no compose service and no resident process', () => {
   // managed-runner-firewall is the managed runners' host firewall, which the account owner decided on
   // 2026-10-19 under a Compose profile of its own (docs/managed-runner-design.md, "Implementation record: the
   // managed runners' host firewall"), not this removal; test/compose-topology.test.mjs (n) pins it.
+  // link-gateway is the runner link's WebSocket gateway, which the runner link project added on 2026-10-25 under a Compose
+  // profile of its own that no install switches on (docs/runner-link-design.md §6.1 and D1; project 34bc0CsOzPh9KshG7H3DW,
+  // task A4), not this removal; test/compose-topology.test.mjs (o) pins it.
   assert.deepEqual(services,
-    ['apiserver', 'docker-channel', 'gateway', 'managed-runner-firewall', 'pgbackup', 'postgres', 'web', 'wiki-worker']);
+    ['apiserver', 'docker-channel', 'gateway', 'link-gateway', 'managed-runner-firewall', 'pgbackup', 'postgres', 'web',
+      'wiki-worker']);
 
   const service = readFileSync(path.join(API, 'src/projects/project-acceptance.service.ts'), 'utf8');
   assert.doesNotMatch(service, /setInterval|setTimeout|@Interval|@Cron|OnModuleInit|OnApplicationBootstrap/);

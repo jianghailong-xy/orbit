@@ -270,6 +270,22 @@ jobs:
         working-directory: src/runner-go
         run: go test ./...
 
+  # The runner link gateway (src/link-gateway), a Go module of its own. -race because it is a server of concurrent
+  # connections whose reader, writer and pinger share state.
+  go-link-gateway:
+    name: Go link gateway
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.x'
+          cache-dependency-path: src/link-gateway/go.sum
+      - name: Test link gateway
+        working-directory: src/link-gateway
+        run: go test -race ./...
+
   swift-core:
     name: Swift core
     runs-on: ubuntu-latest

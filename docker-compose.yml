@@ -392,6 +392,59 @@ services:
       retries: 3
       start_period: 10s
 
+  # The runner link's gateway (docs/runner-link-design.md §6.1; docs/self-hosting.md, "Runner link"): the WebSocket
+  # endpoint runners connect to, on a port of its own published straight from this host, never through the web gateway
+  # above or a proxying CDN. It checks each connection token with the public half of the apiserver's signing key and
+  # reads revoked runner credentials from the apiserver with the gateway secret; it holds no signing key and no database
+  # connection. Until the link is switched over it keeps connections, answers heartbeats and compares what runners
+  # mirror to it, and forwards nothing (src/link-gateway/README.md). It runs only under the runner-link profile, which no
+  # install switches on, so a deployment whose .env does not name that profile runs exactly what it ran.
+  link-gateway:
+    profiles: [runner-link]
+    build:
+      context: src/link-gateway
+      args:
+        ORBIT_SOURCE_SHA: "${ORBIT_SOURCE_SHA:-}"
+    image: orbit-link-gateway:local
+    container_name: orbit-link-gateway
+    restart: unless-stopped
+    logging: *logging
+    # Room to drain before Docker stops it: runners are told to reconnect within LINK_DRAIN_RECONNECT_MAX (30s) and given
+    # LINK_DRAIN_GRACE (15s) more, and the drain gives up at LINK_DRAIN_TIMEOUT (80s).
+    stop_grace_period: 90s
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      # The public half of RUNNER_LINK_SIGNING_KEY, base64 of its PEM (openssl pkey -in runner-link.pem -pubout | base64
+      # -w0); two, comma-separated, while the signing key is replaced.
+      LINK_PUBLIC_KEYS: "${RUNNER_LINK_PUBLIC_KEY:-}"
+      LINK_GATEWAY_TOKEN: "${RUNNER_LINK_GATEWAY_TOKEN:-}"
+      LINK_API_URL: http://apiserver:3000
+      # Certificates: from files in RUNNER_LINK_GATEWAY_DIR/tls, reloaded when they change, unless
+      # RUNNER_LINK_ACME_DOMAINS names the link's host, when the gateway obtains and renews them itself (TLS-ALPN-01,
+      # which needs RUNNER_LINK_PORT=443) and keeps them in RUNNER_LINK_GATEWAY_DIR/acme.
+      LINK_TLS_CERT_FILE: /var/lib/orbit-link-gateway/tls/fullchain.pem
+      LINK_TLS_KEY_FILE: /var/lib/orbit-link-gateway/tls/privkey.pem
+      LINK_ACME_DOMAINS: "${RUNNER_LINK_ACME_DOMAINS:-}"
+      LINK_ACME_EMAIL: "${RUNNER_LINK_ACME_EMAIL:-}"
+      LINK_ACME_CACHE_DIR: /var/lib/orbit-link-gateway/acme
+    ports:
+      # The runners' port, open to the internet. Metrics and the health check stay on this host's loopback.
+      - "${RUNNER_LINK_PORT:-8443}:8443"
+      - "127.0.0.1:${RUNNER_LINK_METRICS_PORT:-9464}:9464"
+    volumes:
+      - "${RUNNER_LINK_GATEWAY_DIR:-/dev/null}:/var/lib/orbit-link-gateway"
+    depends_on:
+      apiserver:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/link-gateway", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
 volumes:
   # Only the Postgres socket directory: the archive itself is a bind mount under ./data
   # so backups are visible (and copyable off the host) without docker.

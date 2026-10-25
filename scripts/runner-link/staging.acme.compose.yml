@@ -1,0 +1,29 @@
+# ACME for the staging link gateway (staging-up.sh with ORBIT_LINK_STAGING_TLS=acme). Pebble, Let's Encrypt's ACME test
+# server, issues the gateway's certificate over TLS-ALPN-01, the way Let's Encrypt does in production. The gateway's host
+# name is a network alias, which Pebble resolves through Docker's DNS, and Pebble validates on the gateway's own port.
+# Clients therefore reach the gateway by that name from inside the project's network, as staging-client.sh does.
+services:
+  pebble:
+    image: ghcr.io/letsencrypt/pebble@sha256:ddf230642b1a584f519f32e347de1b05a6e4c1f6c35c1863b33effeab5f78199
+    container_name: ${STAGING_PROJECT}-pebble
+    command: ["-config", "/etc/pebble/pebble-config.json"]
+    environment:
+      # No random waits before validating, and no deliberately refused nonces: neither is what is being tried here.
+      PEBBLE_VA_NOSLEEP: "1"
+      PEBBLE_WFE_NONCEREJECT: "0"
+    volumes:
+      - ${STAGING_DIR}/pebble:/etc/pebble:ro
+    ports:
+      - 127.0.0.1:${STAGING_PEBBLE_MGMT_PORT}:15000
+
+  link-gateway:
+    depends_on:
+      pebble:
+        condition: service_started
+    environment:
+      LINK_ACME_DIRECTORY_URL: https://pebble:14000/dir
+      LINK_ACME_CA_FILE: /var/lib/orbit-link-gateway/pebble.minica.pem
+    networks:
+      default:
+        aliases:
+          - ${STAGING_ACME_DOMAIN}
