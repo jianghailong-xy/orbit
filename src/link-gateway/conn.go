@@ -41,9 +41,10 @@ type conn struct {
 	outID  atomic.Uint64
 
 	closeOnce  sync.Once
+	drainOnce  sync.Once
 	closing    chan struct{}
 	writerDone chan struct{}
-	reason     atomic.Value // string: why the gateway closed it
+	reason     atomic.Pointer[string] // why the connection ended; the first to say so wins
 
 	mu       sync.Mutex
 	hello    *linkpb.Hello
@@ -398,21 +399,22 @@ func (c *conn) closeWith(code linkpb.CloseCode, message string, retryAfter time.
 }
 
 func (c *conn) setReason(reason string) {
-	if _, set := c.reason.Load().(string); !set {
-		c.reason.Store(reason)
-	}
+	c.reason.CompareAndSwap(nil, &reason)
 }
 
 // drain tells the runner to open its next connection after delay, and closes this one if it is still open after
 // that and the grace on top (§6.1).
+// Only the first call counts: a connection welcomed while the drain began can be reached twice.
 func (c *conn) drain(delay time.Duration) {
-	c.send(&linkpb.Frame{Body: &linkpb.Frame_Drain{Drain: &linkpb.Drain{
-		ReconnectAfterMs: uint32(delay / time.Millisecond),
-	}}}, true)
-	c.g.metrics.drainsSent.inc()
-	c.after(delay+c.g.cfg.DrainGrace, func() {
-		c.closeWith(linkpb.CloseCode_CLOSE_CODE_UNSPECIFIED, "the gateway is shutting down", 0,
-			websocket.StatusGoingAway, "drained")
+	c.drainOnce.Do(func() {
+		c.send(&linkpb.Frame{Body: &linkpb.Frame_Drain{Drain: &linkpb.Drain{
+			ReconnectAfterMs: uint32(delay / time.Millisecond),
+		}}}, true)
+		c.g.metrics.drainsSent.inc()
+		c.after(delay+c.g.cfg.DrainGrace, func() {
+			c.closeWith(linkpb.CloseCode_CLOSE_CODE_UNSPECIFIED, "the gateway is shutting down", 0,
+				websocket.StatusGoingAway, "drained")
+		})
 	})
 }
 
@@ -479,12 +481,11 @@ func (c *conn) finish() {
 		return
 	}
 	c.g.reg.remove(c)
-	reason, _ := c.reason.Load().(string)
-	if reason == "" {
-		reason = "connection_lost"
-		if websocket.CloseStatus(c.readError) != -1 {
-			reason = "client_closed"
-		}
+	reason := "connection_lost"
+	if r := c.reason.Load(); r != nil {
+		reason = *r
+	} else if websocket.CloseStatus(c.readError) != -1 {
+		reason = "client_closed"
 	}
 	c.g.metrics.connections.add(-1)
 	c.g.metrics.disconnects.inc(reason)

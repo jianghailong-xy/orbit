@@ -186,6 +186,10 @@ func formatValue(v float64) string {
 	if math.IsInf(v, 1) {
 		return "+Inf"
 	}
+	// Whole numbers, timestamps among them, in plain digits rather than exponent form.
+	if v == math.Trunc(v) && math.Abs(v) < 1e15 {
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	}
 	return strconv.FormatFloat(v, 'g', -1, 64)
 }
 
