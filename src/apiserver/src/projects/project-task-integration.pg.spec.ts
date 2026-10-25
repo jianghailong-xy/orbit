@@ -437,10 +437,15 @@ test('a DONE task’s landing through the heartbeat and result routes: every que
       await stack.db.runner.update({ where: { id: w.runnerId }, data: { status: RunnerStatus.OFFLINE } });
       assert.equal((await read(stack, w, first)).landTask?.blockingReason?.summary,
         `Waiting for runner ${w.runnerName}: it is offline`);
-      // ONLINE on the row but silent past the session queue's threshold reads offline as well.
+      // ONLINE on the row but silent past the session queue's threshold reads offline as well: its
+      // own record and its presence row, which the beats above wrote, both five minutes old.
       await stack.db.runner.update({
         where: { id: w.runnerId },
         data: { status: RunnerStatus.ONLINE, lastHeartbeatAt: new Date(Date.now() - 5 * 60_000) },
+      });
+      await stack.db.runnerPresence.update({
+        where: { runnerId: w.runnerId },
+        data: { lastBeatAt: new Date(Date.now() - 5 * 60_000) },
       });
       assert.equal((await read(stack, w, first)).landTask?.blockingReason?.summary,
         `Waiting for runner ${w.runnerName}: it is offline`);

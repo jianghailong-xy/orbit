@@ -65,7 +65,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { QueueService as RealQueueService } from '../queue/queue.service';
 import { AutoRetryService } from './auto-retry.service';
-import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
+import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { SessionsService } from './sessions.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -620,7 +620,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     // Work comes back: the runner's next snapshot says so, and the sweep fires at the arm's instant.
     await db.runner.update({ where: { id: m.runnerId }, data: { planUsage: usage(8) } });
     const at = new Date(armed.retry_ms! + 1_000);
-    await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - SESSION_RUNNER_OFFLINE_AFTER_MS / 2) } });
+    await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - RUNNER_OFFLINE_AFTER_MS / 2) } });
     await new AutoRetryService(prisma, sessions, quiet).sweep(at);
     const revived = await db.session.findUniqueOrThrow({ where: { id }, select: { status: true, retryAttempts: true } });
     assert.deepEqual(revived, { status: RunStatus.PENDING, retryAttempts: 1 }, 'not re-sent while Default is still spent');

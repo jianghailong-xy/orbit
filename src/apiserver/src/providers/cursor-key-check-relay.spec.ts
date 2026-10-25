@@ -141,6 +141,7 @@ test(`P2 follow-up a runner is asked at most ${CURSOR_KEY_CHECKS_PER_RUNNER} che
 test('P2 follow-up the heartbeat hands a key only to a process that declares cursor-key-check/v1, and only when one is waiting', async () => {
   const RUNNER = '33333333-3333-4333-8333-333333333333';
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: { update: async () => ({ maxConcurrent: 2 }), findUnique: async () => null, updateMany: async () => ({ count: 0 }) },
     workspace: { findMany: async () => [] },
   } as never;

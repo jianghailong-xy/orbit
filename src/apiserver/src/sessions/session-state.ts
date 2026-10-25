@@ -13,10 +13,7 @@ import {
   deriveSessionRunState,
   deriveSessionState,
 } from '@orbit/shared';
-import { RUNNER_OFFLINE_AFTER_MS, runnerIsOnline, type RunnerBeats } from '../runners/runner-presence';
-
-/** Runners heartbeat every 30s; three missed heartbeats makes resume unavailable. */
-export const SESSION_RUNNER_OFFLINE_AFTER_MS = RUNNER_OFFLINE_AFTER_MS;
+import { runnerIsOnline, type RunnerBeats } from '../runners/runner-presence';
 
 /** The raw fields required to augment a Prisma/API session row. */
 export interface RawSessionStateFields {

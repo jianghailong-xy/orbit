@@ -106,6 +106,7 @@ function jsonEqual(left: unknown, right: unknown): boolean {
 function harness(initial: unknown = null) {
   const row = { planUsage: clone(initial), writes: 0 };
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: {
       update: async () => ({ maxConcurrent: 4, minFreeDiskMb: null }),
       findUnique: async ({ select }: { select?: Record<string, boolean> }) =>

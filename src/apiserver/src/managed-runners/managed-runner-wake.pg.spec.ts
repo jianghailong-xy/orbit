@@ -436,8 +436,10 @@ test('managed runners wake on demand and sleep through the real application', {
     const o = await owner('revive');
     const ended = await session(o.mapping, 'FAILED', { finished_at: new Date(), error: 'it stopped' });
     const asleep = await putToSleep(o);
-    // Long enough asleep for its last heartbeat to read as offline: the gate a revive used to stop at.
+    // Long enough asleep for its last heartbeat to read as offline: the gate a revive used to stop at. Both
+    // records of it — its own and the presence row its beats wrote while it was up.
     await sql.query(`UPDATE runner SET last_heartbeat_at = now() - interval '10 minutes' WHERE id = $1`, [asleep.runnerId]);
+    await sql.query(`UPDATE runner_presence SET last_beat_at = now() - interval '10 minutes' WHERE runner_id = $1`, [asleep.runnerId]);
     const revived = await call(server, 'POST', `/api/sessions/${ended}/resume`, o.token, { clientTurnId: randomUUID(), content: 'carry on' });
     assert.ok(revived.status === 200 || revived.status === 201, `not refused as offline: ${revived.text}`);
     assert.equal((await db.session.findUniqueOrThrow({ where: { id: ended } })).status, 'PENDING');
@@ -519,8 +521,9 @@ test('managed runners wake on demand and sleep through the real application', {
     const rowOf = async () => (await sql.query(`SELECT row_to_json(m)::text AS row FROM managed_runner m WHERE owner_id = $1`, [o.userId])).rows[0].row as string;
     const stored = await rowOf();
     const mark = cluster.calls.length;
-    // Long enough asleep for its last heartbeat to read as offline.
+    // Long enough asleep for its last heartbeat to read as offline: its own record and its presence row.
     await sql.query(`UPDATE runner SET last_heartbeat_at = now() - interval '10 minutes' WHERE id = $1`, [runnerId]);
+    await sql.query(`UPDATE runner_presence SET last_beat_at = now() - interval '10 minutes' WHERE runner_id = $1`, [runnerId]);
 
     // The owner's own requests reach the server only on a replica whose view of the disabled accounts is
     // not yet half a minute old: played by holding this replica's view where it was.
