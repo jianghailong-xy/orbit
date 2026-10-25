@@ -102,6 +102,7 @@ import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 import { branchName } from '../projects/project-criterion-landing';
 import { managedRunnerInstanceClaimable, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
+import { DISPATCH_PAUSED } from './dispatch-pause';
 
 /** The runner asking for work, as the claim route knows it. */
 export interface ClaimingRunner {
@@ -420,6 +421,10 @@ export class QueueService {
           SELECT s.id FROM "session" s
           WHERE s.status = 'PENDING'
             AND s."kind" = 'CONVERSATION'
+            -- The runner dispatch pause (dispatch-pause.ts): while an administrator holds it, nothing is
+            -- claimed. Read after the claim lock above, which the switch takes too, so a pause that has
+            -- been answered is one every later claim sees.
+            AND NOT ${DISPATCH_PAUSED}
             AND NOT (s.id = ANY(${paused}::uuid[]))
             AND s."cancel_requested_at" IS NULL
             AND s."assigned_runner_id" = ${runnerId}
