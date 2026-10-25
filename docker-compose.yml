@@ -212,6 +212,15 @@ services:
       FCM_CLIENT_EMAIL: "${FCM_CLIENT_EMAIL:-}"
       FCM_PRIVATE_KEY: "${FCM_PRIVATE_KEY:-}"
       FCM_ANDROID_PACKAGE: "${FCM_ANDROID_PACKAGE:-io.orbitd.android}"
+      # Optional: the runner link (docs/self-hosting.md, "Runner link"): the connection tokens a runner trades its runner
+      # token for, to reach the link gateway. All three or none: unset, the link is off, its routes answer 404 and runners
+      # work over HTTP as before. The signing key is base64 of an Ed25519 private key in PEM (generate: openssl genpkey
+      # -algorithm ed25519 | base64 -w0); the gateway is given only its public key. The URL is the gateway's ws:// or
+      # wss:// address. The gateway token is the secret the gateway presents to read revoked credentials (generate:
+      # openssl rand -base64 32).
+      RUNNER_LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:-}"
+      RUNNER_LINK_URL: "${RUNNER_LINK_URL:-}"
+      RUNNER_LINK_GATEWAY_TOKEN: "${RUNNER_LINK_GATEWAY_TOKEN:-}"
       # Optional: managed runners (docs/self-hosting.md, "Managed runners"): every account gets a runner of its own,
       # a container on this host's Docker, at sign-in. Off unless the host's .env says true. A fresh install
       # (scripts/install-server.sh) writes that line and an upgrade never does, so a deployment that predates managed

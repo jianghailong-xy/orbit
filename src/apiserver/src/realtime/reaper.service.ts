@@ -32,6 +32,7 @@ import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { TaskFailureHow, returnQueuedTurns } from '../projects/project-open-item';
 import { settleUnrunSessionRequests } from '../sessions/session-request';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
+import { RUNNER_LINK_REVOCATION_WINDOW_MS } from '../runner-api/runner-link-token';
 
 const REAP_INTERVAL_MS = 30_000;
 // How often to permanently purge sessions that have sat in Trash past the retention
@@ -135,6 +136,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     this.timer.unref(); // don't keep the process alive just for the reaper
     this.purgeTimer = setInterval(() => {
       this.purgeTrash().catch((e) => this.log.error('trash purge failed: ' + (e as Error).message));
+      this.purgeLapsedLinkRevocations().catch((e) =>
+        this.log.error('runner link revocation purge failed: ' + (e as Error).message));
     }, PURGE_INTERVAL_MS);
     this.purgeTimer.unref();
   }
@@ -156,6 +159,16 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     if (res.count > 0) {
       this.log.log(`purged ${res.count} trashed session(s) past ${TRASH_RETENTION_DAYS}-day retention`);
     }
+  }
+
+  /**
+   * Delete the runner link revocations older than a connection token's lifetime (migration 0443):
+   * every token minted with those credentials has expired, so they can refuse nothing. Runs whether
+   * or not the link is configured, because the trigger that writes them runs either way.
+   */
+  private async purgeLapsedLinkRevocations(): Promise<void> {
+    const cutoff = new Date(Date.now() - RUNNER_LINK_REVOCATION_WINDOW_MS);
+    await this.prisma.runnerLinkRevocation.deleteMany({ where: { revokedAt: { lt: cutoff } } });
   }
 
   private async sweep(): Promise<void> {

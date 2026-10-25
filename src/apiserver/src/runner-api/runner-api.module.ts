@@ -18,6 +18,8 @@ import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerWatchesController } from './runner-watches.controller';
 import { RunnerReleaseController } from './runner-release.controller';
+import { RunnerLinkGatewayGuard, RunnerLinkTokenController } from './runner-link-token.controller';
+import { RUNNER_LINK, runnerLinkFrom } from './runner-link-token';
 import { RunnerSessionAuthGuard } from './runner-session-auth.guard';
 import {
   createServiceTokenJwt,
@@ -84,11 +86,19 @@ import { RunnerWikiController } from './runner-wiki.controller';
     // Which runner release each runner is to run (runner-release.ts).
     RunnerReleaseController,
     RunnerWikiController,
+    // The runner link's connection tokens and the gateway's revocation list (runner-link-token.ts).
+    RunnerLinkTokenController,
   ],
   providers: [
     RunnerAuthGuard,
     RunnerSessionAuthGuard,
+    RunnerLinkGatewayGuard,
     RunnerWriteProtocolInterceptor,
+    {
+      provide: RUNNER_LINK,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => runnerLinkFrom(config),
+    },
     {
       provide: RUNNER_ORCHESTRATION_JWT,
       inject: [ConfigService],
