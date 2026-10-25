@@ -39,7 +39,7 @@ type options struct {
 	fleet, api, linkURL, connect, caFile, out string
 	runners                                   int
 	rampRate                                  float64
-	duration, drainTimeout, interval          time.Duration
+	duration, settle, drainTimeout, interval  time.Duration
 	eventRate                                 float64
 	flushMin, flushMax                        time.Duration
 	maxBatch                                  int
@@ -91,7 +91,8 @@ func run(args []string) int {
 	fs.StringVar(&o.out, "out", "", "the directory results are written to (required)")
 	fs.IntVar(&o.runners, "runners", 0, "play only the fleet's first N runners (default: all)")
 	fs.Float64Var(&o.rampRate, "ramp-rate", 150, "first connections opened per second")
-	fs.DurationVar(&o.duration, "duration", time.Hour, "how long the steady window lasts, from the moment every runner is connected")
+	fs.DurationVar(&o.duration, "duration", time.Hour, "how long the steady window lasts")
+	fs.DurationVar(&o.settle, "settle", 30*time.Second, "once every runner is connected, how long before the steady window opens: what the ramp left queued drains first")
 	fs.DurationVar(&o.drainTimeout, "drain-timeout", 30*time.Second, "after the steady window, how long runners wait for their last events to be acknowledged")
 	fs.DurationVar(&o.interval, "interval", 10*time.Second, "how often series.jsonl gets a line")
 	fs.Float64Var(&o.eventRate, "event-rate", 2000, "durable events per second across the fleet, shared evenly by the active sessions")
@@ -232,9 +233,9 @@ func (g *loadgen) noteN(kind string, n int64) {
 
 func (g *loadgen) connectedOnce() { g.ever.Add(1) }
 
-// run plays the fleet: the ramp, while every runner opens its first connection at -ramp-rate; the steady window,
-// -duration from the moment the last one is connected; and the drain, while runners wait for their last
-// acknowledgements.
+// run plays the fleet: the ramp, while every runner opens its first connection at -ramp-rate; the settle, -settle long,
+// while what the ramp queued (every runner's first beat at once, its connect) drains; the steady window, -duration long;
+// and the drain, while runners send no more beats and wait for their last acknowledgements.
 func (g *loadgen) run(ctx context.Context) (*summary, int) {
 	o := g.o
 	started := time.Now()
@@ -342,6 +343,13 @@ func (g *loadgen) run(ctx context.Context) (*summary, int) {
 	if everConnected < int64(len(g.runners)) {
 		g.stats.fail("ramp_incomplete", fmt.Sprintf("%d of %d runners connected within %s", everConnected, len(g.runners), rampLimit))
 	}
+	if ctx.Err() == nil && o.settle > 0 {
+		setPhase("settle")
+		select {
+		case <-ctx.Done():
+		case <-time.After(o.settle):
+		}
+	}
 	if ctx.Err() == nil {
 		steadyStart = time.Now()
 		setPhase("steady")
@@ -369,7 +377,7 @@ func (g *loadgen) run(ctx context.Context) (*summary, int) {
 	sum := summary{
 		Config: summaryConfig{
 			Runners: len(g.runners), ActiveSessions: g.activeSessions, EventRate: o.eventRate, PerSessionRate: g.perSessionRate,
-			RampRate: o.rampRate, Duration: o.duration.String(), FlushMin: o.flushMin.String(), FlushMax: o.flushMax.String(),
+			RampRate: o.rampRate, Duration: o.duration.String(), Settle: o.settle.String(), FlushMin: o.flushMin.String(), FlushMax: o.flushMax.String(),
 			MaxBatch: o.maxBatch, RenewBefore: o.renewBefore.String(), SpreadRenewals: o.spreadRenewals, API: o.api,
 			LinkURL: o.linkURL, Connect: o.connect, Seed: o.seed, EventCycle: cycle, BoundaryEvent: "tool_result",
 		},
@@ -418,6 +426,7 @@ type summaryConfig struct {
 	PerSessionRate float64  `json:"perSessionRate"`
 	RampRate       float64  `json:"rampRate"`
 	Duration       string   `json:"duration"`
+	Settle         string   `json:"settle"`
 	FlushMin       string   `json:"flushMin"`
 	FlushMax       string   `json:"flushMax"`
 	MaxBatch       int      `json:"maxBatch"`

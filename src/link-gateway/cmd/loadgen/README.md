@@ -43,17 +43,18 @@ loadgen -fleet fleet.jsonl -api http://127.0.0.1:61086 -link-url wss://link-gate
 | `-ca` | — | Also trust this CA for the link's TLS. |
 | `-runners` | all | Play only the fleet's first N runners. |
 | `-ramp-rate` | 150 | First connections opened per second (the gateway admits 200 a second across all clients). |
-| `-duration` | 1h | The steady window, from the moment every runner is connected. |
+| `-duration` | 1h | The steady window. |
+| `-settle` | 30s | Once every runner is connected, how long before the steady window opens. The ramp queues every runner's first beat and connect at once (since B4a a connect also costs the welcome route's lookup), and on one apiserver that backlog takes about half a minute to drain at 3,000 runners. |
 | `-event-rate` | 2000 | Durable events per second across the fleet. |
 | `-flush-min`, `-flush-max`, `-max-batch` | 1s, 3s, 100 | When a batch is sent, and how many events it carries at most. |
 | `-renew-before`, `-spread-renewals` | 5m, true | When a connection is replaced. |
-| `-drain-timeout` | 30s | After the window, how long runners wait for their last acknowledgements. |
+| `-drain-timeout` | 30s | After the window, how long runners wait for their last acknowledgements. They send no new beat meanwhile, and close each connection with the close handshake, so the gateway sees them leave. |
 | `-interval` | 10s | How often `series.jsonl` gets a line. |
 | `-seed` | 1 | The random seed. |
 
 It writes to `-out`:
 
-- `series.jsonl`: one line per interval, with its phase (`ramp`, `steady`, `drain`), the runners connected, what was
+- `series.jsonl`: one line per interval, with its phase (`ramp`, `settle`, `steady`, `drain`), the runners connected, what was
   sent and acknowledged, the latencies' percentiles and the errors by kind;
 - `summary.json`: the steady window and the whole run, each with its counters, rates, latency summaries and errors,
   the notes (Drain, Credit changes, renewals whose old connection ended first) and the first details of each error;

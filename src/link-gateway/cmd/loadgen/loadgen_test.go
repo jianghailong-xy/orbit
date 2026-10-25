@@ -121,6 +121,8 @@ type fakeGateway struct {
 	welcomes int
 	// helloSessions is how many sessions each Hello named, in order.
 	helloSessions []int
+	// clientCloses counts the connections that ended with the runner's own normal close.
+	clientCloses int
 }
 
 func (f *fakeGateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
@@ -133,6 +135,11 @@ func (f *fakeGateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	read := func() (*linkpb.Frame, error) {
 		_, data, err := ws.Read(ctx)
 		if err != nil {
+			if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
+				f.mu.Lock()
+				f.clientCloses++
+				f.mu.Unlock()
+			}
 			return nil, err
 		}
 		fr := &linkpb.Frame{}
@@ -305,7 +312,7 @@ func playFleet(t *testing.T, supersedeFirst bool) {
 	}
 	g, err := newLoadgen(options{fleet: fleet, api: api.URL, out: dir, rampRate: 100, duration: 3 * time.Second,
 		drainTimeout: 5 * time.Second, interval: time.Second, eventRate: 150, flushMin: 30 * time.Millisecond,
-		flushMax: 120 * time.Millisecond, maxBatch: 10, renewBefore: 500 * time.Millisecond, seed: 3})
+		flushMax: 120 * time.Millisecond, maxBatch: 10, renewBefore: 500 * time.Millisecond, settle: 200 * time.Millisecond, seed: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,6 +365,9 @@ func playFleet(t *testing.T, supersedeFirst bool) {
 		if n != 2 {
 			t.Errorf("Hello %d named %d sessions, want the runner's 2", i, n)
 		}
+	}
+	if fg.clientCloses < 3 {
+		t.Errorf("%d connections ended with the runner's normal close, want at least the 3 runners' last ones", fg.clientCloses)
 	}
 	if sum.Notes["events_acknowledged_by_welcome"] == 0 {
 		t.Errorf("the batch stored on the cut connection was not taken from the next Welcome: notes %v", sum.Notes)

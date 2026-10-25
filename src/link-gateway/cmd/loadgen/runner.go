@@ -139,6 +139,17 @@ func (c *rconn) close() {
 	})
 }
 
+// closeWait closes the connection and waits, for up to timeout, until it has closed: the close handshake done, its
+// reader gone. A process that exits with handshakes still out leaves the gateway connections it reads as lost.
+func (c *rconn) closeWait(timeout time.Duration) {
+	c.close()
+	select {
+	case <-c.done:
+	case <-time.After(timeout):
+		_ = c.ws.CloseNow()
+	}
+}
+
 type dialResult struct {
 	c        *rconn
 	err      error
@@ -265,8 +276,11 @@ func (r *runner) doneOf(c *rconn) <-chan struct{} {
 	return c.done
 }
 
-// drained: nothing produced is left unacknowledged.
+// drained: nothing produced is left unacknowledged, and no heartbeat is out.
 func (r *runner) drained() bool {
+	if !r.beatOut.IsZero() {
+		return false
+	}
 	for _, s := range r.active {
 		if len(s.pending) > 0 || len(s.inflight) > 0 {
 			return false
@@ -278,7 +292,7 @@ func (r *runner) drained() bool {
 func (r *runner) closeAll() {
 	for _, c := range []*rconn{r.cur, r.old} {
 		if c != nil {
-			c.close()
+			c.closeWait(6 * time.Second)
 		}
 	}
 	if r.cur != nil {
@@ -295,7 +309,7 @@ func (r *runner) tick(ctx context.Context, now time.Time, generating bool) {
 		switch {
 		case r.cur == nil && !now.Before(r.dialAt):
 			r.dial(ctx, false)
-		case r.cur != nil && !r.quiescing && !r.renewAt.IsZero() && !now.Before(r.renewAt):
+		case generating && r.cur != nil && !r.quiescing && !r.renewAt.IsZero() && !now.Before(r.renewAt):
 			r.quiescing = true
 			r.quiesceUntil = now.Add(quiesceFor)
 		}
@@ -315,7 +329,7 @@ func (r *runner) tick(ctx context.Context, now time.Time, generating bool) {
 		r.beatLate = true
 		g.stats.fail("heartbeat_ack_late", fmt.Sprintf("runner %s conn %s: no HeartbeatAck %s after a beat", r.id, r.cur.id, now.Sub(r.beatOut).Round(time.Millisecond)))
 	}
-	if r.cur != nil && r.beatOut.IsZero() && !now.Before(r.nextBeat) {
+	if generating && r.cur != nil && r.beatOut.IsZero() && !now.Before(r.nextBeat) {
 		r.beat(now)
 	}
 	// Events.
