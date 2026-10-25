@@ -1,0 +1,30 @@
+[
+ {
+  "group": "task panel and settings",
+  "change": [
+   "A15"
+  ],
+  "screenshots": [
+   "chromium-dark-desktop/settings-saved.png",
+   "chromium-dark-desktop/settings.png",
+   "chromium-dark-phone/settings-saved.png",
+   "chromium-dark-phone/settings.png",
+   "chromium-light-desktop/settings-saved.png",
+   "chromium-light-desktop/settings.png",
+   "chromium-light-phone/settings-saved.png",
+   "chromium-light-phone/settings.png",
+   "webkit-dark-desktop/settings.png",
+   "webkit-dark-phone/settings.png",
+   "webkit-light-desktop/settings.png",
+   "webkit-light-phone/settings.png"
+  ],
+  "mainCommits": [
+   "83671b995",
+   "46e28aaa3"
+  ],
+  "projectLine": [
+   "cb35d126a"
+  ],
+  "generatedFrom": "full-46e28aaa3"
+ }
+]

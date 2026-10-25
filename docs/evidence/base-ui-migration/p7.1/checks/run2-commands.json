@@ -1,0 +1,39 @@
+{
+ "head": "e065ef2f11cde450bcefacaf62f6db0ef21bbf9e",
+ "note": "the same three commands, in the same order, run again after the evidence commit; src/web tree identical to the delivery commit (git rev-parse <commit>:src/web = 31aaca562bae53cc29b959399c9468b25fdf81e9 for both)",
+ "steps": [
+  {
+   "step": "build",
+   "exitCode": 0,
+   "durationMs": 2252
+  },
+  {
+   "step": "test",
+   "exitCode": 0,
+   "durationMs": 213027
+  },
+  {
+   "step": "ui-migration",
+   "exitCode": 0,
+   "durationMs": 186154
+  }
+ ],
+ "vitest": [
+  "Test Files  402 passed (402)",
+  "Tests  5247 passed (5247)"
+ ],
+ "uiMigration": [
+  "P0 expected screenshots: 44 P0.2 originals, 165 main drift references, 43 accepted migration differences.",
+  "11 skipped",
+  "101 passed (3.1m)"
+ ],
+ "screenshots": {
+  "expected": 252,
+  "captured": 252,
+  "unique": 252,
+  "missing": [],
+  "extra": [],
+  "duplicates": []
+ },
+ "distIdenticalAcrossSteps": true
+}

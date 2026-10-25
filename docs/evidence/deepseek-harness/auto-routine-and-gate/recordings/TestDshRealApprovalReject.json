@@ -1,0 +1,215 @@
+{
+  "approvalCards": [
+    {
+      "ID": "approval-1",
+      "Body": {
+        "input": {
+          "content": "P4 denied write",
+          "file_path": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealApprovalReject378342275/001/work/denied.txt",
+          "justification": "P4 synthetic escalation",
+          "sandbox_permissions": "workspace-write"
+        },
+        "toolName": "write",
+        "toolUseId": "call_p4_2"
+      },
+      "Status": "DENIED",
+      "Polls": 2,
+      "LatePoll": false
+    }
+  ],
+  "controlPlane": [
+    {
+      "agent": "",
+      "body": {
+        "input": {
+          "content": "P4 denied write",
+          "file_path": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealApprovalReject378342275/001/work/denied.txt",
+          "justification": "P4 synthetic escalation",
+          "sandbox_permissions": "workspace-write"
+        },
+        "toolName": "write",
+        "toolUseId": "call_p4_2"
+      },
+      "method": "POST",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    }
+  ],
+  "facts": {
+    "denied": "absent",
+    "plain": "absent"
+  },
+  "modelRequests": 3,
+  "orbitEvents": [
+    {
+      "payload": {
+        "argv": [
+          "--profile",
+          "acp",
+          "--patch",
+          "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealApprovalReject378342275/001/dsh-home/orbit.patch.json",
+          "--patch",
+          "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealApprovalReject378342275/001/dsh-home/orbit-agent.patch.json"
+        ],
+        "cliVersion": "0.2.0-rc.2",
+        "configHash": "5dd54d7833861307c61691ff13fe7a7e3ed8f19c5422e7c7efca589774e565e0",
+        "dshHome": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealApprovalReject378342275/001/dsh-home",
+        "executable": "/tmp/orbit-dsh-p4-OFKGjI/install/node_modules/.bin/dsh",
+        "provider": "dsh",
+        "runtime": "acp",
+        "subtype": "launch"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "cliVersion": "0.2.0-rc.2",
+        "provider": "dsh",
+        "resumed": false,
+        "runtime": "acp",
+        "runtimeSessionId": "c07f6c56-0e1f-4f0e-a21f-8ceffee0fd33",
+        "sessionId": "c07f6c56-0e1f-4f0e-a21f-8ceffee0fd33",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "runtimeSessionId": "c07f6c56-0e1f-4f0e-a21f-8ceffee0fd33",
+        "text": "Try both writes."
+      },
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "payload": {
+        "contextTokens": 47437,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "c07f6c56-0e1f-4f0e-a21f-8ceffee0fd33",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_1",
+        "input": {
+          "content": "P4 plain",
+          "file_path": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealApprovalReject378342275/001/work/plain.txt"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "write",
+        "runtimeSessionId": "c07f6c56-0e1f-4f0e-a21f-8ceffee0fd33",
+        "status": "in_progress",
+        "toolCallId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Error: [sandbox: file access denied under read-only mode]\n[sandbox: escalation available — retry this exact operation once with sandbox_permissions (the narrowest wider mode that suffices) + justification; the approval prompt asks the user]",
+        "isError": true,
+        "localTurnId": "t1",
+        "runtimeSessionId": "c07f6c56-0e1f-4f0e-a21f-8ceffee0fd33",
+        "status": "failed",
+        "toolCallId": "call_p4_1",
+        "toolUseId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "contextTokens": 47567,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "c07f6c56-0e1f-4f0e-a21f-8ceffee0fd33",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_2",
+        "input": {
+          "content": "P4 denied write",
+          "file_path": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealApprovalReject378342275/001/work/denied.txt",
+          "justification": "P4 synthetic escalation",
+          "sandbox_permissions": "workspace-write"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "write",
+        "runtimeSessionId": "c07f6c56-0e1f-4f0e-a21f-8ceffee0fd33",
+        "status": "in_progress",
+        "toolCallId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Error: the user rejected escalating this operation to \"workspace-write\"; it stays denied, so stop and explain instead of working around it",
+        "isError": true,
+        "localTurnId": "t1",
+        "runtimeSessionId": "c07f6c56-0e1f-4f0e-a21f-8ceffee0fd33",
+        "status": "failed",
+        "toolCallId": "call_p4_2",
+        "toolUseId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "messageId": "b4eda039-7dcd-4703-afd9-e6e82286a483",
+        "runtimeSessionId": "c07f6c56-0e1f-4f0e-a21f-8ceffee0fd33",
+        "text": "P4 denied answer"
+      },
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "payload": {
+        "contextTokens": 47622,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "c07f6c56-0e1f-4f0e-a21f-8ceffee0fd33",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "contextTokens": 47622,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "numTurns": 1,
+        "runtimeSessionId": "c07f6c56-0e1f-4f0e-a21f-8ceffee0fd33",
+        "stopReason": "end_turn",
+        "subtype": "completed"
+      },
+      "turn": "t1",
+      "type": "turn_end"
+    }
+  ],
+  "permissionMode": "default",
+  "scenario": "TestDshRealApprovalReject"
+}

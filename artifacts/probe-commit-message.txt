@@ -1,0 +1,9 @@
+chore(ci): a temporary dispatch so client.yml compiles this branch
+
+The macOS and iOS jobs of client.yml run only on a pull request or an explicit
+dispatch, and this machine has neither a token nor `gh`. This one-file workflow
+turns a push to its probe branch into that dispatch, as `probe-dispatch.yml`
+does for the source-refused probe. It lives on the probe branch alone and is
+deleted with it.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

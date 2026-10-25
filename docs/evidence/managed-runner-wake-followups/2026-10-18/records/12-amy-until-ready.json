@@ -1,0 +1,66 @@
+{
+  "at": "2026-10-18T03:56:09.985+00:00",
+  "changes": [
+    [
+      "2026-10-18T03:55:43.943+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 0,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 1,
+        "management_state": "PROVISIONING",
+        "pod": null,
+        "reason": null,
+        "revision": 4
+      }
+    ],
+    [
+      "2026-10-18T03:55:48.830+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 0,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 1,
+        "management_state": "PROVISIONING",
+        "pod": null,
+        "reason": null,
+        "revision": 6
+      }
+    ],
+    [
+      "2026-10-18T03:55:49.368+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 0,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 1,
+        "management_state": "STARTING",
+        "pod": "3c1449d4",
+        "reason": null,
+        "revision": 11
+      }
+    ],
+    [
+      "2026-10-18T03:56:09.985+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 0,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 1,
+        "management_state": "READY",
+        "pod": "3c1449d4",
+        "reason": null,
+        "revision": 12
+      }
+    ]
+  ],
+  "owner": "amy",
+  "reached": {
+    "reason": null,
+    "state": "READY"
+  }
+}

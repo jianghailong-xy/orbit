@@ -1,0 +1,209 @@
+{
+ "checks": [
+  {
+   "check": "T07's test server database names this runner and this Pod (its UID) as its own",
+   "ok": true,
+   "value": [
+    "",
+    "              runner_id               | management_state | desired_state | generation |                pod_name                 |               pod_uid                |  node_name   |                   pvc_name                   |         updated_at         ",
+    "--------------------------------------+------------------+---------------+------------+-----------------------------------------+--------------------------------------+--------------+----------------------------------------------+----------------------------",
+    " 01a14db1-e2b6-7199-8613-d95d4616d6a7 | STARTING         | RUNNING       |          1 | mr-01a14db1-e2b6-7199-8613-d95d4616d6a7 | 52ed1c8a-1ba8-43b5-a563-347bb26f9038 | orbit-mr-lab | mr-data-01a14db1-e2b6-7199-8613-d95d4616d6a7 | 2026-10-18 06:29:23.215+00",
+    "(1 row)",
+    ""
+   ]
+  },
+  {
+   "check": "no manager runs: the lab's apiserver units are stopped",
+   "ok": true,
+   "value": {
+    "orbit-mr-lab-api": "inactive",
+    "orbit-mr-lab-api-b": "inactive"
+   }
+  },
+  {
+   "check": "its kubelet reported the stop: Failed, every container terminated",
+   "ok": true,
+   "value": [
+    "Failed",
+    [
+     {
+      "name": "private-volume-directories",
+      "terminated": {
+       "containerID": "containerd://992210d398824b05ac8c4ab199bd9b456df24520feec28c14e8c5e89d32d55ce",
+       "exitCode": 0,
+       "finishedAt": "2026-10-18T06:28:04Z",
+       "reason": "Completed",
+       "startedAt": "2026-10-18T06:28:03Z"
+      }
+     },
+     {
+      "name": "runner",
+      "terminated": {
+       "containerID": "containerd://70c7bce5149640fa96bf5e66d4f0398870a0391c3917ffeccba3ed9417cc5114",
+       "exitCode": 255,
+       "finishedAt": "2026-10-18T08:59:06Z",
+       "reason": "Unknown",
+       "startedAt": "2026-10-18T06:28:05Z"
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "check": "its node is Ready",
+   "ok": true,
+   "value": {
+    "name": "orbit-mr-lab",
+    "ready": "True",
+    "readySince": "2026-10-17T05:37:00Z",
+    "reason": "KubeletReady",
+    "taints": [],
+    "uid": "2aacc9d7-fc60-4ef9-97a4-5a776d40c386",
+    "unschedulable": false
+   }
+  },
+  {
+   "check": "the control plane did not mark it terminal for an unreachable node (no PodGC or taint-manager DisruptionTarget)",
+   "ok": true,
+   "value": {
+    "lastTransitionTime": "2026-10-19T14:48:34Z",
+    "reason": "EvictionByEvictionAPI",
+    "status": "True"
+   }
+  },
+  {
+   "check": "its volume is attached nowhere",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "the runbook's patch ran",
+   "ok": true,
+   "value": "pod/mr-01a14db1-e2b6-7199-8613-d95d4616d6a7 patched"
+  },
+  {
+   "check": "T07's Pod is gone",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-19T16:44:59.291+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "stuck",
+ "result": {
+  "goneAt": "2026-10-19T16:44:59.291+00:00",
+  "patch": {
+   "at": "2026-10-19T16:44:58.938+00:00",
+   "exit": 0,
+   "label": "the runbook's finalizer patch for T07's Pod",
+   "script": "UID_=$($K get pod \"mr-$R\" -o jsonpath='{.metadata.uid}')\nAT=$($K get pod \"mr-$R\" -o json | jq '.metadata.finalizers | index(\"orbit.dev/managed-runner-stop-report\")')\n$K patch pod \"mr-$R\" --type=json -p \"[{\\\"op\\\":\\\"test\\\",\\\"path\\\":\\\"/metadata/uid\\\",\\\"value\\\":\\\"$UID_\\\"},\n  {\\\"op\\\":\\\"test\\\",\\\"path\\\":\\\"/metadata/finalizers/$AT\\\",\\\"value\\\":\\\"orbit.dev/managed-runner-stop-report\\\"},\n  {\\\"op\\\":\\\"remove\\\",\\\"path\\\":\\\"/metadata/finalizers/$AT\\\"}]\"\n",
+   "stderr": "",
+   "stdout": "pod/mr-01a14db1-e2b6-7199-8613-d95d4616d6a7 patched",
+   "variables": {
+    "R": "01a14db1-e2b6-7199-8613-d95d4616d6a7"
+   }
+  },
+  "pod": {
+   "annotations": {
+    "orbit.dev/generation": "1",
+    "orbit.dev/owner-id": "01a14d92-6ccd-76bf-927d-c9b4646efb0f",
+    "orbit.dev/pvc-uid": "dd00c73e-bba2-4d42-ac50-ab03891b413f",
+    "orbit.dev/runner-id": "01a14db1-e2b6-7199-8613-d95d4616d6a7"
+   },
+   "apiUnits": {
+    "orbit-mr-lab-api": "inactive",
+    "orbit-mr-lab-api-b": "inactive"
+   },
+   "conditions": {
+    "ContainersReady": {
+     "lastTransitionTime": "2026-10-18T08:59:09Z",
+     "reason": "PodFailed",
+     "status": "False"
+    },
+    "DisruptionTarget": {
+     "lastTransitionTime": "2026-10-19T14:48:34Z",
+     "reason": "EvictionByEvictionAPI",
+     "status": "True"
+    },
+    "Initialized": {
+     "lastTransitionTime": "2026-10-18T06:28:05Z",
+     "reason": null,
+     "status": "True"
+    },
+    "PodReadyToStartContainers": {
+     "lastTransitionTime": "2026-10-18T08:59:09Z",
+     "reason": null,
+     "status": "False"
+    },
+    "PodScheduled": {
+     "lastTransitionTime": "2026-10-18T06:27:51Z",
+     "reason": null,
+     "status": "True"
+    },
+    "Ready": {
+     "lastTransitionTime": "2026-10-18T08:59:09Z",
+     "reason": "PodFailed",
+     "status": "False"
+    }
+   },
+   "containers": [
+    {
+     "name": "private-volume-directories",
+     "terminated": {
+      "containerID": "containerd://992210d398824b05ac8c4ab199bd9b456df24520feec28c14e8c5e89d32d55ce",
+      "exitCode": 0,
+      "finishedAt": "2026-10-18T06:28:04Z",
+      "reason": "Completed",
+      "startedAt": "2026-10-18T06:28:03Z"
+     }
+    },
+    {
+     "name": "runner",
+     "terminated": {
+      "containerID": "containerd://70c7bce5149640fa96bf5e66d4f0398870a0391c3917ffeccba3ed9417cc5114",
+      "exitCode": 255,
+      "finishedAt": "2026-10-18T08:59:06Z",
+      "reason": "Unknown",
+      "startedAt": "2026-10-18T06:28:05Z"
+     }
+    }
+   ],
+   "created": "2026-10-18T06:27:51Z",
+   "deletionTimestamp": "2026-10-19T14:48:34Z",
+   "finalizers": [
+    "orbit.dev/managed-runner-stop-report"
+   ],
+   "name": "mr-01a14db1-e2b6-7199-8613-d95d4616d6a7",
+   "node": "orbit-mr-lab",
+   "nodeView": {
+    "name": "orbit-mr-lab",
+    "ready": "True",
+    "readySince": "2026-10-17T05:37:00Z",
+    "reason": "KubeletReady",
+    "taints": [],
+    "uid": "2aacc9d7-fc60-4ef9-97a4-5a776d40c386",
+    "unschedulable": false
+   },
+   "phase": "Failed",
+   "pv": "pvc-dd00c73e-bba2-4d42-ac50-ab03891b413f",
+   "t07Database": [
+    "# T07 test server database (a copy of /mnt/data/managed-runner-lab/test-server-t07/pgdata, read in a temporary postgres:16-alpine container with no network), 2026-10-19T16:08:53Z",
+    "              runner_id               |     name      | status |    last_heartbeat_at    |     owner_email      ",
+    "--------------------------------------+---------------+--------+-------------------------+----------------------",
+    " 01a14db1-e2b6-7199-8613-d95d4616d6a7 | orbit-managed | ONLINE | 2026-10-18 06:29:06.024 | t06-root@lab.invalid",
+    "(1 row)",
+    "",
+    "              runner_id               | management_state | desired_state | generation |                pod_name                 |               pod_uid                |  node_name   |                   pvc_name                   |         updated_at         ",
+    "--------------------------------------+------------------+---------------+------------+-----------------------------------------+--------------------------------------+--------------+----------------------------------------------+----------------------------",
+    " 01a14db1-e2b6-7199-8613-d95d4616d6a7 | STARTING         | RUNNING       |          1 | mr-01a14db1-e2b6-7199-8613-d95d4616d6a7 | 52ed1c8a-1ba8-43b5-a563-347bb26f9038 | orbit-mr-lab | mr-data-01a14db1-e2b6-7199-8613-d95d4616d6a7 | 2026-10-18 06:29:23.215+00",
+    "(1 row)",
+    ""
+   ],
+   "uid": "52ed1c8a-1ba8-43b5-a563-347bb26f9038",
+   "volumeAttachments": []
+  }
+ },
+ "seconds": 0.9,
+ "startedAt": "2026-10-19T16:44:58.426+00:00",
+ "step": "t07"
+}

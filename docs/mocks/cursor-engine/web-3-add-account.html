@@ -1,0 +1,69 @@
+<!doctype html>
+<!-- Design board Web 3 (T0, Cursor engine): Add account with Cursor's sign-in link (it lasts ~27 minutes),
+     Re-sign in, and Remove. Real-page captures with the board prototype (prototype.patch). Not shipped code.
+     Render: render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Web 3 · Cursor accounts: Add account, Re-sign in, Remove</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<script src="kit.js"></script>
+<script src="shots/marks.js"></script>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Web 3 · Cursor 账号：Add account 用 Cursor 的登录链接（约 27 分钟有效，过期可重新拿）；Re-sign in、Remove 同其他多账号 engine</h1>
+  <p class="m-sub zh">登录走独立的 <code>agent login</code> 进程（契约 §9、§16.1 <code>cursor-account-login/v1</code>）：runner 拿到 <code>https://cursor.com/loginDeepControl?…</code> 链接转给页面，用户在浏览器里登录，runner 看到 <code>agent login</code> 退出码 0 就算登上，不需要回贴验证码（和 Claude 的回贴码、Kimi 的设备码都不同）。链接约 27 分钟（实测 1,632 s / 1,636 s）没人用就失效，CLI 打印 "Login failed or timed out"：页面要写还剩多久，过期后给「Get a new link」。账号的名字、目录、移除规则都沿用 Codex / Claude / Kimi 那一套（Default 不能移除；有会话在用时机器拒绝移除）。全部是真实页面截图（hpc 的 Cursor 行，原型见 <code>prototype.patch</code>）。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① Add account：起名 → 等 runner 拿到链接 → 打开 cursor.com 登录 → 登上（或链接过期 → 重新拿）</div>
+    <div class="frames" id="s1"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② Re-sign in：账号行的 ⋯ 菜单，登录到同一个账号目录</div>
+    <div class="frames" id="s2"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ Remove：先问；有会话在用时机器拒绝，并说为什么</div>
+    <div class="frames" id="s3"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">④ 差异与待验</div>
+    <div id="notes"></div>
+  </div>
+</section>
+<script>
+const frame = (kind, label, html, cap = '') => `<div class="frame"><div class="lbl zh"><span class="m-k${kind === '改后' ? ' new' : kind === '过程' ? ' state' : ''}">${kind}</span>${label}</div>${html}${cap ? `<p class="m-cap zh" style="max-width:898px">${cap}</p>` : ''}</div>`;
+document.getElementById('s1').innerHTML =
+  frame('过程', 'a · 点 + Add account：名字可改，登录自动开始', shot('w3-add-pending', { width: 898, marks: [{ box: 'name', n: 1, pad: 3 }] })) +
+  frame('过程', 'b · 链接到了：打开 cursor.com；写还剩多久', shot('w3-add-link', { width: 898, marks: [{ box: 'open', n: 2, pad: 3 }, { box: 'expiry', n: 3, pad: 2 }] })) +
+  frame('过程', 'c · 27 分钟没登：链接过期，Get a new link', shot('w3-add-expired', { width: 898, marks: [{ box: 'warn', n: 4, pad: 3 }, { box: 'btn', n: 5, pad: 3 }] })) +
+  frame('过程', 'd · 登上了：面板收起，新账号成一行', shot('w3-add-done', { width: 898 }));
+document.getElementById('s2').innerHTML =
+  frame('过程', 'Team 行的 ⋯', shot('w3-resign-menu', { width: 898, marks: [{ box: 'resign', n: 6, pad: 2 }] })) +
+  frame('过程', 'Re-sign in：同一个链接面板，写「with this account again」', shot('w3-resign-link', { width: 898 }));
+document.getElementById('s3').innerHTML =
+  frame('过程', 'Remove account → 先问', shot('w3-remove-confirm', { width: 1037 })) +
+  frame('过程', '有会话在用：机器拒绝，说原因，目录不动', shot('w3-remove-refused', { width: 898, marks: [{ box: 'panel', n: 7, pad: 3 }] }));
+document.getElementById('notes').innerHTML = notes([
+  [1, '<b>名字</b>同其他 engine 的 Add account：默认「Account N」，可以边登录边改。登录自动开始（不像 Kimi 要先选站点）。'],
+  [2, '<b>打开 cursor.com</b>：链接原样来自 runner 上的 <code>agent login</code>。旁边「Copy sign-in link」，方便换个浏览器登录。'],
+  [3, '<b>还剩多久</b>：「Waiting for you to sign in… · link expires in 26 min」，按 runner 报的 <code>expiresAt</code> 倒数（新字段：开始时间 + 约 27 分钟）。今天的 Kimi 设备码流程没有这一项。'],
+  [4, '<b>过期</b>：「The sign-in link expired before anyone signed in with it.」——由 runner 把 CLI 的 "Login failed or timed out" 映射成这句，不原样透出。'],
+  [5, '<b>Get a new link</b>：代替通用的「Try signing in to … again」，重新起一个 <code>agent login</code>，名字不丢。'],
+  [6, '<b>Re-sign in</b>：⋯ 菜单里现成的一项，只对已登录的账号出现；掉线的账号行直接是 Sign in 按钮（见 Web 2 ④）。登录后写回同一个账号目录。'],
+  [7, '<b>拒绝移除</b>：机器自己的话（<code>cursor-account-remove/v1</code>，有会话在用时拒绝），面板沿用今天的 <code>re-panel bad</code>。Default 没有 Remove。'],
+  ['·', '<b>待验（契约 §9、§17.1 第 6 条）</b>：在另一台设备的浏览器里完成登录、登录 token 的寿命、<code>agent logout</code> 对登录账号的效果——都还没实测（所有者没有完成登录）。P4b 实现前补验；如果不成立，这一页的流程要改，届时回到这块板。'],
+]);
+finish();
+</script>
+</body>
+</html>

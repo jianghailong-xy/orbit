@@ -45,7 +45,7 @@ struct TaskRunHandoffCard: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 10))
+        .composerBandWash(tint, opacity: 0.09)
     }
 
     /// Green is not decoration here: the ENDING case is the one refusal nobody has to act on, and
@@ -120,6 +120,6 @@ struct TaskRunHandedOverCard: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.green.opacity(0.09), in: RoundedRectangle(cornerRadius: 10))
+        .composerBandWash(.green, opacity: 0.09)
     }
 }

@@ -3,7 +3,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { App as AntApp } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiChangeset, WikiChangesetOp } from '@orbit/shared';
 import { WikiReviewPage } from './WikiReviewPage';
@@ -188,10 +187,7 @@ async function mount(changesets: WikiChangeset[], ready: string): Promise<void> 
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          {/* The app mounts AntD's `App`, which is what gives `App.useApp()` its message API. */}
-          <AntApp>
-            <WikiReviewPage spaceSlug={null} />
-          </AntApp>
+          <WikiReviewPage spaceSlug={null} />
           <ToastViewport />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -215,12 +211,11 @@ const buttonIn = (scope: Element, text: string): HTMLButtonElement => {
   return found;
 };
 
-const form = (): HTMLElement | null => document.body.querySelector<HTMLElement>('.ant-modal');
-const titleField = (): HTMLInputElement => form()!.querySelector('input.ant-input') as HTMLInputElement;
-const summaryField = (): HTMLTextAreaElement => form()!.querySelector('textarea.ant-input') as HTMLTextAreaElement;
+const form = (): HTMLElement | null => document.body.querySelector<HTMLElement>('[role="dialog"]');
+const titleField = (): HTMLInputElement => form()!.querySelector('input') as HTMLInputElement;
+const summaryField = (): HTMLTextAreaElement => form()!.querySelector('textarea') as HTMLTextAreaElement;
 /** The form's own Accept — not the card's, which is the button beside Edit. */
-const acceptInForm = (): HTMLButtonElement =>
-  form()!.querySelector('.ant-modal-footer .ant-btn-primary') as HTMLButtonElement;
+const acceptInForm = (): HTMLButtonElement => buttonIn(form()!, 'Accept');
 
 async function click(element: Element): Promise<void> {
   await act(async () => {
@@ -337,7 +332,7 @@ describe("Review's Edit", () => {
 
     expect(decides).toHaveLength(1);
     expect(form()).not.toBeNull();
-    expect(form()!.querySelector('.ant-alert')?.textContent).toContain(
+    expect(form()!.querySelector('[role="alert"]')?.textContent).toContain(
       "the owner's edit does not have the shape this contract gives it",
     );
     // What the owner typed is still there to fix and send again.

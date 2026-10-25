@@ -1,0 +1,60 @@
+probe: probe-done-scroll2.browser.mjs tree: del head: e21fad17277ffe30d40e76097191ca77e5b7f884 projects: chromium-light-phone chromium-dark-phone webkit-dark-phone chromium-light-desktop started: 2026-10-09T14:05:51Z load: 10.67 8.70 6.54 10/4197 3982444
+PROBE del chromium-light-desktop opened {"top":0,"active":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focusin","target":"BUTTON.project-open-item-action is-primary"}
+PROBE   {"kind":"focusout","target":"BUTTON.project-open-item-action is-primary","related":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focusin","target":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focus","target":"DIV.orbit-overlay orbit-dialog project-done-","options":{"preventScroll":true},"before":0,"after":0}
+PROBE del chromium-light-desktop not yet pressed {"top":0,"active":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focusout","target":"DIV.orbit-overlay orbit-dialog project-done-","related":"BUTTON.card-action card-action--secondary"}
+PROBE   {"kind":"focusin","target":"BUTTON.card-action card-action--secondary"}
+PROBE   {"kind":"focusout","target":"BUTTON.card-action card-action--secondary","related":"null"}
+PROBE   {"kind":"focusin","target":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focus","target":"DIV.orbit-overlay orbit-dialog project-done-","options":{"preventScroll":true},"before":0,"after":0}
+PROBE   {"kind":"focus","target":"DIV.orbit-overlay orbit-dialog project-done-","options":{"preventScroll":true},"before":0,"after":0}
+PROBE del chromium-light-desktop typed {"top":0,"active":"TEXTAREA.orbit-text-control orbit-textarea"}
+PROBE   {"kind":"focusout","target":"DIV.orbit-overlay orbit-dialog project-done-","related":"TEXTAREA.orbit-text-control orbit-textarea"}
+PROBE   {"kind":"focusin","target":"TEXTAREA.orbit-text-control orbit-textarea"}
+PROBE del chromium-light-phone opened {"top":0,"active":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focusin","target":"BUTTON.project-open-item-action is-primary"}
+PROBE   {"kind":"focusout","target":"BUTTON.project-open-item-action is-primary","related":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focusin","target":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focus","target":"DIV.orbit-overlay orbit-dialog project-done-","options":{"preventScroll":true},"before":0,"after":0}
+PROBE del chromium-light-phone not yet pressed {"top":7,"active":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focusout","target":"DIV.orbit-overlay orbit-dialog project-done-","related":"BUTTON.card-action card-action--secondary"}
+PROBE   {"kind":"focusin","target":"BUTTON.card-action card-action--secondary"}
+PROBE   {"kind":"focusout","target":"BUTTON.card-action card-action--secondary","related":"null"}
+PROBE   {"kind":"focusin","target":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focus","target":"DIV.orbit-overlay orbit-dialog project-done-","options":{"preventScroll":true},"before":7,"after":7}
+PROBE   {"kind":"scroll","top":7,"active":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focus","target":"DIV.orbit-overlay orbit-dialog project-done-","options":{"preventScroll":true},"before":7,"after":7}
+PROBE del chromium-light-phone typed {"top":7,"active":"TEXTAREA.orbit-text-control orbit-textarea"}
+PROBE   {"kind":"focusout","target":"DIV.orbit-overlay orbit-dialog project-done-","related":"TEXTAREA.orbit-text-control orbit-textarea"}
+PROBE   {"kind":"focusin","target":"TEXTAREA.orbit-text-control orbit-textarea"}
+PROBE del chromium-dark-phone opened {"top":0,"active":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focusin","target":"BUTTON.project-open-item-action is-primary"}
+PROBE   {"kind":"focusout","target":"BUTTON.project-open-item-action is-primary","related":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focusin","target":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focus","target":"DIV.orbit-overlay orbit-dialog project-done-","options":{"preventScroll":true},"before":0,"after":0}
+PROBE del chromium-dark-phone not yet pressed {"top":7,"active":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focusout","target":"DIV.orbit-overlay orbit-dialog project-done-","related":"BUTTON.card-action card-action--secondary"}
+PROBE   {"kind":"focusin","target":"BUTTON.card-action card-action--secondary"}
+PROBE   {"kind":"focusout","target":"BUTTON.card-action card-action--secondary","related":"null"}
+PROBE   {"kind":"focusin","target":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focus","target":"DIV.orbit-overlay orbit-dialog project-done-","options":{"preventScroll":true},"before":7,"after":7}
+PROBE   {"kind":"scroll","top":7,"active":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focus","target":"DIV.orbit-overlay orbit-dialog project-done-","options":{"preventScroll":true},"before":7,"after":7}
+PROBE del chromium-dark-phone typed {"top":7,"active":"TEXTAREA.orbit-text-control orbit-textarea"}
+PROBE   {"kind":"focusout","target":"DIV.orbit-overlay orbit-dialog project-done-","related":"TEXTAREA.orbit-text-control orbit-textarea"}
+PROBE   {"kind":"focusin","target":"TEXTAREA.orbit-text-control orbit-textarea"}
+PROBE del webkit-dark-phone opened {"top":0,"active":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focusin","target":"BUTTON.project-open-item-action is-primary"}
+PROBE   {"kind":"focusout","target":"BUTTON.project-open-item-action is-primary","related":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focusin","target":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focus","target":"DIV.orbit-overlay orbit-dialog project-done-","options":{"preventScroll":true},"before":0,"after":0}
+PROBE del webkit-dark-phone not yet pressed {"top":7,"active":"BODY."}
+PROBE   {"kind":"scroll","top":7,"active":"DIV.orbit-overlay orbit-dialog project-done-"}
+PROBE   {"kind":"focusout","target":"DIV.orbit-overlay orbit-dialog project-done-","related":"BUTTON.card-action card-action--secondary"}
+PROBE   {"kind":"focusin","target":"BUTTON.card-action card-action--secondary"}
+PROBE del webkit-dark-phone typed {"top":7,"active":"TEXTAREA.orbit-text-control orbit-textarea"}
+PROBE   {"kind":"focusin","target":"TEXTAREA.orbit-text-control orbit-textarea"}
+  4 passed (6.1s)

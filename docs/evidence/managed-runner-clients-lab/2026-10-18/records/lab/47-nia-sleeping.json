@@ -1,0 +1,66 @@
+{
+  "at": "2026-10-18T06:20:57.516+00:00",
+  "changes": [
+    [
+      "2026-10-18T06:20:37.343+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 3,
+        "desired_state": "SLEEPING",
+        "drain": "asked",
+        "generation": 8,
+        "management_state": "DRAINING",
+        "pod": "b16dd605",
+        "reason": null,
+        "revision": 123
+      }
+    ],
+    [
+      "2026-10-18T06:20:47.689+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 3,
+        "desired_state": "SLEEPING",
+        "drain": "accepted",
+        "generation": 8,
+        "management_state": "DRAINING",
+        "pod": "b16dd605",
+        "reason": null,
+        "revision": 123
+      }
+    ],
+    [
+      "2026-10-18T06:20:52.608+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 3,
+        "desired_state": "SLEEPING",
+        "drain": "accepted",
+        "generation": 8,
+        "management_state": "DRAINING",
+        "pod": "b16dd605",
+        "reason": null,
+        "revision": 126
+      }
+    ],
+    [
+      "2026-10-18T06:20:57.516+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 3,
+        "desired_state": "SLEEPING",
+        "drain": null,
+        "generation": 9,
+        "management_state": "SLEEPING",
+        "pod": null,
+        "reason": null,
+        "revision": 127
+      }
+    ]
+  ],
+  "owner": "nia",
+  "reached": {
+    "reason": null,
+    "state": "SLEEPING"
+  }
+}

@@ -13,6 +13,8 @@ import {
   attemptEndedUnsettledFact,
   criterionReadyFact,
   criterionSubjectId,
+  criterionUnlandedFact,
+  deliveryVersion,
   dependentReadyFact,
   isSettledTaskStatus,
   projectAcceptanceLandedFact,
@@ -156,6 +158,40 @@ test('the settlement version is the (taskId, status) pairs and nothing else', ()
     settlementVersion(tasks),
   );
   assert.notEqual(settlementVersion(tasks), settlementVersion(tasks.slice(0, 1)));
+});
+
+test('the delivery version is the settlement version until a task has been sent back', () => {
+  const settled = [
+    { taskId: 'b2', status: 'DONE' },
+    { taskId: 'b1', status: 'DONE' },
+  ];
+  // Never sent back — no epoch, or epoch 0, which a task that reported progress has a row at: the
+  // version the settlement digest gives, the key every fact derived before the epoch counted is under.
+  assert.equal(deliveryVersion(settled), settlementVersion(settled));
+  assert.equal(
+    deliveryVersion(settled.map((task) => ({ ...task, lifecycleEpoch: 0 }))),
+    settlementVersion(settled),
+  );
+
+  // Sent back and DONE again: the same pairs, and a new version for every send-back.
+  const returned = [{ ...settled[0]!, lifecycleEpoch: 1 }, settled[1]!];
+  assert.notEqual(deliveryVersion(returned), settlementVersion(settled));
+  assert.notEqual(
+    deliveryVersion([{ ...settled[0]!, lifecycleEpoch: 2 }, settled[1]!]),
+    deliveryVersion(returned),
+  );
+  // Row order is still the planner's business.
+  assert.equal(deliveryVersion(returned), deliveryVersion([...returned].reverse()));
+});
+
+test('an unlanded criterion whose only task was sent back and delivered again is a new fact', () => {
+  const unlanded = (lifecycleEpoch?: number) => criterionUnlandedFact(
+    PROJECT, 'k1', [{ taskId: TASK, status: 'DONE', lifecycleEpoch }], 'UNKNOWN',
+  )!;
+  assert.equal(unlanded().subjectVersion, settlementVersion([{ taskId: TASK, status: 'DONE' }]));
+  assert.equal(wakeIdempotencyKey(unlanded(0)), wakeIdempotencyKey(unlanded()));
+  assert.notEqual(wakeIdempotencyKey(unlanded(1)), wakeIdempotencyKey(unlanded()));
+  assert.equal(unlanded(1).subjectId, unlanded().subjectId, 'a send-back is the same criterion');
 });
 
 test('a project settles only when every task did, and never when it has none', () => {

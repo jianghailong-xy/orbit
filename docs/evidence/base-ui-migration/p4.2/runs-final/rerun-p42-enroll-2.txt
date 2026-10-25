@@ -1,0 +1,16 @@
+argv: env P42_SNAPSHOTS=/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-p42-enroll-2-shots P42_OUTPUT=/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-p42-enroll-2-out npx playwright test --config ui-migration/p42.config.mjs --update-snapshots=all --project chromium-light-phone -g approving orbit register
+head: a794459b14424e0fbc239a6947d589fa4852e946
+started: 2026-10-08T13:35:14Z
+
+
+Running 1 test using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-p42-enroll-2-shots/chromium-light-phone/p42-enroll-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-p42-enroll-2-shots/chromium-light-phone/p42-enroll.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-p42-enroll-2-shots/chromium-light-phone/p42-enroll-approved.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-p42-enroll-2-shots/chromium-light-phone/p42-enroll-conflict.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-p42-enroll-2-shots/chromium-light-phone/p42-enroll-error.png, writing actual.
+  ✓  1 [chromium-light-phone] › ui-migration/p42.browser.mjs:854:3 › P4.2 approving orbit register › loading, the machine, a name already registered, approved and a dead code (2.4s)
+
+  1 passed (3.2s)
+exit=0

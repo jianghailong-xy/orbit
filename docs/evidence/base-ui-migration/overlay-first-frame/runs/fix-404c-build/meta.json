@@ -1,0 +1,16 @@
+{
+ "label": "fix-404c-build",
+ "step": "build",
+ "tree": "/mnt/data/tmp/overlay-first-frame-34brok/run",
+ "command": "npm run build -w @orbit/shared && npm run build -w @orbit/web",
+ "commit": "aa162207c1bd1353224d62e38634dc21f9707e78",
+ "webChanges": [],
+ "webDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "startedAt": "2026-10-08T18:17:32Z",
+ "endedAt": "2026-10-08T18:18:06+00:00",
+ "loadAverage": {
+  "start": "19.39 14.89 13.62",
+  "end": "36.70 19.65 15.25"
+ },
+ "exitCode": 0
+}

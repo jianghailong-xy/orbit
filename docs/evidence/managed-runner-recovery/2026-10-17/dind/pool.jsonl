@@ -1,0 +1,3 @@
+{"a": "READY", "at": "2026-10-17T17:29:07Z", "b": "SLEEPING", "label": "before the graceful restart", "pool": {"activeUsersReserved": 1, "cpuMillisReserved": 2000, "durableBytesReserved": 42949672960, "memoryBytesReserved": 4294967296, "podsReserved": 1}}
+{"a": "READY", "at": "2026-10-17T17:40:57Z", "b": "SLEEPING", "label": "before the powercut restart", "pool": {"activeUsersReserved": 1, "cpuMillisReserved": 2000, "durableBytesReserved": 42949672960, "memoryBytesReserved": 4294967296, "podsReserved": 1}}
+{"a": "READY", "at": "2026-10-17T18:06:36Z", "b": "SLEEPING", "label": "before the graceful restart", "pool": {"activeUsersReserved": 1, "cpuMillisReserved": 2000, "durableBytesReserved": 42949672960, "memoryBytesReserved": 4294967296, "podsReserved": 1}}

@@ -1,0 +1,8 @@
+chromium-dark-desktop  p42-connect-dialect-open.png   all=    38 gt2=    18 max= 17 clusters=  1 [18px x1088-1111 y376-391 m17]
+chromium-dark-desktop  p42-runners-loading.png        all=    64 gt2=    35 max= 21 clusters=  1 [35px x776-791 y104-119 m21]
+chromium-dark-phone    p42-users-loading.png          all=    65 gt2=    35 max= 20 clusters=  1 [35px x192-207 y264-279 m20]
+chromium-dark-phone    p42-workspace-menu.png         all=    11 gt2=     1 max=  3 clusters=  1 [1px x368-375 y416-423 m3]
+chromium-light-desktop p42-keys-loading.png           all=    62 gt2=    37 max= 20 clusters=  1 [37px x776-791 y744-759 m20]
+chromium-light-desktop p42-runners-loading.png        all=   185 gt2=   110 max= 20 clusters=  1 [110px x768-791 y104-127 m20]
+chromium-light-phone   p42-account-pause-custom.png   all=     7 gt2=     3 max=  9 clusters=  1 [3px x152-159 y336-351 m9]
+chromium-light-phone   p42-enroll-loading.png         all=   122 gt2=    73 max= 20 clusters=  1 [73px x224-247 y440-463 m20]

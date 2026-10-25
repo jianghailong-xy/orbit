@@ -192,6 +192,9 @@ orbit_pat_<43 字符 base64url>        # randomBytes(32)，256 bit
 第 3 步任务又追加 1 条：`PATCH /projects/:id/integration`。它的每个字段都是下面 5.1 里 `PATCH /projects/:id`
 拒绝 PAT 的 `integration`，不拒它，字段级规则换个 URL 就绕过去了。
 
+2026-10-17 又追加 1 条：wiki plan 的 `POST plan/versions/:version/build`（对在册版本再要一次生成，`docs/wiki-contract.md` 21.11），
+它和 plan 的另外 7 条一样，对 agent 会话拒 `WIKI_OWNER_CHANNEL_ONLY`。
+
 ※ 2026-10-07 起这条与 `PATCH /projects/:id` 不再逐字段对应：后者对 agent 会话只拒集成对象里的
 **线**字段（`line` / `projectBranchName` / `upstreamRef`，拒 403 `INTEGRATION_SETTINGS_OWNER_ONLY`），
 而 `mergeCheckCommand` / `mergeCheckTimeoutSeconds` 在本会话对本项目的 ALLOWED 确认卡覆盖这次改动时可以写入
@@ -473,6 +476,8 @@ DELETE /api/pat/self               → {id, revokedAt, revokedReason}
   - codex app-server 在挂会话 `ORBIT_*` 的地方调用它；
   - 从零拼的环境直接写上标记：wiki 维护 clean start、dsh 本体、dsh 的 orbit MCP、OpenCode 交给 `orbit mcp` 的
     environment 块。
+  - Cursor CLI（第七个 engine，后来加入）：本体在 `cursor_launch.go` 的 `prepareCursorLaunch` 里调用它（白名单加工作区变量之后、
+    固定层之前）；它的 orbit MCP 与 dsh 共用 `orbitMCPDeclaredEnv`，直接写上标记。两处都在下面的普查里（`cursor`、`cursor orbit MCP server`）。
 - 测试：
   - `TestAgentEnvironmentsWithholdUserCredentials` 断言每个构造点恰好带一个 `ORBIT_RUNNER_CHILD=1`，即使 runner
     自己的环境和 agent 配置都把它置空；同时断言不经 runner 起的登录 shell 不带它。

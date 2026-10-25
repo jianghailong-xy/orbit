@@ -14,8 +14,10 @@ final class TranscriptThinkingTests: XCTestCase {
         RunEvent(seq: 0, type: .thinkingDelta, ts: ts, payload: .object(["delta": .string(text)]))
     }
 
-    private func settle(_ text: String, seq: Int, ts: String? = nil) -> RunEvent {
-        RunEvent(seq: seq, type: .thinking, ts: ts, payload: .object(["text": .string(text)]))
+    private func settle(_ text: String, seq: Int, ts: String? = nil, thinkingMs: Int? = nil) -> RunEvent {
+        var payload: [String: JSONValue] = ["text": .string(text)]
+        if let thinkingMs { payload["thinkingMs"] = .int(thinkingMs) }
+        return RunEvent(seq: seq, type: .thinking, ts: ts, payload: .object(payload))
     }
 
     private func toolCall(seq: Int) -> RunEvent {
@@ -93,6 +95,39 @@ final class TranscriptThinkingTests: XCTestCase {
         XCTAssertEqual(row?.finishedTs, "2026-09-15T17:53:39.000Z", "advanced to the one that ended it")
     }
 
+    func testAReloadedBlockStatesTheDurationTheRunnerStored() {
+        // `thinking_delta` is never stored, so a transcript read back from the server has only the
+        // closing event. Before the runner wrote the duration on it, every turn but the one watched
+        // live said "Thought" where it had said "Thought for 4s".
+        var r = TranscriptReducer()
+        r.apply(settle("weighing it up", seq: 1, ts: "2026-09-15T17:52:04.000Z", thinkingMs: 4200))
+
+        let row = thinkingRows(r).first
+        XCTAssertEqual(row?.thinkingMs, 4200)
+        XCTAssertEqual(
+            ThinkingSummary.settledLabel(chars: row?.text.count ?? 0, blocks: row?.blocks ?? 1,
+                                         startedTs: row?.startedTs, finishedTs: row?.finishedTs,
+                                         thinkingMs: row?.thinkingMs),
+            "Thought for 4s · 14 chars")
+    }
+
+    func testAFoldedRowAddsUpTheDurationsTheRunnerStored() {
+        // The web twin sums them the same way, so both clients state the same figure for the row.
+        var r = TranscriptReducer()
+        r.apply(settle("first", seq: 1, thinkingMs: 4200))
+        r.apply(settle("second", seq: 2, thinkingMs: 2800))
+
+        XCTAssertEqual(thinkingRows(r).first?.thinkingMs, 7000)
+    }
+
+    func testACachedBlockKeepsTheDurationTheRunnerStored() throws {
+        let block = ThinkingBlock(id: "t1", text: "reasoning", streamingText: "", seq: 7, thinkingMs: 4200)
+
+        let back = try JSONDecoder().decode(ThinkingBlock.self, from: JSONEncoder().encode(block))
+
+        XCTAssertEqual(back, block)
+    }
+
     func testFoldingLeavesAStillOpenAssistantBubbleAddressable() {
         // The open-bubble cursors are item indices, and folding removes a row: a delta arriving
         // after it must still land in the bubble it belongs to, not in the wrong one.
@@ -116,5 +151,6 @@ final class TranscriptThinkingTests: XCTestCase {
         XCTAssertEqual(block?.text, "reasoning")
         XCTAssertEqual(block?.blocks, 1)
         XCTAssertNil(block?.startedTs)
+        XCTAssertNil(block?.thinkingMs)
     }
 }

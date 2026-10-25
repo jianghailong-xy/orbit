@@ -1,0 +1,3274 @@
+{
+ "decision": {
+  "taskId": "34Za39Ov1yysHZaYL6wgJ",
+  "evidenceRevision": 1,
+  "evidenceDigest": "6f0931ccd70e1d4f7d2b0920a9245931732498837a3cc9780c64b8cd928c01c2",
+  "verdict": "CONFIRM",
+  "document": "p5.3/README.md"
+ },
+ "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+ "commits": {
+  "head": "e83d71958d20674429e6df4bf67b3345544a4a18",
+  "beforeParent": "b72da6eda7656645c343e97bc73111c1499fab32",
+  "beforeTree": "8c0120ba60665414ee9325796b7ba609b3126045",
+  "afterWithSwitchRevertedTree": "8c0120ba60665414ee9325796b7ba609b3126045",
+  "switchPatchId": "46199904368dca57aa6db55a7e92f0defcdf8aaf",
+  "beforeToAfterPatchId": "46199904368dca57aa6db55a7e92f0defcdf8aaf",
+  "switchOnAfterFirstParent": true,
+  "tipParents": [
+   "c1a1194f6774aa2f7e3e2a94c436157b07f04ee4",
+   "928b9c162ff40de6502c3ea23efb965386b3e113"
+  ],
+  "tipOnProjectFirstParent": true,
+  "tipAncestorOfHead": true,
+  "headFirstParentMergesOfTip": [
+   "9274d5242868693710d3676de16bd501acec809b 6fa5196e562da9ab851f4b89c07e84cdad105c10 a167c2ff0e5bc728f2766f34c90a799c7e6a74a0"
+  ],
+  "afterIsFirstParentOfTipSecondParent": true,
+  "afterAncestorOfHead": true,
+  "tipCodeEqualsAfter": true
+ },
+ "runs": {
+  "before": {
+   "commit": "8f94ddda9069bc2301fefc87f276570b04f4c774",
+   "environmentSha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "environmentEqualsP02": true,
+   "screenshots": 252,
+   "exit": 0,
+   "stats": {
+    "expected": 76,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 4
+   }
+  },
+  "after": {
+   "commit": "b72da6eda7656645c343e97bc73111c1499fab32",
+   "environmentSha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "environmentEqualsP02": true,
+   "screenshots": 252,
+   "exit": 0,
+   "stats": {
+    "expected": 76,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 4
+   }
+  }
+ },
+ "entries": 8,
+ "problems": [],
+ "registry": [
+  {
+   "screenshot": "chromium-dark-phone/session-attachment-menu.png",
+   "decision": {
+    "taskId": "34Za39Ov1yysHZaYL6wgJ",
+    "evidenceRevision": 1,
+    "evidenceDigest": "6f0931ccd70e1d4f7d2b0920a9245931732498837a3cc9780c64b8cd928c01c2",
+    "verdict": "CONFIRM",
+    "document": "p5.3/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "7151d8a82ed1798b50a2ce9ead54b4c8bd75f1b124f60c4b08578496af4f8785"
+   },
+   "mainCommits": [
+    "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+    "9d3751ec2633eba68eb3bee149782795d0426442",
+    "d2e295917d17e73217202e0415820885cd6201b2"
+   ],
+   "sha256": "0921253df97e6c6e3275afa6b3029689c661b710d2fd7d4e867fe346de133696",
+   "sameCommit": {
+    "before": {
+     "commit": "8f94ddda9069bc2301fefc87f276570b04f4c774",
+     "sha256": "7151d8a82ed1798b50a2ce9ead54b4c8bd75f1b124f60c4b08578496af4f8785"
+    },
+    "after": {
+     "commit": "b72da6eda7656645c343e97bc73111c1499fab32",
+     "sha256": "0921253df97e6c6e3275afa6b3029689c661b710d2fd7d4e867fe346de133696"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "difference": "P5.3 把会话工作区换成 Orbit 组件（业务切换 c868a02c2），手机上输入框的 + 菜单是 Orbit Menu 的附件变体（P2.2 的 attachment 变体，ui/Floating.css：250px 宽、42.4px 行高、17px 字、26px 圆角）。P0 session 场景在手机上点开 + 菜单后截取 session-attachment-menu：5 个菜单项（File、Image、Shell、Skill、Command）的标签在 after 中是 17px，即 P2.2 任务指定的字号；被替换的 AntD 菜单实际画的是 14px（P5.3 记录的计算样式：font-size 14px → 17px，line-height 22px → 26.71px）。Shell 一行的终端图标因纵向取整上移约 1px（P5.3 记录的纵向取整带来的图标小数位移）。菜单的盒、分隔线和其余 4 个图标相同。超过 2 级的差异只在 5 个标签（x 81–158、y 565–755）和 Shell 图标（x 39–55、y 657–674）上，单通道差至多 224（明色）或 158（暗色）；其余是这些字形边缘的 ≤2 级像素，WebKit 另有菜单四个圆角处 21（明色）、29（暗色）个 ≤2 级像素。协调者判定接受：P5.3 第 1 版证据的 CONFIRM（判定记录 61sATHPY66znwxRZorvP8d）第 1 条，P2.2 任务指定的 17px 附件变体。出处：p5.3/README.md「合并检查与 P0」中 P0 页面矩阵 session-attachment-menu 一条、「对照结果」中「手机附件菜单的字号」一行与「未消除的差异」第 5 条；P5.3 第 1 版证据 compare/p0-summary.json 中该截图的像素数、最大级数与 styleDeltas 的字号，与本条 before → after 相同。",
+   "hashes": {
+    "acceptedBefore": "7151d8a82ed1798b50a2ce9ead54b4c8bd75f1b124f60c4b08578496af4f8785",
+    "runBefore": "7151d8a82ed1798b50a2ce9ead54b4c8bd75f1b124f60c4b08578496af4f8785",
+    "acceptedAfter": "0921253df97e6c6e3275afa6b3029689c661b710d2fd7d4e867fe346de133696",
+    "runAfter": "0921253df97e6c6e3275afa6b3029689c661b710d2fd7d4e867fe346de133696",
+    "expectedPre": "7151d8a82ed1798b50a2ce9ead54b4c8bd75f1b124f60c4b08578496af4f8785",
+    "p53Reference": "7151d8a82ed1798b50a2ce9ead54b4c8bd75f1b124f60c4b08578496af4f8785",
+    "p53Delivery": "0921253df97e6c6e3275afa6b3029689c661b710d2fd7d4e867fe346de133696"
+   },
+   "beforeMatchesReplaced": true,
+   "beforeBytesEqualReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 2071,
+    "maxChannelDelta": 158
+   },
+   "p53SameCommit": {
+    "pixels": 2071,
+    "max": 158
+   },
+   "originalsVsP53": {
+    "beforeBytesEqualP53Reference": true,
+    "afterBytesEqualP53Delivery": true
+   }
+  },
+  {
+   "screenshot": "chromium-light-desktop/session-attachment-staged.png",
+   "decision": {
+    "taskId": "34Za39Ov1yysHZaYL6wgJ",
+    "evidenceRevision": 1,
+    "evidenceDigest": "6f0931ccd70e1d4f7d2b0920a9245931732498837a3cc9780c64b8cd928c01c2",
+    "verdict": "CONFIRM",
+    "document": "p5.3/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "c2f3d0221ac4dc5a7744ca1cd03f5756c37f24604b3376ad65c41c587c56c352"
+   },
+   "mainCommits": [
+    "918034e7290646c96cf35dc6604a4831e59505ff",
+    "f5bdd7fd395452e85fab89aeba2870740c932f80",
+    "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+    "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+    "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+    "9d3751ec2633eba68eb3bee149782795d0426442",
+    "d2e295917d17e73217202e0415820885cd6201b2"
+   ],
+   "sha256": "ca80aa6a26c62b1842e656cb5f16638ad38442a31fbd0d2ea97ff46eb083572a",
+   "sameCommit": {
+    "before": {
+     "commit": "8f94ddda9069bc2301fefc87f276570b04f4c774",
+     "sha256": "c2f3d0221ac4dc5a7744ca1cd03f5756c37f24604b3376ad65c41c587c56c352"
+    },
+    "after": {
+     "commit": "b72da6eda7656645c343e97bc73111c1499fab32",
+     "sha256": "ca80aa6a26c62b1842e656cb5f16638ad38442a31fbd0d2ea97ff46eb083572a"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "difference": "P5.3 把会话工作区换成 Orbit 组件（业务切换 c868a02c2），输入框的 + 菜单换成 Orbit Menu。P0 session 场景从 + 菜单选 File 放进一个文件后截取 session-attachment-staged：Orbit 菜单关闭后把焦点还给发起的 + 按钮（已验收的焦点约定：选择、Esc 或对话框关闭后焦点回到发起的按钮，P2.1「逐层返回焦点」），+ 在输入框卡片里，卡片因 :focus-within 画出聚焦时较深的边框与阴影（index.css 的 .composer-box:focus-within）；被替换的 AntD Dropdown 把焦点丢到 body，卡片保持未聚焦的样子。卡片里面（附件 chip、两行文字、工具栏）逐像素相同，差异只在卡片 1px 边框一圈和它外面的阴影：卡片边框盒 x 621–1259、y 736–883，边框上单通道差至多 53，全部差异在 x 592–1279、y 719–899 内，卡片内 0 个像素不同。暗色两个桌面环境同样的差异（单通道差至多 40）在 P0 比较器的颜色阈值以内，比较器判为相符，不登记。协调者判定接受：P5.3 第 1 版证据的 CONFIRM（判定记录 61sATHPY66znwxRZorvP8d）第 1 条，已验收焦点约定的可见结果。出处：p5.3/README.md「合并检查与 P0」中 P0 页面矩阵 session-attachment-staged 一条与「未消除的差异」第 1 条；P5.3 第 1 版证据 compare/p0-summary.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+   "hashes": {
+    "acceptedBefore": "c2f3d0221ac4dc5a7744ca1cd03f5756c37f24604b3376ad65c41c587c56c352",
+    "runBefore": "c2f3d0221ac4dc5a7744ca1cd03f5756c37f24604b3376ad65c41c587c56c352",
+    "acceptedAfter": "ca80aa6a26c62b1842e656cb5f16638ad38442a31fbd0d2ea97ff46eb083572a",
+    "runAfter": "ca80aa6a26c62b1842e656cb5f16638ad38442a31fbd0d2ea97ff46eb083572a",
+    "expectedPre": "c2f3d0221ac4dc5a7744ca1cd03f5756c37f24604b3376ad65c41c587c56c352",
+    "p53Reference": "c2f3d0221ac4dc5a7744ca1cd03f5756c37f24604b3376ad65c41c587c56c352",
+    "p53Delivery": "ca80aa6a26c62b1842e656cb5f16638ad38442a31fbd0d2ea97ff46eb083572a"
+   },
+   "beforeMatchesReplaced": true,
+   "beforeBytesEqualReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 24835,
+    "maxChannelDelta": 53
+   },
+   "p53SameCommit": {
+    "pixels": 24835,
+    "max": 53
+   },
+   "originalsVsP53": {
+    "beforeBytesEqualP53Reference": true,
+    "afterBytesEqualP53Delivery": true
+   }
+  },
+  {
+   "screenshot": "chromium-light-phone/session-attachment-menu.png",
+   "decision": {
+    "taskId": "34Za39Ov1yysHZaYL6wgJ",
+    "evidenceRevision": 1,
+    "evidenceDigest": "6f0931ccd70e1d4f7d2b0920a9245931732498837a3cc9780c64b8cd928c01c2",
+    "verdict": "CONFIRM",
+    "document": "p5.3/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "9e4aec458ec8721b7a109855e58e918877b9caf079d8075d030fefb2cf8e157b"
+   },
+   "mainCommits": [
+    "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+    "9d3751ec2633eba68eb3bee149782795d0426442",
+    "d2e295917d17e73217202e0415820885cd6201b2"
+   ],
+   "sha256": "5cfed3f46f4944b259724be51a14341dafc24f14c020a22aa4d906b79f157e4f",
+   "sameCommit": {
+    "before": {
+     "commit": "8f94ddda9069bc2301fefc87f276570b04f4c774",
+     "sha256": "9e4aec458ec8721b7a109855e58e918877b9caf079d8075d030fefb2cf8e157b"
+    },
+    "after": {
+     "commit": "b72da6eda7656645c343e97bc73111c1499fab32",
+     "sha256": "5cfed3f46f4944b259724be51a14341dafc24f14c020a22aa4d906b79f157e4f"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "difference": "P5.3 把会话工作区换成 Orbit 组件（业务切换 c868a02c2），手机上输入框的 + 菜单是 Orbit Menu 的附件变体（P2.2 的 attachment 变体，ui/Floating.css：250px 宽、42.4px 行高、17px 字、26px 圆角）。P0 session 场景在手机上点开 + 菜单后截取 session-attachment-menu：5 个菜单项（File、Image、Shell、Skill、Command）的标签在 after 中是 17px，即 P2.2 任务指定的字号；被替换的 AntD 菜单实际画的是 14px（P5.3 记录的计算样式：font-size 14px → 17px，line-height 22px → 26.71px）。Shell 一行的终端图标因纵向取整上移约 1px（P5.3 记录的纵向取整带来的图标小数位移）。菜单的盒、分隔线和其余 4 个图标相同。超过 2 级的差异只在 5 个标签（x 81–158、y 565–755）和 Shell 图标（x 39–55、y 657–674）上，单通道差至多 224（明色）或 158（暗色）；其余是这些字形边缘的 ≤2 级像素，WebKit 另有菜单四个圆角处 21（明色）、29（暗色）个 ≤2 级像素。协调者判定接受：P5.3 第 1 版证据的 CONFIRM（判定记录 61sATHPY66znwxRZorvP8d）第 1 条，P2.2 任务指定的 17px 附件变体。出处：p5.3/README.md「合并检查与 P0」中 P0 页面矩阵 session-attachment-menu 一条、「对照结果」中「手机附件菜单的字号」一行与「未消除的差异」第 5 条；P5.3 第 1 版证据 compare/p0-summary.json 中该截图的像素数、最大级数与 styleDeltas 的字号，与本条 before → after 相同。",
+   "hashes": {
+    "acceptedBefore": "9e4aec458ec8721b7a109855e58e918877b9caf079d8075d030fefb2cf8e157b",
+    "runBefore": "9e4aec458ec8721b7a109855e58e918877b9caf079d8075d030fefb2cf8e157b",
+    "acceptedAfter": "5cfed3f46f4944b259724be51a14341dafc24f14c020a22aa4d906b79f157e4f",
+    "runAfter": "5cfed3f46f4944b259724be51a14341dafc24f14c020a22aa4d906b79f157e4f",
+    "expectedPre": "9e4aec458ec8721b7a109855e58e918877b9caf079d8075d030fefb2cf8e157b",
+    "p53Reference": "9e4aec458ec8721b7a109855e58e918877b9caf079d8075d030fefb2cf8e157b",
+    "p53Delivery": "5cfed3f46f4944b259724be51a14341dafc24f14c020a22aa4d906b79f157e4f"
+   },
+   "beforeMatchesReplaced": true,
+   "beforeBytesEqualReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 2073,
+    "maxChannelDelta": 224
+   },
+   "p53SameCommit": {
+    "pixels": 2073,
+    "max": 224
+   },
+   "originalsVsP53": {
+    "beforeBytesEqualP53Reference": true,
+    "afterBytesEqualP53Delivery": true
+   }
+  },
+  {
+   "screenshot": "chromium-light-phone/session-attachment-staged.png",
+   "decision": {
+    "taskId": "34Za39Ov1yysHZaYL6wgJ",
+    "evidenceRevision": 1,
+    "evidenceDigest": "6f0931ccd70e1d4f7d2b0920a9245931732498837a3cc9780c64b8cd928c01c2",
+    "verdict": "CONFIRM",
+    "document": "p5.3/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "4c6318acfc587a849ca439974550bf12e53c0791f9a0ceaa2184b0af98a9e90f"
+   },
+   "mainCommits": [
+    "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+    "9d3751ec2633eba68eb3bee149782795d0426442",
+    "d2e295917d17e73217202e0415820885cd6201b2"
+   ],
+   "sha256": "e6e76e867ee14922cac01678322a9de978626b411bf682f1d4c068201fc60501",
+   "sameCommit": {
+    "before": {
+     "commit": "8f94ddda9069bc2301fefc87f276570b04f4c774",
+     "sha256": "4c6318acfc587a849ca439974550bf12e53c0791f9a0ceaa2184b0af98a9e90f"
+    },
+    "after": {
+     "commit": "b72da6eda7656645c343e97bc73111c1499fab32",
+     "sha256": "e6e76e867ee14922cac01678322a9de978626b411bf682f1d4c068201fc60501"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "difference": "P5.3 把会话工作区换成 Orbit 组件（业务切换 c868a02c2），输入框的 + 菜单换成 Orbit Menu。P0 session 场景从 + 菜单选 File 放进一个文件后截取 session-attachment-staged：Orbit 菜单关闭后把焦点还给发起的 + 按钮（已验收的焦点约定：选择、Esc 或对话框关闭后焦点回到发起的按钮，P2.1「逐层返回焦点」），+ 在输入框卡片里，卡片因 :focus-within 画出聚焦时较深的边框与阴影（index.css 的 .composer-box:focus-within）；被替换的 AntD Dropdown 把焦点丢到 body，卡片保持未聚焦的样子。卡片里面（附件 chip、两行文字、工具栏）逐像素相同，差异只在卡片 1px 边框一圈和它外面的阴影：卡片边框盒 x 14–375、y 680–827，边框上单通道差至多 53，全部差异在 x 0–389、y 663–843 内；卡片内 WebKit 0 个像素不同，Chromium 有 7 个单通道差 ≤2 的抗锯齿像素。手机上这张排在 session-attachment-menu 之后，P5.3 的标准 P0 停在前一张，没有比较到它；判定说明要求登记时按比较器确认手机上的这一张，本登记在同提交原件上用 P0 比较器确认明色两个手机环境不相符，暗色两个手机环境同样的差异（单通道差至多 40）在阈值以内，不登记。P5.3 证据的 P0 页面矩阵把 8 个环境的 session-attachment-staged 都列为这一类。协调者判定接受：P5.3 第 1 版证据的 CONFIRM（判定记录 61sATHPY66znwxRZorvP8d）第 1 条，已验收焦点约定的可见结果。出处：p5.3/README.md「合并检查与 P0」中 P0 页面矩阵 session-attachment-staged 一条与「未消除的差异」第 1 条；P5.3 第 1 版证据 compare/p0-summary.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+   "hashes": {
+    "acceptedBefore": "4c6318acfc587a849ca439974550bf12e53c0791f9a0ceaa2184b0af98a9e90f",
+    "runBefore": "4c6318acfc587a849ca439974550bf12e53c0791f9a0ceaa2184b0af98a9e90f",
+    "acceptedAfter": "e6e76e867ee14922cac01678322a9de978626b411bf682f1d4c068201fc60501",
+    "runAfter": "e6e76e867ee14922cac01678322a9de978626b411bf682f1d4c068201fc60501",
+    "expectedPre": "4c6318acfc587a849ca439974550bf12e53c0791f9a0ceaa2184b0af98a9e90f",
+    "p53Reference": "4c6318acfc587a849ca439974550bf12e53c0791f9a0ceaa2184b0af98a9e90f",
+    "p53Delivery": "e6e76e867ee14922cac01678322a9de978626b411bf682f1d4c068201fc60501"
+   },
+   "beforeMatchesReplaced": true,
+   "beforeBytesEqualReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 15311,
+    "maxChannelDelta": 53
+   },
+   "p53SameCommit": {
+    "pixels": 15311,
+    "max": 53
+   },
+   "originalsVsP53": {
+    "beforeBytesEqualP53Reference": true,
+    "afterBytesEqualP53Delivery": true
+   }
+  },
+  {
+   "screenshot": "webkit-dark-phone/session-attachment-menu.png",
+   "decision": {
+    "taskId": "34Za39Ov1yysHZaYL6wgJ",
+    "evidenceRevision": 1,
+    "evidenceDigest": "6f0931ccd70e1d4f7d2b0920a9245931732498837a3cc9780c64b8cd928c01c2",
+    "verdict": "CONFIRM",
+    "document": "p5.3/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "dfea9b23830740f7e4c2c8e4eb28501280802ac089fb6149e81d109f5eeec09c"
+   },
+   "mainCommits": [
+    "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+    "9d3751ec2633eba68eb3bee149782795d0426442",
+    "d2e295917d17e73217202e0415820885cd6201b2"
+   ],
+   "sha256": "db9c6e93c467b0d2ac0b73e2a83c753e4ed1ee26c0a73c25b4db4a851e6aa3dc",
+   "sameCommit": {
+    "before": {
+     "commit": "8f94ddda9069bc2301fefc87f276570b04f4c774",
+     "sha256": "dfea9b23830740f7e4c2c8e4eb28501280802ac089fb6149e81d109f5eeec09c"
+    },
+    "after": {
+     "commit": "b72da6eda7656645c343e97bc73111c1499fab32",
+     "sha256": "db9c6e93c467b0d2ac0b73e2a83c753e4ed1ee26c0a73c25b4db4a851e6aa3dc"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "difference": "P5.3 把会话工作区换成 Orbit 组件（业务切换 c868a02c2），手机上输入框的 + 菜单是 Orbit Menu 的附件变体（P2.2 的 attachment 变体，ui/Floating.css：250px 宽、42.4px 行高、17px 字、26px 圆角）。P0 session 场景在手机上点开 + 菜单后截取 session-attachment-menu：5 个菜单项（File、Image、Shell、Skill、Command）的标签在 after 中是 17px，即 P2.2 任务指定的字号；被替换的 AntD 菜单实际画的是 14px（P5.3 记录的计算样式：font-size 14px → 17px，line-height 22px → 26.71px）。Shell 一行的终端图标因纵向取整上移约 1px（P5.3 记录的纵向取整带来的图标小数位移）。菜单的盒、分隔线和其余 4 个图标相同。超过 2 级的差异只在 5 个标签（x 81–158、y 565–755）和 Shell 图标（x 39–55、y 657–674）上，单通道差至多 224（明色）或 158（暗色）；其余是这些字形边缘的 ≤2 级像素，WebKit 另有菜单四个圆角处 21（明色）、29（暗色）个 ≤2 级像素。协调者判定接受：P5.3 第 1 版证据的 CONFIRM（判定记录 61sATHPY66znwxRZorvP8d）第 1 条，P2.2 任务指定的 17px 附件变体。出处：p5.3/README.md「合并检查与 P0」中 P0 页面矩阵 session-attachment-menu 一条、「对照结果」中「手机附件菜单的字号」一行与「未消除的差异」第 5 条；P5.3 第 1 版证据 compare/p0-summary.json 中该截图的像素数、最大级数与 styleDeltas 的字号，与本条 before → after 相同。",
+   "hashes": {
+    "acceptedBefore": "dfea9b23830740f7e4c2c8e4eb28501280802ac089fb6149e81d109f5eeec09c",
+    "runBefore": "dfea9b23830740f7e4c2c8e4eb28501280802ac089fb6149e81d109f5eeec09c",
+    "acceptedAfter": "db9c6e93c467b0d2ac0b73e2a83c753e4ed1ee26c0a73c25b4db4a851e6aa3dc",
+    "runAfter": "db9c6e93c467b0d2ac0b73e2a83c753e4ed1ee26c0a73c25b4db4a851e6aa3dc",
+    "expectedPre": "dfea9b23830740f7e4c2c8e4eb28501280802ac089fb6149e81d109f5eeec09c",
+    "p53Reference": "dfea9b23830740f7e4c2c8e4eb28501280802ac089fb6149e81d109f5eeec09c",
+    "p53Delivery": "db9c6e93c467b0d2ac0b73e2a83c753e4ed1ee26c0a73c25b4db4a851e6aa3dc"
+   },
+   "beforeMatchesReplaced": true,
+   "beforeBytesEqualReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 2039,
+    "maxChannelDelta": 158
+   },
+   "p53SameCommit": {
+    "pixels": 2039,
+    "max": 158
+   },
+   "originalsVsP53": {
+    "beforeBytesEqualP53Reference": true,
+    "afterBytesEqualP53Delivery": true
+   }
+  },
+  {
+   "screenshot": "webkit-light-desktop/session-attachment-staged.png",
+   "decision": {
+    "taskId": "34Za39Ov1yysHZaYL6wgJ",
+    "evidenceRevision": 1,
+    "evidenceDigest": "6f0931ccd70e1d4f7d2b0920a9245931732498837a3cc9780c64b8cd928c01c2",
+    "verdict": "CONFIRM",
+    "document": "p5.3/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "a8e989479b45b6d141e472f983cb5cba35b9b7608fc7958969bf55786512e24e"
+   },
+   "mainCommits": [
+    "918034e7290646c96cf35dc6604a4831e59505ff",
+    "f5bdd7fd395452e85fab89aeba2870740c932f80",
+    "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+    "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+    "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+    "9d3751ec2633eba68eb3bee149782795d0426442",
+    "d2e295917d17e73217202e0415820885cd6201b2"
+   ],
+   "sha256": "7643c68292e5435ac3b46072d64d7c1afa2114dbe0752b58b783abec3ef0937a",
+   "sameCommit": {
+    "before": {
+     "commit": "8f94ddda9069bc2301fefc87f276570b04f4c774",
+     "sha256": "a8e989479b45b6d141e472f983cb5cba35b9b7608fc7958969bf55786512e24e"
+    },
+    "after": {
+     "commit": "b72da6eda7656645c343e97bc73111c1499fab32",
+     "sha256": "7643c68292e5435ac3b46072d64d7c1afa2114dbe0752b58b783abec3ef0937a"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "difference": "P5.3 把会话工作区换成 Orbit 组件（业务切换 c868a02c2），输入框的 + 菜单换成 Orbit Menu。P0 session 场景从 + 菜单选 File 放进一个文件后截取 session-attachment-staged：Orbit 菜单关闭后把焦点还给发起的 + 按钮（已验收的焦点约定：选择、Esc 或对话框关闭后焦点回到发起的按钮，P2.1「逐层返回焦点」），+ 在输入框卡片里，卡片因 :focus-within 画出聚焦时较深的边框与阴影（index.css 的 .composer-box:focus-within）；被替换的 AntD Dropdown 把焦点丢到 body，卡片保持未聚焦的样子。卡片里面（附件 chip、两行文字、工具栏）逐像素相同，差异只在卡片 1px 边框一圈和它外面的阴影：卡片边框盒 x 621–1259、y 736–883，边框上单通道差至多 53，全部差异在 x 592–1279、y 719–899 内，卡片内 0 个像素不同。暗色两个桌面环境同样的差异（单通道差至多 40）在 P0 比较器的颜色阈值以内，比较器判为相符，不登记。协调者判定接受：P5.3 第 1 版证据的 CONFIRM（判定记录 61sATHPY66znwxRZorvP8d）第 1 条，已验收焦点约定的可见结果。出处：p5.3/README.md「合并检查与 P0」中 P0 页面矩阵 session-attachment-staged 一条与「未消除的差异」第 1 条；P5.3 第 1 版证据 compare/p0-summary.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+   "hashes": {
+    "acceptedBefore": "a8e989479b45b6d141e472f983cb5cba35b9b7608fc7958969bf55786512e24e",
+    "runBefore": "a8e989479b45b6d141e472f983cb5cba35b9b7608fc7958969bf55786512e24e",
+    "acceptedAfter": "7643c68292e5435ac3b46072d64d7c1afa2114dbe0752b58b783abec3ef0937a",
+    "runAfter": "7643c68292e5435ac3b46072d64d7c1afa2114dbe0752b58b783abec3ef0937a",
+    "expectedPre": "a8e989479b45b6d141e472f983cb5cba35b9b7608fc7958969bf55786512e24e",
+    "p53Reference": "a8e989479b45b6d141e472f983cb5cba35b9b7608fc7958969bf55786512e24e",
+    "p53Delivery": "7643c68292e5435ac3b46072d64d7c1afa2114dbe0752b58b783abec3ef0937a"
+   },
+   "beforeMatchesReplaced": true,
+   "beforeBytesEqualReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 26633,
+    "maxChannelDelta": 53
+   },
+   "p53SameCommit": {
+    "pixels": 26633,
+    "max": 53
+   },
+   "originalsVsP53": {
+    "beforeBytesEqualP53Reference": true,
+    "afterBytesEqualP53Delivery": true
+   }
+  },
+  {
+   "screenshot": "webkit-light-phone/session-attachment-menu.png",
+   "decision": {
+    "taskId": "34Za39Ov1yysHZaYL6wgJ",
+    "evidenceRevision": 1,
+    "evidenceDigest": "6f0931ccd70e1d4f7d2b0920a9245931732498837a3cc9780c64b8cd928c01c2",
+    "verdict": "CONFIRM",
+    "document": "p5.3/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "d7aa2fe37f0a78a56262284c33331c92638cd107ffd9e1ea976224ed86cbc2d9"
+   },
+   "mainCommits": [
+    "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+    "9d3751ec2633eba68eb3bee149782795d0426442",
+    "d2e295917d17e73217202e0415820885cd6201b2"
+   ],
+   "sha256": "9022ef0fb13c7f1b1f05bddead0ad3120b388e9e0b3a92bf443e415123e84bb4",
+   "sameCommit": {
+    "before": {
+     "commit": "8f94ddda9069bc2301fefc87f276570b04f4c774",
+     "sha256": "d7aa2fe37f0a78a56262284c33331c92638cd107ffd9e1ea976224ed86cbc2d9"
+    },
+    "after": {
+     "commit": "b72da6eda7656645c343e97bc73111c1499fab32",
+     "sha256": "9022ef0fb13c7f1b1f05bddead0ad3120b388e9e0b3a92bf443e415123e84bb4"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "difference": "P5.3 把会话工作区换成 Orbit 组件（业务切换 c868a02c2），手机上输入框的 + 菜单是 Orbit Menu 的附件变体（P2.2 的 attachment 变体，ui/Floating.css：250px 宽、42.4px 行高、17px 字、26px 圆角）。P0 session 场景在手机上点开 + 菜单后截取 session-attachment-menu：5 个菜单项（File、Image、Shell、Skill、Command）的标签在 after 中是 17px，即 P2.2 任务指定的字号；被替换的 AntD 菜单实际画的是 14px（P5.3 记录的计算样式：font-size 14px → 17px，line-height 22px → 26.71px）。Shell 一行的终端图标因纵向取整上移约 1px（P5.3 记录的纵向取整带来的图标小数位移）。菜单的盒、分隔线和其余 4 个图标相同。超过 2 级的差异只在 5 个标签（x 81–158、y 565–755）和 Shell 图标（x 39–55、y 657–674）上，单通道差至多 224（明色）或 158（暗色）；其余是这些字形边缘的 ≤2 级像素，WebKit 另有菜单四个圆角处 21（明色）、29（暗色）个 ≤2 级像素。协调者判定接受：P5.3 第 1 版证据的 CONFIRM（判定记录 61sATHPY66znwxRZorvP8d）第 1 条，P2.2 任务指定的 17px 附件变体。出处：p5.3/README.md「合并检查与 P0」中 P0 页面矩阵 session-attachment-menu 一条、「对照结果」中「手机附件菜单的字号」一行与「未消除的差异」第 5 条；P5.3 第 1 版证据 compare/p0-summary.json 中该截图的像素数、最大级数与 styleDeltas 的字号，与本条 before → after 相同。",
+   "hashes": {
+    "acceptedBefore": "d7aa2fe37f0a78a56262284c33331c92638cd107ffd9e1ea976224ed86cbc2d9",
+    "runBefore": "d7aa2fe37f0a78a56262284c33331c92638cd107ffd9e1ea976224ed86cbc2d9",
+    "acceptedAfter": "9022ef0fb13c7f1b1f05bddead0ad3120b388e9e0b3a92bf443e415123e84bb4",
+    "runAfter": "9022ef0fb13c7f1b1f05bddead0ad3120b388e9e0b3a92bf443e415123e84bb4",
+    "expectedPre": "d7aa2fe37f0a78a56262284c33331c92638cd107ffd9e1ea976224ed86cbc2d9",
+    "p53Reference": "d7aa2fe37f0a78a56262284c33331c92638cd107ffd9e1ea976224ed86cbc2d9",
+    "p53Delivery": "9022ef0fb13c7f1b1f05bddead0ad3120b388e9e0b3a92bf443e415123e84bb4"
+   },
+   "beforeMatchesReplaced": true,
+   "beforeBytesEqualReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 2035,
+    "maxChannelDelta": 224
+   },
+   "p53SameCommit": {
+    "pixels": 2035,
+    "max": 224
+   },
+   "originalsVsP53": {
+    "beforeBytesEqualP53Reference": true,
+    "afterBytesEqualP53Delivery": true
+   }
+  },
+  {
+   "screenshot": "webkit-light-phone/session-attachment-staged.png",
+   "decision": {
+    "taskId": "34Za39Ov1yysHZaYL6wgJ",
+    "evidenceRevision": 1,
+    "evidenceDigest": "6f0931ccd70e1d4f7d2b0920a9245931732498837a3cc9780c64b8cd928c01c2",
+    "verdict": "CONFIRM",
+    "document": "p5.3/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "1b1a0558e45ed7f78cd2274296ee0c0ce4c9fa3a08a74d4d5cd4d5be8481289e"
+   },
+   "mainCommits": [
+    "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+    "9d3751ec2633eba68eb3bee149782795d0426442",
+    "d2e295917d17e73217202e0415820885cd6201b2"
+   ],
+   "sha256": "7eb1c38126583619f533f0e67d05db3b7d4eddeeb3320fc4da4a7940d2156296",
+   "sameCommit": {
+    "before": {
+     "commit": "8f94ddda9069bc2301fefc87f276570b04f4c774",
+     "sha256": "1b1a0558e45ed7f78cd2274296ee0c0ce4c9fa3a08a74d4d5cd4d5be8481289e"
+    },
+    "after": {
+     "commit": "b72da6eda7656645c343e97bc73111c1499fab32",
+     "sha256": "7eb1c38126583619f533f0e67d05db3b7d4eddeeb3320fc4da4a7940d2156296"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "difference": "P5.3 把会话工作区换成 Orbit 组件（业务切换 c868a02c2），输入框的 + 菜单换成 Orbit Menu。P0 session 场景从 + 菜单选 File 放进一个文件后截取 session-attachment-staged：Orbit 菜单关闭后把焦点还给发起的 + 按钮（已验收的焦点约定：选择、Esc 或对话框关闭后焦点回到发起的按钮，P2.1「逐层返回焦点」），+ 在输入框卡片里，卡片因 :focus-within 画出聚焦时较深的边框与阴影（index.css 的 .composer-box:focus-within）；被替换的 AntD Dropdown 把焦点丢到 body，卡片保持未聚焦的样子。卡片里面（附件 chip、两行文字、工具栏）逐像素相同，差异只在卡片 1px 边框一圈和它外面的阴影：卡片边框盒 x 14–375、y 680–827，边框上单通道差至多 53，全部差异在 x 0–389、y 663–843 内；卡片内 WebKit 0 个像素不同，Chromium 有 7 个单通道差 ≤2 的抗锯齿像素。手机上这张排在 session-attachment-menu 之后，P5.3 的标准 P0 停在前一张，没有比较到它；判定说明要求登记时按比较器确认手机上的这一张，本登记在同提交原件上用 P0 比较器确认明色两个手机环境不相符，暗色两个手机环境同样的差异（单通道差至多 40）在阈值以内，不登记。P5.3 证据的 P0 页面矩阵把 8 个环境的 session-attachment-staged 都列为这一类。协调者判定接受：P5.3 第 1 版证据的 CONFIRM（判定记录 61sATHPY66znwxRZorvP8d）第 1 条，已验收焦点约定的可见结果。出处：p5.3/README.md「合并检查与 P0」中 P0 页面矩阵 session-attachment-staged 一条与「未消除的差异」第 1 条；P5.3 第 1 版证据 compare/p0-summary.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+   "hashes": {
+    "acceptedBefore": "1b1a0558e45ed7f78cd2274296ee0c0ce4c9fa3a08a74d4d5cd4d5be8481289e",
+    "runBefore": "1b1a0558e45ed7f78cd2274296ee0c0ce4c9fa3a08a74d4d5cd4d5be8481289e",
+    "acceptedAfter": "7eb1c38126583619f533f0e67d05db3b7d4eddeeb3320fc4da4a7940d2156296",
+    "runAfter": "7eb1c38126583619f533f0e67d05db3b7d4eddeeb3320fc4da4a7940d2156296",
+    "expectedPre": "1b1a0558e45ed7f78cd2274296ee0c0ce4c9fa3a08a74d4d5cd4d5be8481289e",
+    "p53Reference": "1b1a0558e45ed7f78cd2274296ee0c0ce4c9fa3a08a74d4d5cd4d5be8481289e",
+    "p53Delivery": "7eb1c38126583619f533f0e67d05db3b7d4eddeeb3320fc4da4a7940d2156296"
+   },
+   "beforeMatchesReplaced": true,
+   "beforeBytesEqualReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 16075,
+    "maxChannelDelta": 53
+   },
+   "p53SameCommit": {
+    "pixels": 16075,
+    "max": 53
+   },
+   "originalsVsP53": {
+    "beforeBytesEqualP53Reference": true,
+    "afterBytesEqualP53Delivery": true
+   }
+  }
+ ],
+ "completeness": {
+  "screenshots": 252,
+  "afterBytesEqual": 205,
+  "afterFails": [
+   "chromium-dark-phone/session-attachment-menu.png",
+   "chromium-light-desktop/session-attachment-staged.png",
+   "chromium-light-phone/session-attachment-menu.png",
+   "chromium-light-phone/session-attachment-staged.png",
+   "webkit-dark-phone/session-attachment-menu.png",
+   "webkit-light-desktop/session-attachment-staged.png",
+   "webkit-light-phone/session-attachment-menu.png",
+   "webkit-light-phone/session-attachment-staged.png"
+  ],
+  "beforeBytesEqual": 227,
+  "beforeFails": [],
+  "beforeToAfterDifferent": 34,
+  "beforeToAfterComparatorFails": [
+   "chromium-dark-phone/session-attachment-menu.png",
+   "chromium-light-desktop/session-attachment-staged.png",
+   "chromium-light-phone/session-attachment-menu.png",
+   "chromium-light-phone/session-attachment-staged.png",
+   "webkit-dark-phone/session-attachment-menu.png",
+   "webkit-light-desktop/session-attachment-staged.png",
+   "webkit-light-phone/session-attachment-menu.png",
+   "webkit-light-phone/session-attachment-staged.png"
+  ],
+  "rows": [
+   {
+    "screenshot": "chromium-dark-desktop/breakpoint-599-dialog.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/breakpoint-599-share.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/breakpoint-601-dialog.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/breakpoint-601-share.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/breakpoint-639-graph.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/breakpoint-639-projects.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 7,
+     "maxChannelDelta": 4
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 7,
+     "maxChannelDelta": 4
+    }
+   },
+   {
+    "screenshot": "chromium-dark-desktop/breakpoint-641-graph.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/breakpoint-641-projects.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/breakpoint-959-session.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/breakpoint-959-wiki.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "beforeVsExpectation": {
+     "differentPixels": 12,
+     "maxChannelDelta": 2
+    },
+    "beforeToAfter": {
+     "differentPixels": 12,
+     "maxChannelDelta": 2,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-dark-desktop/breakpoint-961-session.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/breakpoint-961-wiki.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 6,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 6,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-dark-desktop/notification-error.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/profile-validation.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/profile.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/project-graph-fullscreen.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/project-graph.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/project-overview.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 6,
+     "maxChannelDelta": 1
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 6,
+     "maxChannelDelta": 1
+    }
+   },
+   {
+    "screenshot": "chromium-dark-desktop/projects-error.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/projects-list.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/projects-loading.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/projects-search-empty.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 7,
+     "maxChannelDelta": 2
+    },
+    "beforeToAfter": {
+     "differentPixels": 7,
+     "maxChannelDelta": 2,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-dark-desktop/session-attachment-menu.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 7,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 7,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-dark-desktop/session-attachment-staged.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 16261,
+     "maxChannelDelta": 40
+    },
+    "beforeToAfter": {
+     "differentPixels": 16261,
+     "maxChannelDelta": 40,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-dark-desktop/session-composer-focus.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/session-idle.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/session-streaming.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/settings-saved.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 29,
+     "maxChannelDelta": 1
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 29,
+     "maxChannelDelta": 1
+    }
+   },
+   {
+    "screenshot": "chromium-dark-desktop/settings.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/task-action-focus.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 3,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 3,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-dark-desktop/task-action-hover.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 3,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 3,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-dark-desktop/task-action-menu.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/task-detail.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 3,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 3,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-dark-desktop/task-public-share.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/task-share-dialog.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/wiki-home.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-desktop/wiki-new-entry.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 31,
+     "maxChannelDelta": 1
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 31,
+     "maxChannelDelta": 1
+    }
+   },
+   {
+    "screenshot": "chromium-dark-phone/notification-error.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/profile-validation.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 91,
+     "maxChannelDelta": 2
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 91,
+     "maxChannelDelta": 2
+    }
+   },
+   {
+    "screenshot": "chromium-dark-phone/profile.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/project-graph-fullscreen.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/project-graph.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/project-overview.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/projects-error.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/projects-list.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/projects-loading.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/projects-search-empty.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/session-attachment-menu.png",
+    "expectationLayer": "p0-drift",
+    "registered": true,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": true,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 2071,
+     "maxChannelDelta": 158
+    },
+    "beforeToAfter": {
+     "differentPixels": 2071,
+     "maxChannelDelta": 158,
+     "comparatorMatch": false
+    }
+   },
+   {
+    "screenshot": "chromium-dark-phone/session-attachment-staged.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 9782,
+     "maxChannelDelta": 40
+    },
+    "beforeToAfter": {
+     "differentPixels": 9782,
+     "maxChannelDelta": 40,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-dark-phone/session-composer-focus.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/session-idle.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/session-streaming.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/settings-saved.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/settings.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/task-action-focus.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 1,
+     "maxChannelDelta": 1
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 1,
+     "maxChannelDelta": 1
+    }
+   },
+   {
+    "screenshot": "chromium-dark-phone/task-action-hover.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/task-action-menu.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/task-detail.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/task-public-share.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/task-share-dialog.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/wiki-contents.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/wiki-home.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-dark-phone/wiki-new-entry.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 18141,
+     "maxChannelDelta": 1
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 18151,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 10,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-light-desktop/breakpoint-599-dialog.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/breakpoint-599-share.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/breakpoint-601-dialog.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/breakpoint-601-share.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/breakpoint-639-graph.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/breakpoint-639-projects.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 7,
+     "maxChannelDelta": 2
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 7,
+     "maxChannelDelta": 2
+    }
+   },
+   {
+    "screenshot": "chromium-light-desktop/breakpoint-641-graph.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/breakpoint-641-projects.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 7,
+     "maxChannelDelta": 2
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 7,
+     "maxChannelDelta": 2
+    }
+   },
+   {
+    "screenshot": "chromium-light-desktop/breakpoint-959-session.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/breakpoint-959-wiki.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "beforeVsExpectation": {
+     "differentPixels": 14,
+     "maxChannelDelta": 2
+    },
+    "beforeToAfter": {
+     "differentPixels": 14,
+     "maxChannelDelta": 2,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-light-desktop/breakpoint-961-session.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/breakpoint-961-wiki.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "beforeVsExpectation": {
+     "differentPixels": 7,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 7,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-light-desktop/notification-error.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/profile-validation.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/profile.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/project-graph-fullscreen.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/project-graph.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/project-overview.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 6,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 6,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-light-desktop/projects-error.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/projects-list.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/projects-loading.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/projects-search-empty.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "beforeVsExpectation": {
+     "differentPixels": 3,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 3,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-light-desktop/session-attachment-menu.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 9,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 9,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-light-desktop/session-attachment-staged.png",
+    "expectationLayer": "p0-drift",
+    "registered": true,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": true,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 24835,
+     "maxChannelDelta": 53
+    },
+    "beforeToAfter": {
+     "differentPixels": 24835,
+     "maxChannelDelta": 53,
+     "comparatorMatch": false
+    }
+   },
+   {
+    "screenshot": "chromium-light-desktop/session-composer-focus.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/session-idle.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/session-streaming.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/settings-saved.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/settings.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/task-action-focus.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 5,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 5,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-light-desktop/task-action-hover.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 5,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 5,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-light-desktop/task-action-menu.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/task-detail.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 5,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 5,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-light-desktop/task-public-share.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/task-share-dialog.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/wiki-home.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-desktop/wiki-new-entry.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 48,
+     "maxChannelDelta": 2
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 48,
+     "maxChannelDelta": 2
+    }
+   },
+   {
+    "screenshot": "chromium-light-phone/notification-error.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/profile-validation.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 91,
+     "maxChannelDelta": 1
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 91,
+     "maxChannelDelta": 1
+    }
+   },
+   {
+    "screenshot": "chromium-light-phone/profile.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/project-graph-fullscreen.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/project-graph.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/project-overview.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 24,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 24,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-light-phone/projects-error.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/projects-list.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/projects-loading.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/projects-search-empty.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 12,
+     "maxChannelDelta": 2
+    },
+    "beforeToAfter": {
+     "differentPixels": 12,
+     "maxChannelDelta": 2,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-light-phone/session-attachment-menu.png",
+    "expectationLayer": "p0-drift",
+    "registered": true,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": true,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 2073,
+     "maxChannelDelta": 224
+    },
+    "beforeToAfter": {
+     "differentPixels": 2073,
+     "maxChannelDelta": 224,
+     "comparatorMatch": false
+    }
+   },
+   {
+    "screenshot": "chromium-light-phone/session-attachment-staged.png",
+    "expectationLayer": "p0-drift",
+    "registered": true,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": true,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 15311,
+     "maxChannelDelta": 53
+    },
+    "beforeToAfter": {
+     "differentPixels": 15311,
+     "maxChannelDelta": 53,
+     "comparatorMatch": false
+    }
+   },
+   {
+    "screenshot": "chromium-light-phone/session-composer-focus.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/session-idle.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/session-streaming.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/settings-saved.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/settings.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/task-action-focus.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/task-action-hover.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/task-action-menu.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/task-detail.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/task-public-share.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/task-share-dialog.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "chromium-light-phone/wiki-contents.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "beforeVsExpectation": {
+     "differentPixels": 18,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 18,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-light-phone/wiki-home.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 42,
+     "maxChannelDelta": 2
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 50,
+     "maxChannelDelta": 2
+    },
+    "beforeToAfter": {
+     "differentPixels": 36,
+     "maxChannelDelta": 2,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "chromium-light-phone/wiki-new-entry.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 28455,
+     "maxChannelDelta": 2
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 28455,
+     "maxChannelDelta": 2
+    }
+   },
+   {
+    "screenshot": "webkit-dark-desktop/breakpoint-599-dialog.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/breakpoint-599-share.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/breakpoint-601-dialog.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/breakpoint-601-share.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/breakpoint-639-graph.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/breakpoint-639-projects.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/breakpoint-641-graph.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/breakpoint-641-projects.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/breakpoint-959-session.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/breakpoint-959-wiki.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/breakpoint-961-session.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/breakpoint-961-wiki.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/notification-error.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/profile-validation.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/profile.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/project-graph-fullscreen.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 17,
+     "maxChannelDelta": 1
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 17,
+     "maxChannelDelta": 1
+    }
+   },
+   {
+    "screenshot": "webkit-dark-desktop/project-graph.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/project-overview.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/projects-error.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/projects-list.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/projects-loading.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/projects-search-empty.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/session-attachment-menu.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 10,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 10,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "webkit-dark-desktop/session-attachment-staged.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 11457,
+     "maxChannelDelta": 40
+    },
+    "beforeToAfter": {
+     "differentPixels": 11457,
+     "maxChannelDelta": 40,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "webkit-dark-desktop/session-composer-focus.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/session-idle.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/session-streaming.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/settings-saved.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/settings.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/task-action-focus.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/task-action-hover.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/task-action-menu.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/task-detail.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/task-public-share.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/task-share-dialog.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/wiki-home.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-desktop/wiki-new-entry.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 11,
+     "maxChannelDelta": 1
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 11,
+     "maxChannelDelta": 1
+    }
+   },
+   {
+    "screenshot": "webkit-dark-phone/notification-error.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/profile-validation.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/profile.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/project-graph-fullscreen.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/project-graph.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/project-overview.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/projects-error.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/projects-list.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/projects-loading.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/projects-search-empty.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/session-attachment-menu.png",
+    "expectationLayer": "p0-drift",
+    "registered": true,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": true,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 2039,
+     "maxChannelDelta": 158
+    },
+    "beforeToAfter": {
+     "differentPixels": 2039,
+     "maxChannelDelta": 158,
+     "comparatorMatch": false
+    }
+   },
+   {
+    "screenshot": "webkit-dark-phone/session-attachment-staged.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 7856,
+     "maxChannelDelta": 40
+    },
+    "beforeToAfter": {
+     "differentPixels": 7856,
+     "maxChannelDelta": 40,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "webkit-dark-phone/session-composer-focus.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/session-idle.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/session-streaming.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/settings-saved.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/settings.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/task-action-focus.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/task-action-hover.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/task-action-menu.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/task-detail.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/task-public-share.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/task-share-dialog.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/wiki-contents.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/wiki-home.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-dark-phone/wiki-new-entry.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 17,
+     "maxChannelDelta": 1
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 17,
+     "maxChannelDelta": 1
+    }
+   },
+   {
+    "screenshot": "webkit-light-desktop/breakpoint-599-dialog.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/breakpoint-599-share.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/breakpoint-601-dialog.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/breakpoint-601-share.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/breakpoint-639-graph.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/breakpoint-639-projects.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/breakpoint-641-graph.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/breakpoint-641-projects.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/breakpoint-959-session.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/breakpoint-959-wiki.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/breakpoint-961-session.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/breakpoint-961-wiki.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/notification-error.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/profile-validation.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/profile.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/project-graph-fullscreen.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 9,
+     "maxChannelDelta": 1
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 9,
+     "maxChannelDelta": 1
+    }
+   },
+   {
+    "screenshot": "webkit-light-desktop/project-graph.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/project-overview.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/projects-error.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/projects-list.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/projects-loading.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/projects-search-empty.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/session-attachment-menu.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 6,
+     "maxChannelDelta": 1
+    },
+    "beforeToAfter": {
+     "differentPixels": 6,
+     "maxChannelDelta": 1,
+     "comparatorMatch": true
+    }
+   },
+   {
+    "screenshot": "webkit-light-desktop/session-attachment-staged.png",
+    "expectationLayer": "p0-drift",
+    "registered": true,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": true,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 26633,
+     "maxChannelDelta": 53
+    },
+    "beforeToAfter": {
+     "differentPixels": 26633,
+     "maxChannelDelta": 53,
+     "comparatorMatch": false
+    }
+   },
+   {
+    "screenshot": "webkit-light-desktop/session-composer-focus.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/session-idle.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/session-streaming.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/settings-saved.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/settings.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/task-action-focus.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/task-action-hover.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/task-action-menu.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/task-detail.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/task-public-share.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/task-share-dialog.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/wiki-home.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-desktop/wiki-new-entry.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 8,
+     "maxChannelDelta": 1
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 8,
+     "maxChannelDelta": 1
+    }
+   },
+   {
+    "screenshot": "webkit-light-phone/notification-error.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/profile-validation.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 6753,
+     "maxChannelDelta": 255
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 6753,
+     "maxChannelDelta": 255
+    }
+   },
+   {
+    "screenshot": "webkit-light-phone/profile.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/project-graph-fullscreen.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/project-graph.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/project-overview.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/projects-error.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/projects-list.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/projects-loading.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/projects-search-empty.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/session-attachment-menu.png",
+    "expectationLayer": "p0-drift",
+    "registered": true,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": true,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 2035,
+     "maxChannelDelta": 224
+    },
+    "beforeToAfter": {
+     "differentPixels": 2035,
+     "maxChannelDelta": 224,
+     "comparatorMatch": false
+    }
+   },
+   {
+    "screenshot": "webkit-light-phone/session-attachment-staged.png",
+    "expectationLayer": "p0-drift",
+    "registered": true,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": true,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 16075,
+     "maxChannelDelta": 53
+    },
+    "beforeToAfter": {
+     "differentPixels": 16075,
+     "maxChannelDelta": 53,
+     "comparatorMatch": false
+    }
+   },
+   {
+    "screenshot": "webkit-light-phone/session-composer-focus.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/session-idle.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/session-streaming.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/settings-saved.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/settings.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/task-action-focus.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/task-action-hover.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/task-action-menu.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/task-detail.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/task-public-share.png",
+    "expectationLayer": "p0.2",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/task-share-dialog.png",
+    "expectationLayer": "accepted",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/wiki-contents.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/wiki-home.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": true,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": true,
+    "beforeFailsComparator": false
+   },
+   {
+    "screenshot": "webkit-light-phone/wiki-new-entry.png",
+    "expectationLayer": "p0-drift",
+    "registered": false,
+    "afterBytesEqualExpectation": false,
+    "afterFailsComparator": false,
+    "beforeBytesEqualExpectation": false,
+    "beforeFailsComparator": false,
+    "afterVsExpectation": {
+     "differentPixels": 8,
+     "maxChannelDelta": 1
+    },
+    "beforeVsExpectation": {
+     "differentPixels": 8,
+     "maxChannelDelta": 1
+    }
+   }
+  ]
+ }
+}

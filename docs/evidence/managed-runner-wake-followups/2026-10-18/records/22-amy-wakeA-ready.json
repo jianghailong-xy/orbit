@@ -1,0 +1,21 @@
+{
+  "changes": [
+    [
+      "2026-10-18T04:02:24.519+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 1,
+        "desired_state": "SLEEPING",
+        "drain": null,
+        "generation": 3,
+        "management_state": "SLEEPING",
+        "pod": null,
+        "reason": null,
+        "revision": 33
+      }
+    ]
+  ],
+  "owner": "amy",
+  "timeout": 100
+}
+amy not READY/None within 100 s

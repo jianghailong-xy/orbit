@@ -1,0 +1,200 @@
+{
+ "scenario": "api-key-session-management",
+ "process": "acp",
+ "version": "2026.10.14-941492e",
+ "exit": null,
+ "actions": [
+  {
+   "t": 8,
+   "channel": "spawn",
+   "value": {
+    "args": [
+     "acp"
+    ],
+    "cwd": "<RUN>/work",
+    "envKeys": [
+     "AGENT_CLI_CREDENTIAL_STORE",
+     "CURSOR_API_KEY",
+     "CURSOR_CONFIG_DIR",
+     "CURSOR_DATA_DIR",
+     "HOME",
+     "LANG",
+     "NO_OPEN_BROWSER",
+     "ORBIT_P0_CANARY",
+     "PATH",
+     "TERM",
+     "XDG_CACHE_HOME",
+     "XDG_CONFIG_HOME",
+     "XDG_DATA_HOME"
+    ]
+   }
+  },
+  {
+   "t": 8,
+   "channel": "client->agent",
+   "id": 1,
+   "method": "initialize"
+  },
+  {
+   "t": 411,
+   "channel": "client->agent",
+   "id": 2,
+   "method": "session/new"
+  },
+  {
+   "t": 9521,
+   "channel": "client->agent",
+   "id": 3,
+   "method": "session/set_config_option"
+  },
+  {
+   "t": 12240,
+   "channel": "client->agent",
+   "id": 4,
+   "method": "session/set_config_option"
+  },
+  {
+   "t": 13632,
+   "channel": "client->agent",
+   "id": 5,
+   "method": "session/set_config_option"
+  },
+  {
+   "t": 15111,
+   "channel": "client->agent",
+   "id": 6,
+   "method": "session/set_config_option"
+  },
+  {
+   "t": 16493,
+   "channel": "client->agent",
+   "id": 7,
+   "method": "session/set_config_option"
+  },
+  {
+   "t": 16494,
+   "channel": "client->agent",
+   "id": 8,
+   "method": "session/set_config_option"
+  },
+  {
+   "t": 17813,
+   "channel": "client->agent",
+   "id": 9,
+   "method": "session/set_mode"
+  },
+  {
+   "t": 17813,
+   "channel": "client->agent",
+   "id": 10,
+   "method": "session/set_mode"
+  },
+  {
+   "t": 17813,
+   "channel": "client->agent",
+   "id": 11,
+   "method": "session/set_model"
+  },
+  {
+   "t": 20588,
+   "channel": "client->agent",
+   "id": 12,
+   "method": "session/new"
+  },
+  {
+   "t": 23268,
+   "channel": "client->agent",
+   "id": 13,
+   "method": "session/set_config_option"
+  },
+  {
+   "t": 26292,
+   "channel": "client->agent",
+   "id": 14,
+   "method": "session/set_config_option"
+  },
+  {
+   "t": 27735,
+   "channel": "client->agent",
+   "id": 15,
+   "method": "session/new"
+  },
+  {
+   "t": 30564,
+   "channel": "client->agent",
+   "id": 16,
+   "method": "session/set_config_option"
+  },
+  {
+   "t": 33307,
+   "channel": "client->agent",
+   "id": 17,
+   "method": "session/list"
+  },
+  {
+   "t": 33308,
+   "channel": "client->agent",
+   "id": 18,
+   "method": "session/list"
+  },
+  {
+   "t": 33308,
+   "channel": "client->agent",
+   "id": 19,
+   "method": "session/list"
+  },
+  {
+   "t": 33309,
+   "channel": "client->agent",
+   "id": 20,
+   "method": "session/list"
+  },
+  {
+   "t": 33309,
+   "channel": "client->agent",
+   "id": 21,
+   "method": "session/load"
+  },
+  {
+   "t": 33309,
+   "channel": "client->agent",
+   "id": 22,
+   "method": "session/load"
+  },
+  {
+   "t": 33310,
+   "channel": "client->agent",
+   "id": 23,
+   "method": "session/close"
+  },
+  {
+   "t": 33312,
+   "channel": "client->agent",
+   "id": 24,
+   "method": "session/resume"
+  },
+  {
+   "t": 33312,
+   "channel": "client->agent",
+   "id": 25,
+   "method": "session/fork"
+  },
+  {
+   "t": 33312,
+   "channel": "client->agent",
+   "id": 26,
+   "method": "session/prompt"
+  },
+  {
+   "t": 33312,
+   "channel": "client->agent",
+   "id": 27,
+   "method": "session/new"
+  },
+  {
+   "t": 33313,
+   "channel": "client->agent",
+   "method": "session/cancel"
+  }
+ ]
+}

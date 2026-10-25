@@ -1,0 +1,24 @@
+{
+ "app": "/mnt/data/tmp/34dI9lY63LC7ZEZHbJ4bG/trees/negative-control-1px",
+ "commit": "c5020489dd9263b9e1e4cbfd45995a8b50a1f196",
+ "runner": "/mnt/data/tmp/34dI9lY63LC7ZEZHbJ4bG/runners/reg",
+ "runnerCommit": "4882b380e44d3b5cbcc511b1c187056b7af26c53",
+ "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+ "started": "2026-10-10T05:49:17Z",
+ "finished": "2026-10-10T05:54:01Z",
+ "exit": 0,
+ "environment": "p0.2",
+ "stats": {
+  "expected": 76,
+  "unexpected": 0,
+  "flaky": 0,
+  "skipped": 4
+ },
+ "screenshots": 252,
+ "evidence": {
+  "tests": 80,
+  "withUnhandled": 0,
+  "unhandled": {},
+  "withPageErrors": 0
+ }
+}

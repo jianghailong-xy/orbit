@@ -16,6 +16,7 @@ import {
   LANDED_RESULTS,
   LANDING_SERVING_WORK_SELECT,
   readLandingBranches,
+  readLandingJobsByTask,
   taskHasNothingToLand,
   taskLanding,
   type LandingBranches,
@@ -185,13 +186,17 @@ export class ProjectSettledUnmergedProducer {
       },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
+    // The line's own answers about these branches, beside the tasks rather than below them: 0423
+    // made `task_id` a history reference, so there is no relation for Prisma to nest.
+    const jobs = await readLandingJobsByTask(this.prisma, tasks.map((task) => task.id));
 
-    return tasks.flatMap((task) => {
-      if (taskHasNothingToLand(task)) return [];
-      if (taskLanding(task.mergeReceipts, branches) !== 'ON_INTEGRATION_LINE') return [];
-      const sha = newestShaOnLine(task.mergeReceipts, branches);
-      return sha ? [{ taskId: task.id, title: task.title, sha }] : [];
-    });
+    return tasks.map((task) => ({ ...task, integrationJobs: jobs.get(task.id) ?? [] }))
+      .flatMap((task) => {
+        if (taskHasNothingToLand(task)) return [];
+        if (taskLanding(task.mergeReceipts, branches) !== 'ON_INTEGRATION_LINE') return [];
+        const sha = newestShaOnLine(task.mergeReceipts, branches);
+        return sha ? [{ taskId: task.id, title: task.title, sha }] : [];
+      });
   }
 
   /**

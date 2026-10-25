@@ -54,6 +54,28 @@ func userFrame(sessionID string, content []map[string]interface{}) string {
 	})
 }
 
+// userTurnFrame is userFrame for a steer: it also carries the Orbit turn it delivers as the
+// frame's `uuid`. The CLI keeps a uuid it is given (measured on 2.1.296 and 2.1.300) — its
+// --replay-user-messages echo carries it back, so that echo names the message it answers, and
+// `cancel_async_message` drops the message by it while it is still waiting in the CLI's queue
+// (claude_withdraw.go).
+//
+// A steer only, because a steer is delivered once and never again: an ordinary message can be
+// fed a second time to a re-spawned process, under the same turn, and a uuid the resumed
+// conversation already holds is not a promise to make about a different frame.
+func userTurnFrame(sessionID, uuid string, content []map[string]interface{}) string {
+	return marshalFrame(map[string]interface{}{
+		"type": frameUser,
+		"message": map[string]interface{}{
+			"role":    "user",
+			"content": content,
+		},
+		"parent_tool_use_id": nil,
+		"session_id":         sessionID,
+		"uuid":               uuid,
+	})
+}
+
 // controlRequestFrame asks the CLI to do something out of band of the conversation —
 // stop the current turn (ctrlInterrupt), change the permission mode
 // (ctrlSetPermissionMode), switch model (ctrlSetModel). requestID is what the matching

@@ -1,0 +1,652 @@
+{
+  "about": [
+    "How an agent's question (AskUserQuestion) ended, read back from the result text the engine wrote",
+    "for the agent: one set of cases both clients are proved against. `@orbit/shared`'s",
+    "`questionRecord.spec.ts` checks `questionOutcome`, `questionLead` and `QUESTION_RECORD_COPY` (what",
+    "the web renders) against this file; OrbitKit's `QuestionRecordsTests` reads the same file.",
+    "",
+    "`outcome`: the questions as the call's input carries them, the result's text and whether it was an",
+    "error → `{kind: answered, answers}` (one entry per question: the picked options' indices, ascending,",
+    "and the words typed; null where the result names none), `{kind: replied, words}` (Chat about this),",
+    "or null (no result, a failure, a wording the reader does not know: the card shows the result itself).",
+    "",
+    "`lead`: a question's opening on the folded card: every run of whitespace one space, trimmed.",
+    "",
+    "`lines`: what the folded card writes under the openings. For `answered`, one per question: the picked",
+    "options' labels in the order offered, then the typed words in “”, joined by \" · \" (U+00B7 between",
+    "two spaces); null where there is no answer. For `replied`, the reply in “”. None when the outcome is null."
+  ],
+  "copy": {
+    "repliedInChat": "Replied in chat",
+    "yourAnswer": "Your answer",
+    "multipleChoice": "Multiple choice"
+  },
+  "lead": [
+    {
+      "question": "Which branch should this land on?\n\nContext: the fix is one CSS declaration.\n  - main: ships with the next release",
+      "lead": "Which branch should this land on? Context: the fix is one CSS declaration. - main: ships with the next release"
+    },
+    {
+      "question": "  Ship it tonight?  ",
+      "lead": "Ship it tonight?"
+    }
+  ],
+  "outcome": [
+    {
+      "name": "one question, a listed option (the 10:14 screenshot, word for word)",
+      "questions": [
+        {
+          "question": "On iPad, what should a swipe right from the left edge do? Today there are two places on the iPad where the swipe does nothing: (1) the hidden sidebar only opens from the toolbar button; (2) the in-column pages with a Back button (a folder's page, a project's sessions page, a task opened over its project, a runner's engine or name page) only go back from that button. On the iPhone the same swipe opens the drawer on a list page and goes back on a pushed page.",
+          "header": "Swipe right",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Both, like the iPhone (Recommended)",
+              "description": "On a list page, swiping right from the screen's left edge opens the sidebar (swiping left on it closes it). On an in-column page with a Back button, swiping right from that column's left edge goes back one page."
+            },
+            {
+              "label": "Open the sidebar only",
+              "description": "Swiping right from the screen's left edge opens the sidebar; going back still uses only the Back button."
+            },
+            {
+              "label": "Swipe back only",
+              "description": "On an in-column page with a Back button, swiping right goes back; the sidebar still opens only from the toolbar button."
+            }
+          ]
+        }
+      ],
+      "isError": false,
+      "result": "The user answered: \"On iPad, what should a swipe right from the left edge do? Today there are two places on the iPad where the swipe does nothing: (1) the hidden sidebar only opens from the toolbar button; (2) the in-column pages with a Back button (a folder's page, a project's sessions page, a task opened over its project, a runner's engine or name page) only go back from that button. On the iPhone the same swipe opens the drawer on a list page and goes back on a pushed page.\"=\"Both, like the iPhone (Recommended)\". Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say.",
+      "outcome": {
+        "kind": "answered",
+        "answers": [
+          {
+            "picked": [
+              0
+            ],
+            "typed": null
+          }
+        ]
+      },
+      "lines": [
+        "Both, like the iPhone (Recommended)"
+      ]
+    },
+    {
+      "name": "two questions, each a listed option",
+      "questions": [
+        {
+          "question": "On iPad, what should a swipe right from the left edge do? Today there are two places on the iPad where the swipe does nothing: (1) the hidden sidebar only opens from the toolbar button; (2) the in-column pages with a Back button (a folder's page, a project's sessions page, a task opened over its project, a runner's engine or name page) only go back from that button. On the iPhone the same swipe opens the drawer on a list page and goes back on a pushed page.",
+          "header": "Swipe right",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Both, like the iPhone (Recommended)",
+              "description": "On a list page, swiping right from the screen's left edge opens the sidebar (swiping left on it closes it). On an in-column page with a Back button, swiping right from that column's left edge goes back one page."
+            },
+            {
+              "label": "Open the sidebar only",
+              "description": "Swiping right from the screen's left edge opens the sidebar; going back still uses only the Back button."
+            },
+            {
+              "label": "Swipe back only",
+              "description": "On an in-column page with a Back button, swiping right goes back; the sidebar still opens only from the toolbar button."
+            }
+          ]
+        },
+        {
+          "question": "When a project page is opened from the session list (or from a folder), swiping from the left edge will go back to that list. What should the top-left button be on that page? Opened from the drawer, a notification or the merge banner, it keeps ☰ and the edge swipe still opens the drawer.",
+          "header": "Top-left",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "‹ Back (Recommended)",
+              "description": "Standard iOS: the button and the swipe both go back to the list."
+            },
+            {
+              "label": "Keep ☰",
+              "description": "☰ opens the drawer and the edge swipe goes back."
+            }
+          ]
+        }
+      ],
+      "isError": false,
+      "result": "The user answered: \"On iPad, what should a swipe right from the left edge do? Today there are two places on the iPad where the swipe does nothing: (1) the hidden sidebar only opens from the toolbar button; (2) the in-column pages with a Back button (a folder's page, a project's sessions page, a task opened over its project, a runner's engine or name page) only go back from that button. On the iPhone the same swipe opens the drawer on a list page and goes back on a pushed page.\"=\"Open the sidebar only\", \"When a project page is opened from the session list (or from a folder), swiping from the left edge will go back to that list. What should the top-left button be on that page? Opened from the drawer, a notification or the merge banner, it keeps ☰ and the edge swipe still opens the drawer.\"=\"‹ Back (Recommended)\". Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say.",
+      "outcome": {
+        "kind": "answered",
+        "answers": [
+          {
+            "picked": [
+              1
+            ],
+            "typed": null
+          },
+          {
+            "picked": [
+              0
+            ],
+            "typed": null
+          }
+        ]
+      },
+      "lines": [
+        "Open the sidebar only",
+        "‹ Back (Recommended)"
+      ]
+    },
+    {
+      "name": "words typed instead of an option",
+      "questions": [
+        {
+          "question": "On iPad, what should a swipe right from the left edge do? Today there are two places on the iPad where the swipe does nothing: (1) the hidden sidebar only opens from the toolbar button; (2) the in-column pages with a Back button (a folder's page, a project's sessions page, a task opened over its project, a runner's engine or name page) only go back from that button. On the iPhone the same swipe opens the drawer on a list page and goes back on a pushed page.",
+          "header": "Swipe right",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Both, like the iPhone (Recommended)",
+              "description": "On a list page, swiping right from the screen's left edge opens the sidebar (swiping left on it closes it). On an in-column page with a Back button, swiping right from that column's left edge goes back one page."
+            },
+            {
+              "label": "Open the sidebar only",
+              "description": "Swiping right from the screen's left edge opens the sidebar; going back still uses only the Back button."
+            },
+            {
+              "label": "Swipe back only",
+              "description": "On an in-column page with a Back button, swiping right goes back; the sidebar still opens only from the toolbar button."
+            }
+          ]
+        }
+      ],
+      "isError": false,
+      "result": "The user answered: \"On iPad, what should a swipe right from the left edge do? Today there are two places on the iPad where the swipe does nothing: (1) the hidden sidebar only opens from the toolbar button; (2) the in-column pages with a Back button (a folder's page, a project's sessions page, a task opened over its project, a runner's engine or name page) only go back from that button. On the iPhone the same swipe opens the drawer on a list page and goes back on a pushed page.\"=\"Only on list pages for now; leave going back to the button.\". Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say.",
+      "outcome": {
+        "kind": "answered",
+        "answers": [
+          {
+            "picked": [],
+            "typed": "Only on list pages for now; leave going back to the button."
+          }
+        ]
+      },
+      "lines": [
+        "“Only on list pages for now; leave going back to the button.”"
+      ]
+    },
+    {
+      "name": "typed words that start with a label are still typed words on a one-pick question",
+      "questions": [
+        {
+          "question": "Ship it tonight?",
+          "header": "Ship",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Yes"
+            },
+            {
+              "label": "No"
+            }
+          ]
+        }
+      ],
+      "isError": false,
+      "result": "The user answered: \"Ship it tonight?\"=\"Yes, but only the web half\". Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say.",
+      "outcome": {
+        "kind": "answered",
+        "answers": [
+          {
+            "picked": [],
+            "typed": "Yes, but only the web half"
+          }
+        ]
+      },
+      "lines": [
+        "“Yes, but only the web half”"
+      ]
+    },
+    {
+      "name": "multi-select, two picks, in the other wording claude uses",
+      "questions": [
+        {
+          "question": "Which clients should get the new card in this change?",
+          "header": "Clients",
+          "multiSelect": true,
+          "options": [
+            {
+              "label": "iOS and macOS",
+              "description": "One SwiftUI view serves both."
+            },
+            {
+              "label": "Web",
+              "description": "The same words, in its own component."
+            },
+            {
+              "label": "Android",
+              "description": "No per-tool cards there yet."
+            }
+          ]
+        }
+      ],
+      "isError": false,
+      "result": "Your questions have been answered: \"Which clients should get the new card in this change?\"=\"Web,iOS and macOS\". You can now continue with these answers in mind.",
+      "outcome": {
+        "kind": "answered",
+        "answers": [
+          {
+            "picked": [
+              0,
+              1
+            ],
+            "typed": null
+          }
+        ]
+      },
+      "lines": [
+        "iOS and macOS · Web"
+      ]
+    },
+    {
+      "name": "multi-select, a pick and typed words after it",
+      "questions": [
+        {
+          "question": "Which clients should get the new card in this change?",
+          "header": "Clients",
+          "multiSelect": true,
+          "options": [
+            {
+              "label": "iOS and macOS",
+              "description": "One SwiftUI view serves both."
+            },
+            {
+              "label": "Web",
+              "description": "The same words, in its own component."
+            },
+            {
+              "label": "Android",
+              "description": "No per-tool cards there yet."
+            }
+          ]
+        }
+      ],
+      "isError": false,
+      "result": "The user answered: \"Which clients should get the new card in this change?\"=\"Web,and the Mac menu bar, later\". Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say.",
+      "outcome": {
+        "kind": "answered",
+        "answers": [
+          {
+            "picked": [
+              1
+            ],
+            "typed": "and the Mac menu bar, later"
+          }
+        ]
+      },
+      "lines": [
+        "Web · “and the Mac menu bar, later”"
+      ]
+    },
+    {
+      "name": "multi-select labels that hold a comma themselves",
+      "questions": [
+        {
+          "question": "Which colours?",
+          "header": "Colours",
+          "multiSelect": true,
+          "options": [
+            {
+              "label": "Red, green"
+            },
+            {
+              "label": "Red"
+            },
+            {
+              "label": "Blue"
+            }
+          ]
+        }
+      ],
+      "isError": false,
+      "result": "The user answered: \"Which colours?\"=\"Red, green,Blue\". Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say.",
+      "outcome": {
+        "kind": "answered",
+        "answers": [
+          {
+            "picked": [
+              0,
+              2
+            ],
+            "typed": null
+          }
+        ]
+      },
+      "lines": [
+        "Red, green · Blue"
+      ]
+    },
+    {
+      "name": "quotes inside the question and the label",
+      "questions": [
+        {
+          "question": "Keep the \"Open\" button, or rename it to \"View\"?",
+          "header": "Button",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Keep \"Open\""
+            },
+            {
+              "label": "Rename to \"View\""
+            }
+          ]
+        }
+      ],
+      "isError": false,
+      "result": "The user answered: \"Keep the \"Open\" button, or rename it to \"View\"?\"=\"Rename to \"View\"\". Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say.",
+      "outcome": {
+        "kind": "answered",
+        "answers": [
+          {
+            "picked": [
+              1
+            ],
+            "typed": null
+          }
+        ]
+      },
+      "lines": [
+        "Rename to \"View\""
+      ]
+    },
+    {
+      "name": "a question the result does not name",
+      "questions": [
+        {
+          "question": "On iPad, what should a swipe right from the left edge do? Today there are two places on the iPad where the swipe does nothing: (1) the hidden sidebar only opens from the toolbar button; (2) the in-column pages with a Back button (a folder's page, a project's sessions page, a task opened over its project, a runner's engine or name page) only go back from that button. On the iPhone the same swipe opens the drawer on a list page and goes back on a pushed page.",
+          "header": "Swipe right",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Both, like the iPhone (Recommended)",
+              "description": "On a list page, swiping right from the screen's left edge opens the sidebar (swiping left on it closes it). On an in-column page with a Back button, swiping right from that column's left edge goes back one page."
+            },
+            {
+              "label": "Open the sidebar only",
+              "description": "Swiping right from the screen's left edge opens the sidebar; going back still uses only the Back button."
+            },
+            {
+              "label": "Swipe back only",
+              "description": "On an in-column page with a Back button, swiping right goes back; the sidebar still opens only from the toolbar button."
+            }
+          ]
+        },
+        {
+          "question": "When a project page is opened from the session list (or from a folder), swiping from the left edge will go back to that list. What should the top-left button be on that page? Opened from the drawer, a notification or the merge banner, it keeps ☰ and the edge swipe still opens the drawer.",
+          "header": "Top-left",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "‹ Back (Recommended)",
+              "description": "Standard iOS: the button and the swipe both go back to the list."
+            },
+            {
+              "label": "Keep ☰",
+              "description": "☰ opens the drawer and the edge swipe goes back."
+            }
+          ]
+        }
+      ],
+      "isError": false,
+      "result": "The user answered: \"When a project page is opened from the session list (or from a folder), swiping from the left edge will go back to that list. What should the top-left button be on that page? Opened from the drawer, a notification or the merge banner, it keeps ☰ and the edge swipe still opens the drawer.\"=\"Keep ☰\". Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say.",
+      "outcome": {
+        "kind": "answered",
+        "answers": [
+          null,
+          {
+            "picked": [
+              1
+            ],
+            "typed": null
+          }
+        ]
+      },
+      "lines": [
+        null,
+        "Keep ☰"
+      ]
+    },
+    {
+      "name": "a result clipped before its last answer closes",
+      "questions": [
+        {
+          "question": "On iPad, what should a swipe right from the left edge do? Today there are two places on the iPad where the swipe does nothing: (1) the hidden sidebar only opens from the toolbar button; (2) the in-column pages with a Back button (a folder's page, a project's sessions page, a task opened over its project, a runner's engine or name page) only go back from that button. On the iPhone the same swipe opens the drawer on a list page and goes back on a pushed page.",
+          "header": "Swipe right",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Both, like the iPhone (Recommended)",
+              "description": "On a list page, swiping right from the screen's left edge opens the sidebar (swiping left on it closes it). On an in-column page with a Back button, swiping right from that column's left edge goes back one page."
+            },
+            {
+              "label": "Open the sidebar only",
+              "description": "Swiping right from the screen's left edge opens the sidebar; going back still uses only the Back button."
+            },
+            {
+              "label": "Swipe back only",
+              "description": "On an in-column page with a Back button, swiping right goes back; the sidebar still opens only from the toolbar button."
+            }
+          ]
+        },
+        {
+          "question": "When a project page is opened from the session list (or from a folder), swiping from the left edge will go back to that list. What should the top-left button be on that page? Opened from the drawer, a notification or the merge banner, it keeps ☰ and the edge swipe still opens the drawer.",
+          "header": "Top-left",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "‹ Back (Recommended)",
+              "description": "Standard iOS: the button and the swipe both go back to the list."
+            },
+            {
+              "label": "Keep ☰",
+              "description": "☰ opens the drawer and the edge swipe goes back."
+            }
+          ]
+        }
+      ],
+      "isError": false,
+      "result": "The user answered: \"On iPad, what should a swipe right from the left edge do? Today there are two places on the iPad where the swipe does nothing: (1) the hidden sidebar only opens from the toolbar button; (2) the in-column pages with a Back button (a folder's page, a project's sessions page, a task opened over its project, a runner's engine or name page) only go back from that button. On the iPhone the same swipe opens the drawer on a list page and goes back on a pushed page.\"=\"Swipe back only\", \"When a project page is opened from the session list (or from a folder), swiping from the left edge will go back to that list. What should the top-left button be on that page? Opened from the drawer, a notification or the merge banner, it keeps ☰ and the edge swipe still opens the drawer.\"=\"Keep",
+      "outcome": {
+        "kind": "answered",
+        "answers": [
+          {
+            "picked": [
+              2
+            ],
+            "typed": null
+          },
+          null
+        ]
+      },
+      "lines": [
+        "Swipe back only",
+        null
+      ]
+    },
+    {
+      "name": "a note the engine wrote after the answer",
+      "questions": [
+        {
+          "question": "Ship it tonight?",
+          "header": "Ship",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Yes"
+            },
+            {
+              "label": "No"
+            }
+          ]
+        }
+      ],
+      "isError": false,
+      "result": "The user answered: \"Ship it tonight?\"=\"No\" notes: after the release notes are out. Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say.",
+      "outcome": {
+        "kind": "answered",
+        "answers": [
+          {
+            "picked": [
+              1
+            ],
+            "typed": null
+          }
+        ]
+      },
+      "lines": [
+        "No"
+      ]
+    },
+    {
+      "name": "Chat about this: the person's own words, as the call's error",
+      "questions": [
+        {
+          "question": "On iPad, what should a swipe right from the left edge do? Today there are two places on the iPad where the swipe does nothing: (1) the hidden sidebar only opens from the toolbar button; (2) the in-column pages with a Back button (a folder's page, a project's sessions page, a task opened over its project, a runner's engine or name page) only go back from that button. On the iPhone the same swipe opens the drawer on a list page and goes back on a pushed page.",
+          "header": "Swipe right",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Both, like the iPhone (Recommended)",
+              "description": "On a list page, swiping right from the screen's left edge opens the sidebar (swiping left on it closes it). On an in-column page with a Back button, swiping right from that column's left edge goes back one page."
+            },
+            {
+              "label": "Open the sidebar only",
+              "description": "Swiping right from the screen's left edge opens the sidebar; going back still uses only the Back button."
+            },
+            {
+              "label": "Swipe back only",
+              "description": "On an in-column page with a Back button, swiping right goes back; the sidebar still opens only from the toolbar button."
+            }
+          ]
+        }
+      ],
+      "isError": true,
+      "result": "Before I pick: does the left swipe still close the sidebar once it's open?",
+      "outcome": {
+        "kind": "replied",
+        "words": "Before I pick: does the left swipe still close the sidebar once it's open?"
+      },
+      "lines": [
+        "“Before I pick: does the left swipe still close the sidebar once it's open?”"
+      ]
+    },
+    {
+      "name": "a call the engine refused",
+      "questions": [
+        {
+          "question": "Ship it tonight?",
+          "header": "Ship",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Yes"
+            },
+            {
+              "label": "No"
+            }
+          ]
+        }
+      ],
+      "isError": true,
+      "result": "<tool_use_error>InputValidationError: AskUserQuestion failed due to the following issue:\nThe parameter `questions[0].options` must have at least 2 items</tool_use_error>",
+      "outcome": null,
+      "lines": []
+    },
+    {
+      "name": "the runner lost the approval",
+      "questions": [
+        {
+          "question": "Ship it tonight?",
+          "header": "Ship",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Yes"
+            },
+            {
+              "label": "No"
+            }
+          ]
+        }
+      ],
+      "isError": true,
+      "result": "approval poll failed: context deadline exceeded",
+      "outcome": null,
+      "lines": []
+    },
+    {
+      "name": "refused with no words",
+      "questions": [
+        {
+          "question": "Ship it tonight?",
+          "header": "Ship",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Yes"
+            },
+            {
+              "label": "No"
+            }
+          ]
+        }
+      ],
+      "isError": true,
+      "result": "denied by the user",
+      "outcome": null,
+      "lines": []
+    },
+    {
+      "name": "a wording this reader does not know",
+      "questions": [
+        {
+          "question": "Ship it tonight?",
+          "header": "Ship",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Yes"
+            },
+            {
+              "label": "No"
+            }
+          ]
+        }
+      ],
+      "isError": false,
+      "result": "The user did not answer the questions.",
+      "outcome": null,
+      "lines": []
+    },
+    {
+      "name": "no result yet",
+      "questions": [
+        {
+          "question": "Ship it tonight?",
+          "header": "Ship",
+          "multiSelect": false,
+          "options": [
+            {
+              "label": "Yes"
+            },
+            {
+              "label": "No"
+            }
+          ]
+        }
+      ],
+      "isError": false,
+      "result": null,
+      "outcome": null,
+      "lines": []
+    }
+  ]
+}

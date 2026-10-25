@@ -106,18 +106,24 @@ export interface ControlEvent {
   data: Record<string, unknown>;
 }
 
-/** Project membership derived from coordinator, task, context, judgment or root-session links. */
+/** Project membership derived from coordinator, landing, task, context, judgment or root-session
+ *  links. `LANDING` is the platform-driven container of a landing subject (contract §2.9 LS6): it
+ *  is listed only by `GET /sessions?projectId=&includeLanding=1`, never by a flat list. */
 export interface SessionProjectMembership {
   projectId: string;
   projectTitle: string;
   projectStatus: `${ProjectStatus}`;
-  role: 'COORDINATOR' | 'TASK' | 'CONTEXT' | 'JUDGMENT' | 'CHILD';
+  role: 'COORDINATOR' | 'LANDING' | 'TASK' | 'CONTEXT' | 'JUDGMENT' | 'CHILD';
 }
 
 /** `data` for `session.created` / `session.updated`: the slim list-row summary, field-aligned
  *  with the `GET /sessions` list response so the client can upsert it verbatim. */
 export interface ControlSessionSummary {
   id: string;
+  /** What drives the session (contract §2.9): CONVERSATION, or LANDING for the platform-driven
+   *  container a landing subject opens. Optional for rolling-version peers; a landing publishes no
+   *  `session.created` / `session.updated` at all. */
+  sessionKind?: 'CONVERSATION' | 'LANDING';
   /** Work item whose run this session represents. Optional for rolling-version compatibility;
    *  null means an ordinary conversation rather than a task run. */
   taskId?: string | null;
@@ -136,6 +142,10 @@ export interface ControlSessionSummary {
   filingState: SessionFilingState;
   /** Server-derived actions; optional for rolling-version compatibility. */
   capabilities?: SessionCapabilities;
+  /** The engine the session runs on for good — the CLI on the runner (`claude`, `codex`, `kimi`,
+   *  `antigravity`, `opencode`, `dsh`, `cursor`); null when it was never recorded and its credential is gone.
+   *  Absent from an older control plane. */
+  engine?: string | null;
   agentId: string | null;
   agent: { id: string; name: string | null; model: string | null; effort: string | null } | null;
   /** The session folder this session is filed in, or null when it is in no folder. Always sent by
@@ -242,6 +252,19 @@ export interface ControlSessionSummary {
   /** When enginePhase entered the phase it holds; null whenever enginePhase is. A keepalive that
    *  re-announces the same phase does not move it. Absent from an older control plane. */
   enginePhaseSince?: string | null;
+  /** The rolling recap and when it was written (`Session.recapText`/`recapAt`), the line the list
+   *  prefers to `lastAssistantText`. Sent as null on a session that has none — a value, so a client
+   *  folding this summary into a row clears the recap a manual refresh dropped; only an absent key,
+   *  from an older control plane, means "unchanged". */
+  recapText?: string | null;
+  recapAt?: string | null;
+  /** The row's two reply previews, clipped exactly as `GET /sessions` clips them. They are part of
+   *  the summary because an already-open list learns a new reply from this event alone: without
+   *  them a client that folds the summary in would leave the row previewing the previous turn.
+   *  Null is a value here too — a preview cleared on the server has to clear on the row — and only
+   *  an absent key means an older control plane. */
+  lastAssistantText?: string | null;
+  lastUserText?: string | null;
 }
 
 /** `data` for `session.ended`. */

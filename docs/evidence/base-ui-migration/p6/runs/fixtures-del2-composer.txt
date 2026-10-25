@@ -1,0 +1,159 @@
+tree: /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del
+head: 6879542dc23a10a74417002810331a7e73778842
+load: 9.25 10.08 11.42 9/3310 2389742
+started: 2026-10-10T17:55:24Z
+
+P0 expected screenshots: 44 P0.2 originals, 165 main drift references, 43 accepted migration differences.
+
+Running 144 tests using 1 worker
+
+  ✓    1 [chromium-light-desktop] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts (3.2s)
+  ✓    2 [chromium-light-desktop] › ui-migration/composer-input.browser.mjs:80:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (847ms)
+  ✓    3 [chromium-light-desktop] › ui-migration/composer-input.browser.mjs:109:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (591ms)
+  ✓    4 [chromium-light-desktop] › ui-migration/composer-input.browser.mjs:128:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (1.3s)
+  ✓    5 [chromium-light-desktop] › ui-migration/composer-input.browser.mjs:182:1 › comment @-mention restores focus and the caret through the native ref (746ms)
+  ✓    6 [chromium-light-desktop] › ui-migration/composer-input.browser.mjs:211:1 › paste text and files, the 50,000-character cap and history recall (1.1s)
+  ✓    7 [chromium-light-desktop] › ui-migration/composer.browser.mjs:40:1 › session composer grows, caps and scrolls, and starts as the P0 page field (3.1s)
+  ✓    8 [chromium-light-desktop] › ui-migration/composer.browser.mjs:101:1 › session composer with staged attachments keeps its 24px insets; disabled is recorded (1.3s)
+  ✓    9 [chromium-light-desktop] › ui-migration/composer.browser.mjs:118:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (2.4s)
+  ✓   10 [chromium-light-desktop] › ui-migration/composer.browser.mjs:149:1 › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded (1.6s)
+  ✓   11 [chromium-light-desktop] › ui-migration/composer.browser.mjs:169:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (2.1s)
+  ✓   12 [chromium-light-desktop] › ui-migration/composer.browser.mjs:225:1 › the mirror paints its glyphs exactly where the field lays out its own text (1.8s)
+  ✓   13 [chromium-light-desktop] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 599px (1.6s)
+  ✓   14 [chromium-light-desktop] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 601px (1.6s)
+  ✓   15 [chromium-light-desktop] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 959px (1.6s)
+  ✓   16 [chromium-light-desktop] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 961px (1.5s)
+  ✓   17 [chromium-light-desktop] › ui-migration/composer.browser.mjs:296:3 › normal motion › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer (1.7s)
+  ✓   18 [chromium-light-desktop] › ui-migration/composer.browser.mjs:332:5 › normal motion › reduced motion › Orbit text fields stop transitioning (393ms)
+  -   19 [chromium-light-phone] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓   20 [chromium-light-phone] › ui-migration/composer-input.browser.mjs:80:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (877ms)
+  ✓   21 [chromium-light-phone] › ui-migration/composer-input.browser.mjs:109:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (578ms)
+  ✓   22 [chromium-light-phone] › ui-migration/composer-input.browser.mjs:128:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (1.3s)
+  ✓   23 [chromium-light-phone] › ui-migration/composer-input.browser.mjs:182:1 › comment @-mention restores focus and the caret through the native ref (774ms)
+  ✓   24 [chromium-light-phone] › ui-migration/composer-input.browser.mjs:211:1 › paste text and files, the 50,000-character cap and history recall (1.1s)
+  ✓   25 [chromium-light-phone] › ui-migration/composer.browser.mjs:40:1 › session composer grows, caps and scrolls, and starts as the P0 page field (3.2s)
+  ✓   26 [chromium-light-phone] › ui-migration/composer.browser.mjs:101:1 › session composer with staged attachments keeps its 24px insets; disabled is recorded (1.3s)
+  ✓   27 [chromium-light-phone] › ui-migration/composer.browser.mjs:118:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (2.1s)
+  ✓   28 [chromium-light-phone] › ui-migration/composer.browser.mjs:149:1 › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded (1.7s)
+  ✓   29 [chromium-light-phone] › ui-migration/composer.browser.mjs:169:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (2.1s)
+  ✓   30 [chromium-light-phone] › ui-migration/composer.browser.mjs:225:1 › the mirror paints its glyphs exactly where the field lays out its own text (1.8s)
+  -   31 [chromium-light-phone] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 599px
+  -   32 [chromium-light-phone] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 601px
+  -   33 [chromium-light-phone] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 959px
+  -   34 [chromium-light-phone] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 961px
+  ✓   35 [chromium-light-phone] › ui-migration/composer.browser.mjs:296:3 › normal motion › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer (1.9s)
+  ✓   36 [chromium-light-phone] › ui-migration/composer.browser.mjs:332:5 › normal motion › reduced motion › Orbit text fields stop transitioning (397ms)
+  -   37 [chromium-dark-desktop] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓   38 [chromium-dark-desktop] › ui-migration/composer-input.browser.mjs:80:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (905ms)
+  ✓   39 [chromium-dark-desktop] › ui-migration/composer-input.browser.mjs:109:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (610ms)
+  ✓   40 [chromium-dark-desktop] › ui-migration/composer-input.browser.mjs:128:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (1.3s)
+  ✓   41 [chromium-dark-desktop] › ui-migration/composer-input.browser.mjs:182:1 › comment @-mention restores focus and the caret through the native ref (778ms)
+  ✓   42 [chromium-dark-desktop] › ui-migration/composer-input.browser.mjs:211:1 › paste text and files, the 50,000-character cap and history recall (1.1s)
+  ✓   43 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:40:1 › session composer grows, caps and scrolls, and starts as the P0 page field (3.3s)
+  ✓   44 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:101:1 › session composer with staged attachments keeps its 24px insets; disabled is recorded (1.6s)
+  ✓   45 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:118:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (2.3s)
+  ✓   46 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:149:1 › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded (1.6s)
+  ✓   47 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:169:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (2.1s)
+  ✓   48 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:225:1 › the mirror paints its glyphs exactly where the field lays out its own text (1.9s)
+  ✓   49 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 599px (1.8s)
+  ✓   50 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 601px (1.7s)
+  ✓   51 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 959px (1.6s)
+  ✓   52 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 961px (1.7s)
+  ✓   53 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:296:3 › normal motion › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer (2.0s)
+  ✓   54 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:332:5 › normal motion › reduced motion › Orbit text fields stop transitioning (398ms)
+  -   55 [chromium-dark-phone] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓   56 [chromium-dark-phone] › ui-migration/composer-input.browser.mjs:80:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (932ms)
+  ✓   57 [chromium-dark-phone] › ui-migration/composer-input.browser.mjs:109:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (573ms)
+  ✓   58 [chromium-dark-phone] › ui-migration/composer-input.browser.mjs:128:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (1.3s)
+  ✓   59 [chromium-dark-phone] › ui-migration/composer-input.browser.mjs:182:1 › comment @-mention restores focus and the caret through the native ref (762ms)
+  ✓   60 [chromium-dark-phone] › ui-migration/composer-input.browser.mjs:211:1 › paste text and files, the 50,000-character cap and history recall (1.1s)
+  ✓   61 [chromium-dark-phone] › ui-migration/composer.browser.mjs:40:1 › session composer grows, caps and scrolls, and starts as the P0 page field (3.3s)
+  ✓   62 [chromium-dark-phone] › ui-migration/composer.browser.mjs:101:1 › session composer with staged attachments keeps its 24px insets; disabled is recorded (1.5s)
+  ✓   63 [chromium-dark-phone] › ui-migration/composer.browser.mjs:118:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (2.1s)
+  ✓   64 [chromium-dark-phone] › ui-migration/composer.browser.mjs:149:1 › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded (1.6s)
+  ✓   65 [chromium-dark-phone] › ui-migration/composer.browser.mjs:169:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (2.1s)
+  ✓   66 [chromium-dark-phone] › ui-migration/composer.browser.mjs:225:1 › the mirror paints its glyphs exactly where the field lays out its own text (1.9s)
+  -   67 [chromium-dark-phone] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 599px
+  -   68 [chromium-dark-phone] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 601px
+  -   69 [chromium-dark-phone] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 959px
+  -   70 [chromium-dark-phone] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 961px
+  ✓   71 [chromium-dark-phone] › ui-migration/composer.browser.mjs:296:3 › normal motion › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer (2.0s)
+  ✓   72 [chromium-dark-phone] › ui-migration/composer.browser.mjs:332:5 › normal motion › reduced motion › Orbit text fields stop transitioning (424ms)
+  -   73 [webkit-light-desktop] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓   74 [webkit-light-desktop] › ui-migration/composer-input.browser.mjs:80:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (1.0s)
+  ✓   75 [webkit-light-desktop] › ui-migration/composer-input.browser.mjs:109:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (631ms)
+  ✓   76 [webkit-light-desktop] › ui-migration/composer-input.browser.mjs:128:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (1.3s)
+  ✓   77 [webkit-light-desktop] › ui-migration/composer-input.browser.mjs:182:1 › comment @-mention restores focus and the caret through the native ref (839ms)
+  ✓   78 [webkit-light-desktop] › ui-migration/composer-input.browser.mjs:211:1 › paste text and files, the 50,000-character cap and history recall (1.2s)
+  ✓   79 [webkit-light-desktop] › ui-migration/composer.browser.mjs:40:1 › session composer grows, caps and scrolls, and starts as the P0 page field (2.7s)
+  ✓   80 [webkit-light-desktop] › ui-migration/composer.browser.mjs:101:1 › session composer with staged attachments keeps its 24px insets; disabled is recorded (1.2s)
+  ✓   81 [webkit-light-desktop] › ui-migration/composer.browser.mjs:118:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (1.9s)
+  ✓   82 [webkit-light-desktop] › ui-migration/composer.browser.mjs:149:1 › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded (1.2s)
+  ✓   83 [webkit-light-desktop] › ui-migration/composer.browser.mjs:169:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (1.7s)
+  ✓   84 [webkit-light-desktop] › ui-migration/composer.browser.mjs:225:1 › the mirror paints its glyphs exactly where the field lays out its own text (1.5s)
+  ✓   85 [webkit-light-desktop] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 599px (1.3s)
+  ✓   86 [webkit-light-desktop] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 601px (1.2s)
+  ✓   87 [webkit-light-desktop] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 959px (1.2s)
+  ✓   88 [webkit-light-desktop] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 961px (1.2s)
+  ✓   89 [webkit-light-desktop] › ui-migration/composer.browser.mjs:296:3 › normal motion › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer (1.5s)
+  ✓   90 [webkit-light-desktop] › ui-migration/composer.browser.mjs:332:5 › normal motion › reduced motion › Orbit text fields stop transitioning (379ms)
+  -   91 [webkit-light-phone] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓   92 [webkit-light-phone] › ui-migration/composer-input.browser.mjs:80:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (951ms)
+  ✓   93 [webkit-light-phone] › ui-migration/composer-input.browser.mjs:109:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (616ms)
+  ✓   94 [webkit-light-phone] › ui-migration/composer-input.browser.mjs:128:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (1.3s)
+  ✓   95 [webkit-light-phone] › ui-migration/composer-input.browser.mjs:182:1 › comment @-mention restores focus and the caret through the native ref (798ms)
+  ✓   96 [webkit-light-phone] › ui-migration/composer-input.browser.mjs:211:1 › paste text and files, the 50,000-character cap and history recall (1.1s)
+  ✓   97 [webkit-light-phone] › ui-migration/composer.browser.mjs:40:1 › session composer grows, caps and scrolls, and starts as the P0 page field (2.7s)
+  ✓   98 [webkit-light-phone] › ui-migration/composer.browser.mjs:101:1 › session composer with staged attachments keeps its 24px insets; disabled is recorded (1.2s)
+  ✓   99 [webkit-light-phone] › ui-migration/composer.browser.mjs:118:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (1.7s)
+  ✓  100 [webkit-light-phone] › ui-migration/composer.browser.mjs:149:1 › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded (1.2s)
+  ✓  101 [webkit-light-phone] › ui-migration/composer.browser.mjs:169:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (1.7s)
+  ✓  102 [webkit-light-phone] › ui-migration/composer.browser.mjs:225:1 › the mirror paints its glyphs exactly where the field lays out its own text (1.4s)
+  -  103 [webkit-light-phone] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 599px
+  -  104 [webkit-light-phone] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 601px
+  -  105 [webkit-light-phone] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 959px
+  -  106 [webkit-light-phone] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 961px
+  ✓  107 [webkit-light-phone] › ui-migration/composer.browser.mjs:296:3 › normal motion › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer (1.8s)
+  ✓  108 [webkit-light-phone] › ui-migration/composer.browser.mjs:332:5 › normal motion › reduced motion › Orbit text fields stop transitioning (371ms)
+  -  109 [webkit-dark-desktop] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓  110 [webkit-dark-desktop] › ui-migration/composer-input.browser.mjs:80:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (1.0s)
+  ✓  111 [webkit-dark-desktop] › ui-migration/composer-input.browser.mjs:109:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (698ms)
+  ✓  112 [webkit-dark-desktop] › ui-migration/composer-input.browser.mjs:128:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (1.3s)
+  ✓  113 [webkit-dark-desktop] › ui-migration/composer-input.browser.mjs:182:1 › comment @-mention restores focus and the caret through the native ref (842ms)
+  ✓  114 [webkit-dark-desktop] › ui-migration/composer-input.browser.mjs:211:1 › paste text and files, the 50,000-character cap and history recall (1.2s)
+  ✓  115 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:40:1 › session composer grows, caps and scrolls, and starts as the P0 page field (2.8s)
+  ✓  116 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:101:1 › session composer with staged attachments keeps its 24px insets; disabled is recorded (1.3s)
+  ✓  117 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:118:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (1.9s)
+  ✓  118 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:149:1 › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded (1.2s)
+  ✓  119 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:169:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (1.8s)
+  ✓  120 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:225:1 › the mirror paints its glyphs exactly where the field lays out its own text (1.5s)
+  ✓  121 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 599px (1.3s)
+  ✓  122 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 601px (1.3s)
+  ✓  123 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 959px (1.3s)
+  ✓  124 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 961px (1.3s)
+  ✓  125 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:296:3 › normal motion › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer (1.9s)
+  ✓  126 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:332:5 › normal motion › reduced motion › Orbit text fields stop transitioning (382ms)
+  -  127 [webkit-dark-phone] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓  128 [webkit-dark-phone] › ui-migration/composer-input.browser.mjs:80:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (967ms)
+  ✓  129 [webkit-dark-phone] › ui-migration/composer-input.browser.mjs:109:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (637ms)
+  ✓  130 [webkit-dark-phone] › ui-migration/composer-input.browser.mjs:128:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (1.3s)
+  ✓  131 [webkit-dark-phone] › ui-migration/composer-input.browser.mjs:182:1 › comment @-mention restores focus and the caret through the native ref (783ms)
+  ✓  132 [webkit-dark-phone] › ui-migration/composer-input.browser.mjs:211:1 › paste text and files, the 50,000-character cap and history recall (1.1s)
+  ✓  133 [webkit-dark-phone] › ui-migration/composer.browser.mjs:40:1 › session composer grows, caps and scrolls, and starts as the P0 page field (2.6s)
+  ✓  134 [webkit-dark-phone] › ui-migration/composer.browser.mjs:101:1 › session composer with staged attachments keeps its 24px insets; disabled is recorded (1.2s)
+  ✓  135 [webkit-dark-phone] › ui-migration/composer.browser.mjs:118:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (1.6s)
+  ✓  136 [webkit-dark-phone] › ui-migration/composer.browser.mjs:149:1 › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded (1.2s)
+  ✓  137 [webkit-dark-phone] › ui-migration/composer.browser.mjs:169:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (1.6s)
+  ✓  138 [webkit-dark-phone] › ui-migration/composer.browser.mjs:225:1 › the mirror paints its glyphs exactly where the field lays out its own text (1.4s)
+  -  139 [webkit-dark-phone] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 599px
+  -  140 [webkit-dark-phone] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 601px
+  -  141 [webkit-dark-phone] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 959px
+  -  142 [webkit-dark-phone] › ui-migration/composer.browser.mjs:278:5 › existing breakpoints › fields at 961px
+  ✓  143 [webkit-dark-phone] › ui-migration/composer.browser.mjs:296:3 › normal motion › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer (1.8s)
+  ✓  144 [webkit-dark-phone] › ui-migration/composer.browser.mjs:332:5 › normal motion › reduced motion › Orbit text fields stop transitioning (352ms)
+
+  23 skipped
+  121 passed (3.0m)
+exit=0
+load: 9.73 10.00 11.15 5/3322 2401814
+ended: 2026-10-10T17:58:26Z

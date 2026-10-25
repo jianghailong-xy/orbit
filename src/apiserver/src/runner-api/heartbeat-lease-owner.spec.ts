@@ -20,6 +20,7 @@ function harness(
   const commitDrainCalls: unknown[][] = [];
   const abandonedSweeps: unknown[][] = [];
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: {
       update: async () => ({ maxConcurrent: 4 }),
       findUnique: async () => null,
@@ -81,6 +82,7 @@ test('heartbeat cancels supervised sessions not owned by this process', async ()
     id: { in: [SESSION_B, SESSION_A] },
     assignedRunnerId: RUNNER_ID,
     status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
+    sessionKind: 'CONVERSATION',
     inboxLeaseOwner: OWNER,
   });
 });

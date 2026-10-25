@@ -1,0 +1,27 @@
+
+ RUN  v5.0.2 /mnt/data/tmp/overlay-first-frame-34brok/run/src/web
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯⎯⎯ Unhandled Error ⎯⎯⎯⎯⎯⎯⎯
+Error: [vitest-pool]: Failed to start forks worker for test files /mnt/data/tmp/overlay-first-frame-34brok/run/src/web/src/components/ProjectTasksGraph.test.tsx.
+ ❯ ../../node_modules/vitest/dist/chunks/index.C-uw7tH9.js:11466:94
+ ❯ Pool.schedule ../../node_modules/vitest/dist/chunks/index.C-uw7tH9.js:11466:5
+
+Caused by: Error: [vitest-pool-runner]: Timeout waiting for worker to respond
+ ❯ Timeout.<anonymous> ../../node_modules/vitest/dist/chunks/index.C-uw7tH9.js:10965:58
+ ❯ listOnTimeout node:internal/timers:685:17
+ ❯ processTimers node:internal/timers:618:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  no tests
+      Tests  no tests
+     Errors  1 error
+   Start at  00:31:37
+   Duration  60.14s
+

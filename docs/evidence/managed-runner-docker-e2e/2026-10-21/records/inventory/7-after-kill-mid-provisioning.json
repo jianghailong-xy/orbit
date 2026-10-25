@@ -1,0 +1,220 @@
+{
+ "label": "7-after-kill-mid-provisioning",
+ "instance": "orbit-d4-e1a08e4f",
+ "accounts": 4,
+ "mappings": 4,
+ "dockerContainers": 3,
+ "dockerDataVolumes": 4,
+ "bootVolumes": [
+  {
+   "name": "mr-boot-01a15b9c-5f4d-7409-9efc-efcc4e097f6b-g1",
+   "generation": "1"
+  },
+  {
+   "name": "mr-boot-01a15b9d-4ed5-745c-b5b7-3d6e774c61c6-g1",
+   "generation": "1"
+  },
+  {
+   "name": "mr-boot-01a15ba9-a49e-7204-a0b2-6eae30a83d9e-g1",
+   "generation": "1"
+  }
+ ],
+ "rows": [
+  {
+   "email": "admin@d4.test",
+   "state": "STARTING",
+   "desired": "RUNNING",
+   "generation": 1,
+   "revision": 11,
+   "reason": "MODEL_UNAVAILABLE",
+   "runner": "01a15b9c-5f4d-7409-9efc-efcc4e097f6b",
+   "volume": "mr-data-01a15b9c-5f4d-7409-9efc-efcc4e097f6b",
+   "pvc_uid": "6d6275bb-d95f-479c-9cc5-932eaef011e3",
+   "pod_uid": "a703f107-6f3b-4fa8-9e47-c3acab325046",
+   "docker": {
+    "volume": true,
+    "volumeUid": "6d6275bb-d95f-479c-9cc5-932eaef011e3",
+    "volumeCreated": "2026-10-21T07:18:57+08:00",
+    "container": "mr-01a15b9c-5f4d-7409-9efc-efcc4e097f6b",
+    "containerId": "5b6b77f2841c",
+    "containerState": "running",
+    "exitCode": 0,
+    "containerUid": "a703f107-6f3b-4fa8-9e47-c3acab325046",
+    "containerGeneration": "1",
+    "containerVolumeUid": "6d6275bb-d95f-479c-9cc5-932eaef011e3",
+    "mounts": [
+     "mr-boot-01a15b9c-5f4d-7409-9efc-efcc4e097f6b-g1",
+     "mr-data-01a15b9c-5f4d-7409-9efc-efcc4e097f6b"
+    ],
+    "memoryBytes": 1073741824,
+    "nanoCpus": 1000000000,
+    "pids": 1024
+   },
+   "checks": {
+    "volume exists": true,
+    "volume uid = pvc_uid": true,
+    "volume owner/runner = mapping": true,
+    "volume handle names it": true,
+    "workspace on the managed runner": true,
+    "container exists": true,
+    "container uid = pod_uid": true,
+    "container generation = generation": true,
+    "container on this volume": true,
+    "container owner/runner = mapping": true
+   },
+   "agree": true
+  },
+  {
+   "email": "alice@d4.test",
+   "state": "SLEEPING",
+   "desired": "SLEEPING",
+   "generation": 3,
+   "revision": 34,
+   "reason": null,
+   "runner": "01a15b9c-c69f-718f-ba2a-90bd8a35230f",
+   "volume": "mr-data-01a15b9c-c69f-718f-ba2a-90bd8a35230f",
+   "pvc_uid": "13398645-cbab-4150-ad66-3cc43e4c01e8",
+   "pod_uid": null,
+   "docker": {
+    "volume": true,
+    "volumeUid": "13398645-cbab-4150-ad66-3cc43e4c01e8",
+    "volumeCreated": "2026-10-21T07:19:23+08:00",
+    "container": null,
+    "containerId": null,
+    "containerState": null,
+    "exitCode": null,
+    "containerUid": null,
+    "containerGeneration": null,
+    "containerVolumeUid": null,
+    "mounts": [],
+    "memoryBytes": null,
+    "nanoCpus": null,
+    "pids": null
+   },
+   "checks": {
+    "volume exists": true,
+    "volume uid = pvc_uid": true,
+    "volume owner/runner = mapping": true,
+    "volume handle names it": true,
+    "workspace on the managed runner": true,
+    "no container while SLEEPING": true
+   },
+   "agree": true
+  },
+  {
+   "email": "bob@d4.test",
+   "state": "STARTING",
+   "desired": "RUNNING",
+   "generation": 1,
+   "revision": 11,
+   "reason": "MODEL_UNAVAILABLE",
+   "runner": "01a15b9d-4ed5-745c-b5b7-3d6e774c61c6",
+   "volume": "mr-data-01a15b9d-4ed5-745c-b5b7-3d6e774c61c6",
+   "pvc_uid": "bcd0a960-5fdd-46e6-9843-921186438c46",
+   "pod_uid": "257c82a0-d369-49e9-bcf0-6303fdd839e5",
+   "docker": {
+    "volume": true,
+    "volumeUid": "bcd0a960-5fdd-46e6-9843-921186438c46",
+    "volumeCreated": "2026-10-21T07:19:58+08:00",
+    "container": "mr-01a15b9d-4ed5-745c-b5b7-3d6e774c61c6",
+    "containerId": "b6a8b1388953",
+    "containerState": "running",
+    "exitCode": 0,
+    "containerUid": "257c82a0-d369-49e9-bcf0-6303fdd839e5",
+    "containerGeneration": "1",
+    "containerVolumeUid": "bcd0a960-5fdd-46e6-9843-921186438c46",
+    "mounts": [
+     "mr-boot-01a15b9d-4ed5-745c-b5b7-3d6e774c61c6-g1",
+     "mr-data-01a15b9d-4ed5-745c-b5b7-3d6e774c61c6"
+    ],
+    "memoryBytes": 1073741824,
+    "nanoCpus": 1000000000,
+    "pids": 1024
+   },
+   "checks": {
+    "volume exists": true,
+    "volume uid = pvc_uid": true,
+    "volume owner/runner = mapping": true,
+    "volume handle names it": true,
+    "workspace on the managed runner": true,
+    "container exists": true,
+    "container uid = pod_uid": true,
+    "container generation = generation": true,
+    "container on this volume": true,
+    "container owner/runner = mapping": true
+   },
+   "agree": true
+  },
+  {
+   "email": "carol@d4.test",
+   "state": "STARTING",
+   "desired": "RUNNING",
+   "generation": 1,
+   "revision": 11,
+   "reason": "MODEL_UNAVAILABLE",
+   "runner": "01a15ba9-a49e-7204-a0b2-6eae30a83d9e",
+   "volume": "mr-data-01a15ba9-a49e-7204-a0b2-6eae30a83d9e",
+   "pvc_uid": "73a655f6-c1cb-4d49-87bc-b66c3c9715ec",
+   "pod_uid": "9725f650-0b25-4f47-b2d6-9d1f03d28020",
+   "docker": {
+    "volume": true,
+    "volumeUid": "73a655f6-c1cb-4d49-87bc-b66c3c9715ec",
+    "volumeCreated": "2026-10-21T07:33:26+08:00",
+    "container": "mr-01a15ba9-a49e-7204-a0b2-6eae30a83d9e",
+    "containerId": "4c35fb746a28",
+    "containerState": "running",
+    "exitCode": 0,
+    "containerUid": "9725f650-0b25-4f47-b2d6-9d1f03d28020",
+    "containerGeneration": "1",
+    "containerVolumeUid": "73a655f6-c1cb-4d49-87bc-b66c3c9715ec",
+    "mounts": [
+     "mr-boot-01a15ba9-a49e-7204-a0b2-6eae30a83d9e-g1",
+     "mr-data-01a15ba9-a49e-7204-a0b2-6eae30a83d9e"
+    ],
+    "memoryBytes": 1073741824,
+    "nanoCpus": 1000000000,
+    "pids": 1024
+   },
+   "checks": {
+    "volume exists": true,
+    "volume uid = pvc_uid": true,
+    "volume owner/runner = mapping": true,
+    "volume handle names it": true,
+    "workspace on the managed runner": true,
+    "container exists": true,
+    "container uid = pod_uid": true,
+    "container generation = generation": true,
+    "container on this volume": true,
+    "container owner/runner = mapping": true
+   },
+   "agree": true
+  }
+ ],
+ "strayVolumes": [],
+ "strayContainers": [],
+ "containersPerDataVolume": {
+  "mr-data-01a15ba9-a49e-7204-a0b2-6eae30a83d9e": [
+   "mr-01a15ba9-a49e-7204-a0b2-6eae30a83d9e"
+  ],
+  "mr-data-01a15b9d-4ed5-745c-b5b7-3d6e774c61c6": [
+   "mr-01a15b9d-4ed5-745c-b5b7-3d6e774c61c6"
+  ],
+  "mr-data-01a15b9c-5f4d-7409-9efc-efcc4e097f6b": [
+   "mr-01a15b9c-5f4d-7409-9efc-efcc4e097f6b"
+  ]
+ },
+ "mappingsPerAccount": {
+  "admin@d4.test": 1,
+  "alice@d4.test": 1,
+  "bob@d4.test": 1,
+  "carol@d4.test": 1
+ },
+ "runnerRowsPerAccount": {
+  "admin@d4.test": 1,
+  "alice@d4.test": 1,
+  "bob@d4.test": 1,
+  "carol@d4.test": 1
+ },
+ "problems": [],
+ "agree": true
+}

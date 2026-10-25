@@ -1,0 +1,12 @@
+$ docker ps -a --filter label=orbit.test=d2-it-1017083206f4 --format {{.Names}}	{{.Status}}	{{.Labels}}
+mr-01a14908-81ce-70be-bd5a-186769789da3	Up 8 minutes	orbit.managed-runner.generation=1,orbit.managed-runner.instance=d2it-1017083206f4,orbit.managed-runner.kind=runner,orbit.managed-runner.owner=01a14908-81c7-768f-8457-8efc2ab61ec5,orbit.managed-runner.runner=01a14908-81ce-70be-bd5a-186769789da3,orbit.managed-runner.uid=cd1ff383-7841-4d9a-b9c9-72f8720c9e27,orbit.managed-runner.volume-uid=86adca4d-4c5d-463c-bd53-ffd7458dde8f,orbit.test=d2-it-1017083206f4,org.opencontainers.image.revision=d1e0e2c99a9bad801f252c4d618e057839e22d26,org.opencontainers.image.title=Orbit optional managed runner
+pccspec-d2it-1017083206f4	Up 18 minutes	orbit.test=d2-it-1017083206f4
+
+$ docker volume ls --filter label=orbit.test=d2-it-1017083206f4 --format {{.Name}}	{{.Labels}}
+mr-boot-01a14908-81ce-70be-bd5a-186769789da3-g1	orbit.managed-runner.generation=1,orbit.managed-runner.instance=d2it-1017083206f4,orbit.managed-runner.kind=bootstrap,orbit.managed-runner.owner=01a14908-81c7-768f-8457-8efc2ab61ec5,orbit.managed-runner.runner=01a14908-81ce-70be-bd5a-186769789da3,orbit.test=d2-it-1017083206f4
+mr-data-01a148ff-9266-76cf-bca2-740a4be859ce	orbit.managed-runner.disk-limit-bytes=268435456,orbit.managed-runner.instance=d2it-1017083206f4,orbit.managed-runner.kind=data,orbit.managed-runner.owner=01a148ff-924a-7098-ac25-37b240220b97,orbit.managed-runner.runner=01a148ff-9266-76cf-bca2-740a4be859ce,orbit.managed-runner.uid=30b94e1e-6f9e-484c-a98d-a2e68fd9529f,orbit.test=d2-it-1017083206f4
+mr-data-01a148ff-9275-71ab-a08e-91125366d737	orbit.managed-runner.disk-limit-bytes=268435456,orbit.managed-runner.instance=d2it-1017083206f4,orbit.managed-runner.kind=data,orbit.managed-runner.owner=01a148ff-9250-7689-9344-4ee5e704492e,orbit.managed-runner.runner=01a148ff-9275-71ab-a08e-91125366d737,orbit.managed-runner.uid=545adfc8-8ec6-44c1-8af8-f95dcdcd7dab,orbit.test=d2-it-1017083206f4
+mr-data-01a14908-81ce-70be-bd5a-186769789da3	orbit.managed-runner.disk-limit-bytes=268435456,orbit.managed-runner.instance=d2it-1017083206f4,orbit.managed-runner.kind=data,orbit.managed-runner.owner=01a14908-81c7-768f-8457-8efc2ab61ec5,orbit.managed-runner.runner=01a14908-81ce-70be-bd5a-186769789da3,orbit.managed-runner.uid=86adca4d-4c5d-463c-bd53-ffd7458dde8f,orbit.test=d2-it-1017083206f4
+
+$ docker network ls --filter label=orbit.test=d2-it-1017083206f4 --format {{.Name}}
+orbit-mr-d2it-1017083206f4

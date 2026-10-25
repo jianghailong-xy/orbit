@@ -1,0 +1,19 @@
+<!-- The iOS app icon (src/ios/Support/Assets.xcassets/AppIcon.appiconset), as iOS LoginView's OrbitAppIcon draws it (fdeb033ad):
+     a 1024-unit tile with the favicon's 64-unit mark at 13 units per favicon unit, origin (96, 118). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="76dp" android:height="76dp" android:viewportWidth="1024" android:viewportHeight="1024">
+    <path android:pathData="M229,0H795A229,229 0,0 1,1024,229V795A229,229 0,0 1,795,1024H229A229,229 0,0 1,0,795V229A229,229 0,0 1,229,0Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="0" android:endX="1024" android:endY="1024"
+                android:startColor="#FF5C8CFF" android:endColor="#FF3370FF" />
+        </aapt:attr>
+    </path>
+    <group android:translateX="96" android:translateY="118" android:scaleX="13" android:scaleY="13">
+        <group android:rotation="-26" android:pivotX="32" android:pivotY="32">
+            <path android:pathData="M4,32A28,12.5 0,1 0,60,32A28,12.5 0,1 0,4,32" android:strokeColor="#E6FFFFFF" android:strokeWidth="3.4" android:fillColor="@android:color/transparent" />
+            <path android:pathData="M50.6,25.6A5.4,5.4 0,1 0,61.4,25.6A5.4,5.4 0,1 0,50.6,25.6" android:fillColor="#FFFFFFFF" />
+        </group>
+        <path android:pathData="M25,20H39Q45,20 45,26V38Q45,44 39,44H25Q19,44 19,38V26Q19,20 25,20" android:fillColor="#FFFFFFFF" />
+        <path android:pathData="M25,27.5L30,32L25,36.5 M33,35.8H39.5" android:strokeColor="#FF3370FF" android:strokeWidth="2.9" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="@android:color/transparent" />
+    </group>
+</vector>

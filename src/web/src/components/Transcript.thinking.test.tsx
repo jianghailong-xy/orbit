@@ -48,7 +48,9 @@ describe('a settled stretch of reasoning', () => {
     expect(html).not.toContain('blocks');
   });
 
-  it('states how long it took when the page watched it stream', () => {
+  it('states how long it took, from the duration stored on the block', () => {
+    // The runner stores it, so a reloaded turn says what it said while streaming — every turn,
+    // not only the one that was on screen.
     const html = renderToStaticMarkup(
       <Transcript events={[ev(1, 'thinking', { text: 'weighing it up', thinkingMs: 12_000 })]} />,
     );
@@ -56,9 +58,9 @@ describe('a settled stretch of reasoning', () => {
     expect(html).toContain('Thought for 12s');
   });
 
-  it('states size alone after a reload, rather than a duration it cannot know', () => {
-    // `thinking_delta` is broadcast and never persisted, so a reloaded block has no clock behind
-    // it. Size still answers "is opening this worth it".
+  it('states size alone for a block stored with no duration, rather than one it cannot know', () => {
+    // An older runner stored none, and `thinking_delta` is broadcast and never persisted, so
+    // nothing after the fact can time such a block. Size still answers "is opening this worth it".
     const html = renderToStaticMarkup(<Transcript events={[ev(1, 'thinking', { text: 'x'.repeat(2300) })]} />);
 
     expect(html).toContain('2.3k chars');

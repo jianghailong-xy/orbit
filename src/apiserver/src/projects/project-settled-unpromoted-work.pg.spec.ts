@@ -563,7 +563,7 @@ test('(1) a settled project whose line carries d6b55d2d8 tells its coordinator, 
       assert.equal(naming.length, 1,
         `exactly one message names the commit a reader goes to look at: `
         + JSON.stringify(told.map((turn) => turn.content?.slice(0, 160))));
-      assert.match(naming[0]!.content ?? '', /结算/,
+      assert.match(naming[0]!.content ?? '', /settled/,
         'and it says what the situation is, not only which commit it is about');
     } finally {
       await stack.db.$disconnect();

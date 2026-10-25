@@ -1,0 +1,174 @@
+{
+  "args": [
+    "acp",
+    "--disable-auto-update",
+    "--disable-indexing",
+    "--disable-project-configs"
+  ],
+  "cards": null,
+  "checks": [
+    {
+      "name": "plan-command-refused",
+      "pass": true,
+      "detail": "plan-cmd-2.txt absent; requests []"
+    },
+    {
+      "name": "nothing-written-outside-plan",
+      "pass": true,
+      "detail": "switched.txt false, switched-again.txt false"
+    },
+    {
+      "name": "turn-stopped-on-switch",
+      "pass": true,
+      "detail": "completions [{LeaseOwner: TurnID:turn-1 Status:FAILED Result:I'll switch to Agent mode first, then create `switched.txt` with the word switched. Checking the SwitchMode tool schema so the call is valid. Error:Cursor CLI switched itself out of Plan mode (Switch Mode: unknown), so Orbit stopped the turn before anything could run outside Plan. ShellExitCode:\u003cnil\u003e ShellOutput:\u003cnil\u003e Subtype:error NumTurns:1 CostUsd:0 Usage:\u003cnil\u003e ModelUsage:map[] UsageUnknown:true RuntimeSessionID:<UUID_1> IsolationStatus: ChangedFiles:[] BaseSha: BranchSha: ChangedDiff:[] WorktreeDirty:false BranchMerged:false WorktreeBranch:} {LeaseOwner: TurnID:turn-2 Status:FAILED Result:Plan mode blocks file writes, so I’m switching to Agent mode to run `touch plan-cmd-2.txt` and create `switched-again.txt`. Error:Cursor CLI switched itself out of Plan mode (Switch Mode: unknown), so Orbit stopped the turn before anything could run outside Plan. ShellExitCode:\u003cnil\u003e ShellOutput:\u003cnil\u003e Subtype:error NumTurns:1 CostUsd:0 Usage:\u003cnil\u003e ModelUsage:map[] UsageUnknown:true RuntimeSessionID:<UUID_1> IsolationStatus: ChangedFiles:[] BaseSha: BranchSha: ChangedDiff:[] WorktreeDirty:false BranchMerged:false WorktreeBranch:}]"
+    },
+    {
+      "name": "plan-mode-set-again",
+      "pass": true,
+      "detail": "set_mode [\"plan\" \"plan\"]"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.config/cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.config/cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.local/share/cursor-agent",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.local/share/cursor-agent: no such file or directory)"
+    }
+  ],
+  "completions": [
+    {
+      "error": "Cursor CLI switched itself out of Plan mode (Switch Mode: unknown), so Orbit stopped the turn before anything could run outside Plan.",
+      "result": "I'll switch to Agent mode first, then create `switched.txt` with the word switched. Checking the SwitchMode tool schema so the call is valid.",
+      "status": "FAILED",
+      "subtype": "error",
+      "turn": "turn-1"
+    },
+    {
+      "error": "Cursor CLI switched itself out of Plan mode (Switch Mode: unknown), so Orbit stopped the turn before anything could run outside Plan.",
+      "result": "Plan mode blocks file writes, so I’m switching to Agent mode to run `touch plan-cmd-2.txt` and create `switched-again.txt`.",
+      "status": "FAILED",
+      "subtype": "error",
+      "turn": "turn-2"
+    }
+  ],
+  "events": [
+    {
+      "payload": {
+        "cliVersion": "2026.10.14-941492e",
+        "provider": "cursor",
+        "resumed": false,
+        "runtime": "acp",
+        "sessionId": "<UUID_1>",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "notice": "Cursor CLI switched itself out of Plan mode (Switch Mode: unknown), so Orbit stopped the turn before anything could run outside Plan.",
+        "noticeKind": "cursor-plan-mode-left",
+        "provider": "cursor"
+      },
+      "turn": "turn-1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-1\nfc_<UUID_3>_0",
+        "input": {
+          "explanation": "You asked to leave Plan mode and create switched.txt, which requires file edits that Plan mode cannot make.",
+          "targetModeId": "agent"
+        },
+        "name": "Switch Mode: agent"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Cursor CLI ended the turn before this tool reported a result; it may have run.",
+        "isError": true,
+        "toolUseId": "call-<UUID_2>-1\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "message": "Cursor CLI switched itself out of Plan mode (Switch Mode: unknown), so Orbit stopped the turn before anything could run outside Plan."
+      },
+      "turn": "turn-1",
+      "type": "error"
+    },
+    {
+      "payload": {
+        "notice": "Cursor CLI switched itself out of Plan mode (Switch Mode: unknown), so Orbit stopped the turn before anything could run outside Plan.",
+        "noticeKind": "cursor-plan-mode-left",
+        "provider": "cursor"
+      },
+      "turn": "turn-2",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_4>-1\nfc_<UUID_5>_0",
+        "input": {
+          "explanation": "You asked to run a shell command and create switched-again.txt. Those writes need Agent mode.",
+          "targetModeId": "agent"
+        },
+        "name": "Switch Mode: agent"
+      },
+      "turn": "turn-2",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Cursor CLI ended the turn before this tool reported a result; it may have run.",
+        "isError": true,
+        "toolUseId": "call-<UUID_4>-1\nfc_<UUID_5>_0"
+      },
+      "turn": "turn-2",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "message": "Cursor CLI switched itself out of Plan mode (Switch Mode: unknown), so Orbit stopped the turn before anything could run outside Plan."
+      },
+      "turn": "turn-2",
+      "type": "error"
+    }
+  ],
+  "facts": {
+    "notices": [
+      "cursor-plan-mode-left"
+    ],
+    "setModes": [
+      "plan",
+      "plan"
+    ],
+    "switchModeCards": 1
+  },
+  "mode": "plan",
+  "process": "session",
+  "processes": [
+    "<CLI>/cursor-agent --use-system-ca <CLI>/index.js acp --disable-auto-update --disable-indexing --disable-project-configs",
+    "<ORBIT> mcp",
+    "<CLI>/node <CLI>/index.js worker-server"
+  ],
+  "prompts": [
+    14,
+    15
+  ],
+  "scenario": "plan-switch-mode",
+  "status": "SUCCEEDED",
+  "version": "2026.10.14-941492e"
+}

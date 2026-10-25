@@ -2883,14 +2883,9 @@
         "instructions": null,
         "requestedAt": "2026-09-28T12:00:00.000Z",
         "held": null,
-        "waitingFor": {
-          "taskId": "tk-maint",
-          "title": "Wiki maintenance: orbit",
-          "sessionId": "se-maint",
-          "startedAt": "2026-09-29T07:56:00.000Z"
-        },
+        "waitingFor": null,
         "taskId": null,
-        "provider": "local-vllm",
+        "provider": null,
         "sessionId": null,
         "madeAt": null,
         "startedAt": null,
@@ -2915,7 +2910,7 @@
         "held": null,
         "waitingFor": null,
         "taskId": "tk-job",
-        "provider": "local-vllm",
+        "provider": null,
         "sessionId": "se-job",
         "madeAt": "2026-09-28T12:00:05.000Z",
         "startedAt": "2026-09-29T07:48:00.000Z",
@@ -2940,7 +2935,7 @@
         "held": {"reason":"no_maintenance_workspace","at":"2026-09-29T07:30:00.000Z"},
         "waitingFor": null,
         "taskId": null,
-        "provider": "local-vllm",
+        "provider": null,
         "sessionId": null,
         "madeAt": null,
         "startedAt": null,
@@ -2965,7 +2960,7 @@
         "held": null,
         "waitingFor": null,
         "taskId": "tk-job",
-        "provider": "local-vllm",
+        "provider": null,
         "sessionId": "se-job",
         "madeAt": "2026-09-28T12:00:05.000Z",
         "startedAt": null,
@@ -2990,7 +2985,7 @@
         "held": null,
         "waitingFor": null,
         "taskId": "tk-job",
-        "provider": "local-vllm",
+        "provider": null,
         "sessionId": "se-job",
         "madeAt": "2026-09-28T12:00:05.000Z",
         "startedAt": "2026-09-29T07:48:00.000Z",
@@ -3015,7 +3010,7 @@
         "held": null,
         "waitingFor": null,
         "taskId": "tk-job",
-        "provider": "local-vllm",
+        "provider": null,
         "sessionId": "se-job",
         "madeAt": "2026-09-28T12:00:05.000Z",
         "startedAt": "2026-09-29T07:48:00.000Z",
@@ -3040,7 +3035,7 @@
         "held": null,
         "waitingFor": null,
         "taskId": "tk-job",
-        "provider": "local-vllm",
+        "provider": null,
         "sessionId": "se-job",
         "madeAt": "2026-09-28T12:00:05.000Z",
         "startedAt": "2026-09-28T12:00:30.000Z",
@@ -3272,7 +3267,7 @@
         "held": null,
         "waitingFor": null,
         "taskId": "tk-job",
-        "provider": "local-vllm",
+        "provider": null,
         "sessionId": "se-job",
         "madeAt": "2026-09-28T12:00:05.000Z",
         "startedAt": "2026-09-29T07:20:00.000Z",
@@ -3298,14 +3293,9 @@
         "instructions": null,
         "requestedAt": "2026-09-28T12:00:00.000Z",
         "held": null,
-        "waitingFor": {
-          "taskId": "tk-maint",
-          "title": "Wiki maintenance: orbit",
-          "sessionId": "se-maint",
-          "startedAt": "2026-09-29T07:56:00.000Z"
-        },
+        "waitingFor": null,
         "taskId": null,
-        "provider": "local-vllm",
+        "provider": null,
         "sessionId": null,
         "madeAt": null,
         "startedAt": null,
@@ -3333,7 +3323,7 @@
         },
         "waitingFor": null,
         "taskId": null,
-        "provider": "local-vllm",
+        "provider": null,
         "sessionId": null,
         "madeAt": null,
         "startedAt": null,
@@ -3358,7 +3348,7 @@
         "held": null,
         "waitingFor": null,
         "taskId": "tk-job",
-        "provider": "local-vllm",
+        "provider": null,
         "sessionId": "se-job",
         "madeAt": "2026-09-28T12:00:05.000Z",
         "startedAt": "2026-09-29T07:48:00.000Z",
@@ -3420,8 +3410,8 @@
         "jobCard": {
           "look": "queued",
           "title": "Queued",
-          "text": "starts after the Wiki maintenance run that’s going now (started 4m ago)",
-          "link": {"label":"View run","to":"run","sessionId":"se-maint"},
+          "text": "starts after the Wiki maintenance run that’s going now",
+          "link": null,
           "progress": null
         },
         "gate": null,
@@ -3454,7 +3444,7 @@
         "jobCard": {
           "look": "drafting",
           "title": "Drafting",
-          "text": "local-vllm · attempt 1 of 3 · started 12m ago",
+          "text": "System model · attempt 1 of 3 · started 12m ago",
           "link": {"label":"View run","to":"run","sessionId":"se-job"},
           "progress": null
         },
@@ -4135,8 +4125,8 @@
         "jobCard": {
           "look": "queued",
           "title": "Queued",
-          "text": "starts after the Wiki maintenance run that’s going now (started 4m ago)",
-          "link": {"label":"View run","to":"run","sessionId":"se-maint"},
+          "text": "starts after the Wiki maintenance run that’s going now",
+          "link": null,
           "progress": null
         },
         "gate": null,
@@ -4744,49 +4734,10 @@
         {"since":null,"until":null,"says":"any time"},
         {"since":null,"until":"2026-09-01","says":"the start → 2026-09-01"}
       ],
-      "redraftNotes": [
-        {
-          "provider": "local-vllm",
-          "from": {"version":1,"inForce":true},
-          "says": "local-vllm drafts it again from v1, the plan in force, with what you write here. A draft that doesn’t pass the plan check is redrafted with its errors, up to 3 times."
-        },
-        {
-          "provider": null,
-          "from": {"version":2,"inForce":false},
-          "says": "Wiki maintenance drafts it again from draft v2, with what you write here. A draft that doesn’t pass the plan check is redrafted with its errors, up to 3 times."
-        },
-        {
-          "provider": null,
-          "from": null,
-          "says": "Wiki maintenance drafts it again with what you write here. A draft that doesn’t pass the plan check is redrafted with its errors, up to 3 times."
-        }
-      ],
       "protectedKept": [
         {
           "numbers": ["3.1","4.2","7.1"],
           "says": "Protected, kept as they are: 3.1 · 4.2 · 7.1"
-        }
-      ],
-      "emptyText": [
-        {
-          "provider": "local-vllm",
-          "says": "A plan lays out this wiki’s documents: the categories, the documents in each, who each one is for and what it covers, and where each section’s material comes from. local-vllm drafts it; nothing is written until you confirm it."
-        },
-        {
-          "provider": null,
-          "says": "A plan lays out this wiki’s documents: the categories, the documents in each, who each one is for and what it covers, and where each section’s material comes from. Wiki maintenance drafts it; nothing is written until you confirm it."
-        }
-      ],
-      "emptyNote": [
-        {
-          "where": "orbit · wikova",
-          "provider": "local-vllm",
-          "says": "Runs as a task in the Wiki maintenance list, on orbit · wikova with local-vllm — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles."
-        },
-        {
-          "where": null,
-          "provider": null,
-          "says": "Runs as a task in the Wiki maintenance list — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles."
         }
       ],
       "saveNote": [{"n":3,"says":"Saving makes draft v3; it goes through the plan check again."}],

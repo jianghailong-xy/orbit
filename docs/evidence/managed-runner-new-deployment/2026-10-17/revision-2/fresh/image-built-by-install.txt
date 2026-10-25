@@ -1,0 +1,5 @@
+tool-versions sourceSha e7b149183869b2d67ab355016cfecf2ca8bc461e
+{'codex': 'codex-cli 0.158.0', 'node': 'v26.10.0', 'go': 'go1.27.1'}
+claude 2.1.300 (Claude Code)
+/usr/local/bin/claude
+2.1.300 (Claude Code)

@@ -30,6 +30,9 @@ public struct SessionListInputs: Equatable, Sendable {
     public var groupByTag: Bool
     public var searching: Bool
     public var runnerOffline: Bool
+    /// The account's Session recaps switch (`UserPreferences.showRecaps`): a row's line depends on it,
+    /// so a list regrouped after a toggle draws the lines the switch now asks for.
+    public var recaps: Bool
     /// The wall-clock minute: a project row's landing and waiting ages ("3m") and the recency
     /// buckets move with time alone, so a list left on screen regroups at most once a minute.
     public var minute: Int
@@ -37,7 +40,8 @@ public struct SessionListInputs: Equatable, Sendable {
     public init(workspaceID: String, sessions: [Session], tagFilter: String? = nil, folderID: String? = nil,
                 accountSessions: [Session], allSessions: [Session], folders: [SessionFolder],
                 projects: [ProjectSummary], watches: [String: WatchSessionSummary], view: SessionView,
-                groupByTag: Bool = false, searching: Bool, runnerOffline: Bool, now: Date = Date()) {
+                groupByTag: Bool = false, searching: Bool, runnerOffline: Bool,
+                recaps: Bool = true, now: Date = Date()) {
         self.workspaceID = workspaceID
         self.sessions = sessions
         self.tagFilter = tagFilter
@@ -51,6 +55,7 @@ public struct SessionListInputs: Equatable, Sendable {
         self.groupByTag = groupByTag
         self.searching = searching
         self.runnerOffline = runnerOffline
+        self.recaps = recaps
         self.minute = Int((now.timeIntervalSince1970 / 60).rounded(.down))
     }
 
@@ -102,8 +107,9 @@ public final class SessionListingMemo<Value> {
 }
 
 /// `SessionLine.make(for:live: true, watching:)` per session, worked out again only for a session
-/// (or its watch) that changed since it was last asked for. A line is a pure function of the two,
-/// and the regular expressions behind a preview are most of what a regrouping costs.
+/// (or its watch, or the account's recaps switch) that changed since it was last asked for. A line
+/// is a pure function of the three, and the regular expressions behind a preview are most of what a
+/// regrouping costs.
 public final class SessionLineCache {
     private var entries: [String: Entry] = [:]
     private var asked: Set<String> = []
@@ -113,19 +119,21 @@ public final class SessionLineCache {
     private struct Entry {
         let session: Session
         let watching: WatchSessionSummary?
+        let recaps: Bool
         let line: SessionLine
     }
 
     public init() {}
 
-    public func line(for session: Session, watching: WatchSessionSummary?) -> SessionLine {
+    public func line(for session: Session, watching: WatchSessionSummary?, recaps: Bool = true) -> SessionLine {
         asked.insert(session.id)
-        if let entry = entries[session.id], entry.session == session, entry.watching == watching {
+        if let entry = entries[session.id], entry.session == session, entry.watching == watching,
+           entry.recaps == recaps {
             return entry.line
         }
-        let line = SessionLine.make(for: session, live: true, watching: watching)
+        let line = SessionLine.make(for: session, live: true, watching: watching, recaps: recaps)
         made += 1
-        entries[session.id] = Entry(session: session, watching: watching, line: line)
+        entries[session.id] = Entry(session: session, watching: watching, recaps: recaps, line: line)
         return line
     }
 

@@ -1,0 +1,34 @@
+{
+ "scenario": "crash-recover-and-move",
+ "runId": "2026-10-16T17-45-08-331Z",
+ "recordedAt": "2026-10-16T17:46:01.106Z",
+ "reason": "The run-time check looked for the interrupted call's tool result right after session/load; the CLI writes it when the next prompt is sent, which the same run's continuation did.",
+ "basis": "committed protocol recording (seq numbers below) plus files the recorded turn left in its run directory",
+ "checks": [
+  {
+   "name": "after load + the next prompt, the store holds an error result for the interrupted shell call",
+   "ok": true,
+   "detail": "Error: Shell command was interrupted before it completed. It may still be running."
+  }
+ ],
+ "facts": {
+  "toolResult": {
+   "toolName": "Shell",
+   "result": "Error: Shell command was interrupted before it completed. It may still be running."
+  },
+  "roles": [
+   "system",
+   "user",
+   "user",
+   "tool",
+   "assistant",
+   "user",
+   "assistant",
+   "user",
+   "assistant",
+   "tool",
+   "tool",
+   "assistant"
+  ]
+ }
+}

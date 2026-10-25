@@ -6,7 +6,7 @@ import {
   permissionModeAvailableOnRunner,
 } from '@orbit/shared';
 import type { RunnerModelCatalog } from '@orbit/shared';
-import { assertDshPermissionMode } from './permission-semantics';
+import { assertCursorPermissionMode, assertDshPermissionMode } from './permission-semantics';
 import { runtimeCatalogReasoningLevels } from './runtime-model';
 
 // Closed CLI enums. An account default last picked in an OpenCode session (whose variants are
@@ -51,22 +51,25 @@ export function normalizeRuntimeProvider(
   if (value === AgentProvider.CODEX) return AgentProvider.CODEX;
   if (value === AgentProvider.OPENCODE) return AgentProvider.OPENCODE;
   // Like `opencode`, needs no providerBuiltin discriminator: migration 0367 moved any configured
-  // provider or pool that held the slug aside before the keyword became a runtime.
+  // provider or pool that held the slug aside before the keyword became a runtime, as 0426 did `cursor`.
   if (value === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
+  if (value === AgentProvider.CURSOR) return AgentProvider.CURSOR;
   if (value === AgentProvider.KIMI && providerBuiltin) return AgentProvider.KIMI;
   if (value === AgentProvider.DSH && providerBuiltin) return AgentProvider.DSH;
   return AgentProvider.CLAUDE;
 }
 
 /** Runtimes that learn their durable conversation id only after process initialization. agy mints
- *  its conversation id itself and reports it in the `init` event of each process it starts. */
+ *  its conversation id itself and reports it in the `init` event of each process it starts; Cursor
+ *  CLI's comes back from ACP `session/new`. */
 export function initializesRuntimeDynamically(provider?: string | null): boolean {
   return (
     provider === AgentProvider.CODEX ||
     provider === AgentProvider.KIMI ||
     provider === AgentProvider.DSH ||
     provider === AgentProvider.OPENCODE ||
-    provider === AgentProvider.ANTIGRAVITY
+    provider === AgentProvider.ANTIGRAVITY ||
+    provider === AgentProvider.CURSOR
   );
 }
 
@@ -102,6 +105,8 @@ export function normalizeBuiltinPermissionMode(
 ): PermissionMode {
   // dsh enforces its own file sandbox, measured per mode; root and per-model Auto are Claude's.
   if (provider === AgentProvider.DSH) return assertDshPermissionMode(permissionMode);
+  // Cursor CLI keeps the modes measured on it (docs/cursor-runtime-contract.md §5.4); `--force` runs as root.
+  if (provider === AgentProvider.CURSOR) return assertCursorPermissionMode(permissionMode);
   if (!permissionModeAvailableOnRunner(permissionMode, runsAsRoot)) {
     return ROOT_FALLBACK_PERMISSION_MODE;
   }
@@ -125,8 +130,10 @@ export function normalizeEffortForProvider(
   effort?: string | null,
 ): string | undefined {
   if (effort == null) return undefined;
-  // ACP configuration values are opaque; the live catalog below validates dsh's selection.
-  if (provider === AgentProvider.OPENCODE || provider === AgentProvider.DSH) return effort;
+  // ACP configuration values are opaque; the live catalog below validates dsh's and Cursor CLI's selection.
+  if (provider === AgentProvider.OPENCODE || provider === AgentProvider.DSH || provider === AgentProvider.CURSOR) {
+    return effort;
+  }
   if (provider === AgentProvider.KIMI) {
     if (effort === 'minimal') return 'low';
     if (effort === 'medium') return 'high';
@@ -154,6 +161,7 @@ const MODEL_DEFINED_EFFORT_RUNTIMES: AgentProvider[] = [
   AgentProvider.KIMI,
   AgentProvider.ANTIGRAVITY,
   AgentProvider.DSH,
+  AgentProvider.CURSOR,
 ];
 
 /** Claude Code's effort levels, lowest first: the scale a declared list is read against, and the

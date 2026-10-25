@@ -4,13 +4,24 @@ import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.navigation.ObjectId
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okio.Buffer
+
+/** A read a page makes as it opens, tried three times — 300 ms, then 600 ms apart — before it fails (A07-18, iOS bc790273c
+ * `fetchRunners`): one transient failure, common on a phone, would otherwise leave what it reads missing until the page opens again. */
+internal suspend fun <T> threeTries(read: suspend () -> T): T {
+    repeat(2) { attempt ->
+        try { return read() } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { delay(300L * (attempt + 1)) }
+    }
+    return read()
+}
 
 class ComposerApi(private val auth: OrbitApi, private val handle: SessionHandle, val sessionId: String, private val target: DraftTarget? = null) {
     suspend fun read(path: List<String>): JsonElement = Wire.json.parseToJsonElement(auth.request(handle, ApiRequest(path)).body.decodeToString())
@@ -20,16 +31,29 @@ class ComposerApi(private val auth: OrbitApi, private val handle: SessionHandle,
             body = body?.toString()?.encodeToByteArray()))
         return if (response.body.isEmpty()) JsonObject(emptyMap()) else Wire.json.parseToJsonElement(response.body.decodeToString()).jsonObject
     }
+    /** The runner [id] as GET /runners lists it, or null where the list no longer holds it. */
+    suspend fun runner(id: String?): JsonObject? =
+        read(listOf("runners")).jsonArray.filterIsInstance<JsonObject>().firstOrNull { ObjectId.same(it.text("id"), id) }
     suspend fun catalog(detail: JsonObject): ComposerCatalog {
         val runnerId = detail.text("assignedRunnerId") ?: detail.text("runnerId")
             ?: (detail["agent"] as? JsonObject)?.text("runnerId") ?: error("Runner is not assigned.")
-        val runner = read(listOf("runners")).jsonArray.filterIsInstance<JsonObject>()
-            .firstOrNull { ObjectId.same(it.text("id"), runnerId) } ?: error("Runner is unavailable.")
+        // Every runner of the account, which says whether Cursor CLI is drawn at all (ComposerCatalog.fleet).
+        val runners = read(listOf("runners")).jsonArray.filterIsInstance<JsonObject>()
+        val runner = runners.firstOrNull { ObjectId.same(it.text("id"), runnerId) } ?: error("Runner is unavailable.")
+        // Each key with the engines it runs on (`engines`, the server's answer: only it can tell a Claude subscription token).
         val providers = read(listOf("providers")).jsonArray.filterIsInstance<JsonObject>()
         val pools = read(listOf("providers", "pools")).jsonArray.filterIsInstance<JsonObject>()
         val shared = read(listOf("providers", "shared-pools")).jsonArray.filterIsInstance<JsonObject>()
-        fun pool(row: JsonObject, fallback: String) = JsonObject(row + mapOf("runtime" to JsonPrimitive(row.text("engine") ?: fallback), "modelsFromRuntime" to JsonPrimitive(true)))
-        return ComposerCatalog(runner, (providers + pools.map { pool(it, "claude") } + shared.map { pool(it, "codex") }).distinctBy { it.text("slug") })
+        val rows = (providers + pools.map { ProviderEngines.poolRow(it, ProviderEngines.CLAUDE) } +
+            shared.map { ProviderEngines.poolRow(it, ProviderEngines.CODEX, shared = true) }).distinctBy { it.text("slug") }
+        // A session whose key the list no longer has: the account's own keys, turned-off ones included, say whether it was turned
+        // off or deleted.
+        val provider = detail.text("provider")
+        val own = if (provider == null || provider in ProviderEngines.LOGIN_ENGINES || provider == ProviderEngines.OPENCODE ||
+            rows.any { it.text("slug") == provider }) null
+            else try { read(listOf("providers", "mine")).jsonArray.filterIsInstance<JsonObject>() }
+                catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
+        return ComposerCatalog(runner, rows, own, runners)
     }
     suspend fun upload(attachment: StagedAttachment, bytes: ByteArray, progress: (Float) -> Unit): String = withContext(Dispatchers.IO) {
         val multipart = MultipartBody.Builder().setType(MultipartBody.FORM)

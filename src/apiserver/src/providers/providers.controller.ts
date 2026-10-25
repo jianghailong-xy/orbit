@@ -63,6 +63,16 @@ export class ProvidersController {
     return this.balances.balance(user.userId, id, refresh === '1');
   }
 
+  // What uses one of the caller's own keys, per engine: its open sessions and the task pins naming it
+  // (docs/provider-engine-contract.md §3.6) — what a client shows before the key is disabled or
+  // deleted. The same read that refuses changing the protocol of a key in use. Owner-scoped: a shared
+  // row, or another user's, reads as not-found.
+  @PatScope('workspaces:read', { workspaceConfinable: false })
+  @Get('mine/:id/usage')
+  usageMine(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.providers.usage(user.userId, id);
+  }
+
   // The vendor presets' current model lists, for the connect form. Public catalogue data (no key,
   // no endpoint) that the browser can't derive: its copy is whatever shipped in the bundle, while
   // this one carries the latest models.dev refresh.
@@ -72,11 +82,20 @@ export class ProvidersController {
     return this.providers.presetModels();
   }
 
-  // Stateless key/endpoint probe for the add/edit form — any signed-in user, own inputs only.
+  // Stateless key/endpoint probe for the add/edit form — any signed-in user, own inputs only. A Cursor
+  // key is checked by one of the caller's runners instead (ProvidersService.checkCursorKey).
   @PatScope('workspaces:write', { workspaceConfinable: false })
   @Post('test')
-  test(@Body() dto: TestModelProviderDto) {
-    return this.providers.testConnection(dto);
+  test(@CurrentUser() user: AuthUser, @Body() dto: TestModelProviderDto) {
+    return this.providers.testConnection(dto, user.userId);
+  }
+
+  // Check one of the caller's own Cursor keys again on a runner of theirs, and keep what Cursor answered
+  // on the key. Owner-scoped: a shared row, or another user's, reads as not-found.
+  @PatScope('workspaces:write', { workspaceConfinable: false })
+  @Post('mine/:id/key-check')
+  recheckMineKey(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.providers.recheckCursorKey(user.userId, id);
   }
 
   @PatScope('workspaces:write', { workspaceConfinable: false })

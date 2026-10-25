@@ -71,8 +71,12 @@ function fixture(options: {
     modelProvider: {
       findFirst: async ({ where }: { where: { slug: string } }) =>
         [row('harness-key')].find((provider) => provider.slug === where.slug) ?? null,
+      // The owner's keys, of which `harness-key` — a DeepSeek key — is the default one the built-in `dsh`
+      // resolves to (docs/provider-engine-contract.md §3.3).
+      findMany: async () => [row('harness-key')],
     },
     providerPool: { findFirst: async () => null },
+    providerSlugAlias: { findUnique: async () => null },
     session: {
       findFirst: async () => session,
       findUniqueOrThrow: async () => session,
@@ -149,7 +153,9 @@ test('dsh install gate: creation goes through once the engine report shows the p
     const f = fixture({ engines: INSTALLED });
     await f.service.create(ownerId, { ...opening, provider });
     assert.equal(f.creates.length, 1);
-    assert.equal(f.creates[0].provider, provider);
+    // The built-in `dsh` is written as DeepSeek Harness on the default DeepSeek key (§3.3).
+    assert.equal(f.creates[0].provider, 'harness-key');
+    assert.equal(f.creates[0].engine, 'dsh');
     assert.equal(f.creates[0].status, RunStatus.PENDING);
   }
 });

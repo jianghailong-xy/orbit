@@ -1,0 +1,4 @@
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.101 (0.101) seconds
+	 Executed 3671 tests, with 5 tests skipped and 0 failures (0 unexpected) in 32.172 (32.172) seconds
+Test Suite 'All tests' passed at 2026-10-10 16:03:57.626
+	 Executed 3671 tests, with 5 tests skipped and 0 failures (0 unexpected) in 32.172 (32.172) seconds

@@ -44,6 +44,19 @@ func codexTurnError(result codexTurnResult) string {
 	return result.Error
 }
 
+// codexCapacityRetryDelays is the wait before each replay of a turn OpenAI refused with "Selected
+// model is at capacity" — one entry per retry. That refusal is an admission-side transient that
+// clears in minutes and spans models, so the turn is replayed in place rather than failed; once
+// these are spent the turn fails with the error it last hit.
+var codexCapacityRetryDelays = []time.Duration{60 * time.Second, 90 * time.Second, 120 * time.Second}
+
+// isCodexCapacityError reports a turn error as that refusal. The match is deliberately loose about
+// the wording and nothing else. Keep it identical to MODEL_AT_CAPACITY_ERROR_MARKER in
+// src/apiserver/src/tasks/model-routing.ts.
+func isCodexCapacityError(msg string) bool {
+	return strings.Contains(strings.ToLower(msg), "at capacity")
+}
+
 func codexTurnEndPayload(result codexTurnResult, numTurns int, costUsd float64, job *ClaimedSession) map[string]interface{} {
 	contextTokens := result.ContextTokens
 	if contextTokens <= 0 {
@@ -371,13 +384,35 @@ func codexProviderArgs(agentEnv map[string]string) []string {
 // does not reach `orbit mcp` however carefully the spawn sets it, and the bg_*
 // tools would report the transport as unavailable on a session that is serving
 // it perfectly well. ORBIT_WATCHES is here for the same reason: without it `orbit mcp` would list the
-// watch tools in a session whose owner has Watch off (watch_rollout.go).
-const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN"]`
+// watch tools in a session whose owner has Watch off (watch_rollout.go). The managed runner's
+// instance identity is here for the same reason: `orbit mcp` sends it with the runner credential,
+// which a managed runner's control plane refuses without it (managed_instance.go).
+const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID"]`
 
 // codexOrbitMCPServer is the name the config keys below register Orbit's own MCP server under —
 // the `serverName` Codex then reports on an elicitation, which is how an approval tells Orbit's
 // own control-plane tools apart from a third-party server's.
 const codexOrbitMCPServer = "orbit"
+
+// codexPluginsOffConfig turns Codex's plugins feature off for one session. It is a `-c` override,
+// so the machine's own codex TUI keeps its plugins; only sessions go without them.
+//
+// A session's tools come from Orbit, not from the account signed in on the runner. Codex's plugins
+// are remote, account-level installs: an installed connector ("Apps") arrives as the codex_apps MCP
+// with tools inside it, plugin skills ride into the model's prompt beside the engine's own, and the
+// marketplace advertises the rest of the catalog to the model. None of that is the agent's
+// configuration — it is the login's, and it changes when the login does.
+//
+// Measured against the installed CLI (0.161.0, on a home with gmail/github installed and enabled):
+// `codex debug prompt-input` renders the recommended-plugins block and the marketplace catalog
+// naming openai-curated-remote plugins without this override, and neither with it.
+const codexPluginsOffConfig = "features.plugins=false"
+
+// appendCodexSessionToolConfig adds the overrides that keep a session's tools to what Orbit and the
+// agent's own configuration put there. Both spawn paths carry it.
+func appendCodexSessionToolConfig(args []string) []string {
+	return append(args, "-c", codexPluginsOffConfig)
+}
 
 func appendCodexOrbitMCPConfig(args []string, exe string) []string {
 	if exe == "" {
@@ -405,6 +440,7 @@ func codexExecCommandArgs(job *ClaimedSession, execDir, upDir string, imagePaths
 	if job.Agent.FastMode {
 		args = append(args, "-c", fmt.Sprintf("service_tier=%q", codexFastServiceTier))
 	}
+	args = appendCodexSessionToolConfig(args)
 	args = appendCodexOrbitMCPConfig(args, exe)
 	args = append(args, codexProviderArgs(job.Agent.Env)...)
 	args = append(args, "--skip-git-repo-check")

@@ -12,7 +12,7 @@ import {
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { initializesRuntimeDynamically } from '../common/runtime-provider';
-import { normalizeRuntimeProvider } from '../common/runtime-provider';
+import { sessionEngine } from '../providers/session-engine';
 import { runnerOfflineIsFatal } from '../common/session-scheduling';
 import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
 import { PrismaService } from '../prisma/prisma.service';
@@ -32,6 +32,14 @@ import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { TaskFailureHow, returnQueuedTurns } from '../projects/project-open-item';
 import { settleUnrunSessionRequests } from '../sessions/session-request';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
+import { RUNNER_LINK_REVOCATION_WINDOW_MS } from '../runner-api/runner-link-token';
+import {
+  RUNNER_BEATS,
+  RUNNER_OFFLINE_AFTER_MS,
+  RunnerPresenceService,
+  runnerLastBeatAt,
+  type RunnerBeats,
+} from '../runners/runner-presence';
 
 const REAP_INTERVAL_MS = 30_000;
 // How often to permanently purge sessions that have sat in Trash past the retention
@@ -39,7 +47,27 @@ const REAP_INTERVAL_MS = 30_000;
 // removes nothing.
 const PURGE_INTERVAL_MS = 60 * 60_000;
 const TRASH_RETENTION_MS = TRASH_RETENTION_DAYS * 24 * 60 * 60_000;
-const OFFLINE_AFTER_MS = 90_000; // runner missed ~3 heartbeats
+const OFFLINE_AFTER_MS = RUNNER_OFFLINE_AFTER_MS; // runner missed ~3 heartbeats
+/**
+ * How long after it starts the reaper reaps no session as `runner offline`. Its evidence is the
+ * absence of beats in `runner_presence`, an UNLOGGED table a crash or a failover of the primary
+ * empties (docs/runner-link-design.md §6.5); a control plane that has just come up — after a deploy,
+ * or beside a database that just came back — has not yet had the time to hear every live runner
+ * again. Two windows of OFFLINE_AFTER_MS: six heartbeat intervals.
+ */
+const STARTUP_GRACE_MS = 3 * 60_000;
+/**
+ * The share of the cell's runners that going quiet together pauses the offline reaping. Machines do
+ * not stop a fifth at a time; a link gateway, the network or this control plane does, and the
+ * sessions of runners that are only cut off must still be there when they come back.
+ */
+const MASS_SILENCE_SHARE = 0.2;
+/**
+ * "Together": crossed the offline line within this long of each other, and of now. It also bounds
+ * how long one such silence holds the reaping: a runner quiet for longer than this past the line
+ * leaves the count, and its sessions are reaped as anybody's are.
+ */
+const MASS_SILENCE_WINDOW_MS = 10 * 60_000;
 // A cancel/end a live (online) runner hasn't honored within this window means the
 // session is wedged — e.g. the runner restarted and never re-attached (no reclaim),
 // so it can't see the inbox 'end' or the heartbeat cancel. Force-finalize the intent.
@@ -72,14 +100,43 @@ const SWEPT: RunStatus[] = [RunStatus.PENDING, ...LIVE];
  * `status` is not a second opinion: nothing in this control plane ever writes OFFLINE, which only
  * a runner reports about itself on its way out (`runner-api.controller.ts` heartbeat). A crashed
  * machine leaves ONLINE behind, so the heartbeat's age is the whole of the signal.
+ *
+ * Save for one thing the runner says just as surely: `claimedAt`, the session's own claim of the
+ * run (`run_claimed_at`), is the runner process asking for this very run, and one inside the window
+ * is presence. A process that has just started claims at once, while its first heartbeat waits for
+ * the first tick of its 30-second ticker (runner-go runloop.go), so for that long the runner's last
+ * beat is still its predecessor's. A managed runner woken from sleep is exactly that, every
+ * time: on the lab's real k3s (task T06, 2026-10-18) the run a woken runner claimed at 00:56:34.7
+ * was finalized `runner offline` at 00:56:35.4, its heartbeat six minutes old from before the sleep.
+ * The finalizing write asks the same of the row it writes (`claimedLongAgo`), under its lock.
+ *
+ * The beat is read as every reader of presence reads it (runners/runner-presence.ts): both records
+ * of it, selected with RUNNER_BEATS, the later winning.
  */
 function runnerLooksOffline(
-  runner: { status: string; lastHeartbeatAt: Date | null } | null | undefined,
+  runner: ({ status: string } & RunnerBeats) | null | undefined,
   now: number,
+  claimedAt?: Date | null,
 ): boolean {
   if (!runner) return true;
+  if (claimedAt && now - claimedAt.getTime() <= OFFLINE_AFTER_MS) return false;
   if (runner.status === 'OFFLINE') return true;
-  return now - (runner.lastHeartbeatAt?.getTime() ?? 0) > OFFLINE_AFTER_MS;
+  return now - (runnerLastBeatAt(runner)?.getTime() ?? 0) > OFFLINE_AFTER_MS;
+}
+
+/**
+ * Whether an offline verdict was read from silence: the runner is there and has not signed off. The
+ * other two ways `runnerLooksOffline` says offline are facts on the record — a runner marked OFFLINE
+ * (reported by a runner about itself as it leaves, or a managed runner's row before it ever beat), or
+ * no runner at all — and `silenceHold`, which is about silence, does not hold them.
+ */
+function offlineFromSilence(runner: { status: string } | null | undefined): boolean {
+  return !!runner && runner.status !== 'OFFLINE';
+}
+
+/** `runnerLooksOffline`'s claim clause as the finalizing write's WHERE: not claimed inside the window. */
+function claimedLongAgo(now: number) {
+  return { OR: [{ runClaimedAt: null }, { runClaimedAt: { lt: new Date(now - OFFLINE_AFTER_MS) } }] };
 }
 
 /**
@@ -104,21 +161,38 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    * the process.
    */
   private databaseRefusedWorkLastSweep = false;
+  /** When the reaper started (onModuleInit): the clock STARTUP_GRACE_MS runs on. */
+  private startedAt: number | null = null;
+  /**
+   * Until when the offline reaping stays held for the last mass silence a sweep saw: OFFLINE_AFTER_MS
+   * past that sweep, so the runners whose beats were lost in it get a whole window to be heard again.
+   */
+  private massSilenceHeldUntil = 0;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
     /** Hands the exception items this sweep opens to whoever is responsible for them (§4.4). */
     @Optional() private readonly openItems?: ProjectOpenItemService,
+    /**
+     * Whether heartbeat writes have been landing, and how much of the cell has gone quiet at once
+     * (runners/runner-presence.ts) — two of the reasons a runner's silence is not evidence
+     * (`silenceHold`). RealtimeModule provides it beside this service, so production always has it;
+     * `@Optional()` for the specs that build the reaper by hand about something else.
+     */
+    @Optional() private readonly presence?: RunnerPresenceService,
   ) {}
 
   onModuleInit(): void {
+    this.startedAt = Date.now();
     this.timer = setInterval(() => {
       this.sweep().catch((e) => this.log.error('sweep failed: ' + (e as Error).message));
     }, REAP_INTERVAL_MS);
     this.timer.unref(); // don't keep the process alive just for the reaper
     this.purgeTimer = setInterval(() => {
       this.purgeTrash().catch((e) => this.log.error('trash purge failed: ' + (e as Error).message));
+      this.purgeLapsedLinkRevocations().catch((e) =>
+        this.log.error('runner link revocation purge failed: ' + (e as Error).message));
     }, PURGE_INTERVAL_MS);
     this.purgeTimer.unref();
   }
@@ -142,10 +216,22 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Delete the runner link revocations older than a connection token's lifetime (migration 0443):
+   * every token minted with those credentials has expired, so they can refuse nothing. Runs whether
+   * or not the link is configured, because the trigger that writes them runs either way.
+   */
+  private async purgeLapsedLinkRevocations(): Promise<void> {
+    const cutoff = new Date(Date.now() - RUNNER_LINK_REVOCATION_WINDOW_MS);
+    await this.prisma.runnerLinkRevocation.deleteMany({ where: { revokedAt: { lt: cutoff } } });
+  }
+
   private async sweep(): Promise<void> {
     const now = Date.now();
     const sessions = await this.prisma.session.findMany({
-      where: { status: { in: SWEPT } },
+      // A LANDING row is platform-driven and has no runner: it must never read as a dropped run,
+      // be force-finalized or be armed for a retry (§2.9 LS6).
+      where: { status: { in: SWEPT }, sessionKind: 'CONVERSATION' },
       select: {
         id: true,
         taskId: true,
@@ -153,8 +239,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         status: true,
         provider: true,
         providerBuiltin: true,
+        engine: true,
+        ownerId: true,
         runtimeSessionId: true,
         lastTurnAt: true,
+        // The claim of the current run: presence as much as a heartbeat (runnerLooksOffline).
+        runClaimedAt: true,
         cancelRequestedAt: true,
         endReason: true,
         // §13.6 SU6: whether this run is DOING the task's work or looking at it. Only the first
@@ -164,7 +254,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         // auto-run candidate scan requires, so it is the column that says whether the retry
         // this reaper stands aside for exists at all.
         task: { select: { status: true, autoRunWhenReady: true } },
-        assignedRunner: { select: { lastHeartbeatAt: true, status: true } },
+        assignedRunner: { select: { status: true, ...RUNNER_BEATS } },
       },
     });
     // Whether THIS sweep has watched the database refuse a unit of work; see the field above for
@@ -173,9 +263,18 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     let databaseRefusedWork = false;
     const heartbeatEvidenceIsDisqualified = () =>
       databaseRefusedWork || this.databaseRefusedWorkLastSweep;
+    // Whether runner silence is evidence at all this sweep (`silenceHold`). Asked once, and only when
+    // some session would be reaped for it: most sweeps find none. A reading the database refused is a
+    // hold too, and fences the next sweep like any other refusal.
+    let hold: Promise<string | null> | undefined;
+    const silenceHeld = () => (hold ??= this.silenceHold(now).catch((e: unknown) => {
+      if (classifyTransactionFault(e).family === 'RESOURCE') databaseRefusedWork = true;
+      return `the cell's presence could not be read (${(e as Error).message})`;
+    }));
+    const held: string[] = [];
     for (const s of sessions) {
       try {
-        const offline = runnerLooksOffline(s.assignedRunner, now);
+        const offline = runnerLooksOffline(s.assignedRunner, now, s.runClaimedAt);
         // A runner that hasn't honored a cancel/end in time is wedged. Handle this
         // before ordinary offline liveness so a graceful end remains graceful even if
         // the runner disappeared while tearing down.
@@ -241,6 +340,14 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               );
               continue;
             }
+            // The same rule, widened to the rest of what makes silence ours (`silenceHold`): just
+            // started, heartbeat writes failing, or a fifth of the cell gone quiet at once. Logged
+            // once for the sweep below — a mass silence holds every such session at once. A runner
+            // that signed off said so itself, which is no silence, and is reaped as it always was.
+            if (offlineFromSilence(s.assignedRunner) && await silenceHeld()) {
+              held.push(s.id);
+              continue;
+            }
             await this.forceFinalize(s.id, s.assignedRunnerId, s.taskId, 'runner offline', {
               expectedStatuses: [RunStatus.RUNNING],
               onlyIfNotCancelling: true,
@@ -285,15 +392,19 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           }
           continue;
         }
-        // Session.provider is NOT NULL, so there is nothing to inherit here — and a workspace
-        // holds no provider to inherit from (workspace-provider.ts).
-        const provider = normalizeRuntimeProvider(s.provider, s.providerBuiltin);
+        // The engine the session runs on — its own (Session.engine), not the one its slug reads as:
+        // a Codex, Kimi, OpenCode, Antigravity or Harness session on a key or a pool initializes its
+        // runtime the same way the built-in one does, and stalls the same way. One nobody can place
+        // (its credential gone before an engine was recorded) is not judged here.
+        const provider =
+          s.status === RunStatus.RUNNING && !s.runtimeSessionId ? await sessionEngine(this.prisma, s) : null;
         const lastTurn = s.lastTurnAt?.getTime() ?? 0;
         const runtimeStartupGrace =
           provider === AgentProvider.CODEX
             ? CODEX_SHARED_STATE_STARTUP_GRACE_MS
             : DYNAMIC_RUNTIME_STARTUP_GRACE_MS;
         if (
+          provider &&
           initializesRuntimeDynamically(provider) &&
           s.status === RunStatus.RUNNING &&
           !s.runtimeSessionId &&
@@ -356,6 +467,61 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       }
     }
     this.databaseRefusedWorkLastSweep = databaseRefusedWork;
+    if (held.length > 0) {
+      const named = held.slice(0, 10).join(', ') + (held.length > 10 ? ` and ${held.length - 10} more` : '');
+      this.log.warn(`not reaping ${held.length} session(s) whose runner looks offline (${named}): ${await hold}`);
+    }
+  }
+
+  /**
+   * Why a runner's silence is not evidence that it died, this sweep — or null when it is.
+   *
+   * "Offline" is read off the ABSENCE of a beat in `runner_presence`, so it says something about the
+   * runner only while this control plane could have heard one. The database rule in `sweep`
+   * (`databaseRefusedWorkLastSweep`) is one case of that; these are the rest (docs/runner-link-design.md
+   * §6.5), and each holds the offline reaping whole:
+   *
+   *  - The reaper started less than STARTUP_GRACE_MS ago. The presence table is UNLOGGED, so a crash
+   *    or a failover of the primary empties it, and a process that has just come up — after a deploy,
+   *    or beside a database that just came back — has not yet had the time to hear every live runner.
+   *  - A heartbeat write failed in this process within OFFLINE_AFTER_MS: the beat that would have
+   *    answered may be one the database refused, here.
+   *  - A fifth of the cell's runners crossed the offline line together (MASS_SILENCE_SHARE,
+   *    MASS_SILENCE_WINDOW_MS). Read again every sweep that needs it, and held for OFFLINE_AFTER_MS
+   *    past the last sweep that saw it, so the runners whose beats were lost get a whole window to be
+   *    heard again before their silence counts. Only runners that can lose contact are counted
+   *    (RunnerPresenceService.fleetSilence): one that signed off, or a managed runner its manager is
+   *    putting to sleep, is quiet on purpose. In a cell of one to four runners one crashed runner is
+   *    already a fifth, which holds its sessions for up to MASS_SILENCE_WINDOW_MS past the line — the
+   *    price of not reaping a small cell's sessions through a partition on this side, and the window
+   *    in which a restarted runner takes its sessions back.
+   *
+   * None of them is a latch. The grace ends; a failed write ages out; a silence that does not lift
+   * leaves the count MASS_SILENCE_WINDOW_MS past the line, and its sessions are then reaped like any
+   * others. Nothing else here waits on it: a cancel or an end the runner never honored is still
+   * finalized, and so is the run of a runner that signed off (`offlineFromSilence`), since neither
+   * verdict is read from silence.
+   */
+  private async silenceHold(now: number): Promise<string | null> {
+    const s = (ms: number) => `${Math.round(ms / 1000)}s`;
+    if (this.startedAt !== null && now - this.startedAt < STARTUP_GRACE_MS) {
+      return `the reaper started ${s(now - this.startedAt)} ago, inside its ${s(STARTUP_GRACE_MS)} startup grace`;
+    }
+    if (!this.presence) return null;
+    const lostAt = this.presence.lastBeatNotRecordedAt();
+    if (lostAt !== null && now - lostAt <= OFFLINE_AFTER_MS) {
+      return `a heartbeat write failed ${s(now - lostAt)} ago, inside the ${s(OFFLINE_AFTER_MS)} runner silence is read from`;
+    }
+    const fleet = await this.presence.fleetSilence(MASS_SILENCE_WINDOW_MS);
+    if (fleet.heard > 0 && fleet.silent / fleet.heard >= MASS_SILENCE_SHARE) {
+      this.massSilenceHeldUntil = now + OFFLINE_AFTER_MS;
+      return `${fleet.silent} of the ${fleet.heard} runners heard from in the last `
+        + `${s(OFFLINE_AFTER_MS + MASS_SILENCE_WINDOW_MS)} have been silent for over ${s(OFFLINE_AFTER_MS)} at once`;
+    }
+    if (now < this.massSilenceHeldUntil) {
+      return `a fifth of the cell's runners went silent together less than ${s(OFFLINE_AFTER_MS)} ago`;
+    }
+    return null;
   }
 
   /**
@@ -421,7 +587,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         const runner = runnerId
           ? await tx.runner.findUnique({
               where: { id: runnerId },
-              select: { status: true, lastHeartbeatAt: true },
+              select: { status: true, ...RUNNER_BEATS },
             })
           : null;
         if (!runnerLooksOffline(runner, Date.now())) {
@@ -433,6 +599,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           id: sessionId,
           status: { in: opts.expectedStatuses ?? LIVE },
           ...(opts.onlyIfNotCancelling ? { cancelRequestedAt: null } : {}),
+          // The claim half of the re-ask above, on the row this writes: a run claimed inside the
+          // window — since the sweep looked, too — is a runner answering.
+          ...(opts.requireRunnerStillOffline ? claimedLongAgo(Date.now()) : {}),
         },
         // Set cancelRequestedAt too so the heartbeat cancel-drain tells a runner
         // recovering from a partition to stop (the session is already finalized here).

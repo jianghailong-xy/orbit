@@ -1,0 +1,78 @@
+<!doctype html>
+<!-- Design board Web 2 (T0, Cursor engine): Infrastructure — the engine overview and the Cursor CLI row on a
+     machine card, its accounts and their usage, and the states a machine can be in. Real-page captures
+     ("现在" main e00629fd4; "改后" + prototype.patch). Not shipped code. Render: render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Web 2 · Infrastructure: Cursor CLI overview card, machine row, accounts and states</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<script src="kit.js"></script>
+<script src="shots/marks.js"></script>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Web 2 · Infrastructure：概览加 Cursor CLI 卡片；机器卡片加 Cursor CLI 行，账号逐个列出、各自的额度；读不到的额度写「Usage unavailable」</h1>
+  <p class="m-sub zh">Cursor CLI 是第 7 个 engine，也是第 5 个能在一台机器上登多个账号的 engine（和 Claude Code、Codex、Antigravity CLI、Kimi Code 同一套：<code>ACCOUNT_ENGINES</code>、Default 加新加的账号、Automatic / NEXT）。机器卡片上它排在最后（DeepSeek Harness 之后）。额度按账号读（契约 §11：<code>GetCurrentPeriodUsage</code> + <code>GetPlanInfo</code>）：付费套餐显示账期内已用比例和账期结束时间；<b>Free 套餐的请求上限读不到</b>（用尽时接口仍是 0%），所以写「Usage unavailable」，不画 0% 的条。版本是 Orbit 固定的 <code>2026.10.14-941492e</code>，行上写「pinned」而不是「updated」。示例同 Web 1：hpc 有 Default（Free）和 Team（Pro，已用 34%）两个账号；mac-studio 的 runner 是 v0.1.236，早于 Cursor；build-box 没装。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 引擎概览「What your agents can run on」</div>
+    <div class="frames" id="s1"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 机器卡片（hpc 展开）</div>
+    <div class="frames" id="s2"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 展开 Cursor CLI 的账号：每个账号自己的状态和额度</div>
+    <div class="frames" id="s3"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">④ 机器的几种状态（只截 Cursor CLI 这一行），以及「需要处理」</div>
+    <div class="states" id="s4"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑤ 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+<script>
+const frame = (kind, label, html, cap = '') => `<div class="frame"><div class="lbl zh"><span class="m-k${kind === '改后' ? ' new' : ''}">${kind}</span>${label}</div>${html}${cap ? `<p class="m-cap zh" style="max-width:${cap.w ?? 900}px">${cap.t ?? cap}</p>` : ''}</div>`;
+document.getElementById('s1').innerHTML =
+  frame('现在', '六张卡', shot('w2-overview-now', { width: 904 })) +
+  frame('改后', '第 7 张：Cursor CLI', shot('w2-overview-new', { width: 904, marks: [{ box: 'card', n: 1, pad: 2 }] }));
+document.getElementById('s2').innerHTML =
+  frame('现在', 'hpc', shot('w2-machine-now', { width: 902 })) +
+  frame('改后', 'hpc：最后一行 Cursor CLI（收起）', shot('w2-machine-folded', { width: 902, marks: [{ box: 'meta', n: 2, pad: 3 }, { box: 'quota', n: 3, pad: 3 }, { box: 'add', n: 4, pad: 3 }] }));
+document.getElementById('s3').innerHTML =
+  frame('改后', '展开：Default（Free）和 Team（Pro）', shot('w2-machine-open', { width: 898, marks: [{ box: 'defQuota', n: 5, pad: 3 }, { box: 'teamQuota', n: 6, pad: 3 }] }),
+    { t: '账号行的副标题先写套餐，再写目录（和 Kimi 先写站点一样）：<code>Free plan · ~/.orbit/cursor/default</code>。目录是 Orbit 自己的（契约 §16.2），不是 runner 用户的 <code>~/.cursor</code>。NEXT 是 Automatic 下一个新会话会落到的账号：Team 有额度读数且没用完，排在读不到的 Default 前面。' });
+const st = (label, scene, w = 898) => `<div><div class="st-l zh">${label}</div>${shot(scene, { width: w })}</div>`;
+document.getElementById('s4').innerHTML =
+  st('没装（build-box）：Orbit 能装，按钮 Install', 'w2-state-not-installed') +
+  st('runner 早于 Cursor（mac-studio v0.1.236）：Update runner', 'w2-state-update-runner') +
+  st('没登录（Default 掉线）：Signed out + Sign in，行下写后果', 'w2-state-signed-out') +
+  st('版本不符：不是固定版本，Unsupported version + Reinstall', 'w2-state-wrong-version') +
+  `<div style="grid-column: 1 / -1"><div class="st-l zh">没登录时，页顶「需要处理」多一行（今天的 NeedsAttention 按登录 engine 逐个列，Cursor 进这张表即可）</div>${shot('w2-attention', { width: 902 })}</div>`;
+document.getElementById('notes').innerHTML = notes([
+  [1, '<b>概览第 7 张卡</b>：「Subscription · hpc ×2」是登录了的机器和账号数；「API key · Cursor <span class="infra-model">Auto</span>」是能跑 Cursor CLI 的 key（只有 Cursor key 能跑它，它也只跑 Cursor CLI）。Ready 的判定不变：有任一来源即 Ready。'],
+  [2, '<b>版本后写「pinned · checked 6m ago」</b>：Cursor CLI 不自动更新，版本由 runner 固定（契约 §1，P3）；runner 升级时一起换版本。多账号时同 Claude Code：「2 of 2 accounts available」，可展开。'],
+  [3, '<b>收起时</b>写 NEXT 账号和它最紧的额度窗口，规则同其他多账号 engine；这一账号读不到额度时写「Usage unavailable」。'],
+  [4, '<b>Add account</b>：runner 声明 <code>cursor-account-login/v1</code> 才出现（同 Kimi 的 <code>kimi-account-login/v1</code>）。流程见 Web 3。<b>D4</b> 若选「只支持 Default 账号」，这个按钮在那类机器上不出现。'],
+  [5, '<b>读不到的额度</b>：「Free plan」+ 灰字「Usage unavailable」，悬停说明「Cursor doesn’t report how much of the Free plan’s requests are left…」。不画条、不写 0%（项目判据 6、9）。'],
+  [6, '<b>读得到的额度</b>：一个窗口「Monthly limit 34%」，重置时间是账期结束（<code>billingCycleEnd</code>）。用尽时状态变「Spent · resets …」，和其他 engine 相同。'],
+  ['·', '<b>四种状态的措辞</b>沿用现成的：Not installed / Install（同 Kimi）；Update runner + 「This runner predates Cursor CLI. It updates itself when no session is running on it.」（同 DeepSeek Harness）；Signed out / Sign in + 「Sessions on this runner can’t use Cursor CLI until you sign in again.」（同登录 engine）；Unsupported version（同 DeepSeek Harness）+ Reinstall。'],
+]);
+finish();
+</script>
+</body>
+</html>

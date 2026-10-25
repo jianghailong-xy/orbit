@@ -1,0 +1,2245 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/foundation.config.mjs"
+  ],
+  "configFile": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration/foundation.config.mjs",
+  "rootDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/.foundation-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "foundation*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/.foundation-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "foundation*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/.foundation-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "foundation*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/.foundation-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "foundation*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/.foundation-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "foundation*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/.foundation-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "foundation*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/.foundation-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "foundation*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/.foundation-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "foundation*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/.foundation-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4174 --strictPort",
+   "cwd": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del/src/web/",
+   "url": "http://127.0.0.1:4174",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "foundation-theme.browser.mjs",
+   "file": "foundation-theme.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "production boot and hydration preserve cached system",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1927,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:12:43.128Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-f6e3c92cdec426075d75",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "production boot and hydration preserve cached light",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1655,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:12:45.189Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-66c8ad561e0c2791de74",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "production boot and hydration preserve cached dark",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1821,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:12:46.853Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-6096f783dcf3f65a4c5a",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "account adoption, preference writes and live system changes share the foundation theme",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1560,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:12:48.678Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-5792fb45a588ef1a0533",
+     "file": "foundation-theme.browser.mjs",
+     "line": 89,
+     "column": 1
+    },
+    {
+     "title": "production boot and hydration preserve cached system",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1909,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:12:51.619Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-832d92f1272e5c8b1d72",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "production boot and hydration preserve cached light",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1786,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:12:53.577Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-0aaaa37886745c0277bd",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "production boot and hydration preserve cached dark",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1738,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:12:55.372Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-da44d720f9fa160c1694",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "account adoption, preference writes and live system changes share the foundation theme",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1425,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:12:57.114Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-c20f77e4fb826ecafc08",
+     "file": "foundation-theme.browser.mjs",
+     "line": 89,
+     "column": 1
+    },
+    {
+     "title": "production boot and hydration preserve cached system",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1687,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:12:59.866Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-885c9e8dfa036ed21033",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "production boot and hydration preserve cached light",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1663,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:01.601Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-b309bb8e79c165527be6",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "production boot and hydration preserve cached dark",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1679,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:03.269Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-d292d5757cf687b29b5b",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "account adoption, preference writes and live system changes share the foundation theme",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1368,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:04.951Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-d08517069208a4acd6e6",
+     "file": "foundation-theme.browser.mjs",
+     "line": 89,
+     "column": 1
+    },
+    {
+     "title": "production boot and hydration preserve cached system",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1646,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:07.763Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-dd0dc0c206e1e1333048",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "production boot and hydration preserve cached light",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1644,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:09.459Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-ef1a74f5d1d6feee61d6",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "production boot and hydration preserve cached dark",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1657,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:11.107Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-ccf8561b3efc1d36c661",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "account adoption, preference writes and live system changes share the foundation theme",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1300,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:12.769Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-6c19e2eadd0b6d2502b0",
+     "file": "foundation-theme.browser.mjs",
+     "line": 89,
+     "column": 1
+    },
+    {
+     "title": "production boot and hydration preserve cached system",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1490,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:15.321Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-8c7814b41dd87bd2d2cc",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "production boot and hydration preserve cached light",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1319,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:16.909Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-5c8ca663efabf2c9d7b9",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "production boot and hydration preserve cached dark",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1270,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:18.232Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-98ccb5275f04be4ac057",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "account adoption, preference writes and live system changes share the foundation theme",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1481,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:19.506Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-e5fd986a23f19fb66e58",
+     "file": "foundation-theme.browser.mjs",
+     "line": 89,
+     "column": 1
+    },
+    {
+     "title": "production boot and hydration preserve cached system",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1309,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:22.408Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-d1946e78e8bd8fa5501e",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "production boot and hydration preserve cached light",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1235,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:23.785Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-034515fada80cc8ff57e",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "production boot and hydration preserve cached dark",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1231,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:25.024Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-4756b4cd541ed9a51bc7",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "account adoption, preference writes and live system changes share the foundation theme",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1399,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:26.262Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-607d0c42dd804cb6d34a",
+     "file": "foundation-theme.browser.mjs",
+     "line": 89,
+     "column": 1
+    },
+    {
+     "title": "production boot and hydration preserve cached system",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1784,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:29.165Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-08e9867f20fbcd47b405",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "production boot and hydration preserve cached light",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1288,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:31.015Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-3e803152f0c8c70541fd",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "production boot and hydration preserve cached dark",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1292,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:32.306Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-bacf702dd6aa215de3cf",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "account adoption, preference writes and live system changes share the foundation theme",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1416,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:33.602Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-cdaad67bcc7b1404ec3d",
+     "file": "foundation-theme.browser.mjs",
+     "line": 89,
+     "column": 1
+    },
+    {
+     "title": "production boot and hydration preserve cached system",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1296,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:36.546Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-af27aafc9c88e9e555cb",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "production boot and hydration preserve cached light",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1294,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:37.906Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-954c5bdffb93c332e0fc",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "production boot and hydration preserve cached dark",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1249,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:39.204Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-c50a8a9fa1cfb415510a",
+     "file": "foundation-theme.browser.mjs",
+     "line": 63,
+     "column": 3
+    },
+    {
+     "title": "account adoption, preference writes and live system changes share the foundation theme",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1463,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:40.457Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "production-boot-before-app",
+           "contentType": "image/png"
+          },
+          {
+           "name": "theme-browser-evidence",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "db6f78940aaf6a3e3b94-018dd7d1e2af8548a36e",
+     "file": "foundation-theme.browser.mjs",
+     "line": 89,
+     "column": 1
+    }
+   ]
+  },
+  {
+   "title": "foundation.browser.mjs",
+   "file": "foundation.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "foundation states match the frozen P0 palette",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 529,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:12:50.250Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "foundation-states",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "5bf87706e8b849649a66-970ec4ff66e868dff419",
+     "file": "foundation.browser.mjs",
+     "line": 37,
+     "column": 1
+    },
+    {
+     "title": "body portals inherit theme and preserve focus ownership",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 560,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:12:50.784Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "portal-surface",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "5bf87706e8b849649a66-ba90a922564d7a21009e",
+     "file": "foundation.browser.mjs",
+     "line": 76,
+     "column": 1
+    },
+    {
+     "title": "foundation states match the frozen P0 palette",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 500,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:12:58.548Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "foundation-states",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "5bf87706e8b849649a66-a7032c2177d202bf95df",
+     "file": "foundation.browser.mjs",
+     "line": 37,
+     "column": 1
+    },
+    {
+     "title": "body portals inherit theme and preserve focus ownership",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 582,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:12:59.052Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "portal-surface",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "5bf87706e8b849649a66-904c50590f0eac8f0d4d",
+     "file": "foundation.browser.mjs",
+     "line": 76,
+     "column": 1
+    },
+    {
+     "title": "foundation states match the frozen P0 palette",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 529,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:06.328Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "foundation-states",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "5bf87706e8b849649a66-56e8c93344bf5addf19e",
+     "file": "foundation.browser.mjs",
+     "line": 37,
+     "column": 1
+    },
+    {
+     "title": "body portals inherit theme and preserve focus ownership",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 576,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:06.860Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "portal-surface",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "5bf87706e8b849649a66-e3fcaa3449e7f087113e",
+     "file": "foundation.browser.mjs",
+     "line": 76,
+     "column": 1
+    },
+    {
+     "title": "foundation states match the frozen P0 palette",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 499,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:14.081Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "foundation-states",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "5bf87706e8b849649a66-f5eb6ef4dc8802c58aa3",
+     "file": "foundation.browser.mjs",
+     "line": 37,
+     "column": 1
+    },
+    {
+     "title": "body portals inherit theme and preserve focus ownership",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 492,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:14.585Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "portal-surface",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "5bf87706e8b849649a66-14fe6e03b129138e3dfa",
+     "file": "foundation.browser.mjs",
+     "line": 76,
+     "column": 1
+    },
+    {
+     "title": "foundation states match the frozen P0 palette",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 554,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:20.996Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "foundation-states",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "5bf87706e8b849649a66-cb5ec26d9de8658be6ce",
+     "file": "foundation.browser.mjs",
+     "line": 37,
+     "column": 1
+    },
+    {
+     "title": "body portals inherit theme and preserve focus ownership",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 572,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:21.554Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "portal-surface",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "5bf87706e8b849649a66-819dec6a9fff031ffa38",
+     "file": "foundation.browser.mjs",
+     "line": 76,
+     "column": 1
+    },
+    {
+     "title": "foundation states match the frozen P0 palette",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 527,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:27.669Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "foundation-states",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "5bf87706e8b849649a66-a1061314617c68b9ec7e",
+     "file": "foundation.browser.mjs",
+     "line": 37,
+     "column": 1
+    },
+    {
+     "title": "body portals inherit theme and preserve focus ownership",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 688,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:28.201Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "portal-surface",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "5bf87706e8b849649a66-8e5be01ff94c41ba2af0",
+     "file": "foundation.browser.mjs",
+     "line": 76,
+     "column": 1
+    },
+    {
+     "title": "foundation states match the frozen P0 palette",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 547,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:35.027Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "foundation-states",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "5bf87706e8b849649a66-7c6a4fd60ace8315392a",
+     "file": "foundation.browser.mjs",
+     "line": 37,
+     "column": 1
+    },
+    {
+     "title": "body portals inherit theme and preserve focus ownership",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 691,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:35.579Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "portal-surface",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "5bf87706e8b849649a66-f1dfb835682bc5fb5c84",
+     "file": "foundation.browser.mjs",
+     "line": 76,
+     "column": 1
+    },
+    {
+     "title": "foundation states match the frozen P0 palette",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 565,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:41.932Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "foundation-states",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "5bf87706e8b849649a66-82ba7f79c98dbd7010ef",
+     "file": "foundation.browser.mjs",
+     "line": 37,
+     "column": 1
+    },
+    {
+     "title": "body portals inherit theme and preserve focus ownership",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 552,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T17:13:42.502Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "portal-surface",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "5bf87706e8b849649a66-d6988471244b149d2afe",
+     "file": "foundation.browser.mjs",
+     "line": 76,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-10T17:12:39.165Z",
+  "duration": 63993.596000000005,
+  "expected": 48,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

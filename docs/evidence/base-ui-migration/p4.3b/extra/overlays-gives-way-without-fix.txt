@@ -1,0 +1,125 @@
+cgroup: 0::/system.slice/run-p4034655-i54334813.scope oom_score_adj 500
+P0 expected screenshots: 87 P0.2 originals, 143 main drift references, 22 accepted migration differences.
+
+Running 8 tests using 1 worker
+
+  ✘  1 [chromium-light-desktop] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way (928ms)
+  ✘  2 [chromium-light-phone] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way (945ms)
+  ✘  3 [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way (969ms)
+  ✘  4 [chromium-dark-phone] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way (993ms)
+  ✓  5 [webkit-light-desktop] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way (794ms)
+  ✓  6 [webkit-light-phone] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way (758ms)
+  ✓  7 [webkit-dark-desktop] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way (793ms)
+  ✓  8 [webkit-dark-phone] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way (741ms)
+
+
+  1) [chromium-light-desktop] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 100
+
+      390 |   const after = await scrolled();
+      391 |   const active = await page.evaluate(() => (document.activeElement === document.body ? 'body' : document.activeElement?.getAttribute('role') ?? document.activeElement?.tagName));
+    > 392 |   expect(after).toBe(before);
+          |                 ^
+      393 |   await attach(info, 'focused-control-gives-way', { before, after, active });
+      394 |   await page.keyboard.press('Escape');
+      395 |   await expect(long).not.toBeVisible();
+        at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/try/aux-del/src/web/ui-migration/overlays.browser.mjs:392:17
+
+    Error Context: .overlays-results/overlays.browser.mjs-a-dia-5eae3-ontrol-with-focus-gives-way-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays.browser.mjs-a-dia-5eae3-ontrol-with-focus-gives-way-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays.browser.mjs-a-dia-5eae3-ontrol-with-focus-gives-way-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-phone] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 108
+
+      390 |   const after = await scrolled();
+      391 |   const active = await page.evaluate(() => (document.activeElement === document.body ? 'body' : document.activeElement?.getAttribute('role') ?? document.activeElement?.tagName));
+    > 392 |   expect(after).toBe(before);
+          |                 ^
+      393 |   await attach(info, 'focused-control-gives-way', { before, after, active });
+      394 |   await page.keyboard.press('Escape');
+      395 |   await expect(long).not.toBeVisible();
+        at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/try/aux-del/src/web/ui-migration/overlays.browser.mjs:392:17
+
+    Error Context: .overlays-results/overlays.browser.mjs-a-dia-5eae3-ontrol-with-focus-gives-way-chromium-light-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays.browser.mjs-a-dia-5eae3-ontrol-with-focus-gives-way-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays.browser.mjs-a-dia-5eae3-ontrol-with-focus-gives-way-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 100
+
+      390 |   const after = await scrolled();
+      391 |   const active = await page.evaluate(() => (document.activeElement === document.body ? 'body' : document.activeElement?.getAttribute('role') ?? document.activeElement?.tagName));
+    > 392 |   expect(after).toBe(before);
+          |                 ^
+      393 |   await attach(info, 'focused-control-gives-way', { before, after, active });
+      394 |   await page.keyboard.press('Escape');
+      395 |   await expect(long).not.toBeVisible();
+        at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/try/aux-del/src/web/ui-migration/overlays.browser.mjs:392:17
+
+    Error Context: .overlays-results/overlays.browser.mjs-a-dia-5eae3-ontrol-with-focus-gives-way-chromium-dark-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays.browser.mjs-a-dia-5eae3-ontrol-with-focus-gives-way-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays.browser.mjs-a-dia-5eae3-ontrol-with-focus-gives-way-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-dark-phone] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 108
+
+      390 |   const after = await scrolled();
+      391 |   const active = await page.evaluate(() => (document.activeElement === document.body ? 'body' : document.activeElement?.getAttribute('role') ?? document.activeElement?.tagName));
+    > 392 |   expect(after).toBe(before);
+          |                 ^
+      393 |   await attach(info, 'focused-control-gives-way', { before, after, active });
+      394 |   await page.keyboard.press('Escape');
+      395 |   await expect(long).not.toBeVisible();
+        at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/try/aux-del/src/web/ui-migration/overlays.browser.mjs:392:17
+
+    Error Context: .overlays-results/overlays.browser.mjs-a-dia-5eae3-ontrol-with-focus-gives-way-chromium-dark-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays.browser.mjs-a-dia-5eae3-ontrol-with-focus-gives-way-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays.browser.mjs-a-dia-5eae3-ontrol-with-focus-gives-way-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4 failed
+    [chromium-light-desktop] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way 
+    [chromium-light-phone] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way 
+    [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way 
+    [chromium-dark-phone] › ui-migration/overlays.browser.mjs:375:1 › a dialog taller than the screen keeps its scroll when the control with focus gives way 
+  4 passed (10.3s)

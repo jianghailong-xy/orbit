@@ -1,0 +1,109 @@
+{
+ "checks": [
+  {
+   "check": "ann is asleep",
+   "ok": true
+  },
+  {
+   "check": "bob is asleep",
+   "ok": true
+  },
+  {
+   "check": "cy is asleep",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-18T12:58:53.521+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "off-again",
+ "result": {
+  "ann": {
+   "sleep": 409,
+   "until": {
+    "at": "2026-10-18T12:58:53.328+00:00",
+    "changes": [
+     {
+      "at": "2026-10-18T12:56:48.728+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 6,
+       "management_state": "STARTING",
+       "pod": "fbf0ed0d",
+       "reason": null,
+       "revision": 96
+      }
+     },
+     {
+      "at": "2026-10-18T12:56:50.890+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 6,
+       "management_state": "READY",
+       "pod": "fbf0ed0d",
+       "reason": null,
+       "revision": 97
+      }
+     },
+     {
+      "at": "2026-10-18T12:58:21.790+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": "asked",
+       "generation": 6,
+       "management_state": "DRAINING",
+       "pod": "fbf0ed0d",
+       "reason": null,
+       "revision": 98
+      }
+     },
+     {
+      "at": "2026-10-18T12:58:41.889+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": "accepted",
+       "generation": 6,
+       "management_state": "DRAINING",
+       "pod": "fbf0ed0d",
+       "reason": null,
+       "revision": 98
+      }
+     },
+     {
+      "at": "2026-10-18T12:58:46.781+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": "accepted",
+       "generation": 6,
+       "management_state": "DRAINING",
+       "pod": "fbf0ed0d",
+       "reason": null,
+       "revision": 101
+      }
+     },
+     {
+      "at": "2026-10-18T12:58:53.328+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 7,
+       "management_state": "SLEEPING",
+       "pod": null,
+       "reason": null,
+       "revision": 102
+      }
+     }
+    ],
+    "reached": "SLEEPING",
+    "seconds": 124.6
+   }
+  },
+  "bob": null,
+  "cy": null
+ },
+ "seconds": 124.9,
+ "startedAt": "2026-10-18T12:56:48.642+00:00",
+ "step": "asleep"
+}

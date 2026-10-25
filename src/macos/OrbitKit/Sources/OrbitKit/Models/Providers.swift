@@ -20,19 +20,21 @@ public struct ConfiguredProviderModel: Codable, Equatable, Sendable, Identifiabl
     }
 }
 
-/// A control-plane–configured provider (GET /api/providers): a custom identity (its own slug,
-/// label and model list) that borrows a built-in runtime for execution. Its slug lands in an
-/// agent/session's `provider` field just like a built-in, so `AgentDefaults` merges it into the
-/// pickers alongside claude/codex. The payload is de-sensitized (enabled providers only, no
-/// key/baseUrl). Mirrors web's `ConfiguredProvider` (lib/agentDefaults.ts).
+/// A control-plane–configured provider (GET /api/providers): a key — its own slug, label and model
+/// list — that one or more engines run on (docs/provider-engine-contract.md §2.1). Its slug lands in a
+/// session's `provider` beside the engine that runs it, as an engine's own sign-in does. The account
+/// pools ride the same shape (`ProviderPools.asProviders`), each running on its own engine alone. The
+/// payload is de-sensitized (enabled providers only, no key/baseUrl). Mirrors web's
+/// `ConfiguredProvider` (lib/workspaceDefaults.ts).
 public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     /// The configured row's id, used to open its key editor in the web app.
     public var providerID: String? = nil
     public let slug: String
     public let label: String
-    /// The built-in runtime the provider borrows: "claude", "codex", "kimi" or "antigravity".
-    /// Optional so a future server shape still decodes; anything else reads as "claude", as on the
-    /// server (`AgentDefaults.runtime(for:configured:)`).
+    /// The protocol the key's endpoint speaks, named by the engine that speaks it natively: "claude"
+    /// (Anthropic Messages), "codex" (OpenAI Responses), "kimi" (Moonshot) or "antigravity" (Gemini).
+    /// Not the engine: which engines run the key is `engines` (`ProviderEngines.of`). Optional so a
+    /// future server shape still decodes; nil reads as "claude", as on the server.
     public let runtime: String?
     public let models: [ConfiguredProviderModel]
     public let defaultModel: String?
@@ -52,24 +54,42 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     /// Whether an OpenCode session may spend this key too (`OpenCodeKeys`), as GET /providers decides
     /// it. Nil from an older server, which reads as no.
     public var runsOnOpenCode: Bool? = nil
+    /// Every engine this key runs on, its default first, as GET /providers and /providers/mine answer for
+    /// it (docs/provider-engine-contract.md §6.3): a DeepSeek key on Claude Code, OpenCode and DeepSeek
+    /// Harness, a Claude subscription token on Claude Code alone. Nil from an older server, which
+    /// `ProviderEngines.of` reads as the key's runtime.
+    public var engines: [String]? = nil
     /// The endpoint, and whether a key is stored — only on the account's own list (GET
     /// /providers/mine); the pickers' catalogue carries neither. What tells a DeepSeek key
     /// (`DeepSeekBalance.applies`) and names its endpoint on the key's page.
     public var baseUrl: String? = nil
     public var hasApiKey: Bool? = nil
+    /// Whether the key is switched on. Only GET /providers/mine says — the account's own keys, disabled
+    /// ones included (the Infrastructure page's API keys); the catalogue lists enabled keys alone, and
+    /// nil reads as on.
+    public var enabled: Bool? = nil
+    /// A Cursor key only: what Cursor CLI on one of the owner's runners last answered when asked with the
+    /// key it holds now (`agent models`): `VALID`, `INVALID` or `UNREACHABLE` (shared
+    /// `CursorKeyCheckState`) — and when. Both nil until a runner has checked it, and on every other key.
+    public var keyCheckState: String? = nil
+    public var keyCheckedAt: String? = nil
     public var id: String { slug }
 
     private enum CodingKeys: String, CodingKey {
         case providerID = "id"
         case slug, label, runtime, models, defaultModel, presetSlug, modelsFromRuntime, planUsage, runsOnOpenCode
+        case engines
         case baseUrl, hasApiKey
+        case enabled
+        case keyCheckState, keyCheckedAt
     }
 
     public init(slug: String, label: String, runtime: String? = nil,
                 models: [ConfiguredProviderModel] = [], defaultModel: String? = nil,
                 presetSlug: String? = nil, modelsFromRuntime: Bool? = nil,
                 planUsage: PlanUsageSnapshot? = nil, runsOnOpenCode: Bool? = nil,
-                baseUrl: String? = nil, hasApiKey: Bool? = nil) {
+                baseUrl: String? = nil, hasApiKey: Bool? = nil, enabled: Bool? = nil,
+                engines: [String]? = nil) {
         self.slug = slug
         self.label = label
         self.runtime = runtime
@@ -81,5 +101,31 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
         self.runsOnOpenCode = runsOnOpenCode
         self.baseUrl = baseUrl
         self.hasApiKey = hasApiKey
+        self.enabled = enabled
+        self.engines = engines
+    }
+}
+
+/// The answer to Check Again on a saved Cursor key (POST /providers/mine/:id/key-check, shared
+/// `CursorKeyRecheckAnswer`): what this check came to, in a sentence a client may show as it stands,
+/// and the key's last check as it stands after it.
+public struct CursorKeyRecheckAnswer: Codable, Equatable, Sendable {
+    public let ok: Bool
+    /// VALID, INVALID, UNREACHABLE — or NO_RUNNER: no runner of the owner's could ask.
+    public let keyCheck: String
+    public let message: String
+    /// Whether this check's answer was kept on the key: never for NO_RUNNER.
+    public let recorded: Bool
+    public let keyCheckState: String?
+    public let keyCheckedAt: String?
+
+    public init(ok: Bool, keyCheck: String, message: String, recorded: Bool, keyCheckState: String?,
+                keyCheckedAt: String?) {
+        self.ok = ok
+        self.keyCheck = keyCheck
+        self.message = message
+        self.recorded = recorded
+        self.keyCheckState = keyCheckState
+        self.keyCheckedAt = keyCheckedAt
     }
 }

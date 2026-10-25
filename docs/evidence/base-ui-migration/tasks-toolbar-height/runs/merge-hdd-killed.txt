@@ -1,0 +1,83 @@
+bg_run job bgj_f123e2b56805 on the delivery's checkout under /mnt/data (HDD), started 2026-10-10T00:12:24Z, stopped (bg_kill) at 00:36:36Z with Vitest at its 38th file
+command: cd /mnt/data/tmp/34coPBqt8gi229cVNds0E/fix && git rev-parse HEAD && export TMPDIR=/mnt/data/tmp/34coPBqt8gi229cVNds0E/tmp && { /mnt/data/tmp/34coPBqt8gi229cVNds0E/scripts/scoped.sh bash -c 'npm run build -w @orbit/web && npm run test -w @orbit/web' 2>&1 | tee /mnt/data/tmp/34coPBqt8gi229cVNds0E/runs/merge.txt; exit ${PIPESTATUS[0]}; }
+Condensed copy: the build in full, then each finished test file's result line.
+
+423aa3fdb4da9eb51aee4fa198488ac77a4c76fe
+
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 4576 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     5.90 kB │ gzip:   2.54 kB
+dist/assets/TaskDependencyGraph-DLioOiRN.css       15.41 kB │ gzip:   2.56 kB
+dist/assets/app-DFdTj8Ol.css                      486.18 kB │ gzip:  80.56 kB
+dist/assets/rolldown-runtime-hePW80VL.js            0.71 kB │ gzip:   0.42 kB
+dist/assets/StartPlanGraph-BMCNF24y.js              0.91 kB │ gzip:   0.53 kB
+dist/assets/ProjectTaskPanel-DjKR50t9.js            1.00 kB │ gzip:   0.60 kB
+dist/assets/ProjectDependencyGraph-Jf7H4hbV.js     15.76 kB │ gzip:   5.88 kB
+dist/assets/projectDependencyGraph-D-f0xSWI.js    158.54 kB │ gzip:  53.14 kB
+dist/assets/Floating-C4YkIBv5.js                  182.33 kB │ gzip:  62.41 kB
+dist/assets/TaskDependencyGraph-D3aGWyri.js       188.58 kB │ gzip:  60.86 kB
+dist/assets/sessionExport-D-KyI8u4.js             883.57 kB │ gzip: 212.14 kB
+dist/assets/Transcript-CRite4x9.js              1,016.89 kB │ gzip: 322.73 kB
+dist/assets/index-BCWXTJ8A.js                   2,131.51 kB │ gzip: 640.53 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 22.80s
+[PLUGIN_TIMINGS] JavaScript callbacks ran for 2.5s of this 22.8s build (11%).
+The slowest callbacks, timed inside each callback (the wait before a callback starts is excluded, the time it awaits is included):
+  - plugin vite:css-post transform (9%, 2.0s, 30 calls)
+Additional callback time came from the callbacks below and from callbacks under 1s.
+1 callback is listed without a time. Its calls overlapped, so the time inside one call includes work from other calls. To find its cost, profile the build with `node --cpu-prof`:
+  - plugin vite:asset load (2 calls)
+See https://rolldown.rs/reference/InputOptions.checks#bundlertimings for more details.
+
+
+> @orbit/web@0.1.0 test
+
+ ✓ src/pages/ProjectsPage.test.tsx (103 tests) 663ms
+ ✓ src/components/EvidenceDecisionCard.test.tsx (63 tests) 553ms
+ ✓ src/components/Transcript.test.tsx (125 tests) 1539ms
+ ✓ src/components/ProjectProgressStatus.test.tsx (52 tests) 904ms
+ ✓ src/components/WorkspaceView.projectSessions.test.tsx (51 tests) 13217ms
+ ✓ src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx (19 tests) 14980ms
+ ✓ src/lib/sessionProviderChoices.test.ts (70 tests) 35ms
+ ✓ src/components/AcceptanceConfirmationCard.test.tsx (41 tests) 647ms
+ ✓ src/pages/TaskListView.test.tsx (33 tests) 312ms
+ ✓ src/components/CriteriaDecisionCard.test.tsx (36 tests) 882ms
+ ✓ src/components/TaskDetailPanel.test.tsx (65 tests) 289ms
+ ✓ src/components/ProjectPromotionCard.test.tsx (54 tests) 124ms
+ ✓ src/components/ApprovalPanel.test.tsx (41 tests) 873ms
+ ✓ src/components/ProjectAcceptanceCard.test.tsx (37 tests) 207ms
+ ✓ src/components/WorkspaceView.coordinatorChat.test.tsx (21 tests) 3249ms
+ ✓ src/components/ProjectPanoramaHeader.test.tsx (63 tests) 74ms
+ ✓ src/lib/projectAttention.test.ts (61 tests) 38ms
+ ✓ src/components/ProjectDependencyGraph.test.tsx (45 tests) 136ms
+ ✓ src/pages/InfrastructurePage.codexLogin.test.tsx (19 tests) 13491ms
+ ✓ src/lib/workspaceDefaults.test.ts (53 tests) 10ms
+ ✓ src/components/DecisionRail.test.tsx (33 tests) 138ms
+ ✓ src/components/WorkspaceView.codexAccount.test.tsx (22 tests) 56380ms
+ ✓ src/lib/watches.test.ts (42 tests) 351ms
+ ✓ src/pages/ProviderPoolPage.whoCanUseIt.test.tsx (9 tests) 1132ms
+ ✓ src/components/TasksSidePanel.test.tsx (35 tests) 50ms
+ ✓ src/lib/taskSchedule.test.ts (29 tests) 31ms
+ ✓ src/components/OwnerConfirmationCard.test.tsx (22 tests) 212ms
+ ✓ src/components/RunnerEngines.test.tsx (40 tests) 148ms
+ ✓ src/lib/wikiPlan.test.ts (42 tests) 36ms
+ ✓ src/pages/InfrastructurePage.sharedPools.test.tsx (15 tests) 1494ms
+ ✓ src/components/WorkspaceView.settlementPointer.test.tsx (9 tests) 2313ms
+ ✓ src/components/Transcript.backgroundWake.test.tsx (14 tests) 4728ms
+ ✓ src/pages/ProjectCoordinatorSection.test.tsx (13 tests) 741ms
+ ✓ src/pages/SharedProjectPage.test.tsx (11 tests) 11397ms
+ ✓ src/components/WikiActivityPage.test.tsx (19 tests) 223ms
+ ✓ src/components/TaskScheduleEditor.test.tsx (26 tests) 46ms
+ ✓ src/components/ProjectCoordinatorCard.test.tsx (37 tests) 375ms
+ ✓ src/components/TaskDetailPanel.modelRouting.test.tsx (16 tests) 1441ms

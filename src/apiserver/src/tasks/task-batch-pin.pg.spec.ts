@@ -84,14 +84,14 @@ async function seed(client: Client): Promise<World> {
 async function addTask(
   client: Client,
   world: World,
-  spec: { id: string; owner: string; project?: string | null; list?: string | null; model?: string | null; provider?: string | null; labels?: string[] },
+  spec: { id: string; owner: string; project?: string | null; list?: string | null; model?: string | null; provider?: string | null; engine?: string | null; labels?: string[] },
 ): Promise<void> {
   await client.query(
     `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","updated_at",
-                        "project_id","list_id","model","provider","labels","completion_criterion")
-     VALUES ($1,'t',$2,'AGENT',$2,${STALE},$3,$4,$5,$6,$7::text[],'EVIDENCE_JUDGMENT')`,
+                        "project_id","list_id","model","provider","engine","labels","completion_criterion")
+     VALUES ($1,'t',$2,'AGENT',$2,${STALE},$3,$4,$5,$6,$7,$8::text[],'EVIDENCE_JUDGMENT')`,
     [spec.id, spec.owner, spec.project ?? null, spec.list ?? null,
-     spec.model ?? null, spec.provider ?? null, spec.labels ?? []]);
+     spec.model ?? null, spec.provider ?? null, spec.engine ?? null, spec.labels ?? []]);
 }
 
 /** `updated_at` per id, as the date itself — what the database actually holds. */
@@ -150,24 +150,31 @@ suite('pinMany writes the rows that differ and leaves the ones that do not', asy
       { changed: 0 });
   });
 
-  await t.test('provider and model are narrowed independently, so a row differing in one is written', async () => {
+  await t.test('engine, provider and model are narrowed independently, so a row differing in one is written', async () => {
     const world = await seed(client);
     const providerOnly = randomUUID();
+    const engineOnly = randomUUID();
     const neither = randomUUID();
     await addTask(client, world, {
-      id: providerOnly, owner: world.owner, project: world.project, model: FLASH, provider: 'codex',
+      id: providerOnly, owner: world.owner, project: world.project, model: FLASH, provider: 'codex', engine: 'codex',
+    });
+    // A provider pin an older replica wrote, with no engine beside it: a pin naming only the provider
+    // writes its default engine too (docs/provider-engine-contract.md §3.5), which this row lacks.
+    await addTask(client, world, {
+      id: engineOnly, owner: world.owner, project: world.project, model: FLASH, provider: 'claude',
     });
     await addTask(client, world, {
-      id: neither, owner: world.owner, project: world.project, model: FLASH, provider: 'claude',
+      id: neither, owner: world.owner, project: world.project, model: FLASH, provider: 'claude', engine: 'claude',
     });
 
     const res = await tasks.pinMany(world.owner,
       { projectId: world.project, provider: 'claude', model: FLASH });
 
-    assert.deepEqual(res, { changed: 1 });
-    const after = await pins(client, [providerOnly, neither]);
+    assert.deepEqual(res, { changed: 2 });
+    const after = await pins(client, [providerOnly, engineOnly, neither]);
     assert.equal(after.get(providerOnly)!.stale, false, 'the provider differs, so this row changes');
-    assert.equal(after.get(neither)!.stale, true, 'both already match, so this row does not');
+    assert.equal(after.get(engineOnly)!.stale, false, 'the engine differs, so this row changes');
+    assert.equal(after.get(neither)!.stale, true, 'all three already match, so this row does not');
   });
 
   await t.test('clearing a pin skips rows that are already null', async () => {

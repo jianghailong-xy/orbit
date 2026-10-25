@@ -549,8 +549,8 @@ func TestCodexThreadMovedBackCarriesTheTurnsItHadOnTheOtherAccount(t *testing.T)
 }
 
 // The runner says it can carry a conversation to another account, in the words the control plane asks
-// for: a session is moved to another Codex or Claude account only on a runner that declares
-// codex-account-move/v1 or claude-account-move/v1.
+// for: a session is moved to another Codex, Claude or Kimi account only on a runner that declares
+// codex-account-move/v1, claude-account-move/v1 or kimi-account-move/v1.
 func TestTheRunnerDeclaresItCarriesConversationsToAnotherAccount(t *testing.T) {
 	controller, err := os.ReadFile(filepath.Join("..", "apiserver", "src", "providers", "account-move-capability.ts"))
 	if err != nil {
@@ -560,6 +560,7 @@ func TestTheRunnerDeclaresItCarriesConversationsToAnotherAccount(t *testing.T) {
 		"CODEX_ACCOUNT_MOVE_V1":        codexAccountMoveCapabilityV1,
 		"CLAUDE_ACCOUNT_MOVE_V1":       claudeAccountMoveCapabilityV1,
 		"ANTIGRAVITY_ACCOUNT_LOGIN_V1": antigravityAccountLoginCapabilityV1,
+		"KIMI_ACCOUNT_MOVE_V1":         kimiAccountMoveCapabilityV1,
 	} {
 		if !strings.Contains(","+runnerCapabilitiesV1+",", ","+capability+",") {
 			t.Fatalf("this runner does not declare %s: %q", capability, runnerCapabilitiesV1)

@@ -1,0 +1,298 @@
+{
+  "approvalCards": [
+    {
+      "ID": "approval-1",
+      "Body": {
+        "input": {
+          "content": "P4 outside escalated",
+          "file_path": "/root/.orbit-dsh-p4-outside-never-created/outside.txt",
+          "justification": "P4 synthetic escalation",
+          "sandbox_permissions": "danger-full-access"
+        },
+        "toolName": "write",
+        "toolUseId": "call_p4_4"
+      },
+      "Status": "DENIED",
+      "Polls": 2,
+      "LatePoll": false
+    }
+  ],
+  "controlPlane": [
+    {
+      "agent": "",
+      "body": {
+        "input": {
+          "content": "P4 outside escalated",
+          "file_path": "/root/.orbit-dsh-p4-outside-never-created/outside.txt",
+          "justification": "P4 synthetic escalation",
+          "sandbox_permissions": "danger-full-access"
+        },
+        "toolName": "write",
+        "toolUseId": "call_p4_4"
+      },
+      "method": "POST",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    }
+  ],
+  "facts": {
+    "cards": 1,
+    "inside": "P4 auto inside",
+    "outside": "absent"
+  },
+  "modelRequests": 5,
+  "orbitEvents": [
+    {
+      "payload": {
+        "argv": [
+          "--profile",
+          "acp",
+          "--patch",
+          "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealAutoWorkspaceBoundary935288480/001/dsh-home/orbit.patch.json",
+          "--patch",
+          "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealAutoWorkspaceBoundary935288480/001/dsh-home/orbit-agent.patch.json"
+        ],
+        "cliVersion": "0.2.0-rc.2",
+        "configHash": "3dc13f88d1908ba1ddbaf9fde7f3589be8e843a9cf535a281e4cc732a130d40c",
+        "dshHome": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealAutoWorkspaceBoundary935288480/001/dsh-home",
+        "executable": "/tmp/orbit-dsh-p4-OFKGjI/install/node_modules/.bin/dsh",
+        "provider": "dsh",
+        "runtime": "acp",
+        "subtype": "launch"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "cliVersion": "0.2.0-rc.2",
+        "provider": "dsh",
+        "resumed": false,
+        "runtime": "acp",
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "sessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "text": "Write inside, then outside."
+      },
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "payload": {
+        "contextTokens": 47442,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_1",
+        "input": {
+          "content": "P4 auto inside",
+          "file_path": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealAutoWorkspaceBoundary935288480/001/work/inside.txt"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "write",
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "status": "in_progress",
+        "toolCallId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "\u003cpath\u003e/tmp/orbit-dsh-p4-OFKGjI/TestDshRealAutoWorkspaceBoundary935288480/001/work/inside.txt\u003c/path\u003e\n\u003ctype\u003efile\u003c/type\u003e\n\u003ccontent\u003e\nCreated file\n\u003c/content\u003e",
+        "isError": false,
+        "localTurnId": "t1",
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "status": "completed",
+        "toolCallId": "call_p4_1",
+        "toolUseId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "contextTokens": 47523,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_2",
+        "input": {
+          "command": "printf 'P4 auto command' \u003e auto-command.txt",
+          "description": "write in the workspace"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "bash",
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "status": "in_progress",
+        "toolCallId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "(no output)",
+        "isError": false,
+        "localTurnId": "t1",
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "status": "completed",
+        "toolCallId": "call_p4_2",
+        "toolUseId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "contextTokens": 47567,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_3",
+        "input": {
+          "content": "P4 outside",
+          "file_path": "/root/.orbit-dsh-p4-outside-never-created/outside.txt"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "write",
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "status": "in_progress",
+        "toolCallId": "call_p4_3"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Error: [sandbox: file access denied under workspace-write mode]\n[sandbox: escalation available — retry this exact operation once with sandbox_permissions (the narrowest wider mode that suffices) + justification; the approval prompt asks the user]",
+        "isError": true,
+        "localTurnId": "t1",
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "status": "failed",
+        "toolCallId": "call_p4_3",
+        "toolUseId": "call_p4_3"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "contextTokens": 47694,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_4",
+        "input": {
+          "content": "P4 outside escalated",
+          "file_path": "/root/.orbit-dsh-p4-outside-never-created/outside.txt",
+          "justification": "P4 synthetic escalation",
+          "sandbox_permissions": "danger-full-access"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "write",
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "status": "in_progress",
+        "toolCallId": "call_p4_4"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Error: the user rejected escalating this operation to \"danger-full-access\"; it stays denied, so stop and explain instead of working around it",
+        "isError": true,
+        "localTurnId": "t1",
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "status": "failed",
+        "toolCallId": "call_p4_4",
+        "toolUseId": "call_p4_4"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "messageId": "d5cfedbf-fff0-4330-a8fc-9d6a90a05348",
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "text": "P4 auto answer"
+      },
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "payload": {
+        "contextTokens": 47750,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "contextTokens": 47750,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "numTurns": 1,
+        "runtimeSessionId": "f05d9c3c-6946-4c3d-9f8f-a192f55ae4f1",
+        "stopReason": "end_turn",
+        "subtype": "completed"
+      },
+      "turn": "t1",
+      "type": "turn_end"
+    }
+  ],
+  "permissionMode": "auto",
+  "scenario": "TestDshRealAutoWorkspaceBoundary"
+}

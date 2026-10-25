@@ -1,0 +1,25 @@
+{
+ "checks": [
+  {
+   "check": "the apiserver is built in this checkout",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-19T12:42:52.777+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "facts",
+ "result": {
+  "apiserverBuiltAt": "2026-10-19T11:48:03+00:00",
+  "branch": "orbit/task-ceph-rbd-5580b7",
+  "head": "3314ffd946acb9fc44d1b7a33f508c62addfbaf4",
+  "originMain": "e7168b246175a18b4af1928aa2c5b2bf4a656297",
+  "projectLine": "8055bb5686ba981c7a518557190aebfb8dedc46b",
+  "projectLineIsAncestor": true,
+  "subject": "fix(managed-runner-lab): the fake model quotes T02 markers; the T02 run uncordons the first node before its first start",
+  "uncommitted": []
+ },
+ "seconds": 3.2,
+ "startedAt": "2026-10-19T12:42:49.590+00:00",
+ "step": "git"
+}

@@ -6,6 +6,8 @@ import {
   CURRENT_WORK_INTERRUPTED,
   CurrentWorkSteerTransaction,
   requeueUnreadCurrentWorkSteers,
+  StopReadTransaction,
+  stopOvertookTarget,
   terminalizePendingCurrentWorkSteers,
 } from './current-work-delivery';
 import {
@@ -130,6 +132,45 @@ test('a steer candidate receives its exact terminal receipt', async () => {
     deliveryFailureReason: reason,
     deliveryTerminalAt: steer.data.answeredAt,
   });
+});
+
+test('a runner\'s report about one steer writes off that steer alone', async () => {
+  // A sibling aimed at the same target may still be on its way into a turn that has not ended.
+  const double = currentWorkTerminalizationDouble({
+    steers: [{ id: STEER_ID, targetTurnId: TARGET_ID, status: 'IN_FLIGHT' }],
+  });
+  const tx: CurrentWorkSteerTransaction = { conversationTurn: double.conversationTurn };
+
+  await terminalizePendingCurrentWorkSteers(tx, SESSION_ID, {
+    turnIds: [STEER_ID],
+    includeInFlight: true,
+    code: CURRENT_WORK_INTERRUPTED,
+    reason: 'stopped before the engine read it',
+  });
+
+  const read = double.calls.steerFinds[0] as { where: Record<string, unknown> };
+  assert.deepEqual(read.where.id, { in: [STEER_ID] });
+  assert.equal('targetTurnId' in read.where, false);
+  const write = double.calls.steerWrites[0] as { data: Record<string, unknown> };
+  assert.equal(write.data.deliveryStatus, 'FAILED');
+  assert.equal(write.data.deliveryFailureCode, CURRENT_WORK_INTERRUPTED);
+});
+
+test('a Stop overtakes a target only when its interrupt was filed after that target', async () => {
+  const reads: Array<{ where?: unknown }> = [];
+  const stopFiled = (filed: boolean) => transactionDouble<StopReadTransaction>({
+    conversationTurn: {
+      findFirst: (args) => {
+        reads.push(args as { where?: unknown });
+        return filed ? { id: 'the-interrupt-turn' } : null;
+      },
+    },
+  });
+
+  assert.equal(await stopOvertookTarget(stopFiled(true), SESSION_ID, 7), true);
+  assert.equal(await stopOvertookTarget(stopFiled(false), SESSION_ID, 7), false);
+  // After the target, not merely anywhere in the session: an earlier Stop belongs to an earlier turn.
+  assert.deepEqual(reads[0].where, { sessionId: SESSION_ID, kind: 'interrupt', seq: { gt: 7 } });
 });
 
 test('an unread message re-enters the queue as an ordinary next turn, carrying no receipt', async () => {

@@ -7,8 +7,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderBalance } from '@orbit/shared';
 import { api } from '../api';
+import { InfrastructurePage } from '../pages/InfrastructurePage';
 import { ProviderConnectPage } from '../pages/ProviderConnectPage';
-import { ProvidersPage } from '../pages/ProvidersPage';
 import { deepseekBalanceKey } from '../lib/deepseekBalance';
 import { PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { DeepSeekBalanceLine, DeepSeekBalanceSection } from './DeepSeekBalance';
@@ -21,6 +21,7 @@ const row = (over: Partial<ProviderRow> = {}): ProviderRow => ({
   slug: 'deepseek',
   label: 'DeepSeek',
   runtime: 'claude',
+  engines: ['claude', 'opencode', 'dsh'] as ProviderRow['engines'],
   baseUrl: 'https://api.deepseek.com/anthropic',
   models: [{ value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' }],
   defaultModel: 'deepseek-v4-pro',
@@ -30,7 +31,7 @@ const row = (over: Partial<ProviderRow> = {}): ProviderRow => ({
   hasApiKey: true,
   ...over,
 });
-const harness = row({ id: 'dsh', slug: 'deepseek-harness', label: 'DeepSeek Harness', runtime: 'dsh', presetSlug: 'deepseek-harness', models: [], defaultModel: '' });
+const harness = row({ id: 'dsh', slug: 'deepseek-harness', label: 'DeepSeek Harness', runtime: 'dsh', engines: ['dsh', 'claude', 'opencode'] as ProviderRow['engines'], presetSlug: 'deepseek-harness', models: [], defaultModel: '' });
 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000 - 5_000).toISOString();
 const CNY = { currency: 'CNY', totalBalance: '110.00', grantedBalance: '10.00', toppedUpBalance: '100.00' };
@@ -86,6 +87,8 @@ describe('the DeepSeek account balance', () => {
     apiMock.mockImplementation(((path: string) => {
       const balance = /^\/providers\/mine\/([^/]+)\/balance/.exec(path);
       if (balance) return (answers[balance[1]] ?? (() => new Promise(() => {})))();
+      // What uses the key, on its page's Works with: nothing here.
+      if (path.endsWith('/usage')) return Promise.resolve({ providerId: '', engines: [], sessions: 0, tasks: 0 });
       return Promise.resolve([]);
     }) as typeof api);
     container = document.createElement('div');
@@ -130,7 +133,7 @@ describe('the DeepSeek account balance', () => {
   };
   const balanceRequests = () => apiMock.mock.calls.map(([path]) => path as string).filter((path) => path.includes('/balance'));
 
-  describe('the line under a DeepSeek row on the Providers list', () => {
+  describe('the line under a DeepSeek row on Infrastructure’s API keys', () => {
     it('says it is checking until the server answers — with no number in the meantime', async () => {
       await show(<DeepSeekBalanceLine row={row()} />);
       expect(text()).toBe('Checking account balance…');
@@ -303,7 +306,7 @@ describe('the DeepSeek account balance', () => {
       row({ id: 'proxy', slug: 'proxy', label: 'Proxy', presetSlug: null, baseUrl: 'https://llm-proxy.example.com/v1' }),
     ];
 
-    it('the Providers list gives every DeepSeek key a balance line — and the same balance to keys that share it', async () => {
+    it('Infrastructure’s API keys give every DeepSeek key a balance line — and the same balance to keys that share it', async () => {
       const shared = ok();
       answers.ds = async () => shared;
       answers.dsh = async () => shared;
@@ -312,10 +315,10 @@ describe('the DeepSeek account balance', () => {
       client.setQueryData(PROVIDERS_LIST_KEY, [row(), harness, ...others]);
       client.setQueryData(['providers', 'pools'], []);
       client.setQueryData(['providers', 'shared-pools'], []);
-      await show(<ProvidersPage />);
+      await show(<InfrastructurePage />);
       const lineOf = (name: string) =>
-        [...container.querySelectorAll('tr')]
-          .find((tr) => tr.querySelector('.prov-cell-name')?.textContent === name)
+        [...container.querySelectorAll('.vk-row')]
+          .find((key) => key.querySelector('.vk-name')?.textContent === name)
           ?.querySelector('[data-testid="deepseek-balance-line"]')
           ?.textContent?.replace(/\s+/g, ' ')
           .trim();
@@ -352,7 +355,8 @@ describe('the DeepSeek account balance', () => {
       answers.dsh = async () => ok({ sharedWith: [{ id: 'ds', label: 'DeepSeek' }] });
       await edit('dsh', [row(), harness]);
       const titles = [...container.querySelectorAll('.provider-step .ps-title')].map((t) => t.textContent);
-      expect(titles).toEqual(['Name', 'Paste your DeepSeek Harness API key', 'DeepSeek account balance']);
+      // A key made from the retired Harness preset is a DeepSeek key, and its page says so.
+      expect(titles).toEqual(['Name', 'Paste your DeepSeek API key', 'DeepSeek account balance']);
       expect(text()).toContain('Same DeepSeek account as DeepSeek — both show this balance.');
     });
 

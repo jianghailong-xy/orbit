@@ -74,7 +74,9 @@ const CARD: Delivery = {
   check: null,
   errorCode: null,
   failure: null,
-  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+  // A conflict's cell holds no rerun door (`decideIntegrationRetry` refuses one), so the server
+  // lists none here: the card is what the server sends, and `Retry the task` is not in it.
+  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'CANCEL_TASK'],
   landing: { receipts: 0, state: 'NOT_KNOWN', upstream: 'main', integration: 'main' },
 };
 
@@ -118,9 +120,10 @@ describe('an exception item delivered to the coordinator', () => {
     // The change that made this worth a card: the platform's own reading of the landing, which
     // otherwise costs the coordinator a re-check of the merge receipts every time.
     expect(el!.querySelector('.oic-facts')?.textContent).toContain('No merge receipt');
-    // The doors are the server's list, and the ones a reader can walk are links.
+    // The doors are the server's list, and the ones a reader can walk are links. A conflict offers
+    // no rerun (the server refuses one for it), so the only chip left is the quiet one that stops.
     const chips = [...el!.querySelectorAll('.oic-chip')].map((c) => c.textContent);
-    expect(chips).toEqual(['Retry the task', 'Cancel the task']);
+    expect(chips).toEqual(['Cancel the task']);
     const links = [...el!.querySelectorAll('.oic-links a')].map((a) => a.textContent);
     expect(links).toEqual(['Open the task ↗', 'Open the failed session ↗']);
     // The paragraph the agent read is still one disclosure away, verbatim.
@@ -206,5 +209,30 @@ describe('an exception item delivered to the coordinator', () => {
     expect(card()).toBeNull();
     expect(container.querySelector('.chat-user .md')?.textContent).toContain('【例外待办】');
     expect(container.textContent).toContain('待办编号');
+  });
+});
+
+/**
+ * The third link (§2.9 LS6, board v4 06 b): the landing the attempt belongs to, AFTER the two main's
+ * card already had. The failed session stays where it was — a reader looking for what broke still
+ * finds it — and the landing is where the attempt is read step by step.
+ */
+describe('an exception item’s landing', () => {
+  const LANDING = '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5b77';
+
+  it('adds Open the landing after the failed session, pointing at the landing session', async () => {
+    await mount([delivered({ ...CARD, landingSessionId: LANDING })]);
+    const links = [...(card()?.querySelectorAll('.oic-links a') ?? [])];
+    expect(links.map((anchor) => anchor.textContent))
+      .toEqual(['Open the task ↗', 'Open the failed session ↗', 'Open the landing ↗']);
+    // The id goes through the normalizing codec, so either spelling of it lands on the right page.
+    expect(new URL(links[2]!.getAttribute('href')!, 'http://x').pathname).toMatch(/^\/sessions\/[0-9A-Za-z]+$/);
+    expect(links[2]!.getAttribute('href')).not.toBe(links[1]!.getAttribute('href'));
+  });
+
+  it('draws no such link on a delivery whose item recorded no landing', async () => {
+    await mount([delivered({ ...CARD, landingSessionId: null })]);
+    const links = [...(card()?.querySelectorAll('.oic-links a') ?? [])].map((anchor) => anchor.textContent);
+    expect(links).toEqual(['Open the task ↗', 'Open the failed session ↗']);
   });
 });

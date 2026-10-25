@@ -1,0 +1,173 @@
+{
+ "name": "shell-wrapper-env",
+ "runId": "2026-10-17T01-55-13-333Z",
+ "startedAt": "2026-10-17T01:55:13.334Z",
+ "finishedAt": "2026-10-17T01:56:18.956Z",
+ "passed": true,
+ "realPromptsDeclared": 1,
+ "realPrompts": [
+  {
+   "n": 1,
+   "at": "2026-10-17T01:55:45.410Z",
+   "note": "D4 A: P3 orbit-bash as SHELL; HOME, profile and variable names agent commands see"
+  }
+ ],
+ "protocol": "protocol/shell-wrapper-env.ndjson",
+ "protocolLines": 83,
+ "fixtures": [
+  "shell-wrapper-env/wrapper"
+ ],
+ "checks": [
+  {
+   "name": "a token is exchanged from the key without a prompt (file store, session/new)",
+   "ok": true
+  },
+  {
+   "name": "session/new succeeds with both CURSOR_API_KEY and CURSOR_AUTH_TOKEN set",
+   "ok": true
+  },
+  {
+   "name": "both commands ran",
+   "ok": true,
+   "detail": {
+    "probe": [
+     "HOME",
+     "SHELL",
+     "PROFILE",
+     "CANARY",
+     "PATH"
+    ],
+    "names": 28
+   }
+  },
+  {
+   "name": "the CLI starts orbit-bash (a #!/bin/sh script whose path names bash) for the agent's commands",
+   "ok": true,
+   "detail": [
+    "/usr/bin/bash <P0_ROOT>/cli/2026.10. acp",
+    "<RUN>/bin/orbit-bash -O extglob -ilc",
+    "/bin/bash -O extglob -ilc",
+    "<RUN>/bin/orbit-bash -O extglob -c",
+    "/bin/bash -O extglob -c"
+   ]
+  },
+  {
+   "name": "…for the login-shell snapshot (-ilc) as well as for each command (-c)",
+   "ok": true,
+   "detail": [
+    "/usr/bin/bash <P0_ROOT>/cli/2026.10. acp",
+    "<RUN>/bin/orbit-bash -O extglob -ilc",
+    "/bin/bash -O extglob -ilc",
+    "<RUN>/bin/orbit-bash -O extglob -c",
+    "/bin/bash -O extglob -c"
+   ]
+  },
+  {
+   "name": "agent commands see the runner user's HOME (the wrapper's), not the CLI's account HOME",
+   "ok": true,
+   "detail": "<RUN>/real-home"
+  },
+  {
+   "name": "…and its login profile, not the account HOME's",
+   "ok": true,
+   "detail": "real"
+  },
+  {
+   "name": "…and none of CURSOR_API_KEY, CURSOR_AUTH_TOKEN, XDG_CONFIG_HOME, CURSOR_CONFIG_DIR, CURSOR_DATA_DIR",
+   "ok": true,
+   "detail": []
+  },
+  {
+   "name": "a workspace variable still reaches them (the canary)",
+   "ok": true
+  },
+  {
+   "name": "the CLI itself still runs on the account HOME: its state file is there, nothing of Cursor's in the commands' HOME",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "agent command environment under SHELL=<RUN>/bin/orbit-bash": {
+   "stopReason": "end_turn",
+   "probe": {
+    "HOME": "<RUN>/real-home",
+    "SHELL": "<RUN>/bin/orbit-bash",
+    "PROFILE": "real",
+    "CANARY": "inherited",
+    "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+   },
+   "names": [
+    "AGENT_CLI_CREDENTIAL_STORE",
+    "AGENT_TRANSCRIPTS",
+    "CURSOR_AGENT",
+    "CURSOR_AGENT_DISABLE_DEBUG_LOG",
+    "CURSOR_CONVERSATION_ID",
+    "CURSOR_INVOKED_AS",
+    "CURSOR_REQUEST_ID",
+    "CURSOR_RIPGREP_PATH",
+    "DIRENV_DISABLE",
+    "FORCE_COLOR",
+    "GLOBAL_AGENT_ENVIRONMENT_VARIABLE_NAMESPACE",
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "NODE_COMPILE_CACHE",
+    "NO_COLOR",
+    "NO_OPEN_BROWSER",
+    "ORBIT_P0_CANARY",
+    "ORBIT_P0_PROFILE_HOME",
+    "PATH",
+    "PWD",
+    "SHELL",
+    "SHLVL",
+    "TERM",
+    "USER",
+    "_",
+    "_ZO_DOCTOR",
+    "__CURSOR_SANDBOX_ENV_RESTORE"
+   ],
+   "cursorAndOrbitNames": [
+    "AGENT_CLI_CREDENTIAL_STORE",
+    "AGENT_TRANSCRIPTS",
+    "CURSOR_AGENT",
+    "CURSOR_AGENT_DISABLE_DEBUG_LOG",
+    "CURSOR_CONVERSATION_ID",
+    "CURSOR_INVOKED_AS",
+    "CURSOR_REQUEST_ID",
+    "CURSOR_RIPGREP_PATH",
+    "DIRENV_DISABLE",
+    "GLOBAL_AGENT_ENVIRONMENT_VARIABLE_NAMESPACE",
+    "NO_OPEN_BROWSER",
+    "ORBIT_P0_CANARY",
+    "ORBIT_P0_PROFILE_HOME",
+    "SHELL",
+    "__CURSOR_SANDBOX_ENV_RESTORE"
+   ],
+   "shellsExecuted": [
+    "/usr/bin/bash <P0_ROOT>/cli/2026.10. acp",
+    "<RUN>/bin/orbit-bash -O extglob -ilc",
+    "/bin/bash -O extglob -ilc",
+    "<RUN>/bin/orbit-bash -O extglob -c",
+    "/bin/bash -O extglob -c"
+   ],
+   "permissionRequests": [
+    "`printf '%s\\n' \"HOME=$HOME\" \"SHELL=$SHELL\" \"PROFILE=$ORBIT_P0_PROFILE_HOME\" \"CANARY=$ORBIT_P0_CANARY\" \"PATH=$PATH\" > probe.txt`",
+    "`env | cut -d= -f1 | sort > env-names.txt`"
+   ],
+   "answer": "I'll run those two commands exactly as written, one at a time.DONE"
+  },
+  "variables the CLI process had that the commands do not see": [
+   "CURSOR_API_KEY",
+   "CURSOR_AUTH_TOKEN",
+   "CURSOR_CONFIG_DIR",
+   "CURSOR_DATA_DIR"
+  ],
+  "files in the stand-in for the runner user's HOME after the turn": [
+   ".bash_profile 644 34"
+  ]
+ }
+}

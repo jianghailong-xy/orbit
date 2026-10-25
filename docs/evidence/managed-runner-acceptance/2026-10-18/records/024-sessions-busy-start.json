@@ -1,0 +1,67 @@
+{
+ "checks": [
+  {
+   "check": "the work outlasts the checks made meanwhile",
+   "ok": true,
+   "value": "FAKE-SLOW 240 and FAKE-BG 240"
+  },
+  {
+   "check": "ann: the turn is accepted",
+   "ok": true,
+   "value": 201
+  },
+  {
+   "check": "bob: the turn is accepted",
+   "ok": true,
+   "value": 201
+  },
+  {
+   "check": "bob: a background job runs on the runner",
+   "ok": true,
+   "value": [
+    "bgj_48fc3ac4ec85"
+   ]
+  }
+ ],
+ "endedAt": "2026-10-18T12:37:51.986+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "sessions",
+ "result": {
+  "at": "2026-10-18T12:37:50.854+00:00",
+  "bobJobs": [
+   "bgj_48fc3ac4ec85"
+  ],
+  "turns": {
+   "ann": {
+    "answer": {
+     "code": null,
+     "id": null,
+     "message": null,
+     "seq": 2,
+     "status": null
+    },
+    "at": "2026-10-18T12:37:50.854+00:00",
+    "kind": "turn",
+    "session": "34i3WAGGhr09tgpAvF8px",
+    "status": 201
+   },
+   "bob": {
+    "answer": {
+     "code": null,
+     "id": null,
+     "message": null,
+     "seq": 2,
+     "status": null
+    },
+    "at": "2026-10-18T12:37:50.889+00:00",
+    "kind": "turn",
+    "session": "34i3WAGAkWMoXGCZw2Tmn",
+    "status": 201
+   }
+  }
+ },
+ "seconds": 1.1,
+ "startedAt": "2026-10-18T12:37:50.854+00:00",
+ "step": "busy-start"
+}

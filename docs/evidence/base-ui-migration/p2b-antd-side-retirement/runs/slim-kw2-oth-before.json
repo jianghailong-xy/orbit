@@ -1,0 +1,3028 @@
+{
+ "tests": [
+  {
+   "name": "orbit-menu menu-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-enter",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-enter",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-enter",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-enter",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-enter",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-enter",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-enter",
+   "result": "Action=file | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-enter",
+   "result": "Action=file | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-enter-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-enter-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-enter burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-enter paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-space burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-space",
+   "result": "none | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-space paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-space",
+   "result": "Action=file | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-space burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-enter-space",
+   "result": "none | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-space paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-enter-space",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-space burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-space",
+   "result": "none | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-space paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-space",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-home-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-home-enter",
+   "result": "Action=file | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-home-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-home-enter",
+   "result": "Action=file | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-home-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-enter-home-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-home-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-enter-home-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-home-enter burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-home-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-home-enter paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-home-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-end-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-end-enter",
+   "result": "Action=command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-end-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-end-enter",
+   "result": "Action=command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-end-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-enter-end-enter",
+   "result": "ran /Command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-end-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-enter-end-enter",
+   "result": "ran /Command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-end-enter burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-end-enter",
+   "result": "ran /Command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-end-enter paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-end-enter",
+   "result": "ran /Command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-s-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-s-enter",
+   "result": "Action=shell | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-s-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-s-enter",
+   "result": "Action=shell | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-s-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-enter-s-enter",
+   "result": "ran Shell | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-s-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-enter-s-enter",
+   "result": "ran Shell | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-s-enter burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-s-enter",
+   "result": "ran Shell | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-s-enter paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-s-enter",
+   "result": "ran Shell | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-tab",
+   "result": "none | none | @button:Open context",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-tab",
+   "result": "none | none | @button:Open context",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-enter-tab",
+   "result": "none | none | @button:Switch theme",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-enter-tab",
+   "result": "none | none | @button:Switch theme",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-tab burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-tab",
+   "result": "none | none | @button:Switch theme",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-tab paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-tab",
+   "result": "none | none | @button:Switch theme",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-tab-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-tab-enter",
+   "result": "none | dialog:Context | @dialog:Context12,800 of 128,000",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-tab-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-tab-enter",
+   "result": "none | dialog:Context | @dialog:Context12,800 of 128,000",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-tab-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-enter-tab-enter",
+   "result": "none | none | @button:Switch theme | theme changed",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-tab-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-enter-tab-enter",
+   "result": "none | none | @button:Switch theme | theme changed",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-tab-enter burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-tab-enter",
+   "result": "none | none | @button:Switch theme | theme changed",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-tab-enter paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-tab-enter",
+   "result": "none | none | @button:Switch theme | theme changed",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-shift-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-shift-tab",
+   "result": "none | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-shift-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-shift-tab",
+   "result": "none | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-shift-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-enter-shift-tab",
+   "result": "none | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-shift-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-enter-shift-tab",
+   "result": "none | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-shift-tab burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-shift-tab",
+   "result": "none | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-shift-tab paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-shift-tab",
+   "result": "none | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-shift-tab-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-shift-tab-enter",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-enter-shift-tab-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-shift-tab-enter",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-shift-tab-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-enter-shift-tab-enter",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-enter-shift-tab-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-enter-shift-tab-enter",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-shift-tab-enter burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-enter-shift-tab-enter",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-enter-shift-tab-enter paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-enter-shift-tab-enter",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-down-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-down-enter",
+   "result": "Action=file | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-down-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-down-enter",
+   "result": "Action=file | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-down-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-down-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-down-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-down-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-down-enter burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-down-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-down-enter paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-down-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-down-end-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-down-end-enter",
+   "result": "Action=command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-down-end-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-down-end-enter",
+   "result": "Action=command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-down-end-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-down-end-enter",
+   "result": "ran /Command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-down-end-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-down-end-enter",
+   "result": "ran /Command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-down-end-enter burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-down-end-enter",
+   "result": "ran /Command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-down-end-enter paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-down-end-enter",
+   "result": "ran /Command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-up-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-up-enter",
+   "result": "Action=command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-up-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-up-enter",
+   "result": "Action=command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-up-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-up-enter",
+   "result": "ran /Command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-up-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-up-enter",
+   "result": "ran /Command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-up-enter burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-up-enter",
+   "result": "ran /Command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-up-enter paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-up-enter",
+   "result": "ran /Command | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-up-home-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-up-home-enter",
+   "result": "Action=file | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-up-home-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-up-home-enter",
+   "result": "Action=file | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-up-home-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-up-home-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-up-home-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-up-home-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-up-home-enter burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-up-home-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-up-home-enter paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-up-home-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-space burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-space",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-space paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-space",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-space burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-space",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-space paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-space",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-space burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-space",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-space paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-space",
+   "result": "none | menu×1 | @menuitem:File",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-space-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-space-enter",
+   "result": "Action=file | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-space-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-space-enter",
+   "result": "Action=file | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-space-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-space-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-space-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-space-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-space-enter burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-space-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-space-enter paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-space-enter",
+   "result": "ran File | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-space-down-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "burst",
+   "sequence": "menu-space-down-enter",
+   "result": "Action=image | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu menu-space-down-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu",
+   "mode": "paced",
+   "sequence": "menu-space-down-enter",
+   "result": "Action=image | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-space-down-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "burst",
+   "sequence": "menu-space-down-enter",
+   "result": "ran Image | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-menu-sample menu-space-down-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-menu-sample",
+   "mode": "paced",
+   "sequence": "menu-space-down-enter",
+   "result": "ran Image | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-space-down-enter burst sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "burst",
+   "sequence": "menu-space-down-enter",
+   "result": "ran Image | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-menu menu-space-down-enter paced sample 0",
+   "status": "expected",
+   "target": "antd-menu",
+   "mode": "paced",
+   "sequence": "menu-space-down-enter",
+   "result": "ran Image | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu sub-right burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "burst",
+   "sequence": "sub-right",
+   "result": "none | menu×2 | @menuitem:Codex",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu sub-right paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "paced",
+   "sequence": "sub-right",
+   "result": "none | menu×2 | @menuitem:Codex",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "burst",
+   "sequence": "sub-right",
+   "result": "none | menu×2 | @menuitem:Codex",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "paced",
+   "sequence": "sub-right",
+   "result": "none | menu×2 | @menuitem:Codex",
+   "error": null
+  },
+  {
+   "name": "antd-submenu sub-right burst sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-submenu sub-right paced sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-session sub-right burst sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "burst",
+   "sequence": "sub-right",
+   "result": "none | menu×2 | @menuitem:Codex",
+   "error": null
+  },
+  {
+   "name": "orbit-session sub-right paced sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "paced",
+   "sequence": "sub-right",
+   "result": "none | menu×2 | @menuitem:Codex",
+   "error": null
+  },
+  {
+   "name": "antd-session sub-right burst sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-session sub-right paced sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-submenu sub-right-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "burst",
+   "sequence": "sub-right-enter",
+   "result": "Action=codex | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu sub-right-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "paced",
+   "sequence": "sub-right-enter",
+   "result": "Action=codex | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "burst",
+   "sequence": "sub-right-enter",
+   "result": "ran Codex | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "paced",
+   "sequence": "sub-right-enter",
+   "result": "ran Codex | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-submenu sub-right-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-submenu sub-right-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-session sub-right-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "burst",
+   "sequence": "sub-right-enter",
+   "result": "Picked=codex | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-session sub-right-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "paced",
+   "sequence": "sub-right-enter",
+   "result": "Picked=codex | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "antd-session sub-right-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-session sub-right-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-submenu sub-right-down-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "burst",
+   "sequence": "sub-right-down-enter",
+   "result": "Action=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu sub-right-down-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "paced",
+   "sequence": "sub-right-down-enter",
+   "result": "Action=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-down-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "burst",
+   "sequence": "sub-right-down-enter",
+   "result": "ran Claude | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-down-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "paced",
+   "sequence": "sub-right-down-enter",
+   "result": "ran Claude | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-submenu sub-right-down-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-down-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-submenu sub-right-down-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-down-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-session sub-right-down-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "burst",
+   "sequence": "sub-right-down-enter",
+   "result": "Picked=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-session sub-right-down-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "paced",
+   "sequence": "sub-right-down-enter",
+   "result": "Picked=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "antd-session sub-right-down-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-down-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-session sub-right-down-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-down-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-submenu sub-right-up-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "burst",
+   "sequence": "sub-right-up-enter",
+   "result": "Action=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu sub-right-up-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "paced",
+   "sequence": "sub-right-up-enter",
+   "result": "Action=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-up-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "burst",
+   "sequence": "sub-right-up-enter",
+   "result": "ran Claude | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-up-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "paced",
+   "sequence": "sub-right-up-enter",
+   "result": "ran Claude | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-submenu sub-right-up-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-up-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-submenu sub-right-up-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-up-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-session sub-right-up-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "burst",
+   "sequence": "sub-right-up-enter",
+   "result": "Picked=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-session sub-right-up-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "paced",
+   "sequence": "sub-right-up-enter",
+   "result": "Picked=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "antd-session sub-right-up-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-up-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-session sub-right-up-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-up-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-submenu sub-right-left burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "burst",
+   "sequence": "sub-right-left",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu sub-right-left paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "paced",
+   "sequence": "sub-right-left",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-left burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "burst",
+   "sequence": "sub-right-left",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-left paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "paced",
+   "sequence": "sub-right-left",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "antd-submenu sub-right-left burst sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-left",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-submenu sub-right-left paced sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-left",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-session sub-right-left burst sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "burst",
+   "sequence": "sub-right-left",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "orbit-session sub-right-left paced sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "paced",
+   "sequence": "sub-right-left",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "antd-session sub-right-left burst sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-left",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-session sub-right-left paced sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-left",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-submenu sub-right-escape burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "burst",
+   "sequence": "sub-right-escape",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu sub-right-escape paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "paced",
+   "sequence": "sub-right-escape",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-escape burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "burst",
+   "sequence": "sub-right-escape",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-escape paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "paced",
+   "sequence": "sub-right-escape",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "antd-submenu sub-right-escape burst sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-escape",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-submenu sub-right-escape paced sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-escape",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-session sub-right-escape burst sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "burst",
+   "sequence": "sub-right-escape",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "orbit-session sub-right-escape paced sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "paced",
+   "sequence": "sub-right-escape",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "antd-session sub-right-escape burst sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-escape",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-session sub-right-escape paced sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-escape",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-submenu sub-right-space burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "burst",
+   "sequence": "sub-right-space",
+   "result": "Action=codex | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu sub-right-space paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "paced",
+   "sequence": "sub-right-space",
+   "result": "Action=codex | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-space burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "burst",
+   "sequence": "sub-right-space",
+   "result": "ran Codex | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-space paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "paced",
+   "sequence": "sub-right-space",
+   "result": "ran Codex | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-submenu sub-right-space burst sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-space",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-submenu sub-right-space paced sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-space",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-session sub-right-space burst sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "burst",
+   "sequence": "sub-right-space",
+   "result": "Picked=codex | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-session sub-right-space paced sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "paced",
+   "sequence": "sub-right-space",
+   "result": "Picked=codex | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "antd-session sub-right-space burst sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-space",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-session sub-right-space paced sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-space",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-submenu sub-right-home-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "burst",
+   "sequence": "sub-right-home-enter",
+   "result": "Action=codex | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu sub-right-home-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "paced",
+   "sequence": "sub-right-home-enter",
+   "result": "Action=codex | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-home-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "burst",
+   "sequence": "sub-right-home-enter",
+   "result": "ran Codex | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-home-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "paced",
+   "sequence": "sub-right-home-enter",
+   "result": "ran Codex | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-submenu sub-right-home-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-home-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-submenu sub-right-home-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-home-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-session sub-right-home-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "burst",
+   "sequence": "sub-right-home-enter",
+   "result": "Picked=codex | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-session sub-right-home-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "paced",
+   "sequence": "sub-right-home-enter",
+   "result": "Picked=codex | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "antd-session sub-right-home-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-home-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-session sub-right-home-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-home-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-submenu sub-right-end-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "burst",
+   "sequence": "sub-right-end-enter",
+   "result": "Action=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu sub-right-end-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "paced",
+   "sequence": "sub-right-end-enter",
+   "result": "Action=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-end-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "burst",
+   "sequence": "sub-right-end-enter",
+   "result": "ran Claude | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-end-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "paced",
+   "sequence": "sub-right-end-enter",
+   "result": "ran Claude | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-submenu sub-right-end-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-end-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-submenu sub-right-end-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-end-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-session sub-right-end-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "burst",
+   "sequence": "sub-right-end-enter",
+   "result": "Picked=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-session sub-right-end-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "paced",
+   "sequence": "sub-right-end-enter",
+   "result": "Picked=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "antd-session sub-right-end-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-end-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-session sub-right-end-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-end-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-submenu sub-right-c-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "burst",
+   "sequence": "sub-right-c-enter",
+   "result": "Action=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu sub-right-c-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "paced",
+   "sequence": "sub-right-c-enter",
+   "result": "Action=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-c-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "burst",
+   "sequence": "sub-right-c-enter",
+   "result": "ran Claude | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-c-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "paced",
+   "sequence": "sub-right-c-enter",
+   "result": "ran Claude | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-submenu sub-right-c-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-c-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-submenu sub-right-c-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-c-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-session sub-right-c-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "burst",
+   "sequence": "sub-right-c-enter",
+   "result": "Picked=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-session sub-right-c-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "paced",
+   "sequence": "sub-right-c-enter",
+   "result": "Picked=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "antd-session sub-right-c-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-c-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-session sub-right-c-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-c-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-submenu sub-right-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "burst",
+   "sequence": "sub-right-tab",
+   "result": "none | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu sub-right-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "paced",
+   "sequence": "sub-right-tab",
+   "result": "none | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "burst",
+   "sequence": "sub-right-tab",
+   "result": "none | none | @button:Switch theme",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "paced",
+   "sequence": "sub-right-tab",
+   "result": "none | none | @button:Switch theme",
+   "error": null
+  },
+  {
+   "name": "antd-submenu sub-right-tab burst sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-tab",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-submenu sub-right-tab paced sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-tab",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-session sub-right-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "burst",
+   "sequence": "sub-right-tab",
+   "result": "none | none | @button:Switch theme",
+   "error": null
+  },
+  {
+   "name": "orbit-session sub-right-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "paced",
+   "sequence": "sub-right-tab",
+   "result": "none | none | @button:Switch theme",
+   "error": null
+  },
+  {
+   "name": "antd-session sub-right-tab burst sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-tab",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-session sub-right-tab paced sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-tab",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-submenu sub-right-shift-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "burst",
+   "sequence": "sub-right-shift-tab",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu sub-right-shift-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "paced",
+   "sequence": "sub-right-shift-tab",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-shift-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "burst",
+   "sequence": "sub-right-shift-tab",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-right-shift-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "paced",
+   "sequence": "sub-right-shift-tab",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "antd-submenu sub-right-shift-tab burst sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-shift-tab",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-submenu sub-right-shift-tab paced sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-right-shift-tab",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-session sub-right-shift-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "burst",
+   "sequence": "sub-right-shift-tab",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "orbit-session sub-right-shift-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "paced",
+   "sequence": "sub-right-shift-tab",
+   "result": "none | menu×1 | @menuitem:Provider",
+   "error": null
+  },
+  {
+   "name": "antd-session sub-right-shift-tab burst sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-shift-tab",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-session sub-right-shift-tab paced sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-right-shift-tab",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-submenu sub-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "burst",
+   "sequence": "sub-enter",
+   "result": "none | menu×2 | @menuitem:Codex",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu sub-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "paced",
+   "sequence": "sub-enter",
+   "result": "none | menu×2 | @menuitem:Codex",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "burst",
+   "sequence": "sub-enter",
+   "result": "none | menu×2 | @menuitem:Codex",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "paced",
+   "sequence": "sub-enter",
+   "result": "none | menu×2 | @menuitem:Codex",
+   "error": null
+  },
+  {
+   "name": "antd-submenu sub-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-submenu sub-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-session sub-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "burst",
+   "sequence": "sub-enter",
+   "result": "none | menu×2 | @menuitem:Codex",
+   "error": null
+  },
+  {
+   "name": "orbit-session sub-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "paced",
+   "sequence": "sub-enter",
+   "result": "none | menu×2 | @menuitem:Codex",
+   "error": null
+  },
+  {
+   "name": "antd-session sub-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-session sub-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-submenu sub-enter-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "burst",
+   "sequence": "sub-enter-enter",
+   "result": "Action=codex | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu sub-enter-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "paced",
+   "sequence": "sub-enter-enter",
+   "result": "Action=codex | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-enter-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "burst",
+   "sequence": "sub-enter-enter",
+   "result": "ran Codex | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-enter-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "paced",
+   "sequence": "sub-enter-enter",
+   "result": "ran Codex | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-submenu sub-enter-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-enter-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-submenu sub-enter-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-enter-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-session sub-enter-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "burst",
+   "sequence": "sub-enter-enter",
+   "result": "Picked=codex | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-session sub-enter-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "paced",
+   "sequence": "sub-enter-enter",
+   "result": "Picked=codex | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "antd-session sub-enter-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-enter-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-session sub-enter-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-enter-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-submenu sub-enter-down-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "burst",
+   "sequence": "sub-enter-down-enter",
+   "result": "Action=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu sub-enter-down-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu",
+   "mode": "paced",
+   "sequence": "sub-enter-down-enter",
+   "result": "Action=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-enter-down-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "burst",
+   "sequence": "sub-enter-down-enter",
+   "result": "ran Claude | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "orbit-submenu-sample sub-enter-down-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-submenu-sample",
+   "mode": "paced",
+   "sequence": "sub-enter-down-enter",
+   "result": "ran Claude | none | @button:Add attachment",
+   "error": null
+  },
+  {
+   "name": "antd-submenu sub-enter-down-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-enter-down-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-submenu sub-enter-down-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-submenu",
+   "mode": null,
+   "sequence": "sub-enter-down-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-session sub-enter-down-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "burst",
+   "sequence": "sub-enter-down-enter",
+   "result": "Picked=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "orbit-session sub-enter-down-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-session",
+   "mode": "paced",
+   "sequence": "sub-enter-down-enter",
+   "result": "Picked=claude | none | @button:Session actions",
+   "error": null
+  },
+  {
+   "name": "antd-session sub-enter-down-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-enter-down-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "antd-session sub-enter-down-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-session",
+   "mode": null,
+   "sequence": "sub-enter-down-enter",
+   "result": null,
+   "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeFocused\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed"
+  },
+  {
+   "name": "orbit-popconfirm pop-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-popconfirm",
+   "mode": "burst",
+   "sequence": "pop-enter",
+   "result": "none | dialog:Delete this task? | @dialog:Delete this task?A run s",
+   "error": null
+  },
+  {
+   "name": "orbit-popconfirm pop-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-popconfirm",
+   "mode": "paced",
+   "sequence": "pop-enter",
+   "result": "none | dialog:Delete this task? | @dialog:Delete this task?A run s",
+   "error": null
+  },
+  {
+   "name": "antd-popconfirm pop-enter burst sample 0",
+   "status": "expected",
+   "target": "antd-popconfirm",
+   "mode": "burst",
+   "sequence": "pop-enter",
+   "result": "none | dialog:Delete this task? | @dialog:Delete this task?A run s",
+   "error": null
+  },
+  {
+   "name": "antd-popconfirm pop-enter paced sample 0",
+   "status": "expected",
+   "target": "antd-popconfirm",
+   "mode": "paced",
+   "sequence": "pop-enter",
+   "result": "none | dialog:Delete this task? | @dialog:Delete this task?A run s",
+   "error": null
+  },
+  {
+   "name": "orbit-popconfirm pop-enter-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-popconfirm",
+   "mode": "burst",
+   "sequence": "pop-enter-enter",
+   "result": "none | none | @button:Delete task",
+   "error": null
+  },
+  {
+   "name": "orbit-popconfirm pop-enter-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-popconfirm",
+   "mode": "paced",
+   "sequence": "pop-enter-enter",
+   "result": "none | dialog:Delete this task? | @dialog:Delete this task?A run s",
+   "error": null
+  },
+  {
+   "name": "antd-popconfirm pop-enter-enter burst sample 0",
+   "status": "expected",
+   "target": "antd-popconfirm",
+   "mode": "burst",
+   "sequence": "pop-enter-enter",
+   "result": "none | none | @button:Delete task",
+   "error": null
+  },
+  {
+   "name": "antd-popconfirm pop-enter-enter paced sample 0",
+   "status": "expected",
+   "target": "antd-popconfirm",
+   "mode": "paced",
+   "sequence": "pop-enter-enter",
+   "result": "none | dialog:Delete this task? | @dialog:Delete this task?A run s",
+   "error": null
+  },
+  {
+   "name": "orbit-popconfirm pop-enter-space burst sample 0",
+   "status": "expected",
+   "target": "orbit-popconfirm",
+   "mode": "burst",
+   "sequence": "pop-enter-space",
+   "result": "none | none | @button:Delete task",
+   "error": null
+  },
+  {
+   "name": "orbit-popconfirm pop-enter-space paced sample 0",
+   "status": "expected",
+   "target": "orbit-popconfirm",
+   "mode": "paced",
+   "sequence": "pop-enter-space",
+   "result": "none | dialog:Delete this task? | @dialog:Delete this task?A run s",
+   "error": null
+  },
+  {
+   "name": "antd-popconfirm pop-enter-space burst sample 0",
+   "status": "expected",
+   "target": "antd-popconfirm",
+   "mode": "burst",
+   "sequence": "pop-enter-space",
+   "result": "none | none | @button:Delete task",
+   "error": null
+  },
+  {
+   "name": "antd-popconfirm pop-enter-space paced sample 0",
+   "status": "expected",
+   "target": "antd-popconfirm",
+   "mode": "paced",
+   "sequence": "pop-enter-space",
+   "result": "none | dialog:Delete this task? | @dialog:Delete this task?A run s",
+   "error": null
+  },
+  {
+   "name": "orbit-popconfirm pop-enter-escape burst sample 0",
+   "status": "expected",
+   "target": "orbit-popconfirm",
+   "mode": "burst",
+   "sequence": "pop-enter-escape",
+   "result": "none | none | @button:Delete task",
+   "error": null
+  },
+  {
+   "name": "orbit-popconfirm pop-enter-escape paced sample 0",
+   "status": "expected",
+   "target": "orbit-popconfirm",
+   "mode": "paced",
+   "sequence": "pop-enter-escape",
+   "result": "none | none | @button:Delete task",
+   "error": null
+  },
+  {
+   "name": "antd-popconfirm pop-enter-escape burst sample 0",
+   "status": "expected",
+   "target": "antd-popconfirm",
+   "mode": "burst",
+   "sequence": "pop-enter-escape",
+   "result": "none | none | @button:Delete task",
+   "error": null
+  },
+  {
+   "name": "antd-popconfirm pop-enter-escape paced sample 0",
+   "status": "expected",
+   "target": "antd-popconfirm",
+   "mode": "paced",
+   "sequence": "pop-enter-escape",
+   "result": "none | none | @button:Delete task",
+   "error": null
+  },
+  {
+   "name": "orbit-popconfirm pop-enter-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-popconfirm",
+   "mode": "burst",
+   "sequence": "pop-enter-tab",
+   "result": "none | dialog:Delete this task? | @button:Cancel",
+   "error": null
+  },
+  {
+   "name": "orbit-popconfirm pop-enter-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-popconfirm",
+   "mode": "paced",
+   "sequence": "pop-enter-tab",
+   "result": "none | dialog:Delete this task? | @button:Cancel",
+   "error": null
+  },
+  {
+   "name": "antd-popconfirm pop-enter-tab burst sample 0",
+   "status": "expected",
+   "target": "antd-popconfirm",
+   "mode": "burst",
+   "sequence": "pop-enter-tab",
+   "result": "none | dialog:Delete this task? | @button:Cancel",
+   "error": null
+  },
+  {
+   "name": "antd-popconfirm pop-enter-tab paced sample 0",
+   "status": "expected",
+   "target": "antd-popconfirm",
+   "mode": "paced",
+   "sequence": "pop-enter-tab",
+   "result": "none | dialog:Delete this task? | @button:Cancel",
+   "error": null
+  },
+  {
+   "name": "orbit-popconfirm pop-enter-tab-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-popconfirm",
+   "mode": "burst",
+   "sequence": "pop-enter-tab-enter",
+   "result": "Answer=cancelled | none | @button:Delete task",
+   "error": null
+  },
+  {
+   "name": "orbit-popconfirm pop-enter-tab-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-popconfirm",
+   "mode": "paced",
+   "sequence": "pop-enter-tab-enter",
+   "result": "Answer=cancelled | none | @button:Delete task",
+   "error": null
+  },
+  {
+   "name": "antd-popconfirm pop-enter-tab-enter burst sample 0",
+   "status": "expected",
+   "target": "antd-popconfirm",
+   "mode": "burst",
+   "sequence": "pop-enter-tab-enter",
+   "result": "Answer=cancelled | none | @button:Delete task",
+   "error": null
+  },
+  {
+   "name": "antd-popconfirm pop-enter-tab-enter paced sample 0",
+   "status": "expected",
+   "target": "antd-popconfirm",
+   "mode": "paced",
+   "sequence": "pop-enter-tab-enter",
+   "result": "Answer=cancelled | none | @button:Delete task",
+   "error": null
+  },
+  {
+   "name": "orbit-popconfirm pop-enter-shift-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-popconfirm",
+   "mode": "burst",
+   "sequence": "pop-enter-shift-tab",
+   "result": "none | none | @button:Switch theme",
+   "error": null
+  },
+  {
+   "name": "orbit-popconfirm pop-enter-shift-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-popconfirm",
+   "mode": "paced",
+   "sequence": "pop-enter-shift-tab",
+   "result": "none | dialog:Delete this task? | @button:Delete task",
+   "error": null
+  },
+  {
+   "name": "antd-popconfirm pop-enter-shift-tab burst sample 0",
+   "status": "expected",
+   "target": "antd-popconfirm",
+   "mode": "burst",
+   "sequence": "pop-enter-shift-tab",
+   "result": "none | none | @button:Switch theme",
+   "error": null
+  },
+  {
+   "name": "antd-popconfirm pop-enter-shift-tab paced sample 0",
+   "status": "expected",
+   "target": "antd-popconfirm",
+   "mode": "paced",
+   "sequence": "pop-enter-shift-tab",
+   "result": "none | dialog:Delete this task? | @button:Delete task",
+   "error": null
+  },
+  {
+   "name": "orbit-dialog dlg-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-dialog",
+   "mode": "burst",
+   "sequence": "dlg-enter",
+   "result": "none | dialog:Edit workspace | @dialog:Edit workspaceWorkspace ",
+   "error": null
+  },
+  {
+   "name": "orbit-dialog dlg-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-dialog",
+   "mode": "paced",
+   "sequence": "dlg-enter",
+   "result": "none | dialog:Edit workspace | @dialog:Edit workspaceWorkspace ",
+   "error": null
+  },
+  {
+   "name": "antd-dialog dlg-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-dialog",
+   "mode": null,
+   "sequence": "dlg-enter",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "antd-dialog dlg-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-dialog",
+   "mode": null,
+   "sequence": "dlg-enter",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "orbit-confirm dlg-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-confirm",
+   "mode": "burst",
+   "sequence": "dlg-enter",
+   "result": "none | alertdialog:Delete runner? | @button:Cancel",
+   "error": null
+  },
+  {
+   "name": "orbit-confirm dlg-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-confirm",
+   "mode": "paced",
+   "sequence": "dlg-enter",
+   "result": "none | alertdialog:Delete runner? | @button:Cancel",
+   "error": null
+  },
+  {
+   "name": "antd-confirm dlg-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-confirm",
+   "mode": null,
+   "sequence": "dlg-enter",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "antd-confirm dlg-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-confirm",
+   "mode": null,
+   "sequence": "dlg-enter",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "orbit-dialog dlg-enter-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-dialog",
+   "mode": "burst",
+   "sequence": "dlg-enter-enter",
+   "result": "none | dialog:Edit workspace | @dialog:Edit workspaceWorkspace ",
+   "error": null
+  },
+  {
+   "name": "orbit-dialog dlg-enter-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-dialog",
+   "mode": "paced",
+   "sequence": "dlg-enter-enter",
+   "result": "none | dialog:Edit workspace | @dialog:Edit workspaceWorkspace ",
+   "error": null
+  },
+  {
+   "name": "antd-dialog dlg-enter-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-dialog",
+   "mode": null,
+   "sequence": "dlg-enter-enter",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "antd-dialog dlg-enter-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-dialog",
+   "mode": null,
+   "sequence": "dlg-enter-enter",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "orbit-confirm dlg-enter-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-confirm",
+   "mode": "burst",
+   "sequence": "dlg-enter-enter",
+   "result": "ran Cancel | none | @button:Orbit confirm",
+   "error": null
+  },
+  {
+   "name": "orbit-confirm dlg-enter-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-confirm",
+   "mode": "paced",
+   "sequence": "dlg-enter-enter",
+   "result": "ran Cancel | none | @button:Orbit confirm",
+   "error": null
+  },
+  {
+   "name": "antd-confirm dlg-enter-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-confirm",
+   "mode": null,
+   "sequence": "dlg-enter-enter",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "antd-confirm dlg-enter-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-confirm",
+   "mode": null,
+   "sequence": "dlg-enter-enter",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "orbit-dialog dlg-enter-space burst sample 0",
+   "status": "expected",
+   "target": "orbit-dialog",
+   "mode": "burst",
+   "sequence": "dlg-enter-space",
+   "result": "none | dialog:Edit workspace | @dialog:Edit workspaceWorkspace ",
+   "error": null
+  },
+  {
+   "name": "orbit-dialog dlg-enter-space paced sample 0",
+   "status": "expected",
+   "target": "orbit-dialog",
+   "mode": "paced",
+   "sequence": "dlg-enter-space",
+   "result": "none | dialog:Edit workspace | @dialog:Edit workspaceWorkspace ",
+   "error": null
+  },
+  {
+   "name": "antd-dialog dlg-enter-space burst sample 0",
+   "status": "unexpected",
+   "target": "antd-dialog",
+   "mode": null,
+   "sequence": "dlg-enter-space",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "antd-dialog dlg-enter-space paced sample 0",
+   "status": "unexpected",
+   "target": "antd-dialog",
+   "mode": null,
+   "sequence": "dlg-enter-space",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "orbit-confirm dlg-enter-space burst sample 0",
+   "status": "expected",
+   "target": "orbit-confirm",
+   "mode": "burst",
+   "sequence": "dlg-enter-space",
+   "result": "ran Cancel | none | @button:Orbit confirm",
+   "error": null
+  },
+  {
+   "name": "orbit-confirm dlg-enter-space paced sample 0",
+   "status": "expected",
+   "target": "orbit-confirm",
+   "mode": "paced",
+   "sequence": "dlg-enter-space",
+   "result": "ran Cancel | none | @button:Orbit confirm",
+   "error": null
+  },
+  {
+   "name": "antd-confirm dlg-enter-space burst sample 0",
+   "status": "unexpected",
+   "target": "antd-confirm",
+   "mode": null,
+   "sequence": "dlg-enter-space",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "antd-confirm dlg-enter-space paced sample 0",
+   "status": "unexpected",
+   "target": "antd-confirm",
+   "mode": null,
+   "sequence": "dlg-enter-space",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "orbit-dialog dlg-enter-escape burst sample 0",
+   "status": "expected",
+   "target": "orbit-dialog",
+   "mode": "burst",
+   "sequence": "dlg-enter-escape",
+   "result": "none | none | @button:Orbit dialog",
+   "error": null
+  },
+  {
+   "name": "orbit-dialog dlg-enter-escape paced sample 0",
+   "status": "expected",
+   "target": "orbit-dialog",
+   "mode": "paced",
+   "sequence": "dlg-enter-escape",
+   "result": "none | none | @button:Orbit dialog",
+   "error": null
+  },
+  {
+   "name": "antd-dialog dlg-enter-escape burst sample 0",
+   "status": "unexpected",
+   "target": "antd-dialog",
+   "mode": null,
+   "sequence": "dlg-enter-escape",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "antd-dialog dlg-enter-escape paced sample 0",
+   "status": "unexpected",
+   "target": "antd-dialog",
+   "mode": null,
+   "sequence": "dlg-enter-escape",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "orbit-confirm dlg-enter-escape burst sample 0",
+   "status": "expected",
+   "target": "orbit-confirm",
+   "mode": "burst",
+   "sequence": "dlg-enter-escape",
+   "result": "none | none | @button:Orbit confirm",
+   "error": null
+  },
+  {
+   "name": "orbit-confirm dlg-enter-escape paced sample 0",
+   "status": "expected",
+   "target": "orbit-confirm",
+   "mode": "paced",
+   "sequence": "dlg-enter-escape",
+   "result": "none | none | @button:Orbit confirm",
+   "error": null
+  },
+  {
+   "name": "antd-confirm dlg-enter-escape burst sample 0",
+   "status": "unexpected",
+   "target": "antd-confirm",
+   "mode": null,
+   "sequence": "dlg-enter-escape",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "antd-confirm dlg-enter-escape paced sample 0",
+   "status": "unexpected",
+   "target": "antd-confirm",
+   "mode": null,
+   "sequence": "dlg-enter-escape",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "orbit-dialog dlg-enter-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-dialog",
+   "mode": "burst",
+   "sequence": "dlg-enter-tab",
+   "result": "none | dialog:Edit workspace | @button:Close",
+   "error": null
+  },
+  {
+   "name": "orbit-dialog dlg-enter-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-dialog",
+   "mode": "paced",
+   "sequence": "dlg-enter-tab",
+   "result": "none | dialog:Edit workspace | @button:Close",
+   "error": null
+  },
+  {
+   "name": "antd-dialog dlg-enter-tab burst sample 0",
+   "status": "unexpected",
+   "target": "antd-dialog",
+   "mode": null,
+   "sequence": "dlg-enter-tab",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "antd-dialog dlg-enter-tab paced sample 0",
+   "status": "unexpected",
+   "target": "antd-dialog",
+   "mode": null,
+   "sequence": "dlg-enter-tab",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "orbit-confirm dlg-enter-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-confirm",
+   "mode": "burst",
+   "sequence": "dlg-enter-tab",
+   "result": "none | alertdialog:Delete runner? | @button:Delete",
+   "error": null
+  },
+  {
+   "name": "orbit-confirm dlg-enter-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-confirm",
+   "mode": "paced",
+   "sequence": "dlg-enter-tab",
+   "result": "none | alertdialog:Delete runner? | @button:Delete",
+   "error": null
+  },
+  {
+   "name": "antd-confirm dlg-enter-tab burst sample 0",
+   "status": "unexpected",
+   "target": "antd-confirm",
+   "mode": null,
+   "sequence": "dlg-enter-tab",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "antd-confirm dlg-enter-tab paced sample 0",
+   "status": "unexpected",
+   "target": "antd-confirm",
+   "mode": null,
+   "sequence": "dlg-enter-tab",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "orbit-dialog dlg-enter-tab-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-dialog",
+   "mode": "burst",
+   "sequence": "dlg-enter-tab-enter",
+   "result": "ran Close | none | @button:Orbit dialog",
+   "error": null
+  },
+  {
+   "name": "orbit-dialog dlg-enter-tab-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-dialog",
+   "mode": "paced",
+   "sequence": "dlg-enter-tab-enter",
+   "result": "ran Close | none | @button:Orbit dialog",
+   "error": null
+  },
+  {
+   "name": "antd-dialog dlg-enter-tab-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-dialog",
+   "mode": null,
+   "sequence": "dlg-enter-tab-enter",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "antd-dialog dlg-enter-tab-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-dialog",
+   "mode": null,
+   "sequence": "dlg-enter-tab-enter",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "orbit-confirm dlg-enter-tab-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-confirm",
+   "mode": "burst",
+   "sequence": "dlg-enter-tab-enter",
+   "result": "ran Delete | none | @button:Orbit confirm",
+   "error": null
+  },
+  {
+   "name": "orbit-confirm dlg-enter-tab-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-confirm",
+   "mode": "paced",
+   "sequence": "dlg-enter-tab-enter",
+   "result": "ran Delete | none | @button:Orbit confirm",
+   "error": null
+  },
+  {
+   "name": "antd-confirm dlg-enter-tab-enter burst sample 0",
+   "status": "unexpected",
+   "target": "antd-confirm",
+   "mode": null,
+   "sequence": "dlg-enter-tab-enter",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "antd-confirm dlg-enter-tab-enter paced sample 0",
+   "status": "unexpected",
+   "target": "antd-confirm",
+   "mode": null,
+   "sequence": "dlg-enter-tab-enter",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "orbit-dialog dlg-enter-shift-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-dialog",
+   "mode": "burst",
+   "sequence": "dlg-enter-shift-tab",
+   "result": "none | dialog:Edit workspace | @button:Save",
+   "error": null
+  },
+  {
+   "name": "orbit-dialog dlg-enter-shift-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-dialog",
+   "mode": "paced",
+   "sequence": "dlg-enter-shift-tab",
+   "result": "none | dialog:Edit workspace | @button:Save",
+   "error": null
+  },
+  {
+   "name": "antd-dialog dlg-enter-shift-tab burst sample 0",
+   "status": "unexpected",
+   "target": "antd-dialog",
+   "mode": null,
+   "sequence": "dlg-enter-shift-tab",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "antd-dialog dlg-enter-shift-tab paced sample 0",
+   "status": "unexpected",
+   "target": "antd-dialog",
+   "mode": null,
+   "sequence": "dlg-enter-shift-tab",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "orbit-confirm dlg-enter-shift-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-confirm",
+   "mode": "burst",
+   "sequence": "dlg-enter-shift-tab",
+   "result": "none | alertdialog:Delete runner? | @button:Delete",
+   "error": null
+  },
+  {
+   "name": "orbit-confirm dlg-enter-shift-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-confirm",
+   "mode": "paced",
+   "sequence": "dlg-enter-shift-tab",
+   "result": "none | alertdialog:Delete runner? | @button:Delete",
+   "error": null
+  },
+  {
+   "name": "antd-confirm dlg-enter-shift-tab burst sample 0",
+   "status": "unexpected",
+   "target": "antd-confirm",
+   "mode": null,
+   "sequence": "dlg-enter-shift-tab",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  },
+  {
+   "name": "antd-confirm dlg-enter-shift-tab paced sample 0",
+   "status": "unexpected",
+   "target": "antd-confirm",
+   "mode": null,
+   "sequence": "dlg-enter-shift-tab",
+   "result": null,
+   "error": "\u001b[31mTest timeout of 90000ms exceeded.\u001b[39m"
+  }
+ ]
+}

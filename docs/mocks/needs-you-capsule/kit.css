@@ -1,0 +1,162 @@
+/* 2026-10-21 · needs-you 条（owner 说的「黄色审批条」）改版 · 图板套件（自含）。
+   手机按 owner 的截图量：iPhone Pro Max 440×956pt，暗色；导航玻璃圆 44pt（x 20–64 / 376–420，y 62–106），
+   今天的条 y 116–154、#402E1D，上面整块 #191919，转录 17pt / 行距 27pt。英文是上线文案，中文是说明。 */
+@font-face { font-family: "Inter"; src: url("file:///var/tmp/landing-mock-render/fonts/Inter.ttf"); font-weight: 100 900; }
+@font-face { font-family: "Noto Sans SC"; src: url("file:///var/tmp/landing-mock-render/fonts/NotoSansSC.ttf"); font-weight: 100 900; }
+@font-face { font-family: "JetBrains Mono"; src: url("file:///var/tmp/landing-mock-render/fonts/JetBrainsMono.ttf"); font-weight: 100 900; }
+
+* { box-sizing: border-box; }
+body { margin: 0; padding: 40px 48px 56px; background: #e6e6eb; color: #16161a; width: max-content;
+       font: 15px/1.55 "Inter", "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+h1 { font-size: 28px; letter-spacing: -.02em; margin: 0 0 10px; }
+h2 { font-size: 19px; margin: 34px 0 12px; letter-spacing: -.01em; }
+.lede { color: #4f4f58; margin: 0 0 26px; font-size: 15px; max-width: 1840px; }
+.lede b, .cap b { color: #16161a; }
+code { font: 13px "JetBrains Mono", monospace; background: rgba(0,0,0,.06); border-radius: 4px; padding: 0 4px; }
+.row { display: flex; gap: 40px; align-items: flex-start; }
+.col { width: 440px; flex: none; }
+.tag { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 650; border-radius: 999px; padding: 2px 10px; margin-bottom: 10px; }
+.tag.now { background: #ffd9d4; color: #8f1d13; }
+.tag.rec { background: #d6e4ff; color: #14428f; }
+.tag.alt { background: #e3e3e8; color: #3a3a40; }
+.cap { margin-top: 14px; font-size: 14px; color: #4f4f58; line-height: 1.62; }
+.cap h3 { font-size: 16px; color: #16161a; margin: 0 0 6px; }
+.cap ul { margin: 4px 0 0; padding-left: 18px; }
+.cap li { margin: 3px 0; }
+.cost { display: inline-block; font-weight: 650; color: #16161a; background: #fff; border-radius: 6px; padding: 0 7px; }
+.foot { margin-top: 30px; font-size: 14px; color: #4f4f58; line-height: 1.65; max-width: 1840px; }
+.foot b { color: #16161a; }
+
+/* 标注：红虚线框 + 编号 */
+.mk { position: absolute; border: 1.5px dashed #ff3b30; border-radius: 8px; pointer-events: none; z-index: 20; }
+.mk.round { border-radius: 999px; }
+.num { position: absolute; z-index: 21; width: 20px; height: 20px; border-radius: 50%; background: #ff3b30; color: #fff;
+       font: 700 12px/20px "Inter", sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+.n { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; background: #ff3b30; color: #fff; font: 700 11px/18px "Inter";
+     justify-content: center; vertical-align: 1px; margin-right: 4px; }
+.dim { position: absolute; z-index: 21; font: 600 11px/1 "Inter", sans-serif; color: #2860e8; white-space: nowrap; }
+.dimline { position: absolute; z-index: 21; border-color: #2860e8; border-style: solid; border-width: 0; }
+
+/* ── 手机 ─────────────────────────────────────────────── */
+.ph { width: 440px; position: relative; overflow: hidden; border-radius: 56px 56px 0 0; font-family: "Inter", "Noto Sans SC", sans-serif;
+      box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 18px 40px rgba(0,0,0,.14); }
+.ph.full { border-radius: 56px; }
+.ph.strip { border-radius: 22px; }
+.ph.crop::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 56px; z-index: 30;
+                  background: linear-gradient(to bottom, rgba(230,230,235,0), #e6e6eb); }
+.ph.dark { background: #000; color: #fff;
+  --l1: #fff; --l2: rgba(235,235,245,.6); --l3: rgba(235,235,245,.3); --txt: #CACED4;
+  --or: #FF9F0A; --tile: rgba(255,159,10,.15);
+  --glass: #2C2C2E; --glass-hi: rgba(255,255,255,.16); --glass-edge: rgba(255,255,255,.07); --glass-sh: 0 8px 22px rgba(0,0,0,.5);
+  --navg: #363636; --pill: rgba(120,120,128,.32); --sep: rgba(84,84,88,.65); --field: rgba(118,118,128,.24); }
+.ph.light { background: #fff; color: #000;
+  --l1: #000; --l2: rgba(60,60,67,.6); --l3: rgba(60,60,67,.3); --txt: #1c1c1e;
+  --or: #FF9500; --tile: rgba(255,149,0,.15);
+  --glass: rgba(255,255,255,.96); --glass-hi: rgba(255,255,255,.9); --glass-edge: rgba(0,0,0,.06); --glass-sh: 0 6px 18px rgba(0,0,0,.10);
+  --navg: #fff; --pill: rgba(120,120,128,.14); --sep: rgba(60,60,67,.2); --field: rgba(118,118,128,.12); }
+
+.status { position: absolute; left: 0; right: 0; top: 0; height: 62px; z-index: 12; color: var(--l1); }
+.status .tm { position: absolute; left: 50px; top: 19px; font: 600 18px/26px "Inter"; letter-spacing: -.01em; display: flex; align-items: center; gap: 4px; }
+.status .rt { position: absolute; right: 44px; top: 22px; display: flex; align-items: center; gap: 8px; }
+.bars { display: flex; align-items: flex-end; gap: 2px; height: 13px; }
+.bars i { width: 3.5px; border-radius: 1px; background: var(--l1); }
+.bars i.off { opacity: .35; }
+.batt { min-width: 33px; height: 16px; border-radius: 5.5px; background: var(--l1); color: var(--batt-ink, #000); font: 700 12px/16px "Inter";
+        text-align: center; position: relative; }
+.ph.light .batt { --batt-ink: #fff; }
+.batt::after { content: ""; position: absolute; right: -3.5px; top: 5px; width: 2px; height: 6px; border-radius: 0 1.5px 1.5px 0; background: var(--l1); opacity: .45; }
+
+.nav { position: absolute; left: 0; right: 0; top: 62px; height: 44px; z-index: 12; }
+.gc { position: absolute; top: 0; width: 44px; height: 44px; border-radius: 50%; background: var(--navg); display: flex; align-items: center; justify-content: center;
+      box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge); }
+.ph.light .gc { box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge), 0 2px 10px rgba(0,0,0,.08); }
+.gc.l { left: 20px; } .gc.r { right: 20px; }
+
+/* 顶部的「刷灰」：今天的条用 .bar 底板，并一路铺到状态栏后面 */
+.topbar { position: absolute; left: 0; right: 0; top: 0; z-index: 5; }
+/* iOS 26 的滚动边缘：转录在导航下面淡出 */
+.edge { position: absolute; left: 0; right: 0; top: 0; z-index: 6; pointer-events: none; }
+
+/* 转录 */
+.tx { position: absolute; left: 16px; right: 16px; z-index: 1; font: 17px/27.2px "Inter", "Noto Sans SC", sans-serif; color: var(--txt); }
+.tx p { margin: 0; }
+.tx .ind { padding-left: 20px; }
+.ubub { margin: 6px 0 14px auto; max-width: 300px; width: max-content; background: #2C2C2E; color: #fff; border-radius: 20px; padding: 8px 14px; font-size: 16px; line-height: 23px; }
+.ph.light .ubub { background: #E9EEFE; color: #000; }
+
+/* 底部：后台进程托盘 + 输入框 */
+.tray { position: absolute; left: 16px; right: 16px; top: 784px; height: 29px; border-radius: 10px; background: #212121; border: 1px solid #333;
+        display: flex; align-items: center; gap: 8px; padding: 0 12px 0 11px; font-size: 13px; z-index: 8; }
+.tray b { font-weight: 650; color: #fff; }
+.tray .mut { color: rgba(235,235,245,.55); font-size: 12px; }
+.tray .ch { margin-left: auto; }
+.comp { position: absolute; left: 16px; right: 16px; top: 832px; height: 70px; border-radius: 26px; background: #2A2A2A; border: 1px solid #3E3E3E; z-index: 8; }
+.comp .ph1 { position: absolute; left: 16px; top: 10px; font-size: 17px; color: rgba(235,235,245,.32); }
+.comp .bt { position: absolute; left: 14px; right: 10px; bottom: 8px; height: 28px; display: flex; align-items: center; gap: 10px; font-size: 16px; }
+.comp .bt .auto { color: rgba(235,235,245,.55); }
+.comp .bt .mdl { margin-left: auto; font-weight: 650; }
+.comp .bt .eff { color: rgba(235,235,245,.55); }
+.spin { width: 15px; height: 15px; border-radius: 50%; border: 2px solid rgba(62,105,246,.25); border-top-color: #3E69F6; border-right-color: #3E69F6; }
+.stopb { width: 28px; height: 28px; border-radius: 50%; background: #3E69F6; display: flex; align-items: center; justify-content: center; }
+.stopb i { width: 10px; height: 10px; border-radius: 2px; background: #fff; }
+.home { position: absolute; left: 50%; bottom: 8px; width: 150px; height: 5px; margin-left: -75px; border-radius: 3px; background: rgba(255,255,255,.75); z-index: 9; }
+.ph.light .home { background: #000; }
+
+/* ── 今天的条（NeedsYouBannerView）─────────────────────── */
+.today { position: absolute; left: 0; right: 0; top: 116px; height: 38px; z-index: 10; display: flex; align-items: center; gap: 9px; padding: 0 16px; }
+.today .d { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.today .t { flex: 1; min-width: 0; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.today .hl { position: absolute; left: 0; right: 0; bottom: -0.34px; height: .34px; }
+
+/* ── 方案 A：导航栏下一枚玻璃胶囊 ─────────────────────── */
+.cap44 { position: absolute; left: 20px; right: 20px; height: 44px; border-radius: 22px; z-index: 10; background: var(--glass);
+         box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge), var(--glass-sh);
+         display: flex; align-items: center; gap: 10px; padding: 0 16px 0 7px; color: var(--l1); }
+.cap44.rim { box-shadow: inset 0 .75px 0 var(--glass-hi), inset 0 0 0 1px rgba(255,159,10,.32), var(--glass-sh); }
+.tile { width: 30px; height: 30px; border-radius: 50%; background: var(--tile); display: flex; align-items: center; justify-content: center; flex: none; position: relative; }
+.cap44 .w { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.cap44 .l1 { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.cap44 .w b { flex: 1; min-width: 0; font-size: 15px; line-height: 18px; font-weight: 600; letter-spacing: -.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cap44 .w s { text-decoration: none; font-size: 13px; line-height: 16px; color: var(--l2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cap44 .w.one b { font-size: 15px; }
+.cap44 .age { font-size: 13px; color: var(--l2); font-variant-numeric: tabular-nums; flex: none; }
+.cap44 .more { font-size: 12px; line-height: 16px; font-weight: 650; color: var(--l2); background: var(--pill); border-radius: 999px; padding: 0 7px; flex: none; align-self: center; }
+.cap44 .chv { flex: none; display: flex; margin-left: -2px; }
+
+/* 方案 B：导航栏中间 */
+.capnav { left: 72px; right: 72px; top: 0; box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge); background: var(--navg); }
+.ph.light .capnav { box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge), 0 2px 10px rgba(0,0,0,.08); }
+.sq { position: absolute; top: 0; height: 44px; border-radius: 22px; background: var(--navg); display: flex; align-items: center; gap: 6px; padding: 0 14px;
+      box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge); white-space: nowrap; overflow: hidden; }
+.sq .lb { font-size: 13px; color: var(--l2); flex: none; }
+.sq .q { font-size: 15px; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.badge { position: absolute; top: -3px; right: -3px; min-width: 17px; height: 17px; border-radius: 9px; background: var(--or); color: #000;
+         font: 700 11px/17px "Inter"; text-align: center; padding: 0 4px; box-shadow: 0 0 0 2px #000; }
+
+/* 方案 C：只修颜色的整条 */
+.band { position: absolute; left: 0; right: 0; top: 116px; height: 38px; z-index: 10; display: flex; align-items: center; gap: 8px; padding: 0 16px; }
+.band .t { flex: 1; min-width: 0; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.band .t b { font-weight: 600; }
+.band .t s { text-decoration: none; color: var(--l2); }
+.band .age { font-size: 13px; color: var(--l2); flex: none; }
+
+/* 列表页（AgentsView）*/
+.ltitle { position: absolute; left: 20px; top: 116px; font: 700 34px/41px "Inter", "Noto Sans SC"; letter-spacing: -.02em; z-index: 3; }
+.search { position: absolute; left: 16px; right: 16px; top: 166px; height: 44px; border-radius: 22px; background: var(--field); display: flex; align-items: center;
+          gap: 8px; padding: 0 14px; font-size: 17px; color: var(--l2); z-index: 3; }
+.sec { position: absolute; left: 20px; font: 600 15px/20px "Inter"; color: var(--l2); z-index: 3; }
+.srow { position: absolute; left: 20px; right: 20px; z-index: 3; }
+.srow .a { display: flex; align-items: baseline; gap: 8px; }
+.srow .a b { flex: 1; min-width: 0; font-size: 17px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srow .a .tm { font-size: 14px; color: var(--l2); }
+.srow .s { font-size: 15px; color: var(--l2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; display: flex; align-items: center; gap: 6px; }
+.srow .s .dt { width: 7px; height: 7px; border-radius: 50%; background: var(--or); flex: none; }
+.srow .s .amb { color: var(--or); }
+.srow.sep::after { content: ""; position: absolute; left: 0; right: -20px; bottom: -11px; height: .5px; background: var(--sep); }
+
+/* 规格放大 */
+.spec { position: relative; background: #000; border-radius: 22px; }
+.swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; box-shadow: 0 0 0 1px rgba(0,0,0,.12); }
+table.tok { border-collapse: collapse; font-size: 13.5px; margin-top: 6px; }
+table.tok td { padding: 4px 14px 4px 0; vertical-align: top; color: #4f4f58; }
+table.tok td:first-child { color: #16161a; font-weight: 600; white-space: nowrap; }

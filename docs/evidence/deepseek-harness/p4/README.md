@@ -14,9 +14,9 @@ bash scripts/test-dsh-mcp-approval.sh [--evidence <dir>]
 
 | Orbit 模式 | dsh 启动策略 | 未获批动作 | 场景 |
 | --- | --- | --- | --- |
-| Default | `read-only` + 审批桥接 | 每次写（工具或命令）先出一张 Orbit 审批卡，允许只放行这一次 | `TestDshRealApprovalAllowOnce`、`TestDshRealApprovalReject`、`TestDshRealApprovalStop`、`TestDshRealApprovalDisconnect` |
+| Default | `read-only` + 审批桥接 | 每次写（工具或命令）先出一张 Orbit 审批卡，允许只放行这一次 | `TestDshRealApprovalAllowOnce`、`TestDshRealApprovalReject`、`TestDshRealApprovalStop`、`TestDshRealApprovalDisconnect`、`TestDshRealDefaultCacheRootDenied` |
 | Don't Ask | `read-only`，提权请求一律 `reject-once` | 拒绝，不出卡，转录中有 `permission_denied` | `TestDshRealDontAskRejectsUnasked` |
-| Auto | `workspace-write` + 审批桥接 | 工作区与临时目录内的写和命令直接执行；其他位置被沙箱拒绝，提权出卡 | `TestDshRealAutoWorkspaceBoundary` |
+| Auto | `workspace-write` + 审批桥接 | 工作区、临时目录与共享缓存根（session overlay 把 `machineHome()/caches` 拼进沙箱自己构建的 profile）内的写和命令直接执行；其他位置被沙箱拒绝，提权出卡 | `TestDshRealAutoWorkspaceBoundary`、`TestDshRealAutoCacheRoot` |
 | Plan、Accept Edits、Bypass | 无可强制的等价策略 | 服务端拒绝（`assertDshPermissionMode`），runner 启动前以 `DSH_PERMISSION_UNSUPPORTED` 拒绝 | `TestDshPermissionPolicy/unsupported-modes-refused-before-launch` 及 API 用例 |
 
 shared 的 `derivePermissionSemantics` 与服务端准入用同一集合 `DSH_PERMISSION_MODES`，因此客户端标注为不支持的模式正是服务端拒绝的模式（`P4 dsh: the server admits exactly the modes the picker describes as honored`）。

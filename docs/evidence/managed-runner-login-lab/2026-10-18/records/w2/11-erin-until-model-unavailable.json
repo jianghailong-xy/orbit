@@ -1,0 +1,78 @@
+{
+  "at": "2026-10-17T23:37:22.400+00:00",
+  "changes": [
+    [
+      "2026-10-17T23:36:31.094+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": null,
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": null,
+        "management_state": "PROVISIONING",
+        "pod": null,
+        "reason": null,
+        "revision": 4,
+        "runner_status": "OFFLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-17T23:36:36.332+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": null,
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": null,
+        "management_state": "STARTING",
+        "pod": "5cce5e71",
+        "reason": null,
+        "revision": 11,
+        "runner_status": "OFFLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-17T23:37:18.210+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": "2026-10-17T23:37:17.722",
+        "management_state": "STARTING",
+        "pod": "5cce5e71",
+        "reason": null,
+        "revision": 11,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-17T23:37:22.400+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": "2026-10-17T23:37:17.722",
+        "management_state": "STARTING",
+        "pod": "5cce5e71",
+        "reason": "MODEL_UNAVAILABLE",
+        "revision": 12,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ]
+  ],
+  "owner": "erin",
+  "reached": {
+    "reason": "MODEL_UNAVAILABLE",
+    "state": "STARTING"
+  }
+}

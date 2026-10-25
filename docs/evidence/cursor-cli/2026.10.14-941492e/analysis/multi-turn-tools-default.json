@@ -1,0 +1,81 @@
+{
+ "scenario": "multi-turn-tools-default",
+ "runId": "2026-10-16T17-27-51-600Z",
+ "recordedAt": "2026-10-16T17:29:23.393Z",
+ "reason": "The run-time check also demanded that the model quote the task title; ACP never carries MCP result content (rawOutput is {success:true}), so that part was not a property of the CLI.",
+ "basis": "committed protocol recording (seq numbers below) plus files the recorded turn left in its run directory",
+ "checks": [
+  {
+   "name": "`orbit mcp` injected through session/new mcpServers: task_get raised a permission request",
+   "ok": true,
+   "detail": {
+    "seq": 182,
+    "sessionId": "<UUID_8>",
+    "title": "orbit-task_get: task_get",
+    "kind": "other",
+    "options": [
+     "allow-once",
+     "allow-always",
+     "reject-once"
+    ]
+   }
+  },
+  {
+   "name": "…and the tool card completed with rawOutput {success:true}",
+   "ok": true,
+   "detail": {
+    "sessionId": "<UUID_8>",
+    "firstSeq": 179,
+    "statuses": [
+     "pending",
+     "in_progress",
+     "completed"
+    ],
+    "title": "orbit: task_get",
+    "kind": "other",
+    "rawInput": {
+     "providerIdentifier": "orbit",
+     "toolName": "task_get",
+     "args": {}
+    },
+    "lastSeq": 184,
+    "rawOutput": {
+     "success": true
+    }
+   }
+  }
+ ],
+ "facts": {
+  "orbitToolCard": {
+   "sessionId": "<UUID_8>",
+   "firstSeq": 179,
+   "statuses": [
+    "pending",
+    "in_progress",
+    "completed"
+   ],
+   "title": "orbit: task_get",
+   "kind": "other",
+   "rawInput": {
+    "providerIdentifier": "orbit",
+    "toolName": "task_get",
+    "args": {}
+   },
+   "lastSeq": 184,
+   "rawOutput": {
+    "success": true
+   }
+  },
+  "permissionRequest": {
+   "seq": 182,
+   "sessionId": "<UUID_8>",
+   "title": "orbit-task_get: task_get",
+   "kind": "other",
+   "options": [
+    "allow-once",
+    "allow-always",
+    "reject-once"
+   ]
+  }
+ }
+}

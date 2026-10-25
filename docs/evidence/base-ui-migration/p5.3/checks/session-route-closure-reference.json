@@ -1,0 +1,88 @@
+{
+ "audit": {
+  "commit": "8f94ddda9069bc2301fefc87f276570b04f4c774",
+  "scopeHash": "db56e87f36222ba363d3aa0ce28244e330e7fec17e2d09ea69089b9525879f21"
+ },
+ "records": [
+  "2026-10-07.json",
+  "2026-10-07b.json",
+  "2026-10-07c.json",
+  "2026-10-07d.json",
+  "2026-10-08.json",
+  "2026-10-08b.json",
+  "2026-10-09.json",
+  "2026-10-09b.json",
+  "2026-10-09c.json",
+  "2026-10-10.json",
+  "2026-10-10b.json"
+ ],
+ "routes": [
+  {
+   "route": "(the signed-in shell: sidebar and session search)",
+   "entry": "components/AppShell.tsx",
+   "modules": 230,
+   "antd": [
+    {
+     "module": "src/web/src/components/WorkspaceView.tsx",
+     "antd": [
+      "App",
+      "Button",
+      "Dropdown",
+      "Image",
+      "Input",
+      "MenuProps",
+      "Popover",
+      "Select",
+      "Spin",
+      "Tooltip"
+     ],
+     "owner": "P5.3",
+     "chain": [
+      "src/web/src/components/AppShell.tsx",
+      "src/web/src/components/SessionSearch.tsx {{ SessionSearch }}",
+      "src/web/src/components/WorkspaceView.tsx {{ StatusIcon, statusLabel }}"
+     ]
+    }
+   ]
+  },
+  {
+   "route": "/workspaces/:id/*, /agents/:id/*, /sessions/:id (the session workspace)",
+   "entry": "components/WorkspaceConsole.tsx",
+   "modules": 226,
+   "antd": [
+    {
+     "module": "src/web/src/components/WorkspaceConsole.tsx",
+     "antd": [
+      "Button",
+      "Result",
+      "Spin"
+     ],
+     "owner": "P5.3",
+     "chain": [
+      "src/web/src/components/WorkspaceConsole.tsx"
+     ]
+    },
+    {
+     "module": "src/web/src/components/WorkspaceView.tsx",
+     "antd": [
+      "App",
+      "Button",
+      "Dropdown",
+      "Image",
+      "Input",
+      "MenuProps",
+      "Popover",
+      "Select",
+      "Spin",
+      "Tooltip"
+     ],
+     "owner": "P5.3",
+     "chain": [
+      "src/web/src/components/WorkspaceConsole.tsx",
+      "src/web/src/components/WorkspaceView.tsx {{ WorkspaceView }}"
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -10,39 +10,52 @@ import XCTest
 /// /interrupt and then POSTed /turns would be racing its own delete, and which of those two
 /// outcomes it got would come down to network ordering. One request is what makes neither possible.
 final class InterruptAndSendTests: XCTestCase {
-    private func offers(session: RunStatus? = .running, stream: RunStatus = .running,
+    /// A session record for the predicate — only the fields the stop decision reads.
+    private func session(_ status: RunStatus, engineTurnActive: Bool? = nil,
+                         subagents: Int? = nil, bg: Int? = nil) -> Session {
+        Session(id: "s1", title: "t", status: status, agentId: nil, assignedRunnerId: nil,
+                pendingApprovals: nil, branch: nil, updatedAt: nil,
+                runningBgCount: bg, runningSubagentCount: subagents, engineTurnActive: engineTurnActive)
+    }
+
+    private func offers(session s: Session?, stream: RunStatus = .running,
                         canSend: Bool = true, ordinaryDraft: Bool = true,
                         replying: Bool = false, busy: Bool = false) -> Bool {
-        ComposerLogic.offersInterruptAndSend(session: session, stream: stream, canSend: canSend,
+        ComposerLogic.offersInterruptAndSend(session: s, stream: stream, canSend: canSend,
                                              ordinaryDraft: ordinaryDraft, replying: replying,
                                              busy: busy)
     }
 
     func testOfferedWhileATurnGeneratesAndThereIsSomethingToSend() {
-        XCTAssertTrue(offers())
-        // Same authoritative-status precedence as Stop and the Queued label, so the three always
+        XCTAssertTrue(offers(session: session(.running)))
+        // Same authoritative-record precedence as Stop and the Queued label, so the three always
         // agree: a cold open of an already-running session never replays a `.running` event into
         // the reducer, and reading the stream alone would hide this button exactly there.
-        XCTAssertTrue(offers(session: .running, stream: .awaitingInput))
+        XCTAssertTrue(offers(session: session(.running), stream: .awaitingInput))
+        XCTAssertTrue(offers(session: session(.awaitingInput, engineTurnActive: true)))
+        // Same "something to stop" clause as the Stop button: work left running behind a parked
+        // turn counts, so the desktop's Stop & send appears there too.
+        XCTAssertTrue(offers(session: session(.awaitingInput, subagents: 1)))
+        XCTAssertTrue(offers(session: session(.awaitingInput, bg: 1)))
         XCTAssertTrue(offers(session: nil, stream: .running))
     }
 
     func testNotOfferedWhenNothingIsRunning() {
         // Send already means "do this next" when no turn is in flight; there is nothing to stop.
-        XCTAssertFalse(offers(session: .awaitingInput, stream: .running))
+        XCTAssertFalse(offers(session: session(.awaitingInput), stream: .running))
         XCTAssertFalse(offers(session: nil, stream: .awaitingInput))
     }
 
     func testOffersNothingSendItselfWouldRefuse() {
         // An empty composer, a mid-flight upload, an offline runner: `canSend` carries them all,
         // and a stop with nothing to put in its place is what the Stop button is for.
-        XCTAssertFalse(offers(canSend: false))
+        XCTAssertFalse(offers(session: session(.running), canSend: false))
         // A `!cmd` runs on the runner beside the engine — not something the engine is stopped for.
-        XCTAssertFalse(offers(ordinaryDraft: false))
+        XCTAssertFalse(offers(session: session(.running), ordinaryDraft: false))
         // A reply to a blocking question goes back through the approval it answers, not as a turn.
-        XCTAssertFalse(offers(replying: true))
+        XCTAssertFalse(offers(session: session(.running), replying: true))
         // And never twice: a second stop would drop the follow-up the first one just queued.
-        XCTAssertFalse(offers(busy: true))
+        XCTAssertFalse(offers(session: session(.running), busy: true))
     }
 
     func testTheRequestCarriesTheFollowUpAndItsIdempotencyKey() throws {

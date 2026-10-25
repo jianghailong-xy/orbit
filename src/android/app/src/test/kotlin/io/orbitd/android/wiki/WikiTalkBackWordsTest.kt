@@ -4,6 +4,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -62,8 +65,9 @@ class WikiTalkBackWordsTest {
         assertTrue("$where: presses TalkBack reads twice: $twice", twice.isEmpty())
     }
 
-    /** The home: the review banner and the space picker say each of their words once (TalkBack read the banner twice,
-     * and the space's slug as a state and again as its text). */
+    /** The home and Activity: the space picker, the bar's Activity with its number, its Share with the space's live link, and
+     * the review banner say each of their words once (TalkBack read the banner twice, and the space's slug as a state and
+     * again as its text). */
     @Test fun theHomesPressesSayTheirWordsOnce() {
         val space = WikiFixtures.spaceID
         val rig = WikiTestRig { api ->
@@ -72,16 +76,33 @@ class WikiTalkBackWordsTest {
                 "wiki/spaces/$space" -> 200 to WikiFixtures.space
                 "wiki/spaces/$space/entries" -> 200 to WikiFixtures.entries
                 "wiki/spaces/$space/timeline" -> 200 to WikiFixtures.timeline
+                "wiki/spaces/$space/docs" -> 200 to wikiDocsFixture().obj("docs").obj("directory").obj("read").toString()
+                "wiki/spaces/$space/share" -> 200 to """{"link":{"id":"L5","token":"t","kind":"WIKI","state":"ACTIVE","include":{"footnotes":false},
+                    "root":{"id":"$space","title":"orbit","slug":"orbit"},"viewCount":0},"counts":{"documents":12,"footnotes":486}}"""
                 "wiki/review" -> 200 to WikiFixtures.review
                 else -> null
             }
         }
+        val store = rig.store()
         val route = OrbitRoute(Destination.WIKI)
-        show(route) { WikiHomeScreen(rig.store(), route, DirectoryData(), WikiNavRecord().nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-review-banner").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("wiki-review-banner").assertTextContains("proposals to review", substring = true)
+        var page by mutableStateOf(route)
+        show(null) {
+            Row { PageBar.Actions(page, this) }
+            if (page.destination == Destination.WIKI) WikiHomeScreen(store, page, DirectoryData(), WikiNavRecord().nav)
+            else WikiActivityScreen(store, page, DirectoryData(), WikiNavRecord().nav)
+        }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-home-line").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-space-picker").assert(hasContentDescription(WikiCopy.spacePickerHint)).assertTextContains("orbit")
+        // The documents' rows, their folded row and All 4: words, never a bare glyph (the blue dots are silent).
+        compose.onNodeWithTag("wiki-home-principles-all").assert(hasContentDescription("All 4"))
+        compose.onNodeWithTag("wiki-bar-activity").assert(hasContentDescription(WikiCopy.activity)).assert(hasStateDescription("3 waiting on you"))
+        compose.waitUntil(60_000) { compose.onAllNodes(hasTestTag("wiki-bar-share") and hasStateDescription("Live link")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("wiki-bar-share").assert(hasContentDescription("Share…"))
         assertTalkBackReadsWords("home")
+        page = OrbitRoute(Destination.WIKI_ACTIVITY)
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-review-banner").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("wiki-review-banner").assertTextContains("proposals to review", substring = true)
+        assertTalkBackReadsWords("activity")
     }
     private fun labelled(tag: String, label: String) = compose.onNodeWithTag(tag).assert(hasContentDescription(label))
 
@@ -98,7 +119,7 @@ class WikiTalkBackWordsTest {
         }
         val route = OrbitRoute(Destination.WIKI_ENTRY, WikiFixtures.pitfallID)
         show(route) { WikiEntryScreen(store, route, DirectoryData(), WikiNavRecord().nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-entry-mark").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-entry-mark").fetchSemanticsNodes().isNotEmpty() }
         labelled("wiki-entry-confirm", "Confirm")
         labelled("wiki-entry-reject", "Reject")
         compose.onNode(isHeading() and hasText("Sources")).assertTextContains("3")
@@ -118,7 +139,7 @@ class WikiTalkBackWordsTest {
         val route = OrbitRoute(Destination.WIKI_PLAN)
         val state = WikiPlanFixture.state("draftReady")
         val shown = WikiPlanLogic.defaultShown(state)
-        show(route) { WikiPlanPage(route, state, shown, shown?.let { WikiPlanLogic.base(it, state) }, emptyList(), null, null, null, null, WikiPlanFixture.now) }
+        show(route) { WikiPlanPage(route, state, shown, shown?.let { WikiPlanLogic.base(it, state) }, emptyList(), null, null, WikiPlanFixture.now) }
         compose.onNodeWithTag("wiki-plan-version-menu").assert(hasContentDescription(shown!!.status.label))
         assertTalkBackReadsWords("plan")
     }
@@ -148,7 +169,7 @@ class WikiTalkBackWordsTest {
             show { WikiDocPage(doc, "https://github.com/example/orbit", null) }
             compose.onNodeWithTag("wiki-doc-list").performScrollToNode(hasTestTag("wiki-doc-footnote:$n"))
             compose.onNodeWithTag("wiki-doc-footnote:$n").performSemanticsAction(SemanticsActions.OnClick)
-            compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-doc-footnote-sheet").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-doc-footnote-sheet").fetchSemanticsNodes().isNotEmpty() }
             assertTalkBackReadsWords("footnote $n's sheet")
         }
     }

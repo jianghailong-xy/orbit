@@ -1,0 +1,2 @@
+scope=P7c Cursor CLI screens, controlled HTTP on the emulator; no real Cursor account, key, runner or prompt
+exit_code=0

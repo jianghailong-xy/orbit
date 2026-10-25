@@ -13,8 +13,8 @@ test('started-signal event types cover claude output kinds', () => {
 
 test('the nudge tells claude to continue without repeating side effects', () => {
   const out = buildResumeContinuation('开始部署从 main 分支');
-  assert.match(out, /runner 重启/);
-  assert.match(out, /切勿重复执行/);
+  assert.match(out, /its runner restarted/);
+  assert.match(out, /never repeat any operation with side effects that has already completed/);
   assert.match(out, /开始部署从 main 分支/); // quotes the interrupted message for context
   assert.notEqual(out, '开始部署从 main 分支'); // never the verbatim original
 });
@@ -26,6 +26,6 @@ test('the nudge caps a very long quoted message', () => {
 });
 
 test('the nudge drops the quote block when there is no interrupted text', () => {
-  assert.doesNotMatch(buildResumeContinuation(''), /被中断的消息/);
-  assert.doesNotMatch(buildResumeContinuation(null), /被中断的消息/);
+  assert.doesNotMatch(buildResumeContinuation(''), /The interrupted message/);
+  assert.doesNotMatch(buildResumeContinuation(null), /The interrupted message/);
 });

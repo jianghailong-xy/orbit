@@ -1,0 +1,708 @@
+[WebServer] (node:1071934) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 88 P0.2 originals, 150 main drift references, 14 accepted migration differences.
+
+Running 72 tests using 1 worker
+
+(node:1073763) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   1 [chromium-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own (2.1s)
+(node:1074250) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   2 [chromium-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit dialog leaves the page where it was scrolled, before and after a notice (1.9s)
+  ✓   3 [chromium-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD dialog leaves the page where it was scrolled, before and after a notice (3.7s)
+  ✓   4 [chromium-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit right drawer leaves the page where it was scrolled, before and after a notice (1.9s)
+  ✓   5 [chromium-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD right drawer leaves the page where it was scrolled, before and after a notice (4.1s)
+  ✓   6 [chromium-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice (1.7s)
+  ✓   7 [chromium-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD bottom drawer leaves the page where it was scrolled, before and after a notice (4.3s)
+  ✓   8 [chromium-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit confirm leaves the page where it was scrolled, before and after a notice (2.3s)
+  ✓   9 [chromium-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD confirm leaves the page where it was scrolled, before and after a notice (3.1s)
+(node:1076882) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  10 [chromium-light-phone] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own (1.7s)
+(node:1077471) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  11 [chromium-light-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit dialog leaves the page where it was scrolled, before and after a notice (2.6s)
+  ✓  12 [chromium-light-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD dialog leaves the page where it was scrolled, before and after a notice (4.3s)
+  ✓  13 [chromium-light-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit right drawer leaves the page where it was scrolled, before and after a notice (2.3s)
+  ✓  14 [chromium-light-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD right drawer leaves the page where it was scrolled, before and after a notice (4.5s)
+  ✓  15 [chromium-light-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice (2.2s)
+  ✓  16 [chromium-light-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD bottom drawer leaves the page where it was scrolled, before and after a notice (4.9s)
+  ✓  17 [chromium-light-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit confirm leaves the page where it was scrolled, before and after a notice (2.3s)
+  ✓  18 [chromium-light-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD confirm leaves the page where it was scrolled, before and after a notice (4.4s)
+(node:1080083) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  19 [chromium-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own (1.9s)
+(node:1081332) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  20 [chromium-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit dialog leaves the page where it was scrolled, before and after a notice (2.2s)
+  ✓  21 [chromium-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD dialog leaves the page where it was scrolled, before and after a notice (4.3s)
+  ✓  22 [chromium-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit right drawer leaves the page where it was scrolled, before and after a notice (2.1s)
+  ✓  23 [chromium-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD right drawer leaves the page where it was scrolled, before and after a notice (4.6s)
+  ✓  24 [chromium-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice (2.4s)
+  ✓  25 [chromium-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD bottom drawer leaves the page where it was scrolled, before and after a notice (5.0s)
+  ✓  26 [chromium-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit confirm leaves the page where it was scrolled, before and after a notice (2.5s)
+  ✓  27 [chromium-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD confirm leaves the page where it was scrolled, before and after a notice (4.5s)
+(node:1085551) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  28 [chromium-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own (3.1s)
+(node:1085971) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  29 [chromium-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit dialog leaves the page where it was scrolled, before and after a notice (3.9s)
+  ✓  30 [chromium-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD dialog leaves the page where it was scrolled, before and after a notice (5.0s)
+  ✓  31 [chromium-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit right drawer leaves the page where it was scrolled, before and after a notice (3.3s)
+  ✓  32 [chromium-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD right drawer leaves the page where it was scrolled, before and after a notice (4.3s)
+  ✓  33 [chromium-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice (3.8s)
+  ✓  34 [chromium-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD bottom drawer leaves the page where it was scrolled, before and after a notice (6.2s)
+  ✓  35 [chromium-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit confirm leaves the page where it was scrolled, before and after a notice (2.8s)
+  ✓  36 [chromium-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD confirm leaves the page where it was scrolled, before and after a notice (3.5s)
+(node:1089366) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  37 [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own (2.4s)
+(node:1089710) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  38 [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit dialog leaves the page where it was scrolled, before and after a notice (2.7s)
+(node:1090298) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  39 [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD dialog leaves the page where it was scrolled, before and after a notice (4.2s)
+  ✘  40 [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit right drawer leaves the page where it was scrolled, before and after a notice (2.8s)
+(node:1091464) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  41 [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD right drawer leaves the page where it was scrolled, before and after a notice (5.0s)
+  ✘  42 [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice (2.6s)
+(node:1092803) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  43 [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD bottom drawer leaves the page where it was scrolled, before and after a notice (5.0s)
+  ✘  44 [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit confirm leaves the page where it was scrolled, before and after a notice (3.8s)
+(node:1094537) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  45 [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD confirm leaves the page where it was scrolled, before and after a notice (4.3s)
+(node:1095314) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  46 [webkit-light-phone] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own (2.2s)
+(node:1095732) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  47 [webkit-light-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit dialog leaves the page where it was scrolled, before and after a notice (4.6s)
+  ✓  48 [webkit-light-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD dialog leaves the page where it was scrolled, before and after a notice (4.1s)
+  ✓  49 [webkit-light-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit right drawer leaves the page where it was scrolled, before and after a notice (2.6s)
+  ✓  50 [webkit-light-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD right drawer leaves the page where it was scrolled, before and after a notice (5.9s)
+  ✓  51 [webkit-light-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice (3.5s)
+  ✓  52 [webkit-light-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD bottom drawer leaves the page where it was scrolled, before and after a notice (5.0s)
+  ✓  53 [webkit-light-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit confirm leaves the page where it was scrolled, before and after a notice (5.8s)
+  ✓  54 [webkit-light-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD confirm leaves the page where it was scrolled, before and after a notice (4.1s)
+(node:1100683) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  55 [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own (3.1s)
+(node:1101228) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  56 [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit dialog leaves the page where it was scrolled, before and after a notice (4.2s)
+(node:1102000) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  57 [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD dialog leaves the page where it was scrolled, before and after a notice (4.4s)
+  ✘  58 [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit right drawer leaves the page where it was scrolled, before and after a notice (2.9s)
+(node:1103158) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  59 [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD right drawer leaves the page where it was scrolled, before and after a notice (4.8s)
+  ✘  60 [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice (2.1s)
+(node:1104146) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  61 [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD bottom drawer leaves the page where it was scrolled, before and after a notice (4.4s)
+  ✘  62 [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit confirm leaves the page where it was scrolled, before and after a notice (2.7s)
+(node:1104958) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  63 [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD confirm leaves the page where it was scrolled, before and after a notice (4.2s)
+(node:1105725) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  64 [webkit-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own (3.1s)
+(node:1106310) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  65 [webkit-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit dialog leaves the page where it was scrolled, before and after a notice (3.0s)
+  ✓  66 [webkit-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD dialog leaves the page where it was scrolled, before and after a notice (4.0s)
+  ✓  67 [webkit-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit right drawer leaves the page where it was scrolled, before and after a notice (5.6s)
+  ✓  68 [webkit-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD right drawer leaves the page where it was scrolled, before and after a notice (6.0s)
+  ✓  69 [webkit-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice (2.5s)
+  ✓  70 [webkit-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD bottom drawer leaves the page where it was scrolled, before and after a notice (5.5s)
+  ✓  71 [webkit-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit confirm leaves the page where it was scrolled, before and after a notice (3.9s)
+  ✓  72 [webkit-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:57:3 › AntD confirm leaves the page where it was scrolled, before and after a notice (5.2s)
+
+
+  1) [chromium-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 900
+    Received: 901
+
+      50 |   expect(before.documentHeight).toBe(before.viewportHeight);
+      51 |   expect(before.documentScrollbar).toBe(0);
+    > 52 |   expect(after.documentHeight).toBe(after.viewportHeight);
+         |                                ^
+      53 |   expect(after.documentScrollbar).toBe(0);
+      54 | });
+      55 |
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:52:32
+
+    Error Context: .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-phone] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 844
+    Received: 845
+
+      50 |   expect(before.documentHeight).toBe(before.viewportHeight);
+      51 |   expect(before.documentScrollbar).toBe(0);
+    > 52 |   expect(after.documentHeight).toBe(after.viewportHeight);
+         |                                ^
+      53 |   expect(after.documentScrollbar).toBe(0);
+      54 | });
+      55 |
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:52:32
+
+    Error Context: .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 900
+    Received: 901
+
+      50 |   expect(before.documentHeight).toBe(before.viewportHeight);
+      51 |   expect(before.documentScrollbar).toBe(0);
+    > 52 |   expect(after.documentHeight).toBe(after.viewportHeight);
+         |                                ^
+      53 |   expect(after.documentScrollbar).toBe(0);
+      54 | });
+      55 |
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:52:32
+
+    Error Context: .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 844
+    Received: 845
+
+      50 |   expect(before.documentHeight).toBe(before.viewportHeight);
+      51 |   expect(before.documentScrollbar).toBe(0);
+    > 52 |   expect(after.documentHeight).toBe(after.viewportHeight);
+         |                                ^
+      53 |   expect(after.documentScrollbar).toBe(0);
+      54 | });
+      55 |
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:52:32
+
+    Error Context: .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 900
+    Received: 901
+
+      50 |   expect(before.documentHeight).toBe(before.viewportHeight);
+      51 |   expect(before.documentScrollbar).toBe(0);
+    > 52 |   expect(after.documentHeight).toBe(after.viewportHeight);
+         |                                ^
+      53 |   expect(after.documentScrollbar).toBe(0);
+      54 | });
+      55 |
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:52:32
+
+    Error Context: .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit dialog leaves the page where it was scrolled, before and after a notice 
+
+    Error: Orbit dialog open after a notice
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1536
+    Received: 0
+
+      74 |       const open = await frame(page);
+      75 |       states.push({ when, step: 'open', ...open });
+    > 76 |       expect.soft(open.pageScrollTop, `${system} ${kind} open ${when}`).toBe(scrolled);
+         |                                                                         ^
+      77 |       await overlay.getByRole('button', { name: 'Cancel', exact: true }).click();
+      78 |       await expect(overlay).toHaveCount(0);
+      79 |       await expect.poll(() => locked(page)).toBe(false);
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:76:73
+
+    Error: Orbit dialog closed after a notice
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1536
+    Received: 0
+
+      80 |       const closed = await frame(page);
+      81 |       states.push({ when, step: 'closed', ...closed });
+    > 82 |       expect.soft(closed.pageScrollTop, `${system} ${kind} closed ${when}`).toBe(scrolled);
+         |                                                                             ^
+      83 |     }
+      84 |     await info.attach('scroll-positions', { body: JSON.stringify(states, null, 2), contentType: 'application/json' });
+      85 |   });
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:82:77
+
+    Error Context: .overlays-results/overlays-app-frame.browser-f2d41-d-before-and-after-a-notice-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays-app-frame.browser-f2d41-d-before-and-after-a-notice-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays-app-frame.browser-f2d41-d-before-and-after-a-notice-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit right drawer leaves the page where it was scrolled, before and after a notice 
+
+    Error: Orbit right drawer open after a notice
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1536
+    Received: 0
+
+      74 |       const open = await frame(page);
+      75 |       states.push({ when, step: 'open', ...open });
+    > 76 |       expect.soft(open.pageScrollTop, `${system} ${kind} open ${when}`).toBe(scrolled);
+         |                                                                         ^
+      77 |       await overlay.getByRole('button', { name: 'Cancel', exact: true }).click();
+      78 |       await expect(overlay).toHaveCount(0);
+      79 |       await expect.poll(() => locked(page)).toBe(false);
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:76:73
+
+    Error: Orbit right drawer closed after a notice
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1536
+    Received: 0
+
+      80 |       const closed = await frame(page);
+      81 |       states.push({ when, step: 'closed', ...closed });
+    > 82 |       expect.soft(closed.pageScrollTop, `${system} ${kind} closed ${when}`).toBe(scrolled);
+         |                                                                             ^
+      83 |     }
+      84 |     await info.attach('scroll-positions', { body: JSON.stringify(states, null, 2), contentType: 'application/json' });
+      85 |   });
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:82:77
+
+    Error Context: .overlays-results/overlays-app-frame.browser-29131-d-before-and-after-a-notice-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays-app-frame.browser-29131-d-before-and-after-a-notice-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays-app-frame.browser-29131-d-before-and-after-a-notice-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice 
+
+    Error: Orbit bottom drawer open after a notice
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1536
+    Received: 0
+
+      74 |       const open = await frame(page);
+      75 |       states.push({ when, step: 'open', ...open });
+    > 76 |       expect.soft(open.pageScrollTop, `${system} ${kind} open ${when}`).toBe(scrolled);
+         |                                                                         ^
+      77 |       await overlay.getByRole('button', { name: 'Cancel', exact: true }).click();
+      78 |       await expect(overlay).toHaveCount(0);
+      79 |       await expect.poll(() => locked(page)).toBe(false);
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:76:73
+
+    Error: Orbit bottom drawer closed after a notice
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1536
+    Received: 0
+
+      80 |       const closed = await frame(page);
+      81 |       states.push({ when, step: 'closed', ...closed });
+    > 82 |       expect.soft(closed.pageScrollTop, `${system} ${kind} closed ${when}`).toBe(scrolled);
+         |                                                                             ^
+      83 |     }
+      84 |     await info.attach('scroll-positions', { body: JSON.stringify(states, null, 2), contentType: 'application/json' });
+      85 |   });
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:82:77
+
+    Error Context: .overlays-results/overlays-app-frame.browser-9a542-d-before-and-after-a-notice-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays-app-frame.browser-9a542-d-before-and-after-a-notice-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays-app-frame.browser-9a542-d-before-and-after-a-notice-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit confirm leaves the page where it was scrolled, before and after a notice 
+
+    Error: Orbit confirm open after a notice
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1536
+    Received: 0
+
+      74 |       const open = await frame(page);
+      75 |       states.push({ when, step: 'open', ...open });
+    > 76 |       expect.soft(open.pageScrollTop, `${system} ${kind} open ${when}`).toBe(scrolled);
+         |                                                                         ^
+      77 |       await overlay.getByRole('button', { name: 'Cancel', exact: true }).click();
+      78 |       await expect(overlay).toHaveCount(0);
+      79 |       await expect.poll(() => locked(page)).toBe(false);
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:76:73
+
+    Error: Orbit confirm closed after a notice
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1536
+    Received: 0
+
+      80 |       const closed = await frame(page);
+      81 |       states.push({ when, step: 'closed', ...closed });
+    > 82 |       expect.soft(closed.pageScrollTop, `${system} ${kind} closed ${when}`).toBe(scrolled);
+         |                                                                             ^
+      83 |     }
+      84 |     await info.attach('scroll-positions', { body: JSON.stringify(states, null, 2), contentType: 'application/json' });
+      85 |   });
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:82:77
+
+    Error Context: .overlays-results/overlays-app-frame.browser-d1de1-d-before-and-after-a-notice-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays-app-frame.browser-d1de1-d-before-and-after-a-notice-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays-app-frame.browser-d1de1-d-before-and-after-a-notice-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [webkit-light-phone] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 844
+    Received: 845
+
+      50 |   expect(before.documentHeight).toBe(before.viewportHeight);
+      51 |   expect(before.documentScrollbar).toBe(0);
+    > 52 |   expect(after.documentHeight).toBe(after.viewportHeight);
+         |                                ^
+      53 |   expect(after.documentScrollbar).toBe(0);
+      54 | });
+      55 |
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:52:32
+
+    Error Context: .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 900
+    Received: 901
+
+      50 |   expect(before.documentHeight).toBe(before.viewportHeight);
+      51 |   expect(before.documentScrollbar).toBe(0);
+    > 52 |   expect(after.documentHeight).toBe(after.viewportHeight);
+         |                                ^
+      53 |   expect(after.documentScrollbar).toBe(0);
+      54 | });
+      55 |
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:52:32
+
+    Error Context: .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12) [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit dialog leaves the page where it was scrolled, before and after a notice 
+
+    Error: Orbit dialog open after a notice
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1536
+    Received: 0
+
+      74 |       const open = await frame(page);
+      75 |       states.push({ when, step: 'open', ...open });
+    > 76 |       expect.soft(open.pageScrollTop, `${system} ${kind} open ${when}`).toBe(scrolled);
+         |                                                                         ^
+      77 |       await overlay.getByRole('button', { name: 'Cancel', exact: true }).click();
+      78 |       await expect(overlay).toHaveCount(0);
+      79 |       await expect.poll(() => locked(page)).toBe(false);
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:76:73
+
+    Error: Orbit dialog closed after a notice
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1536
+    Received: 0
+
+      80 |       const closed = await frame(page);
+      81 |       states.push({ when, step: 'closed', ...closed });
+    > 82 |       expect.soft(closed.pageScrollTop, `${system} ${kind} closed ${when}`).toBe(scrolled);
+         |                                                                             ^
+      83 |     }
+      84 |     await info.attach('scroll-positions', { body: JSON.stringify(states, null, 2), contentType: 'application/json' });
+      85 |   });
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:82:77
+
+    Error Context: .overlays-results/overlays-app-frame.browser-f2d41-d-before-and-after-a-notice-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays-app-frame.browser-f2d41-d-before-and-after-a-notice-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays-app-frame.browser-f2d41-d-before-and-after-a-notice-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  13) [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit right drawer leaves the page where it was scrolled, before and after a notice 
+
+    Error: Orbit right drawer open after a notice
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1536
+    Received: 0
+
+      74 |       const open = await frame(page);
+      75 |       states.push({ when, step: 'open', ...open });
+    > 76 |       expect.soft(open.pageScrollTop, `${system} ${kind} open ${when}`).toBe(scrolled);
+         |                                                                         ^
+      77 |       await overlay.getByRole('button', { name: 'Cancel', exact: true }).click();
+      78 |       await expect(overlay).toHaveCount(0);
+      79 |       await expect.poll(() => locked(page)).toBe(false);
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:76:73
+
+    Error: Orbit right drawer closed after a notice
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1536
+    Received: 0
+
+      80 |       const closed = await frame(page);
+      81 |       states.push({ when, step: 'closed', ...closed });
+    > 82 |       expect.soft(closed.pageScrollTop, `${system} ${kind} closed ${when}`).toBe(scrolled);
+         |                                                                             ^
+      83 |     }
+      84 |     await info.attach('scroll-positions', { body: JSON.stringify(states, null, 2), contentType: 'application/json' });
+      85 |   });
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:82:77
+
+    Error Context: .overlays-results/overlays-app-frame.browser-29131-d-before-and-after-a-notice-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays-app-frame.browser-29131-d-before-and-after-a-notice-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays-app-frame.browser-29131-d-before-and-after-a-notice-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  14) [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice 
+
+    Error: Orbit bottom drawer open after a notice
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1536
+    Received: 0
+
+      74 |       const open = await frame(page);
+      75 |       states.push({ when, step: 'open', ...open });
+    > 76 |       expect.soft(open.pageScrollTop, `${system} ${kind} open ${when}`).toBe(scrolled);
+         |                                                                         ^
+      77 |       await overlay.getByRole('button', { name: 'Cancel', exact: true }).click();
+      78 |       await expect(overlay).toHaveCount(0);
+      79 |       await expect.poll(() => locked(page)).toBe(false);
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:76:73
+
+    Error: Orbit bottom drawer closed after a notice
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1536
+    Received: 0
+
+      80 |       const closed = await frame(page);
+      81 |       states.push({ when, step: 'closed', ...closed });
+    > 82 |       expect.soft(closed.pageScrollTop, `${system} ${kind} closed ${when}`).toBe(scrolled);
+         |                                                                             ^
+      83 |     }
+      84 |     await info.attach('scroll-positions', { body: JSON.stringify(states, null, 2), contentType: 'application/json' });
+      85 |   });
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:82:77
+
+    Error Context: .overlays-results/overlays-app-frame.browser-9a542-d-before-and-after-a-notice-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays-app-frame.browser-9a542-d-before-and-after-a-notice-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays-app-frame.browser-9a542-d-before-and-after-a-notice-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  15) [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit confirm leaves the page where it was scrolled, before and after a notice 
+
+    Error: Orbit confirm open after a notice
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1536
+    Received: 0
+
+      74 |       const open = await frame(page);
+      75 |       states.push({ when, step: 'open', ...open });
+    > 76 |       expect.soft(open.pageScrollTop, `${system} ${kind} open ${when}`).toBe(scrolled);
+         |                                                                         ^
+      77 |       await overlay.getByRole('button', { name: 'Cancel', exact: true }).click();
+      78 |       await expect(overlay).toHaveCount(0);
+      79 |       await expect.poll(() => locked(page)).toBe(false);
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:76:73
+
+    Error: Orbit confirm closed after a notice
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1536
+    Received: 0
+
+      80 |       const closed = await frame(page);
+      81 |       states.push({ when, step: 'closed', ...closed });
+    > 82 |       expect.soft(closed.pageScrollTop, `${system} ${kind} closed ${when}`).toBe(scrolled);
+         |                                                                             ^
+      83 |     }
+      84 |     await info.attach('scroll-positions', { body: JSON.stringify(states, null, 2), contentType: 'application/json' });
+      85 |   });
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:82:77
+
+    Error Context: .overlays-results/overlays-app-frame.browser-d1de1-d-before-and-after-a-notice-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays-app-frame.browser-d1de1-d-before-and-after-a-notice-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays-app-frame.browser-d1de1-d-before-and-after-a-notice-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  16) [webkit-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 844
+    Received: 845
+
+      50 |   expect(before.documentHeight).toBe(before.viewportHeight);
+      51 |   expect(before.documentScrollbar).toBe(0);
+    > 52 |   expect(after.documentHeight).toBe(after.viewportHeight);
+         |                                ^
+      53 |   expect(after.documentScrollbar).toBe(0);
+      54 | });
+      55 |
+        at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/overlays-app-frame.browser.mjs:52:32
+
+    Error Context: .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .overlays-results/overlays-app-frame.browser-4994e-ith-no-scrollbar-of-its-own-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  16 failed
+    [chromium-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own 
+    [chromium-light-phone] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own 
+    [chromium-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own 
+    [chromium-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own 
+    [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own 
+    [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit dialog leaves the page where it was scrolled, before and after a notice 
+    [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit right drawer leaves the page where it was scrolled, before and after a notice 
+    [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice 
+    [webkit-light-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit confirm leaves the page where it was scrolled, before and after a notice 
+    [webkit-light-phone] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own 
+    [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own 
+    [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit dialog leaves the page where it was scrolled, before and after a notice 
+    [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit right drawer leaves the page where it was scrolled, before and after a notice 
+    [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit bottom drawer leaves the page where it was scrolled, before and after a notice 
+    [webkit-dark-desktop] › ui-migration/overlays-app-frame.browser.mjs:57:3 › Orbit confirm leaves the page where it was scrolled, before and after a notice 
+    [webkit-dark-phone] › ui-migration/overlays-app-frame.browser.mjs:45:1 › a notice leaves the document one viewport high, with no scrollbar of its own 
+  56 passed (5.4m)
+78cae80d9ac63d8acd30eecf4d35db73ab059b5a
+exit 1 start 2026-10-09T00:12:04Z end 2026-10-09T00:17:27Z

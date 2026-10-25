@@ -16,7 +16,7 @@ final class CriteriaChangeTests: XCTestCase {
     /// were.
     private func standingJSON(changes: String = """
         {"added":[{"key":"k5","ordinal":5,"text":"macOS：设置 → Runners 与 iOS 同结构"}],
-         "stricter":[{"key":"k2","ordinal":2,"verificationMethod":"跑 RunnersPage 的 vitest",
+         "stricter":[{"key":"k2","ordinal":2,"verificationMethod":"跑 InfrastructurePage 的 vitest",
                       "confirmedVerificationMethod":"owner 看截图确认"}],
          "revised":[],"removed":[],"unchanged":[4,1,3]}
         """, state: String = "STALE") -> String {
@@ -65,7 +65,7 @@ final class CriteriaChangeTests: XCTestCase {
         let rows = CriteriaChanges.rows(changes)
         XCTAssertEqual(rows.map(\.mark), [.new, .stricter])
         XCTAssertEqual(rows.map(\.kind), ["5 · New", "2 · Stricter check"])
-        XCTAssertEqual(rows.map(\.text), ["macOS：设置 → Runners 与 iOS 同结构", "跑 RunnersPage 的 vitest"])
+        XCTAssertEqual(rows.map(\.text), ["macOS：设置 → Runners 与 iOS 同结构", "跑 InfrastructurePage 的 vitest"])
         XCTAssertEqual(rows.map(\.was), [nil, "was: owner 看截图确认"])
         XCTAssertEqual(CriteriaChanges.unchangedLine(changes), "1, 3, 4 unchanged")
 

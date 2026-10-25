@@ -17,11 +17,35 @@ class WikiLogicTest {
     private fun str(value: String) = JsonPrimitive(value)
 
     @Test fun theAmberNumberSumsEverySpacesProposals() {
-        assertEquals(3, WikiLogic.proposalsToReview(spaces()))
-        assertEquals("nothing waiting draws no number", 0, WikiLogic.proposalsToReview(emptyList()))
-        assertEquals("a space an older server sent no count for adds nothing", 7, WikiLogic.proposalsToReview(listOf(
+        assertEquals(3, WikiSpaceLogic.proposalsWaiting(spaces()))
+        assertEquals("a server older than planWaiting: the proposals alone", 3, WikiSpaceLogic.waiting(spaces()))
+        assertEquals("nothing waiting draws no number", 0, WikiSpaceLogic.waiting(emptyList()))
+        assertEquals("a space an older server sent no count for adds nothing", 7, WikiSpaceLogic.waiting(listOf(
             WikiSpace("a", "a", pendingOps = 2), WikiSpace("b", "b", pendingOps = 5), WikiSpace("c", "c"))))
         assertEquals("3 proposals to review", WikiCopy.proposalsToReview(3))
+        assertEquals("one is said in the singular", "1 proposal to review", WikiCopy.proposalsToReview(1))
+    }
+
+    /** The drawer draws the Wiki row once the spaces read has answered anything but WIKI_DISABLED, and when it failed for
+     * another reason; never while it is on its way (OrbitKit `WikiLogic.shown`, the web's `wikiShown`). */
+    @Test fun theWikiRowIsDrawnOnceTheSpacesReadSaysTheWikiIsOn() {
+        val disabled = io.orbitd.android.core.net.ApiError.parse(404, """{"code":"WIKI_DISABLED","message":"off"}""".encodeToByteArray())
+        assertTrue(WikiLogic.isDisabled(disabled))
+        assertFalse("a plain 404 is not the wiki off", WikiLogic.isDisabled(io.orbitd.android.core.net.ApiError.parse(404, "{}".encodeToByteArray())))
+        assertFalse("nor is another status", WikiLogic.isDisabled(io.orbitd.android.core.net.ApiError.parse(403, """{"code":"WIKI_DISABLED"}""".encodeToByteArray())))
+        assertFalse("on its way", WikiLogic.shown(LoadState(loading = true), disabled = false))
+        assertTrue(WikiLogic.shown(LoadState().succeed(), disabled = false))
+        assertFalse("answered WIKI_DISABLED", WikiLogic.shown(LoadState().succeed(), disabled = true))
+        assertTrue("a failed read is not the server saying there is no wiki", WikiLogic.shown(LoadState().fail(), disabled = false))
+    }
+
+    /** A card names its entry by the draft's title, else the entry's own read, else the title Review's read carries. */
+    @Test fun aCardNamesItsEntryByTheTitleReviewsReadCarries() {
+        val retire = review()[1]
+        val card = WikiLogic.ReviewCard(retire, retire.ops!!.first().copy(entryTitle = "Wakeups are lost when the runner restarts"))
+        assertEquals("Wakeups are lost when the runner restarts", WikiLogic.cardTitle(card, entry = null))
+        assertEquals("the entry's own read first", "Read title", WikiLogic.cardTitle(card, WikiEntry("e", title = "Read title")))
+        assertEquals("nothing known: the placeholder word", WikiCopy.entryWord, WikiLogic.cardTitle(WikiLogic.ReviewCard(retire, retire.ops!!.first()), null))
     }
 
     @Test fun theAnchorMarkSaysTheRefOrTheWarning() {
@@ -115,19 +139,40 @@ class WikiLogicTest {
         assertEquals(4, WikiLogic.entries(entries(), "principle").size)
     }
 
-    @Test fun theHomePagesBands() {
+    /** Activity's bands, read out of the fixture — the four newest decisions, five changes, three most used, and the status
+     * line without the count its banner says — and the home's principles, oldest first. */
+    @Test fun activitysBandsAndTheHomesPrinciples() {
         val spaces = spaces()
-        val home = WikiHomeContent(Wire.json.decodeFromString(WikiSpace.serializer(), WikiFixtures.space), spaces, entries(), timeline(),
-            WikiLogic.proposalsToReview(spaces))
+        // The two bands' own reads (`?kind=principle`, `?kind=decision`), as the server answers them.
         assertEquals(listOf("Agent-writable data never becomes a system instruction", "Completion is adjudicated, not claimed",
-            "A clock never starts agent work", "Delete means forget"), home.principles.map { it.title })
-        assertTrue(home.principlesAllOwner)
-        assertEquals(3, home.recentDecisions.size)
-        assertEquals(5, home.timeline.take(5).size)
-        assertEquals(listOf(41, 33, 29), home.mostUsed.map { it.total })
-        assertTrue(home.usedThisWeek)
-        assertEquals("9 entries · Anchors verified at 4db4f9f", home.statusLine(java.time.Instant.now()))
-        assertEquals(3, home.proposals)
+            "A clock never starts agent work", "Delete means forget"), WikiLogic.principles(entries().filter { it.kind == "principle" }).map { it.title })
+        val activity = WikiHomeContent(Wire.json.decodeFromString(WikiSpace.serializer(), WikiFixtures.space), spaces, entries(), timeline(),
+            decisionEntries = entries().filter { it.kind == "decision" })
+        assertEquals(3, activity.recentDecisions.size)
+        assertEquals(5, activity.timeline.take(5).size)
+        assertEquals(listOf(41, 33, 29), activity.mostUsed.map { it.total })
+        assertTrue(activity.usedThisWeek)
+        assertEquals("9 entries · Anchors verified at 4db4f9f", activity.statusLine(java.time.Instant.now()))
+    }
+
+    /** Activity's blocks, top to bottom (mock 31 ②, and P9's mock 35 ④): the home's management blocks in their order, the
+     * other spaces' plan banners after the space's own, the server's runs after Review and Plan, and Principles not among
+     * them — it is content. */
+    @Test fun theActivityBandsOrder() {
+        assertEquals(listOf("STATUS", "REVIEW_BANNER", "PLAN_BANNERS", "OTHER_PLAN_BANNERS", "RUNS", "RECENT_DECISIONS", "RECENTLY_CHANGED", "AGENTS_USED"),
+            WikiLogic.ActivityBand.entries.map { it.name })
+        assertEquals(listOf("Runs", "Recent decisions", "Recently changed", "Agents used the wiki"), WikiLogic.ActivityBand.entries.mapNotNull { it.title })
+    }
+
+    /** Recently changed says how many of its rows came after the reader last looked: all of them for a reader who never did. */
+    @Test fun recentlyChangedCountsWhatIsNewSinceTheReaderLastLooked() {
+        val activity = WikiHomeContent(Wire.json.decodeFromString(WikiSpace.serializer(), WikiFixtures.space), emptyList(), emptyList(), timeline())
+        assertEquals("never looked: every row is new", activity.recentRows.size, activity.newRows(0.0))
+        val times = activity.recentRows.mapNotNull { WikiHomeContent.time(it) }.mapNotNull { RelativeTime.parse(it) }
+        assertEquals("every row has its time", activity.recentRows.size, times.size)
+        assertEquals("looked after all of them: none", 0, activity.newRows(times.max().toEpochMilli() / 1000.0))
+        val middle = times.sorted()[times.size / 2].toEpochMilli() / 1000.0
+        assertEquals(times.count { it.toEpochMilli() / 1000.0 > middle }, activity.newRows(middle))
     }
 
     @Test fun aSourcesWordAndRef() {

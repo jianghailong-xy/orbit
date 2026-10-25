@@ -1,0 +1,5 @@
+mac-failed: no window after launch; pressing ⌘N
+mac-failed: 1 window(s)
+mac-failed: in view after 0 move(s) at (350.0, 423.0, 500.0, 86.0)
+mac-failed: landing log reads
+23:15:11 "GET /api/sessions/L1/landing/log?jobId=jL&claim=1&round=1&check=1 HTTP/1.1" 200 -

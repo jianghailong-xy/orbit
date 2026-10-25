@@ -1,0 +1,75 @@
+{
+  "everyTokenWorks": true,
+  "owner": "hank",
+  "parallel": 1,
+  "replica": false,
+  "signIns": [
+    {
+      "at": "2026-10-17T23:39:08.265+00:00",
+      "ms": 48.5,
+      "port": 13710,
+      "status": 201
+    }
+  ],
+  "slowestMs": 48.5
+}
+{
+  "everyTokenWorks": true,
+  "owner": "hank",
+  "parallel": 1,
+  "replica": false,
+  "signIns": [
+    {
+      "at": "2026-10-17T23:39:08.367+00:00",
+      "ms": 42.0,
+      "port": 13710,
+      "status": 201
+    }
+  ],
+  "slowestMs": 42.0
+}
+{
+  "everyTokenWorks": true,
+  "owner": "hank",
+  "parallel": 1,
+  "replica": false,
+  "signIns": [
+    {
+      "at": "2026-10-17T23:39:08.461+00:00",
+      "ms": 39.3,
+      "port": 13710,
+      "status": 201
+    }
+  ],
+  "slowestMs": 39.3
+}
+{
+  "everyTokenWorks": true,
+  "owner": "hank",
+  "parallel": 1,
+  "replica": false,
+  "signIns": [
+    {
+      "at": "2026-10-17T23:39:08.552+00:00",
+      "ms": 38.8,
+      "port": 13710,
+      "status": 201
+    }
+  ],
+  "slowestMs": 38.8
+}
+{
+  "everyTokenWorks": true,
+  "owner": "hank",
+  "parallel": 1,
+  "replica": false,
+  "signIns": [
+    {
+      "at": "2026-10-17T23:39:08.641+00:00",
+      "ms": 38.0,
+      "port": 13710,
+      "status": 201
+    }
+  ],
+  "slowestMs": 38.0
+}

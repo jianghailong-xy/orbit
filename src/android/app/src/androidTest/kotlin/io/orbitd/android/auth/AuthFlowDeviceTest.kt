@@ -62,10 +62,10 @@ class AuthFlowDeviceTest {
                     }
                 }
             }
-            compose.onNodeWithText("Instance address").performTextReplacement(server.url("/").toString())
-            compose.onNodeWithText("Email").performTextInput("a03@example.test")
-            compose.onNodeWithText("Password").performTextInput("a03-device-password")
-            compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
+            compose.chooseServer(server.url("/").toString())
+            compose.onNodeWithText("Email").performTextReplacement("a03@example.test")
+            compose.onNodeWithText("Password").performTextReplacement("a03-device-password")
+            compose.onNodeWithText("Sign In").performScrollTo().performClick()
             compose.waitUntil(10_000) { session.state.value is AuthState.SignedIn }
             compose.onNodeWithContentDescription("Open navigation").performClick()
             compose.onNodeWithText("Settings").performScrollTo().performClick()
@@ -83,7 +83,9 @@ class AuthFlowDeviceTest {
             compose.onNode(hasText("Sign out") and hasAnyAncestor(isDialog())).performClick()
             compose.waitUntil(10_000) { session.state.value is AuthState.SignedOut }
             runBlocking { assertNull(AndroidCredentialStore(compose.activity).load()) }
-            compose.onNodeWithText("Instance address").assertIsDisplayed()
+            // Back on the login page with the email this server signed in with (A03c), and never the password.
+            compose.onNodeWithText("Welcome back").assertIsDisplayed()
+            compose.waitUntil(10_000) { compose.onAllNodes(hasText("Email") and hasText("a03@example.test")).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithContentDescription("Edit profile").assertDoesNotExist()
             capture("signed-out.png")
             assertEquals(1, requests.count { it.path == "/api/auth/refresh" })

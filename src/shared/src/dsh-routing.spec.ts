@@ -124,6 +124,7 @@ describe('P1a dsh shared routing', () => {
       opencode: 'one-shot',
       antigravity: 'stream-json',
       dsh: 'json-rpc',
+      cursor: 'json-rpc',
     });
     expect(modelForProvider(AgentProvider.CLAUDE, 'deepseek-v4-pro')).toBe('deepseek-v4-pro');
     expect(modelForProvider(AgentProvider.CLAUDE)).toBe('claude-opus-5');

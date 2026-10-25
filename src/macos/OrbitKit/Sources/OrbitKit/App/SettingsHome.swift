@@ -4,15 +4,14 @@ import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Found
 #endif
 
 /// A page Settings opens from its list, each one a frame of Settings' own stack
-/// (`NavNode.settingsPage`). The runners list is the one page that predates these and keeps its own
-/// frame (`NavNode.settingsRunners`).
+/// (`NavNode.settingsPage`).
 public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
-    case providers, notifications, sharedLinks, accessTokens, changePassword, admin
+    case infrastructure, notifications, sharedLinks, accessTokens, changePassword, admin
 
     /// The page's navigation title — the same words as the row that opens it.
     public var title: String {
         switch self {
-        case .providers:      return SettingsHome.title(.providers)
+        case .infrastructure: return SettingsHome.title(.infrastructure)
         case .notifications:  return SettingsHome.title(.notifications)
         case .sharedLinks:    return SettingsHome.title(.sharedLinks)
         case .accessTokens:   return SettingsHome.title(.accessTokens)
@@ -28,17 +27,18 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
 /// and nothing of its own — the ChatGPT-style sheet the owner picked from the mockups.
 ///
 /// The rows are the web's Settings and Profile pages, regrouped for a phone: Session defaults and
-/// Session orchestration under Sessions, the Runners and Providers pages under Machines & models,
-/// Notifications and Appearance under Preferences, Profile's email and password under Account with
-/// Shared links and Access tokens beside them. The words are the web's wherever it has one.
+/// Session orchestration under Sessions, the Infrastructure page — the web's Runners and Providers
+/// pages, made one — under Machines & models, Notifications and Appearance under Preferences,
+/// Profile's email and password under Account with Shared links and Access tokens beside them. The
+/// words are the web's wherever it has one.
 public enum SettingsHome {
     public enum Group: String, CaseIterable, Sendable {
         case sessions, machines, preferences, account
     }
 
     public enum Row: String, CaseIterable, Sendable {
-        case defaultPermission, orchestration, modelRouting
-        case runners, providers
+        case defaultPermission, orchestration, modelRouting, promptSuggestions, recaps
+        case infrastructure
         case notifications, appearance
         case email, instance, sharedLinks, accessTokens, changePassword, admin
     }
@@ -55,8 +55,8 @@ public enum SettingsHome {
     /// The rows a group shows, in order. Admin is role-gated, like its section everywhere else.
     public static func rows(_ group: Group, isAdmin: Bool) -> [Row] {
         switch group {
-        case .sessions:    return [.defaultPermission, .orchestration, .modelRouting]
-        case .machines:    return [.runners, .providers]
+        case .sessions:    return [.defaultPermission, .orchestration, .modelRouting, .promptSuggestions, .recaps]
+        case .machines:    return [.infrastructure]
         case .preferences: return [.notifications, .appearance]
         case .account:
             let rows: [Row] = [.email, .instance, .sharedLinks, .accessTokens, .changePassword]
@@ -69,8 +69,9 @@ public enum SettingsHome {
         case .defaultPermission: return "Default permission"
         case .orchestration:     return "Session orchestration"
         case .modelRouting:      return SettingsCopy.smartModelSelection
-        case .runners:           return AppSection.runners.title
-        case .providers:         return "Providers"
+        case .promptSuggestions: return SettingsCopy.suggestedReplies
+        case .recaps:            return SettingsCopy.sessionRecaps
+        case .infrastructure:    return AppSection.runners.title
         case .notifications:     return "Notifications"
         case .appearance:        return "Appearance"
         case .email:             return "Email"
@@ -82,14 +83,15 @@ public enum SettingsHome {
         }
     }
 
-    /// SF Symbol for the row's leading glyph. Runners and Admin keep the glyph their sections have.
+    /// SF Symbol for the row's leading glyph. Infrastructure and Admin keep the glyph their sections have.
     public static func systemImage(_ row: Row) -> String {
         switch row {
         case .defaultPermission: return "hand.raised"
         case .orchestration:     return "point.3.connected.trianglepath.dotted"
         case .modelRouting:      return "sparkles"
-        case .runners:           return AppSection.runners.systemImage
-        case .providers:         return "powerplug"
+        case .promptSuggestions: return "text.bubble"
+        case .recaps:            return "text.alignleft"
+        case .infrastructure:    return AppSection.runners.systemImage
         case .notifications:     return "bell"
         case .appearance:        return "circle.lefthalf.filled"
         case .email:             return "envelope"
@@ -102,22 +104,36 @@ public enum SettingsHome {
     }
 
     /// The page a row opens. Nil for the rows that are answered in place: the two pickers, which
-    /// are menus on the row itself, the orchestration and smart model selection switches — each one
-    /// for the whole account, so the row is the switch — and the two lines that only say something.
+    /// are menus on the row itself, the orchestration, smart model selection, suggested replies and
+    /// session recaps switches — each one for the whole account, so the row is the switch — and the
+    /// two lines that only say something.
     public static func page(_ row: Row) -> SettingsPage? {
         switch row {
-        case .providers:      return .providers
+        case .infrastructure: return .infrastructure
         case .notifications:  return .notifications
         case .sharedLinks:    return .sharedLinks
         case .accessTokens:   return .accessTokens
         case .changePassword: return .changePassword
         case .admin:          return .admin
-        case .runners, .defaultPermission, .orchestration, .modelRouting, .appearance, .email, .instance:
+        case .defaultPermission, .orchestration, .modelRouting, .promptSuggestions, .recaps, .appearance,
+             .email, .instance:
             return nil
         }
     }
 
+    /// The line under a group: the Infrastructure page's own, under the one row that opens it.
+    public static func footer(_ group: Group) -> String? {
+        group == .machines ? Infrastructure.subtitle : nil
+    }
+
     // MARK: - What a row says
+
+    /// "1 needs you" — how many lines the Infrastructure page's Needs you holds; with none, how many of
+    /// the account's machines can take work right now.
+    public static func infrastructureValue(needsYou: Int, runners: [Runner]) -> String {
+        if needsYou > 0 { return needsYou == 1 ? "1 needs you" : "\(needsYou) need you" }
+        return runnersValue(runners)
+    }
 
     /// "3 of 4 online" — how many of the account's machines can take work right now.
     public static func runnersValue(_ runners: [Runner]) -> String {
@@ -280,6 +296,21 @@ public enum SettingsCopy {
     /// the switch, with the hint under its name, since nothing else on the list says what it does.
     public static let smartModelSelection = "Smart model selection"
     public static let smartModelSelectionHint = "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before."
+
+    // MARK: Suggested replies (the web page's Session defaults card)
+
+    /// The account's switch for the engine's guess at the next message, on unless turned off. On iOS
+    /// the row is the switch, with the hint under its name, as smart model selection's is.
+    public static let suggestedReplies = "Suggested replies"
+    public static let suggestedRepliesHint = "When a Claude turn ends, the empty message box offers what you'd probably type next. Each suggestion is one more request on that session's Claude account."
+
+    // MARK: Session recaps (the web page's Session defaults card)
+
+    /// The account's switch for the server's rolling recap — the line on a session's list row and the
+    /// Recap card its conversation ends with — on unless turned off. On iOS the row is the switch,
+    /// with the hint under its name, as its two neighbours are.
+    public static let sessionRecaps = "Session recaps"
+    public static let sessionRecapsHint = "Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply, and the conversation ends with it. Off: the raw last reply, and no summary in the conversation."
 
     // MARK: Change password (the web's Profile page)
 

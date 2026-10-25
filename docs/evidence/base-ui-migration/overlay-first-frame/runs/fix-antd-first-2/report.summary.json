@@ -1,0 +1,1485 @@
+{
+ "stats": {
+  "startTime": "2026-10-08T11:27:02.524Z",
+  "duration": 587979.355,
+  "expected": 64,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ },
+ "errors": [],
+ "tests": [
+  {
+   "title": "replaced menu is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 10228,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "311a402c147cd0a4dfe6069e1d1800f70b7cedf5a2d9c08b07ee8045bca25997"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced submenu is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 12094,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "161a9d2d9cf8d219f633570b9195f3706eab530d4cead81ab95d2da5d1360874"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced select is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7202,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9a82488b76aafdb2b68d73963e47bd33316c53ce85bc2be643e1045cf58746a7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced combobox is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 10076,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7675621897354df350a11f22370ef1fac9f86bae8374926eae32a635a457959a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced multiselect is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7187,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7d0c3dcaaab8de9d30d0cf75da926825eb3982bccf058d068b90520d3271124e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced popover is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7196,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "85af1625dbad25ca26c7e0a676dae8198c5409f2f83f3f19c86167523222aee4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced tooltip is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 12224,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2aeecfaae17f7f3bf58947ce3720f4b1485eaabdc911e91040ef8ffa79d1f4b1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced popconfirm is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7352,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6047d10bcbfdab6af53a582245740fa097f06524d321ba385a86bace9d809feb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced menu is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 10485,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "04b0303cc5878617d6dcd2f28f5ef60e79fef4f05495ff6ba65de93ae714260c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced submenu is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 11791,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7e6404142aed8cfe84add54c5cfa392225db3270d6c4826813d040b612705bcb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced select is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 6694,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "340be722e80792a74aafa3e0fa047a22ffd455aca550757dd6d7010e831d4cbb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced combobox is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 6783,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ca975a439ca76f6cc3b3dfccc72238cf9141e1e7f9b43826747539681e3c4ee3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced multiselect is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7053,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ae2362d77654eda773e132b84960d68868e87f1bd7602991c78553edd887b6f5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced popover is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 6695,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "75045875a1eb4066fafbc341ef4df141b71562df3c57194f6aa328619fa3699b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced tooltip is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7437,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "80bcae5f0544b4eb1b5f00c5624ca181cc885dfe0b17ebd659a30f5e5f39aa90"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced popconfirm is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 6791,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "da947a7c55ebfc0ed85728d0f1fdf88c44c6b4e5d8ae489596b09bab5cbc6f50"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced menu is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7331,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bd350b1a27e6687a7e63b0054f41effe2378330e74e65ba343539aef44f41cf7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced submenu is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 11516,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4162331130b5d05daed4915af5d74246fdd29c1c09ca272316c35f0fff91f936"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced select is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 6514,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "49e3d3291999717c5e7f5c73dd44ff5f09f05ac76b508e41f0178607824c0bd1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced combobox is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 6627,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e0ba5c6db81992a9e7747f0963964e2b36ca0aad787ba940b1b7336d208d0acd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced multiselect is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 8982,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "fb5806768a30ea0f0e9a88134516cdfb648977644e1e89313beaed9b4b41ad1d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced popover is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7022,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "21eaa25f2da6a21ddf646c4d2ee60c721e548c88deb343b7920d4b638a097747"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced tooltip is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7671,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a059582f4235edd73d1344e28c821b60677fc0dcce7567aa48b60bd9decdcb10"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced popconfirm is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7952,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0929aeafb6d02ec30e61f74c0ce27da8b0f6babc3b907118da45c08f0a9704f3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced menu is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7796,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1971a6cb67ddfe2e5ddaaefb0f04d9ace3131012a8c93abcfe8d2db6fcd800cf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced submenu is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 12084,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f92e8ce0badd636abc9b4879a94dfaf41866b83c3073859afff38a42a0d5ac83"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced select is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7296,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "40cd53c82064ea3943ccb5d8358f686075a251cc71115f0c33cd8af3074d7280"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced combobox is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7044,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e0ec0c2d8528b53fc66462095dda1c33b3a49d96890579d98237d4060dcee9a5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced multiselect is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 8948,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "fec2ce6d5910b82f49600cfecbc868e2f73256d76f8fe2b248747052a2ab9dc7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced popover is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 6888,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d020e54fa9e238e24f5c6abbcb193f8069d5777f4d4ecff1ef28148679e35567"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced tooltip is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 8501,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "424eb61d02968af8c4be77f7a0d37a137b2219ab5f189b446d5a1b8ab67e084b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced popconfirm is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 8937,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2ae2f62e63fa0a2868851d8cbd2c82efa488f1ac2197ee2a9153c7c9f17fcc0f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced menu is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7599,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "396516cdc78d8bb57ce37246ba8993b148199209a1abe3d583aad9455d73abe0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced submenu is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 11495,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6b6c034feecad93cb91fd3e5ecdc3b6d08b42f3115571e8aaff0355592b0fc0d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced select is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7332,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b5100edda371d529463f9f487ff00555c1a04b3c9c9cd4fb64c2ff0560c6f9e1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced combobox is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 8344,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5e5da68af0e1636f26269438c99366703f450cbe15fdd2a5addd77f32aeaeab9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced multiselect is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7688,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e7853126c03178348a597cacd796d44654af8af39dc2891074caa9b227fccdd2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced popover is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 8101,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "90df7177befdae47f0d6600dbb97f673c2809401432e9491a3a925cb21f4654a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced tooltip is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 9471,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9bcec338bc4c8f36fdd6d3433dc8466597b48cca522a67bfbfb30a6483e84a76"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced popconfirm is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 10685,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "64d15ecc4436c8a64f0dde34d5df5977093479a826d2ad6acbf7030157d0150e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced menu is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 9646,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0f68bf500c8fae734c50285c923003e26dac9ade09f9d61908acf3a49ea3064d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced submenu is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 13579,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "14cb8f5ee6bc97baecfa437c9cd95ad2f5eb76074e6a6da7d06ccc84ff3460d5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced select is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 10477,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c3cdb8fe033b7114345c8ed05c4dd88520e4aca4e1b8600ec7fde6cd089e77ff"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced combobox is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 10311,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "63468e411042e4358ddd70058c4275c5a072b151ed6d6b0ca4a91eef1e17c73b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced multiselect is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 10319,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "401286ad87aff88401463ca4d23b4075069664c881c11016dc73324ff3aec6fe"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced popover is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 11806,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "50c3fef2415c6551c13191ce3cfa61a86169ace23987841cda42df3c5ea872fa"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced tooltip is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 9091,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6def34593ea46b2ce7262f1b0b4650a7b852194642088bcfa7e2fad07a458ea4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced popconfirm is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 8951,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1c95bef184c443aee9e5e818117578ed56da74ac4919a7a55b3b455e9682fef9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced menu is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 9131,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "207a176689b0a330a05fd3370d66fe3177f3021cc88d93fa5e7cf35a0c327a39"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced submenu is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 17803,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "503ecd6e8307c99f70e8b028d2f519ea3ee61afdea769afcac2f86e1d52b90c0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced select is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7310,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b630335a25ed11431d3e805ecc56ddd046bfbaadd5834652b8fa54c29716a6e2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced combobox is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7511,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f8ece9befd5d96d04dc9944bb067710dbf4e1543ef7722d90585e779a6f38ed9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced multiselect is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7001,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5ea1076e5189ca66b00a35b17ec877385882d295f5b88ca414d53f25835e948a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced popover is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 6948,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e65b1b69f01a396b3634ac95ae49f8ee26371d673574403cd002994e0681519f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced tooltip is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7951,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0f83d273a213fceb5b90d358931cdef30831c672f7379ef7e6e1beb667d1307e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced popconfirm is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7675,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5ff5f7f076d97f32a700217c3162d9e34f63a944ed82df0845d8273834c90e3b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced menu is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7169,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "560c6cdd0d1721ff315d09f1a316460c91e8721230b02ecf751fb3ee530b69f8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced submenu is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 11366,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "72449a167824f4a641b46e6e8fb58c492ae5b445128348f208a317aea83cf35f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced select is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7104,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "04c7cee93960e4ac71347384dc6aac32b2df0ef28dc54baed92f06fb99bf75dd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced combobox is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7404,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6ec906d5ce20b7b775e9f14cfcef068f56c9f764ee87f3cee7a07ea706c9cd8b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced multiselect is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 8152,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "569de2e01ec5710367de4a3fcdcb3d76b6d35368e6b2a5f365922c4560a7bc6f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced popover is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 11311,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4201ca99b1260437131d7148f7cae80f41d576f1660a1cf729075e51e68b1bda"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced tooltip is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 9585,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a9d91ecbdc428a952e2f115cecd2471bb8b5117a93031f1bc73a238f3b57f027"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "replaced popconfirm is laid out where it settles from its first shown frame",
+   "location": "antd-first-frame.browser.mjs:34",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 8875,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-first-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0e456128e5dcb6a34d595a46f129bf1b5f3642b59297717190de2ed9ff15165c"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

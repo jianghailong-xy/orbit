@@ -1,0 +1,108 @@
+{
+ "checks": [
+  {
+   "check": "the before image is in both VMs' containerd under one digest reference and ID",
+   "ok": true,
+   "value": {
+    "orbit-mr-lab": {
+     "alreadyThere": true,
+     "id": "sha256:6d72caf4b147150eb390abfa75a942caf3f1e950af12a101227c3c447544b38f",
+     "importSeconds": null,
+     "size": "499715070"
+    },
+    "orbit-mr-lab-2": {
+     "alreadyThere": true,
+     "id": "sha256:6d72caf4b147150eb390abfa75a942caf3f1e950af12a101227c3c447544b38f",
+     "importSeconds": null,
+     "size": "499715572"
+    }
+   }
+  },
+  {
+   "check": "the after image is in both VMs' containerd under one digest reference and ID",
+   "ok": true,
+   "value": {
+    "orbit-mr-lab": {
+     "alreadyThere": false,
+     "id": "sha256:a48423df05a60055bf74776046f4c2e862d095acf2aa95e741765bfb7c650a1c",
+     "importSeconds": 39.6,
+     "size": "499728584"
+    },
+    "orbit-mr-lab-2": {
+     "alreadyThere": false,
+     "id": "sha256:a48423df05a60055bf74776046f4c2e862d095acf2aa95e741765bfb7c650a1c",
+     "importSeconds": 35.6,
+     "size": "499728584"
+    }
+   }
+  },
+  {
+   "check": "the before image's runner and image sources are the project line's",
+   "ok": true,
+   "value": "(no difference)"
+  },
+  {
+   "check": "the after image's runner and image sources are this checkout's",
+   "ok": true,
+   "value": "(no difference)"
+  },
+  {
+   "check": "the two images differ",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-19T16:44:58.381+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "facts",
+ "result": {
+  "after": {
+   "archive": "/mnt/data/tmp/t02c/image/lab.oci.tar",
+   "archiveSha256": "9047462903a378eda628796a52048b7df4c9a6458961936981f1457a62cd0c19",
+   "labManifest": "sha256:e893caee28f18ef8a33714370dfb64fc0ae777361bf7847fce2f8fd2b4ea00f3",
+   "nodes": {
+    "orbit-mr-lab": {
+     "alreadyThere": false,
+     "id": "sha256:a48423df05a60055bf74776046f4c2e862d095acf2aa95e741765bfb7c650a1c",
+     "importSeconds": 39.6,
+     "size": "499728584"
+    },
+    "orbit-mr-lab-2": {
+     "alreadyThere": false,
+     "id": "sha256:a48423df05a60055bf74776046f4c2e862d095acf2aa95e741765bfb7c650a1c",
+     "importSeconds": 35.6,
+     "size": "499728584"
+    }
+   },
+   "pushed": false,
+   "reference": "docker.io/library/orbit-managed-runner-lab@sha256:51888af127b4c076f79f914ce119ac6b22fd9859282151a564996ce9cffc3ad0",
+   "source": "af37b52854ee07f9b9304a39ef18ce14ba209610"
+  },
+  "before": {
+   "archive": "/mnt/data/tmp/t02-cross-node/image/lab.oci.tar",
+   "archiveSha256": "90c8987b3adcd8d722cfcaa96008bd8e8d02d8b55336ae50cf163fce4357c838",
+   "labManifest": "sha256:2f6cc4f2722027fb7f2b135367eac432dc5de454ff3bb496fc04ecd8a6bc00fb",
+   "nodes": {
+    "orbit-mr-lab": {
+     "alreadyThere": true,
+     "id": "sha256:6d72caf4b147150eb390abfa75a942caf3f1e950af12a101227c3c447544b38f",
+     "importSeconds": null,
+     "size": "499715070"
+    },
+    "orbit-mr-lab-2": {
+     "alreadyThere": true,
+     "id": "sha256:6d72caf4b147150eb390abfa75a942caf3f1e950af12a101227c3c447544b38f",
+     "importSeconds": null,
+     "size": "499715572"
+    }
+   },
+   "pushed": false,
+   "reference": "docker.io/library/orbit-managed-runner-lab@sha256:6483cb7504e34fe140333f519eb68db6aba3699d22b1ac5db61d212885d3f3d9",
+   "source": "8055bb5686ba981c7a518557190aebfb8dedc46b"
+  },
+  "projectLine": "326f43dc0ac22b91d894b706630a7f4d9c5666c7"
+ },
+ "seconds": 113.4,
+ "startedAt": "2026-10-19T16:43:05.022+00:00",
+ "step": "images"
+}

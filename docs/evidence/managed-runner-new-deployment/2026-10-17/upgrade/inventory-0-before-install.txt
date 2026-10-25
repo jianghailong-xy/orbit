@@ -1,0 +1,8 @@
+== before install 2026-10-17T11:13:10Z
+-- containers
+-- volumes
+-- networks
+bridge	bridge
+host	host
+none	null
+-- images

@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.config.mjs --project webkit-dark-phone'",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "f162a2f9de3cb4bdea8e9a6120dd28a8e2184328",
+ "webTree": "d8ae59f026644577041afea38b5994da1eef0f9f",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-08T03:38:25.207531+00:00",
+ "endedAt": "2026-10-08T03:40:13.201701+00:00",
+ "loadAverage": {
+  "start": [
+   18.95458984375,
+   31.6630859375,
+   30.07763671875
+  ],
+  "end": [
+   29.01904296875,
+   31.26171875,
+   30.0830078125
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "e4b7ed88fe4bbbdc05ac8eb84fc204e534604cfd439321389ef44667e68f77bc",
+ "outputBytes": 8736,
+ "raw": "/var/tmp/kw2-246921c8/runs/held-frames-rebased-webkit-dark-phone",
+ "stats": {
+  "expected": 49,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 107647.363,
+  "samples": 49
+ }
+}

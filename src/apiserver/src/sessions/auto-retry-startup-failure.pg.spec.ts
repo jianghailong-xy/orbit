@@ -44,7 +44,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { AutoRetryService, BACKOFF_MS } from './auto-retry.service';
-import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
+import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { SessionsService } from './sessions.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -90,6 +90,7 @@ function connect(url: string): Harness {
   const prisma = db as unknown as PrismaService;
   const realtime = {
     publish: () => undefined,
+    publishBatch: () => undefined,
     publishSessionUpdated: () => undefined,
     publishQueuedTurnsChanged: () => undefined,
     notifyInbox: () => undefined,
@@ -227,7 +228,7 @@ function connect(url: string): Harness {
       await sql.query(
         `UPDATE "runner" SET last_heartbeat_at = $2::timestamptz - ($3 || ' milliseconds')::interval
           WHERE id = $1::uuid`,
-        [runnerId, at.toISOString(), String(SESSION_RUNNER_OFFLINE_AFTER_MS / 2)],
+        [runnerId, at.toISOString(), String(RUNNER_OFFLINE_AFTER_MS / 2)],
       );
     },
   };
@@ -287,11 +288,22 @@ function runnerGaveUp(h: Harness, f: Fixture, leaseOwner?: string | null) {
  * `activate-leases` does on the wire.
  */
 async function claimed(h: Harness, sessionId: string): Promise<void> {
-  await h.sql.query(
-    `UPDATE "session" SET status = 'RUNNING', inbox_lease_owner = gen_random_uuid()
-      WHERE id = $1::uuid`,
-    [sessionId],
-  );
+  // One transaction, because migration 0414 asks every writer of PENDING -> RUNNING or of a new
+  // lease owner to declare it reads the session's recorded engine (`common/session-scheduling.ts`):
+  // without the declaration this claim is dropped in silence and the lease write is refused.
+  await h.sql.query('BEGIN');
+  try {
+    await h.sql.query(`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`);
+    await h.sql.query(
+      `UPDATE "session" SET status = 'RUNNING', inbox_lease_owner = gen_random_uuid()
+        WHERE id = $1::uuid`,
+      [sessionId],
+    );
+    await h.sql.query('COMMIT');
+  } catch (error) {
+    await h.sql.query('ROLLBACK');
+    throw error;
+  }
 }
 
 /** The lease this session's inbox is owned by — what the runner running it presents. */

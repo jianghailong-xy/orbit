@@ -13,6 +13,8 @@ import {
   EvidenceReviewDeliveryRefused,
   bindEvidenceReviewDelivery,
   evidenceReviewTurnId,
+  evidenceSendBackMessage,
+  evidenceSendBackTurnId,
   type EvidenceReviewDeliveryRefusalCode,
 } from './evidence-review';
 
@@ -34,6 +36,10 @@ export type EvidenceReviewDelivery = 'DELIVERED' | EvidenceReviewDeliveryRefusal
  * every time (2026-10-06: four revisions, all PENDING while every message after them steered in). It differs in keeping nothing of its own: the turn is the delivery, so a refusal
  * writes nothing and a fault leaves the revision undelivered — and either way not held, which puts it
  * in front of the owner at once.
+ *
+ * The same unit also carries the one delivery a decision makes: `deliverSendBack` hands a recorded
+ * SEND_BACK's note to the run that submitted the revision, so the loop the decision opens has
+ * somebody told to walk it.
  */
 @Injectable()
 export class EvidenceReviewService {
@@ -93,5 +99,69 @@ export class EvidenceReviewService {
     this.logger.log(`evidence of task ${taskId} was not handed to its dispatching session (${code}); `
       + 'the owner\'s card has it');
     return code;
+  }
+
+  /**
+   * Deliver a recorded SEND_BACK's note to the run that submitted the decided revision — the one
+   * session that must act on it, which the decision row alone never told (2026-10-09: an owner's
+   * send-back stalled a task because neither the run nor the project's coordinator could see the
+   * reason). In a project or out of it, and whoever decided: the revision's `sourceSessionId` is
+   * always the run to carry on.
+   *
+   * Called after the decision's commit, so a delivery that cannot be made — the run has ended, or
+   * a fault — is logged and never reported as a failed decision: the note is recorded, and stays
+   * readable on the revision in `task_evidence_list`. Keyed by the decision row, so the decide
+   * door's own replay replays the turn instead of delivering twice.
+   */
+  async deliverSendBack(ownerId: string, taskId: string, decisionId: string): Promise<void> {
+    const decision = await this.prisma.taskEvidenceDecision.findFirst({
+      where: { id: decisionId, taskId, ownerId },
+      select: {
+        decision: true,
+        note: true,
+        decidedByType: true,
+        evidence: { select: { revision: true, sourceSessionId: true } },
+        task: { select: { title: true } },
+      },
+    });
+    if (!decision || decision.decision !== 'SEND_BACK' || !decision.note) return;
+    const runSessionId = decision.evidence.sourceSessionId;
+    // Read before the turn for the log's sake: `createTurn` refuses an ended conversation itself,
+    // which the catch below would report as a fault where the reason is that it ended.
+    const run = await this.prisma.session.findFirst({
+      where: { id: runSessionId, ownerId },
+      select: SESSION_ENDING_SELECT,
+    });
+    if (!run || sessionHasEnded(run)) {
+      this.logger.log(`send-back of task ${taskId} was not handed to its run: the session has ended; `
+        + 'the note is on the revision in task_evidence_list');
+      return;
+    }
+    try {
+      await this.sessions.createTurn(
+        ownerId,
+        runSessionId,
+        {
+          clientTurnId: evidenceSendBackTurnId(decisionId),
+          content: evidenceSendBackMessage({
+            taskId,
+            taskTitle: decision.task.title,
+            revision: decision.evidence.revision.toString(),
+            decidedByType: decision.decidedByType,
+            note: decision.note,
+          }),
+          intent: 'NEXT_TURN',
+        },
+        { steerIfLive: true },
+      );
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof ConflictException
+        || error instanceof ForbiddenException || error instanceof BadRequestException) {
+        this.logger.warn(`send-back of task ${taskId} was not handed to its run: `
+          + `${error instanceof Error ? error.message : error}`);
+        return;
+      }
+      throw error;
+    }
   }
 }

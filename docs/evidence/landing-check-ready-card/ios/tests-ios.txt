@@ -1,0 +1,8 @@
+Test Case '-[LandingSessionProbeUITests.LandingReadyCardTests testIPhoneCancelledLandingStillSaysItStopped]' started.
+Test Case '-[LandingSessionProbeUITests.LandingReadyCardTests testIPhoneCancelledLandingStillSaysItStopped]' passed (28.398 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingReadyCardTests testIPhoneMergeCheckThatEndedReadyWritesNoStoppedLine]' started.
+Test Case '-[LandingSessionProbeUITests.LandingReadyCardTests testIPhoneMergeCheckThatEndedReadyWritesNoStoppedLine]' passed (16.690 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 45.088 (45.091) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 45.088 (45.093) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 45.088 (45.095) seconds
+** TEST SUCCEEDED **

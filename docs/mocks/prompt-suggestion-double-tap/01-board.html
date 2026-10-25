@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>prompt-suggestion-double-tap</title>
+<style>
+  /* Mock fonts for a Linux render; a Mac resolves -apple-system / PingFang first and never reaches them. */
+  @font-face { font-family: "MockInter"; src: url("file:///tmp/mockfonts/Inter.ttf"); font-weight: 100 900; }
+  @font-face { font-family: "MockSC"; src: url("file:///tmp/mockfonts/NotoSansSC.ttf"); font-weight: 100 900; }
+  @font-face { font-family: "MockMono"; src: url("file:///tmp/mockfonts/JetBrainsMono.ttf"); font-weight: 100 900; }
+  :root {
+    /* iPhone tokens, as in prompt-suggestions/01-board.html */
+    --label: #0b0b0c;
+    --secondary: rgb(138, 138, 142);
+    --placeholder: rgba(60, 60, 67, 0.32);
+    --sep: rgba(60, 60, 67, 0.2);
+    --track: rgba(60, 60, 67, 0.16);
+    --tint: #2e6aff;
+    --page: #ffffff;
+    --card: #ffffff;
+    --card-border: rgba(0, 0, 0, 0.13);
+    --card-shadow: 0 4px 18px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.04);
+    --send-off: #d1d1d6;
+    --use-bg: rgba(46, 106, 255, 0.10);
+    --tray: rgba(0, 0, 0, 0.04);
+    --tray-line: rgba(0, 0, 0, 0.10);
+  }
+  .dark {
+    --label: #f5f5f7;
+    --secondary: rgba(235, 235, 245, 0.6);
+    --placeholder: rgba(235, 235, 245, 0.3);
+    --sep: rgba(84, 84, 88, 0.6);
+    --track: rgba(235, 235, 245, 0.18);
+    --tint: #3d7bff;
+    --page: #000000;
+    --card: #1c1c1e;
+    --card-border: rgba(255, 255, 255, 0.1);
+    --card-shadow: none;
+    --send-off: #3a3a3c;
+    --use-bg: rgba(61, 123, 255, 0.18);
+    --tray: rgba(255, 255, 255, 0.06);
+    --tray-line: rgba(255, 255, 255, 0.10);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { margin: 0; width: max-content; background: #eef0f3; }
+  .m-sheet {
+    width: 1330px; padding: 16px 20px 24px; background: #eef0f3; color: #1f2329;
+    font-family: -apple-system, "SF Pro Text", "PingFang SC", "MockInter", "MockSC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  section { padding: 20px 20px 18px; }
+  code, .mono { font-family: "SF Mono", Menlo, "MockMono", monospace; }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.2px; }
+  .lede { margin-top: 8px; font-size: 15px; color: #4b5260; line-height: 1.6; max-width: 1240px; }
+  .lede code, .legend code, .notes code, .snote code { font-size: 12.5px; background: #e2e5ea; border-radius: 4px; padding: 0 4px; }
+  h2 { font-size: 17px; font-weight: 700; margin: 0 0 12px; display: flex; align-items: baseline; gap: 10px; }
+  #part-1 h2 { margin-top: 26px; }
+  h2 small { font-size: 13px; font-weight: 400; color: #6b7280; }
+  .row { display: flex; gap: 22px; align-items: flex-start; }
+  .tile { width: 393px; flex: none; }
+  .cap { font-size: 14px; font-weight: 700; margin-bottom: 8px; display: flex; gap: 8px; align-items: baseline; }
+  .cap span { font-weight: 400; color: #6b7280; font-size: 12.5px; }
+  .cap .rec { color: #16833a; font-weight: 700; font-size: 12.5px; }
+  .cap .now { color: #c2410c; font-weight: 700; font-size: 12.5px; }
+  .legend { margin-top: 10px; font-size: 12.5px; color: #4b5260; line-height: 1.6; }
+  .legend b { color: #1f2329; }
+
+  /* ── phone bottom crop ── */
+  .phone {
+    position: relative; width: 393px; height: 336px; overflow: hidden;
+    border-radius: 14px; background: var(--page); color: var(--label);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.06);
+    display: flex; flex-direction: column; justify-content: flex-end;
+  }
+  .phone.kbup { height: 520px; }
+  .phone::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 56px; z-index: 1;
+    background: linear-gradient(var(--page), transparent); }
+  .tail { padding: 0 16px 14px; font-size: 17px; line-height: 26px; color: var(--label); }
+  .band { padding: 12px 16px 10px; border-top: 0.5px solid var(--sep); }
+  .kbup .band { padding-bottom: 8px; }
+  .safe { position: relative; height: 34px; flex: none; }
+  .home { position: absolute; bottom: 8px; left: 50%; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: var(--label); }
+
+  .card { position: relative; background: var(--card); border-radius: 24px;
+    box-shadow: 0 0 0 0.5px var(--card-border), var(--card-shadow); }
+  .card.focus { box-shadow: 0 0 0 0.5px rgba(0,0,0,0.26), 0 6px 22px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.05); }
+  .field { position: relative; padding: 15px 16px 8px; font-size: 17px; line-height: 22px; min-height: 45px; color: var(--label); }
+  .field .ph { color: var(--placeholder); }
+  .field.sug { display: flex; align-items: center; gap: 8px; }
+  .field.sug .ph { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Today: the words stop 64pt short of the end, and Use hangs in that room. */
+  .field.sug.today { gap: 0; }
+  .field.sug.today .ph { flex: 1 1 auto; padding-right: 64px; }
+  .field.sug.today .use { position: absolute; right: 16px; top: 13px; }
+  /* New: the words take the line; the hint (first time only) follows them, as web's Tab key does. */
+  .field.sug.new .ph { flex: 0 1 auto; }
+  .hint { flex: none; font-size: 13px; line-height: 22px; color: var(--placeholder); white-space: nowrap; letter-spacing: 0.1px; }
+  .use { flex: none; height: 26px; padding: 0 11px; border-radius: 13px; background: var(--use-bg);
+    color: var(--tint); font-size: 14px; font-weight: 600; line-height: 26px; }
+  .caret { display: inline-block; width: 2px; height: 21px; background: var(--tint); vertical-align: -4px; margin-left: 1px; border-radius: 1px; }
+  .caret.at0 { position: absolute; left: 15px; top: 15.5px; margin: 0; }
+  .toolbar { display: flex; align-items: center; height: 46px; padding: 6px 8px 8px 8px; font-size: 15px; line-height: 20px; }
+  .ic { flex: none; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: var(--label); }
+  .mode { flex: none; margin-left: 6px; color: var(--secondary); font-weight: 500; white-space: nowrap; }
+  .sp { flex: 1 1 auto; min-width: 10px; }
+  .chip { display: flex; align-items: baseline; gap: 5px; min-width: 0; flex: 0 1 auto; padding: 0 2px; white-space: nowrap; }
+  .chip b { font-weight: 600; color: var(--label); }
+  .chip i { font-style: normal; color: var(--secondary); }
+  .meters { flex: none; display: flex; align-items: center; gap: 8px; margin-left: 12px; }
+  .bar { width: 20px; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
+  .bar > span { display: block; height: 100%; border-radius: 2px; background: var(--tint); }
+  .send { flex: none; margin-left: 10px; width: 32px; height: 32px; border-radius: 16px; background: var(--tint); display: flex; align-items: center; justify-content: center; }
+  .send.off { background: var(--send-off); }
+
+  /* Parking strip above the card (BackgroundTrayView / WorktreeBar): 8pt radius, 4% fill, 10% hairline, 30pt row. */
+  .tray { border-radius: 8px; background: var(--tray); box-shadow: inset 0 0 0 1px var(--tray-line); height: 30px;
+    display: flex; align-items: center; gap: 7px; padding: 0 6px 0 10px; font-size: 13px; margin-bottom: 8px; white-space: nowrap; }
+  .tray .tt { font-weight: 600; }
+  .tray .meta { font-size: 11px; color: var(--secondary); }
+  .tray .grow { flex: 1; }
+  .tray .chev { color: var(--secondary); margin-right: 4px; }
+  .tray.git { padding-left: 5px; font-family: "SF Mono", Menlo, "MockMono", monospace; font-size: 12px; }
+  .bchip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 5px;
+    background: rgba(120,120,128,0.12); box-shadow: inset 0 0 0 1px rgba(120,120,128,0.22); color: var(--secondary); }
+  .add { color: #248a3d; } .del { color: #d70015; }
+  .merge { display: inline-flex; align-items: center; height: 22px; padding: 0 7px 0 10px; border-radius: 11px;
+    background: rgba(46,106,255,0.10); box-shadow: inset 0 0 0 1px rgba(46,106,255,0.45); color: var(--tint);
+    font-family: -apple-system, "SF Pro Text", "MockInter", sans-serif; font-size: 12.5px; font-weight: 600; }
+  .merge i { width: 1px; height: 14px; background: rgba(46,106,255,0.45); margin: 0 5px 0 8px; }
+
+  /* ── keyboard (iOS 26, pinyin; typing-focus-ios.html) ── */
+  .kb { position: relative; flex: none; height: 328px; background: #e2e3e8; border-radius: 28px 28px 0 0; box-shadow: 0 -.5px 0 rgba(0,0,0,.12); color: #1f2228; }
+  .kb .cand { position: absolute; left: 0; right: 0; top: 4px; height: 44px; display: flex; align-items: center; padding: 0 6px 0 10px; font-size: 19px; }
+  .kb .cand span { flex: 1 1 auto; text-align: center; }
+  .kb .cand svg { flex: none; margin-left: 8px; }
+  .kb .kr { position: absolute; left: 4px; right: 4px; display: flex; gap: 6px; justify-content: center; }
+  .kb .k { height: 42px; flex: 0 0 32.6px; background: #fff; border-radius: 8px; box-shadow: 0 1px 0 rgba(0,0,0,.2); display: flex; align-items: center; justify-content: center; font-size: 23px; }
+  .kb .k.kw { flex-basis: 44px; } .kb .k.kwide { flex-basis: 96px; font-size: 17px; }
+  .kb .k.kspace { flex: 1 1 auto; justify-content: flex-end; align-items: flex-end; padding: 0 12px 6px 0; font-size: 12px; color: #9a9aa0; }
+  .kb .bot { position: absolute; left: 34px; right: 34px; top: 268px; display: flex; justify-content: space-between; }
+
+  /* ── annotations: red dots, dashed boxes, purple specs ── */
+  .co { position: absolute; z-index: 6; width: 20px; height: 20px; border-radius: 10px; background: #e0460f; color: #fff;
+    font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px #fff; }
+  .mark { outline: 1.5px dashed #e0460f; outline-offset: 2px; border-radius: 20px 20px 6px 6px; }
+  .mark > .co { top: -12px; right: -12px; }
+  .umark { outline: 1.5px dashed #e0460f; outline-offset: 3px; }
+  .spec { position: absolute; z-index: 6; font-size: 11px; font-weight: 700; color: #7c3aed; white-space: nowrap; }
+  .touch { position: absolute; z-index: 6; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%;
+    background: rgba(224,70,15,0.10); box-shadow: 0 0 0 1.5px #e0460f; }
+  .touch::after { content: ""; position: absolute; inset: 14px; border-radius: 50%; background: rgba(224,70,15,0.6); }
+  .touch.ghost { background: transparent; box-shadow: 0 0 0 1.5px rgba(224,70,15,0.45); }
+  .touch.ghost::after { background: rgba(224,70,15,0.22); }
+  .buzz { position: absolute; z-index: 6; }
+
+  /* iOS edit menu over the caret (⑥) */
+  .emenu { position: absolute; z-index: 5; left: 2px; top: -36px; display: flex; height: 36px; border-radius: 18px; background: #fff;
+    box-shadow: 0 8px 26px rgba(0,0,0,0.16), 0 0 0 0.5px rgba(0,0,0,0.12); font-size: 15px; color: #000; overflow: hidden; }
+  .emenu span { padding: 0 14px; line-height: 36px; }
+  .emenu span + span { box-shadow: inset 0.5px 0 0 rgba(60,60,67,0.25); }
+
+  /* VoiceOver cursor + caption panel (⑨) */
+  .vo { position: absolute; z-index: 5; left: 6px; right: 6px; top: 8px; bottom: 1px; border-radius: 16px;
+    box-shadow: 0 0 0 1.5px #fff, 0 0 0 4.5px #111, inset 0 0 0 1.5px #fff; }
+  .vocap { margin-top: 8px; padding: 9px 14px 10px; border-radius: 12px; background: #1c1c1e; color: #fff; font-size: 13px; line-height: 21px; }
+  .vocap .who { display: inline-block; width: 82px; color: rgba(235,235,245,0.6); font-size: 12px; }
+  .vocap .act { display: inline-block; margin-top: 5px; padding: 0 8px; border-radius: 6px; background: rgba(255,255,255,0.18); }
+  .vocap .dim { color: rgba(235,235,245,0.6); font-size: 12px; }
+
+  /* ⑦ stacked cards */
+  .panel { width: 393px; border-radius: 14px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.06); padding: 4px 16px 16px; }
+  .plabel { font-size: 12px; color: #6b7280; margin: 12px 0 6px 2px; }
+  .plabel b { color: #1f2329; }
+
+  /* ── other surfaces ── */
+  .surf { background: #fff; border-radius: 14px; box-shadow: 0 0 0 1px rgba(0,0,0,0.06); padding: 6px 22px; }
+  .srow { display: flex; align-items: center; gap: 16px; padding: 14px 0; }
+  .srow + .srow { border-top: 1px solid #eceef1; }
+  .sname { width: 150px; flex: none; font-size: 14px; line-height: 1.45; }
+  .sname span { display: block; font-size: 12px; color: #6b7280; }
+  .smini { width: 330px; flex: none; }
+  .smini .tag { font-size: 11.5px; color: #6b7280; margin: 0 0 5px 2px; }
+  .sarrow { flex: none; color: #9aa0a8; font-size: 18px; margin-top: 16px; }
+  .snote { flex: 1; font-size: 12.5px; line-height: 1.6; color: #4b5260; }
+  .snote b { color: #1f2329; }
+  .srow.plain .snote { font-size: 13px; }
+  /* web composer at phone width (composer-card-web.html tokens) */
+  .wcard { position: relative; background: #fff; border-radius: 22px; box-shadow: 0 0 0 1px #e3e5e8, 0 2px 10px rgba(31,35,41,0.05); }
+  .wfield { display: flex; align-items: center; gap: 8px; padding: 13px 12px 3px 18px; font-size: 15px; line-height: 24px; min-height: 40px; }
+  .wfield .wph { color: #b3b8bf; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wfield.today .wph { flex: 1 1 auto; }
+  .wuse { flex: none; height: 26px; padding: 0 11px; border-radius: 13px; background: rgba(51,112,255,0.09); color: #3370ff;
+    font-size: 13px; font-weight: 600; line-height: 26px; }
+  .wtip { flex: none; font-size: 12px; color: #b3b8bf; white-space: nowrap; }
+  .wtool { display: flex; align-items: center; height: 42px; padding: 4px 8px 6px; font-size: 13px; color: #646a73; }
+  .wtool .ic { color: #1f2329; width: 28px; height: 28px; }
+  .wtool .wchip { margin-left: auto; white-space: nowrap; } .wtool .wchip b { color: #1f2329; font-weight: 600; }
+  .wsend { flex: none; margin-left: 10px; width: 28px; height: 28px; border-radius: 14px; background: #d5d8dd; display: flex; align-items: center; justify-content: center; }
+  /* Android OutlinedTextField (Material 3, OrbitTheme primary #0066BE) */
+  .afield { position: relative; display: flex; align-items: center; gap: 8px; height: 56px; padding: 0 4px 0 16px; border-radius: 4px;
+    box-shadow: inset 0 0 0 1px #79747e; font-family: "Roboto", "MockInter", "MockSC", sans-serif; font-size: 16px; }
+  .afield .aph { color: #44474e; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .afield.today .aph { flex: 1 1 auto; }
+  .afield.new { padding-right: 16px; }
+  .ause { flex: none; height: 40px; padding: 0 12px; border-radius: 20px; color: #0066be; font-size: 14px; font-weight: 600; line-height: 40px; letter-spacing: 0.1px; }
+  .atip { flex: none; font-size: 12px; color: #74777f; white-space: nowrap; }
+
+  /* ── notes ── */
+  .notes { background: #fff; border-radius: 14px; padding: 18px 22px; box-shadow: 0 0 0 1px rgba(0,0,0,0.06);
+    display: grid; grid-template-columns: 1.05fr 0.9fr 1.25fr; gap: 6px 30px; font-size: 13px; line-height: 1.62; color: #2b303b; }
+  .notes h3 { font-size: 14px; margin: 0 0 6px; color: #111; }
+  .notes h3.more { margin-top: 14px; }
+  .notes h4 { font-size: 13px; margin: 8px 0 2px; color: #111; }
+  .notes ul, .notes ol { padding-left: 18px; }
+  .notes li { margin: 2px 0; }
+  .notes b { color: #111; }
+  .notes .pick { color: #16833a; font-weight: 700; }
+  .notes .cost { display: inline-block; font-size: 11.5px; font-weight: 700; color: #7c3aed; margin-left: 2px; }
+</style>
+</head>
+<body>
+<div class="m-sheet">
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="plus" viewBox="0 0 20 20"><path d="M10 3.2v13.6M3.2 10h13.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="up" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="ring" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="var(--track)" stroke-width="2.3"/><circle cx="8" cy="8" r="6" fill="none" stroke="var(--tint)" stroke-width="2.3" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="22.2" transform="rotate(-90 8 8)"/></symbol>
+  <symbol id="term" viewBox="0 0 16 16"><rect x="1.2" y="2.2" width="13.6" height="11.6" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.2 6.2 6.4 8 4.2 9.8M7.6 10.2h4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="branch" viewBox="0 0 16 16"><path d="M5 2.5v11M5 9c0-2.6 6-2 6-5.2V2.5M11 2.5l-2 2M11 2.5l2 2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cr" viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cd" viewBox="0 0 16 16"><path d="M3.5 6 8 10.5 12.5 6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="shift" viewBox="0 0 20 20"><path d="M10 3 3 10.5h3.8V17h6.4v-6.5H17z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="del" viewBox="0 0 24 20"><path d="M8 3h12.5c.8 0 1.5.7 1.5 1.5v11c0 .8-.7 1.5-1.5 1.5H8L2 10z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M11 7l6 6M17 7l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="ret" viewBox="0 0 22 18"><path d="M19 3v6.5c0 1-.8 1.8-1.8 1.8H4M8 7l-4 4.3L8 15.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="globe" viewBox="0 0 26 26"><circle cx="13" cy="13" r="11" fill="none" stroke="currentColor" stroke-width="1.6"/><ellipse cx="13" cy="13" rx="5" ry="11" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M2 13h22M4 7.5h18M4 18.5h18" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="mic" viewBox="0 0 20 26"><rect x="6" y="2" width="8" height="14" rx="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M2.5 12.5c0 4.2 3.4 7.5 7.5 7.5s7.5-3.3 7.5-7.5M10 20v4M6.5 24h7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <!-- haptic: three short arcs -->
+  <symbol id="buzz" viewBox="0 0 22 22"><path d="M6 4.5c-2.2 1.7-3.3 3.9-3.3 6.5s1.1 4.8 3.3 6.5M16 4.5c2.2 1.7 3.3 3.9 3.3 6.5s-1.1 4.8-3.3 6.5M9 7.5c-1 .9-1.5 2-1.5 3.5s.5 2.6 1.5 3.5M13 7.5c1 .9 1.5 2 1.5 3.5s-.5 2.6-1.5 3.5" fill="none" stroke="#7c3aed" stroke-width="1.6" stroke-linecap="round"/></symbol>
+</svg>
+
+<template id="toolbar-idle">
+  <div class="toolbar">
+    <div class="ic"><svg width="20" height="20"><use href="#plus"/></svg></div>
+    <span class="mode">Auto</span><span class="sp"></span>
+    <span class="chip"><b>Opus 5.5</b><i>Max</i></span>
+    <span class="meters"><span class="bar"><span style="width:55%"></span></span><svg width="16" height="16"><use href="#ring"/></svg></span>
+    <div class="send off"><svg width="16" height="16"><use href="#up"/></svg></div>
+  </div>
+</template>
+<template id="toolbar-ready">
+  <div class="toolbar">
+    <div class="ic"><svg width="20" height="20"><use href="#plus"/></svg></div>
+    <span class="mode">Auto</span><span class="sp"></span>
+    <span class="chip"><b>Opus 5.5</b><i>Max</i></span>
+    <span class="meters"><span class="bar"><span style="width:55%"></span></span><svg width="16" height="16"><use href="#ring"/></svg></span>
+    <div class="send"><svg width="16" height="16"><use href="#up"/></svg></div>
+  </div>
+</template>
+<template id="strip">
+  <div class="tray"><svg width="16" height="16"><use href="#term"/></svg><span class="tt">Background processes</span><span class="meta">10 total</span><span class="grow"></span><svg class="chev" width="14" height="14"><use href="#cr"/></svg></div>
+  <div class="tray git"><span class="bchip"><svg width="12" height="12"><use href="#branch"/></svg>orb…78c</span><span class="add">+1,204</span><span class="del">−96</span><span class="grow"></span><span class="merge">Merge to main<i></i><svg width="12" height="12"><use href="#cd"/></svg></span></div>
+</template>
+<template id="tail">
+  <div class="tail">web 全量测试全绿，iOS 也构建过了。分支已 rebase 到最新的 main，可以合并部署了。</div>
+</template>
+<template id="keyboard">
+  <div class="kb">
+    <div class="cand"><span>我</span><span>你</span><span>这个</span><span>是</span><span>好</span><span>请</span><span>是否</span><span>不</span><svg width="18" height="18"><use href="#cd"/></svg></div>
+    <div class="kr" style="top:53px"><span class="k">q</span><span class="k">w</span><span class="k">e</span><span class="k">r</span><span class="k">t</span><span class="k">y</span><span class="k">u</span><span class="k">i</span><span class="k">o</span><span class="k">p</span></div>
+    <div class="kr" style="top:107px"><span class="k">a</span><span class="k">s</span><span class="k">d</span><span class="k">f</span><span class="k">g</span><span class="k">h</span><span class="k">j</span><span class="k">k</span><span class="k">l</span></div>
+    <div class="kr" style="top:161px"><span class="k kw"><svg width="20" height="20"><use href="#shift"/></svg></span><span style="width:6px"></span><span class="k">z</span><span class="k">x</span><span class="k">c</span><span class="k">v</span><span class="k">b</span><span class="k">n</span><span class="k">m</span><span style="width:6px"></span><span class="k kw"><svg width="24" height="20"><use href="#del"/></svg></span></div>
+    <div class="kr" style="top:215px"><span class="k kwide">123</span><span class="k kspace">拼</span><span class="k kwide"><svg width="22" height="18"><use href="#ret"/></svg></span></div>
+    <div class="bot"><svg width="26" height="26"><use href="#globe"/></svg><svg width="20" height="26"><use href="#mic"/></svg></div>
+  </div>
+</template>
+
+<!-- ═════════════ 1 · today vs new ═════════════ -->
+<section id="part-1">
+<h1>建议输入：Use 换成「拍两下」—— iPhone 为准</h1>
+<p class="lede">今天灰字行尾有个 <b>Use</b> 胶囊，点它把建议填进输入框。改成：<b>拿掉 Use，在输入框那一行拍两下</b>，效果和点 Use 一样：填进去、光标到句尾、键盘起来，<b>不发送</b>。
+有建议时第一下先等约 0.3 秒，看有没有第二下：键盘若立刻起来，会把输入卡片顶上去，第二下就落到键盘上。只点一下，键盘晚这么一点起来，照旧是自己打字。
+手势看不见，所以灰字后面跟一行小字 <b>Double-tap to use</b>；在这台设备上拍中过一次，它就不再出现。
+例句是编的；红点、虚线框、紫字是标注，不是界面。</p>
+
+<h2>iPhone · 今天 vs 改后 <small>键盘没起来时；卡片高度不变，对话区不动</small></h2>
+<div class="row">
+  <div class="tile">
+    <div class="cap">① 今天 <span class="now">现状</span><span>照你的截图重画</span></div>
+    <div class="phone">
+      <div data-tpl="tail"></div>
+      <div class="band"><div data-tpl="strip"></div><div class="card">
+        <div class="field sug today"><span class="ph">合并并部署</span><span class="use umark">Use</span>
+          <span class="co" style="right:6px; top:2px">1</span></div>
+        <div data-tpl="toolbar-idle"></div>
+      </div></div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend"><b>Use</b> 是个按钮：tint 底、高 26，行尾还给它留了 64pt。看着像在等你点，比它要填的那句话还显眼。</div>
+  </div>
+
+  <div class="tile">
+    <div class="cap">② 改后 · 第一次见到 <span class="rec">推荐</span><span>小字教一次</span></div>
+    <div class="phone">
+      <div data-tpl="tail"></div>
+      <div class="band"><div data-tpl="strip"></div><div class="card">
+        <div class="field sug new mark"><span class="ph">合并并部署</span><span class="hint">Double-tap to use</span>
+          <span class="co">2</span><span class="spec" style="right:16px; top:17px">整行都能拍</span></div>
+        <div data-tpl="toolbar-idle"></div>
+      </div></div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend">Use 拿掉。灰字后面紧跟一行小字 <b>Double-tap to use</b>（13pt，比建议小一号，同一个灰），和网页把 Tab 键帽紧跟在灰字后面是一个规矩。
+      <b>整行都能拍</b>，不用对准。</div>
+  </div>
+
+  <div class="tile">
+    <div class="cap">③ 改后 · 拍中过一次以后 <span>只剩灰字</span></div>
+    <div class="phone">
+      <div data-tpl="tail"></div>
+      <div class="band"><div data-tpl="strip"></div><div class="card">
+        <div class="field sug new"><span class="ph">合并并部署</span></div>
+        <div data-tpl="toolbar-idle"></div>
+      </div></div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend">这台设备上拍中过一次，提示就不再出现。这一行和 Message… 一样干净：灰字就是建议本身。没有建议时仍是 Message…，和今天一样。</div>
+  </div>
+</div>
+</section>
+
+<!-- ═════════════ 2 · the gesture ═════════════ -->
+<section id="part-2">
+<h2>iPhone · 拍两下 <small>有建议时，第一下先等约 0.3 秒，好让第二下落在原处</small></h2>
+<div class="row">
+  <div class="tile">
+    <div class="cap">④ 只点一下 <span>约 0.3 秒后键盘起来，灰字还在</span></div>
+    <div class="phone kbup">
+      <div data-tpl="tail"></div>
+      <div class="band"><div class="card focus">
+        <div class="field sug new"><span class="caret at0"></span><span class="ph">合并并部署</span><span class="hint">Double-tap to use</span>
+          <span class="touch" style="left:286px; top:26px"></span><span class="spec" style="left:226px; top:-6px">第 1 下</span></div>
+        <div data-tpl="toolbar-idle"></div>
+      </div></div>
+      <div data-tpl="keyboard"></div>
+    </div>
+    <div class="legend">有建议时，单点要等双击判定落空（约 0.3 秒）才起键盘：键盘若在第一下就起来，会把输入卡片顶上去，第二下就落到键盘上（拼音键盘上是一个候选字）。之后和今天一样：停车栏收起，<b>灰字还在</b>，开始打字它就让开。</div>
+  </div>
+
+  <div class="tile">
+    <div class="cap">⑤ 第二下 <span>约 0.3 秒内；原地变成你的字</span></div>
+    <div class="phone kbup">
+      <div data-tpl="tail"></div>
+      <div class="band"><div class="card focus">
+        <div class="field">合并并部署<span class="caret"></span>
+          <span class="touch ghost" style="left:286px; top:26px"></span><span class="touch" style="left:291px; top:28px"></span>
+          <span class="spec" style="left:226px; top:-6px">第 2 下</span>
+          <svg class="buzz" width="22" height="22" style="left:318px; top:-9px"><use href="#buzz"/></svg><span class="spec" style="left:341px; top:-6px">轻震</span></div>
+        <div data-tpl="toolbar-ready"></div>
+      </div></div>
+      <div data-tpl="keyboard"></div>
+    </div>
+    <div class="legend">灰字原地变黑，光标跳到句尾，发送键变蓝，轻震一下（批准卡用的同一个 <code>PlatformHaptics.tap()</code>）。
+      <b>不发送</b>，和 Use 一样（10-08 定的 ②），可以改完再发。</div>
+  </div>
+
+  <div class="tile">
+    <div class="cap">⑥ 想粘贴时 <span>唯一会撞上的地方</span></div>
+    <div class="phone kbup">
+      <div data-tpl="tail"></div>
+      <div class="band"><div class="card focus">
+        <div class="field sug new"><span class="caret at0"></span><span class="ph">合并并部署</span>
+          <div class="emenu"><span>Paste</span><span>AutoFill</span></div></div>
+        <div data-tpl="toolbar-idle"></div>
+      </div></div>
+      <div data-tpl="keyboard"></div>
+    </div>
+    <div class="legend">有建议、输入框还空着时，单点不再弹编辑菜单：<b>长按</b>出 Paste（实现时改的，iPhone 上点按被扣住后不再开关菜单）。<b>两下点得太快</b>会被当成拍两下、填进建议，删掉再粘即可。
+      只在有建议、输入框为空时认两下；有字时两下仍是系统的选词。</div>
+  </div>
+</div>
+</section>
+
+<!-- ═════════════ 3 · details ═════════════ -->
+<section id="part-3">
+<h2>iPhone · 细节 <small>长建议、深色、读屏</small></h2>
+<div class="row">
+  <div class="tile">
+    <div class="cap">⑦ 长建议 <span>Use 让出来的宽度给灰字</span></div>
+    <div class="panel">
+      <div class="plabel"><b>今天</b> · Use 连留白占 64pt</div>
+      <div class="card"><div class="field sug today"><span class="ph">先在 staging 跑一遍 e2e，没问题再合并并部署到生产</span><span class="use">Use</span></div>
+        <div data-tpl="toolbar-idle"></div></div>
+      <div class="plabel"><b>改后 · 第一次见到</b> · 提示比 Use 多占约 3 个字</div>
+      <div class="card"><div class="field sug new"><span class="ph">先在 staging 跑一遍 e2e，没问题再合并并部署到生产</span><span class="hint">Double-tap to use</span></div>
+        <div data-tpl="toolbar-idle"></div></div>
+      <div class="plabel"><b>改后 · 拍中过一次以后</b> · 整行给灰字，多出约 4 个字</div>
+      <div class="card"><div class="field sug new"><span class="ph">先在 staging 跑一遍 e2e，没问题再合并并部署到生产</span></div>
+        <div data-tpl="toolbar-idle"></div></div>
+    </div>
+    <div class="legend">建议只占一行、尾部截断（CLI 自己限在 2–12 个词）。用过以后整行都给它，比今天多显示约 4 个字；第一次见到时提示小字比 Use 多占约 3 个字，只这一阵子。</div>
+  </div>
+
+  <div class="tile">
+    <div class="cap">⑧ 深色 <span>同 ②</span></div>
+    <div class="phone dark">
+      <div data-tpl="tail"></div>
+      <div class="band"><div data-tpl="strip"></div><div class="card">
+        <div class="field sug new"><span class="ph">合并并部署</span><span class="hint">Double-tap to use</span></div>
+        <div data-tpl="toolbar-idle"></div>
+      </div></div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend">灰字和提示都用系统的 <code>placeholderText</code>，深色下自动变浅。没有胶囊，深色里也就没有那一块亮蓝。</div>
+  </div>
+
+  <div class="tile">
+    <div class="cap">⑨ VoiceOver <span>读屏的双击是「激活」</span></div>
+    <div class="phone">
+      <div data-tpl="tail"></div>
+      <div class="band"><div data-tpl="strip"></div><div class="card">
+        <div class="field sug new"><span class="ph">合并并部署</span><span class="hint">Double-tap to use</span><span class="vo"></span></div>
+        <div data-tpl="toolbar-idle"></div>
+      </div></div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="vocap"><span class="who">VoiceOver 读</span>Message, text field. Suggested: 合并并部署. Actions available.<br>
+      <span class="who">上下滑</span><span class="act">Use suggestion</span> <span class="dim">→ 双击 = 填入</span></div>
+    <div class="legend">开着 VoiceOver 时，双击是它自己的「激活」，拍两下这条路给不了读屏的人。输入框读出建议，带一个 <b>Use suggestion</b> 动作：上下滑选中，再双击。今天 Use 按钮读的也是这句。</div>
+  </div>
+</div>
+</section>
+
+<!-- ═════════════ 4 · other surfaces ═════════════ -->
+<section id="part-4">
+<h2>其他端 <small>iPhone 为准：触屏一起改，有键盘的不动</small></h2>
+<div class="surf">
+  <div class="srow">
+    <div class="sname"><b>手机网页</b><span>触屏</span></div>
+    <div class="smini"><div class="tag">今天</div>
+      <div class="wcard"><div class="wfield today"><span class="wph">合并并部署</span><span class="wuse">Use</span></div>
+        <div class="wtool"><div class="ic"><svg width="18" height="18"><use href="#plus"/></svg></div>Auto<span class="wchip"><b>Opus 5.5</b> Max</span><div class="wsend"><svg width="14" height="14"><use href="#up"/></svg></div></div></div></div>
+    <div class="sarrow">→</div>
+    <div class="smini"><div class="tag">改后</div>
+      <div class="wcard"><div class="wfield"><span class="wph">合并并部署</span><span class="wtip">Double-tap to use</span></div>
+        <div class="wtool"><div class="ic"><svg width="18" height="18"><use href="#plus"/></svg></div>Auto<span class="wchip"><b>Opus 5.5</b> Max</span><div class="wsend"><svg width="14" height="14"><use href="#up"/></svg></div></div></div></div>
+    <div class="snote">和 iPhone 一个样（10-09 定过「手机网页保留 Use，和 iPhone App 一样」，这次跟着一起变）。
+      Safari 默认拍两下会放大页面，输入框要加 <code>touch-action: manipulation</code>。读屏保留一个看不见的 Use 按钮。</div>
+  </div>
+  <div class="srow">
+    <div class="sname"><b>Android</b><span>SessionComposer</span></div>
+    <div class="smini"><div class="tag">今天</div>
+      <div class="afield today"><span class="aph">合并并部署</span><span class="ause">Use</span></div></div>
+    <div class="sarrow">→</div>
+    <div class="smini"><div class="tag">改后</div>
+      <div class="afield new"><span class="aph">合并并部署</span><span class="atip">Double-tap to use</span></div></div>
+    <div class="snote">输入框尾部的 Use 文字按钮拿掉，placeholder 里灰字加提示；拍两下填入；没聚焦时第一下同样先等一等。TalkBack 同样走 <b>Use suggestion</b> 动作。</div>
+  </div>
+  <div class="srow plain">
+    <div class="sname"><b>iPad</b><span>同一份 ComposerView</span></div>
+    <div class="snote">跟 iPhone 一起变，不用另做。</div>
+  </div>
+  <div class="srow plain">
+    <div class="sname"><b>Mac · 桌面网页</b><span>有键盘</span></div>
+    <div class="snote"><b>不动</b>：按 Tab 填入。Mac 是行尾 <code>Use ⇥</code>，网页是灰字后的 <code>Tab</code> 键帽（10-09 定的）。有键盘就用不着拍。</div>
+  </div>
+</div>
+</section>
+
+<!-- ═════════════ 5 · decide + land ═════════════ -->
+<section id="part-5">
+<div class="notes">
+  <div>
+    <h3>待定 · 要你拍板</h3>
+    <h4>① 提示小字</h4>
+    <ol>
+      <li><span class="pick">A. 紧跟灰字，拍中一次后不再出现（推荐）</span>：先 ② 后 ③</li>
+      <li>B. 一直显示：一直是 ②</li>
+      <li>C. 不显示，只有灰字：一开始就是 ③；第一次看到的人不会知道能拍</li>
+    </ol>
+    <h4>② 范围</h4>
+    <ol>
+      <li><span class="pick">A. 触屏一起改（推荐）</span>：iPhone、iPad、手机网页、Android</li>
+      <li>B. 先只改 iPhone、iPad（同一份代码），手机网页和 Android 留 Use</li>
+    </ol>
+  </div>
+  <div>
+    <h3>变与不变</h3>
+    <ul>
+      <li>拍两下 = 以前点 Use：填进去、光标到句尾、键盘起来，<b>不发送</b></li>
+      <li>单点照旧是聚焦打字，只是有建议时晚约 0.3 秒；有字时不认两下</li>
+      <li>建议什么时候出现、什么时候消失（设计文档 §4.4）不变；不加关闭按钮，设置里的总开关照旧</li>
+    </ul>
+    <h3 class="more">代价</h3>
+    <ul>
+      <li>手势看不见：靠提示小字教一次，每台设备各一次（记在本机）</li>
+      <li>有建议时单点晚约 0.3 秒起键盘，否则第二下会落到刚起来的键盘上（④）</li>
+      <li>有建议、输入框为空时，粘贴改为长按（⑥）</li>
+      <li>读屏走动作、不走手势（⑨）</li>
+    </ul>
+  </div>
+  <div>
+    <h3>落地（按代价排）</h3>
+    <ol>
+      <li><b>iPhone · iPad</b><span class="cost">小</span>：<code>PromptSuggestionLine</code> 在 iOS 去掉 Use 和行尾 64pt，换成提示小字（macOS 分支的 <code>Use ⇥</code> 不动）；
+        <code>GrowingTextEditor</code> 的 UITextView 在有建议时挂一个双击识别，输入框自己的点按都等它落空，认到就走现成的 <code>acceptSuggestion()</code> + <code>PlatformHaptics.tap()</code>，第二下不让系统弹编辑菜单；
+        加 <code>Use suggestion</code> 读屏动作；「用过」记在 UserDefaults</li>
+      <li><b>手机网页</b><span class="cost">小</span>：<code>hover: none</code> 时不画 <code>.composer-suggestion-use</code>，改画提示；textarea 上认两下（两次点按 ≤ 300 ms、相距 ≤ 24 px），没聚焦时先扣住第一下、超时再交还；
+        <code>touch-action: manipulation</code>；读屏用的 Use 按钮视觉隐藏；「用过」记在 localStorage</li>
+      <li><b>Android</b><span class="cost">中</span>：<code>SessionComposer.kt</code> 去掉 trailingIcon 的 Use；没聚焦时输入框上盖一层只收点按的透明层（单点等双击超时再交还），已聚焦时 <code>pointerInput</code> 在 Initial 阶段认两下；
+        <code>semantics</code> 加 customActions；「用过」记在 SharedPreferences</li>
+      <li><b>测试与文档</b>：三端把「点 Use」的用例换成拍两下，加上单点不填、有字不认、提示只出一次、读屏动作；
+        <code>docs/prompt-suggestions-design.md</code> 改 §4.1、§4.3，§9 补一条</li>
+    </ol>
+  </div>
+</div>
+</section>
+
+</div>
+<script>
+  // Stamp the shared pieces in (keeps the frames identical where they should be). Nested templates
+  // (none today) would need a second pass.
+  for (const slot of document.querySelectorAll('[data-tpl]')) {
+    const tpl = document.getElementById(slot.dataset.tpl);
+    slot.replaceWith(tpl.content.cloneNode(true));
+  }
+</script>
+</body>
+</html>

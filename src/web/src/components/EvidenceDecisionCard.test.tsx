@@ -7,38 +7,52 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { pendingDecisionsQuery } from '../lib/queries';
+import type { SessionStateSource } from '../lib/sessionState';
 import { CARD_ACTION_CLASS } from './CardAction';
 import { ENTER_HINT } from './CardHotkey';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
 import {
+  DecisionStrip,
   decisionRowKey,
+  needsDecisionCount,
   type PendingDecisionQueue,
   type PendingDecisionRow,
+  type SentToCoordinatorRow,
 } from './DecisionRail';
 import {
   DECISION_ASK_HEADING,
   DECISION_CONFIRM_ACTION,
   DECISION_CRITERION_HEADING,
+  DECISION_DECIDE_MYSELF_ACTION,
   DECISION_NO_CLAIM,
   DECISION_NO_CRITERION,
   DECISION_NO_GAPS,
   DECISION_SEND_BACK_ACTION,
   DECISION_SEND_BACK_HINT,
   EVIDENCE_DECISION_ALREADY_DECIDED,
+  EVIDENCE_DECISION_COORDINATOR_BACK,
+  EVIDENCE_DECISION_QUEUED_HEADING,
+  EVIDENCE_DECISION_QUEUED_NOTE,
+  EVIDENCE_DECISION_QUEUED_OPEN_NOTE,
   EVIDENCE_DECISION_RECORDED_HEADING,
   EVIDENCE_DECISION_STALE_HEADING,
   EVIDENCE_DECISION_SUPERSEDED,
   EVIDENCE_DECISION_UNREAD_HEADING,
   EvidenceDecisionCard,
   SessionEvidenceDecisionCard,
+  coordinatorPause,
+  coordinatorPauseLine,
   decisionClaimFold,
   decisionGapsMore,
+  decisionReceiptTime,
   evidenceDecidingSession,
+  evidenceDecisionCardRows,
   evidenceDecisionRecordedLine,
   evidenceDecisionRefusal,
   evidenceDecisionRequest,
   evidenceDecisionStanding,
   sendEvidenceDecision,
+  sentToCoordinatorLine,
   type EvidenceDecisionResult,
   type EvidenceDecisionStanding,
 } from './EvidenceDecisionCard';
@@ -943,3 +957,491 @@ describe('where the card is mounted', () => {
     expect(element).toContain('sessionId={selectedId}');
   });
 });
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+   A version waiting for the coordinator
+   ───────────────────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * The versions a paused coordinator is owed (`waitingOnCoordinator`) and the ones handed to it since
+ * (`sentToCoordinator`): folded while one waits, opened in place into the card above by Decide it
+ * myself, one line once it is sent. What the folded card says about the pause is read off the
+ * coordinator conversation's own row — its run state, its error, its armed retry — as the page hands
+ * it over, and the words are the project's (its instructions' copy section), pinned literally here.
+ */
+const QUEUED_TASK_ID = '3kurFew9WWOLA9F0fp8dtZ';
+const LATER_TASK_ID = 'OzUP5aliVUIv4unAopIJ5';
+const SUBMITTED_AT = '2026-10-09T11:59:30.000Z';
+const RESETS_AT = '2026-10-12T11:00:00.000Z';
+const RETRIES_AT = '2026-10-09T12:02:30.000Z';
+const NOW = new Date('2026-10-09T12:02:00.000Z');
+const WEEKLY_LIMIT = "You've hit your weekly limit · resets Oct 12, 7pm (Asia/Shanghai)";
+
+function queuedRow(over: Partial<PendingDecisionRow> = {}): PendingDecisionRow {
+  return row({
+    taskId: QUEUED_TASK_ID,
+    title: 'Queue cards for the coordinator',
+    submittedAt: SUBMITTED_AT,
+    ...over,
+  });
+}
+
+function sentRow(over: Partial<SentToCoordinatorRow> = {}): SentToCoordinatorRow {
+  return {
+    taskId: QUEUED_TASK_ID,
+    title: 'Queue cards for the coordinator',
+    projectId: PROJECT_ID,
+    evidenceRevision: '2',
+    deliveredAt: '2026-10-09T12:05:00.000Z',
+    ...over,
+  };
+}
+
+/** The read a coordinator conversation gets while its coordinator is paused. */
+function coordinatorQueue(over: Partial<PendingDecisionQueue> = {}): PendingDecisionQueue {
+  return { ...queue([]), waitingOnCoordinator: [queuedRow()], sentToCoordinator: [], ...over };
+}
+
+/** The coordinator conversation as the page holds it: FAILED on Claude's weekly limit, with the
+ *  retry armed for the reset — the evening of 2026-10-09 the project was filed for. */
+function coordinator(over: SessionStateSource = {}): SessionStateSource {
+  return { runState: 'FAILED', lifecycleState: 'OPEN', error: WEEKLY_LIMIT, retryAt: RESETS_AT, ...over };
+}
+
+function coordinatorCards(
+  read: PendingDecisionQueue,
+  session: SessionStateSource | null = coordinator(),
+  projectId: string | null = PROJECT_ID,
+): string {
+  const qc = newClient();
+  qc.setQueryData(pendingDecisionsQuery(SESSION_ID).queryKey, read);
+  return renderToStaticMarkup(
+    <QueryClientProvider client={qc}>
+      <SessionEvidenceDecisionCard
+        sessionId={SESSION_ID}
+        projectId={projectId}
+        coordinator={session}
+        onSendBack={() => {}}
+      />
+    </QueryClientProvider>,
+  );
+}
+
+async function mountCoordinatorCards(
+  read: PendingDecisionQueue,
+  onSendBack: (row: PendingDecisionRow) => void = () => {},
+): Promise<{ qc: QueryClient; rendered: HTMLElement }> {
+  const qc = newClient();
+  qc.setQueryData(pendingDecisionsQuery(SESSION_ID).queryKey, read);
+  const rendered = await mount(
+    <QueryClientProvider client={qc}>
+      <SessionEvidenceDecisionCard
+        sessionId={SESSION_ID}
+        projectId={PROJECT_ID}
+        coordinator={coordinator()}
+        onSendBack={onSendBack}
+      />
+    </QueryClientProvider>,
+  );
+  return { qc, rendered };
+}
+
+/** The next read, as a poll would bring it. */
+async function reread(qc: QueryClient, read: PendingDecisionQueue): Promise<void> {
+  await act(async () => {
+    qc.setQueryData(pendingDecisionsQuery(SESSION_ID).queryKey, read);
+  });
+  await settle();
+}
+
+/** What each slot of the conversation is drawn as, in order: folded, one line, or a card. */
+function slots(scope: HTMLElement): string[] {
+  return [...scope.children].map((node) => {
+    const element = node as HTMLElement;
+    if (element.dataset.queuedRow) return `waiting ${element.dataset.queuedRow}`;
+    if (element.dataset.sentRow) return `sent ${element.dataset.sentRow}`;
+    return `card ${element.dataset.decisionRow ?? '?'}`;
+  });
+}
+
+function posts(): unknown[] {
+  return apiMock.mock.calls.filter(
+    ([, options]) => (options as { method?: string } | undefined)?.method === 'POST',
+  );
+}
+
+describe('a version waiting for the coordinator: why it waits', () => {
+  const at = (iso: string): string => decisionReceiptTime(iso, NOW);
+  const cases: Array<[string, SessionStateSource, string]> = [
+    ['a weekly limit, with the reset it armed a retry for', coordinator(),
+      `Coordinator paused · weekly limit · resets ${at(RESETS_AT)}`],
+    ['a 5-hour limit, with its reset',
+      coordinator({ error: "You've hit your session limit · resets 6:20pm (Europe/Berlin)" }),
+      `Coordinator paused · 5-hour limit · resets ${at(RESETS_AT)}`],
+    ['a weekly limit with no retry armed', coordinator({ retryAt: null }),
+      'Coordinator paused · weekly limit'],
+    ['a usage limit that names no window, with no retry armed',
+      coordinator({
+        error: "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase "
+          + 'more credits or try again at Aug 9th, 2026 1:26 PM.',
+        retryAt: null,
+      }),
+      'Coordinator paused · usage limit'],
+    ['a provider error it will retry',
+      coordinator({
+        error: 'API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"slow down"}}',
+        retryAt: RETRIES_AT,
+      }),
+      `Coordinator paused · retries ${at(RETRIES_AT)}`],
+    ['a runner that went away, with nothing armed', coordinator({ error: 'runner offline', retryAt: null }),
+      'Coordinator paused'],
+    ['a limit parked waiting for input, with its retry armed',
+      coordinator({ runState: 'AWAITING_INPUT', error: null }),
+      `Coordinator paused · retries ${at(RESETS_AT)}`],
+    // The transcript's own judgment: a reply that only QUOTES the limit is not one.
+    ['a failure that only quotes a limit',
+      coordinator({ error: `The earlier run stopped on this line from the runtime: ${WEEKLY_LIMIT}`, retryAt: null }),
+      'Coordinator paused'],
+    ['back, and running', coordinator({ runState: 'RUNNING', error: null, retryAt: null }),
+      'Coordinator is back · it gets this when its current turn ends'],
+    ['back, and waiting for its reader', coordinator({ runState: 'AWAITING_INPUT', error: null, retryAt: null }),
+      'Coordinator is back · it gets this when its current turn ends'],
+  ];
+
+  it.each(cases)('%s', (_name, session, line) => {
+    expect(coordinatorPauseLine(coordinatorPause(session), NOW)).toBe(line);
+  });
+
+  it('is said on the folded card, amber while the coordinator is paused and quiet once it is back', () => {
+    for (const [name, session] of cases) {
+      const html = coordinatorCards(coordinatorQueue(), session);
+      expect(html, name).toContain(escaped(coordinatorPauseLine(coordinatorPause(session))));
+      expect(html.includes('evidence-queued-pause is-paused'), name)
+        .toBe(coordinatorPause(session).state === 'PAUSED');
+    }
+  });
+
+  it('is paused for a reason nobody knows when there is no conversation to read', () => {
+    expect(coordinatorPauseLine(coordinatorPause(null), NOW)).toBe('Coordinator paused');
+  });
+});
+
+describe('a version waiting for the coordinator, folded', () => {
+  it('says what waits and when it came, the task, why it waits, and that the reader may still decide — in that order', () => {
+    const html = coordinatorCards(coordinatorQueue());
+    const order = [
+      EVIDENCE_DECISION_QUEUED_HEADING,
+      decisionReceiptTime(SUBMITTED_AT),
+      'Queue cards for the coordinator',
+      coordinatorPauseLine(coordinatorPause(coordinator())),
+      EVIDENCE_DECISION_QUEUED_NOTE,
+      DECISION_DECIDE_MYSELF_ACTION,
+    ].map((text) => html.indexOf(escaped(text)));
+    expect(order.every((index) => index >= 0), String(order)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    // The time is the heading line's right-hand end, not a line of its own.
+    const head = /<div class="approval-head evidence-queued-head">([\s\S]*?)<\/div>/u.exec(html)?.[1] ?? '';
+    expect(head).toContain(`>${EVIDENCE_DECISION_QUEUED_HEADING}<`);
+    expect(head).toContain(`<span class="evidence-queued-time">${escaped(decisionReceiptTime(SUBMITTED_AT))}</span>`);
+  });
+
+  it('uses the project’s own words, each declared where the native clients read the card’s copy', () => {
+    expect(EVIDENCE_DECISION_QUEUED_HEADING).toBe('Waiting for the coordinator');
+    expect(EVIDENCE_DECISION_QUEUED_NOTE).toBe('It goes to the coordinator when it’s back. You can still decide now.');
+    expect(DECISION_DECIDE_MYSELF_ACTION).toBe('Decide it myself');
+    expect(EVIDENCE_DECISION_QUEUED_OPEN_NOTE)
+      .toBe('It gets this when it’s back. Decide here only if you don’t want to wait.');
+    expect(EVIDENCE_DECISION_COORDINATOR_BACK).toBe('Coordinator is back · it gets this when its current turn ends');
+    expect(sentToCoordinatorLine(sentRow().deliveredAt, NOW))
+      .toBe(`Sent to the coordinator · ${decisionReceiptTime(sentRow().deliveredAt, NOW)}`);
+
+    // `NAME = '…'` once a wrapped value is pulled up onto its line: the shape the Swift copy parity
+    // tests read this card's constants in (`EvidenceDecisionCopyParityTests.flatWebCard`).
+    const flat = cardSource()
+      .replace(/['`]\s*\+\s*['`]/gu, '')
+      .replace(/=\s*\n\s*'/gu, "= '");
+    for (const [name, value] of [
+      ['EVIDENCE_DECISION_QUEUED_HEADING', 'Waiting for the coordinator'],
+      ['EVIDENCE_DECISION_QUEUED_NOTE', 'It goes to the coordinator when it’s back. You can still decide now.'],
+      ['DECISION_DECIDE_MYSELF_ACTION', 'Decide it myself'],
+      ['EVIDENCE_DECISION_QUEUED_OPEN_NOTE', 'It gets this when it’s back. Decide here only if you don’t want to wait.'],
+      ['EVIDENCE_DECISION_COORDINATOR_PAUSED', 'Coordinator paused'],
+      ['EVIDENCE_DECISION_COORDINATOR_BACK', 'Coordinator is back · it gets this when its current turn ends'],
+      ['DECISION_PAUSE_FIVE_HOUR_LIMIT', '5-hour limit'],
+      ['DECISION_PAUSE_WEEKLY_LIMIT', 'weekly limit'],
+      ['DECISION_PAUSE_USAGE_LIMIT', 'usage limit'],
+      ['EVIDENCE_DECISION_SENT_TO_COORDINATOR', 'Sent to the coordinator'],
+    ]) {
+      expect(flat).toContain(`export const ${name} = '${value}';`);
+    }
+  });
+
+  it('is grey, asks nothing, carries no address the pinned strip could point at, and holds no key', () => {
+    const html = coordinatorCards(coordinatorQueue());
+    expect(html).toContain('class="approval-card evidence-queued"');
+    expect(html).not.toContain('approval-card decision-ask evidence-decision');
+    expect(html).not.toContain('data-decision-row');
+    expect(html).not.toContain('approval-kbd');
+    // Its one control opens it; neither verdict is on it while it is folded.
+    expect(buttons(html).map((button) => button.text)).toEqual([DECISION_DECIDE_MYSELF_ACTION]);
+  });
+
+  it('is drawn for this project’s versions only, and in a conversation that coordinates one', () => {
+    const elsewhere = coordinatorQueue({
+      waitingOnCoordinator: [queuedRow({ projectId: OTHER_PROJECT_ID })],
+      sentToCoordinator: [sentRow({ projectId: OTHER_PROJECT_ID })],
+    });
+    expect(coordinatorCards(elsewhere)).toBe('');
+    expect(coordinatorCards(coordinatorQueue({ sentToCoordinator: [sentRow()] }), coordinator(), null)).toBe('');
+  });
+});
+
+describe('Decide it myself', () => {
+  it('opens the folded card in place into today’s card, saying why it waits and what deciding here means', async () => {
+    const { rendered } = await mountCoordinatorCards(coordinatorQueue());
+    await click(press(rendered, DECISION_DECIDE_MYSELF_ACTION));
+
+    expect(slots(rendered)).toEqual([`card ${QUEUED_TASK_ID}@2`]);
+    const card = rendered.firstElementChild as HTMLElement;
+    expect(card.querySelector('.evidence-decision-heading')?.textContent).toBe(DECISION_ASK_HEADING);
+    // The pause line first, then what deciding here means — then the card as it always reads.
+    const notice = card.querySelector<HTMLElement>('.evidence-queued-notice');
+    expect(notice?.textContent)
+      .toBe(`${coordinatorPauseLine(coordinatorPause(coordinator()))}${EVIDENCE_DECISION_QUEUED_OPEN_NOTE}`);
+    expect(card.querySelector('.decision-ask-standard-text')?.textContent).toBe(queuedRow().criterion!.text);
+    expect(press(card, DECISION_CONFIRM_ACTION).disabled).toBe(false);
+    expect(press(card, OWNER_SEND_BACK_ACTION).disabled).toBe(false);
+    // Nobody is being asked it yet, so it takes no key: its buttons are its only presses.
+    expect(hintOn(press(card, DECISION_CONFIRM_ACTION))).toBeNull();
+    expect(apiMock).not.toHaveBeenCalled();
+  });
+
+  it('confirms through the decision door from this conversation, as today’s card does', async () => {
+    apiMock.mockImplementation((async (_path: string, options?: { method?: string }) =>
+      options?.method === 'POST'
+        ? receipt({ taskId: QUEUED_TASK_ID })
+        : coordinatorQueue({ waitingOnCoordinator: [] })) as never);
+    const { rendered } = await mountCoordinatorCards(coordinatorQueue());
+    await click(press(rendered, DECISION_DECIDE_MYSELF_ACTION));
+    await click(press(rendered, DECISION_CONFIRM_ACTION));
+    await settle();
+
+    // The same row, the same deciding session — the coordinator conversation it is drawn in.
+    expect(posts()).toEqual([
+      [
+        `/tasks/${QUEUED_TASK_ID}/evidence/decision`,
+        {
+          method: 'POST',
+          body: { decidingSessionId: SESSION_ID, evidenceRevision: '2', decision: 'CONFIRM' },
+        },
+      ],
+    ]);
+    expect(
+      apiMock.mock.calls.filter(([path]) => String(path).startsWith('/tasks/evidence-decisions/pending')),
+    ).toHaveLength(1);
+    expect(rendered.textContent).toContain(evidenceDecisionRecordedLine(receipt({ taskId: QUEUED_TASK_ID })));
+    // Decided here, it no longer goes to the coordinator, and the card stops saying it will.
+    expect(rendered.querySelector('.evidence-queued-notice')).toBeNull();
+  });
+
+  it('hands Chat about this to the composer with the row, and asks the door for nothing itself', async () => {
+    const onSendBack = vi.fn();
+    const { rendered } = await mountCoordinatorCards(coordinatorQueue(), onSendBack);
+    await click(press(rendered, DECISION_DECIDE_MYSELF_ACTION));
+    await click(press(rendered, OWNER_SEND_BACK_ACTION));
+    await settle();
+
+    expect(onSendBack.mock.calls).toEqual([[queuedRow()]]);
+    expect(apiMock).not.toHaveBeenCalled();
+    expect(press(rendered, DECISION_CONFIRM_ACTION).disabled).toBe(false);
+  });
+
+  it('leaves the keys to a question below it', async () => {
+    const asked = row({ evidenceRevision: '5', title: 'Asked of the owner' });
+    apiMock.mockImplementation((async (_path: string, options?: { method?: string }) =>
+      options?.method === 'POST' ? receipt({ evidenceRevision: '5' }) : coordinatorQueue()) as never);
+    const { qc, rendered } = await mountCoordinatorCards(coordinatorQueue());
+    await click(press(rendered, DECISION_DECIDE_MYSELF_ACTION));
+    // A question arrives under the opened card: drawn lower, it is still the one the keys answer.
+    await reread(qc, coordinatorQueue({ pending: [asked] }));
+
+    expect(slots(rendered)).toEqual([`card ${QUEUED_TASK_ID}@2`, `card ${TASK_ID}@5`]);
+    const cards = [...rendered.querySelectorAll<HTMLElement>('[data-decision-row]')];
+    expect(cards.map((card) =>
+      [...card.querySelectorAll<HTMLElement>('button.card-action')].map(hintOn).filter(Boolean)))
+      .toEqual([[], [ENTER_HINT]]);
+    await key();
+    expect(posts().map(([path]) => path)).toEqual([`/tasks/${TASK_ID}/evidence/decision`]);
+  });
+});
+
+describe('handed to the coordinator', () => {
+  it('is one line saying when, with nothing to press', () => {
+    const html = coordinatorCards(coordinatorQueue({ waitingOnCoordinator: [], sentToCoordinator: [sentRow()] }));
+    expect(html).toContain(escaped(sentToCoordinatorLine(sentRow().deliveredAt)));
+    expect(html).toContain(`data-sent-row="${QUEUED_TASK_ID}@2"`);
+    expect(buttons(html)).toEqual([]);
+    expect(html).not.toContain('data-decision-row');
+    expect(html).not.toContain('evidence-queued');
+  });
+
+  it('takes the place its folded card had', async () => {
+    const later = queuedRow({ taskId: LATER_TASK_ID, title: 'Send waited revisions' });
+    const { qc, rendered } = await mountCoordinatorCards(coordinatorQueue({ waitingOnCoordinator: [queuedRow(), later] }));
+    expect(slots(rendered)).toEqual([`waiting ${QUEUED_TASK_ID}@2`, `waiting ${LATER_TASK_ID}@2`]);
+
+    // The second one goes first: a fresh read would list the line ahead of the card still waiting,
+    // and the conversation keeps each where it was.
+    await reread(qc, coordinatorQueue({
+      waitingOnCoordinator: [queuedRow()],
+      sentToCoordinator: [sentRow({ taskId: LATER_TASK_ID, title: later.title })],
+    }));
+    expect(slots(rendered)).toEqual([`waiting ${QUEUED_TASK_ID}@2`, `sent ${LATER_TASK_ID}@2`]);
+
+    // And a card the reader opened collapses to its line just the same once it is handed over.
+    await click(press(rendered, DECISION_DECIDE_MYSELF_ACTION));
+    expect(slots(rendered)).toEqual([`card ${QUEUED_TASK_ID}@2`, `sent ${LATER_TASK_ID}@2`]);
+    await reread(qc, coordinatorQueue({
+      waitingOnCoordinator: [],
+      sentToCoordinator: [sentRow(), sentRow({ taskId: LATER_TASK_ID, title: later.title })],
+    }));
+    expect(slots(rendered)).toEqual([`sent ${QUEUED_TASK_ID}@2`, `sent ${LATER_TASK_ID}@2`]);
+  });
+});
+
+describe('a version moving between the coordinator and its owner', () => {
+  it('leaves nothing behind when it only ever waited and a later revision replaced it', async () => {
+    const { qc, rendered } = await mountCoordinatorCards(coordinatorQueue());
+    await reread(qc, coordinatorQueue({ waitingOnCoordinator: [queuedRow({ evidenceRevision: '3' })] }));
+    expect(slots(rendered)).toEqual([`waiting ${QUEUED_TASK_ID}@3`]);
+    expect(rendered.textContent).not.toContain(EVIDENCE_DECISION_STALE_HEADING);
+  });
+
+  it('says an opened one was superseded, by the version waiting in its place', async () => {
+    const { qc, rendered } = await mountCoordinatorCards(coordinatorQueue());
+    await click(press(rendered, DECISION_DECIDE_MYSELF_ACTION));
+    await reread(qc, coordinatorQueue({ waitingOnCoordinator: [queuedRow({ evidenceRevision: '3' })] }));
+
+    expect(slots(rendered)).toEqual([`card ${QUEUED_TASK_ID}@2`, `waiting ${QUEUED_TASK_ID}@3`]);
+    const stale = rendered.firstElementChild as HTMLElement;
+    expect(stale.textContent).toContain(EVIDENCE_DECISION_STALE_HEADING);
+    expect(stale.textContent).toContain(EVIDENCE_DECISION_SUPERSEDED);
+    expect(stale.textContent).toContain('version 3');
+    expect(press(stale, DECISION_CONFIRM_ACTION).disabled).toBe(true);
+  });
+
+  it('folds a question that goes back to wait for its coordinator, rather than calling it answered', async () => {
+    const { qc, rendered } = await mountCoordinatorCards(coordinatorQueue({
+      waitingOnCoordinator: [],
+      pending: [queuedRow()],
+    }));
+    expect(slots(rendered)).toEqual([`card ${QUEUED_TASK_ID}@2`]);
+    await reread(qc, coordinatorQueue());
+    expect(slots(rendered)).toEqual([`waiting ${QUEUED_TASK_ID}@2`]);
+    expect(rendered.textContent).not.toContain(EVIDENCE_DECISION_STALE_HEADING);
+  });
+
+  it('draws one that became the owner’s question as today’s card, in the place it waited in', async () => {
+    const later = queuedRow({ taskId: LATER_TASK_ID });
+    const { qc, rendered } = await mountCoordinatorCards(coordinatorQueue({ waitingOnCoordinator: [queuedRow(), later] }));
+    await reread(qc, coordinatorQueue({ waitingOnCoordinator: [later], pending: [queuedRow()] }));
+
+    expect(slots(rendered)).toEqual([`card ${QUEUED_TASK_ID}@2`, `waiting ${LATER_TASK_ID}@2`]);
+    const card = rendered.firstElementChild as HTMLElement;
+    expect(card.querySelector('.evidence-queued-notice')).toBeNull();
+    expect(hintOn(press(card, DECISION_CONFIRM_ACTION))).toBe(ENTER_HINT);
+  });
+});
+
+describe('with nothing waiting for the coordinator', () => {
+  it('draws what it drew before the queue existed, whatever the read and the conversation say', () => {
+    const rows = [row(), row({ taskId: 'task-two', evidenceRevision: '4' })];
+    const before = sessionCards(rows);
+    expect(roots(before)).toEqual([`${TASK_ID}@2`, 'task-two@4']);
+    for (const session of [null, coordinator(), coordinator({ runState: 'RUNNING', error: null, retryAt: null })]) {
+      expect(coordinatorCards({ ...queue(rows), waitingOnCoordinator: [], sentToCoordinator: [] }, session))
+        .toBe(before);
+      expect(coordinatorCards(queue(rows), session)).toBe(before);
+    }
+    expect(before).not.toContain('evidence-queued');
+    expect(before).not.toContain('evidence-sent');
+  });
+});
+
+/** This card's source, for the declarations the native clients read. */
+function cardSource(): string {
+  const found = ['src/components/EvidenceDecisionCard.tsx', 'src/web/src/components/EvidenceDecisionCard.tsx']
+    .map((each) => resolve(process.cwd(), each))
+    .find(existsSync);
+  if (!found) throw new Error(`EvidenceDecisionCard.tsx is not under ${process.cwd()}`);
+  return readFileSync(found, 'utf8');
+}
+
+/**
+ * The read as the server sends it to a coordinator conversation: the evidence queue of the fixture
+ * every client reads (`src/shared/src/interaction-cards.fixture.json`) — one question, one version
+ * waiting for the coordinator, one handed to it.
+ */
+describe('the shared fixture’s evidence queue', () => {
+  const fixture = sharedFixture();
+  const read = fixture.snapshot.standing.evidenceDecisions as PendingDecisionQueue;
+  const asked = read.pending[0]!;
+  const waiting = read.waitingOnCoordinator![0]!;
+  const sent = read.sentToCoordinator![0]!;
+
+  it('draws the question as its card, the waiting version folded, and the sent one as its line', () => {
+    const qc = newClient();
+    qc.setQueryData(pendingDecisionsQuery(fixture.sessionId).queryKey, read);
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={qc}>
+        <SessionEvidenceDecisionCard
+          sessionId={fixture.sessionId}
+          projectId={fixture.projectId}
+          coordinator={coordinator()}
+          onSendBack={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+    expect(roots(html)).toEqual([decisionRowKey(asked)]);
+    expect(html).toContain(`data-queued-row="${decisionRowKey(waiting)}"`);
+    expect(html).toContain(escaped(waiting.title));
+    expect(html).toContain(escaped(decisionReceiptTime(waiting.submittedAt!)));
+    expect(html).toContain(`data-sent-row="${decisionRowKey(sent)}"`);
+    expect(html).toContain(escaped(sentToCoordinatorLine(sent.deliveredAt)));
+    // The question first, then the version handed over, then the one still waiting.
+    const at = (needle: string): number => html.indexOf(needle);
+    expect(at(`data-decision-row="${decisionRowKey(asked)}"`)).toBeLessThan(at('data-sent-row='));
+    expect(at('data-sent-row=')).toBeLessThan(at('data-queued-row='));
+  });
+
+  it('puts the one question on the pinned line, and neither of the others', () => {
+    const cards = new Set(
+      evidenceDecisionCardRows(read, fixture.projectId, fixture.sessionId).map(decisionRowKey),
+    );
+    const html = renderToStaticMarkup(
+      <DecisionStrip
+        queue={read}
+        open={false}
+        hasCard={(row) => cards.has(decisionRowKey(row))}
+        onToggle={() => {}}
+      />,
+    );
+    expect(html).toContain(`aria-label="${needsDecisionCount(1)}: ${escaped(asked.title)}"`);
+    expect(html).not.toContain(escaped(waiting.title));
+    expect(html).not.toContain(escaped(sent.title));
+  });
+});
+
+/** The fixture every client reads the server's interaction cards from. */
+function sharedFixture(): {
+  sessionId: string;
+  projectId: string;
+  snapshot: { standing: { evidenceDecisions: unknown } };
+} {
+  const found = [
+    resolve(process.cwd(), '../shared/src/interaction-cards.fixture.json'),
+    resolve(process.cwd(), 'src/shared/src/interaction-cards.fixture.json'),
+  ].find(existsSync);
+  if (!found) throw new Error(`interaction-cards.fixture.json not found from ${process.cwd()}`);
+  return JSON.parse(readFileSync(found, 'utf8'));
+}

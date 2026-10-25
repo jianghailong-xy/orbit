@@ -68,6 +68,7 @@ function heartbeatHarness(row: Record<string, unknown> = {}) {
   const writes: Array<Record<string, unknown>> = [];
   const claims: Array<Record<string, unknown>> = [];
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: {
       update: async ({ data }: { data: Record<string, unknown> }) => {
         writes.push(data);

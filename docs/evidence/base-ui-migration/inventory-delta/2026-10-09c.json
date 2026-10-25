@@ -1,0 +1,87 @@
+{
+ "schemaVersion": 1,
+ "kind": "antd-inventory-delta",
+ "date": "2026-10-09",
+ "task": "34Za39J4QY3kDa5p2Wsau",
+ "decision": {
+  "by": "coordinator",
+  "session": "34b245G3NiwgVVUj2JFJw",
+  "date": "2026-10-09",
+  "questions": [
+   "WorkspaceView.managedRunner.test"
+  ]
+ },
+ "scan": {
+  "commit": "29ef702b3f677e2fd512f53e2e76723bdd07008a",
+  "scopeHash": "33cf994720f55abeeaccd795ab6497dd92603232aaaf52c1b0c989924dc7b2c7",
+  "command": "node src/web/scripts/audit-antd.mjs --json",
+  "counts": {
+   "scannedFiles": 765,
+   "productionFiles": 380,
+   "testFiles": 383,
+   "antdProductionFiles": 19,
+   "antdTestFiles": 49,
+   "antSelectorTestFiles": 13,
+   "antClassTestFiles": 13,
+   "iconProductionFiles": 111,
+   "iconTestFiles": 0,
+   "relevantSourceFiles": 216,
+   "hitLines": {
+    "ant-class": 140,
+    "ant-design-support": 19,
+    "ant-selector": 135,
+    "antd-reference": 180,
+    "icon-class": 83,
+    "icon-reference": 122,
+    "imperative-confirm": 10,
+    "imperative-feedback": 221,
+    "internal-ref": 4,
+    "provider": 62,
+    "rc-support": 236,
+    "ref-focus": 28,
+    "theme": 2,
+    "use-app": 4,
+    "use-token": 1
+   },
+   "retirementBlockingFiles": 96
+  }
+ },
+ "files": {
+  "src/web/src/components/WorkspaceView.managedRunner.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "94025579b96f6e90b39c9a49cebfc757f54dd4ac",
+     "short": "94025579b",
+     "date": "2026-10-09",
+     "subject": "feat(managed-runner): shared status display, server-derived state fixture and web status UI",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P5.3",
+   "reason": "WorkspaceView 的测试，只用 antd 的 App 包裹被测的会话工作区；会话工作区由 P5.3 迁移，与其余 WorkspaceView.*.test.tsx 一起去掉这个包裹。",
+   "basis": "协调者 2026-10-09 判定（P4.4 跟上 origin/main 251c3de8f 后 --check-owners 报出：managed runner 项目 94025579b 带进 main 的两个测试文件，status 记 new，记入 2026-10-09c.json；2026-10-09.json 与 2026-10-09b.json 已被占用）。同批报出的 App.managedRunner.test.tsx 落在 P4.4 的 App.tsx 范围里，由 P4.4 在业务切换里去掉包裹，不进记录。"
+  }
+ },
+ "css": [],
+ "summary": {
+  "files": 1,
+  "cssLines": 0,
+  "owners": {
+   "P5.3": 1
+  }
+ }
+}

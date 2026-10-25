@@ -1,0 +1,46 @@
+{
+ "head": "09d94a12f4bb969d69edf75c208d8ab0f9777423",
+ "workingDirectory": "/mnt/data/tmp/34Za39UxopXFSlSSCGBZG/cand",
+ "note": "The P7 review re-run by P7.2 on the same delivery commit. Each step got its own exit code and ran inside a MemoryMax=6G cgroup. Steps 1, 2, 5 are the project P7 acceptance commands themselves; 3 and 4 are bounded re-checks of supplementary entries.",
+ "steps": [
+  {
+   "step": "build (projected onto the P7 acceptance command)",
+   "command": "NO_COLOR=1 npm run build -w @orbit/web",
+   "exitCode": 0,
+   "durationMs": 5437,
+   "result": "tsc -b && vite build; the existing large-chunk warning is preserved; vite reported 'built in 4.43s'"
+  },
+  {
+   "step": "vitest",
+   "command": "NO_COLOR=1 npm run test -w @orbit/web",
+   "exitCode": 0,
+   "durationMs": 213410,
+   "result": "402 test files, 5,247 tests, all passed (matches P7.1's run2 exactly)"
+  },
+  {
+   "step": "ui-migration (the P0 browser regression)",
+   "command": "NO_COLOR=1 npm run test:ui-migration -w @orbit/web",
+   "exitCode": 0,
+   "durationMs": 170178,
+   "result": "101 passed, 11 skipped, 0 unexpected, 0 flaky, 0 retries; 252/252 screenshots asserted (44 p0.2 + 165 p0-drift + 43 accepted); environment.json sha256 fe69e824… (identical to P0.2)"
+  },
+  {
+   "step": "choices, bounded re-check of the two recorded WebKit-phone reds",
+   "command": "NO_COLOR=1 npm run test:ui-choices -w @orbit/web -- choices.browser.mjs --project=webkit-light-phone --project=webkit-dark-phone",
+   "exitCode": 1,
+   "durationMs": 62283,
+   "result": "46 passed, 2 failed, 0 flaky; the two failures are 'multiple labels search, toggle, collapse, remove and clear without losing the remaining values' on webkit-light-phone and webkit-dark-phone, each the recorded 'ResizeObserver loop completed with undelivered notifications.' page-error assertion — the pre-existing MultiSelect issue (fix 62ab70582 landed after this candidate); no third failure"
+  },
+  {
+   "step": "foundation (theme and base controls)",
+   "command": "NO_COLOR=1 npm run test:ui-foundation -w @orbit/web",
+   "exitCode": 0,
+   "durationMs": 66000,
+   "result": "48 passed, 0 failed (includes production boot and cached system/light/dark first paint)"
+  }
+ ],
+ "audit": [
+  {"command": "node src/web/scripts/audit-antd.mjs --check-owners", "exitCode": 0, "result": "unowned [], pending [], owners {}"},
+  {"command": "node src/web/scripts/audit-antd.mjs --check-retired", "exitCode": 0, "result": "retirementBlockingFiles 0; antd production/test files 0; declared dependency family: icons only"}
+ ]
+}

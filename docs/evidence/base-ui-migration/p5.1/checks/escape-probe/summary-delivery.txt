@@ -1,0 +1,18 @@
+Delivery (eb9438625) Plan usage popover, WebKit light desktop, 16 repeats of the same instrumented case.
+Times in ms from the logger start (just before the Dismiss press): the pointer entering the popover, the Escape.
+repeat  0: entered   70  Escape  170  gap 100 ms                 popovers after settle 0  drawn 2 s later False
+repeat  1: entered   68  Escape  175  gap 107 ms                 popovers after settle 0  drawn 2 s later False
+repeat  2: entered   35  Escape   97  gap 62 ms                  popovers after settle 0  drawn 2 s later False
+repeat  3: entered   67  Escape  194  gap 127 ms                 popovers after settle 0  drawn 2 s later False
+repeat  4: entered   78  Escape  169  gap 91 ms                  popovers after settle 0  drawn 2 s later False
+repeat  5: entered   38  Escape  202  gap 164 ms                 popovers after settle 0  drawn 2 s later False
+repeat  6: entered   65  Escape  157  gap 92 ms                  popovers after settle 0  drawn 2 s later False
+repeat  7: entered   49  Escape  173  gap 124 ms                 popovers after settle 0  drawn 2 s later False
+repeat  8: entered   31  Escape  110  gap 79 ms                  popovers after settle 0  drawn 2 s later False
+repeat  9: entered   29  Escape  107  gap 78 ms                  popovers after settle 0  drawn 2 s later False
+repeat 10: entered   32  Escape  114  gap 82 ms                  popovers after settle 0  drawn 2 s later False
+repeat 11: entered   37  Escape  150  gap 113 ms                 popovers after settle 0  drawn 2 s later False
+repeat 12: entered   50  Escape  163  gap 113 ms                 popovers after settle 0  drawn 2 s later False
+repeat 13: entered   46  Escape  181  gap 135 ms                 popovers after settle 0  drawn 2 s later False
+repeat 14: entered   46  Escape  254  gap 208 ms                 popovers after settle 0  drawn 2 s later False
+repeat 15: entered   36  Escape  143  gap 107 ms                 popovers after settle 0  drawn 2 s later False

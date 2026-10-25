@@ -1,0 +1,6 @@
+[Nest] 116  - 10/17/2026, 2:49:18 PM     LOG [ManagedRunners] managed runners are enabled in orbit-6742fb0e (Docker instance orbit-6742fb0e)
+[Nest] 116  - 10/17/2026, 2:49:18 PM   ERROR [ManagedRunnerWorker] managed runner pass failed: the channel serves instance orbit-6742fb0e with image sha256:09a872d9ce72858c003953b8e0b76d920aa2e57341be614182219c7bfac0b394; this profile names orbit-6742fb0e with sha256:8a3c127f2568918ad62bf5055d41bfbf28078f49e032575d1d07275df8f40ba7
+[Nest] 116  - 10/17/2026, 2:49:23 PM   ERROR [ManagedRunnerWorker] managed runner pass failed: the channel serves instance orbit-6742fb0e with image sha256:09a872d9ce72858c003953b8e0b76d920aa2e57341be614182219c7bfac0b394; this profile names orbit-6742fb0e with sha256:8a3c127f2568918ad62bf5055d41bfbf28078f49e032575d1d07275df8f40ba7
+2026-10-17T14:49:25Z orbit-docker-channel: instance orbit-6742fb0e serving on /var/lib/orbit-managed-runners/channel.sock; image sha256:8a3c127f2568918ad62bf5055d41bfbf28078f49e032575d1d07275df8f40ba7, network orbit-managed-runners
+2026-10-17T14:49:28Z orbit-docker-channel: GET /v1/info -> 200
+2026-10-17T14:49:28Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200

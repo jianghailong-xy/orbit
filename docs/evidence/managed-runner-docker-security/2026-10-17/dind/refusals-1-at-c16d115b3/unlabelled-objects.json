@@ -1,0 +1,11 @@
+{
+  "made with the docker CLI, not the channel": [
+    "volume create --label orbit.test=d5-34hJ7S9C3isVnzIDDfSHD mr-data-4d88ff53-e825-4599-96a8-33a626bc801d",
+    "volume create --label orbit.test=d5-34hJ7S9C3isVnzIDDfSHD --label orbit.managed-runner.instance=orbit-foreign-d5 --label orbit.managed-runner.kind=data --label orbit.managed-runner.owner=1f86b3bc-d258-4384-9449-b0781cd1c70b --label orbit.managed-runner.runner=2b6093ca-c6cd-41c5-ae5a-1927bdcbb00e --label orbit.managed-runner.uid=bc884f62-0dc2-4891-aceb-f8c204c2ad95 mr-data-2b6093ca-c6cd-41c5-ae5a-1927bdcbb00e",
+    "volume create --label orbit.test=d5-34hJ7S9C3isVnzIDDfSHD --label orbit.managed-runner.instance=orbit-e08a3eef --label orbit.managed-runner.kind=bootstrap mr-data-639e4142-5afa-4dcd-8e76-21c741339a4c",
+    "run -d --label orbit.test=d5-34hJ7S9C3isVnzIDDfSHD --name mr-3f2cf02c-fb27-4efe-8733-6030b7170cc2 --network none alpine:3 sleep 3600",
+    "run -d --label orbit.test=d5-34hJ7S9C3isVnzIDDfSHD --label orbit.managed-runner.instance=orbit-foreign-d5 --label orbit.managed-runner.kind=runner --label orbit.managed-runner.runner=b75e2bb7-ded9-4026-af12-eda48eef8903 --label orbit.managed-runner.uid=6c320983-8896-4c6a-a3ef-16063df4b7dc --name mr-b75e2bb7-ded9-4026-af12-eda48eef8903 --network none alpine:3 sleep 3600",
+    "create --label orbit.test=d5-34hJ7S9C3isVnzIDDfSHD --name d5-intruder --network none -v mr-data-a43405b4-16b8-42f8-8512-ffc8f5c8c7fe:/stolen alpine:3 true",
+    "volume create --label orbit.test=d5-34hJ7S9C3isVnzIDDfSHD mr-boot-03d840bf-11ed-4c00-af56-b905a2cabe76-g1"
+  ]
+}

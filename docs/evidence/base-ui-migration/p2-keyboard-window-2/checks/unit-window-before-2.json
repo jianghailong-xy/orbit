@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370 && git log --oneline -1 && git rev-parse HEAD:src/web && cd src/web && NO_COLOR=1 npx vitest run src/components/ui/keyboardWindow.test.tsx src/components/ui/Menu.test.tsx",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_798f419c2c5c",
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "commit": "4d54fbe5f",
+ "webTree": "c9b680e536261073e36d2a37e3238fe4f6ef4bdc",
+ "outputLastWritten": "2026-10-07T13:59:40.023761+00:00",
+ "exitCode": 1,
+ "outputSha256": "f370fefe0c5c79f2dadd257b743b307fce5794c25d6bb9da4973b1dfb30aeb25",
+ "outputBytes": 22251,
+ "note": "Unfixed components with the test extended by the coordinator's second decision (4d54fbe5f adds only tests and probe cases): keyboardWindow.test.tsx 26 of 58 fail, the 23 of unit-window-before plus the three new Home/End windows (Enter End Enter and Down End Enter run file, not shell; Up Home Enter runs shell, not file); every reference passes. Menu.test.tsx 18/18."
+}

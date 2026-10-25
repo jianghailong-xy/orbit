@@ -48,7 +48,7 @@ export function useOverlayChild(open: boolean, onEscape: () => void) {
     return () => { scope.children.delete(key); };
   }, [open, scope]);
   const getContainer = useCallback(() => scope?.container.current ?? document.body, [scope]);
-  return { getContainer, zIndex: 1000 + (scope ? scope.level + 1 : 0) * 100 };
+  return { getContainer, zIndex: 1000 + (scope ? scope.level + 1 : 0) * 100, inOverlay: scope !== null };
 }
 
 export interface OverlayProps {
@@ -86,7 +86,12 @@ export function OverlaySurface({
   const popup = useRef<HTMLDivElement>(null);
   const setPopup = useCallback((node: HTMLDivElement | null) => {
     popup.current = node;
-    if (!node || !open) return;
+    if (!node) return;
+    // When the focused control inside goes away (a card swapping its content), Base UI hands focus back
+    // to the popup with a plain focus(), which scrolls a dialog taller than the screen to its top. The
+    // popup takes focus without scrolling, as its first focus below does.
+    node.focus = (options?: FocusOptions) => HTMLElement.prototype.focus.call(node, { ...options, preventScroll: true });
+    if (!open) return;
     return registerFeedbackLayer(node, scope.level);
   }, [open, scope.level]);
   const Root = kind === 'confirm' ? AlertDialog.Root : BaseDialog.Root;
@@ -110,7 +115,16 @@ export function OverlaySurface({
       <BaseDialog.Portal container={parent?.container} keepMounted={keepMounted}>
         <BaseDialog.Backdrop forceRender className="orbit-overlay-backdrop" style={{ zIndex }} />
         <BaseDialog.Viewport className={`orbit-overlay-viewport orbit-${kind}-viewport`} style={{ zIndex }}>
-          <BaseDialog.Popup ref={setPopup} initialFocus={initialFocus ?? popup} finalFocus={returnFocus}
+          <BaseDialog.Popup ref={setPopup} initialFocus={() => {
+            // Base UI moves focus in on the next animation frame. Until then keys reach the page behind
+            // the dialog (Enter re-presses its opener, Tab moves along the page), where the replaced modal
+            // already had focus inside; so focus now, as Base UI would, and leave it nothing to do.
+            const target = initialFocus ? initialFocus.current : popup.current;
+            // An empty initialFocus ref falls back to Base UI's default, as it did.
+            if (!target) return true;
+            if (!popup.current?.contains(document.activeElement)) target.focus({ preventScroll: target === popup.current });
+            return false;
+          }} finalFocus={returnFocus}
             className={`orbit-overlay orbit-${kind}${className ? ` ${className}` : ''}`}
             data-placement={kind === 'drawer' ? placement : undefined} aria-busy={busy || undefined}
             style={{ width: kind === 'drawer' && placement === 'bottom' ? '100%' : width,

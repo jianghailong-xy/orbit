@@ -1,0 +1,26 @@
+{
+  "at": "2026-10-18T00:56:17.996+00:00",
+  "execute": {
+    "answer": {
+      "code": null,
+      "id": null,
+      "message": null,
+      "sessionId": "38c2n5lLT0dmDjjuPtsc8l",
+      "status": null
+    },
+    "at": "2026-10-18T00:56:18.044+00:00",
+    "status": 201
+  },
+  "kind": "task",
+  "owner": "amy",
+  "runAt": null,
+  "status": 201,
+  "task": {
+    "assigneeId": "34hlwBX3PDHoZvmmu6hPq",
+    "code": null,
+    "id": "34hmIofiPE2a6D74GFfUf",
+    "message": null,
+    "runAt": null,
+    "status": "OPEN"
+  }
+}

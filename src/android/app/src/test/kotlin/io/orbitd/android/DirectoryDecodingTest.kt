@@ -31,16 +31,45 @@ class DirectoryDecodingTest {
         lastTurnAt: String = "null", deletedAt: String = "null") = """{"id":"$id","status":"ENDED","title":"$title",
         "createdAt":"2026-10-08T01:05:00.000Z","lastTurnAt":$lastTurnAt,"deletedAt":$deletedAt,"pinnedAt":null,"folderId":$folderId,
         "tags":$tags,"runningBgJobCount":0,"workspace":$workspace,"agent":$workspace,"runState":"ENDED","lifecycleState":"OPEN",
-        "pendingApprovals":0,"confirmationUnderReview":null,"lastAssistantText":null,"lastUserText":null,"capabilities":{"canSend":true,
+        "pendingApprovals":0,"confirmationUnderReview":null,"lastAssistantText":null,"lastUserText":null,"recapText":null,"recapAt":null,"capabilities":{"canSend":true,
         "canResume":false,"resumeBlockedReason":null,"canComplete":true,"canArchive":true,"canRestore":false}}"""
     private val sessions = mapOf(
         "open" to "[${session("s1", "Directory check", tags = "[$bug]")},${session("s2", "No workspace", workspace = "null")}]",
         "completed" to "[${session("s3", "Filed", folderId = "\"f1\"", lastTurnAt = "\"2026-10-08T01:06:00.000Z\"")}]",
         "trash" to "[${session("s4", "Deleted", deletedAt = "\"2026-10-08T01:07:00.000Z\"")}]")
 
-    private fun directory() = directoryData(RealtimeState(directoryFresh = true, directory = DirectorySnapshot(
+    private fun directory(trashing: Set<String> = emptySet()) = directoryData(RealtimeState(directoryFresh = true, directory = DirectorySnapshot(
         workspaces = rows(workspaces), sessions = sessions.mapValues { rows(it.value) },
-        folders = rows(folders), tags = rows(tags), runners = rows(runners))))
+        folders = rows(folders), tags = rows(tags), runners = rows(runners))), trashing)
+
+    /** §2.9 LS6: a flat read that happens to carry a LANDING row still decodes — the row's two optional fields are read, and its kind
+     * is what the project's pages sort it by. One unknown row must never make the whole directory unreadable. */
+    @Test fun aLandingRowInAFlatReadStillDecodes() {
+        val landing = """{"id":"l1","status":"AWAITING_INPUT","title":"Land · Wire the page","sessionKind":"LANDING",
+            "landing":{"subject":"TASK","state":"AWAITING_DECISION","settledAs":null,"settledAt":null},
+            "projectMembership":{"projectId":"p1","projectTitle":"Launch","projectStatus":"OPEN","role":"LANDING"}}"""
+        val data = directoryData(RealtimeState(directoryFresh = true, directory = DirectorySnapshot(
+            workspaces = rows(workspaces), sessions = mapOf("open" to rows("[$landing,${session("s1", "Directory check")}]")),
+            folders = rows(folders), tags = rows(tags), runners = rows(runners))))
+        assertNull(data.error)
+        val row = data.sessions.getValue("open").first { it.id == "l1" }
+        assertTrue(row.isLanding); assertTrue(row.projectMembership!!.isLanding)
+        assertEquals("AWAITING_DECISION", row.landing?.state); assertNull(row.landing?.settledAs)
+        assertEquals(listOf("l1", "s1"), data.sessions.getValue("open").map { it.id })
+        assertEquals("a conversation row is not a landing", false, data.sessions.getValue("open").last().isLanding)
+    }
+
+    /** A05-9: a session on its way to Trash is in no view of the decoded directory — whichever read the snapshot came from — so
+     * nothing drawn from it lists or counts it; every other row is as the server sent it. */
+    @Test fun aSessionOnItsWayToTrashIsInNoViewOfTheDirectory() {
+        val data = directory(setOf(TrashingSessions.key("s1"), TrashingSessions.key("s3")))
+        assertNull(data.error)
+        assertEquals(listOf("No workspace"), data.sessions.getValue("open").map { it.name })
+        assertEquals(emptyList<String>(), data.sessions.getValue("completed").map { it.name })
+        assertEquals(listOf("Deleted"), data.sessions.getValue("trash").map { it.name })
+        assertEquals(listOf("Research"), data.folders.map { it.name })
+        assertEquals(listOf("Directory check", "No workspace"), directory().sessions.getValue("open").map { it.name })
+    }
 
     @Test fun aWorkspaceNobodyHasReorderedIsListedInsteadOfAnUnreadableDirectory() {
         val data = directory()
@@ -62,7 +91,8 @@ class DirectoryDecodingTest {
         assertEquals(listOf("w-never", null), open.map { it.workspace })
         assertEquals(listOf(listOf("Bug"), emptyList()), open.map { row -> row.tags.map { it.name } })
         assertTrue(open.all { it.pinnedAt == null && it.folderId == null && it.lastTurnAt == null && it.confirmationUnderReview == null &&
-            it.lastAssistantText == null && it.lastUserText == null && it.capabilities?.resumeBlockedReason == null })
+            it.lastAssistantText == null && it.lastUserText == null && it.recapText == null && it.recapAt == null &&
+            it.capabilities?.resumeBlockedReason == null })
         assertEquals(listOf("f1"), data.sessions.getValue("completed").map { it.folderId })
         assertEquals(listOf("Deleted"), data.sessions.getValue("trash").map { it.name })
     }

@@ -1,0 +1,48 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T04:17:37.392",
+    "ingested_at": "2026-10-18T04:17:37.472129+00:00",
+    "ingested_by_runner_id": "01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "seq": 36,
+    "session_id": "01a14d28-86e3-779e-a191-0fe345bd2b7c",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-B-AMY-Q1",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T04:17:37Z",
+      "kind": "text",
+      "messages": 11,
+      "n": 8,
+      "tool": null
+    }
+  ],
+  "owner": "amy",
+  "session": {
+    "assigned_runner_id": "01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "created_at": "2026-10-18T03:57:44.036",
+    "engine": "claude",
+    "id": "01a14d28-86e3-779e-a191-0fe345bd2b7c",
+    "provider": "deepseek",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06B-AMY-S1 the first session, sent while the runner sleeps"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T04:17:37.541",
+      "client_turn_id": "40685ce7-9de3-475d-94fc-784906e7fe90",
+      "content": "T06-B-AMY-Q1 a message while a ResourceQuota leaves no room for a Pod",
+      "created_at": "2026-10-18T04:15:20.21",
+      "delivered_at": "2026-10-18T04:17:37.101",
+      "id": "01a14d38-a492-755f-8862-09a5ecee3511",
+      "kind": "message",
+      "seq": 4,
+      "status": "ANSWERED"
+    }
+  ]
+}

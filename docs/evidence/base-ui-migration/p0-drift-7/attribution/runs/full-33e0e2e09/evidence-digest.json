@@ -1,0 +1,2058 @@
+{
+ "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop": {
+  "project": "chromium-dark-desktop",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "captures": [
+   "breakpoint-599-share",
+   "breakpoint-599-dialog",
+   "breakpoint-601-share",
+   "breakpoint-601-dialog",
+   "breakpoint-639-projects",
+   "breakpoint-639-graph",
+   "breakpoint-641-projects",
+   "breakpoint-641-graph",
+   "breakpoint-959-wiki",
+   "breakpoint-959-session",
+   "breakpoint-961-wiki",
+   "breakpoint-961-session"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d": 4,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/coordinator/status": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/handoffs": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/integration": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/open-items": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/blocking": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/ready": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/promotions/current": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/share": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/tasks/page": 2,
+   "GET /api/projects/sidebar": 10,
+   "GET /api/providers": 23,
+   "GET /api/providers/pools": 2,
+   "GET /api/providers/shared-pools": 2,
+   "GET /api/runners": 24,
+   "GET /api/session-folders": 2,
+   "GET /api/session-tags": 2,
+   "GET /api/sessions": 26,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c": 6,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/approvals": 2,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/background": 2,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/created-tasks": 2,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/events/page": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns": 2,
+   "GET /api/sessions/counts": 10,
+   "GET /api/shared/uiMigrationBaselineTask20260928": 2,
+   "GET /api/task-lists": 2,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V": 4,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/attribution": 2,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/share": 4,
+   "GET /api/tasks/active": 2,
+   "GET /api/tasks/counts": 2,
+   "GET /api/tasks/evidence-decisions/pending": 2,
+   "GET /api/tasks/labels": 2,
+   "GET /api/tasks/page": 4,
+   "GET /api/users/me": 24,
+   "GET /api/watches": 16,
+   "GET /api/wiki/spaces": 10,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/articles": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/docs": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/entries": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan": 2,
+   "GET /api/workspaces": 29
+  }
+ },
+ "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-phone": {
+  "project": "chromium-dark-phone",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {}
+ },
+ "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop": {
+  "project": "chromium-light-desktop",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "captures": [
+   "breakpoint-599-share",
+   "breakpoint-599-dialog",
+   "breakpoint-601-share",
+   "breakpoint-601-dialog",
+   "breakpoint-639-projects",
+   "breakpoint-639-graph",
+   "breakpoint-641-projects",
+   "breakpoint-641-graph",
+   "breakpoint-959-wiki",
+   "breakpoint-959-session",
+   "breakpoint-961-wiki",
+   "breakpoint-961-session"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d": 4,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/coordinator/status": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/handoffs": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/integration": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/open-items": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/blocking": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/ready": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/promotions/current": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/share": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/tasks/page": 2,
+   "GET /api/projects/sidebar": 10,
+   "GET /api/providers": 24,
+   "GET /api/providers/pools": 2,
+   "GET /api/providers/shared-pools": 2,
+   "GET /api/runners": 24,
+   "GET /api/session-folders": 2,
+   "GET /api/session-tags": 2,
+   "GET /api/sessions": 26,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c": 6,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/approvals": 2,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/background": 2,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/created-tasks": 2,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/events/page": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns": 2,
+   "GET /api/sessions/counts": 10,
+   "GET /api/shared/uiMigrationBaselineTask20260928": 2,
+   "GET /api/task-lists": 2,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V": 4,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/attribution": 2,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/share": 4,
+   "GET /api/tasks/active": 2,
+   "GET /api/tasks/counts": 2,
+   "GET /api/tasks/evidence-decisions/pending": 2,
+   "GET /api/tasks/labels": 2,
+   "GET /api/tasks/page": 4,
+   "GET /api/users/me": 24,
+   "GET /api/watches": 16,
+   "GET /api/wiki/spaces": 10,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/articles": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/docs": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/entries": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan": 2,
+   "GET /api/workspaces": 30
+  }
+ },
+ "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-phone": {
+  "project": "chromium-light-phone",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {}
+ },
+ "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop": {
+  "project": "webkit-dark-desktop",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "captures": [
+   "breakpoint-599-share",
+   "breakpoint-599-dialog",
+   "breakpoint-601-share",
+   "breakpoint-601-dialog",
+   "breakpoint-639-projects",
+   "breakpoint-639-graph",
+   "breakpoint-641-projects",
+   "breakpoint-641-graph",
+   "breakpoint-959-wiki",
+   "breakpoint-959-session",
+   "breakpoint-961-wiki",
+   "breakpoint-961-session"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d": 4,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/coordinator/status": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/handoffs": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/integration": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/open-items": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/blocking": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/ready": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/promotions/current": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/share": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/tasks/page": 2,
+   "GET /api/projects/sidebar": 10,
+   "GET /api/providers": 24,
+   "GET /api/providers/pools": 2,
+   "GET /api/providers/shared-pools": 2,
+   "GET /api/runners": 24,
+   "GET /api/session-folders": 2,
+   "GET /api/session-tags": 2,
+   "GET /api/sessions": 26,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c": 6,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/approvals": 2,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/background": 2,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/created-tasks": 2,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/events/page": 2,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns": 2,
+   "GET /api/sessions/counts": 10,
+   "GET /api/shared/uiMigrationBaselineTask20260928": 2,
+   "GET /api/task-lists": 2,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V": 4,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/attribution": 2,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/share": 4,
+   "GET /api/tasks/active": 2,
+   "GET /api/tasks/counts": 2,
+   "GET /api/tasks/evidence-decisions/pending": 2,
+   "GET /api/tasks/labels": 2,
+   "GET /api/tasks/page": 4,
+   "GET /api/users/me": 24,
+   "GET /api/watches": 16,
+   "GET /api/wiki/spaces": 10,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/articles": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/docs": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/entries": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan": 2,
+   "GET /api/workspaces": 30
+  }
+ },
+ "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-phone": {
+  "project": "webkit-dark-phone",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {}
+ },
+ "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop": {
+  "project": "webkit-light-desktop",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "captures": [
+   "breakpoint-599-share",
+   "breakpoint-599-dialog",
+   "breakpoint-601-share",
+   "breakpoint-601-dialog",
+   "breakpoint-639-projects",
+   "breakpoint-639-graph",
+   "breakpoint-641-projects",
+   "breakpoint-641-graph",
+   "breakpoint-959-wiki",
+   "breakpoint-959-session",
+   "breakpoint-961-wiki",
+   "breakpoint-961-session"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d": 4,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/coordinator/status": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/handoffs": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/integration": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/open-items": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/blocking": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/ready": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/promotions/current": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/share": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/tasks/page": 2,
+   "GET /api/projects/sidebar": 10,
+   "GET /api/providers": 24,
+   "GET /api/providers/pools": 2,
+   "GET /api/providers/shared-pools": 2,
+   "GET /api/runners": 24,
+   "GET /api/session-folders": 2,
+   "GET /api/session-tags": 2,
+   "GET /api/sessions": 26,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c": 6,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/approvals": 2,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/background": 2,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/created-tasks": 2,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/events/page": 2,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns": 2,
+   "GET /api/sessions/counts": 10,
+   "GET /api/shared/uiMigrationBaselineTask20260928": 2,
+   "GET /api/task-lists": 2,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V": 4,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/attribution": 2,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/share": 4,
+   "GET /api/tasks/active": 2,
+   "GET /api/tasks/counts": 2,
+   "GET /api/tasks/evidence-decisions/pending": 2,
+   "GET /api/tasks/labels": 2,
+   "GET /api/tasks/page": 4,
+   "GET /api/users/me": 24,
+   "GET /api/watches": 16,
+   "GET /api/wiki/spaces": 10,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/articles": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/docs": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/entries": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan": 2,
+   "GET /api/workspaces": 30
+  }
+ },
+ "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-phone": {
+  "project": "webkit-light-phone",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {}
+ },
+ "pages.browser.mjs-profile-chromium-dark-desktop": {
+  "project": "chromium-dark-desktop",
+  "test": "profile",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "pages.browser.mjs-profile-chromium-dark-phone": {
+  "project": "chromium-dark-phone",
+  "test": "profile",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "pages.browser.mjs-profile-chromium-light-desktop": {
+  "project": "chromium-light-desktop",
+  "test": "profile",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "pages.browser.mjs-profile-chromium-light-phone": {
+  "project": "chromium-light-phone",
+  "test": "profile",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "pages.browser.mjs-profile-webkit-dark-desktop": {
+  "project": "webkit-dark-desktop",
+  "test": "profile",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "pages.browser.mjs-profile-webkit-dark-phone": {
+  "project": "webkit-dark-phone",
+  "test": "profile",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "pages.browser.mjs-profile-webkit-light-desktop": {
+  "project": "webkit-light-desktop",
+  "test": "profile",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "pages.browser.mjs-profile-webkit-light-phone": {
+  "project": "webkit-light-phone",
+  "test": "profile",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "pages.browser.mjs-projects-chromium-dark-desktop": {
+  "project": "chromium-dark-desktop",
+  "test": "projects",
+  "captures": [
+   "projects-list",
+   "projects-search-empty",
+   "project-overview",
+   "project-graph",
+   "project-graph-fullscreen"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/coordinator/status": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/handoffs": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/integration": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/open-items": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/blocking": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/ready": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/promotions/current": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/share": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/tasks/page": 1,
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 4,
+   "GET /api/runners": 4,
+   "GET /api/sessions": 4,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 4,
+   "GET /api/wiki/spaces": 2,
+   "GET /api/workspaces": 6
+  }
+ },
+ "pages.browser.mjs-projects-chromium-dark-phone": {
+  "project": "chromium-dark-phone",
+  "test": "projects",
+  "captures": [
+   "projects-list",
+   "projects-search-empty",
+   "project-overview",
+   "project-graph",
+   "project-graph-fullscreen"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/coordinator/status": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/handoffs": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/integration": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/open-items": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/blocking": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/ready": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/promotions/current": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/share": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/tasks/page": 1,
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 4,
+   "GET /api/runners": 4,
+   "GET /api/sessions": 4,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 4,
+   "GET /api/wiki/spaces": 2,
+   "GET /api/workspaces": 6
+  }
+ },
+ "pages.browser.mjs-projects-chromium-light-desktop": {
+  "project": "chromium-light-desktop",
+  "test": "projects",
+  "captures": [
+   "projects-list",
+   "projects-search-empty",
+   "project-overview",
+   "project-graph",
+   "project-graph-fullscreen"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/coordinator/status": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/handoffs": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/integration": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/open-items": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/blocking": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/ready": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/promotions/current": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/share": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/tasks/page": 1,
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 4,
+   "GET /api/runners": 4,
+   "GET /api/sessions": 4,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 4,
+   "GET /api/wiki/spaces": 2,
+   "GET /api/workspaces": 6
+  }
+ },
+ "pages.browser.mjs-projects-chromium-light-phone": {
+  "project": "chromium-light-phone",
+  "test": "projects",
+  "captures": [
+   "projects-list",
+   "projects-search-empty",
+   "project-overview",
+   "project-graph",
+   "project-graph-fullscreen"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/coordinator/status": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/handoffs": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/integration": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/open-items": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/blocking": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/ready": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/promotions/current": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/share": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/tasks/page": 1,
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 4,
+   "GET /api/runners": 4,
+   "GET /api/sessions": 4,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 4,
+   "GET /api/wiki/spaces": 2,
+   "GET /api/workspaces": 6
+  }
+ },
+ "pages.browser.mjs-projects-webkit-dark-desktop": {
+  "project": "webkit-dark-desktop",
+  "test": "projects",
+  "captures": [
+   "projects-list",
+   "projects-search-empty",
+   "project-overview",
+   "project-graph",
+   "project-graph-fullscreen"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/coordinator/status": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/handoffs": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/integration": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/open-items": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/blocking": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/ready": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/promotions/current": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/share": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/tasks/page": 1,
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 4,
+   "GET /api/runners": 4,
+   "GET /api/sessions": 4,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 4,
+   "GET /api/wiki/spaces": 2,
+   "GET /api/workspaces": 6
+  }
+ },
+ "pages.browser.mjs-projects-webkit-dark-phone": {
+  "project": "webkit-dark-phone",
+  "test": "projects",
+  "captures": [
+   "projects-list",
+   "projects-search-empty",
+   "project-overview",
+   "project-graph",
+   "project-graph-fullscreen"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/coordinator/status": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/handoffs": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/integration": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/open-items": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/blocking": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/ready": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/promotions/current": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/share": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/tasks/page": 1,
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 4,
+   "GET /api/runners": 4,
+   "GET /api/sessions": 4,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 4,
+   "GET /api/wiki/spaces": 2,
+   "GET /api/workspaces": 6
+  }
+ },
+ "pages.browser.mjs-projects-webkit-light-desktop": {
+  "project": "webkit-light-desktop",
+  "test": "projects",
+  "captures": [
+   "projects-list",
+   "projects-search-empty",
+   "project-overview",
+   "project-graph",
+   "project-graph-fullscreen"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/coordinator/status": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/handoffs": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/integration": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/open-items": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/blocking": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/ready": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/promotions/current": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/share": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/tasks/page": 1,
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 4,
+   "GET /api/runners": 4,
+   "GET /api/sessions": 4,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 4,
+   "GET /api/wiki/spaces": 2,
+   "GET /api/workspaces": 6
+  }
+ },
+ "pages.browser.mjs-projects-webkit-light-phone": {
+  "project": "webkit-light-phone",
+  "test": "projects",
+  "captures": [
+   "projects-list",
+   "projects-search-empty",
+   "project-overview",
+   "project-graph",
+   "project-graph-fullscreen"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d": 2,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/coordinator/status": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/dependency-graph": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/handoffs": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/integration": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/open-items": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/blocking": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/panorama/ready": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/promotions/current": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/share": 1,
+   "GET /api/projects/2zwQZ2hd93IvLb59t6p9d/tasks/page": 1,
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 4,
+   "GET /api/runners": 4,
+   "GET /api/sessions": 4,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 4,
+   "GET /api/wiki/spaces": 2,
+   "GET /api/workspaces": 6
+  }
+ },
+ "pages.browser.mjs-session-chromium-dark-desktop": {
+  "project": "chromium-dark-desktop",
+  "test": "session",
+  "captures": [
+   "session-idle",
+   "session-streaming",
+   "session-composer-focus",
+   "session-attachment-menu",
+   "session-attachment-staged",
+   "notification-error"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 3,
+   "GET /api/providers/pools": 1,
+   "GET /api/providers/shared-pools": 1,
+   "GET /api/runners": 2,
+   "GET /api/session-folders": 1,
+   "GET /api/session-tags": 1,
+   "GET /api/sessions": 5,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c": 4,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/approvals": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/background": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/created-tasks": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/events/page": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns": 3,
+   "GET /api/sessions/counts": 1,
+   "GET /api/tasks/evidence-decisions/pending": 2,
+   "GET /api/users/me": 2,
+   "GET /api/watches": 8,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 1,
+   "POST /api/attachments": 1,
+   "POST /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns/current-work-routing": 1
+  }
+ },
+ "pages.browser.mjs-session-chromium-dark-phone": {
+  "project": "chromium-dark-phone",
+  "test": "session",
+  "captures": [
+   "session-idle",
+   "session-streaming",
+   "session-composer-focus",
+   "session-attachment-menu",
+   "session-attachment-staged",
+   "notification-error"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 3,
+   "GET /api/providers/pools": 1,
+   "GET /api/providers/shared-pools": 1,
+   "GET /api/runners": 2,
+   "GET /api/session-folders": 1,
+   "GET /api/session-tags": 1,
+   "GET /api/sessions": 5,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c": 4,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/approvals": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/background": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/created-tasks": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/events/page": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns": 3,
+   "GET /api/sessions/counts": 1,
+   "GET /api/tasks/evidence-decisions/pending": 2,
+   "GET /api/users/me": 2,
+   "GET /api/watches": 8,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 1,
+   "POST /api/attachments": 1,
+   "POST /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns/current-work-routing": 1
+  }
+ },
+ "pages.browser.mjs-session-chromium-light-desktop": {
+  "project": "chromium-light-desktop",
+  "test": "session",
+  "captures": [
+   "session-idle",
+   "session-streaming",
+   "session-composer-focus",
+   "session-attachment-menu",
+   "session-attachment-staged",
+   "notification-error"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 3,
+   "GET /api/providers/pools": 1,
+   "GET /api/providers/shared-pools": 1,
+   "GET /api/runners": 2,
+   "GET /api/session-folders": 1,
+   "GET /api/session-tags": 1,
+   "GET /api/sessions": 5,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c": 4,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/approvals": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/background": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/created-tasks": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/events/page": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns": 3,
+   "GET /api/sessions/counts": 1,
+   "GET /api/tasks/evidence-decisions/pending": 2,
+   "GET /api/users/me": 2,
+   "GET /api/watches": 8,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 1,
+   "POST /api/attachments": 1,
+   "POST /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns/current-work-routing": 1
+  }
+ },
+ "pages.browser.mjs-session-chromium-light-phone": {
+  "project": "chromium-light-phone",
+  "test": "session",
+  "captures": [
+   "session-idle",
+   "session-streaming",
+   "session-composer-focus",
+   "session-attachment-menu",
+   "session-attachment-staged",
+   "notification-error"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 3,
+   "GET /api/providers/pools": 1,
+   "GET /api/providers/shared-pools": 1,
+   "GET /api/runners": 2,
+   "GET /api/session-folders": 1,
+   "GET /api/session-tags": 1,
+   "GET /api/sessions": 5,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c": 4,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/approvals": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/background": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/created-tasks": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/events/page": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns": 3,
+   "GET /api/sessions/counts": 1,
+   "GET /api/tasks/evidence-decisions/pending": 2,
+   "GET /api/users/me": 2,
+   "GET /api/watches": 8,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 1,
+   "POST /api/attachments": 1,
+   "POST /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns/current-work-routing": 1
+  }
+ },
+ "pages.browser.mjs-session-webkit-dark-desktop": {
+  "project": "webkit-dark-desktop",
+  "test": "session",
+  "captures": [
+   "session-idle",
+   "session-streaming",
+   "session-composer-focus",
+   "session-attachment-menu",
+   "session-attachment-staged",
+   "notification-error"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 3,
+   "GET /api/providers/pools": 1,
+   "GET /api/providers/shared-pools": 1,
+   "GET /api/runners": 2,
+   "GET /api/session-folders": 1,
+   "GET /api/session-tags": 1,
+   "GET /api/sessions": 5,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c": 4,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/approvals": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/background": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/created-tasks": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/events/page": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns": 3,
+   "GET /api/sessions/counts": 1,
+   "GET /api/tasks/evidence-decisions/pending": 2,
+   "GET /api/users/me": 2,
+   "GET /api/watches": 8,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 1,
+   "POST /api/attachments": 1,
+   "POST /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns/current-work-routing": 1
+  }
+ },
+ "pages.browser.mjs-session-webkit-dark-phone": {
+  "project": "webkit-dark-phone",
+  "test": "session",
+  "captures": [
+   "session-idle",
+   "session-streaming",
+   "session-composer-focus",
+   "session-attachment-menu",
+   "session-attachment-staged",
+   "notification-error"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 3,
+   "GET /api/providers/pools": 1,
+   "GET /api/providers/shared-pools": 1,
+   "GET /api/runners": 2,
+   "GET /api/session-folders": 1,
+   "GET /api/session-tags": 1,
+   "GET /api/sessions": 5,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c": 4,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/approvals": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/background": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/created-tasks": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/events/page": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns": 3,
+   "GET /api/sessions/counts": 1,
+   "GET /api/tasks/evidence-decisions/pending": 2,
+   "GET /api/users/me": 2,
+   "GET /api/watches": 8,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 1,
+   "POST /api/attachments": 1,
+   "POST /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns/current-work-routing": 1
+  }
+ },
+ "pages.browser.mjs-session-webkit-light-desktop": {
+  "project": "webkit-light-desktop",
+  "test": "session",
+  "captures": [
+   "session-idle",
+   "session-streaming",
+   "session-composer-focus",
+   "session-attachment-menu",
+   "session-attachment-staged",
+   "notification-error"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 3,
+   "GET /api/providers/pools": 1,
+   "GET /api/providers/shared-pools": 1,
+   "GET /api/runners": 2,
+   "GET /api/session-folders": 1,
+   "GET /api/session-tags": 1,
+   "GET /api/sessions": 5,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c": 4,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/approvals": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/background": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/created-tasks": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/events/page": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns": 3,
+   "GET /api/sessions/counts": 1,
+   "GET /api/tasks/evidence-decisions/pending": 2,
+   "GET /api/users/me": 2,
+   "GET /api/watches": 8,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 1,
+   "POST /api/attachments": 1,
+   "POST /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns/current-work-routing": 1
+  }
+ },
+ "pages.browser.mjs-session-webkit-light-phone": {
+  "project": "webkit-light-phone",
+  "test": "session",
+  "captures": [
+   "session-idle",
+   "session-streaming",
+   "session-composer-focus",
+   "session-attachment-menu",
+   "session-attachment-staged",
+   "notification-error"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 3,
+   "GET /api/providers/pools": 1,
+   "GET /api/providers/shared-pools": 1,
+   "GET /api/runners": 2,
+   "GET /api/session-folders": 1,
+   "GET /api/session-tags": 1,
+   "GET /api/sessions": 5,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c": 4,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/approvals": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/background": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/created-tasks": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/events/page": 1,
+   "GET /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns": 3,
+   "GET /api/sessions/counts": 1,
+   "GET /api/tasks/evidence-decisions/pending": 2,
+   "GET /api/users/me": 2,
+   "GET /api/watches": 8,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 1,
+   "POST /api/attachments": 1,
+   "POST /api/sessions/2zwQZ2hd93IvLb59t6p1c/turns/current-work-routing": 1
+  }
+ },
+ "pages.browser.mjs-settings-chromium-dark-desktop": {
+  "project": "chromium-dark-desktop",
+  "test": "settings",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "pages.browser.mjs-settings-chromium-dark-phone": {
+  "project": "chromium-dark-phone",
+  "test": "settings",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "pages.browser.mjs-settings-chromium-light-desktop": {
+  "project": "chromium-light-desktop",
+  "test": "settings",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "pages.browser.mjs-settings-chromium-light-phone": {
+  "project": "chromium-light-phone",
+  "test": "settings",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "pages.browser.mjs-settings-webkit-dark-desktop": {
+  "project": "webkit-dark-desktop",
+  "test": "settings",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "pages.browser.mjs-settings-webkit-dark-phone": {
+  "project": "webkit-dark-phone",
+  "test": "settings",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "pages.browser.mjs-settings-webkit-light-desktop": {
+  "project": "webkit-light-desktop",
+  "test": "settings",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "pages.browser.mjs-settings-webkit-light-phone": {
+  "project": "webkit-light-phone",
+  "test": "settings",
+  "captures": [],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 2,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 2,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "pages.browser.mjs-share-chromium-dark-desktop": {
+  "project": "chromium-dark-desktop",
+  "test": "share",
+  "captures": [
+   "task-public-share"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/shared/uiMigrationBaselineTask20260928": 1,
+   "GET /api/users/me": 1
+  }
+ },
+ "pages.browser.mjs-share-chromium-dark-phone": {
+  "project": "chromium-dark-phone",
+  "test": "share",
+  "captures": [
+   "task-public-share"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/shared/uiMigrationBaselineTask20260928": 1,
+   "GET /api/users/me": 1
+  }
+ },
+ "pages.browser.mjs-share-chromium-light-desktop": {
+  "project": "chromium-light-desktop",
+  "test": "share",
+  "captures": [
+   "task-public-share"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/shared/uiMigrationBaselineTask20260928": 1,
+   "GET /api/users/me": 1
+  }
+ },
+ "pages.browser.mjs-share-chromium-light-phone": {
+  "project": "chromium-light-phone",
+  "test": "share",
+  "captures": [
+   "task-public-share"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/shared/uiMigrationBaselineTask20260928": 1,
+   "GET /api/users/me": 1
+  }
+ },
+ "pages.browser.mjs-share-webkit-dark-desktop": {
+  "project": "webkit-dark-desktop",
+  "test": "share",
+  "captures": [
+   "task-public-share"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/shared/uiMigrationBaselineTask20260928": 1,
+   "GET /api/users/me": 1
+  }
+ },
+ "pages.browser.mjs-share-webkit-dark-phone": {
+  "project": "webkit-dark-phone",
+  "test": "share",
+  "captures": [
+   "task-public-share"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/shared/uiMigrationBaselineTask20260928": 1,
+   "GET /api/users/me": 1
+  }
+ },
+ "pages.browser.mjs-share-webkit-light-desktop": {
+  "project": "webkit-light-desktop",
+  "test": "share",
+  "captures": [
+   "task-public-share"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/shared/uiMigrationBaselineTask20260928": 1,
+   "GET /api/users/me": 1
+  }
+ },
+ "pages.browser.mjs-share-webkit-light-phone": {
+  "project": "webkit-light-phone",
+  "test": "share",
+  "captures": [
+   "task-public-share"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/shared/uiMigrationBaselineTask20260928": 1,
+   "GET /api/users/me": 1
+  }
+ },
+ "pages.browser.mjs-task-chromium-dark-desktop": {
+  "project": "chromium-dark-desktop",
+  "test": "task",
+  "captures": [
+   "task-detail",
+   "task-action-hover",
+   "task-action-focus",
+   "task-action-menu",
+   "task-share-dialog"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 3,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/task-lists": 1,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V": 2,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/attribution": 1,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/share": 2,
+   "GET /api/tasks/active": 1,
+   "GET /api/tasks/counts": 1,
+   "GET /api/tasks/labels": 1,
+   "GET /api/tasks/page": 2,
+   "GET /api/users/me": 3,
+   "GET /api/watches": 8,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 4
+  }
+ },
+ "pages.browser.mjs-task-chromium-dark-phone": {
+  "project": "chromium-dark-phone",
+  "test": "task",
+  "captures": [
+   "task-detail",
+   "task-action-hover",
+   "task-action-focus",
+   "task-action-menu",
+   "task-share-dialog"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 3,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/task-lists": 1,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V": 2,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/attribution": 1,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/share": 2,
+   "GET /api/tasks/active": 1,
+   "GET /api/tasks/counts": 1,
+   "GET /api/tasks/labels": 1,
+   "GET /api/tasks/page": 2,
+   "GET /api/users/me": 3,
+   "GET /api/watches": 8,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 4
+  }
+ },
+ "pages.browser.mjs-task-chromium-light-desktop": {
+  "project": "chromium-light-desktop",
+  "test": "task",
+  "captures": [
+   "task-detail",
+   "task-action-hover",
+   "task-action-focus",
+   "task-action-menu",
+   "task-share-dialog"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 3,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/task-lists": 1,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V": 2,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/attribution": 1,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/share": 2,
+   "GET /api/tasks/active": 1,
+   "GET /api/tasks/counts": 1,
+   "GET /api/tasks/labels": 1,
+   "GET /api/tasks/page": 2,
+   "GET /api/users/me": 3,
+   "GET /api/watches": 8,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 4
+  }
+ },
+ "pages.browser.mjs-task-chromium-light-phone": {
+  "project": "chromium-light-phone",
+  "test": "task",
+  "captures": [
+   "task-detail",
+   "task-action-hover",
+   "task-action-focus",
+   "task-action-menu",
+   "task-share-dialog"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 3,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/task-lists": 1,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V": 2,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/attribution": 1,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/share": 2,
+   "GET /api/tasks/active": 1,
+   "GET /api/tasks/counts": 1,
+   "GET /api/tasks/labels": 1,
+   "GET /api/tasks/page": 2,
+   "GET /api/users/me": 3,
+   "GET /api/watches": 8,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 4
+  }
+ },
+ "pages.browser.mjs-task-webkit-dark-desktop": {
+  "project": "webkit-dark-desktop",
+  "test": "task",
+  "captures": [
+   "task-detail",
+   "task-action-hover",
+   "task-action-focus",
+   "task-action-menu",
+   "task-share-dialog"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 3,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/task-lists": 1,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V": 2,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/attribution": 1,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/share": 2,
+   "GET /api/tasks/active": 1,
+   "GET /api/tasks/counts": 1,
+   "GET /api/tasks/labels": 1,
+   "GET /api/tasks/page": 2,
+   "GET /api/users/me": 3,
+   "GET /api/watches": 8,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 4
+  }
+ },
+ "pages.browser.mjs-task-webkit-dark-phone": {
+  "project": "webkit-dark-phone",
+  "test": "task",
+  "captures": [
+   "task-detail",
+   "task-action-hover",
+   "task-action-focus",
+   "task-action-menu",
+   "task-share-dialog"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 3,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/task-lists": 1,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V": 2,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/attribution": 1,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/share": 2,
+   "GET /api/tasks/active": 1,
+   "GET /api/tasks/counts": 1,
+   "GET /api/tasks/labels": 1,
+   "GET /api/tasks/page": 2,
+   "GET /api/users/me": 3,
+   "GET /api/watches": 8,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 4
+  }
+ },
+ "pages.browser.mjs-task-webkit-light-desktop": {
+  "project": "webkit-light-desktop",
+  "test": "task",
+  "captures": [
+   "task-detail",
+   "task-action-hover",
+   "task-action-focus",
+   "task-action-menu",
+   "task-share-dialog"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 3,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/task-lists": 1,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V": 2,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/attribution": 1,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/share": 2,
+   "GET /api/tasks/active": 1,
+   "GET /api/tasks/counts": 1,
+   "GET /api/tasks/labels": 1,
+   "GET /api/tasks/page": 2,
+   "GET /api/users/me": 3,
+   "GET /api/watches": 8,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 4
+  }
+ },
+ "pages.browser.mjs-task-webkit-light-phone": {
+  "project": "webkit-light-phone",
+  "test": "task",
+  "captures": [
+   "task-detail",
+   "task-action-hover",
+   "task-action-focus",
+   "task-action-menu",
+   "task-share-dialog"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 3,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/task-lists": 1,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V": 2,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/attribution": 1,
+   "GET /api/tasks/2zwQZ2hd93IvLb59t6p5V/share": 2,
+   "GET /api/tasks/active": 1,
+   "GET /api/tasks/counts": 1,
+   "GET /api/tasks/labels": 1,
+   "GET /api/tasks/page": 2,
+   "GET /api/users/me": 3,
+   "GET /api/watches": 8,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 4
+  }
+ },
+ "pages.browser.mjs-wiki-chromium-dark-desktop": {
+  "project": "chromium-dark-desktop",
+  "test": "wiki",
+  "captures": [
+   "wiki-home",
+   "wiki-new-entry"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/articles": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/docs": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/entries": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan": 1,
+   "GET /api/workspaces": 4
+  }
+ },
+ "pages.browser.mjs-wiki-chromium-dark-phone": {
+  "project": "chromium-dark-phone",
+  "test": "wiki",
+  "captures": [
+   "wiki-home",
+   "wiki-contents",
+   "wiki-new-entry"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 4,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/articles": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/docs": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/entries": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan": 1,
+   "GET /api/workspaces": 5
+  }
+ },
+ "pages.browser.mjs-wiki-chromium-light-desktop": {
+  "project": "chromium-light-desktop",
+  "test": "wiki",
+  "captures": [
+   "wiki-home",
+   "wiki-new-entry"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/articles": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/docs": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/entries": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan": 1,
+   "GET /api/workspaces": 4
+  }
+ },
+ "pages.browser.mjs-wiki-chromium-light-phone": {
+  "project": "chromium-light-phone",
+  "test": "wiki",
+  "captures": [
+   "wiki-home",
+   "wiki-contents",
+   "wiki-new-entry"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 4,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/articles": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/docs": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/entries": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan": 1,
+   "GET /api/workspaces": 5
+  }
+ },
+ "pages.browser.mjs-wiki-webkit-dark-desktop": {
+  "project": "webkit-dark-desktop",
+  "test": "wiki",
+  "captures": [
+   "wiki-home",
+   "wiki-new-entry"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/articles": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/docs": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/entries": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan": 1,
+   "GET /api/workspaces": 4
+  }
+ },
+ "pages.browser.mjs-wiki-webkit-dark-phone": {
+  "project": "webkit-dark-phone",
+  "test": "wiki",
+  "captures": [
+   "wiki-home",
+   "wiki-contents",
+   "wiki-new-entry"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 4,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/articles": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/docs": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/entries": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan": 1,
+   "GET /api/workspaces": 5
+  }
+ },
+ "pages.browser.mjs-wiki-webkit-light-desktop": {
+  "project": "webkit-light-desktop",
+  "test": "wiki",
+  "captures": [
+   "wiki-home",
+   "wiki-new-entry"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 3,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/articles": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/docs": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/entries": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan": 1,
+   "GET /api/workspaces": 4
+  }
+ },
+ "pages.browser.mjs-wiki-webkit-light-phone": {
+  "project": "webkit-light-phone",
+  "test": "wiki",
+  "captures": [
+   "wiki-home",
+   "wiki-contents",
+   "wiki-new-entry"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 4,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl": 2,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/articles": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/docs": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/entries": 1,
+   "GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan": 1,
+   "GET /api/workspaces": 5
+  }
+ },
+ "states.browser.mjs-control-74696-rojects-loading-and-release-chromium-dark-desktop": {
+  "project": "chromium-dark-desktop",
+  "test": "projects loading and release",
+  "captures": [
+   "projects-loading"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 1,
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "states.browser.mjs-control-74696-rojects-loading-and-release-chromium-dark-phone": {
+  "project": "chromium-dark-phone",
+  "test": "projects loading and release",
+  "captures": [
+   "projects-loading"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 1,
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "states.browser.mjs-control-74696-rojects-loading-and-release-chromium-light-desktop": {
+  "project": "chromium-light-desktop",
+  "test": "projects loading and release",
+  "captures": [
+   "projects-loading"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 1,
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "states.browser.mjs-control-74696-rojects-loading-and-release-chromium-light-phone": {
+  "project": "chromium-light-phone",
+  "test": "projects loading and release",
+  "captures": [
+   "projects-loading"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 1,
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "states.browser.mjs-control-74696-rojects-loading-and-release-webkit-dark-desktop": {
+  "project": "webkit-dark-desktop",
+  "test": "projects loading and release",
+  "captures": [
+   "projects-loading"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 1,
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "states.browser.mjs-control-74696-rojects-loading-and-release-webkit-dark-phone": {
+  "project": "webkit-dark-phone",
+  "test": "projects loading and release",
+  "captures": [
+   "projects-loading"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 1,
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "states.browser.mjs-control-74696-rojects-loading-and-release-webkit-light-desktop": {
+  "project": "webkit-light-desktop",
+  "test": "projects loading and release",
+  "captures": [
+   "projects-loading"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 1,
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "states.browser.mjs-control-74696-rojects-loading-and-release-webkit-light-phone": {
+  "project": "webkit-light-phone",
+  "test": "projects loading and release",
+  "captures": [
+   "projects-loading"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 1,
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "states.browser.mjs-controlled-error-projects-error-and-retry-chromium-dark-desktop": {
+  "project": "chromium-dark-desktop",
+  "test": "projects error and retry",
+  "captures": [
+   "projects-error"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 3,
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "states.browser.mjs-controlled-error-projects-error-and-retry-chromium-dark-phone": {
+  "project": "chromium-dark-phone",
+  "test": "projects error and retry",
+  "captures": [
+   "projects-error"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 3,
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "states.browser.mjs-controlled-error-projects-error-and-retry-chromium-light-desktop": {
+  "project": "chromium-light-desktop",
+  "test": "projects error and retry",
+  "captures": [
+   "projects-error"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 3,
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "states.browser.mjs-controlled-error-projects-error-and-retry-chromium-light-phone": {
+  "project": "chromium-light-phone",
+  "test": "projects error and retry",
+  "captures": [
+   "projects-error"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 3,
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "states.browser.mjs-controlled-error-projects-error-and-retry-webkit-dark-desktop": {
+  "project": "webkit-dark-desktop",
+  "test": "projects error and retry",
+  "captures": [
+   "projects-error"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 4,
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "states.browser.mjs-controlled-error-projects-error-and-retry-webkit-dark-phone": {
+  "project": "webkit-dark-phone",
+  "test": "projects error and retry",
+  "captures": [
+   "projects-error"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 4,
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "states.browser.mjs-controlled-error-projects-error-and-retry-webkit-light-desktop": {
+  "project": "webkit-light-desktop",
+  "test": "projects error and retry",
+  "captures": [
+   "projects-error"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 4,
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ },
+ "states.browser.mjs-controlled-error-projects-error-and-retry-webkit-light-phone": {
+  "project": "webkit-light-phone",
+  "test": "projects error and retry",
+  "captures": [
+   "projects-error"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects": 4,
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3
+  }
+ }
+}

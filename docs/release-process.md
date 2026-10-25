@@ -27,9 +27,12 @@ impact, and reproduce the checks that support the announcement.
 ## Publishing
 
 Pushing a `v*` tag starts [.github/workflows/release.yml](../.github/workflows/release.yml), which builds the
-signed/notarized macOS DMG and the iOS TestFlight artifact. The macOS job creates the GitHub Release and
-Sparkle appcast for tag pushes. Maintainers must review the generated release body before sharing it in
-Discussions or other channels, and must check that the release is marked prerelease when the tag contains `-`.
+signed/notarized macOS DMG, the iOS TestFlight artifact and the signed Android APK. The macOS job creates the
+GitHub Release and Sparkle appcast for tag pushes; once it and the Android build have succeeded, the Android
+publishing job attaches `orbit-android-<version>.apk`, its `.sha256` and `android-update.json` to that same
+Release ([Android releases](../src/android/docs/release.md)). Maintainers must review the generated release
+body before sharing it in Discussions or other channels, and must check that the release is marked prerelease
+when the tag contains `-`.
 
 Do not publish signing credentials, private logs, or a claim that a generated changelog is a substitute for
 human upgrade notes. If a required gate is unavailable, say so in the release body and delay the release
@@ -37,7 +40,8 @@ unless the maintainer explicitly records the exception.
 
 ## After publishing
 
-- Check that the release assets, checksums (when provided), appcast, and TestFlight build identify the same tag.
+- Check that the release assets, checksums (when provided), appcast, TestFlight build, and Android
+  `android-update.json` identify the same tag.
 - Announce the release in [Discussions](https://github.com/jianghailong-xy/orbit/discussions) with upgrade notes,
   known limits, and a link to the exact release.
 - Keep the previous supported release and rollback instructions discoverable.
@@ -85,6 +89,10 @@ gh release download "$ORBIT_RELEASE_TAG" --repo jianghailong-xy/orbit --dir "$OR
   and TestFlight jobs succeeded on `ORBIT_RELEASE_SHA`. A successful macOS job alone does not prove iOS upload.
 - [ ] Confirm the expected `Orbit-v<version>-arm64.dmg` and `.zip` assets are present and nonempty.
   The ZIP is the Sparkle payload, not a server image. Record asset names, sizes, URLs, and workflow run URL.
+- [ ] Confirm `orbit-android-<version>.apk`, its `.sha256` and `android-update.json` are present and that
+  `(cd "$ORBIT_RELEASE_ASSETS" && sha256sum -c orbit-android-*.apk.sha256)` passes; the manifest's `tag`,
+  `versionName` and `sourceSha` must be this tag, its version and `ORBIT_RELEASE_SHA`. A second tag on an
+  already released commit carries no Android files (its Android jobs skip); record which release has them.
 - [ ] If the publisher supplies `SHA256SUMS`, verify it from the asset directory using
   `(cd "$ORBIT_RELEASE_ASSETS" && sha256sum -c SHA256SUMS)` on Linux, or
   `(cd "$ORBIT_RELEASE_ASSETS" && shasum -a 256 -c SHA256SUMS)` on macOS. For another checksum filename,
@@ -109,6 +117,7 @@ curl -fsS "$ORBIT_VERIFY_ORIGIN/dl/version.json"
 | Downloadable runner | `/dl/version.json`, then `orbit status` and `orbit capabilities --json` on a registered runner | Manifest/`cliVersion` match the product version; `sourceSha` matches `ORBIT_RELEASE_SHA` |
 | macOS | App bundle's `CFBundleShortVersionString`, bundle build number, and release workflow SHA | Full version including any prerelease suffix; build number is the source commit count |
 | iOS | App Store Connect/TestFlight version, build number, and release workflow SHA | Numeric version `${ORBIT_RELEASE_VERSION%%-*}`; build number is the source commit count |
+| Android | `android-update.json` on the release; Settings → About on an installed phone | `versionName` is `ORBIT_RELEASE_VERSION` (prerelease suffix included); `versionCode` is the source commit count; `sourceSha` is `ORBIT_RELEASE_SHA` |
 
 Server/web do not expose a runtime source-SHA endpoint; retain the build checkout SHA, build log, and image
 IDs as source evidence. Do not infer their source from a matching version string alone. The macOS-bundled
@@ -148,6 +157,72 @@ Besides the version and the runner-write contract, it carries one entry per plat
 Check a build against its manifest with
 `(cd dist-bin && jq -r '.assets[] | "\(.sha256)  \(.file)"' version.json | sha256sum -c)`
 (`shasum -a 256 -c` on macOS).
+
+### macOS runner signature
+
+The Go linker signs a darwin binary ad hoc, with the identifier `a.out`. macOS records a person's privacy
+(TCC) answers for such a binary against its code hash, which every release changes, so after each runner
+update a Mac asked again about Documents, Desktop and every other protected place an agent's work had
+reached. A deployment with an Apple Developer ID signs the two darwin binaries instead.
+`scripts/build-binaries.sh` signs them with [rcodesign](https://github.com/indygreg/apple-platform-rs) on
+Linux before compressing them, so `version.json` carries the digests of the signed files and the update
+check passes as before. Each binary is signed:
+
+- as `com.orbit.runner`, by the team's Developer ID. Its designated requirement is then that identifier
+  and that team, the same for every release, so an answer given to one release holds for the next.
+- with the hardened runtime, and the entitlements that let macOS still ask on the runner's behalf for the
+  camera, microphone, location, contacts, calendars, photos and Apple Events. A hardened process without
+  them is refused those outright. Files and folders need no entitlement.
+- with a secure timestamp from Apple, so the signature outlives the certificate.
+
+The binaries are not notarized. A runner, `install.sh` and the macOS app download them without a
+quarantine attribute, so Gatekeeper does not assess them.
+
+To turn signing on, once, on the deploy host:
+
+1. Export the Developer ID Application certificate and its private key from Keychain Access as a `.p12`
+   with a password. A team can hold more than one Developer ID Application certificate, and the
+   designated requirement names the team rather than the certificate, so a certificate of the runner's
+   own keeps the macOS app's signing key off the deploy host and can be revoked alone. Keychain Access
+   protects a `.p12` with SHA-1 and 3DES or RC2, the only kind rcodesign 0.29 reads. A `.p12` written by
+   OpenSSL 3 uses AES by default, and rcodesign reports it as a wrong password. Rewrite such a file
+   first:
+
+   ```bash
+   (umask 077; pem="$(mktemp)"; openssl pkcs12 -in in.p12 -nodes -out "$pem" &&
+     openssl pkcs12 -export -legacy -in "$pem" -out developer-id.p12; rm -f "$pem")
+   ```
+
+2. Copy the `.p12` to the deploy host outside the checkout, and put its password on the first line of a
+   second file. Make both readable only by the account that deploys (`chmod 600`).
+3. Add three lines to the checkout's `.env`:
+
+   ```bash
+   COMPOSE_FILE=docker-compose.yml:deploy/macos-runner-signing.yml
+   ORBIT_MACOS_SIGNING_P12=/root/orbit-signing/developer-id.p12
+   ORBIT_MACOS_SIGNING_PASSWORD_FILE=/root/orbit-signing/developer-id.password
+   ```
+
+   Every Compose command in the checkout, the upgrade skill's included, then also reads
+   [deploy/macos-runner-signing.yml](../deploy/macos-runner-signing.yml). It hands the two files to the
+   web build as BuildKit secrets, which reach only the step that signs: not an image layer, a build
+   argument or the build log. A build that is told to sign and cannot (a missing file, a wrong password,
+   Apple's timestamp server out of reach) fails instead of publishing unsigned binaries.
+4. Deploy with the upgrade skill. The build log names what it signed:
+   `signed as com.orbit.runner, team <team ID>`.
+
+Without these lines nothing changes: the darwin binaries keep the linker's signature and the build fetches
+nothing. A build that leaves them out, such as one from another checkout, publishes ad-hoc binaries again,
+and every Mac that updates to them asks once more.
+
+On a Mac whose runner has updated to a signed release, `codesign -dv ~/.orbit/bin/orbit` shows
+`Identifier=com.orbit.runner`, the team's `TeamIdentifier` and `flags=0x10000(runtime)`, and
+`codesign -d -r- ~/.orbit/bin/orbit` shows a designated requirement naming both. The first signed
+release asks once more about what the ad-hoc one was allowed, since the stored answer names the ad-hoc
+hash, and access granted by hand in System Settings, such as Full Disk Access, has to be granted again
+once for the same reason. From then on the answers survive updates. After the next update,
+`log show --last 1h --info --debug --predicate 'subsystem == "com.apple.TCC"'` shows `AUTHREQ_RESULT` with
+`authValue=2` for the runner and no `AUTHREQ_PROMPTING` naming it.
 
 ### Runner rollout and rollback
 

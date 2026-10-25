@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { RunnerEngines } from './RunnerEngines';
-import { openRunnerCards, openRunnerMenu, runnerMenuItem } from './RunnerEngines.test-helpers';
+import { openRunnerCards, runnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -92,7 +92,7 @@ let host: HTMLDivElement | null = null;
 // Tells React this is a test that drives updates through act(), so it flushes them there.
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  // Remove asks in an antd popup, which measures itself with a ResizeObserver jsdom does not have.
+  // The account menu measures its button with a ResizeObserver, which jsdom does not have.
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
 afterAll(() => {
@@ -149,13 +149,14 @@ const click = async (el: HTMLElement) => {
     el.click();
   });
 };
-/** The confirmation's own Remove, once its popup is drawn (a portal, a few frames late on a slow host). */
+/** The confirmation's own Remove, once its popup — a dialog named by its question — is drawn (a portal,
+ *  a few frames late on a slow host). */
 const confirmation = async () => {
   let ok: HTMLButtonElement | undefined;
   await act(async () => {
     await vi.waitFor(
       () => {
-        ok = [...document.querySelectorAll<HTMLButtonElement>('.ant-popconfirm button')].find(
+        ok = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
           (b) => b.textContent?.trim() === 'Remove',
         );
         expect(ok).toBeDefined();
@@ -248,7 +249,8 @@ describe('two slots that are two accounts', () => {
 
     expect(rows(page, '.re-dup')).toHaveLength(0);
     expect(accountsOf(page)).toHaveLength(2);
-    expect((await openRunnerMenu(defaultRow)).textContent).not.toContain('Remove account');
+    // Default's own Remove takes it off Orbit's list alone (RunnerEngines.removeDefault.test.tsx).
+    expect(await runnerMenuItem(defaultRow, 'Remove account')).toBeTruthy();
     expect(await runnerMenuItem(workRow, 'Remove account')).toBeTruthy();
   });
 });
@@ -269,7 +271,7 @@ describe('a fingerprint nobody has read', () => {
       const [defaultRow, addedRow] = accountsOf(page);
 
       expect(rows(page, '.re-dup')).toHaveLength(0);
-      expect((await openRunnerMenu(defaultRow)).textContent).not.toContain('Remove account');
+      expect(await runnerMenuItem(defaultRow, 'Remove account')).toBeTruthy();
       expect(await runnerMenuItem(addedRow, 'Remove account')).toBeTruthy();
     });
   }

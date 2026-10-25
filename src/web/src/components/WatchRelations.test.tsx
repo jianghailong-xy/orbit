@@ -191,7 +191,8 @@ describe('a task’s Followed by', () => {
       [...section.querySelectorAll('button')].find((b) => b.textContent?.includes('Follow task')),
       'Follow task',
     );
-    expect(document.body.querySelector('.ant-modal-title')?.textContent).toBe('Follow task');
+    const editor = document.body.querySelector('[role="dialog"]');
+    expect(document.getElementById(editor?.getAttribute('aria-labelledby') ?? '')?.textContent).toBe('Follow task');
   });
 
   it('says nothing is watching the task rather than drawing an empty list', async () => {
@@ -218,7 +219,7 @@ describe('a session’s Following and Followed by', () => {
       [...container!.querySelectorAll('button')].find((b) => b.textContent?.includes('Following')),
       'Following',
     );
-    const rows = [...document.body.querySelectorAll<HTMLElement>('.ant-popover .watch-row')];
+    const rows = [...document.body.querySelectorAll<HTMLElement>('.watch-popover .watch-row')];
     expect(rows.map((r) => r.dataset.watchId)).toEqual(['WAITING']);
   });
 
@@ -469,6 +470,107 @@ describe('a session’s Following and Followed by', () => {
     expect(container!.querySelector('.watch-strip'), 'no strip: it waits on the person').toBeNull();
     // The header's chip counts the same set, so it must not count this one either: only Follow left.
     expect(buttons(container!)).toEqual(['Follow']);
+  });
+
+  /** The task a session target's session runs, as the watch read names it (`targetTask`). */
+  const runs = (id: string, title: string, over: { running?: boolean } = {}) => ({
+    targetTask: { id, title, status: { status: 'IN_PROGRESS', running: over.running ?? true, queued: false } },
+  });
+  const AWAIT_TASK: WatchView['predicate'] = {
+    kind: 'ANY_OF',
+    operands: [
+      { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' },
+      { kind: 'ANY', over: 'ALL_TARGETS', leaf: 'TASK_FAILED' },
+    ],
+  };
+  const AWAIT_SESSION: WatchView['predicate'] = {
+    kind: 'ANY_OF',
+    operands: [
+      { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'SESSION_TURN_SETTLED' },
+      { kind: 'ANY', over: 'ALL_TARGETS', leaf: 'SESSION_NEEDS_ATTENTION' },
+    ],
+  };
+  const NOTIFY = 'Android: tapping a notification opens the session it names';
+  const DEPLOY = 'Deploy main 06f4463: runner 0.1.231 at 40%';
+  /** A task_await on T1 and a session_await on its run session S1: the owner's screenshot. */
+  const awaitBoth = (sessionAwaitTarget: Partial<WatchTargetView>) => [
+    watch('TASK_AWAIT', {
+      predicate: AWAIT_TASK,
+      targets: [target('TASK', 'T1', { targetTitle: NOTIFY, ...standing('IN_PROGRESS', { running: true }) })],
+      ...resumes('S_ME'),
+    }),
+    watch('SESSION_AWAIT', {
+      predicate: AWAIT_SESSION,
+      targets: [target('SESSION', 'S1', { targetTitle: `Task: ${NOTIFY}`, ...run('RUNNING', { running: true }), ...sessionAwaitTarget })],
+      ...resumes('S_ME'),
+    }),
+  ];
+
+  it('leaves a task’s run session to the Tasks card: no strip, while Following still names both', async () => {
+    serve(awaitBoth(runs('T1', NOTIFY)));
+    await mount(
+      <>
+        <SessionWatchStrip sessionId="S_ME" />
+        <SessionWatchBadges sessionId="S_ME" />
+      </>,
+    );
+    expect(container!.querySelector('.watch-strip')).toBeNull();
+    // The relations say the watches as they were made: one on a task, one on a session.
+    expect(buttons(container!)).toEqual(['Following 2 targets', 'Follow']);
+  });
+
+  it('keeps a run session on the strip, by its own name, when an older server names no task for it', async () => {
+    serve(awaitBoth({}));
+    await mount(<SessionWatchStrip sessionId="S_ME" />);
+    expect(container!.querySelector('.watch-strip .ct-one')?.textContent).toBe(`Task: ${NOTIFY}`);
+  });
+
+  it('keeps a session that runs no task on the strip, as before', async () => {
+    serve([
+      watch('TASK_AWAIT', {
+        predicate: AWAIT_TASK,
+        targets: [target('TASK', 'T1', standing('IN_PROGRESS', { running: true }))],
+        ...resumes('S_ME'),
+      }),
+      watch('CHILD', {
+        predicate: AWAIT_SESSION,
+        targets: [target('SESSION', 'S3', { targetTitle: DEPLOY, ...run('RUNNING', { running: true }), targetTask: null })],
+        ...resumes('S_ME'),
+      }),
+    ]);
+    await mount(<SessionWatchStrip sessionId="S_ME" />);
+    const strip = container!.querySelector('.watch-strip')!;
+    expect(strip.querySelector('.ct-one')?.textContent).toBe(DEPLOY);
+    expect(strip.querySelector('.status-pill')?.textContent).toBe('Running');
+  });
+
+  it('lists a run session that shares its watch with another session as its task', async () => {
+    serve([
+      watch('BOTH', {
+        predicate: AWAIT_SESSION,
+        targets: [
+          target('SESSION', 'S3', { targetTitle: DEPLOY, ...run('RUNNING', { running: true }), targetTask: null }),
+          target('SESSION', 'S1', { targetTitle: `Task: ${NOTIFY}`, ...run('AWAITING_INPUT'), ...runs('T1', NOTIFY, { running: false }) }),
+        ],
+        ...resumes('S_ME'),
+      }),
+    ]);
+    await mount(<SessionWatchStrip sessionId="S_ME" />);
+    const strip = container!.querySelector('.watch-strip')!;
+    // A session and a task, each where it stands: the task is not done while its run waits for a reply.
+    expect(strip.querySelector('.watch-strip-target')?.textContent).toBe('all 2 targets');
+    expect(strip.querySelector('.ct-count')?.textContent).toBe('1 running · 0/2 done');
+    await click(strip.querySelector('.bg-tray-row'), 'the strip');
+    expect(
+      [...strip.querySelectorAll('a.ct-row')].map((a) => [
+        a.querySelector('.status-pill')?.textContent,
+        a.querySelector('.ct-title')?.textContent,
+        a.getAttribute('href'),
+      ]),
+    ).toEqual([
+      ['Running', DEPLOY, '/sessions/S3'],
+      ['In progress', NOTIFY, '/tasks/T1'],
+    ]);
   });
 });
 

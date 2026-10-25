@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { wikiWorkerRunning, type WikiSystemModelState, type WikiSystemModelStatus } from '@orbit/shared';
+import { WIKI_EXECUTOR_READ, wikiWorkerRunning, type WikiSystemModelRead, type WikiSystemModelState, type WikiSystemModelStatus } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -29,5 +29,13 @@ export class WikiSystemModelReads {
       checkedAt: row.checkedAt?.toISOString() ?? null,
       workerSeenAt: row.workerSeenAt.toISOString(),
     };
+  }
+
+  /**
+   * The user door's answer (contract `systemModel.read`): the state `read` answers, and who executes the caller's
+   * wiki — the server, for every account (contract `jobs.executor.read`).
+   */
+  async readForUser(now: Date = new Date()): Promise<WikiSystemModelRead> {
+    return { ...(await this.read(now)), executor: WIKI_EXECUTOR_READ };
   }
 }

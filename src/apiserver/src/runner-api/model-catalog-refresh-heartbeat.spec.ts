@@ -19,6 +19,7 @@ function harness(pending: boolean) {
   let storedRequestAt: Date | null = pending ? new Date('2026-09-05T00:00:00.000Z') : null;
   const claims: Array<Record<string, unknown>> = [];
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: {
       update: async () => ({ maxConcurrent: 2 }),
       findUnique: async () => null,

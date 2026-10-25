@@ -1,0 +1,162 @@
+{
+  "at": "2026-10-17T19:54:25.624+00:00",
+  "ceph": {
+    "blocklist": "10.0.2.15:0/3454451936 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/1785994816 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/3957931511 2026-10-18T06:02:36.277036+0000\n10.0.2.15:0/3657271528 2026-10-18T05:32:55.761170+0000\n10.0.2.15:0/2116855770 2026-10-18T05:32:21.802292+0000\n10.0.2.15:0/1577251256 2026-10-18T05:45:42.456577+0000\n10.0.2.15:0/126035369 2026-10-18T06:00:08.023957+0000\n10.0.2.15:0/2400258217 2026-10-18T06:18:34.360152+0000\n10.0.2.15:0/839558565 2026-10-18T05:45:42.456577+0000\n10.0.2.15:6824/2927075483 2026-10-18T06:58:22.138406+0000\n10.0.2.15:0/684585882 2026-10-18T05:42:02.138181+0000\n10.0.2.15:6825/3840669940 2026-10-18T19:46:35.556850+0000\n10.0.2.15:6824/857119874 2026-10-18T06:18:34.360152+0000\n10.0.2.15:0/1453475795 2026-10-18T06:15:01.467900+0000\n10.0.2.15:0/280390005 2026-10-18T06:18:34.360152+0000\n10.0.2.15:0/1704723826 2026-10-18T06:18:34.360152+0000\n10.0.2.15:0/2768098679 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/796256179 2026-10-18T05:32:58.148475+0000\n10.0.2.15:6825/3298492733 2026-10-18T06:15:01.467900+0000\n10.0.2.15:0/1190343191 2026-10-18T05:42:02.138181+0000\n10.0.2.15:0/460888383 2026-10-18T05:42:02.138181+0000\n10.0.2.15:0/788829727 2026-10-18T05:32:21.802292+0000\n10.0.2.15:0/2453517372 2026-10-18T06:18:34.360152+0000\n10.0.2.15:0/2454030720 2026-10-18T05:45:42.456577+0000\n10.0.2.15:6824/3298492733 2026-10-18T06:15:01.467900+0000\n10.0.2.15:6800/2242499925 2026-10-18T05:32:21.802292+0000\n10.0.2.15:0/2915574634 2026-10-18T06:58:22.138406+0000\n10.0.2.15:6824/3840669940 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/846290385 2026-10-18T06:15:01.467900+0000\n10.0.2.15:6801/2608923415 2026-10-18T05:32:55.761170+0000\n10.0.2.15:0/705477897 2026-10-18T05:32:58.148475+0000\n10.0.2.15:0/1032693241 2026-10-18T05:32:21.802292+0000\n10.0.2.15:6801/2242499925 2026-10-18T05:32:21.802292+0000\n10.0.2.15:6801/2960448006 2026-10-18T05:32:58.148475+0000\n10.0.2.15:6825/2927075483 2026-10-18T06:58:22.138406+0000\n10.0.2.15:0/335839488 2026-10-18T06:00:08.023957+0000\n10.0.2.15:0/2383664914 2026-10-18T05:32:58.148475+0000\n10.0.2.15:0/292887695 2026-10-18T06:15:01.467900+0000\n10.0.2.15:0/2161969538 2026-10-18T06:58:22.138406+0000\n10.0.2.15:0/1673688656 2026-10-18T06:00:08.023957+0000\n10.0.2.15:6800/2960448006 2026-10-18T05:32:58.148475+0000\n10.0.2.15:6824/551327558 2026-10-18T06:02:36.277036+0000\n10.0.2.15:6825/551327558 2026-10-18T06:02:36.277036+0000\n10.0.2.15:0/2537738623 2026-10-18T06:02:36.277036+0000\n10.0.2.15:6825/1292598608 2026-10-18T05:45:42.456577+0000\n10.0.2.15:6824/2743786823 2026-10-18T06:00:08.023957+0000\n10.0.2.15:0/943165560 2026-10-18T06:02:36.277036+0000\n10.0.2.15:0/2690687567 2026-10-18T05:32:55.761170+0000\n10.0.2.15:6824/1292598608 2026-10-18T05:45:42.456577+0000\n10.0.2.15:0/1705519196 2026-10-18T06:58:22.138406+0000\n10.0.2.15:6825/857119874 2026-10-18T06:18:34.360152+0000\n10.0.2.15:6800/3941680233 2026-10-18T05:42:02.138181+0000\n10.0.2.15:6801/3941680233 2026-10-18T05:42:02.138181+0000\n10.0.2.15:0/899918902 2026-10-18T05:32:55.761170+0000\n10.0.2.15:6800/2608923415 2026-10-18T05:32:55.761170+0000\n10.0.2.15:6825/2743786823 2026-10-18T06:00:08.023957+0000\n10.0.2.15:0/2715107948 2026-10-18T05:42:02.138181+0000\nlisted 57 entries",
+    "fsid": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+    "health": "HEALTH_OK",
+    "healthDetail": "HEALTH_OK",
+    "osdmap": {
+      "epoch": 97,
+      "num_in_osds": 3,
+      "num_osds": 3,
+      "num_remapped_pgs": 0,
+      "num_up_osds": 3,
+      "osd_in_since": 1792215315,
+      "osd_up_since": 1792266390
+    },
+    "pgs": [
+      {
+        "count": 33,
+        "state_name": "active+clean"
+      }
+    ],
+    "rbdInfo": {
+      "access_timestamp": "Sat Oct 17 19:50:49 2026",
+      "block_name_prefix": "rbd_data.16fab75b3dd1e",
+      "create_timestamp": "Sat Oct 17 19:50:49 2026",
+      "features": [
+        "layering"
+      ],
+      "flags": [],
+      "format": 2,
+      "id": "16fab75b3dd1e",
+      "modify_timestamp": "Sat Oct 17 19:50:49 2026",
+      "name": "csi-vol-73e7db32-b44a-49cb-a146-f42de6fe5c27",
+      "object_size": 4194304,
+      "objects": 512,
+      "op_features": [],
+      "order": 22,
+      "size": 2147483648,
+      "snapshot_count": 0
+    },
+    "rbdStatus": {
+      "watchers": [
+        {
+          "address": "10.0.2.15:0/2749916366",
+          "client": 94119,
+          "cookie": 18446462598732840962
+        }
+      ]
+    }
+  },
+  "guest": [
+    "== kernel 7.0.0-34-generic, boot 1e881b7f-1679-4b71-8b5e-6b31ef87312e, up 517.76 s",
+    "== rbd devices",
+    "rbd0 orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd client client94119 addr 10.0.2.15:0/2749916366",
+    "rbd1 orbit-mr-rbd/csi-vol-73e7db32-b44a-49cb-a146-f42de6fe5c27 client client94119 addr 10.0.2.15:0/2749916366",
+    "== RBD filesystems mounted",
+    "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd /dev/rbd0 ext4 rw,relatime,stripe=1024",
+    "/var/lib/kubelet/pods/b1a4fd21-2843-4aa3-96b0-84897f626678/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount /dev/rbd0 ext4 rw,relatime,stripe=1024",
+    "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/a58831d827951719efbddea2b07ff834312fb022eb617f3d1d6794b70d8f4701/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-73e7db32-b44a-49cb-a146-f42de6fe5c27 /dev/rbd1 ext4 rw,relatime,stripe=1024",
+    "/var/lib/kubelet/pods/38693fcf-9066-4dfa-9c27-c39b2124f3c9/volumes/kubernetes.io~csi/pvc-d5299c21-8be0-4e61-91dd-33636ccda9ab/mount /dev/rbd1 ext4 rw,relatime,stripe=1024"
+  ],
+  "mapping": {
+    "attachments": 1,
+    "attempt": 0,
+    "desired": "RUNNING",
+    "generation": 1,
+    "operation": "CREATE_POD:COMPLETED",
+    "pod": "38693fcf-9066-4dfa-9c27-c39b2124f3c9:Running:",
+    "podUid": "38693fcf-9066-4dfa-9c27-c39b2124f3c9",
+    "proof": null,
+    "proofRetired": false,
+    "reason": "MODEL_UNAVAILABLE",
+    "secretGeneration": "1",
+    "state": "STARTING"
+  },
+  "objects": {
+    "bootstrapSecret": {
+      "createdAt": "2026-10-17T19:50:53Z",
+      "generation": "1",
+      "name": "mr-boot-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "uid": "ce308eb6-a896-429e-b7b1-950bfc10d89e"
+    },
+    "pod": {
+      "containers": [
+        {
+          "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+          "name": "private-volume-directories",
+          "restartCount": 0,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://d6c7ca811dd63f97fd84abb36fe1b74a29b83245f71ee3b6317caf941f72dea8",
+              "exitCode": 0,
+              "finishedAt": "2026-10-17T19:52:09Z",
+              "reason": "Completed",
+              "startedAt": "2026-10-17T19:52:08Z"
+            }
+          }
+        },
+        {
+          "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+          "name": "runner",
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-10-17T19:52:10Z"
+            }
+          }
+        }
+      ],
+      "deletionTimestamp": null,
+      "generation": "1",
+      "images": [
+        "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d"
+      ],
+      "name": "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "node": "orbit-mr-lab",
+      "phase": "Running",
+      "uid": "38693fcf-9066-4dfa-9c27-c39b2124f3c9"
+    },
+    "podsUsingTheClaim": [
+      "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799"
+    ],
+    "pv": {
+      "claimUid": "d5299c21-8be0-4e61-91dd-33636ccda9ab",
+      "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+      "fsType": "ext4",
+      "image": "csi-vol-73e7db32-b44a-49cb-a146-f42de6fe5c27",
+      "name": "pvc-d5299c21-8be0-4e61-91dd-33636ccda9ab",
+      "pool": "orbit-mr-rbd",
+      "reclaimPolicy": "Retain",
+      "uid": "26476233-644b-47a5-b62d-b8a0848ef9f3",
+      "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-73e7db32-b44a-49cb-a146-f42de6fe5c27"
+    },
+    "pvc": {
+      "accessModes": [
+        "ReadWriteOnce"
+      ],
+      "annotations": {
+        "orbit.dev/owner-id": "01a14b6a-bba2-7260-801a-354b0a0e6f8b",
+        "orbit.dev/runner-id": "01a14b6a-bbb3-703c-9da2-52e164ebf799",
+        "pv.kubernetes.io/bind-completed": "yes",
+        "pv.kubernetes.io/bound-by-controller": "yes",
+        "volume.beta.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com",
+        "volume.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com"
+      },
+      "name": "mr-data-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "phase": "Bound",
+      "storageClassName": "runner-data",
+      "uid": "d5299c21-8be0-4e61-91dd-33636ccda9ab",
+      "volumeName": "pvc-d5299c21-8be0-4e61-91dd-33636ccda9ab"
+    },
+    "volumeAttachments": [
+      {
+        "attached": true,
+        "deletionTimestamp": null,
+        "name": "csi-415eea4c5576a6142d81bffd518127b5eedd687b459f98f75cd3cf2ac47e0746",
+        "node": "orbit-mr-lab"
+      }
+    ]
+  }
+}

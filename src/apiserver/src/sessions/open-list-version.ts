@@ -5,7 +5,7 @@ import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
 import { EVIDENCE_REVIEW_WINDOW_SECONDS } from '../tasks/evidence-review';
 import { EVIDENCE_REVIEW_TURN_KEY_PREFIX } from './watch-turn-key';
 import { freshRunningBgJobs } from './background-job-activity';
-import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
+import { RUNNER_OFFLINE_AFTER_MS, runnerIsOnline, runnerLastBeatSql } from '../runners/runner-presence';
 
 /**
  * A cheap stand-in for "would `SessionsService.list` answer the Open list differently now": the
@@ -19,6 +19,9 @@ import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
  * with no such column. Instead each source contributes the set of its row VERSIONS — `(ctid, xmin)`
  * is a new pair for every insert and update, whoever wrote it, and a delete removes one — folded to
  * a count and an order-free sum. Vacuum freezing or moving a row only changes it spuriously.
+ * `project_integration_job` is the one exception: a v2 claim renews its row every 30 seconds
+ * (§2.2 J-T4), so the RUNNING half of that source fingerprints the row's content without the
+ * renewal-only columns, while every finished row keeps its tuple identity (see the line below).
  *
  * The sources are every table `listRows` and the readers it calls reach (owner decisions,
  * request peers, confirmations under review, project membership, the queued-gate lateral), each
@@ -27,6 +30,13 @@ import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
  * account can hold a hundred thousand of them and fingerprinting all of them cost as much as the list.
  * Anyone adding a source to the list row must add it here (`open-list-version.pg.spec.ts` pins
  * the ones the row shows).
+ *
+ * `includeLanding` is the one source that is not always read: only the project grouping's
+ * landing-aware list can see a LANDING row (contract §2.9 LS6), so `project_landing` joins the
+ * version, and the session fingerprint counts LANDING rows, only when that flag is on. An insert
+ * or a settlement then moves the landing-aware ETag and leaves the plain list's exactly where it
+ * was; the other landing facts a row shows (its OPEN integration items, its BLOCKED candidate)
+ * are sources already.
  *
  * The rest of the list is a fact about the clock, not the rows: a runner going offline, a job going
  * quiet, a share link expiring, a review window or an escalation passing. Each is a threshold that
@@ -39,6 +49,7 @@ export async function readOpenListVersion(
   prisma: PrismaService,
   ownerId: string,
   nowMs: number = Date.now(),
+  includeLanding: boolean = false,
 ): Promise<string> {
   const o = Prisma.sql`${ownerId}::uuid`;
   // How many row versions, and an order-free fingerprint of which.
@@ -56,16 +67,17 @@ export async function readOpenListVersion(
   const [row] = await prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
     WITH owned AS MATERIALIZED (
       SELECT s.id, s.ctid::text || ':' || s.xmin::text AS v, s.status::text AS status,
-             s.task_id, s.context_task_id, s.assigned_runner_id,
+             s.kind AS kind, s.task_id, s.context_task_id, s.assigned_runner_id,
              COALESCE(s.completed_at, s.archived_at) IS NULL AND s.deleted_at IS NULL AS open,
              ${worktreeOperationFenceSql('s')} AS fenced,
              CASE WHEN cardinality(s.running_bg_jobs) > 0
                   THEN json_build_array(s.running_bg_jobs, s.running_bg_job_activity) END AS bg
         FROM session s WHERE s.owner_id = ${o}
     ),
-    -- The runners the list rows can name, whoever owns them.
+    -- The runners the list rows can name, whoever owns them, with the last beat the rows show
+    -- (runners/runner-presence.ts).
     runners AS MATERIALIZED (
-      SELECT r.ctid::text || ':' || r.xmin::text AS v, r.status::text AS status, r.last_heartbeat_at
+      SELECT r.id, r.ctid::text || ':' || r.xmin::text AS v, r.status::text AS status, ${runnerLastBeatSql('r')} AS beat
         FROM runner r
        WHERE r.owner_id = ${o} OR r.id IN (SELECT assigned_runner_id FROM owned WHERE assigned_runner_id IS NOT NULL)
     ),
@@ -94,16 +106,26 @@ export async function readOpenListVersion(
        WHERE e.owner_id = ${o}
     )
     SELECT
-      (SELECT count(*)::text || '/' || COALESCE(sum(hashtextextended(v, 0)), 0)::text FROM owned) AS session,
+      -- A landing container is in no flat view (contract §2.9 LS6), so its row versions count only
+      -- for the project grouping's landing-aware read: a landing inserted or settled moves that
+      -- list's version and leaves this one exactly where it was. Every other source reads the
+      -- same account-wide set either way.
+      (SELECT count(*)::text || '/' || COALESCE(sum(hashtextextended(v, 0)), 0)::text
+         FROM owned WHERE ${includeLanding ? Prisma.sql`TRUE` : Prisma.sql`kind = 'CONVERSATION'`}) AS session,
       -- The queued gate counts every running turn on the runner a PENDING row waits for.
       ${rowsOf('x', Prisma.sql`FROM session x WHERE x.status = 'RUNNING' AND x.owner_id <> ${o}
         AND x.assigned_runner_id IN (SELECT assigned_runner_id FROM owned WHERE status = 'PENDING')`)} AS foreign_running,
       ${ownedBy('workspace')} AS workspace,
       (SELECT count(*)::text || '/' || COALESCE(sum(hashtextextended(v, 0)), 0)::text FROM runners) AS runner,
+      -- Those runners' presence rows, which a heartbeat rewrites without touching the runner's own.
+      ${rowsOf('x', Prisma.sql`FROM runner_presence x WHERE x.runner_id IN (SELECT id FROM runners)`)} AS runner_presence,
       -- ANY(ARRAY(…)), not IN: the planner reads the criterion branch above as the whole task table
       -- (a foreign-key estimate that ignores its NULLs) and would scan all of it for a few thousand ids.
       ${rowsOf('x', Prisma.sql`FROM task x WHERE x.id = ANY(ARRAY(SELECT id FROM task_ids))`)} AS task,
       ${ownedBy('project')} AS project,
+      -- Only read by the project grouping's landing-aware list (contract §2.9 LS6). A constant
+      -- when that is off, so this version stays exactly where it was across landing writes.
+      ${includeLanding ? ownedBy('project_landing') : Prisma.sql`'0/0'`} AS landing,
       ${rowsOf('x', Prisma.sql`FROM project_coordinator_wake x JOIN project p ON p.id = x.project_id
         WHERE p.owner_id = ${o} AND x.status IN ('DELIVERED', 'SESSION_OPENED')`)} AS coordinator_wake,
       ${ownedBy('project_open_item')} AS open_item,
@@ -114,7 +136,27 @@ export async function readOpenListVersion(
       ${ownedBy('project_standard_set_confirmation')} AS standard_set_confirmation,
       ${ownedViaProject('project_task_status_count')} AS task_status_count,
       ${ownedBy('project_promotion')} AS promotion,
-      ${ownedBy('project_integration_job')} AS integration_job,
+      -- A v2 integration claim renews its job row inside every 30 seconds (§2.2 J-T4), so ctid/xmin
+      -- — a new pair on every UPDATE — would move this version, and every client's If-None-Match,
+      -- while nothing the list shows changed. Only a RUNNING row is renewed, so only that half pays
+      -- for a content hash: a job that is not RUNNING keeps its tuple identity, and a running one is
+      -- hashed as its row WITHOUT the columns only a renewal writes (heartbeat_at, updated_at, phase
+      -- and the step/check/output facts). Two subqueries rather than one CASE over the whole set, so
+      -- the whole-row reference — and the detoast of every finished check's outputTail — never runs
+      -- over the account's finished jobs. A running row that ends leaves the second half and enters
+      -- the first, so the state change moves the version like any other write to a finished row.
+      COALESCE((
+        SELECT count(*)::text || '/' || COALESCE(sum(hashtextextended(x.ctid::text || ':' || x.xmin::text, 0)), 0)::text
+          FROM project_integration_job x
+         WHERE x.owner_id = ${o} AND x.state <> 'RUNNING'), '0/0')
+      || ':' ||
+      COALESCE((
+        SELECT count(*)::text || '/' || COALESCE(sum(hashtextextended((to_jsonb(x)
+            - 'heartbeat_at' - 'updated_at' - 'phase' - 'round' - 'step' - 'step_started_at'
+            - 'output_moved_at' - 'current_check')::text, 0)), 0)::text
+          FROM project_integration_job x
+         WHERE x.owner_id = ${o} AND x.state = 'RUNNING'), '0/0')
+      AS integration_job,
       ${ownedBy('project_codebase')} AS codebase,
       ${ownedBy('project_criteria_authorship')} AS criteria_authorship,
       ${ownedBy('session_merge_receipt')} AS merge_receipt,
@@ -142,14 +184,14 @@ export async function readOpenListVersion(
           AND x.client_turn_id = v.delivery_turn_client_id
         WHERE v.owner_id = ${o}`)} AS review_turn,
       -- The thresholds the list decides on Postgres' clock. Each only flips one way as time passes.
-      (SELECT count(*) FROM runners WHERE status = 'OFFLINE' OR last_heartbeat_at IS NULL
-        OR last_heartbeat_at < now() - (${SESSION_RUNNER_OFFLINE_AFTER_MS} * interval '1 millisecond'))::text AS runners_offline_sql,
+      (SELECT count(*) FROM runners WHERE status = 'OFFLINE' OR beat IS NULL
+        OR beat < now() - (${RUNNER_OFFLINE_AFTER_MS} * interval '1 millisecond'))::text AS runners_offline_sql,
       (SELECT count(*) FROM owned WHERE fenced)::text AS fenced,
       (SELECT count(*) FROM share_link sl WHERE sl.owner_id = ${o} AND sl.revoked_at IS NULL
         AND (sl.expires_at IS NULL OR sl.expires_at > now()))::text AS share_links_live,
       -- What the thresholds decided on the JS clock are read from; not hashed (the rows are).
       (SELECT json_agg(bg) FROM owned WHERE bg IS NOT NULL) AS bg_jobs,
-      (SELECT json_agg(json_build_array(status, ${ms(Prisma.sql`last_heartbeat_at`)})) FROM runners) AS runner_clock,
+      (SELECT json_agg(json_build_array(status, ${ms(Prisma.sql`beat`)})) FROM runners) AS runner_clock,
       -- The instants at which a JS-clock threshold flips: an evidence-review window closing, a
       -- coordinator's escalation running out (from a delivered wake or a done request; at once
       -- when its session has ended, hence both), a confirmation review falling due.
@@ -175,8 +217,8 @@ export async function readOpenListVersion(
   const freshJobs = ((bg_jobs ?? []) as Array<[string[], unknown]>)
     .reduce((n, [jobs, activity]) => n + freshRunningBgJobs(jobs, activity, nowMs).length, 0);
   const runnersOnline = ((runner_clock ?? []) as Array<[string, number | null]>)
-    .filter(([status, heartbeat]) => status !== 'OFFLINE' && heartbeat != null
-      && heartbeat >= nowMs - SESSION_RUNNER_OFFLINE_AFTER_MS).length;
+    .filter(([status, beat]) => runnerIsOnline({ status, lastHeartbeatAt: beat == null ? null : new Date(beat) }, nowMs))
+    .length;
 
   return createHash('sha256')
     .update(JSON.stringify([rows, deadlinesPassed, freshJobs, runnersOnline]))

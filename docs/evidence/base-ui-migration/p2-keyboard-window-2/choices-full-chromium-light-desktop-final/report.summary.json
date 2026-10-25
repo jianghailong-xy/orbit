@@ -1,0 +1,2036 @@
+{
+ "stats": {
+  "startTime": "2026-10-07T23:40:11.762Z",
+  "duration": 174849.349,
+  "expected": 65,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ },
+ "errors": [],
+ "tests": [
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3239,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "068dd99eceef976b66f3674a3ec4561217c82a4e0474dc3042a1f258c8413876"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a3cd9a5f28e3a28af14061956f370d9505fdf01ab20476f0d587b6c545e29c67"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1590dd0a16ac843af96d6322904291804fa65d190a5767cb3b8f58a5d23bc623"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4990693be50ac4681da10c996ddf34cce51a946409657425dd65958732125f7c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1225,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5978d0ab4d3d896f759e13e9c098f491efbde1d462fdf6b1508492340d75ded2"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b64dfb6fbebc3daa692d781b708e33fafd3dc823ee1607fbb7bbe010732fdb43"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "99cd60ae799203d7c20b952ec758af447d842e6399d6956257f06bf2cad48fd9"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "932d3c594d2140b8efbc4c3ef93f3d52d939eb5247bfd12683311990cc620ca0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion attachment has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 752,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2ed078e263df459b0bbd47800d66637274da0cf2b565527752fc0f84eaee4aad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion expiry has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 845,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3ac55c530665855870a62e3ba73223bff9e071b816ecf6d857187142cd439214"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion search has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 745,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7dd87db6f44689c4cfbd1a4e6f9417a499f2ae4af188476d791c911ef2337f99"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion multiple has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 862,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f7305d38793c55724fb5f37d6730ac2315c2099de948b6b2f4f045ae8ce71e9a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion popover has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 839,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0deab6f87166bc8e7100acbd10d07fded4c2b7d3911b1f0d4f66b4c96f68b53f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion tooltip has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 825,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f7a8c6fa875ca868b582f1cf266d402b49217453763be64a299a13a55f655555"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal attachment can reopen during exit without stale unmount",
+   "location": "choices-lifecycle.browser.mjs:132",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1550,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reopen",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "35e8f0c3dbb62ce76c860ba86a5efd84db85e5710e35b2d37261bf09f305bf65"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal expiry can reopen during exit without stale unmount",
+   "location": "choices-lifecycle.browser.mjs:132",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1487,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reopen",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "20d7a350bc6615c27d4572c02c55546b9c9a1e09286c3c7fa89fa8a74e184624"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal search can reopen during exit without stale unmount",
+   "location": "choices-lifecycle.browser.mjs:132",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1588,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reopen",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9789ab31d89aa8775eea57d120cd442348b0d1f575f285e7b6948997dcbb42df"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal popover can reopen during exit without stale unmount",
+   "location": "choices-lifecycle.browser.mjs:132",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1601,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reopen",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "964068c882462a5824d5967acc600ceb05498152f746fcdebc25edca96e6222d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches attachment",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2354,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "524159e0fc364d2d5af1965b48efd94937b082798144fc6d341d953557312b39"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "55351b3d82591d679e13f372666563069c65873803c84f47af9f924f354c9087"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "ee8c480d054419aee079270f9743e6a5ce5362983c413970d917a86158d96543"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "4100007cc15c73c857438b28d857322c4e85d908b0bb644356647626f7f713af"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "96b08d3782c272673d2d051d6db59c193725f1047bc90a53d27ae24c3602b2cd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches attachment",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2573,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "871f5020e784444d38a6d3c58d93acd9607f3260c2127d9ed93540fe6918ef2b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches attachment",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2527,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c3cc8588bef61925ea942fad3649ee2fc5dbb049deb58974e4501f4823666844"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches expiry",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2394,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "7692f2dce6145188bfe19e83678b0be54b6c5ff1553b3a623c01c5b79ae11c31"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "c0595b55517eba7fb899e2e09cc0fd880d4bbeeae4b238bc85bd874417301dad"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "ab9191cbcd25f92f48e6422e48d0327d4a80e7f7772f58920c6006d201e84243"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "4186393cdcf2c74005ecf29884086643a809c1eba83960239b59e04eb7f1eb80"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a13359b9890baca3b07b4cbfe608d94bd7ea76cc68ee9f2cd72a1ae43835236c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches expiry",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2660,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0884815a7cb5c6c6e8d5cb9184adfde499c0ba75afe55b78badeead578888441"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches expiry",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2528,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6b52ae67ec70da95e145a2b2596cfbdc8251fde6de8c65f5df53c593298e9455"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches search",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2355,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "65195323dc48ae54ec88c0deb9c761bf1726b2b12c5bf16547a17125bb6e14fd"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "8d59bde18033a8d866d674c684768d0e9a7b759c054a03d154b4d8f4b178d714"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "3f10da336fad22eb96c946482bb6be87e33eac0d9df8e073514ba0eb7fb145b7"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "d6b6b830c794b7f991a7cf62e205ba7f4971ff5b8af479578dab556bd2252f26"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c4198347cc0ae58a6faa4ba2aaacbd2f1dcdedef8ecc9dd8e5ac938dc347f3c8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches search",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2964,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ef8092edb308c0936ec7e96ab5e3d912d1ec3de57dc707ab35b89bbb7cad4fee"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches search",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2670,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3f081c69c58f6bd403267aa1fee5b5a7d46cb454b7ef6ccd254565cb688a0688"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches multiple",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2612,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "d2e05a729139d56fe6a3d10a469053f957de6f2fabd3435fa25c4e04c29af97b"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "4068ff6efaabaa6c0662a603f9d72eba65c5016fd52c298d1ce1a4d69c577235"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "e9576deccf4ee2d2b62f5a1c3f7e5b146a0ddeb7a606da089ac3998409111ca1"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "73ae67d1132be57b88ece496d8600f9f1ef8bcf1a18ab26b96023c2e7e12e62f"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "700cac7fdeb2b151f95cebacf5fc4746674fc56a1d651af17efca4d0d45646aa"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches multiple",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3763,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7cfb97bbbc0bd3d15ee78a0dd6d89841dbaabbaac6c568308c2218f45df25290"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches multiple",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3836,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2670a508e369f7838618f7415e374d25e9dc6edf0fad80e0da7c298f3321f1b0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches popover",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3994,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "d7c62b20e17d3992c7a77e3d1ff7516a6b302476e8148170d1a09d241ac6d91d"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "991863cab443f923e325afe6c4841920d97b0048e110a3b2e30820a46d2cc216"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "595bb0f5a011c5f151eb1c73dc363edf7e5fcfdf2ec1710d46f1a5145c6df5e9"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "baf1e60888fde197c8c445710f7ca4ae12d6ca3a3b451a37d49be78fb9278252"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "fa40e8fd45012e17e279d313c0cb138dfc788da38962baa9c4c09aeb555968cb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches popover",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3240,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0311686e1dd7be0b374ef47ed3f4dc3a603b5aae86ee98c9a86dca27144e3a4d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches popover",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2460,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "957d1737c5377f90f6e69c789de43c8515fab0735fe6c0b9fc70758bd4f4bee7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches tooltip",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2565,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "7f2859c0305d70aab231055d169627079bbef3a0c82741b8cf3ef415cf47c7d1"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "ccf836357f0a3e31f9ab1bd15f849b4118dcd8d8831ad97ed393ba3e3961da8d"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "7f2859c0305d70aab231055d169627079bbef3a0c82741b8cf3ef415cf47c7d1"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "91d6dd565c630b8e3de8b4e626188d101d2bc9cbfc5e3a0b3562580a53c9c5c1"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3dbb39958bbb8dd60a86210df7013de748549f739c4c5cff7e9f043e31cd1535"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches tooltip",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2442,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "38bb1b5a5b07cee6ce6cae830f3fcd4cb991711d55f14eb159956f9edbf21a88"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches tooltip",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2552,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9ac34ec45ce74c24c8eae819e8a2b1fc475806dc8539d152584230541bb2467d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popover center zoom origin matches",
+   "location": "choices-motion.browser.mjs:141",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2492,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a2923e31df59baf97ebcb9d3bfc1e5b2757beb7970f88e65184f27f67bbedd50"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popover end zoom origin matches",
+   "location": "choices-motion.browser.mjs:141",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2495,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c4f611638cbfdf22b7fd70708a633fb7e7c6cafd8c91ada724b73e35e2e6e34e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "tooltip center zoom origin matches",
+   "location": "choices-motion.browser.mjs:141",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2446,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0fd91a69268b8c1548a8fe6eacd4b1d0a92fc863d5ec23b3a3ccb67f2f8e259f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "tooltip end zoom origin matches",
+   "location": "choices-motion.browser.mjs:141",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3362,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6fb1d039452b3e52fcc3a58a797e4e748a9c5fc1253a1e306b5f0b771a1828a2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "submenu left edge zoom matches and stays in view",
+   "location": "choices-motion.browser.mjs:160",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3563,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ea1663ca5ce324a5d42b65961890aa7a04211f56d68a765e3ab4eb033019c755"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "submenu right edge zoom matches and stays in view",
+   "location": "choices-motion.browser.mjs:160",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 5071,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c82ba3b9ec2581e44884d48ccf0aa090907385e045776244508718f7546e300d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "expiry dims the current value while open and restores it on Escape",
+   "location": "choices-open-value.browser.mjs:31",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 6003,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-expiry-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "afaeb5e4bf110207eec7157339142a824e42faf7b2973de5ab287f690dc83edb"
+      },
+      {
+       "name": "orbit-expiry-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "afaeb5e4bf110207eec7157339142a824e42faf7b2973de5ab287f690dc83edb"
+      },
+      {
+       "name": "open-value",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4da7dacae2c87b570071c7045c0aea14516f592fce94827640efe3cae1eff966"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "account dims the current value while open and restores it on Escape",
+   "location": "choices-open-value.browser.mjs:31",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2742,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-account-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "672c87661c4a906f3ae8f76be7b9f76e43754091d70a65296d49db5e839d89f6"
+      },
+      {
+       "name": "orbit-account-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "672c87661c4a906f3ae8f76be7b9f76e43754091d70a65296d49db5e839d89f6"
+      },
+      {
+       "name": "open-value",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e02cc3ed7eef4e9f69dccb348f8c3bc5ed35d3cba8bcc5d1787087313d21e55f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "search dims the current value while open and restores it on Escape",
+   "location": "choices-open-value.browser.mjs:31",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2628,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-search-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "9187d451c5590a5199a1ee1592432a07086454281c57be7c1f7cfc9ab9887c61"
+      },
+      {
+       "name": "orbit-search-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a3176830e2fb75a87e46d58f68fb820c001900308fa1371a35bb96ebd0945d54"
+      },
+      {
+       "name": "open-value",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4da7dacae2c87b570071c7045c0aea14516f592fce94827640efe3cae1eff966"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3750,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-attachment-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "705e355c7010b9b69e0a952edbaeec08b2dfb77f4d1c7d6a3343fdc7e2bd28af"
+      },
+      {
+       "name": "orbit-attachment-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b3838582ed1e0f5ac7ed071687ef9b933b10f448b699b8ad7eb15614eaabd395"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8f2bb091a21a559aa59fd540eab207d16f90ff041334188386b80f7329ee7c07"
+      },
+      {
+       "name": "menu-glyphs",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7125724b498fcdb2964f337485b0eba812c65813cff96f5f66994c839f4a4077"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "access matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3296,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-access-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "52d0718d77046614acff7717df061610b4f0a9960e644d884fe80ff7d707f682"
+      },
+      {
+       "name": "orbit-access-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "3008a190bb90fbba3b34c3f452ecc46f81dc8e41e40c79717ef2a91c3eee4bf6"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "03f938eb0360ad7375573d0a15346cac123d027925408809069193f414acc02f"
+      },
+      {
+       "name": "menu-glyphs",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "010a2cdf961ab7db4bf8b51908f7592aa8f3aeca704b0f1085637ba8a6f6c137"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "expiry matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4664,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-expiry-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "fb6e9c2f5b0ffb843328eaf0630b20ee4d2fee85593b44700c81164118903da5"
+      },
+      {
+       "name": "antd-expiry-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "bd7a16c47af5c7aee73ed8abe600900b6f19a0008ba05332e51d4a12355ae7d2"
+      },
+      {
+       "name": "orbit-expiry-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "fb6e9c2f5b0ffb843328eaf0630b20ee4d2fee85593b44700c81164118903da5"
+      },
+      {
+       "name": "orbit-expiry-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "bd7a16c47af5c7aee73ed8abe600900b6f19a0008ba05332e51d4a12355ae7d2"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2fec49c1a33adf58aacfcc2ee4f1ffc9103dd51ea82908709ed64c057e1af5aa"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "account matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 5543,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-account-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a26d9542e65529a267f661dbabf4c7f27d6da5ffbf0ef163851756a001759273"
+      },
+      {
+       "name": "antd-account-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "de45f0c3a0db3275cfad2b7f80be82e44742b45d1ee69a7814c619e34aef29b4"
+      },
+      {
+       "name": "orbit-account-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a26d9542e65529a267f661dbabf4c7f27d6da5ffbf0ef163851756a001759273"
+      },
+      {
+       "name": "orbit-account-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "de45f0c3a0db3275cfad2b7f80be82e44742b45d1ee69a7814c619e34aef29b4"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b25cac7f7f37d8f18d9715b477ea7136f2a2a1c1707a0bcf2a40f48e1674d9e2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "search matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4804,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-search-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "52df41e20ebca9f8fd56dc5cf3f321c0bfb5c438cb6c46568adebeb093f7c574"
+      },
+      {
+       "name": "antd-search-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "685bc0603233982c28276fd9e0120e93f88e76b7ba17f0485461daf72c0ab2f5"
+      },
+      {
+       "name": "orbit-search-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "52df41e20ebca9f8fd56dc5cf3f321c0bfb5c438cb6c46568adebeb093f7c574"
+      },
+      {
+       "name": "orbit-search-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "685bc0603233982c28276fd9e0120e93f88e76b7ba17f0485461daf72c0ab2f5"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5b87f5372ce464447b23850b24eda567fbe7916f7c48b93bb753e55ccc7ebe7b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popover matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3145,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-popover-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "0d779bdba1d21e1935cfc63729910e8f72617cea743a5d7c3437d114eb13bf22"
+      },
+      {
+       "name": "antd-popover-context",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a43c49974f9362b5d985cfe463a2b9d29b4c2a8ffe9a10772615988c39fe1ef9"
+      },
+      {
+       "name": "orbit-popover-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "0d779bdba1d21e1935cfc63729910e8f72617cea743a5d7c3437d114eb13bf22"
+      },
+      {
+       "name": "orbit-popover-context",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "4ef0bf816ff054ec3fa8490857a2b4fafe767d104265c978994a37a8cc57c061"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "be79aa554288aa873963d84a2acc654b3f238704e06f4a3d7688f5122be42b65"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "tooltip matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3044,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-tooltip-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "3a3a8d1633ff4c04fb56b400cd9efd96ec288bb268984cbe6cccd7aa49cfe58a"
+      },
+      {
+       "name": "antd-tooltip-context",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "e8e44c6bc8e9aa419dd87c05767c329ccadf82b87ad4dd3e581c5902a32e160a"
+      },
+      {
+       "name": "orbit-tooltip-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "3a3a8d1633ff4c04fb56b400cd9efd96ec288bb268984cbe6cccd7aa49cfe58a"
+      },
+      {
+       "name": "orbit-tooltip-context",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "e8e44c6bc8e9aa419dd87c05767c329ccadf82b87ad4dd3e581c5902a32e160a"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3d67fd9c890bb4e503d56e5e71533aaf008e856434fb42d40a3ad733b774af4a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "empty, disabled, hover and focus choice surfaces match the existing states",
+   "location": "choices.browser.mjs:158",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 14197,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-expiry-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "6cbfba5a842cb2cada7e987c06bf39c51eeba36a1b7a0ce64f9c65e9247e5759"
+      },
+      {
+       "name": "orbit-expiry-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "6cbfba5a842cb2cada7e987c06bf39c51eeba36a1b7a0ce64f9c65e9247e5759"
+      },
+      {
+       "name": "antd-expiry-empty",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "fe466481123df4b376d70c3a0cecee0d77df9c48b062959d0c41986a9010b74e"
+      },
+      {
+       "name": "orbit-expiry-empty",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "56de062560e013813f1090c93e4816bbe00e6c94f9f05efb8f608be7ba23761b"
+      },
+      {
+       "name": "antd-expiry-focus",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "fbfa91c3379623d977cd0838dcabf9e1a6a4fcc8bf0259152e9d15985fe77153"
+      },
+      {
+       "name": "orbit-expiry-focus",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "fbfa91c3379623d977cd0838dcabf9e1a6a4fcc8bf0259152e9d15985fe77153"
+      },
+      {
+       "name": "antd-search-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5065991d516c2d4cf7dc0ede9d974357d7cdf5e552355027a8881468366900e0"
+      },
+      {
+       "name": "orbit-search-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5065991d516c2d4cf7dc0ede9d974357d7cdf5e552355027a8881468366900e0"
+      },
+      {
+       "name": "antd-search-empty",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "1187bc3ec5c95305ab31d0569ab9f94c4924130d44187e20c51fed2b27004cb9"
+      },
+      {
+       "name": "orbit-search-empty",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "2c1b4c022f31914b3b10aae11e8de56135fef1f20ed7145dd9ca1fa693e11717"
+      },
+      {
+       "name": "antd-search-focus",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a98cce81aaddaf6ea4fea1428f95926397210345dd3d6479834570d20a286103"
+      },
+      {
+       "name": "orbit-search-focus",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a98cce81aaddaf6ea4fea1428f95926397210345dd3d6479834570d20a286103"
+      },
+      {
+       "name": "choice-states",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "79104b16277920cae59a84e7de5fc3e02605b34962ce562762f9f6ece1ce3da9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu arrows, disabled items, submenu, checkbox and focus return work",
+   "location": "choices.browser.mjs:198",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1250,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-menu",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "723692d528c63ed61fd07e5a0001f78b5ce8cd61c7bb4f8a6883bed78f758d02"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus",
+   "location": "choices.browser.mjs:231",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1715,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "pointer-menu",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "81481828f8f44d314fa63c086e939506af4ee230b1eb53f95bdb108d7e0cc1ca"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values",
+   "location": "choices.browser.mjs:263",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1255,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "search preserves selection, filters groups, handles no results, composition and explicit clear",
+   "location": "choices.browser.mjs:292",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1616,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "search",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "97a3ed479253a2ded3663964de1f9db68ef65e914f479514801c98b3e36ae8c1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "remote search accepts server labels and resets an action picker without local filtering",
+   "location": "choices.browser.mjs:323",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1128,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "remote-search",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d1e0607554d9e46087eee9b61968b116e9b8be9eaacdb5f895cce41a8a6a550e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog owns choices, top-layer Escape, Tab and theme",
+   "location": "choices.browser.mjs:343",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2072,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "choices-in-dialog",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "cfeaeebfc1fff72b50c7bea735fca4f7ac3d2e6500865947a796943ce3fa0b46"
+      },
+      {
+       "name": "nested-choices",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "legacy Modal owns choices, top-layer Escape, Tab and theme",
+   "location": "choices.browser.mjs:343",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2267,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "choices-in-dialog",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "8e13f4a15d6c148318a1a7431069d2fcf794316f79b0527cab1a79ef50681c59"
+      },
+      {
+       "name": "nested-choices",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "961974b994e72e1b26f3107443ebf99d2e0704f1167f4a724dc930ccecd2b679"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary",
+   "location": "choices.browser.mjs:381",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3402,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "legacy-tab-baseline",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8a4a69f32fc6b2705fcf6c39247da0a82ddbe2da309d44c3e0cf8602372c7ffc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover",
+   "location": "choices.browser.mjs:400",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1567,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "popover-tooltip",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e0b29a3a60e5f2ef0a20587c4f5c79f92a76c58e1fbbb403a6f189e5a2b954f1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "open choices follow the live system theme without losing selection",
+   "location": "choices.browser.mjs:435",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1076,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "live-theme",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2681bb725781285931f30e0ee0bbdff2c83faa9f85ddf2e95c806e888c731751"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner",
+   "location": "choices.browser.mjs:453",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1442,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "dialog-boundaries",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "multiple chip appearance matches current labels and email fields",
+   "location": "choices.browser.mjs:486",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4824,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-multiple-default",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "05f346daa460602331270f43fe478b095c98ac327e896ef316445c5c911e2376"
+      },
+      {
+       "name": "antd-multiple-options",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "eb74dbf9b4b51ffd8c20fe3ec509711c05832f901b8e896404dae98884a21335"
+      },
+      {
+       "name": "orbit-multiple-default",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "05f346daa460602331270f43fe478b095c98ac327e896ef316445c5c911e2376"
+      },
+      {
+       "name": "orbit-multiple-options",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "db65f175fd8ed32bc450a16d09d0c1479aa9e02d9062773d6154f6fb8f2de853"
+      },
+      {
+       "name": "antd-multiple-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "6963021bd469cc8c0feccf0c308aab9287760f428d5f9999e973f855af26e2dd"
+      },
+      {
+       "name": "orbit-multiple-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "6963021bd469cc8c0feccf0c308aab9287760f428d5f9999e973f855af26e2dd"
+      },
+      {
+       "name": "multi-appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f520551e75c99859d434e387d1efe5c985af42d1c92a5e36c1d9ed9686f1bfe8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "tags chip appearance matches current labels and email fields",
+   "location": "choices.browser.mjs:486",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4162,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-tags-default",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "d8c1b64abfc3b2eddd2ee7f313c7df48d14f1e25726c7cd0b403fd529379c784"
+      },
+      {
+       "name": "orbit-tags-default",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "d8c1b64abfc3b2eddd2ee7f313c7df48d14f1e25726c7cd0b403fd529379c784"
+      },
+      {
+       "name": "antd-tags-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "d8c099752e9042b628bf3dad6bbc14edf00983a42a611d6f00b0a534236dd010"
+      },
+      {
+       "name": "orbit-tags-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "d8c099752e9042b628bf3dad6bbc14edf00983a42a611d6f00b0a534236dd010"
+      },
+      {
+       "name": "multi-appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "77029b2237ea5abab0b2ef399bfab1c4850b3875670577a7d2e99c29c2610eaa"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+   "location": "choices.browser.mjs:515",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1389,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "multiple-labels",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "12aa37d5e9012d39fd4cd07e9f8bdf46633e20b758109e6c45e307c202995340"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion",
+   "location": "choices.browser.mjs:552",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1141,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "email-tags",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bca4a211111d6395b7e9300f7d3398adc7958a2f273e587b049a3cc4c7dd39ba"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+   "location": "choices.browser.mjs:592",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1338,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "multi-dialog-and-row",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "search option touch selects once and preserves input focus",
+   "location": "choices.browser.mjs:631",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1040,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "search-touch",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ea0b7a5890019671d18a56a439323f477f9ef256216a72fc2ca67361a871e19b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen",
+   "location": "choices.browser.mjs:642",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1319,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "long-tooltip",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a02adebc9a3658cf31105f5bd6c709a6e580642796b716bd5284ad07e6ae01e6"
+      },
+      {
+       "name": "plan-usage-sized-popover",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "356ac107e2c0b911bd5e953c369f881b7f9386c0c980218224ad071193822f12"
+      },
+      {
+       "name": "tooltip-and-popover-edges",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b7b15d89088ad431c77b3c1bfe4a31bce28864eab86dfc4a00f29857fd8b94fb"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

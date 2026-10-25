@@ -28,12 +28,12 @@ export const POOL_GATEWAY_UPSTREAM = 'POOL_GATEWAY_UPSTREAM';
 export const POOL_GATEWAY_PATH = '/api/gw/codex';
 
 /**
- * What a session token may call, and nothing else, whichever upstream its session is on: what codex 0.158
- * was recorded calling through a configured provider (providers/fixtures/codex-gateway-recording.json) —
- * one POST of `/responses` per model request, the context compaction's included. Everything else codex
- * asks a ChatGPT backend for when it is signed in itself — the model list, workspace routing, plugins,
- * settings, analytics (providers/fixtures/codex-chatgpt-backend-recording.json) — goes to the backend it
- * was configured with, never through here, and a session token reaches none of it.
+ * What a session on one of a pool's API keys may call, and nothing else: what codex 0.158 was recorded
+ * calling through a configured provider (providers/fixtures/codex-gateway-recording.json) — one POST of
+ * `/responses` per model request, the context compaction's included. OpenAI's API has no other path codex
+ * asks it for. A session on one of a pool's ChatGPT accounts is the login gateway's, whose allowed paths
+ * are loginGatewayAllows (codex-login-gateway.ts): the turn, plus the ChatGPT backend calls the CLI makes
+ * for itself when signed in — routing, plugins, settings, analytics.
  */
 const ALLOWED = [{ method: 'POST', path: '/responses' }] as const;
 

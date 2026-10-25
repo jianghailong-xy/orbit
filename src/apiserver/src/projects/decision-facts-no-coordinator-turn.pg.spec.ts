@@ -82,6 +82,7 @@ import { CompletionEvidenceProducer } from './completion-evidence.producer';
 import { CompletionInputRouter } from './completion-input-router.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorDeliveryService } from './coordinator-delivery.service';
+import { CoordinatorEvidenceQueueService } from './coordinator-evidence-queue.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -160,6 +161,7 @@ function connect(url: string): Stack {
   const convergence = new CoordinatorConvergenceService(prisma);
   const deliveries = new CoordinatorDeliveryService(prisma, wakes, sessions);
   const judgments = new CoordinatorJudgmentService(prisma, wakes, sessions);
+  const producer = new CompletionEvidenceProducer(prisma, convergence, deliveries);
   const provided = new Map<unknown, unknown>([
     [PrismaService, prisma],
     [ProjectAcceptanceService, new ProjectAcceptanceService(prisma)],
@@ -179,7 +181,8 @@ function connect(url: string): Stack {
     [DependentReadyProducer, new DependentReadyProducer(prisma, convergence, deliveries)],
     [ProjectSettledUnmergedProducer,
       new ProjectSettledUnmergedProducer(prisma, convergence, deliveries)],
-    [CompletionEvidenceProducer, new CompletionEvidenceProducer(prisma, convergence, deliveries)],
+    [CompletionEvidenceProducer, producer],
+    [CoordinatorEvidenceQueueService, new CoordinatorEvidenceQueueService(prisma, producer)],
   ]);
   return {
     db,

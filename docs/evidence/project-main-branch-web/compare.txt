@@ -1,0 +1,18 @@
+② 01b-start-proposal: design (1496, 1462) real (1496, 1462) same_size=True differing_px=0 (0.000%) bbox=None
+③ 01c-menu: design (1436, 996) real (1436, 996) same_size=True differing_px=0 (0.000%) bbox=None
+④ 01d-typed: design (1432, 368) real (1432, 368) same_size=True differing_px=0 (0.000%) bbox=None
+⑥ 01k-memory-start: design (1496, 1480) real (1496, 1480) same_size=True differing_px=0 (0.000%) bbox=None
+⑦ 01l-memory-menu: design (1432, 496) real (1432, 496) same_size=True differing_px=0 (0.000%) bbox=None
+⑨ 01g-run-proposal: design (1920, 1456) real (1920, 1456) same_size=True differing_px=0 (0.000%) bbox=None
+⑩ 01h-run-locked: design (1920, 1296) real (1920, 1296) same_size=True differing_px=0 (0.000%) bbox=None
+⑪ 01j-line-proposal: design (1912, 166) real (1912, 166) same_size=True differing_px=0 (0.000%) bbox=None
+
+Exact check, every channel of every pixel (threshold 0):
+01b-start-proposal: identical=False max_channel_diff=2 pixels_differing=12 bbox=(58, 20, 1438, 32)
+01c-menu: identical=False max_channel_diff=1 pixels_differing=19 bbox=(1331, 988, 1389, 996)
+01d-typed: identical=True max_channel_diff=0 pixels_differing=0 bbox=None
+01k-memory-start: identical=False max_channel_diff=2 pixels_differing=14 bbox=(58, 130, 1438, 896)
+01l-memory-menu: identical=True max_channel_diff=0 pixels_differing=0 bbox=None
+01g-run-proposal: identical=True max_channel_diff=0 pixels_differing=0 bbox=None
+01h-run-locked: identical=True max_channel_diff=0 pixels_differing=0 bbox=None
+01j-line-proposal: identical=True max_channel_diff=0 pixels_differing=0 bbox=None

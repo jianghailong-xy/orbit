@@ -1,0 +1,206 @@
+{
+  "at": "2026-10-18T04:18:10.306+00:00",
+  "attachments": [
+    {
+      "attached": true,
+      "deleting": false,
+      "name": "csi-fc130ac6441702e90303f78a5519b5f1143a3b53534548bc105cf7e41eb666f3"
+    }
+  ],
+  "defaultWorkspace": {
+    "auto_init_git": true,
+    "enable_worktree": true,
+    "id": "01a14d26-b013-74ad-b17a-8b127f528105",
+    "name": "Default",
+    "runner_id": "01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "target_runner_id": "01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "work_dir": "/var/lib/orbit/home/orbit-repos/default"
+  },
+  "display": {
+    "acceptsWork": true,
+    "detail": "Sessions here run on the runner Orbit manages for you.",
+    "ensure": false,
+    "kind": "available",
+    "moving": false,
+    "retry": false,
+    "signIn": false,
+    "startsNewSession": true,
+    "title": "Managed runner ready"
+  },
+  "mapping": {
+    "attempt": 0,
+    "demand_revision": 5,
+    "desired_state": "RUNNING",
+    "generation": 5,
+    "id": "01a14d26-b015-74ae-adbf-b0eb3ffeabe6",
+    "initial_provider": "deepseek",
+    "last_demand_at": "2026-10-18T04:15:20.22+00:00",
+    "last_error": null,
+    "management_state": "READY",
+    "node_name": "orbit-mr-lab",
+    "pod_name": "mr-01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "pod_uid": "b768e731-fd17-4c6c-98bd-7feb744459eb",
+    "pv_uid": "29a6631c-4f0c-4d25-b69d-d8d591862e9b",
+    "pvc_name": "mr-data-01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "pvc_uid": "4a06a82f-fcfd-4b7e-a32c-aea44e40d388",
+    "reservation": {
+      "compute": {
+        "activeUsers": 1,
+        "attachments": 1,
+        "cpuMillis": 500,
+        "ephemeralBytes": 1073741824,
+        "generation": 5,
+        "memoryBytes": 805306368,
+        "pods": 1,
+        "reservedAt": "2026-10-18T04:15:20.240Z"
+      },
+      "pool": "8bb69c69-79f8-42a6-91a8-96d365abe63c",
+      "storage": {
+        "durableBytes": 2147483648,
+        "reservedAt": "2026-10-18T03:55:43.529Z"
+      },
+      "version": 1
+    },
+    "revision": 89,
+    "state_entered_at": "2026-10-18T04:17:41.812+00:00",
+    "volume_handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-0f182ddc-4c32-4c23-b6d7-57b2a0f61ada"
+  },
+  "owner": "amy",
+  "pod": {
+    "containers": [
+      {
+        "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+        "name": "private-volume-directories",
+        "restartCount": 0,
+        "state": {
+          "terminated": {
+            "containerID": "containerd://873b22ea2470dad1f8e7b0dd3cdee73bd441a601a94bb52042ad298980c23c30",
+            "exitCode": 0,
+            "finishedAt": "2026-10-18T04:17:29Z",
+            "reason": "Completed",
+            "startedAt": "2026-10-18T04:17:29Z"
+          }
+        }
+      },
+      {
+        "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+        "name": "runner",
+        "restartCount": 0,
+        "state": {
+          "running": {
+            "startedAt": "2026-10-18T04:17:30Z"
+          }
+        }
+      }
+    ],
+    "deletionTimestamp": null,
+    "generation": "5",
+    "images": [
+      "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312"
+    ],
+    "name": "mr-01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "node": "orbit-mr-lab",
+    "phase": "Running",
+    "uid": "b768e731-fd17-4c6c-98bd-7feb744459eb"
+  },
+  "podsUsingTheClaim": [
+    "mr-01a14d26-b010-71ec-bb22-0cf65c7614e5"
+  ],
+  "pv": {
+    "handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-0f182ddc-4c32-4c23-b6d7-57b2a0f61ada",
+    "image": "csi-vol-0f182ddc-4c32-4c23-b6d7-57b2a0f61ada",
+    "reclaim": "Retain",
+    "uid": "29a6631c-4f0c-4d25-b69d-d8d591862e9b"
+  },
+  "pvc": {
+    "createdAt": "2026-10-18T03:55:43Z",
+    "phase": "Bound",
+    "uid": "4a06a82f-fcfd-4b7e-a32c-aea44e40d388",
+    "volumeName": "pvc-4a06a82f-fcfd-4b7e-a32c-aea44e40d388"
+  },
+  "runner": {
+    "capabilities": [
+      "antigravity-account-login/v1",
+      "antigravity-account-remove/v1",
+      "antigravity-google-login/v1",
+      "claude-account-login/v1",
+      "claude-account-move/v1",
+      "claude-account-remove/v1",
+      "codex-account-login/v1",
+      "codex-account-move/v1",
+      "codex-account-remove/v1",
+      "codex-rate-limit-reset-v1",
+      "cursor-account-login/v1",
+      "cursor-account-remove/v1",
+      "cursor-key-check/v1",
+      "integration-job/v1",
+      "kimi-account-login/v1",
+      "kimi-account-move/v1",
+      "kimi-account-remove/v1",
+      "kimi-login-region/v1",
+      "managed-runner-instance-v1",
+      "managed-runner-sleep-v1",
+      "promotion-automatic-land/v1",
+      "session-claude-coordinator-context-v1",
+      "session-claude-steer-withdraw-v1",
+      "session-codex-coordinator-context-v1",
+      "session-codex-steer-v1",
+      "session-current-work-routing-v1",
+      "session-merge-recovery-v1",
+      "session-move/v1",
+      "session-orchestration-credential-v1",
+      "session-terminal-handoff-v1",
+      "session-worktree-ops-v1",
+      "source-pin/v1",
+      "wiki-maintenance-run/v1",
+      "wiki-repo-op-read/v1",
+      "wiki-repo-op/v1",
+      "provider:claude",
+      "provider:codex",
+      "provider:opencode",
+      "provider:antigravity",
+      "provider:dsh",
+      "os:linux"
+    ],
+    "enrolled_at": "2026-10-18T03:55:43.504",
+    "id": "01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "last_heartbeat_at": "2026-10-18T04:18:01.143",
+    "name": "orbit-managed",
+    "status": "ONLINE",
+    "token_hash_prefix": "4ee2501f8def"
+  },
+  "sessions": [
+    {
+      "id": "01a14d28-86e3-779e-a191-0fe345bd2b7c",
+      "retry_at": null,
+      "retry_attempts": 0,
+      "status": "AWAITING_INPUT",
+      "task_id": null,
+      "title": "T06B-AMY-S1 the first session, sent while the runn"
+    },
+    {
+      "id": "4fdb59fb-f5ac-5c97-91d1-3d2d8a4f7886",
+      "retry_at": null,
+      "retry_attempts": 0,
+      "status": "AWAITING_INPUT",
+      "task_id": "01a14d35-b4ce-7727-bdd2-348de9a649f3",
+      "title": "Task: T06-B-AMY-T1 a task run, Run Now, while the "
+    }
+  ],
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": true,
+      "canWake": false
+    },
+    "desiredState": "RUNNING",
+    "heartbeatStatus": "ONLINE",
+    "managementState": "READY",
+    "reason": null,
+    "retryAfter": null,
+    "revision": 89,
+    "usable": true
+  }
+}

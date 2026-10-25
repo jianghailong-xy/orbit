@@ -7,8 +7,7 @@ import {
   StopOutlined,
   SwapOutlined,
 } from '@ant-design/icons';
-import { Button, Dropdown, Input, Modal } from 'antd';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { LINK_PREVIEW_MAX_REFS, type LinkPreviewRef } from '@orbit/shared';
 import { useNavigate } from 'react-router-dom';
@@ -17,6 +16,11 @@ import { WikiEmpty } from './WikiCards';
 import { WikiEntryAnswers, WikiMarkBar } from './WikiEntryMarks';
 import { WikiAim, WikiAnchorMark, WikiKindMark, WikiTrustBadge } from './WikiMarks';
 import { WikiSourceList } from './WikiSources';
+import { Button } from './ui/Button';
+import { Dialog } from './ui/Dialog';
+import { Input } from './ui/Input';
+import { Menu } from './ui/Menu';
+import { Textarea } from './ui/Textarea';
 import { linkPreviewsQuery, wikiEntryQuery } from '../lib/queries';
 import { decodeId } from '../lib/idCodec';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
@@ -94,6 +98,8 @@ export function WikiEntryDrawer({
   const [menuOpen, setMenuOpen] = useState(false);
   const [editor, setEditor] = useState<'edit' | 'supersede' | 'retire' | null>(null);
   const [copied, setCopied] = useState(false);
+  // An editor opened from the ⋯ menu gives focus back to ⋯ when it closes.
+  const more = useRef<HTMLButtonElement>(null);
 
   // A drawer that stays mounted while another entry is opened must not keep the first one's copy
   // state, so the "Copied" word goes back to "Copy link" whenever the entry changes.
@@ -114,7 +120,7 @@ export function WikiEntryDrawer({
           <div className="tdp-head-main">
             <div className="tdp-title">{WIKI_NO_ENTRY_SELECTED}</div>
           </div>
-          <Button type="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
+          <Button variant="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
         </div>
       </aside>
     );
@@ -150,34 +156,30 @@ export function WikiEntryDrawer({
             disabled={!data}
             aria-label={WIKI_ACTION_EDIT}
           >
-            {!(phone && data && wikiEntryAnswerable(data)) && <>{WIKI_ACTION_EDIT}</>}
+            {phone && data && wikiEntryAnswerable(data) ? null : WIKI_ACTION_EDIT}
           </Button>
-          <Dropdown
+          <Menu
             open={menuOpen}
             onOpenChange={setMenuOpen}
-            trigger={['click']}
-            menu={{
-              items: [
-                { key: 'supersede', icon: <SwapOutlined />, label: WIKI_ACTION_SUPERSEDE },
-                { key: 'retire', icon: <StopOutlined />, label: WIKI_ACTION_RETIRE, danger: true },
-                { type: 'divider' },
-                { key: 'copy', icon: <LinkOutlined />, label: copied ? WIKI_LINK_COPIED : WIKI_ACTION_COPY_LINK },
-              ],
-              onClick: async ({ key }) => {
-                if (key === 'copy') {
+            items={[
+              { key: 'supersede', icon: <SwapOutlined />, label: WIKI_ACTION_SUPERSEDE, onSelect: () => setEditor('supersede') },
+              { key: 'retire', icon: <StopOutlined />, label: WIKI_ACTION_RETIRE, danger: true, onSelect: () => setEditor('retire') },
+              { type: 'separator', key: 'divider' },
+              {
+                key: 'copy',
+                icon: <LinkOutlined />,
+                label: copied ? WIKI_LINK_COPIED : WIKI_ACTION_COPY_LINK,
+                onSelect: async () => {
                   await copyEntryLink(spaceSlug, entryId);
                   setCopied(true);
                   message.success(WIKI_LINK_COPIED);
-                  return;
-                }
-                setEditor(key as 'supersede' | 'retire');
+                },
               },
-            }}
-          >
-            <Button type="text" icon={<EllipsisOutlined />} aria-label="More actions" />
-          </Dropdown>
+            ]}
+            trigger={<Button ref={more} variant="text" icon={<EllipsisOutlined />} aria-label="More actions" />}
+          />
         </div>
-        <Button type="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
+        <Button variant="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
       </div>
       {data && <WikiMarkBar entry={data} />}
 
@@ -264,6 +266,7 @@ export function WikiEntryDrawer({
           mode={editor}
           entry={data}
           onClose={() => setEditor(null)}
+          returnFocus={editor === 'edit' ? undefined : more}
         />
       )}
     </aside>
@@ -406,11 +409,13 @@ function EntryEditor({
   mode,
   entry,
   onClose,
+  returnFocus,
 }: {
   open: boolean;
   mode: 'edit' | 'supersede' | 'retire';
   entry: WikiEntryDetail;
   onClose: () => void;
+  returnFocus?: RefObject<HTMLButtonElement | null>;
 }) {
   const [title, setTitle] = useState(entry.title);
   const [summary, setSummary] = useState(entry.summary);
@@ -444,17 +449,28 @@ function EntryEditor({
   };
 
   return (
-    <Modal
+    <Dialog
       open
       title={
         mode === 'retire' ? WIKI_ACTION_RETIRE : mode === 'supersede' ? WIKI_ACTION_SUPERSEDE : WIKI_ACTION_EDIT
       }
-      onCancel={onClose}
-      onOk={submit}
-      okText={mode === 'retire' ? 'Retire' : mode === 'supersede' ? 'Supersede' : 'Save'}
-      okButtonProps={{ danger: mode === 'retire', disabled: mode === 'retire' && reason.trim().length === 0 }}
-      confirmLoading={write.isPending}
-      destroyOnHidden
+      onClose={onClose}
+      returnFocus={returnFocus}
+      className="wk-entry-edit-dialog"
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            danger={mode === 'retire'}
+            disabled={mode === 'retire' && reason.trim().length === 0}
+            loading={write.isPending}
+            onClick={() => void submit()}
+          >
+            {mode === 'retire' ? 'Retire' : mode === 'supersede' ? 'Supersede' : 'Save'}
+          </Button>
+        </>
+      }
     >
       {mode === 'retire' ? (
         <>
@@ -462,7 +478,7 @@ function EntryEditor({
             Agents stop getting this entry. It stays in History, struck through, and the reason goes on
             the record.
           </p>
-          <Input.TextArea
+          <Textarea
             rows={3}
             value={reason}
             onChange={(event) => setReason(event.target.value)}
@@ -479,7 +495,7 @@ function EntryEditor({
           <WikiTitleSummaryFields title={title} summary={summary} onTitle={setTitle} onSummary={setSummary} />
         </>
       )}
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -501,7 +517,7 @@ export function WikiTitleSummaryFields({
   return (
     <>
       <Input value={title} onChange={(event) => onTitle(event.target.value)} placeholder="Title" />
-      <Input.TextArea
+      <Textarea
         rows={3}
         value={summary}
         onChange={(event) => onSummary(event.target.value)}

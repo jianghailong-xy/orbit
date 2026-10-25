@@ -31,7 +31,7 @@ import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
-import { WIKI_LIMITS, WIKI_SOURCE_ROW_ID_KINDS, toUuid, uuidToBase62 } from '@orbit/shared';
+import { WIKI_LIMITS, WIKI_REFUSAL_CODES, WIKI_SOURCE_ROW_ID_KINDS, toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -45,7 +45,7 @@ import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
 import { RealtimeService } from '../realtime/realtime.service';
 import { WikiController } from './wiki.controller';
 import { WikiRetrieval } from './wiki-retrieval';
-import { normalizeRepoUrl, slugFromText, WikiService } from './wiki.service';
+import { normalizeRepoUrl, slugFromText, WikiRefusalError, WikiService } from './wiki.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -355,39 +355,11 @@ function addOp(shape: { title: string; kind?: string; summary?: string; fields?:
 
 test('the refusals, limits and effect policy this door answers with are the contract\'s', () => {
   const status = (code: string) => CONTRACT.refusals.find((refusal) => refusal.code === code)?.httpStatus;
+  // The closed set is the shared one (`WIKI_REFUSAL_CODES`), each code answered with the status the service gives
+  // it (`WikiRefusalError`): the contract names every one of them, with that status, and no other.
   assert.deepEqual(
     CONTRACT.refusals.map((refusal) => [refusal.code, refusal.httpStatus]).sort(),
-    [
-      // The articles (migration 0317, contract `articles.regeneration`).
-      ['WIKI_ARTICLE_STALE', 409],
-      // The maintenance run's cursor (migration 0315, contract `maintenance.cursor.advance`).
-      ['WIKI_CURSOR_BEHIND', 409],
-      ['WIKI_CURSOR_INVALID', 400],
-      ['WIKI_DISABLED', 404],
-      // The documents (migration 0326, contract `docs.schema`).
-      ['WIKI_DOC_INVALID', 422],
-      ['WIKI_IDEMPOTENCY_KEY_REUSED', 409],
-      ['WIKI_KIND_OWNER_ONLY', 403],
-      ['WIKI_NOT_MAINTENANCE_SESSION', 403],
-      ['WIKI_OWNER_CHANNEL_ONLY', 403],
-      // The plan (migration 0325, contract `plan.gate`, `plan.versions`, `plan.guard`).
-      ['WIKI_PLAN_GATE', 422],
-      // The plan's jobs (migration 0338, contract `plan.jobs`): a run that runs none, or whose job ended.
-      ['WIKI_PLAN_NO_JOB', 409],
-      ['WIKI_PLAN_STALE', 409],
-      ['WIKI_PLAN_UNCONFIRMED', 409],
-      ['WIKI_PROBE_REFUSED', 422],
-      ['WIKI_QUOTA', 429],
-      ['WIKI_QUOTE_NOT_FOUND', 422],
-      ['WIKI_REVIEW_QUEUE_FULL', 429],
-      ['WIKI_REVISION_CONFLICT', 409],
-      ['WIKI_SCHEMA', 400],
-      // The pipelines the server runs for an account (contract `jobs.executor`): the runner door's half is closed.
-      ['WIKI_SERVER_EXECUTES', 409],
-      ['WIKI_SESSION_EXCLUDED', 403],
-      ['WIKI_SOURCE_UNRESOLVED', 422],
-      ['WIKI_SPACE_UNBOUND', 409],
-    ].sort(),
+    WIKI_REFUSAL_CODES.map((code) => [code, new WikiRefusalError({ code, message: code }).getStatus()]).sort(),
   );
   assert.equal(status('WIKI_REVISION_CONFLICT'), 409);
   // accept, edit and reject answer any op; reconfirm, amend and retire answer a challenge, and only a

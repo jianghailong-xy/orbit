@@ -1,0 +1,64 @@
+<!doctype html>
+<!-- Design board Web 6 (T0, Cursor engine): which permission modes a Cursor session can use (D6 A and B), and
+     switching a Cursor session's account or key (D5) — refused until a runner can carry the conversation.
+     Real-page captures ("现在" main e00629fd4; "改后" + prototype.patch). Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Web 6 · Cursor session: permission modes, switching the account</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<script src="kit.js"></script>
+<script src="shots/marks.js"></script>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Web 6 · 权限模式：Cursor 能做的可选、做不全的带一句说明、做不到的不可选；换账号：开始说话以后先不能换</h1>
+  <p class="m-sub zh">Cursor 在 ACP 下写工作区文件从不发权限请求，也没有开关能让它问（契约 §5.4）——所以「编辑前要问」的 Default 做不到。其余模式按 P1 的协调说明映射：Accept Edits = 默认白名单（写文件不问，命令 / MCP / web fetch 走审批卡）；Plan = Cursor 的 plan 模式挡写文件 + Orbit 拒绝其余请求；Auto = Orbit 自己的请求级分类器（写文件不受控）；Don’t Ask = Orbit 一律拒绝（写文件仍会发生）；Bypass = <code>--force</code>。Cursor 自己的 ask 模式不用。下拉框沿用今天的「模式 — 短说明」写法（今天 DeepSeek Harness、Codex、OpenCode 已经这样）。换账号：跨账号续聊还没验证（D5），说过话的会话先不能换，没说过话的照常换。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 权限模式下拉框（composer 左下）</div>
+    <div class="frames" id="s1"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 换账号或换 key：composer 模型菜单 → Provider</div>
+    <div class="frames" id="s2"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+<script>
+const frame = (kind, label, html, cap = '') => `<div class="frame"><div class="lbl zh"><span class="m-k${kind === '改后' ? ' new' : ''}">${kind}</span>${label}</div>${html}${cap ? `<p class="m-cap zh" style="max-width:${cap.w ?? 600}px">${cap.t ?? cap}</p>` : ''}</div>`;
+document.getElementById('s1').innerHTML =
+  frame('现在', '先例：DeepSeek Harness 不支持的模式灰掉并写原因', shot('w6-modes-now', { width: 674 })) +
+  frame('改后', 'D6 方案 A（板上推荐）：Default 不可选', shot('w6-modes-a', { width: 572, marks: [{ box: 'def', n: 1, pad: 2 }, { box: 'plan', n: 2, pad: 2 }, { box: 'auto', n: 3, pad: 2 }, { box: 'dont', n: 4, pad: 2 }] }),
+    { t: '新会话的模式：账号默认是 Default 时，Cursor 会话起步为 Accept Edits（P1：服务端给没指定模式的 Cursor 会话选 acceptEdits，不能落到被拒的 default 上）。', w: 572 }) +
+  frame('改后', 'D6 方案 B：Default 可选，但写明按 Accept Edits 跑', shot('w6-modes-b', { width: 572, marks: [{ box: 'def', n: 5, pad: 2 }] }));
+document.getElementById('s2').innerHTML =
+  frame('改后', '说过话的会话（runner 没声明 cursor-account-move/v1）：列出但不能选', shot('w7-switch-blocked', { width: 790, marks: [{ box: 'team', n: 6, pad: 2 }, { box: 'foot', n: 7, pad: 3 }] })) +
+  frame('改后', '没说过话（新会话草稿）：照常换', shot('w7-switch-draft', { width: 790 }),
+    { t: '草稿里换账号或 key 就是在新账号下 <code>session/new</code>（契约 §13.3），没有对话要搬。', w: 790 }) +
+  frame('改后', 'P6b 验证跨账号续聊后，runner 声明 cursor-account-move/v1：说过话的也能换', shot('w7-switch-open', { width: 790 }),
+    { t: '选 Team 后，composer 下沿用今天的那句：「The turn in flight finishes on Default. Your next one uses Team.」——对话随会话搬过去（拷 <code>acp-sessions/&lt;id&gt;/</code> 后 load）。', w: 790 });
+document.getElementById('notes').innerHTML = notes([
+  [1, '<b>Default（方案 A）</b>：灰掉，「Default — not on Cursor CLI, it edits files without asking」。会话配置写 default 时服务端拒绝（P1 已按此实现）。'],
+  [2, '<b>Plan</b>：可选带说明「file writes blocked, commands refused」——写文件靠 Cursor 的 plan 模式（服务端行为，只实测一次），命令 / MCP / fetch 由 Orbit 一律拒绝。'],
+  [3, '<b>Auto</b>：可选带说明「file edits aren’t reviewed」——Orbit 的分类器只管命令和工具请求，工作区写不经过它（P1）。分类器做不出来时，Auto 也灰掉（同 Default）。'],
+  [4, '<b>Don’t Ask</b>：可选带说明「file edits still happen」。Accept Edits、Bypass 没有说明：它们说的就是实际行为。'],
+  [5, '<b>Default（方案 B）</b>：可选，「Default — runs as Accept Edits, file edits don’t ask」，会话照 acceptEdits 跑。代价：同一个词在 Cursor 上和其他 engine 上意思不同。'],
+  [6, '<b>换账号（D5，验证前）</b>：账号行和 Cursor key 行都列出、但灰掉不能点；当前账号仍打勾。今天的写法是 runner 没声明搬运能力就整组藏起来，用户看不到为什么没有。'],
+  [7, '<b>说明</b>：「Cursor CLI can’t carry a conversation to another account or key yet. Start a new session to use one of these.」服务端对这类请求的拒绝文案同义：「this session’s runner can’t move a Cursor conversation to another account yet — start a new session on that account」。'],
+  ['·', '<b>不变的：</b>Automatic 的含义（新会话落到最先重置的账号）、Provider 分组（Signed in on hpc / API keys）、各账号的额度摘要（Team「Monthly 34%」，读不到的 Default 不写数字）。'],
+]);
+finish();
+</script>
+</body>
+</html>

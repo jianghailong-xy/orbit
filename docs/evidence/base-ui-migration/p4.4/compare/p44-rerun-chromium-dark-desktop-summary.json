@@ -1,0 +1,361 @@
+{
+ "beyond": [
+  {
+   "clusters": [
+    [
+     [
+      744,
+      745
+     ],
+     [
+      209,
+      212
+     ],
+     5,
+     1
+    ],
+    [
+     [
+      744,
+      746
+     ],
+     [
+      249,
+      252
+     ],
+     7,
+     1
+    ],
+    [
+     [
+      744,
+      745
+     ],
+     [
+      273,
+      276
+     ],
+     5,
+     1
+    ],
+    [
+     [
+      744,
+      746
+     ],
+     [
+      313,
+      316
+     ],
+     7,
+     1
+    ],
+    [
+     [
+      744,
+      745
+     ],
+     [
+      359,
+      362
+     ],
+     5,
+     1
+    ],
+    [
+     [
+      859,
+      860
+     ],
+     [
+      398,
+      399
+     ],
+     3,
+     1
+    ]
+   ],
+   "max": 63,
+   "pixels": 1847,
+   "shot": "chromium-dark-desktop/p44-plan-edit-kinds.png"
+  }
+ ],
+ "missing": [],
+ "screenshots": {
+  "antialias": 6,
+  "beyond": 1,
+  "identical": 2,
+  "missing": 0
+ },
+ "styleDeltas": {
+  "chromium-dark-desktop/p44-plan-edit": {
+   "drawer": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ]
+   }
+  },
+  "chromium-dark-desktop/p44-plan-edit-changed": {
+   "drawer": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ]
+   }
+  }
+ },
+ "tests": {
+  "notPassedDel": [],
+  "notPassedRef": [],
+  "total": 1
+ },
+ "traces": {
+  "differing": {
+   "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "plan",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "plan",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "plan"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "v2Draft",
+       "role": "menu"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "v2Redraft · Sep 28, 12:43 · waiting for youDraft"
+        },
+        {
+         "disabled": false,
+         "text": "v1Sep 28, 09:12 · confirmed by youConfirmed"
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "versions",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-dropdown",
+       "ant-dropdown-css-var",
+       "ant-dropdown-menu",
+       "ant-dropdown-menu-css-var",
+       "ant-dropdown-menu-item",
+       "ant-dropdown-menu-item-only-child",
+       "ant-dropdown-menu-item-selected",
+       "ant-dropdown-menu-light",
+       "ant-dropdown-menu-root",
+       "ant-dropdown-menu-title-content",
+       "ant-dropdown-menu-vertical",
+       "ant-dropdown-open",
+       "ant-dropdown-placement-bottomLeft",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "v2Draft",
+       "role": "button"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "v2Redraft · Sep 28, 12:43 · waiting for youDraft"
+        },
+        {
+         "disabled": false,
+         "text": "v1Sep 28, 09:12 · confirmed by youConfirmed"
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "versions",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "versions"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Compare with v1",
+       "role": "menu"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "Compare with v1"
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "more",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-dropdown",
+       "ant-dropdown-css-var",
+       "ant-dropdown-menu",
+       "ant-dropdown-menu-css-var",
+       "ant-dropdown-menu-item",
+       "ant-dropdown-menu-item-only-child",
+       "ant-dropdown-menu-light",
+       "ant-dropdown-menu-root",
+       "ant-dropdown-menu-title-content",
+       "ant-dropdown-menu-vertical",
+       "ant-dropdown-open",
+       "ant-dropdown-placement-bottomRight",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "More",
+       "role": "button"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "Compare with v1"
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "more",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "more"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "More",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "compared",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "compared",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "compared"
+    }
+   ]
+  },
+  "equal": 0,
+  "total": 1
+ }
+}

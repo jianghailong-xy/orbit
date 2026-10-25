@@ -1,21 +1,33 @@
-# Release workflow for both Orbit clients — one `vX.Y.Z` tag ships both from a single push:
-#   • dmg        → macOS: signed + notarized + stapled DMG, a GitHub Release, and the Sparkle appcast.
-#   • testflight → iOS:   signed .ipa archived and uploaded to TestFlight.
+# Release workflow for all three Orbit clients — one `vX.Y.Z` tag ships them from a single push:
+#   • dmg             → macOS:   signed + notarized + stapled DMG, the GitHub Release, and the Sparkle appcast.
+#   • testflight      → iOS:     signed .ipa archived and uploaded to TestFlight.
+#   • android-build   → Android: signed release APK, built and verified with the android-internal environment.
+#   • android-publish → Android: attaches the APK, its .sha256 and android-update.json (what installed apps
+#                       read to update themselves) to the Release dmg created. Runs only when dmg and
+#                       android-build both succeeded; after fixing dmg, "Re-run failed jobs" publishes it.
 #
-# Trigger: pushing a `v*` tag runs BOTH jobs. `workflow_dispatch` also builds, with a `platform`
-# choice (both / macos / ios) so a single client can be rebuilt without a tag (a dispatch with no tag
-# uses each build's default version). The build/test CI gate lives in client.yml.
+# Trigger: pushing a `v*` tag runs ALL of them. `workflow_dispatch` builds macOS and/or iOS only, with a
+# `platform` choice (both / macos / ios) so a single Apple client can be rebuilt without a tag (a dispatch
+# with no tag uses each build's default version); Android runs on tag pushes alone. The build/test CI
+# gates live in client.yml and android.yml.
 #
 # The tag drives the version. macOS uses it verbatim (vX.Y.Z → stable channel; vX.Y.Z-beta.N →
 # Sparkle beta channel). iOS strips any -beta.N to a numeric marketing version
-# (CFBundleShortVersionString must be numeric); its build number is the commit count.
+# (CFBundleShortVersionString must be numeric); its build number is the commit count. Android uses the
+# tag without v as versionName and the same commit count as versionCode, which must exceed every
+# published Android versionCode; a second tag on an already published commit skips Android quietly.
 #
 # Required repo secrets (Settings → Secrets and variables → Actions):
 #   macOS: DEVID_CERT_P12_BASE64, DEVID_CERT_PASSWORD, KEYCHAIN_PASSWORD, APPLE_ID, APPLE_TEAM_ID,
 #          APPLE_APP_PASSWORD, SPARKLE_ED_PRIVATE_KEY
 #   iOS:   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8_BASE64, APPLE_TEAM_ID
 #   (iOS one-time setup — App Store Connect app + API key — is in src/ios/README.md → Release.)
-name: Release (macOS DMG + iOS TestFlight)
+# Android signing is not a repo secret: environment android-internal (v* tags only) holds secrets
+#   ANDROID_KEYSTORE_BASE64, ANDROID_STORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD and variables
+#   ANDROID_APPLICATION_ID, ANDROID_CERT_SHA256 (optional ANDROID_FIREBASE_{APP_ID,API_KEY,PROJECT_ID,
+#   SENDER_ID,ANDROID_PACKAGE}: public Firebase client values, all or none). Only android-build sees them.
+#   (See src/android/docs/release.md.)
+name: Release (macOS DMG + iOS TestFlight + Android APK)
 
 on:
   workflow_dispatch:
@@ -37,7 +49,7 @@ jobs:
   dmg:
     name: macOS · signed + notarized DMG
     # A tag push builds both; a manual run honours the platform choice.
-    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'ios'
+    if: (github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'both' || inputs.platform == 'macos'))
     runs-on: macos-15
     permissions:
       contents: write          # create the GitHub Release + push the gh-pages appcast
@@ -110,7 +122,7 @@ jobs:
 
       # ---- Release publishing (tag pushes only) ------------------------------------------------
       - name: Create GitHub Release
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -121,7 +133,7 @@ jobs:
             "src/macos/build/Orbit-v$ver-arm64.zip"
 
       - name: Generate Sparkle appcast
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: |
@@ -143,7 +155,7 @@ jobs:
           cp "$work/appcast.xml" "$work/out/appcast.xml"
 
       - name: Publish appcast to GitHub Pages
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ github.token }}
@@ -155,7 +167,7 @@ jobs:
   # ---- iOS: TestFlight --------------------------------------------------------------------------
   testflight:
     name: iOS · TestFlight
-    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'macos'
+    if: (github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'both' || inputs.platform == 'ios'))
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -268,3 +280,140 @@ jobs:
             -authenticationKeyPath "$RUNNER_TEMP/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+  # ---- Android: signed APK on the same GitHub Release ---------------------------------------------
+  # Tag pushes only. The signing material lives in the android-internal environment, which only
+  # this job uses; nothing here runs Apple tooling or holds a write token.
+  android-build:
+    name: Android · signed release APK
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: android-internal
+    permissions:
+      contents: read
+    outputs:
+      skip: ${{ steps.version.outputs.skip }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0             # versionCode is the commit count, as the iOS build number is
+          persist-credentials: false
+      # Before anything reads a secret: the tag names the version, and the commit count must exceed every
+      # published Android versionCode. A commit already published by another v* tag skips the rest quietly.
+      - name: Check tag, version and release history
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ORBIT_ANDROID_APPLICATION_ID: ${{ vars.ANDROID_APPLICATION_ID }}
+        run: |
+          set -euo pipefail
+          python3 src/android/scripts/github-release.py validate --tag "$GITHUB_REF_NAME" \
+            --version-code "$(git rev-list --count HEAD)" --source-sha "$(git rev-parse HEAD)" \
+            --application-id "$ORBIT_ANDROID_APPLICATION_ID" --repository "$GITHUB_REPOSITORY" --output "$GITHUB_OUTPUT"
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        if: steps.version.outputs.skip == 'false'
+        with:
+          distribution: temurin
+          java-version: '21.0.9+10.0.LTS'
+      - name: Verify release trigger isolation
+        if: steps.version.outputs.skip == 'false'
+        run: node --test scripts/ci/release-workflows.test.mjs
+      - name: Install Android SDK packages
+        if: steps.version.outputs.skip == 'false'
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'cmdline-tools;22.0'
+          "$ANDROID_HOME/cmdline-tools/22.0/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0'
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+      - name: Verify Android
+        if: steps.version.outputs.skip == 'false'
+        run: bash src/android/scripts/verify.sh "$RUNNER_TEMP/android-verification"
+      - name: Build and verify signed APK
+        if: steps.version.outputs.skip == 'false'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ORBIT_ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ORBIT_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ORBIT_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ORBIT_ANDROID_APPLICATION_ID: ${{ vars.ANDROID_APPLICATION_ID }}
+          ORBIT_ANDROID_CERT_SHA256: ${{ vars.ANDROID_CERT_SHA256 }}
+          ORBIT_ANDROID_VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          ORBIT_ANDROID_VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          ORBIT_ANDROID_SIGNING_PURPOSE: release
+          ORBIT_ANDROID_FIREBASE_APP_ID: ${{ vars.ANDROID_FIREBASE_APP_ID }}
+          ORBIT_ANDROID_FIREBASE_API_KEY: ${{ vars.ANDROID_FIREBASE_API_KEY }}
+          ORBIT_ANDROID_FIREBASE_PROJECT_ID: ${{ vars.ANDROID_FIREBASE_PROJECT_ID }}
+          ORBIT_ANDROID_FIREBASE_SENDER_ID: ${{ vars.ANDROID_FIREBASE_SENDER_ID }}
+          ORBIT_ANDROID_FIREBASE_ANDROID_PACKAGE: ${{ vars.ANDROID_FIREBASE_ANDROID_PACKAGE }}
+        run: |
+          set -euo pipefail
+          umask 077
+          : "${ANDROID_KEYSTORE_BASE64:?Configure signing in the protected android-internal environment}"
+          export ORBIT_ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/android-internal-signing.jks"
+          trap 'rm -f "$ORBIT_ANDROID_KEYSTORE_PATH"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ORBIT_ANDROID_KEYSTORE_PATH"
+          bash src/android/scripts/build-release.sh "$RUNNER_TEMP/android-internal-apk"
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/android-internal-signing.jks"
+      - name: Keep signed APK and identity
+        if: steps.version.outputs.skip == 'false'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-release-${{ github.run_id }}
+          path: ${{ runner.temp }}/android-internal-apk
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+
+  # Holds the write token but never the signing environment or its secrets. It does not create the
+  # Release or change its pre-release/latest state, and never replaces an asset already there.
+  android-publish:
+    name: Android · attach to the GitHub Release
+    needs: [dmg, android-build]
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v') && needs.android-build.outputs.skip == 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: android-release-${{ github.run_id }}
+          path: ${{ runner.temp }}/android-release
+      - name: Write update manifest
+        id: manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The annotated tag's message is the update's notes; github-release.py has a default sentence.
+          git fetch --no-tags --force origin "+refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          : > "$RUNNER_TEMP/notes.txt"
+          if [ "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")" = tag ]; then
+            git tag -l --format='%(contents:subject)%0a%0a%(contents:body)' "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.txt"
+          fi
+          python3 src/android/scripts/github-release.py manifest --tag "$GITHUB_REF_NAME" --repository "$GITHUB_REPOSITORY" \
+            --identity "$RUNNER_TEMP/android-release/identity.json" --apk "$RUNNER_TEMP/android-release/app-release.apk" \
+            --notes-file "$RUNNER_TEMP/notes.txt" --output "$RUNNER_TEMP/publish" --github-output "$GITHUB_OUTPUT"
+      - name: Attach to the GitHub Release
+        if: steps.manifest.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/publish"
+          mapfile -t pending < "$out/pending-assets.txt"
+          # The APK and its .sha256 first: installed apps act only on a release that carries the manifest.
+          if [ "${#pending[@]}" -gt 0 ]; then
+            gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "${pending[@]/#/$out/}"
+          fi
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "$out/android-update.json"
+      - name: Verify published assets
+        if: steps.manifest.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 src/android/scripts/github-release.py verify-published --repository "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME" --dir "$RUNNER_TEMP/publish"

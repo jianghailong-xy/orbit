@@ -1,33 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import type { RunnerModelCatalog } from '@orbit/shared';
+import { AgentProvider, type RunnerModelCatalog } from '@orbit/shared';
 import {
   clampPermissionModeForModel,
   CLAUDE_EFFORT_OPTIONS,
   CODEX_EFFORT_OPTIONS,
   contextWindowFor,
-  defaultModelForProvider,
+  defaultEngineOf,
+  defaultModelFor,
+  defaultModelKey,
   effectiveSessionEffort,
   effectiveSessionModel,
-  effortOptionsForProvider,
+  effortOptionsFor,
+  KIMI_EFFORT_OPTIONS,
   KIMI_MODEL_OPTIONS,
   livePinnedModel,
-  mergedProviderOptions,
-  modelOptionsForProvider,
-  openCodeChoiceKey,
-  openCodeKeyChoice,
-  providerChoiceFor,
-  newSessionEffortForProvider,
-  newSessionModelForProvider,
-  normalizeEffortForProvider,
+  modelOptionsFor,
+  newSessionEffortFor,
+  newSessionModelFor,
+  normalizeEffortFor,
   OPENCODE_EFFORT_OPTIONS,
   ANTIGRAVITY_EFFORT_OPTIONS,
   ANTIGRAVITY_MODEL_OPTIONS,
+  permissionModeSupported,
+  providerEngines,
   providerIdentityResolved,
-  PROVIDER_OPTIONS,
-  runtimeForProvider,
+  rememberedModel,
+  sessionEngineOf,
+  sessionPick,
   supportsAuto,
   type ConfiguredProvider,
 } from './workspaceDefaults';
+
+const { CLAUDE, CODEX, KIMI, ANTIGRAVITY, OPENCODE, DSH } = AgentProvider;
 
 describe('remembered new-session models', () => {
   const catalog: RunnerModelCatalog = { codex: [
@@ -35,14 +39,104 @@ describe('remembered new-session models', () => {
     { value: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' },
   ] };
   const defaults = { codex: 'gpt-5.6-sol' };
-  it('uses only this provider’s last pick and drops retired models', () => {
-    expect(newSessionModelForProvider('codex', { codex: 'gpt-6.1-sol' }, catalog, null, defaults)).toBe('gpt-6.1-sol');
-    expect(newSessionModelForProvider('codex', { claude: 'claude-sonnet-5' }, catalog, null, defaults)).toBe('gpt-5.6-sol');
-    expect(newSessionModelForProvider('codex', { codex: 'gpt-retired' }, catalog, null, defaults)).toBe('gpt-5.6-sol');
+  it('uses only this engine and provider’s last pick and drops retired models', () => {
+    expect(newSessionModelFor(CODEX, 'codex', { 'codex:codex': 'gpt-6.1-sol' }, catalog, null, defaults)).toBe('gpt-6.1-sol');
+    expect(newSessionModelFor(CODEX, 'codex', { 'claude:claude': 'claude-sonnet-5' }, catalog, null, defaults)).toBe('gpt-5.6-sol');
+    expect(newSessionModelFor(CODEX, 'codex', { 'codex:codex': 'gpt-retired' }, catalog, null, defaults)).toBe('gpt-5.6-sol');
   });
   it('keeps a remembered model while the catalog is unavailable, including OpenCode’s empty choice', () => {
-    expect(newSessionModelForProvider('codex', { codex: 'gpt-6.1-sol' }, null, null, defaults)).toBe('gpt-6.1-sol');
-    expect(newSessionModelForProvider('opencode', { opencode: '' }, null, null, { opencode: 'some/model' })).toBe('');
+    expect(newSessionModelFor(CODEX, 'codex', { 'codex:codex': 'gpt-6.1-sol' }, null, null, defaults)).toBe('gpt-6.1-sol');
+    expect(newSessionModelFor(OPENCODE, 'opencode', { 'opencode:opencode': '' }, null, null, { opencode: 'some/model' })).toBe('');
+  });
+});
+
+describe('the model remembered per engine and provider (contract §6.5)', () => {
+  const deepseek: ConfiguredProvider = {
+    slug: 'deepseek',
+    label: 'DeepSeek',
+    runtime: 'claude',
+    presetSlug: 'deepseek',
+    models: [{ value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' }],
+    engines: ['claude', 'opencode', 'dsh'],
+  };
+  const configured = [deepseek];
+
+  it('is written under `<engine>:<provider>`', () => {
+    expect(defaultModelKey(DSH, 'deepseek-2')).toBe('dsh:deepseek-2');
+    expect(defaultModelKey(CODEX, 'codex')).toBe('codex:codex');
+  });
+
+  it('keeps one key’s pick on each engine apart', () => {
+    const picks = { 'claude:deepseek': 'deepseek-v4-pro', 'dsh:deepseek': 'acp-token-flash' };
+    expect(rememberedModel(CLAUDE, 'deepseek', picks, configured)).toBe('deepseek-v4-pro');
+    expect(rememberedModel(DSH, 'deepseek', picks, configured)).toBe('acp-token-flash');
+    expect(rememberedModel(OPENCODE, 'deepseek', picks, configured)).toBeUndefined();
+  });
+
+  it('reads what an older client remembered, on the engine the provider runs on by default only', () => {
+    // A bare slug was the engine it ran on before engines were their own field.
+    expect(rememberedModel(CLAUDE, 'deepseek', { deepseek: 'deepseek-v4-flash' }, configured)).toBe('deepseek-v4-flash');
+    expect(rememberedModel(DSH, 'deepseek', { deepseek: 'deepseek-v4-flash' }, configured)).toBeUndefined();
+    expect(rememberedModel(CODEX, 'codex', { codex: 'gpt-6.1-sol' })).toBe('gpt-6.1-sol');
+    // OpenCode's old keys: `opencode/<slug>` named the key inside its value; `opencode` its own pick.
+    expect(rememberedModel(OPENCODE, 'deepseek', { 'opencode/deepseek': 'orbit-deepseek/deepseek-v4-pro' }, configured)).toBe(
+      'deepseek-v4-pro',
+    );
+    expect(rememberedModel(OPENCODE, 'deepseek', { 'opencode/deepseek': 'orbit-glm/glm-5' }, configured)).toBeUndefined();
+    expect(rememberedModel(OPENCODE, 'opencode', { opencode: 'anthropic/claude-sonnet-4' })).toBe('anthropic/claude-sonnet-4');
+    expect(rememberedModel(OPENCODE, 'opencode', { opencode: 'orbit-deepseek/deepseek-v4-pro' })).toBeUndefined();
+    // The pair's own key wins over an old one.
+    expect(rememberedModel(CLAUDE, 'deepseek', { deepseek: 'old', 'claude:deepseek': 'new' }, configured)).toBe('new');
+  });
+});
+
+describe('which engines a provider runs on (the compatibility table, read off GET /providers)', () => {
+  const key = (over: Partial<ConfiguredProvider>): ConfiguredProvider => ({ slug: 'k', label: 'K', runtime: 'claude', models: [], ...over });
+
+  it('gives an engine’s own sign-in its engine, OpenCode’s own configuration OpenCode', () => {
+    expect(providerEngines('claude')).toEqual(['claude']);
+    expect(providerEngines('kimi')).toEqual(['kimi']);
+    expect(providerEngines('opencode')).toEqual(['opencode']);
+    expect(defaultEngineOf('antigravity')).toBe('antigravity');
+  });
+
+  it('reads a key’s engines as the server sends them, the default first', () => {
+    const deepseek = key({ slug: 'deepseek', presetSlug: 'deepseek', engines: ['claude', 'opencode', 'dsh'] });
+    expect(providerEngines('deepseek', [deepseek])).toEqual(['claude', 'opencode', 'dsh']);
+    expect(defaultEngineOf('deepseek', [deepseek])).toBe('claude');
+    // A subscription token runs on Claude Code alone — only the server can tell.
+    expect(providerEngines('max', [key({ slug: 'max', engines: ['claude'] })])).toEqual(['claude']);
+  });
+
+  it('reads a row from a payload without `engines` (an account pool) by its protocol, and OpenCode where it says so', () => {
+    expect(providerEngines('pool', [key({ slug: 'pool', runtime: 'codex' })])).toEqual(['codex']);
+    expect(providerEngines('gw', [key({ slug: 'gw', runtime: 'kimi', runsOnOpenCode: true })])).toEqual(['kimi', 'opencode']);
+    expect(providerEngines('old-dsh', [key({ slug: 'old-dsh', runtime: 'dsh' })])).toEqual(['dsh']);
+    // A protocol no engine speaks runs nowhere, rather than on Claude Code by default.
+    expect(providerEngines('odd', [key({ slug: 'odd', runtime: 'nonsense' })])).toEqual([]);
+  });
+
+  it('places the legacy built-in `dsh` on DeepSeek Harness, and knows nothing of a provider since removed', () => {
+    expect(providerEngines('dsh', [])).toEqual(['dsh']);
+    expect(providerEngines('gone', [])).toEqual([]);
+    expect(defaultEngineOf('gone', [])).toBeNull();
+  });
+
+  it('keeps a session on the engine it recorded, whichever provider it is on', () => {
+    const deepseek = key({ slug: 'deepseek', engines: ['claude', 'opencode', 'dsh'] });
+    expect(sessionEngineOf('dsh', 'deepseek', [deepseek])).toBe('dsh');
+    expect(sessionEngineOf('opencode', 'gone', [])).toBe('opencode');
+    // A row an older replica wrote: placed by its provider, and on Claude Code when that is gone too.
+    expect(sessionEngineOf(null, 'deepseek', [deepseek])).toBe('claude');
+    expect(sessionEngineOf(undefined, 'codex')).toBe('codex');
+    expect(sessionEngineOf(null, 'gone', [])).toBe('claude');
+  });
+
+  it('reads an OpenCode session an older client started on a key as that key, with its bare model', () => {
+    expect(sessionPick(OPENCODE, 'opencode', 'orbit-deepseek/deepseek-v4-pro')).toEqual({ provider: 'deepseek', model: 'deepseek-v4-pro' });
+    expect(sessionPick(OPENCODE, 'opencode', 'anthropic/claude-sonnet-4')).toEqual({ provider: 'opencode', model: 'anthropic/claude-sonnet-4' });
+    expect(sessionPick(OPENCODE, 'deepseek', 'deepseek-v4-pro')).toEqual({ provider: 'deepseek', model: 'deepseek-v4-pro' });
+    expect(sessionPick(CLAUDE, 'claude', 'orbit-deepseek/x')).toEqual({ provider: 'claude', model: 'orbit-deepseek/x' });
   });
 });
 
@@ -50,20 +144,20 @@ describe('Claude model capabilities', () => {
   it('knows the current tiers without a static picker list', () => {
     // Claude/Codex options come from the runner catalog only, so there is no list to assert —
     // what still lives here are the per-model traits the CLI cannot report.
-    expect(modelOptionsForProvider('claude')).toEqual([]);
+    expect(modelOptionsFor(CLAUDE, 'claude')).toEqual([]);
     expect(contextWindowFor('claude-fable-5')).toBe(1_000_000);
-    expect(supportsAuto('claude-opus-5', 'claude')).toBe(true);
-    expect(supportsAuto('claude-fable-5', 'claude')).toBe(true);
-    expect(supportsAuto('claude-sonnet-5', 'claude')).toBe(true);
-    expect(supportsAuto('claude-haiku-4-5', 'claude')).toBe(false);
-    // Claude is the only runtime that gates Auto per model; built-in Codex has it for any model.
-    expect(supportsAuto('gpt-5.6-sol', 'codex')).toBe(true);
+    expect(supportsAuto('claude-opus-5', CLAUDE, 'claude')).toBe(true);
+    expect(supportsAuto('claude-fable-5', CLAUDE, 'claude')).toBe(true);
+    expect(supportsAuto('claude-sonnet-5', CLAUDE, 'claude')).toBe(true);
+    expect(supportsAuto('claude-haiku-4-5', CLAUDE, 'claude')).toBe(false);
+    // Claude is the only engine that gates Auto per model; Codex has it for any model.
+    expect(supportsAuto('gpt-5.6-sol', CODEX, 'codex')).toBe(true);
   });
 
   it('clamps Auto when the effective Runtime default cannot run it', () => {
-    expect(clampPermissionModeForModel('auto', 'claude-haiku-4-5', 'claude')).toBe('default');
-    expect(clampPermissionModeForModel('auto', 'claude-opus-5', 'claude')).toBe('auto');
-    expect(clampPermissionModeForModel('plan', 'claude-haiku-4-5', 'claude')).toBe('plan');
+    expect(clampPermissionModeForModel('auto', 'claude-haiku-4-5', CLAUDE, 'claude')).toBe('default');
+    expect(clampPermissionModeForModel('auto', 'claude-opus-5', CLAUDE, 'claude')).toBe('auto');
+    expect(clampPermissionModeForModel('plan', 'claude-haiku-4-5', CLAUDE, 'claude')).toBe('plan');
   });
 
   it('takes Auto from the assigned runner’s catalog rather than a list in the repo', () => {
@@ -76,17 +170,17 @@ describe('Claude model capabilities', () => {
         { value: 'claude-opus-5', label: 'Opus 5', permissionModes: ['default', 'plan'] },
       ],
     };
-    expect(supportsAuto('claude-opus-5-5', 'claude', null, catalog)).toBe(true);
-    expect(clampPermissionModeForModel('auto', 'claude-opus-5-5', 'claude', null, catalog)).toBe(
+    expect(supportsAuto('claude-opus-5-5', CLAUDE, 'claude', null, catalog)).toBe(true);
+    expect(clampPermissionModeForModel('auto', 'claude-opus-5-5', CLAUDE, 'claude', null, catalog)).toBe(
       'auto',
     );
     // And a row that withholds Auto wins over the fallback list, which still lists Opus 5.
-    expect(supportsAuto('claude-opus-5', 'claude', null, catalog)).toBe(false);
-    expect(clampPermissionModeForModel('auto', 'claude-opus-5', 'claude', null, catalog)).toBe(
+    expect(supportsAuto('claude-opus-5', CLAUDE, 'claude', null, catalog)).toBe(false);
+    expect(clampPermissionModeForModel('auto', 'claude-opus-5', CLAUDE, 'claude', null, catalog)).toBe(
       'default',
     );
     // A model the runner has not reported keeps the fallback answer — silence is not "no".
-    expect(supportsAuto('claude-sonnet-5', 'claude', null, catalog)).toBe(true);
+    expect(supportsAuto('claude-sonnet-5', CLAUDE, 'claude', null, catalog)).toBe(true);
   });
 });
 
@@ -102,7 +196,7 @@ describe('Codex model efforts', () => {
   };
 
   it('uses the selected model catalog, including max and Ultra', () => {
-    expect(effortOptionsForProvider('codex', 'gpt-5.6-sol', catalog)).toEqual([
+    expect(effortOptionsFor(CODEX, 'codex', 'gpt-5.6-sol', catalog)).toEqual([
       { value: '', label: 'Default' },
       { value: 'low', label: 'Low' },
       { value: 'medium', label: 'Medium' },
@@ -111,25 +205,79 @@ describe('Codex model efforts', () => {
       { value: 'max', label: 'Max' },
       { value: 'ultra', label: 'Ultra' },
     ]);
-    expect(normalizeEffortForProvider('codex', 'ultra', 'gpt-5.6-sol', catalog)).toBe('ultra');
-    expect(normalizeEffortForProvider('codex', 'max', 'gpt-5.6-sol', catalog)).toBe('max');
-    expect(normalizeEffortForProvider('codex', 'minimal', 'gpt-5.6-sol', catalog)).toBe('');
+    expect(normalizeEffortFor(CODEX, 'codex', 'ultra', 'gpt-5.6-sol', catalog)).toBe('ultra');
+    expect(normalizeEffortFor(CODEX, 'codex', 'max', 'gpt-5.6-sol', catalog)).toBe('max');
+    expect(normalizeEffortFor(CODEX, 'codex', 'minimal', 'gpt-5.6-sol', catalog)).toBe('');
   });
 
   it('keeps a closed fallback vocabulary when no catalog row is available', () => {
-    expect(effortOptionsForProvider('codex')).toEqual(CODEX_EFFORT_OPTIONS);
-    expect(normalizeEffortForProvider('codex', 'ultra')).toBe('ultra');
-    expect(normalizeEffortForProvider('codex', 'project-custom')).toBe('');
+    expect(effortOptionsFor(CODEX, 'codex')).toEqual(CODEX_EFFORT_OPTIONS);
+    expect(normalizeEffortFor(CODEX, 'codex', 'ultra')).toBe('ultra');
+    expect(normalizeEffortFor(CODEX, 'codex', 'project-custom')).toBe('');
   });
 
   it('keeps the account last-picked Ultra over a stale workspace Max', () => {
     expect(
-      newSessionEffortForProvider('codex', 'ultra', 'max', 'gpt-5.6-sol', catalog),
+      newSessionEffortFor(CODEX, 'codex', 'ultra', 'max', 'gpt-5.6-sol', catalog),
     ).toBe('ultra');
-    expect(newSessionEffortForProvider('codex', '', 'max', 'gpt-5.6-sol', catalog)).toBe('');
+    expect(newSessionEffortFor(CODEX, 'codex', '', 'max', 'gpt-5.6-sol', catalog)).toBe('');
     expect(
-      newSessionEffortForProvider('codex', undefined, 'max', 'gpt-5.6-sol', catalog),
+      newSessionEffortFor(CODEX, 'codex', undefined, 'max', 'gpt-5.6-sol', catalog),
     ).toBe('max');
+  });
+});
+
+describe('effort, permission and Auto by the engine, never the provider’s slug', () => {
+  // A Responses gateway key and a DeepSeek key: neither slug names an engine. Read by slug, both were
+  // Claude — so a Codex session on the gateway was offered Claude's efforts.
+  const gateway: ConfiguredProvider = {
+    slug: 'openai-gateway',
+    label: 'OpenAI gateway',
+    runtime: 'codex',
+    models: [{ value: 'gpt-5.6-sol', label: 'GPT-5.6-Sol' }],
+    engines: ['codex', 'opencode'],
+  };
+  const deepseek: ConfiguredProvider = {
+    slug: 'deepseek',
+    label: 'DeepSeek',
+    runtime: 'claude',
+    presetSlug: 'deepseek',
+    models: [{ value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' }],
+    engines: ['claude', 'opencode', 'dsh'],
+  };
+  const configured = [gateway, deepseek];
+  const catalog: RunnerModelCatalog = {
+    dsh: [{ value: 'acp-pro', label: 'DeepSeek V4 Pro', reasoningLevels: ['off', 'high', 'max'] }],
+  };
+
+  it('offers Codex’s levels to a Codex session on a key, and OpenCode’s variants to OpenCode on one', () => {
+    expect(effortOptionsFor(CODEX, 'openai-gateway', 'gpt-5.6-sol', null, configured)).toEqual(CODEX_EFFORT_OPTIONS);
+    expect(normalizeEffortFor(CODEX, 'openai-gateway', 'minimal', 'gpt-5.6-sol', null, configured)).toBe('minimal');
+    expect(effortOptionsFor(OPENCODE, 'deepseek', 'deepseek-v4-pro', null, configured)).toEqual(OPENCODE_EFFORT_OPTIONS);
+    expect(effortOptionsFor(KIMI, 'moonshot', 'kimi-k3', null, [])).toEqual(KIMI_EFFORT_OPTIONS);
+  });
+
+  it('offers DeepSeek Harness its own catalogue’s levels on whichever DeepSeek key, and Claude’s on Claude Code', () => {
+    expect(effortOptionsFor(DSH, 'deepseek', 'acp-pro', catalog, configured).map((option) => option.value)).toEqual([
+      '',
+      'off',
+      'high',
+      'max',
+    ]);
+    expect(normalizeEffortFor(DSH, 'deepseek', 'medium', 'acp-pro', catalog, configured)).toBe('');
+    expect(effortOptionsFor(CLAUDE, 'deepseek', 'deepseek-v4-pro', catalog, configured)).toEqual(CLAUDE_EFFORT_OPTIONS);
+  });
+
+  it('refuses the permission modes DeepSeek Harness refuses, whichever key it runs on', () => {
+    expect(permissionModeSupported('plan', DSH)).toBe(false);
+    expect(permissionModeSupported('auto', DSH)).toBe(true);
+    expect(permissionModeSupported('plan', CLAUDE)).toBe(true);
+    expect(clampPermissionModeForModel('plan', 'acp-pro', DSH, 'deepseek', configured, catalog)).toBe('default');
+  });
+
+  it('leaves Auto to a key’s own model space on Claude Code', () => {
+    expect(supportsAuto('deepseek-v4-pro', CLAUDE, 'deepseek', configured)).toBe(true);
+    expect(supportsAuto('deepseek-v4-pro', CLAUDE, 'claude', configured)).toBe(false);
   });
 });
 
@@ -145,19 +293,18 @@ describe('Kimi runtime defaults', () => {
   };
 
   it('falls back to the managed Kimi coding model when no runner catalog is available', () => {
-    expect(mergedProviderOptions()).toContainEqual({ value: 'kimi', label: 'Kimi' });
     expect(KIMI_MODEL_OPTIONS).toEqual([
       { value: 'kimi-code/kimi-for-coding', label: 'Kimi for Coding' },
     ]);
-    expect(modelOptionsForProvider('kimi')).toEqual(KIMI_MODEL_OPTIONS);
-    expect(defaultModelForProvider('kimi')).toBe('kimi-code/kimi-for-coding');
+    expect(modelOptionsFor(KIMI, 'kimi')).toEqual(KIMI_MODEL_OPTIONS);
+    expect(defaultModelFor(KIMI, 'kimi')).toBe('kimi-code/kimi-for-coding');
     expect(contextWindowFor('kimi-code/kimi-for-coding')).toBe(262_144);
-    expect(supportsAuto('kimi-code/kimi-for-coding', 'kimi')).toBe(true);
-    expect(supportsAuto('local-kimi-alias', 'kimi')).toBe(true);
+    expect(supportsAuto('kimi-code/kimi-for-coding', KIMI, 'kimi')).toBe(true);
+    expect(supportsAuto('local-kimi-alias', KIMI, 'kimi')).toBe(true);
   });
 
   it('lists every model the runner reports, with its own context window', () => {
-    expect(modelOptionsForProvider('kimi', kimiCatalog)).toEqual([
+    expect(modelOptionsFor(KIMI, 'kimi', kimiCatalog)).toEqual([
       { value: 'kimi-code/kimi-for-coding', label: 'K2.7 Coding' },
       { value: 'kimi-code/k3', label: 'K3' },
     ]);
@@ -165,39 +312,39 @@ describe('Kimi runtime defaults', () => {
   });
 
   it('offers Kimi efforts without Codex-only minimal when the model is unknown', () => {
-    expect(effortOptionsForProvider('kimi')).toEqual([
+    expect(effortOptionsFor(KIMI, 'kimi')).toEqual([
       { value: '', label: 'Default' },
       { value: 'low', label: 'Low' },
       { value: 'high', label: 'High' },
       { value: 'max', label: 'Max' },
     ]);
 
-    expect(normalizeEffortForProvider('kimi', 'minimal')).toBe('low');
-    expect(normalizeEffortForProvider('kimi', 'medium')).toBe('high');
-    expect(normalizeEffortForProvider('kimi', 'xhigh')).toBe('max');
-    expect(normalizeEffortForProvider('kimi', 'high')).toBe('high');
+    expect(normalizeEffortFor(KIMI, 'kimi', 'minimal')).toBe('low');
+    expect(normalizeEffortFor(KIMI, 'kimi', 'medium')).toBe('high');
+    expect(normalizeEffortFor(KIMI, 'kimi', 'xhigh')).toBe('max');
+    expect(normalizeEffortFor(KIMI, 'kimi', 'high')).toBe('high');
   });
 
   it("offers each Kimi model only the thinking levels it declares", () => {
     // K2.7 Coding rejects every level with invalid_params, so Default is the whole picker.
-    expect(effortOptionsForProvider('kimi', 'kimi-code/kimi-for-coding', kimiCatalog)).toEqual([
+    expect(effortOptionsFor(KIMI, 'kimi', 'kimi-code/kimi-for-coding', kimiCatalog)).toEqual([
       { value: '', label: 'Default' },
     ]);
-    expect(effortOptionsForProvider('kimi', 'kimi-code/k3', kimiCatalog)).toEqual([
+    expect(effortOptionsFor(KIMI, 'kimi', 'kimi-code/k3', kimiCatalog)).toEqual([
       { value: '', label: 'Default' },
       { value: 'low', label: 'Low' },
       { value: 'high', label: 'High' },
       { value: 'max', label: 'Max' },
     ]);
 
-    expect(normalizeEffortForProvider('kimi', 'max', 'kimi-code/kimi-for-coding', kimiCatalog))
+    expect(normalizeEffortFor(KIMI, 'kimi', 'max', 'kimi-code/kimi-for-coding', kimiCatalog))
       .toBe('');
-    expect(normalizeEffortForProvider('kimi', 'max', 'kimi-code/k3', kimiCatalog)).toBe('max');
+    expect(normalizeEffortFor(KIMI, 'kimi', 'max', 'kimi-code/k3', kimiCatalog)).toBe('max');
     // Vocabulary mapping still runs before the model's own list is consulted.
-    expect(normalizeEffortForProvider('kimi', 'xhigh', 'kimi-code/k3', kimiCatalog)).toBe('max');
-    expect(normalizeEffortForProvider('kimi', 'medium', 'kimi-code/k3', kimiCatalog)).toBe('high');
+    expect(normalizeEffortFor(KIMI, 'kimi', 'xhigh', 'kimi-code/k3', kimiCatalog)).toBe('max');
+    expect(normalizeEffortFor(KIMI, 'kimi', 'medium', 'kimi-code/k3', kimiCatalog)).toBe('high');
     // A model the catalog does not report (KIMI_MODEL_* alias) keeps its value.
-    expect(normalizeEffortForProvider('kimi', 'max', 'local-kimi-alias', kimiCatalog)).toBe('max');
+    expect(normalizeEffortFor(KIMI, 'kimi', 'max', 'local-kimi-alias', kimiCatalog)).toBe('max');
   });
 });
 
@@ -218,32 +365,32 @@ describe('Efforts a self-hosted model declares', () => {
   };
   const configured = [vllm];
   const shown = (model: string, effort: string) =>
-    normalizeEffortForProvider('local-vllm', effort, model, null, configured);
+    normalizeEffortFor(CLAUDE, 'local-vllm', effort, model, null, configured);
 
   it('offers only the declared levels, lowest first, with Ultra where xhigh is one of them', () => {
-    expect(effortOptionsForProvider('local-vllm', 'qwen3.8-27b-fp8', null, configured)).toEqual([
+    expect(effortOptionsFor(CLAUDE, 'local-vllm', 'qwen3.8-27b-fp8', null, configured)).toEqual([
       { value: '', label: 'Default' },
       { value: 'low', label: 'Low' },
       { value: 'medium', label: 'Medium' },
       { value: 'xhigh', label: 'xHigh' },
       { value: 'ultra', label: 'Ultra' },
     ]);
-    expect(effortOptionsForProvider('local-vllm', 'qwen3.8-9b', null, configured)).toEqual([
+    expect(effortOptionsFor(CLAUDE, 'local-vllm', 'qwen3.8-9b', null, configured)).toEqual([
       { value: '', label: 'Default' },
       { value: 'low', label: 'Low' },
       { value: 'medium', label: 'Medium' },
       { value: 'high', label: 'High' },
     ]);
     // `[]` is a model that takes no effort at all.
-    expect(effortOptionsForProvider('local-vllm', 'qwen3.8-mini', null, configured)).toEqual([
+    expect(effortOptionsFor(CLAUDE, 'local-vllm', 'qwen3.8-mini', null, configured)).toEqual([
       { value: '', label: 'Default' },
     ]);
     // No declaration leaves Claude's list, as before.
-    expect(effortOptionsForProvider('local-vllm', 'qwen3.8-plain', null, configured)).toEqual(
+    expect(effortOptionsFor(CLAUDE, 'local-vllm', 'qwen3.8-plain', null, configured)).toEqual(
       CLAUDE_EFFORT_OPTIONS,
     );
     // Without the provider list the model cannot be looked up, so nothing is withheld.
-    expect(effortOptionsForProvider('local-vllm', 'qwen3.8-27b-fp8')).toEqual(CLAUDE_EFFORT_OPTIONS);
+    expect(effortOptionsFor(CLAUDE, 'local-vllm', 'qwen3.8-27b-fp8')).toEqual(CLAUDE_EFFORT_OPTIONS);
   });
 
   it('names the level dispatch runs a stored effort at: the nearest declared one, ties going up', () => {
@@ -263,16 +410,16 @@ describe('Efforts a self-hosted model declares', () => {
 
   it('starts a new session at the declared level nearest the account default', () => {
     expect(
-      newSessionEffortForProvider('local-vllm', 'max', undefined, 'qwen3.8-27b-fp8', null, configured),
+      newSessionEffortFor(CLAUDE, 'local-vllm', 'max', undefined, 'qwen3.8-27b-fp8', null, configured),
     ).toBe('xhigh');
   });
 
-  it('reads a declaration only on the Claude runtime, the one dispatch honours it on', () => {
+  it('reads a declaration only on Claude Code, the one engine dispatch honours it on', () => {
     const codexRow: ConfiguredProvider = { ...vllm, slug: 'gateway', runtime: 'codex' };
-    expect(effortOptionsForProvider('gateway', 'qwen3.8-27b-fp8', null, [codexRow])).toEqual(
-      effortOptionsForProvider('gateway', 'qwen3.8-27b-fp8'),
-    );
-    expect(normalizeEffortForProvider('gateway', 'max', 'qwen3.8-27b-fp8', null, [codexRow])).toBe('max');
+    expect(effortOptionsFor(CODEX, 'gateway', 'qwen3.8-27b-fp8', null, [codexRow])).toEqual(CODEX_EFFORT_OPTIONS);
+    expect(normalizeEffortFor(CODEX, 'gateway', 'max', 'qwen3.8-27b-fp8', null, [codexRow])).toBe('max');
+    // The same key under OpenCode is OpenCode's to describe.
+    expect(effortOptionsFor(OPENCODE, 'local-vllm', 'qwen3.8-27b-fp8', null, configured)).toEqual(OPENCODE_EFFORT_OPTIONS);
   });
 });
 
@@ -290,7 +437,7 @@ describe('Runtime-reported default models', () => {
     };
 
     expect(
-      defaultModelForProvider('claude', catalog, undefined, {
+      defaultModelFor(CLAUDE, 'claude', catalog, undefined, {
         claude: 'claude-opus-5',
       }),
     ).toBe('claude-opus-5');
@@ -301,8 +448,8 @@ describe('Runtime-reported default models', () => {
       codex: [{ value: 'gpt-catalog-first', label: 'Catalog First' }],
     };
 
-    expect(defaultModelForProvider('codex', catalog, undefined, {})).toBe('gpt-catalog-first');
-    expect(defaultModelForProvider('codex', null, undefined, {})).toBe('gpt-5.6-sol');
+    expect(defaultModelFor(CODEX, 'codex', catalog, undefined, {})).toBe('gpt-catalog-first');
+    expect(defaultModelFor(CODEX, 'codex', null, undefined, {})).toBe('gpt-5.6-sol');
   });
 
   it('keeps a configured provider in its own model space', () => {
@@ -317,23 +464,25 @@ describe('Runtime-reported default models', () => {
     ];
 
     expect(
-      defaultModelForProvider('deepseek', null, configured, { claude: 'claude-sonnet-5' }),
+      defaultModelFor(CLAUDE, 'deepseek', null, configured, { claude: 'claude-sonnet-5' }),
     ).toBe('deepseek-v4');
   });
 
-  it('normalizes a removed provider to the Claude Runtime before reading its default', () => {
+  it('reads a provider since removed in its session’s engine, never another engine’s', () => {
     const catalog: RunnerModelCatalog = {
       claude: [{ value: 'claude-catalog', label: 'Claude Catalog' }],
+      codex: [{ value: 'gpt-catalog', label: 'GPT Catalog' }],
     };
 
     expect(
-      defaultModelForProvider('removed-provider', catalog, [], {
+      defaultModelFor(CLAUDE, 'removed-provider', catalog, [], {
         claude: 'claude-runtime-default',
       }),
     ).toBe('claude-runtime-default');
+    expect(defaultModelFor(CODEX, 'removed-provider', catalog, [], {})).toBe('gpt-catalog');
   });
 
-  it('reads Auto availability from the runtime a configured provider borrows', () => {
+  it('reads Auto availability from the engine a key runs on', () => {
     const configured: ConfiguredProvider[] = [
       { slug: 'moonshot', label: 'Kimi (Moonshot)', runtime: 'kimi', models: [] },
       { slug: 'local-codex', label: 'Local Codex', runtime: 'codex', models: [] },
@@ -341,17 +490,16 @@ describe('Runtime-reported default models', () => {
       { slug: 'local-legacy', label: 'Legacy', runtime: 'nonsense', models: [] },
     ];
 
-    // Kimi's Auto is a runtime-wide mode, so it holds for this vendor's model ids too.
-    expect(supportsAuto('kimi-k2.7-code', 'moonshot', configured)).toBe(true);
+    // Kimi's Auto is an engine-wide mode, so it holds for this vendor's model ids too.
+    expect(supportsAuto('kimi-k2.7-code', KIMI, 'moonshot', configured)).toBe(true);
     // So is Codex's — `on-request` is its name for letting the model decide when to ask.
-    expect(supportsAuto('gpt-5.6-sol', 'local-codex', configured)).toBe(true);
-    // A configured provider on the Claude runtime owns its model space: the static Claude
-    // allow-list can't cover vendor ids (e.g. DeepSeek), so the CLI decides for itself.
-    expect(supportsAuto('deepseek-v4', 'deepseek', configured)).toBe(true);
-    // An unreadable runtime keeps the backend's Claude fallback — but Auto still follows the
-    // configured-provider rule, not the Claude model allow-list.
-    expect(supportsAuto('claude-opus-5', 'local-legacy', configured)).toBe(true);
-    expect(supportsAuto('some-alias', 'local-legacy', configured)).toBe(true);
+    expect(supportsAuto('gpt-5.6-sol', CODEX, 'local-codex', configured)).toBe(true);
+    // A key on Claude Code owns its model space: the static Claude allow-list can't cover vendor ids
+    // (e.g. DeepSeek), so the CLI decides for itself.
+    expect(supportsAuto('deepseek-v4', CLAUDE, 'deepseek', configured)).toBe(true);
+    // A row with an unreadable protocol still follows the key rule, not the Claude model allow-list.
+    expect(supportsAuto('claude-opus-5', CLAUDE, 'local-legacy', configured)).toBe(true);
+    expect(supportsAuto('some-alias', CLAUDE, 'local-legacy', configured)).toBe(true);
   });
 
   it('does not leak Claude picker rows into an empty custom model space', () => {
@@ -359,8 +507,8 @@ describe('Runtime-reported default models', () => {
       { slug: 'custom-codex', label: 'Custom Codex', runtime: 'codex', models: [] },
     ];
 
-    expect(modelOptionsForProvider('custom-codex', null, configured)).toEqual([]);
-    expect(defaultModelForProvider('custom-codex', null, configured)).toBe('gpt-5.6-sol');
+    expect(modelOptionsFor(CODEX, 'custom-codex', null, configured)).toEqual([]);
+    expect(defaultModelFor(CODEX, 'custom-codex', null, configured)).toBe('gpt-5.6-sol');
   });
 });
 
@@ -390,36 +538,37 @@ describe('Retired models', () => {
   ];
 
   it('drops a pin the runtime no longer offers, on the engine and on its own vendor', () => {
-    expect(livePinnedModel('claude-opus-5', 'claude', catalog)).toBeUndefined();
-    expect(livePinnedModel('claude-opus-6', 'claude', catalog)).toBe('claude-opus-6');
-    // A BYOK vendor on the CLI's own endpoint is judged against the same catalog.
-    expect(livePinnedModel('claude-opus-5', 'anthropic', catalog, byok)).toBeUndefined();
+    expect(livePinnedModel('claude-opus-5', CLAUDE, 'claude', catalog)).toBeUndefined();
+    expect(livePinnedModel('claude-opus-6', CLAUDE, 'claude', catalog)).toBe('claude-opus-6');
+    // A key on the CLI's own endpoint is judged against the same catalog.
+    expect(livePinnedModel('claude-opus-5', CLAUDE, 'anthropic', catalog, byok)).toBeUndefined();
   });
 
   it('leaves alone every pin the catalog cannot speak for', () => {
     // No catalog reported → nothing can be retired.
-    expect(livePinnedModel('claude-opus-5', 'claude', undefined)).toBe('claude-opus-5');
-    expect(livePinnedModel('claude-opus-5', 'claude', {})).toBe('claude-opus-5');
+    expect(livePinnedModel('claude-opus-5', CLAUDE, 'claude', undefined)).toBe('claude-opus-5');
+    expect(livePinnedModel('claude-opus-5', CLAUDE, 'claude', {})).toBe('claude-opus-5');
     // The Runtime's own reported default (an alias, a gateway id) is current by definition.
-    expect(livePinnedModel('opus', 'claude', catalog, undefined, { claude: 'opus' })).toBe('opus');
+    expect(livePinnedModel('opus', CLAUDE, 'claude', catalog, undefined, { claude: 'opus' })).toBe('opus');
     // A third-party vendor keeps its own list; the runner's Claude probe says nothing about it.
-    expect(livePinnedModel('deepseek-v3', 'deepseek', catalog, byok)).toBe('deepseek-v3');
-    // OpenCode owns model selection.
-    expect(livePinnedModel('anthropic/claude-sonnet-4', 'opencode', catalog)).toBe(
+    expect(livePinnedModel('deepseek-v3', CLAUDE, 'deepseek', catalog, byok)).toBe('deepseek-v3');
+    // OpenCode owns model selection — on its own configuration and on a key alike.
+    expect(livePinnedModel('anthropic/claude-sonnet-4', OPENCODE, 'opencode', catalog)).toBe(
       'anthropic/claude-sonnet-4',
     );
+    expect(livePinnedModel('claude-opus-5', OPENCODE, 'anthropic', catalog, byok)).toBe('claude-opus-5');
     // A blank model is OpenCode's "you pick" sentinel, not a stale id.
-    expect(livePinnedModel('', 'opencode', catalog)).toBe('');
+    expect(livePinnedModel('', OPENCODE, 'opencode', catalog)).toBe('');
   });
 
   it('falls through a retired session pin AND a retired workspace pin to the current default', () => {
     // The reported symptom: session and workspace both left on last generation's Opus.
     expect(
-      effectiveSessionModel('claude', 'claude-opus-5', 'claude-opus-5', catalog, undefined, {}),
+      effectiveSessionModel(CLAUDE, 'claude', 'claude-opus-5', 'claude-opus-5', catalog, undefined, {}),
     ).toBe('claude-opus-6');
     // A live workspace pin still wins over the provider default.
     expect(
-      effectiveSessionModel('claude', 'claude-opus-5', 'claude-sonnet-5', catalog, undefined, {}),
+      effectiveSessionModel(CLAUDE, 'claude', 'claude-opus-5', 'claude-sonnet-5', catalog, undefined, {}),
     ).toBe('claude-sonnet-5');
   });
 });
@@ -436,26 +585,22 @@ describe('OpenCode defaults', () => {
     ],
   };
 
-  it('is a distinct runtime whose empty default never falls back to Claude', () => {
-    expect(PROVIDER_OPTIONS).toContainEqual({
-      value: 'opencode',
-      label: 'OpenCode',
-    });
-    expect(defaultModelForProvider('opencode', catalog)).toBe('');
-    expect(modelOptionsForProvider('opencode')).toEqual([{ value: '', label: 'Managed by OpenCode' }]);
-    expect(modelOptionsForProvider('opencode', catalog)).toEqual([
+  it('is a distinct engine whose empty default never falls back to Claude', () => {
+    expect(defaultModelFor(OPENCODE, 'opencode', catalog)).toBe('');
+    expect(modelOptionsFor(OPENCODE, 'opencode')).toEqual([{ value: '', label: 'Managed by OpenCode' }]);
+    expect(modelOptionsFor(OPENCODE, 'opencode', catalog)).toEqual([
       { value: '', label: 'Managed by OpenCode' },
       { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4' },
     ]);
-    expect(supportsAuto('', 'opencode')).toBe(true);
-    expect(supportsAuto('anthropic/claude-sonnet-4', 'opencode')).toBe(true);
+    expect(supportsAuto('', OPENCODE, 'opencode')).toBe(true);
+    expect(supportsAuto('anthropic/claude-sonnet-4', OPENCODE, 'opencode')).toBe(true);
   });
 
   it('resolves a null session model through its workspace while preserving an explicit empty value', () => {
-    expect(effectiveSessionModel('opencode', null, 'anthropic/claude-sonnet-4', catalog)).toBe(
+    expect(effectiveSessionModel(OPENCODE, 'opencode', null, 'anthropic/claude-sonnet-4', catalog)).toBe(
       'anthropic/claude-sonnet-4',
     );
-    expect(effectiveSessionModel('opencode', '', 'anthropic/claude-sonnet-4', catalog)).toBe('');
+    expect(effectiveSessionModel(OPENCODE, 'opencode', '', 'anthropic/claude-sonnet-4', catalog)).toBe('');
   });
 
   it('resolves a null session effort through its workspace while preserving an explicit empty value', () => {
@@ -464,20 +609,20 @@ describe('OpenCode defaults', () => {
   });
 
   it('uses the selected catalog model reasoning variants and rejects stale values', () => {
-    expect(effortOptionsForProvider('opencode', 'anthropic/claude-sonnet-4', catalog)).toEqual([
+    expect(effortOptionsFor(OPENCODE, 'opencode', 'anthropic/claude-sonnet-4', catalog)).toEqual([
       { value: '', label: 'Default' },
       { value: 'low', label: 'Low' },
       { value: 'high', label: 'High' },
       { value: 'ultra', label: 'Ultra' },
     ]);
-    expect(normalizeEffortForProvider('opencode', 'ultra', 'anthropic/claude-sonnet-4', catalog)).toBe('ultra');
-    expect(normalizeEffortForProvider('opencode', 'max', 'anthropic/claude-sonnet-4', catalog)).toBe('');
+    expect(normalizeEffortFor(OPENCODE, 'opencode', 'ultra', 'anthropic/claude-sonnet-4', catalog)).toBe('ultra');
+    expect(normalizeEffortFor(OPENCODE, 'opencode', 'max', 'anthropic/claude-sonnet-4', catalog)).toBe('');
   });
 
   it('offers every runner-supported fallback effort when a catalog model is unavailable', () => {
-    expect(effortOptionsForProvider('opencode', '', catalog)).toEqual(OPENCODE_EFFORT_OPTIONS);
-    expect(normalizeEffortForProvider('opencode', 'max', '', catalog)).toBe('max');
-    expect(normalizeEffortForProvider('opencode', 'project-custom', 'project/local-model', catalog)).toBe(
+    expect(effortOptionsFor(OPENCODE, 'opencode', '', catalog)).toEqual(OPENCODE_EFFORT_OPTIONS);
+    expect(normalizeEffortFor(OPENCODE, 'opencode', 'max', '', catalog)).toBe('max');
+    expect(normalizeEffortFor(OPENCODE, 'opencode', 'project-custom', 'project/local-model', catalog)).toBe(
       'project-custom',
     );
   });
@@ -492,15 +637,15 @@ describe('OpenCode defaults', () => {
         },
       ],
     };
-    expect(effortOptionsForProvider('opencode', 'local/no-variants', noVariants)).toEqual([
+    expect(effortOptionsFor(OPENCODE, 'opencode', 'local/no-variants', noVariants)).toEqual([
       { value: '', label: 'Default' },
     ]);
-    expect(normalizeEffortForProvider('opencode', 'high', 'local/no-variants', noVariants)).toBe('');
+    expect(normalizeEffortFor(OPENCODE, 'opencode', 'high', 'local/no-variants', noVariants)).toBe('');
   });
 
-  it('does not leak an unknown dynamic OpenCode variant into another runtime', () => {
-    expect(normalizeEffortForProvider('claude', 'project-custom', 'claude-opus-5', catalog)).toBe('');
-    expect(normalizeEffortForProvider('codex', 'project-custom', 'gpt-5.6-sol', catalog)).toBe('');
+  it('does not leak an unknown dynamic OpenCode variant into another engine', () => {
+    expect(normalizeEffortFor(CLAUDE, 'claude', 'project-custom', 'claude-opus-5', catalog)).toBe('');
+    expect(normalizeEffortFor(CODEX, 'codex', 'project-custom', 'gpt-5.6-sol', catalog)).toBe('');
   });
 });
 
@@ -518,71 +663,69 @@ describe('Antigravity defaults', () => {
     ],
   };
 
-  it('is a built-in runtime of its own', () => {
-    expect(PROVIDER_OPTIONS).toContainEqual({ value: 'antigravity', label: 'Antigravity' });
-    expect(mergedProviderOptions(null).map((option) => option.value)).toContain('antigravity');
+  it('is an engine of its own', () => {
     expect(providerIdentityResolved('antigravity')).toBe(true);
     // agy runs Auto as --dangerously-skip-permissions on any model, so it is not a per-model question.
-    expect(supportsAuto('gemini-3.1-pro', 'antigravity')).toBe(true);
+    expect(supportsAuto('gemini-3.1-pro', ANTIGRAVITY, 'antigravity')).toBe(true);
   });
 
   it('offers the runner models and labels the no-catalogue fallback with Gemini’s preset default', () => {
-    expect(modelOptionsForProvider('antigravity', catalog)).toEqual([
+    expect(modelOptionsFor(ANTIGRAVITY, 'antigravity', catalog)).toEqual([
       { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
       { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro' },
     ]);
-    expect(modelOptionsForProvider('antigravity')).toEqual(ANTIGRAVITY_MODEL_OPTIONS);
+    expect(modelOptionsFor(ANTIGRAVITY, 'antigravity')).toEqual(ANTIGRAVITY_MODEL_OPTIONS);
     expect(ANTIGRAVITY_MODEL_OPTIONS).toEqual([{ value: '', label: 'Gemini 3.8 Flash' }]);
-    expect(modelOptionsForProvider('antigravity', { claude: [{ value: 'claude-opus-5', label: 'Opus 5' }] }))
+    expect(modelOptionsFor(ANTIGRAVITY, 'antigravity', { claude: [{ value: 'claude-opus-5', label: 'Opus 5' }] }))
       .toEqual([{ value: '', label: 'Gemini 3.8 Flash' }]);
-    expect(defaultModelForProvider('antigravity')).toBe('');
+    expect(defaultModelFor(ANTIGRAVITY, 'antigravity')).toBe('');
   });
 
-  it('defaults like the other built-ins, and never to a Claude model', () => {
-    expect(defaultModelForProvider('antigravity', catalog, null, { antigravity: 'gemini-3.1-pro' })).toBe(
+  it('defaults like the other engines, and never to a Claude model', () => {
+    expect(defaultModelFor(ANTIGRAVITY, 'antigravity', catalog, null, { antigravity: 'gemini-3.1-pro' })).toBe(
       'gemini-3.1-pro',
     );
-    expect(defaultModelForProvider('antigravity', catalog)).toBe('gemini-3.8-flash');
+    expect(defaultModelFor(ANTIGRAVITY, 'antigravity', catalog)).toBe('gemini-3.8-flash');
     // No catalogue and no reported default: no `--model`, which is what dispatch sends too.
-    expect(defaultModelForProvider('antigravity')).toBe('');
-    expect(defaultModelForProvider('antigravity', { claude: [{ value: 'claude-opus-5', label: 'Opus 5' }] })).toBe('');
+    expect(defaultModelFor(ANTIGRAVITY, 'antigravity')).toBe('');
+    expect(defaultModelFor(ANTIGRAVITY, 'antigravity', { claude: [{ value: 'claude-opus-5', label: 'Opus 5' }] })).toBe('');
   });
 
   it('shows the model a session with none actually runs on', () => {
     // '' stood in for a catalogue not reported yet. Once there is one, a model-less session runs
     // its first row, so the pill says that rather than a choice nobody made.
-    expect(livePinnedModel('', 'antigravity', catalog)).toBeUndefined();
-    expect(effectiveSessionModel('antigravity', '', null, catalog)).toBe('gemini-3.8-flash');
-    expect(effectiveSessionModel('antigravity', '', null, null)).toBe('');
-    expect(newSessionModelForProvider('antigravity', { antigravity: '' }, catalog)).toBe('gemini-3.8-flash');
+    expect(livePinnedModel('', ANTIGRAVITY, 'antigravity', catalog)).toBeUndefined();
+    expect(effectiveSessionModel(ANTIGRAVITY, 'antigravity', '', null, catalog)).toBe('gemini-3.8-flash');
+    expect(effectiveSessionModel(ANTIGRAVITY, 'antigravity', '', null, null)).toBe('');
+    expect(newSessionModelFor(ANTIGRAVITY, 'antigravity', { 'antigravity:antigravity': '' }, catalog)).toBe('gemini-3.8-flash');
     // A pin the runner still lists stays; one it no longer lists falls to the current default.
-    expect(effectiveSessionModel('antigravity', 'gemini-3.1-pro', null, catalog)).toBe('gemini-3.1-pro');
-    expect(effectiveSessionModel('antigravity', 'gemini-2.9-pro', null, catalog)).toBe('gemini-3.8-flash');
+    expect(effectiveSessionModel(ANTIGRAVITY, 'antigravity', 'gemini-3.1-pro', null, catalog)).toBe('gemini-3.1-pro');
+    expect(effectiveSessionModel(ANTIGRAVITY, 'antigravity', 'gemini-2.9-pro', null, catalog)).toBe('gemini-3.8-flash');
   });
 
   it('offers each model only the thinking levels it has', () => {
-    expect(effortOptionsForProvider('antigravity', 'gemini-3.1-pro', catalog)).toEqual([
+    expect(effortOptionsFor(ANTIGRAVITY, 'antigravity', 'gemini-3.1-pro', catalog)).toEqual([
       { value: '', label: 'Default' },
       { value: 'low', label: 'Low' },
       { value: 'high', label: 'High' },
     ]);
-    expect(effortOptionsForProvider('antigravity', 'gemini-3.8-flash', catalog)).toEqual(ANTIGRAVITY_EFFORT_OPTIONS);
+    expect(effortOptionsFor(ANTIGRAVITY, 'antigravity', 'gemini-3.8-flash', catalog)).toEqual(ANTIGRAVITY_EFFORT_OPTIONS);
     // A model the catalogue does not report gets agy's whole vocabulary, not Claude's.
-    expect(effortOptionsForProvider('antigravity', '', catalog)).toEqual(ANTIGRAVITY_EFFORT_OPTIONS);
-    expect(effortOptionsForProvider('antigravity', 'gemini-3.1-pro')).toEqual(ANTIGRAVITY_EFFORT_OPTIONS);
+    expect(effortOptionsFor(ANTIGRAVITY, 'antigravity', '', catalog)).toEqual(ANTIGRAVITY_EFFORT_OPTIONS);
+    expect(effortOptionsFor(ANTIGRAVITY, 'antigravity', 'gemini-3.1-pro')).toEqual(ANTIGRAVITY_EFFORT_OPTIONS);
   });
 
-  it('moves an effort picked on another runtime onto agy’s levels, then the model’s own', () => {
-    expect(normalizeEffortForProvider('antigravity', 'max', 'gemini-3.8-flash', catalog)).toBe('high');
-    expect(normalizeEffortForProvider('antigravity', 'ultra', 'gemini-3.8-flash', catalog)).toBe('high');
-    expect(normalizeEffortForProvider('antigravity', 'minimal', 'gemini-3.8-flash', catalog)).toBe('low');
+  it('moves an effort picked on another engine onto agy’s levels, then the model’s own', () => {
+    expect(normalizeEffortFor(ANTIGRAVITY, 'antigravity', 'max', 'gemini-3.8-flash', catalog)).toBe('high');
+    expect(normalizeEffortFor(ANTIGRAVITY, 'antigravity', 'ultra', 'gemini-3.8-flash', catalog)).toBe('high');
+    expect(normalizeEffortFor(ANTIGRAVITY, 'antigravity', 'minimal', 'gemini-3.8-flash', catalog)).toBe('low');
     // Gemini 3.1 Pro has no Medium: Default rather than a level agy would refuse.
-    expect(normalizeEffortForProvider('antigravity', 'medium', 'gemini-3.1-pro', catalog)).toBe('');
-    expect(normalizeEffortForProvider('antigravity', 'xhigh', 'gemini-3.1-pro', catalog)).toBe('high');
+    expect(normalizeEffortFor(ANTIGRAVITY, 'antigravity', 'medium', 'gemini-3.1-pro', catalog)).toBe('');
+    expect(normalizeEffortFor(ANTIGRAVITY, 'antigravity', 'xhigh', 'gemini-3.1-pro', catalog)).toBe('high');
     // No row: agy's closed vocabulary still applies, so an OpenCode variant is dropped.
-    expect(normalizeEffortForProvider('antigravity', 'max', '', catalog)).toBe('high');
-    expect(normalizeEffortForProvider('antigravity', 'project-custom', '', catalog)).toBe('');
-    expect(newSessionEffortForProvider('antigravity', 'max', null, 'gemini-3.1-pro', catalog)).toBe('high');
+    expect(normalizeEffortFor(ANTIGRAVITY, 'antigravity', 'max', '', catalog)).toBe('high');
+    expect(normalizeEffortFor(ANTIGRAVITY, 'antigravity', 'project-custom', '', catalog)).toBe('');
+    expect(newSessionEffortFor(ANTIGRAVITY, 'antigravity', 'max', null, 'gemini-3.1-pro', catalog)).toBe('high');
   });
 
   it('takes its context window from the runner catalogue', () => {
@@ -591,7 +734,7 @@ describe('Antigravity defaults', () => {
   });
 });
 
-describe('A Gemini key, which runs on Antigravity', () => {
+describe('A Gemini key on Antigravity', () => {
   // What GET /providers serves for a row connected from the Gemini preset: withPreset() puts agy's
   // fallback list and the modelsFromRuntime flag on it.
   const gemini: ConfiguredProvider = {
@@ -614,33 +757,33 @@ describe('A Gemini key, which runs on Antigravity', () => {
     ],
   };
 
-  it('runs on the runtime it borrows', () => {
-    expect(runtimeForProvider('gemini', [gemini])).toBe('antigravity');
+  it('runs on Antigravity by default', () => {
+    expect(defaultEngineOf('gemini', [gemini])).toBe('antigravity');
   });
 
   it('offers the models agy reports, and the preset’s own only until it reports them', () => {
-    expect(modelOptionsForProvider('gemini', catalog, [gemini])).toEqual([
+    expect(modelOptionsFor(ANTIGRAVITY, 'gemini', catalog, [gemini])).toEqual([
       { value: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash' },
       { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro' },
     ]);
-    expect(modelOptionsForProvider('gemini', null, [gemini]).map((option) => option.value)).toEqual([
+    expect(modelOptionsFor(ANTIGRAVITY, 'gemini', null, [gemini]).map((option) => option.value)).toEqual([
       'gemini-3.8-flash',
       'gemini-3.1-pro',
     ]);
   });
 
   it('defaults to what agy reports, never to what Claude does', () => {
-    expect(defaultModelForProvider('gemini', catalog, [gemini])).toBe('gemini-3.7-flash');
+    expect(defaultModelFor(ANTIGRAVITY, 'gemini', catalog, [gemini])).toBe('gemini-3.7-flash');
     expect(
-      defaultModelForProvider('gemini', catalog, [gemini], { claude: 'claude-opus-6', antigravity: 'gemini-3.1-pro' }),
+      defaultModelFor(ANTIGRAVITY, 'gemini', catalog, [gemini], { claude: 'claude-opus-6', antigravity: 'gemini-3.1-pro' }),
     ).toBe('gemini-3.1-pro');
-    expect(defaultModelForProvider('gemini', null, [gemini])).toBe('gemini-3.8-flash');
+    expect(defaultModelFor(ANTIGRAVITY, 'gemini', null, [gemini])).toBe('gemini-3.8-flash');
   });
 
   it('judges a pin against agy’s catalogue', () => {
-    expect(livePinnedModel('gemini-3.1-pro', 'gemini', catalog, [gemini])).toBe('gemini-3.1-pro');
+    expect(livePinnedModel('gemini-3.1-pro', ANTIGRAVITY, 'gemini', catalog, [gemini])).toBe('gemini-3.1-pro');
     // A pin from when the row ran on Codex: agy has no such model and would refuse to start.
-    expect(livePinnedModel('gemini-2.5-pro', 'gemini', catalog, [gemini])).toBeUndefined();
+    expect(livePinnedModel('gemini-2.5-pro', ANTIGRAVITY, 'gemini', catalog, [gemini])).toBeUndefined();
   });
 });
 
@@ -731,34 +874,51 @@ describe('contextWindowFor', () => {
   });
 });
 
-describe('a configured key run on OpenCode', () => {
+describe('one DeepSeek key on each engine that runs it (contract §2.2)', () => {
   const deepseekKey: ConfiguredProvider = {
     slug: 'deepseek',
     label: 'DeepSeek',
     runtime: 'claude',
+    presetSlug: 'deepseek',
     models: [
       { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
       { value: 'deepseek-flash', label: 'DeepSeek Flash' },
     ],
     defaultModel: 'deepseek-v4-pro',
     runsOnOpenCode: true,
+    engines: ['claude', 'opencode', 'dsh'],
+  };
+  const catalog: RunnerModelCatalog = {
+    claude: [{ value: 'claude-opus-6', label: 'Opus 6' }],
+    opencode: [{ value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4' }],
+    dsh: [
+      { value: 'acp-pro', label: 'DeepSeek V4 Pro' },
+      { value: 'acp-flash', label: 'DeepSeek V4 Flash' },
+    ],
   };
 
-  it('is run by OpenCode, on the key’s own models under the ids that name the key', () => {
-    expect(runtimeForProvider('opencode/deepseek', [deepseekKey])).toBe('opencode');
-    expect(modelOptionsForProvider('opencode/deepseek', null, [deepseekKey])).toEqual([
-      { value: 'orbit-deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
-      { value: 'orbit-deepseek/deepseek-flash', label: 'DeepSeek Flash' },
-    ]);
-    expect(defaultModelForProvider('opencode/deepseek', null, [deepseekKey])).toBe('orbit-deepseek/deepseek-v4-pro');
+  it('brings its own models to Claude Code and to OpenCode, bare — nothing names the key in a model any more', () => {
+    const own = [
+      { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+      { value: 'deepseek-flash', label: 'DeepSeek Flash' },
+    ];
+    expect(modelOptionsFor(CLAUDE, 'deepseek', catalog, [deepseekKey])).toEqual(own);
+    expect(modelOptionsFor(OPENCODE, 'deepseek', catalog, [deepseekKey])).toEqual(own);
+    expect(defaultModelFor(OPENCODE, 'deepseek', catalog, [deepseekKey])).toBe('deepseek-v4-pro');
+    expect(modelOptionsFor(OPENCODE, 'deepseek', catalog, [deepseekKey]).some((option) => option.value.startsWith('orbit-'))).toBe(false);
   });
 
-  it('is the choice of an OpenCode session whose model names it, and of nothing else', () => {
-    expect(providerChoiceFor('opencode', 'orbit-deepseek/deepseek-flash')).toBe('opencode/deepseek');
-    expect(providerChoiceFor('opencode', 'anthropic/claude-opus-5')).toBe('opencode');
-    expect(providerChoiceFor('claude', 'orbit-deepseek/x')).toBe('claude');
-    expect(openCodeChoiceKey('opencode/deepseek')).toBe('deepseek');
-    expect(openCodeChoiceKey('opencode')).toBeNull();
-    expect(openCodeKeyChoice('glm')).toBe('opencode/glm');
+  it('runs DeepSeek Harness on the runner’s catalogue, whichever DeepSeek key it spends', () => {
+    expect(modelOptionsFor(DSH, 'deepseek', catalog, [deepseekKey])).toEqual(catalog.dsh!.map(({ value, label }) => ({ value, label })));
+    expect(defaultModelFor(DSH, 'deepseek', catalog, [deepseekKey])).toBe('acp-pro');
+    expect(defaultModelFor(DSH, 'deepseek', catalog, [deepseekKey], { dsh: 'acp-flash' })).toBe('acp-flash');
+    // Before the runner reports one, the runtime picks: no static fallback, and never the key's own.
+    expect(modelOptionsFor(DSH, 'deepseek', null, [deepseekKey])).toEqual([]);
+    expect(defaultModelFor(DSH, 'deepseek', null, [deepseekKey])).toBe('');
+  });
+
+  it('judges a Harness pin against the Harness catalogue, not the key’s table', () => {
+    expect(livePinnedModel('acp-flash', DSH, 'deepseek', catalog, [deepseekKey])).toBe('acp-flash');
+    expect(livePinnedModel('deepseek-v4-pro', DSH, 'deepseek', catalog, [deepseekKey])).toBeUndefined();
   });
 });

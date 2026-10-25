@@ -105,7 +105,8 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertEqual(live(.running, false, 1), "Needs you")      // a pending card blocks inside the turn
         XCTAssertEqual(live(.running, false, 0), "Working")
         XCTAssertEqual(live(.awaitingInput, true, 0), "Working")
-        XCTAssertEqual(live(.awaitingInput, false, 0), "Needs you")
+        XCTAssertEqual(live(.awaitingInput, false, 0), "Idle")       // a turn that ended on its own
+        XCTAssertEqual(live(.awaitingInput, false, 1), "Needs you")  // parked, with a question it asked
         XCTAssertEqual(live(.failed, false, 0), "Idle")
         XCTAssertEqual(ProjectPage.coordinatorPill(status(.live, session: .init(
             id: "s", runState: .awaitingInput, lifecycleState: .completed))).label, "Completed")
@@ -205,6 +206,34 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertEqual(empty.subtitle, "No open items")
     }
 
+    // MARK: The ending, where the progress card was
+
+    /// A project's sessions page draws its ending in the progress card's place — the settled card
+    /// the conversation draws — only off a read that says DONE and carries the projection's counts
+    /// to tally; an open project, and a read without them, keep the progress card
+    /// (docs/mocks/project-done-sessions-page, owner decision 2026-10-10).
+    func testTheEndingStandsOnlyForAReadThatSaysDoneAndCanTallyIt() {
+        let projection = ProjectDerivedDone(
+            done: true, criteria: [ProjectDoneCriterion(definitionId: "c1", satisfied: true)],
+            counts: ProjectDoneCounts(criteria: 1, met: 1, landed: 1, onMain: 1))
+        XCTAssertTrue(ProjectPage.drawsEnding(
+            ProjectDoneSubject(title: "t", status: "DONE", derivedDone: projection)))
+        XCTAssertTrue(ProjectPage.drawsEnding(
+            ProjectDoneSubject(title: "t", status: "DONE", derivedDone: projection, doneBy: .owner)),
+                      "the owner's own record draws the same ending, spelled by its badge")
+        XCTAssertFalse(ProjectPage.drawsEnding(
+            ProjectDoneSubject(title: "t", status: "OPEN", derivedDone: projection)),
+                       "an open project keeps its progress card")
+        XCTAssertFalse(ProjectPage.drawsEnding(
+            ProjectDoneSubject(title: "t", status: "DONE",
+                               derivedDone: ProjectDerivedDone(counts: nil))),
+                       "the older projection — no unified counts — keeps it too, as it draws none")
+        XCTAssertFalse(ProjectPage.drawsEnding(
+            ProjectDoneSubject(title: "t", status: "DONE")),
+                       "and so does a read that carries no projection at all")
+        XCTAssertFalse(ProjectPage.drawsEnding(nil), "a read that has not answered is not an ending")
+    }
+
     func testWaitingLabelCountsDownToTheOwner() {
         XCTAssertEqual(ProjectPage.waitingLabel(item(.integrationConflict, assignee: .coordinator,
                                                      waited: 18 * 60, escalateIn: 102 * 60), now: Self.now),
@@ -261,14 +290,70 @@ final class ProjectPageTests: XCTestCase {
 
     // MARK: The landing in flight
 
-    /// The row the owner approved: `◌ Landing <task> · checking · 1m 20s`.
+    /// The row the owner approved: `◌ Landing <task> · checking · 1m 20s`, with the runner's own
+    /// last report under it — a claimed job reports, and the row says how long ago it did.
     func testTheLandingLineNamesTheTaskAndCountsSecondsWhileTheChecksRun() {
         let view = ProjectIntegrationView(
             integratingCount: 1, queuedCount: 0,
             inFlight: .init(taskTitle: "T2 wiki 契约、迁移与共享类型", state: "RUNNING",
-                            startedAt: iso(80), kind: "LAND_TASK", phase: "CHECK"))
-        XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now), ProjectPage.LandingLine(
-            what: "T2 wiki 契约、迁移与共享类型", running: true, state: "checking", clock: "1m 20s", word: "Landing"))
+                            startedAt: iso(80), kind: "LAND_TASK", phase: "CHECK", heartbeatAt: iso(0)))
+        XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now, updatedAt: Self.now), ProjectPage.LandingLine(
+            what: "T2 wiki 契约、迁移与共享类型", running: true, state: "checking", clock: "1m 20s",
+            word: "Landing", updated: "Updated just now"))
+    }
+
+    /// §7.2 V6 (contract :1579-1610, board docs/mocks/landing-session/v4/05): once the server derives
+    /// the claim's liveness, the head's two slots carry the step's clock against its budget, the
+    /// claim and round, and the liveness sentence — and the card and the job rows carry the same
+    /// head. A server that sends none keeps the line above, word for word (the tests above it).
+    func testTheV6FieldsDrawTheStepClockTheClaimAndTheLiveness() {
+        let check = ProjectIntegrationCheck(name: "TASK_ACCEPTANCE", index: 1, count: 3, budgetSeconds: 3600,
+                                            startedAt: iso(110.5))
+        let inFlight = ProjectIntegrationInFlight(
+            taskTitle: "C5", state: "RUNNING", startedAt: iso(110.5), kind: "LAND_TASK", phase: "CHECK",
+            heartbeatAt: iso(0), jobId: "j1", taskId: "t1", runner: "wikova", claim: 1, round: 1,
+            check: check, stepStartedAt: iso(110.5), outputMovedAt: iso(6.4), progressProtocol: "v2",
+            liveness: "LIVE")
+        let job = ProjectIntegrationJob(
+            jobId: "j1", kind: "LAND_TASK", state: "RUNNING", phase: "CHECK", taskId: "t1", taskTitle: "C5",
+            startedAt: iso(110.5), queuedAt: iso(140.5), heartbeatAt: iso(0), runnerName: "wikova",
+            claim: 1, round: 1, check: check, stepStartedAt: iso(110.5), outputMovedAt: iso(6.4),
+            liveness: "LIVE")
+        let view = ProjectIntegrationView(
+            integratingCount: 1, queuedCount: 0, inFlight: inFlight,
+            landTasks: [ProjectLandTask(taskId: "t1", taskTitle: "C5", landTask: LandTaskIntegrationView(
+                jobId: "j1", state: "RUNNING", phase: "CHECK", targetRef: "refs/heads/project/p",
+                startedAt: iso(110.5)))],
+            inFlightJobs: [job])
+        let line = ProjectPage.landingLine(view, now: Self.now, updatedAt: Self.now)!
+        let head = ProjectPage.LandingHead(right: "1m 50s of 60m", isClock: true,
+                                           detail: "checking · output 6s ago · claim 1 · round 1 of 3")
+        XCTAssertEqual(line.head, head)
+        let card = ProjectPage.landingCard(view, now: Self.now, updatedAt: Self.now)!
+        XCTAssertEqual(card.head, head)
+        XCTAssertEqual(card.clock, "1m 50s of 60m")
+        XCTAssertEqual(ProjectPage.landingJobLines(view, now: Self.now, updatedAt: Self.now).first?.line.head, head)
+        // The three readings that change the shape: a quiet check still runs, SILENT stops the ring,
+        // and LEGACY says why its quiet is not a stall with no freshness to misread.
+        func read(_ liveness: String, step: TimeInterval = 110.5, heartbeat: TimeInterval = 0,
+                  output: TimeInterval = 6.4) -> ProjectPage.LandingLine {
+            let flight = ProjectIntegrationInFlight(
+                taskTitle: "C5", state: "RUNNING", startedAt: iso(step), kind: "LAND_TASK", phase: "CHECK",
+                heartbeatAt: iso(heartbeat), jobId: "j1", taskId: "t1", runner: "wikova", claim: 1, round: 1,
+                check: check, stepStartedAt: iso(step), outputMovedAt: iso(output), progressProtocol: "v2",
+                liveness: liveness)
+            return ProjectPage.landingLine(ProjectIntegrationView(integratingCount: 1, inFlight: flight),
+                                           now: Self.now, updatedAt: Self.now)!
+        }
+        XCTAssertEqual(read("QUIET", output: 840.5).head.detail,
+                       "checking · no output for 14m · within its 60m budget · claim 1 · round 1 of 3")
+        let silent = read("SILENT", step: 600.5, heartbeat: 240.5)
+        XCTAssertEqual(silent.head.detail, "checking · no word from runner wikova for 4m · claim 1 · round 1 of 3")
+        XCTAssertFalse(silent.running)
+        let legacy = read("LEGACY", step: 720.5, heartbeat: 720.5)
+        XCTAssertEqual(legacy.head.detail, "checking · reports only between steps · claim 1 · round 1 of 3")
+        XCTAssertFalse(legacy.head.detail.contains("Updated"))
+        XCTAssertTrue(legacy.running)
     }
 
     func testTheLandingLineIsQueuedAndStillWhileTheJobWaitsItsTurn() {
@@ -284,13 +369,13 @@ final class ProjectPageTests: XCTestCase {
     func testTheLandingLineNamesTheCountWhenSeveralAreInFlight() {
         let view = ProjectIntegrationView(
             integratingCount: 2, queuedCount: 1,
-            inFlight: .init(taskTitle: "T1", state: "RUNNING", startedAt: iso(80)))
+            inFlight: .init(taskTitle: "T1", state: "RUNNING", startedAt: iso(80), heartbeatAt: iso(0)))
         XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now)?.what, "3 jobs")
     }
 
     func testLandingRefreshFailureFreezesTheClockAndStopsClaimingActivity() {
         let view = ProjectIntegrationView(integratingCount: 1, inFlight: .init(
-            state: "RUNNING", startedAt: iso(80), kind: "LAND_TASK", phase: "CHECK"))
+            state: "RUNNING", startedAt: iso(80), kind: "LAND_TASK", phase: "CHECK", heartbeatAt: iso(0)))
         let later = Self.now.addingTimeInterval(60)
         let line = ProjectPage.landingLine(view, now: later, updatedAt: Self.now, refreshFailed: true)
         XCTAssertEqual(line?.state, "Update unavailable")
@@ -302,14 +387,45 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertEqual(ProjectPage.landingLine(view, now: later, updatedAt: later)?.running, true)
     }
 
+    /// A runner that has gone quiet is a fact about the REPORTS, and the row says exactly that.
+    /// It used to say "Update unavailable", which read as "the app cannot see the server" and, to a
+    /// reader watching a landing sit still, as "this timed out" — neither of which is what happened.
     func testLandingHeartbeatCanBeStaleEvenWhenTheAPIReadSucceeds() {
         let view = ProjectIntegrationView(integratingCount: 1, inFlight: .init(
             state: "RUNNING", startedAt: iso(720), kind: "LAND_TASK", phase: "CHECK", heartbeatAt: iso(660)))
         let line = ProjectPage.landingLine(view, now: Self.now, updatedAt: Self.now)
         XCTAssertEqual(line?.running, false)
-        XCTAssertEqual(line?.state, "Update unavailable")
+        XCTAssertEqual(line?.state, ProjectPage.landingNoReport)
         XCTAssertEqual(line?.clock, "1m 0s")
-        XCTAssertEqual(line?.updated, "Updated 11m ago")
+        XCTAssertEqual(line?.updated, "No report for 11m")
+        // Never a timeout: a timeout is the job's own verdict, and the server words it in the
+        // landing's `blockingReason` (`LandTaskStatus`), which is the only place it appears.
+        XCTAssertFalse("\(line?.state ?? "") \(line?.updated ?? "")".lowercased().contains("timed out"))
+        // A claim whose runner has not reported once says that instead of counting a silence it
+        // cannot measure.
+        let silentFromTheStart = ProjectIntegrationView(integratingCount: 1, inFlight: .init(
+            state: "RUNNING", startedAt: iso(240), kind: "LAND_TASK", phase: "FETCH"))
+        XCTAssertEqual(ProjectPage.landingLine(silentFromTheStart, now: Self.now, updatedAt: Self.now)?.updated,
+                       ProjectPage.landingNoReportYet)
+    }
+
+    /// The other half of "how long is this taking": a job claimed 2m 24s after it was queued, and
+    /// 4m 41s into its work, is a different story from one that has been working for 7m 5s.
+    func testTheLandingLineSaysWhatTheJobWaitedBeforeItWasClaimed() {
+        let view = ProjectIntegrationView(integratingCount: 1, inFlight: .init(
+            taskTitle: "C5", state: "RUNNING", startedAt: iso(281), kind: "LAND_TASK", phase: "FETCH",
+            heartbeatAt: iso(5), waitMs: 143_637))
+        let line = ProjectPage.landingLine(view, now: Self.now, updatedAt: Self.now)
+        XCTAssertEqual(line?.clock, "4m 41s")
+        XCTAssertEqual(line?.wait, "2m 23s")
+        // A queued job's whole clock IS its wait, which `Queued for` already says.
+        let queued = ProjectIntegrationView(integratingCount: 0, queuedCount: 1, inFlight: .init(
+            taskTitle: "C5", state: "QUEUED", startedAt: iso(126), kind: "LAND_TASK", waitMs: 126_000))
+        XCTAssertEqual(ProjectPage.landingLine(queued, now: Self.now)?.clockLabel, "Queued for")
+        XCTAssertNil(ProjectPage.landingLine(queued, now: Self.now)?.wait)
+        // And a job that never waited says nothing about waiting.
+        XCTAssertNil(ProjectPage.landingLine(ProjectIntegrationView(integratingCount: 1, inFlight: .init(
+            state: "RUNNING", startedAt: iso(80), heartbeatAt: iso(0))), now: Self.now)?.wait)
     }
 
     func testManualAndPausedReadyWorkUseTheirActualStartConditions() {
@@ -334,16 +450,16 @@ final class ProjectPageTests: XCTestCase {
     func testTheLandingLineKeepsItsWordsForAJobWithNoTaskAndNoReadableClock() {
         let view = ProjectIntegrationView(
             integratingCount: 1, queuedCount: 0,
-            inFlight: .init(taskTitle: nil, state: "RUNNING", startedAt: "not a date"))
-        XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now), ProjectPage.LandingLine(
-            what: nil, running: true, state: "running", clock: "0m 0s"))
+            inFlight: .init(taskTitle: nil, state: "RUNNING", startedAt: "not a date", heartbeatAt: iso(0)))
+        XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now, updatedAt: Self.now), ProjectPage.LandingLine(
+            what: nil, running: true, state: "running", clock: "0m 0s", updated: "Updated just now"))
     }
 
     func testMergeJobsDescribeTheirKindAndActualPhase() {
         for (kind, word) in ProjectPage.integrationJobWords {
             for (phase, state) in ProjectPage.integrationPhaseWords {
                 let view = ProjectIntegrationView(inFlight: .init(
-                    state: "RUNNING", startedAt: iso(80), kind: kind, phase: phase))
+                    state: "RUNNING", startedAt: iso(80), kind: kind, phase: phase, heartbeatAt: iso(0)))
                 XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now)?.word, word)
                 XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now)?.state, state)
             }
@@ -478,11 +594,16 @@ final class ProjectPageTests: XCTestCase {
                        ProjectPage.LandingLine(what: "T", running: true, state: "checking", clock: "12m 0s",
                                                word: "Landing", updated: "Updated 11m ago"))
         // An empty list is still a server that lists them; no list at all is an older server, whose
-        // row keeps the guess it always made.
+        // row reads the reports for itself — and reads them for what they are: a runner that has
+        // said nothing for a while is "No report", never a timeout (only the job's own verdict, the
+        // server's `blockingReason`, may word one) and never "Update unavailable", which is this app
+        // failing to READ the server.
         let empty = ProjectIntegrationView(integratingCount: 1, inFlight: inFlight, inFlightJobs: [])
         XCTAssertEqual(ProjectPage.landingLine(empty, now: Self.now, updatedAt: Self.now)?.state, "checking")
         let older = ProjectIntegrationView(integratingCount: 1, inFlight: inFlight)
-        XCTAssertEqual(ProjectPage.landingLine(older, now: Self.now, updatedAt: Self.now)?.state, "Update unavailable")
+        XCTAssertEqual(ProjectPage.landingLine(older, now: Self.now, updatedAt: Self.now)?.state, "No report")
+        XCTAssertEqual(ProjectPage.landingLine(older, now: Self.now, updatedAt: Self.now)?.updated,
+                       "No report for 11m")
         XCTAssertEqual(ProjectPage.landingLine(older, now: Self.now, updatedAt: Self.now)?.timedOut, false)
     }
 
@@ -537,7 +658,7 @@ final class ProjectPageTests: XCTestCase {
             jobId: "j-merge", taskId: nil,
             line: ProjectPage.LandingLine(what: nil, running: false, state: "queued", clock: "41m 8s",
                                           word: "Merge to main", clockLabel: "Queued for", updated: "Updated just now"),
-            detail: nil, retryable: false))
+            detail: nil, retryable: false, mergeJob: true))
 
         func detail(phase: String?, runner: String? = "workstation-gpu") -> String? {
             let view = ProjectIntegrationView(inFlight: .init(state: "RUNNING", startedAt: iso(6_630)), inFlightJobs: [
@@ -587,6 +708,60 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertEqual(ProjectPage.landingJobLines(stuckLanding(), now: Self.now,
                                                    updatedAt: Self.now.addingTimeInterval(-91)).first?.line.state,
                        "Update unavailable")
+    }
+
+    // MARK: The project's main branch, by name
+
+    /// Where the page says work goes, it names the project's main branch: the integration read's
+    /// `upstreamRef` for the landing row, its jobs and the line row's facts, and the branch its host
+    /// hands the lanes and the criteria. A read that names none says main, as it always did.
+    func testThePageNamesTheProjectsMainBranch() throws {
+        let merging = ProjectIntegrationView(upstreamRef: "master", inFlight: .init(
+            state: "RUNNING", startedAt: iso(80), kind: "LAND_PROMOTION", phase: "MAIN_SYNC", heartbeatAt: iso(0)))
+        let line = try XCTUnwrap(ProjectPage.landingLine(merging, now: Self.now, updatedAt: Self.now))
+        XCTAssertEqual(line.word, "Merge to master")
+        XCTAssertEqual(line.state, "syncing master")
+        let unnamed = ProjectIntegrationView(inFlight: merging.inFlight)
+        XCTAssertEqual(ProjectPage.landingLine(unnamed, now: Self.now, updatedAt: Self.now)?.word, "Merge to main")
+        XCTAssertEqual(ProjectPage.landingLine(unnamed, now: Self.now, updatedAt: Self.now)?.state, "syncing main")
+
+        // The jobs a press on the row lists, and where a timed-out one stopped.
+        let jobs = ProjectIntegrationView(upstreamRef: "master", inFlight: merging.inFlight, inFlightJobs: [
+            job("j-sync", phase: "MAIN_SYNC", started: 6_630, heartbeat: 6_620, timedOut: true),
+            job("j-merge", kind: "LAND_PROMOTION", state: "QUEUED", phase: nil, taskId: nil, title: nil,
+                started: 2_468, queued: 2_468, heartbeat: nil, runner: nil, limit: nil),
+        ])
+        let lines = ProjectPage.landingJobLines(jobs, now: Self.now, updatedAt: Self.now)
+        XCTAssertEqual(lines.first?.detail?.hasSuffix("stopped at syncing master · no push recorded"), true)
+        XCTAssertEqual(lines.last?.line.word, "Merge to master")
+
+        // The Work overview's lanes and the criteria, by the branch their host passes.
+        let b = ProjectPanoramaBuckets(running: 0, ready: 0, blocked: 0, done: 5, integrating: 1,
+                                       onIntegrationLine: 2, onUpstream: 2, doneNotIntegrated: 0)
+        let cells = ProjectPage.overviewCells(b, taskCount: 5, line: .projectBranch, main: "master")
+        XCTAssertEqual(cells.first { $0.key == "onIntegrationLine" }?.footnote, "not on master yet")
+        XCTAssertEqual(cells.first { $0.key == "onUpstream" }?.label, "On master")
+        XCTAssertEqual(cells.first { $0.key == "onUpstream" }?.footnote, "landed on master")
+        XCTAssertEqual(ProjectPage.overviewCells(b, taskCount: 5, line: .projectBranch)
+                        .first { $0.key == "onUpstream" }?.label, "On main")
+        let landed = ProjectCriterion(id: "c1", ordinal: 1, text: "A", satisfied: true, landing: "LANDED")
+        let onBranch = ProjectCriterion(id: "c2", ordinal: 2, text: "B", satisfied: true,
+                                        landing: "ON_INTEGRATION_LINE")
+        XCTAssertEqual(ProjectPage.criterionWork(landed, integrationRef: nil, main: "master")?.landing, "on master")
+        XCTAssertEqual(ProjectPage.criterionWork(onBranch, integrationRef: "project/x", main: "master")?.landingWarning,
+                       "not on master yet")
+
+        // The line row's facts and a landed task's tag.
+        let branch = ProjectIntegrationView(line: .projectBranch, ref: "project/x", upstreamRef: "master",
+                                            commitsAheadOfUpstream: 1, lastUpstreamSyncAt: iso(720))
+        let facts = try XCTUnwrap(ProjectPage.integrationFacts(branch, now: Self.now))
+        XCTAssertEqual(Array(facts.prefix(3)), ["project/x", "1 commit ahead of master at last measurement",
+                                                "synced with master 12m ago"])
+        XCTAssertEqual(ProjectPage.integrationFacts(ProjectIntegrationView(line: .main, upstreamRef: "master"),
+                                                    now: Self.now)?.first, "master")
+        let onUpstream = ProjectTaskRow(id: "t", title: "t", integration: .init(state: "ON_UPSTREAM"))
+        XCTAssertEqual(ProjectPage.integrationTag(onUpstream, ref: nil, upstreamRef: "master")?.text, "On master")
+        XCTAssertEqual(ProjectPage.integrationTag(onUpstream, ref: nil, upstreamRef: nil)?.text, "On main")
     }
 
     // MARK: Tasks
@@ -709,12 +884,17 @@ final class ProjectPageTests: XCTestCase {
         let page = try JSONDecoder().decode(ProjectTaskPage.self, from: Data("""
         {"items":[{"id":"t1","title":"A","status":"OPEN","parentTaskId":null,"createdAt":"x","updatedAt":"y",
           "childCount":0,"unmetCount":1,"blocksCount":2,"topoLevel":1,"dependencyState":"BLOCKED",
-          "workState":"BLOCKED","integration":{"state":"NOT_APPLICABLE","since":null,"handler":null,
-          "openItemId":null,"jobId":null,"checksRunningForMs":null},"landingWaitCount":0}],
+          "workState":"BLOCKED","integration":{"state":"QUEUED","since":null,"handler":null,
+          "openItemId":null,"jobId":"j1","checksRunningForMs":null,
+          "landTask":{"jobId":"j1","state":"QUEUED","phase":null,"targetRef":"refs/heads/project/p",
+                      "blockingReason":{"code":"WAITING_DISPATCH","summary":"Waiting to land: next for the runner"}}},
+          "landingWaitCount":0}],
          "nextCursor":"c2"}
         """.utf8))
         XCTAssertEqual(page.items.first?.blocksCount, 2)
-        XCTAssertEqual(page.items.first?.integration?.state, "NOT_APPLICABLE")
+        XCTAssertEqual(page.items.first?.integration?.state, "QUEUED")
+        XCTAssertEqual(page.items.first?.integration?.landTask?.jobId, "j1")
+        XCTAssertEqual(page.items.first?.integration?.landTask?.blockingReason?.code, "WAITING_DISPATCH")
         XCTAssertEqual(page.nextCursor, "c2")
 
         let panorama = try JSONDecoder().decode(ProjectPanorama.self, from: Data("""
@@ -733,24 +913,52 @@ final class ProjectPageTests: XCTestCase {
         {"line":"PROJECT_BRANCH","ref":"project/runner","upstreamRef":"main","integratingCount":1,"queuedCount":1,
          "mergeCheckOnTip":"PASSING",
          "inFlight":{"taskTitle":"C5","kind":"LAND_TASK","phase":"FETCH","state":"RUNNING",
-           "startedAt":"2026-10-07T12:07:04.000Z","heartbeatAt":"2026-10-07T12:07:13.000Z"},
+           "startedAt":"2026-10-07T12:07:04.000Z","heartbeatAt":"2026-10-07T12:07:13.000Z",
+           "jobId":"j-c5","taskId":"t-c5","runner":"workstation-gpu","claim":1,"progressProtocol":"v2",
+           "round":1,"stepStartedAt":"2026-10-07T12:12:00.000Z",
+           "outputMovedAt":"2026-10-07T12:13:04.000Z","typicalMs":2280000,"liveness":"LIVE",
+           "check":{"name":"MERGE_CHECK","index":1,"count":2,"budgetSeconds":3600,
+                    "startedAt":"2026-10-07T12:12:00.000Z"}},
          "inFlightJobs":[
            {"jobId":"j-c5","kind":"LAND_TASK","state":"RUNNING","phase":"FETCH","taskId":"t-c5","taskTitle":"C5",
             "generation":1,"startedAt":"2026-10-07T12:07:04.000Z","queuedAt":"2026-10-07T12:06:58.000Z",
             "heartbeatAt":"2026-10-07T12:07:13.000Z","runnerName":"workstation-gpu","retriedBy":null,
-            "timedOut":true,"limitSeconds":600,"retryable":true},
+            "timedOut":true,"limitSeconds":600,"retryable":true,
+            "promotionId":null,"claim":2,"round":1,"progressProtocol":"v2",
+            "check":{"name":"MERGE_CHECK","index":1,"count":2,"budgetSeconds":3600,
+                     "startedAt":"2026-10-07T12:12:00.000Z"},
+            "stepStartedAt":"2026-10-07T12:12:00.000Z","outputMovedAt":"2026-10-07T12:13:04.000Z",
+            "typicalMs":2280000,"liveness":"LIVE","landingSessionId":"s-landing",
+            "blockingReason":{"code":"WAITING_LOCAL_LOCK",
+                              "summary":"Waiting for another job on this runner"}},
            {"jobId":"j-merge","kind":"LAND_PROMOTION","state":"QUEUED","phase":null,"taskId":null,"taskTitle":null,
             "generation":2,"startedAt":"2026-10-07T13:16:00.000Z","queuedAt":"2026-10-07T13:16:00.000Z",
             "heartbeatAt":null,"runnerName":null,"retriedBy":"COORDINATOR","timedOut":false,"limitSeconds":null,
             "retryable":false,"somethingNewer":1}]}
         """.utf8))
         XCTAssertEqual(view.inFlight?.taskTitle, "C5")
+        XCTAssertEqual(view.inFlight?.jobId, "j-c5")
+        XCTAssertEqual(view.inFlight?.runner, "workstation-gpu")
+        XCTAssertEqual(view.inFlight?.claim, 1)
+        XCTAssertEqual(view.inFlight?.check?.name, "MERGE_CHECK")
+        XCTAssertEqual(view.inFlight?.typicalMs, 2_280_000)
+        XCTAssertEqual(view.inFlight?.liveness, "LIVE")
         XCTAssertEqual(view.inFlightJobs, [
             ProjectIntegrationJob(jobId: "j-c5", kind: "LAND_TASK", state: "RUNNING", phase: "FETCH", taskId: "t-c5",
                                   taskTitle: "C5", generation: 1, startedAt: "2026-10-07T12:07:04.000Z",
                                   queuedAt: "2026-10-07T12:06:58.000Z", heartbeatAt: "2026-10-07T12:07:13.000Z",
                                   runnerName: "workstation-gpu", retriedBy: nil, timedOut: true, limitSeconds: 600,
-                                  retryable: true),
+                                  retryable: true, promotionId: nil, claim: 2, round: 1,
+                                  check: ProjectIntegrationCheck(name: "MERGE_CHECK", index: 1, count: 2,
+                                                                 budgetSeconds: 3600,
+                                                                 startedAt: "2026-10-07T12:12:00.000Z"),
+                                  stepStartedAt: "2026-10-07T12:12:00.000Z",
+                                  outputMovedAt: "2026-10-07T12:13:04.000Z", typicalMs: 2_280_000,
+                                  liveness: "LIVE",
+                                  blockingReason: LandTaskBlockingReason(
+                                    code: "WAITING_LOCAL_LOCK",
+                                    summary: "Waiting for another job on this runner"),
+                                  landingSessionId: "s-landing"),
             ProjectIntegrationJob(jobId: "j-merge", kind: "LAND_PROMOTION", state: "QUEUED", generation: 2,
                                   startedAt: "2026-10-07T13:16:00.000Z", queuedAt: "2026-10-07T13:16:00.000Z",
                                   retriedBy: "COORDINATOR"),

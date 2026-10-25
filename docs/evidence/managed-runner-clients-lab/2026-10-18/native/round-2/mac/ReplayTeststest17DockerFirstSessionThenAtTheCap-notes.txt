@@ -1,0 +1,24 @@
+scene 17-docker-first-session-then-at-the-cap: 257.992 s, actions (
+        {
+        body =         {
+            agentId = 34huV6eiavlQuuUtX0W0a;
+            engine = "<null>";
+            model = "deepseek-v4-pro";
+            prompt = "T07-EVE-S1 a first session while the managed environment has no room";
+            provider = "<null>";
+        };
+        m = POST;
+        path = "/api/sessions";
+        t = "103.989";
+    }
+)
+17-docker-first-session-then-at-the-cap: no window after launch; File > New Window
+17-docker-first-session-then-at-the-cap-00: "Waiting for capacity" shows
+17-docker-first-session-then-at-the-cap-01: "DeepSeek" shows
+17-docker-first-session-then-at-the-cap-02: typed into 49 label="" value="T07-EVE-S1 a first session while the managed environment has no room" frame=(652.0, 584.0, 317.0, 36.0) hittable=true
+17-docker-first-session-then-at-the-cap-02: send 9 label="Arrow Up Circle" value="" frame=(944.0, 633.0, 32.0, 32.0) hittable=true
+17-docker-first-session-then-at-the-cap-03: "Waiting for capacity" shows
+17-docker-first-session-then-at-the-cap-04: "as many runner containers as it allows" shows
+17-docker-first-session-then-at-the-cap-05: "Answering: T07-EVE-S1" shows
+17-docker-first-session-then-at-the-cap: 129 requests, 0 violations, actions left [], notes (
+)

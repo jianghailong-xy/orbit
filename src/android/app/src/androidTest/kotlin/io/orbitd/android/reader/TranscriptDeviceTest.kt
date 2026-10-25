@@ -9,8 +9,11 @@ import android.os.*
 import android.view.*
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.*
 import io.orbitd.android.core.auth.AuthState
 import java.io.File
@@ -124,7 +127,7 @@ class TranscriptDeviceTest {
         awaitText("Related reading task")
         capture("review-image-task-destination")
         instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-        awaitText("Session options")
+        awaitActions()
         val opened = java.util.concurrent.atomic.AtomicReference<String?>()
         val monitor = object : android.app.Instrumentation.ActivityMonitor() {
             override fun onStartActivity(intent: Intent): android.app.Instrumentation.ActivityResult? {
@@ -142,6 +145,164 @@ class TranscriptDeviceTest {
             File(evidence, "review-link-targets.txt").writeText("orbit=Related reading task\nhttps=${opened.get()}\nexternalIntentIntercepted=true\n")
             capture("review-image-web-destination")
         } finally { instrument.removeMonitor(monitor) }
+    }
+
+    /**
+     * A06c over fixture mode A06C, through the real login, directory and reader: the sticky question — since A06-18 a
+     * capsule in the bar, off the live tail only — and its jump, the Orbit context card, engine stderr/notice/transient
+     * rows, a workflow's agents, an image file link, the worktree bar's merge and changed files (a binary file's
+     * preview), and the tail kept in view when the keyboard rises.
+     */
+    @Test fun a06cReaderIncrements() = journey("a06c") {
+        login(); control("{\"reset\":true,\"mode\":\"A06C\"}")
+        openSession(); awaitText("Latest answer A06C", substring = true)
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Reconnecting", substring = true).fetchSemanticsNodes().isEmpty() }
+        val list = compose.onNodeWithTag("transcript-list")
+        val bar = hasAnyAncestor(hasTestTag("question-capsule"))
+        // The phone-sized reader shows a few lines between its chrome: bring each target into view before tapping it.
+        fun tap(target: SemanticsMatcher) { list.performScrollToNode(target); compose.onNode(target).performClick() }
+        // A06-18: at the live tail the bar carries no question and no title, between back and the ⋯.
+        compose.waitForIdle()
+        assertTrue("no capsule at the tail", compose.onAllNodesWithTag("question-capsule").fetchSemanticsNodes().isEmpty())
+        assertTrue("nothing written in the bar at the tail", compose.onAllNodes(hasAnyAncestor(hasTestTag("app-bar")) and
+            hasText("", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        capture("a06f-tail-bar-empty")
+        // Scrolled back a little — a slow drag that stops before it lifts — the capsule names the question above the fold.
+        list.performTouchInput { down(center); repeat(10) { moveBy(androidx.compose.ui.geometry.Offset(0f, height / 40f)) }; advanceEventTime(200); up() }
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Second question: ship the reader") and bar, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("↑") and bar, useUnmergedTree = true).assertIsDisplayed()
+        capture("a06c-sticky-question")
+        measureCapsule("second-question")
+        compose.onNodeWithContentDescription("Jump to your last question").performClick()
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("First question: plan the reader increments") and bar, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Second question: ship the reader").assertIsDisplayed()
+        capture("a06c-sticky-jumped")
+        measureCapsule("first-question")
+        // A06-9: what delivery appended is a card under the person's words, not part of them.
+        list.performScrollToNode(hasText("Attached · referenced task"))
+        compose.onNodeWithText("Attached · referenced task", useUnmergedTree = true).assertIsDisplayed()
+        capture("a06c-context-card")
+        list.performScrollToNode(hasText("Attached to this message"))
+        compose.onNodeWithText("Attached to this message").assertIsDisplayed()
+        tap(hasText("View full context"))
+        awaitText("<referenced-task", substring = true)
+        capture("a06c-context-opened")
+        // Engine stderr, a recoverable diagnostic and a notice, and Codex's exhausted 429 as a transient row (A06-1, A06-2).
+        list.performScrollToNode(hasText("--dangerously-skip-permissions cannot be used with root/sudo privileges"))
+        compose.onNodeWithText("Startup · model_catalog · codex_model_catalog_auth:", substring = true).assertExists()
+        list.performScrollToNode(hasText("exceeded retry limit, last status: 429 Too Many Requests", substring = true))
+        compose.onNodeWithText("Provider unavailable").assertIsDisplayed()
+        // The notice is a row of its own, brought into view as the others are: since A07c's auto-retry card, the 429 is
+        // tall enough that the row beside it is not composed at this size.
+        list.performScrollToNode(hasText("Switched to Wikova · Pro", substring = true))
+        compose.onNodeWithText("Switched to Wikova · Pro", substring = true).assertExists()
+        capture("a06c-engine-rows")
+        // A workflow's progress and an agent row that opens to what it did (baseline, A06-6).
+        list.performScrollToNode(hasText("Review the reader increments"))
+        tap(hasText("Show input and output") and hasAnyAncestor(hasTestTag("event:15")))
+        list.performScrollToNode(hasText("design:sticky-header"))
+        compose.onNodeWithText("12 tool calls · 17m").assertExists()
+        tap(hasText("design:sticky-header") and hasClickAction())
+        awaitText("claude-opus-5-5")
+        list.performScrollToNode(hasText("claude-opus-5-5"))
+        capture("a06c-workflow-agent")
+        // A06-3: a linked screenshot is the image file row and opens the image viewer.
+        list.performScrollToNode(hasContentDescription("runner.png"))
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("PNG image · Tap to preview").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("transcript-list", useUnmergedTree = true).performScrollToNode(hasText("PNG image · Tap to preview"))
+        capture("a06c-image-file-row")
+        tap(hasContentDescription("runner.png"))
+        compose.onNodeWithText("Close image").assertIsDisplayed()
+        capture("a06c-image-file-viewer")
+        compose.onNodeWithText("Close image").performClick()
+        // The worktree bar and its merge (baseline): the fixture's runner answers a second later.
+        compose.onNodeWithText("Jump to latest").performClick()
+        awaitText("Merge to main")
+        capture("a06c-worktree-bar")
+        compose.onNodeWithText("Merge to main").performClick()
+        compose.waitUntil(20_000) { compose.onAllNodesWithText("✓ Merged").fetchSemanticsNodes().isNotEmpty() }
+        awaitText("Merged into main")
+        capture("a06c-worktree-merged")
+        val posts = URL("$server/__stats").readText()
+        File(evidence, "a06c-posts.json").writeText(posts)
+        assertTrue(posts, posts.contains("\"path\":\"merge\",\"body\":{\"targetBranch\":\"main\"}"))
+        // The changed files: a text diff, a binary image's current bytes and an unpreviewable archive (A06-7).
+        compose.onNodeWithText("+12 −3 · 3 files", substring = true, useUnmergedTree = true).performClick()
+        awaitText("Worktree changes")
+        capture("a06c-worktree-files")
+        compose.onNodeWithText("new.png", substring = true, useUnmergedTree = true).performClick()
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Scroll to explore").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("1440 × 2560").assertIsDisplayed()
+        capture("a06c-binary-image")
+        compose.onNodeWithText("‹ Worktree changes").performClick()
+        compose.onNodeWithText("app.zip", substring = true, useUnmergedTree = true).performClick()
+        awaitText("No preview available")
+        capture("a06c-binary-zip")
+        compose.onNodeWithText("Done").performClick()
+        // A06-5: at the bottom, focusing the composer raises the keyboard and the last line stays in view. At the
+        // script's 360×640 dp that is only possible because the chrome folds away while the composer holds the
+        // keyboard (iOS `ConsoleView.foldsChrome`): the bar, the rows under it and the cards above the composer.
+        awaitText("Latest answer A06C", substring = true)
+        if (compose.onAllNodesWithText("Jump to latest").fetchSemanticsNodes().isNotEmpty()) compose.onNodeWithText("Jump to latest").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Context:", substring = true).assertExists()
+        compose.onNodeWithTag("composer-input").performClick()
+        compose.waitUntil(15_000) { imeVisible() }
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("app-bar").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Context:", substring = true).fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Jump to your last question").fetchSemanticsNodes().isEmpty() }
+        SystemClock.sleep(1_500)
+        compose.waitForIdle()
+        val latest = compose.onNodeWithText("Latest answer A06C", substring = true).fetchSemanticsNode().boundsInWindow
+        val visible = list.fetchSemanticsNode().boundsInWindow
+        File(evidence, "a06c-tail.txt").writeText(shell("wm size") + shell("wm density") + "ime=${imeVisible()}\nlatest=$latest list=$visible\n")
+        assertTrue("the last line stays above the keyboard: $latest in $visible", latest.bottom <= visible.bottom + 2f && latest.top >= visible.top)
+        capture("a06c-tail-pinned-keyboard")
+        // The keyboard going gives the chrome back, as it was.
+        shell("input keyevent KEYCODE_BACK")
+        compose.waitUntil(15_000) { !imeVisible() }
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("app-bar").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Context:", substring = true).assertExists()
+        capture("a06c-tail-restored")
+    }
+    /**
+     * A06-18 at this script's 360 dp: what the bar leaves the capsule beside back, ⋯, ☰ and refresh, and how much of the line
+     * shows — the line's laid-out width against its whole width — with the room a card's label would leave it, measured in
+     * the device's own font at the capsule's label style (13 sp medium).
+     */
+    private fun measureCapsule(name: String) {
+        val density = app.resources.displayMetrics.density
+        fun dp(px: Float) = "%.1f".format(px / density)
+        val capsule = compose.onNodeWithTag("question-capsule").fetchSemanticsNode().boundsInWindow
+        val texts = compose.onAllNodes(hasAnyAncestor(hasTestTag("question-capsule")) and hasText("", substring = true), useUnmergedTree = true)
+        val lines = texts.fetchSemanticsNodes().indices.map { index ->
+            val node = texts[index].fetchSemanticsNode()
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            node.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+            val whole = layouts.firstOrNull()?.multiParagraph?.intrinsics?.maxIntrinsicWidth ?: 0f
+            val text = node.config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString("") { it.text }
+            "text=\"$text\" widthDp=${dp(node.boundsInWindow.width)} wholeDp=${dp(whole)} cut=${node.boundsInWindow.width < kotlin.math.ceil(whole)}"
+        }
+        val measurer = androidx.compose.ui.text.TextMeasurer(androidx.compose.ui.text.font.createFontFamilyResolver(app),
+            androidx.compose.ui.unit.Density(app), androidx.compose.ui.unit.LayoutDirection.Ltr)
+        val style = androidx.compose.ui.text.TextStyle(fontSize = androidx.compose.ui.unit.TextUnit(13f, androidx.compose.ui.unit.TextUnitType.Sp),
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+        // The capsule's padding (12 dp a side) and the gap between its label and its line (6 dp) are the rest of its width.
+        val inner = capsule.width - 30f * density
+        val cards = listOf("↑ Task started", "↑ Project started", "↑ Exception item", "↑ From Planner").joinToString("\n") { label ->
+            val width = measurer.measure(label, style).size.width.toFloat()
+            "card label=\"$label\" labelDp=${dp(width)} lineRoomDp=${dp((inner - width).coerceAtLeast(0f))}"
+        }
+        File(evidence, "a06f-capsule-$name.txt").writeText(shell("wm size") + shell("wm density") +
+            "windowWidthDp=${dp(compose.onRoot().fetchSemanticsNode().boundsInWindow.width)}\ncapsuleLeftDp=${dp(capsule.left)} capsuleWidthDp=${dp(capsule.width)}" +
+            " capsuleHeightDp=${dp(capsule.height)}\n" + lines.joinToString("\n") + "\n" + cards + "\n")
+    }
+    private fun shell(command: String): String =
+        ParcelFileDescriptor.AutoCloseInputStream(instrument.uiAutomation.executeShellCommand(command)).bufferedReader().use { it.readText() }
+    private fun imeVisible(): Boolean {
+        var shown = false
+        compose.activityRule.scenario.onActivity { shown = ViewCompat.getRootWindowInsets(it.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true }
+        return shown
     }
 
     private fun reviewSession() {
@@ -229,11 +390,11 @@ class TranscriptDeviceTest {
         assertTrue("Around endpoint must preserve the gap", compose.onAllNodesWithText("Jump to latest").fetchSemanticsNodes().isNotEmpty())
         // A05 toolbar/system back must return to the original reader, then the directory.
         instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Session options").fetchSemanticsNodes().isNotEmpty() }
+        awaitActions()
         compose.onNodeWithContentDescription("Back").performClick()
         awaitText("Long conversation")
         compose.onNodeWithText("Long conversation").performClick()
-        awaitText("Session options")
+        awaitActions()
         control("{\"denial\":403}")
         compose.runOnIdle { app.realtime.refreshSession() }
         awaitText("Session unavailable")
@@ -242,7 +403,7 @@ class TranscriptDeviceTest {
         control("{\"denial\":0}")
         compose.onNodeWithText("Retry").performClick()
         compose.waitUntil(15_000) { app.realtime.state.value.session?.fresh == true }
-        compose.onNodeWithText("Session options").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Session actions").assertIsDisplayed().assertIsEnabled()
     }
 
     @Test fun toolOutputWorktreeAndSubagentReading() = journey("tools") {
@@ -269,14 +430,21 @@ class TranscriptDeviceTest {
         compose.onNodeWithText("Close subagent transcript").assertIsDisplayed()
         capture("subagent")
         compose.onNodeWithText("Close subagent transcript").performClick()
-        compose.onNodeWithText("Long conversation").performClick()
+        // Session details are the ⋯ menu's since A06-18 (the session's name under the bar opened them).
+        compose.onNodeWithContentDescription("Session actions").performClick()
+        compose.onNode(hasText("Session details") and hasAnyAncestor(isPopup()) and hasClickAction()).performClick()
         compose.onNodeWithText("View changed files and diff").performClick()
         awaitText("reader.kt")
         capture("diff")
         compose.onNodeWithText("Close diff").performClick()
         compose.onNodeWithTag("session-details").performScrollToNode(hasText("BUILD SUCCESSFUL", substring = true))
         compose.onNodeWithText("BUILD SUCCESSFUL", substring = true).assertIsDisplayed()
-        compose.onNodeWithTag("session-details").performScrollToNode(hasText("Checking references"))
+        // An agent is named by its kind and opens to its progress rather than output (iOS's background rows, A06c).
+        compose.onNodeWithTag("session-details").performScrollToNode(hasText("Review documentation"))
+        compose.onNodeWithText("Agent").assertIsDisplayed()
+        compose.onNodeWithTag("session-details").performScrollToNode(hasText("Show progress"))
+        compose.onNodeWithText("Show progress").performClick()
+        compose.onNodeWithTag("session-details").performScrollToNode(hasText("No progress reported yet."))
         capture("background-work")
         compose.onNodeWithText("Close session details").performClick()
     }
@@ -394,10 +562,10 @@ class TranscriptDeviceTest {
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
         assertTrue(app.session.state.value is AuthState.SignedOut)
         control("{\"reset\":true}")
-        compose.onNodeWithText("Instance address").performTextReplacement(server)
-        compose.onNodeWithText("Email").performTextInput("a06@example.test")
-        compose.onNodeWithText("Password").performTextInput("a06-fixture-password")
-        compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
+        compose.chooseServer(server)
+        compose.onNodeWithText("Email").performTextReplacement("a06@example.test")
+        compose.onNodeWithText("Password").performTextReplacement("a06-fixture-password")
+        compose.onNodeWithText("Sign In").performScrollTo().performClick()
         compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
     }
     private fun openSession() {
@@ -420,6 +588,10 @@ class TranscriptDeviceTest {
         val top = bounds.top + location[1]
         File(evidence, "screen-positions.txt").appendText("windowTop=${bounds.top} decorY=${location[1]} screenTop=$top\n")
         return top
+    }
+    /** The reader is up: the session's ⋯ in the bar (A05-3) has its session to act on. */
+    private fun awaitActions() {
+        compose.waitUntil(15_000) { compose.onAllNodes(hasContentDescription("Session actions") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
     }
     private fun awaitText(text: String, substring: Boolean = false) {
         compose.waitUntil(15_000) { compose.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty() }

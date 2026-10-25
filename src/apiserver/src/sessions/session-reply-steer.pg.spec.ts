@@ -87,7 +87,7 @@ const HOUR = 60 * 60 * 1000;
 const ROUTING = [SESSION_CURRENT_WORK_ROUTING_V1];
 
 /** How a block delivered by a steer says it joined the turn the asker is in. */
-const STEER_HEAD = '你正在工作，所以这条回信加进了你当前这一轮，没有为它另开一轮。';
+const STEER_HEAD = 'You are working, so this reply was added to the turn you are in; no turn was opened for it.';
 
 /** A collaborator whose every method answers nothing: the broadcasts a turn's enqueue fires. */
 const silent = (): unknown =>
@@ -197,9 +197,21 @@ test('an outcome handed back to an asker running a turn is written into that tur
     );
   }
 
+  /**
+   * The claim's own write, as the runner's lease routes make it: PENDING -> RUNNING is dropped in
+   * silence for a session that has a recorded engine unless the same transaction declares it reads
+   * that engine (migration 0414, `common/session-scheduling.ts`).
+   */
+  async function claimSession(sessionId: string): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+      await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    });
+  }
+
   /** The claim, then the polls after it until a message comes out (a control turn is answered on the spot). */
   async function deliver(sessionId: string): Promise<{ turnId: string; content: string; clientTurnId: string }> {
-    await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    await claimSession(sessionId);
     for (;;) {
       const handed = await (api as unknown as {
         dequeueTurn: (sessionId: string, runnerId: string, leaseGeneration: string | null) => Promise<Record<string, unknown> | null>;
@@ -364,7 +376,7 @@ test('an outcome handed back to an asker running a turn is written into that tur
     assert.equal(handed.turnId, steer.id);
     assert.equal(handed.targetTurnId, running);
     assert.equal(blocksFor(handed.content, request.id), 1);
-    assert.match(handed.content, /回复：yes, shard 3 is migrated/);
+    assert.match(handed.content, /Reply: yes, shard 3 is migrated/);
     assert.ok(handed.content.includes(STEER_HEAD), handed.content);
     assert.equal(handed.content, active.content);
     assert.equal(handed.content, queued.content);
@@ -583,7 +595,7 @@ test('an outcome handed back to an asker running a turn is written into that tur
     const back = await deliver(asker);
     assert.equal(back.turnId, again.id);
     assert.equal(blocksFor(back.content, request.id), 1);
-    assert.match(back.content, /回复：take it/);
+    assert.match(back.content, /Reply: take it/);
   });
 
   // ── 31. an interrupt ────────────────────────────────────────────────────────────────────────────
@@ -626,6 +638,57 @@ test('an outcome handed back to an asker running a turn is written into that tur
     await finish(asker, next.turnId);
     await sessions.createTurn(ownerId, asker, { clientTurnId: randomUUID(), content: 'thanks' });
     assert.equal(blocksFor((await deliver(asker)).content, request.id), 0);
+  });
+
+  await t.test('a Stop overtakes a reply steer the runner took before the engine read it: the outcome is held, and said on the next delivered turn', async () => {
+    // Whichever runner is on the other end: one that hands the unread steer back, and one that reports
+    // it undelivered (owner, 2026-10-16). Neither opens a turn after the Stop to say the outcome.
+    for (const report of ['hands it back', 'reports it undelivered'] as const) {
+      const asker = await session(`Coordinator: stopped while an answer waits to be read (${report})`);
+      const recipient = await session('Worker: answers');
+      const request = await ask(asker, recipient, 'go or no-go?');
+      const running = await busy(asker);
+      await reply(recipient, request.requestId, 'go');
+      const [steer] = await replyTurnsOf(asker);
+      assert.equal(steer.kind, 'steer');
+      assert.equal((await deliverSteer(asker)).turnId, steer.id);
+
+      await sessions.interrupt(ownerId, asker);
+      const stop = await (api as unknown as {
+        dequeueTurn: (
+          sessionId: string, runnerId: string, leaseGeneration: string | null, acceptsSteer: boolean,
+          declaredCapabilities: readonly string[],
+        ) => Promise<Record<string, unknown> | null>;
+      }).dequeueTurn.call(api, asker, runnerId, null, true, ROUTING);
+      assert.equal(stop?.kind, 'interrupt');
+      if (report === 'hands it back') await requeueSteer(asker, steer.id);
+      else await settleSteer(asker, steer.id, false);
+      await say(asker, running, RunEventType.INTERRUPT, { requestId: `stop-${asker}` });
+      await api.turnComplete({ id: runnerId } as never, asker, {
+        turnId: running, status: SharedRunStatus.INTERRUPTED, subtype: 'error_during_execution', numTurns: 1, costUsd: 0,
+      } as never);
+
+      const dropped = await turnRow(steer.id);
+      assert.deepEqual(
+        [dropped.kind, dropped.status, dropped.deliveryStatus, dropped.deliveryFailureCode],
+        ['steer', 'ANSWERED', 'FAILED', 'CURRENT_WORK_INTERRUPTED'],
+      );
+      const held = await requestRow(request.id);
+      assert.equal(held.replyClientTurnId, null);
+      assert.ok(held.replyHeldAt, `the outcome was not held on its request row (${report})`);
+      assert.deepEqual((await worker.drain()).handedOff, [], `the worker queued it again, after a stop (${report})`);
+      assert.equal(await queuedExecutables(asker), 0);
+      assert.equal(await statusOf(asker), RunStatus.AWAITING_INPUT);
+
+      // The asker's next turn — the owner's own message — says it, once.
+      const ownerKey = randomUUID();
+      await sessions.createTurn(ownerId, asker, { clientTurnId: ownerKey, content: 'what did the worker say?' });
+      const next = await deliver(asker);
+      assert.equal(next.clientTurnId, ownerKey);
+      assert.equal(blocksFor(next.content, request.id), 1);
+      assert.ok(!next.content.includes(STEER_HEAD), next.content);
+      assert.equal((await requestRow(request.id)).replyClientTurnId, ownerKey);
+    }
   });
 
   // ── 32. the auto-retry ─────────────────────────────────────────────────────────────────────────
@@ -675,7 +738,7 @@ test('an outcome handed back to an asker running a turn is written into that tur
     assert.equal(back.turnId, resent[0].id);
     assert.ok(back.content.startsWith('keep rebuilding the index'), back.content);
     assert.equal(blocksFor(back.content, request.id), 1);
-    assert.match(back.content, /回复：rebuilt/);
+    assert.match(back.content, /Reply: rebuilt/);
     assert.equal((await requestRow(request.id)).replyClientTurnId, resent[0].clientTurnId);
   });
 });

@@ -4,7 +4,9 @@
 
 import { WIKI_MAINTENANCE_RULES, type WikiCursorOutcome } from './wiki';
 import type { WikiMaintenanceFailureKind, WikiMaintenanceHeldReason } from './wikiMaintain';
+import type { WikiExecutorView } from './wikiJobs';
 import type { WikiRepoLook } from './wikiRepoOps';
+import type { WikiSystemModelStatus } from './wikiSystemModel';
 
 /**
  * The looks the status line's maintenance part takes, in the order they win: the first that holds is
@@ -36,16 +38,19 @@ export interface WikiMaintenanceHealth {
   dailyLimitReached: boolean;
   /** Why the last fact that found the space due made no task, and when; null once one is made. */
   held: { reason: WikiMaintenanceHeldReason; at: string } | null;
-  /** The run under way: started, not ended, its task not ended. */
-  running: { sessionId: string | null; startedAt: string } | null;
-  /** The run that ended last, and how: what the status line's View run opens. */
-  lastRun: { sessionId: string | null; outcome: WikiCursorOutcome | null; endedAt: string } | null;
+  /**
+   * The run under way: started, not ended, its task not ended. `jobId` is the server's job that runs it (P8),
+   * null for a run of a maintenance session — and absent from a control plane older than P9.
+   */
+  running: { sessionId: string | null; jobId?: string | null; startedAt: string } | null;
+  /** The run that ended last, and how: what the status line's View run opens — its session, or its job's row on Activity. */
+  lastRun: { sessionId: string | null; jobId?: string | null; outcome: WikiCursorOutcome | null; endedAt: string } | null;
   /**
    * Of the runs whose latest attempt failed or was truncated, the one that ended last: whose failure it was
    * (`infra` or `content`, contract `maintenance.job.recovery.failureKinds`) and why, so a client can tell
    * the platform failing from the run failing. Null while no run's latest attempt failed.
    */
-  lastFailure: { kind: WikiMaintenanceFailureKind; reason: string | null; at: string; sessionId: string | null } | null;
+  lastFailure: { kind: WikiMaintenanceFailureKind; reason: string | null; at: string; sessionId: string | null; jobId?: string | null } | null;
 }
 
 /**
@@ -53,11 +58,14 @@ export interface WikiMaintenanceHealth {
  * run on the server, which holds no repository, so they ask the machine the space's workspace runs on — and
  * this is whether that machine can be asked. `look` is the one word the status line needs:
  *
- *   ready            the workspace's runner is there, beating, and has declared `wiki-repo-op/v1`;
+ *   ready            the workspace's runner is there, beating, and reads whole files (`wiki-repo-op-read/v1`);
  *   no_workspace     the space names no workspace, or the one it names is gone or has no working directory;
  *   runner_missing   the workspace is not bound to a machine;
  *   runner_offline   the machine is not beating;
- *   runner_upgrade   the machine is beating but is too old to be given repository work — upgrade it.
+ *   runner_upgrade   the machine is beating but has to be upgraded: without `wiki-repo-op/v1` it cannot be
+ *                    handed repository work at all, and with only that (no `wiki-repo-op-read/v1`) it reads the
+ *                    old bounded window instead of whole files — the steps still run, cut short. The wire
+ *                    carries the one word; which of the two it is, the server reads for itself.
  */
 export interface WikiSpaceRepoHealth {
   look: WikiRepoLook;
@@ -79,6 +87,13 @@ export interface WikiSpaceHealth {
    * no repository reads `ready` with no pending work.
    */
   repo?: WikiSpaceRepoHealth;
+  /**
+   * Whether the server executes this account's wiki (contract `jobs.executor.read`, P9), and the System model it
+   * calls while it does — `GET /api/wiki/system-model`'s state, null under runner. Both are what the status line's
+   * server reasons are said from; absent from a control plane older than P9, which reads as runner.
+   */
+  executor?: WikiExecutorView;
+  systemModel?: WikiSystemModelStatus | null;
 }
 
 /**

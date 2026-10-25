@@ -46,7 +46,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
-import { OPEN_ITEM_TURN_PREFIX } from '../projects/project-open-item';
+import { OPEN_ITEM_TURN_PREFIX, OWNER_ANSWER_TURN_PREFIX } from '../projects/project-open-item';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PROJECT_STARTED_TURN_PREFIX, tellCoordinatorProjectStarted } from '../projects/project-started';
 import type { PushService } from '../push/push.service';
@@ -76,6 +76,7 @@ const SHA = 'c3'.repeat(20);
  *  added there is a compile error here until it is listed, and then a red below until it has a case. */
 const CARD_FIELDS: Record<keyof TurnCards, true> = {
   openItemDelivery: true,
+  ownerAnswer: true,
   taskStart: true,
   projectStarted: true,
   confirmationReviewRequest: true,
@@ -330,6 +331,21 @@ test('a waiting turn is listed with the cards its echo is stored with, in both v
     await openItems.deliver(item.id);
     const delivery = await turnKeyed(coordinator, OPEN_ITEM_TURN_PREFIX);
     await assertSameCards('openItemDelivery', coordinator, delivery.id, { ahead, listedWhileHanded: true });
+  });
+
+  // ── ownerAnswer ───────────────────────────────────────────────────────────────────────────────
+
+  await t.test('the owner\'s answer told to the coordinator that asked (ownerAnswer)', async () => {
+    const { projectId, coordinator } = await coordinatedProject('the project whose coordinator asked');
+    const asked = await openItems.askOwner(ownerId, projectId, coordinator, {
+      question: 'Merge now, or wait for the review?',
+      options: [{ label: 'Merge now' }, { label: 'Wait for the review' }],
+      clientQuestionId: randomUUID(),
+    });
+    const ahead = await ownerSays(coordinator, 'the owner goes first');
+    await openItems.answerOpenItem(ownerId, projectId, asked.itemId, { option: 1 });
+    const told = await turnKeyed(coordinator, OWNER_ANSWER_TURN_PREFIX);
+    await assertSameCards('ownerAnswer', coordinator, told.id, { ahead, listedWhileHanded: true });
   });
 
   // ── taskStart ─────────────────────────────────────────────────────────────────────────────────

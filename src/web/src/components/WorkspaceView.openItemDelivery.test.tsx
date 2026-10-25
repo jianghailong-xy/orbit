@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OpenItemDeliveryCard as Delivery } from '@orbit/shared';
@@ -83,7 +82,9 @@ const CARD: Delivery = {
   check: null,
   errorCode: null,
   failure: null,
-  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+  // A conflict's cell holds no rerun door (`decideIntegrationRetry` refuses one), so the server
+  // lists none here: the card is what the server sends, and `Retry the task` is not in it.
+  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'CANCEL_TASK'],
   landing: { receipts: 0, state: 'NOT_KNOWN', upstream: 'main', integration: 'main' },
 };
 
@@ -260,9 +261,7 @@ async function mountSession(): Promise<void> {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
-          <AntApp>
-            <WorkspaceView runner={RUNNER} />
-          </AntApp>
+          <WorkspaceView runner={RUNNER} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -304,9 +303,8 @@ describe('an exception item’s delivery, on its way into the transcript', () =>
     const placeholder = cardFields(card()!);
     expect(placeholder.title).toBe(CARD.title);
     expect(placeholder.files).toEqual(CARD.files);
-    expect(placeholder.doors).toEqual([
-      'Retry the task', 'Cancel the task',
-    ]);
+    // The server lists no rerun for a conflict, so the card offers only the quiet door that stops it.
+    expect(placeholder.doors).toEqual(['Cancel the task']);
 
     // …and then the runner leases the turn and echoes it, carrying the same card the ingest path
     // recorded (withOpenItemDelivery). Nothing about the delivery may change shape at that moment.
@@ -348,12 +346,14 @@ describe('an exception item’s delivery, on its way into the transcript', () =>
     expect(line.querySelector('.chat-queued-tag')?.textContent).toBe('Queued for next turn');
     expect([...line.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Cancel']);
 
-    // The negative control: a turn that is not a delivery is drawn exactly as it always was, from
-    // its own words — the card is read off the payload, never off what the text looks like.
-    const bubbles = mounted().querySelectorAll<HTMLElement>('.chat-msg.chat-user.chat-queued');
-    expect(bubbles).toHaveLength(1);
-    expect(bubbles[0].querySelector('.md')?.textContent?.trim()).toBe(TYPED);
-    expect(bubbles[0].querySelector('.oic')).toBeNull();
+    // The negative control: a turn that is not a delivery is the reader's own message, waiting in
+    // the tray above the composer as its words — the card is read off the payload, never off what
+    // the text looks like.
+    expect(mounted().querySelectorAll('.chat-msg.chat-user.chat-queued')).toHaveLength(0);
+    const rows = mounted().querySelectorAll<HTMLElement>('.pending-tray-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector('.pending-tray-text')?.textContent).toBe(TYPED);
+    expect(rows[0].querySelector('.oic')).toBeNull();
     expect(
       [...mounted().querySelectorAll('.chat-user')].some((bubble) =>
         bubble.textContent?.includes('【例外待办】')),
@@ -378,7 +378,7 @@ describe('an exception item’s delivery, on its way into the transcript', () =>
     expect(cardFields(card()!), 'the delivery redrew itself as it left the queue').toEqual(waiting);
     expect(mounted().querySelectorAll('.oic')).toHaveLength(1);
     expect(
-      mounted().querySelectorAll('.chat-msg.chat-user.chat-queued'),
+      mounted().querySelectorAll('.pending-tray-row'),
       'the message typed behind it is still waiting its turn',
     ).toHaveLength(1);
   });

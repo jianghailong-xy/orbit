@@ -1,0 +1,24 @@
+/usr/local/bin/ctr
+io.containerd.content.v1.content
+io.containerd.grpc.v1.introspection
+io.containerd.metadata.v1.bolt
+io.containerd.runtime.v2.task
+io.containerd.sandbox.controller.v1.shim
+io.containerd.snapshotter.v1.blockfile
+io.containerd.snapshotter.v1.erofs
+io.containerd.snapshotter.v1.native
+io.containerd.snapshotter.v1.overlayfs
+tmpmounts
+2160 MiB /var/lib/docker/containerd/daemon/io.containerd.content.v1.content
+17572 MiB /var/lib/docker/containerd/daemon/io.containerd.snapshotter.v1.overlayfs
+264
+ID                                                               CREATED AT           LABELS                                                                                                       
+041n9aav8rw5nc1kt1f1z476j                                        2026-10-17T13:23:58Z containerd.io/gc.flat=2026-10-17T13:23:58.114952062Z                                                         
+041n9aav8rw5nc1kt1f1z476j-variants                               2026-10-17T13:23:59Z -                                                                                                            
+041n9aav8rw5nc1kt1f1z476j-view                                   2026-10-17T13:41:51Z buildkit/lease.temporary=2026-10-17T13:41:51.258786016Z,containerd.io/gc.flat=2026-10-17T13:41:51.258779189Z 
+04ascuyzhm727jawjujqq2btm                                        2026-10-17T14:10:34Z containerd.io/gc.flat=2026-10-17T14:10:34.072292652Z                                                         
+TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
+Images          7         5         4.564GB   1.996GB (43%)
+Containers      8         8         2.834MB   0B (0%)
+Local Volumes   4         4         4.076MB   0B (0%)
+Build Cache     132       0         15.94GB   12.81GB

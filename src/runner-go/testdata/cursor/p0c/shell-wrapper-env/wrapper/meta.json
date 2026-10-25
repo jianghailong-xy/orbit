@@ -1,0 +1,73 @@
+{
+ "scenario": "shell-wrapper-env",
+ "process": "wrapper",
+ "version": "2026.10.14-941492e",
+ "exit": null,
+ "actions": [
+  {
+   "t": 22302,
+   "channel": "spawn",
+   "value": {
+    "args": [
+     "-f",
+     "-qq",
+     "-e",
+     "trace=execve",
+     "-o",
+     "<RUN>/turn.strace",
+     "<CLI>/cursor-agent",
+     "acp"
+    ],
+    "cwd": "<RUN>/work",
+    "envKeys": [
+     "AGENT_CLI_CREDENTIAL_STORE",
+     "CURSOR_AGENT_DISABLE_DEBUG_LOG",
+     "CURSOR_API_KEY",
+     "CURSOR_AUTH_TOKEN",
+     "CURSOR_CONFIG_DIR",
+     "CURSOR_DATA_DIR",
+     "DIRENV_DISABLE",
+     "HOME",
+     "LANG",
+     "LOGNAME",
+     "NO_OPEN_BROWSER",
+     "ORBIT_P0_CANARY",
+     "PATH",
+     "SHELL",
+     "TERM",
+     "USER"
+    ]
+   }
+  },
+  {
+   "t": 22302,
+   "channel": "client->agent",
+   "id": 1,
+   "method": "initialize"
+  },
+  {
+   "t": 22833,
+   "channel": "client->agent",
+   "id": 2,
+   "method": "session/new"
+  },
+  {
+   "t": 32086,
+   "channel": "client->agent",
+   "id": 3,
+   "method": "session/prompt"
+  },
+  {
+   "t": 36750,
+   "channel": "client->agent",
+   "id": 0,
+   "method": null
+  },
+  {
+   "t": 38798,
+   "channel": "client->agent",
+   "id": 1,
+   "method": null
+  }
+ ]
+}

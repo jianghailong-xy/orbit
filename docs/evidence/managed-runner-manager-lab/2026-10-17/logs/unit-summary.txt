@@ -1,0 +1,16 @@
+✔ DockerBackend words the channel's failures for the manager (0.176771ms)
+✔ the channel client speaks to the channel's socket with its token, and tells a refusal from no answer (226.876684ms)
+✔ a Pod patch is a JSON Patch of that one Pod, and a test that does not hold is the API server's refusal (0.227068ms)
+✔ nothing listening: the API server was never reached (23.230614ms)
+✔ a connection reset before the TLS session is up, as a VM's port forward does while its guest boots: never reached (4.106038ms)
+✔ a connection that never gets its TLS session within the deadline: never reached (301.874801ms)
+✔ once the TLS session is up, a request that gets no answer may have been applied: ambiguous, not unreachable (306.321673ms)
+✔ an answer comes back as it was sent (3.481466ms)
+✔ a Pod deleted by anyone stays, ended, with its kubelet's report, until the manager takes its finalizer off (21.484685ms)
+✔ a successful run whose work never reached its branch says so on the task (0.919018ms)
+✔ the model sees just this turn, and the answer comes back sanitized (0.451408ms)
+✔ a run that never reached the COMPLETED lifecycle, or was trashed, is not evidence (0.185025ms)
+ℹ tests 5325
+ℹ pass 5325
+ℹ fail 0
+ℹ skipped 0

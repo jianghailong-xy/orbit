@@ -1,0 +1,58 @@
+[
+ {
+  "round": 1,
+  "step": "Enter",
+  "at": "div[menuitem]",
+  "name": "mainselected",
+  "menuOpen": true
+ },
+ {
+  "round": 1,
+  "step": "ArrowDown",
+  "at": "div[menuitem]",
+  "name": "develop",
+  "menuOpen": true
+ },
+ {
+  "round": 1,
+  "step": "Tab",
+  "at": "input",
+  "name": "Search branches…",
+  "menuOpen": true
+ },
+ {
+  "round": 1,
+  "step": "Escape",
+  "at": "button",
+  "name": "Choose a branch to merge into",
+  "menuOpen": false
+ },
+ {
+  "round": 2,
+  "step": "Enter",
+  "at": "div[menuitem]",
+  "name": "mainselected",
+  "menuOpen": true
+ },
+ {
+  "round": 2,
+  "step": "ArrowDown",
+  "at": "div[menuitem]",
+  "name": "develop",
+  "menuOpen": true
+ },
+ {
+  "round": 2,
+  "step": "Tab",
+  "at": "input",
+  "name": "Search branches…",
+  "menuOpen": true
+ },
+ {
+  "round": 2,
+  "step": "Escape",
+  "at": "button",
+  "name": "Choose a branch to merge into",
+  "menuOpen": false
+ }
+]

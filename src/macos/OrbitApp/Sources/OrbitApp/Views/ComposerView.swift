@@ -22,8 +22,8 @@ private final class ComposerPasteState {
 
 /// The composer band: everything below the transcript that belongs to the message you're about to
 /// send — the error strip, staged attachments, the background tray, the git bar, and the composer
-/// itself. ONE place owns the band's 16pt gutter, its top rule, and the 8pt rhythm between its
-/// members (web parity: `.workspace-composer` — a `border-top`-only container whose children each
+/// itself. ONE place owns the band's 16pt gutter and the 8pt rhythm between its members (web
+/// parity: `.workspace-composer` — a container with no surface and no rule whose children each
 /// carry `margin-bottom: 8px`). Before this existed every member padded itself and the
 /// stack drifted: the git bar had picked up a stray 4pt top padding nobody else had, so the gap
 /// above it was 12 where the tray's was 8, and the whole stack's top edge jumped 4pt whenever a
@@ -40,28 +40,16 @@ struct ComposerBand<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) { content }
             .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 10)
-            // NO surface of its own — the band is defined by its top rule alone (web parity:
-            // `.workspace-composer` sets `border-top` and nothing else). A `.bar` fill here reads as
-            // a grey panel behind the tray and the git bar, which web has nowhere; the two cards and
-            // the composer box each already carry their own fill + border, so they stand on the
-            // content backdrop exactly as they do on the web. (`.bar` used to sit on `ComposerView`,
-            // covering only the field and its footer — hoisting it to the band is what spread it.)
+            .padding(.bottom, .composerBandFoot)
+            // NO surface of its own (web parity: `.workspace-composer` has none). A `.bar` fill here
+            // reads as a grey panel behind the tray and the git bar, which web has nowhere; the two
+            // cards and the composer box each already carry their own fill + border, so they stand on
+            // the content backdrop exactly as they do on the web. (`.bar` used to sit on
+            // `ComposerView`, covering only the field and its footer — hoisting it to the band is what
+            // spread it.)
             //
-            // Full-bleed hairline (so it can't be inset by the gutter above) marking where the
-            // transcript ends. Wrapped in a stack to give the rule a horizontal axis — a bare
-            // `Divider()` in a background draws as a VERTICAL line down the middle instead (same fix
-            // as the sticky question header's bottom rule). BEHIND the content, not over it: nothing
-            // in the band reaches its top edge (the 12pt padding keeps it clear), but the composer's
-            // floating `/` menu crosses it, and as an overlay the hairline drew a seam across that card.
-            .background(alignment: .top) { VStack(spacing: 0) { Divider() } }
-            // Clearance ABOVE the rule (web's `.workspace-composer { margin-top: 8px }`) — applied
-            // after the background so it pads the band outward and leaves the hairline on the
-            // content's edge. Without it the rule sat ~7pt under the last transcript row (its 6pt
-            // inset + the 1pt tail anchor) while web gives the same bubble 16 (8pt message margin +
-            // this 8), so the tail — a reply, or the working dots — read as crowding the line.
-            .padding(.top, 8)
+            // No top rule and no clearance above the first member either: what scrolls above the band
+            // fades out into it (`fadesIntoComposerBand`), and keeps that room under its own last row.
     }
 }
 
@@ -81,10 +69,124 @@ extension EnvironmentValues {
     }
 }
 
+/// Whether a view stands in a composer band that floats over the transcript (iOS 26,
+/// `ConsoleView.transcriptAndBand`), with the rows passing behind it — where a card washed with a
+/// faint tint has to be glass instead (`composerBandWash`).
+private struct FloatsOverTranscriptKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var floatsOverTranscript: Bool {
+        get { self[FloatsOverTranscriptKey.self] }
+        set { self[FloatsOverTranscriptKey.self] = newValue }
+    }
+}
+
+private struct ComposerBandWash: ViewModifier {
+    @Environment(\.floatsOverTranscript) private var floats
+    let tint: Color
+    let opacity: Double
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10)
+        #if os(iOS)
+        if #available(iOS 26.0, *), floats {
+            content.glassEffect(.regular.tint(tint.opacity(0.22)), in: shape)
+        } else {
+            content.background(tint.opacity(opacity), in: shape)
+        }
+        #else
+        content.background(tint.opacity(opacity), in: shape)
+        #endif
+    }
+}
+
 extension CGFloat {
     /// The one vertical gap between `ComposerBand` members. Read it, don't retype it — the drift it
     /// replaces was four hand-written literals that stopped agreeing.
     static let composerBandGap: CGFloat = 8
+    /// How far a scroll view fades out above the composer band — and the room it keeps clear under
+    /// its last row, so at rest nothing sits in the fade. See `fadesIntoComposerBand`.
+    static let composerBandFade: CGFloat = 20
+    /// The band's foot: the room it keeps under its last member, the composer or its folded bar.
+    static let composerBandFoot: CGFloat = 10
+}
+
+extension View {
+    /// The bottom edge of a scroll view that ends at the composer band (web: the conversation's
+    /// `.workspace-sessions` mask). The band draws no rule, so a row cut off at the edge dissolves
+    /// into it instead of being sliced through. The scroll view keeps `composerBandFade` of room
+    /// under its last row, so the fade only covers rows on their way out of view. The trailing 16pt
+    /// — the rows' own inset, where the scroller runs — stays out of it, so a scroller resting at
+    /// the bottom keeps its whole knob (web keeps its scrollbar gutter out the same way).
+    func fadesIntoComposerBand() -> some View {
+        mask {
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    Color.black
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                        .frame(height: .composerBandFade)
+                }
+                Color.black.frame(width: 16)
+            }
+            #if os(iOS)
+            // On up behind the nav bar. The scroll view runs on up there — its frame starts at the top
+            // of the screen, its content inset by the bar — and what passes behind the bar is the
+            // bar's to soften (iOS 26's scroll-edge effect), not this mask's to cut. Sized to the
+            // layout frame alone, which stops at the bar, it sliced every row off at the bar's lower
+            // edge and left a blank strip behind the glass (the owner, 2026-10-16).
+            .ignoresSafeArea(.container, edges: .top)
+            #endif
+        }
+    }
+
+    /// The surface of a card that stands in the composer band: the tray, the git bar, Tasks created
+    /// here, Watching. On iOS 26 the console's band floats over the transcript, which runs on under it
+    /// (`ConsoleView.transcriptAndBand`), so the card is Liquid Glass — the faint fill would let the
+    /// rows passing behind read straight through it. Elsewhere it stands on the bare content backdrop
+    /// as it always has: a faint fill and a hairline.
+    @ViewBuilder func composerBandCard(cornerRadius: CGFloat = 8) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius)
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            clipShape(shape).glassEffect(.regular, in: shape)
+        } else {
+            background(Color.primary.opacity(0.04), in: shape).clipShape(shape)
+                .overlay(shape.strokeBorder(Color.primary.opacity(0.1)))
+        }
+        #else
+        background(Color.primary.opacity(0.04), in: shape).clipShape(shape)
+            .overlay(shape.strokeBorder(Color.primary.opacity(0.1)))
+        #endif
+    }
+
+    /// A card the composer band shows now and then, washed with what it says — a run that never
+    /// started, an engine to repair, a hand-off, the managed runner's state. Where the band floats over
+    /// the transcript (`floatsOverTranscript`) it is glass tinted that colour, as the toasts are
+    /// (`ToastHost`), for the reason `composerBandCard` gives (the owner, 2026-10-16: these too).
+    /// Anywhere else — the Runners and Tasks pages, an error row in the transcript — it keeps the faint
+    /// wash it always had.
+    func composerBandWash(_ tint: Color, opacity: Double) -> some View {
+        modifier(ComposerBandWash(tint: tint, opacity: opacity))
+    }
+
+    /// The composer card's own surface, under its hairline: an elevated fill with a soft drop shadow
+    /// that lifts a touch on focus — or, on iOS 26, glass, for the reason `composerBandCard` gives.
+    @ViewBuilder fileprivate func composerCardSurface(cornerRadius: CGFloat, focused: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            glassEffect(.regular, in: shape)
+        } else {
+            background(shape.fill(Color.editorSurface)
+                .shadow(color: .black.opacity(focused ? 0.12 : 0.06), radius: focused ? 7 : 4, y: 1.5))
+        }
+        #else
+        background(shape.fill(Color.editorSurface)
+            .shadow(color: .black.opacity(focused ? 0.12 : 0.06), radius: focused ? 7 : 4, y: 1.5))
+        #endif
+    }
 }
 
 struct ComposerView: View {
@@ -117,7 +219,7 @@ struct ComposerView: View {
     @State private var pickedPhotos: [PhotosPickerItem] = []
     #endif
 
-    // The models of the current provider, in catalog order (Opus → Haiku). The model control's
+    // The models of the current engine and provider, in catalog order (Opus → Haiku). The model control's
     // menu is `.menuOrder(.fixed)`, so they read top to bottom in this order on both platforms —
     // the web menu's order — rather than being reversed when iOS opens the menu upward.
     private var modelMenuItems: [ModelOption] {
@@ -126,19 +228,29 @@ struct ComposerView: View {
                 id: console.modelID,
                 name: console.isDraft ? "Runtime default" : console.modelID)]
         }
-        // `providerChoice`: on OpenCode with a configured key, that key's models (`OpenCodeKeys`).
-        var models = AgentDefaults.models(for: console.providerChoice, catalog: console.modelCatalog,
+        // The pair's model space: a key brings its own table to every engine that runs it, OpenCode
+        // included, and DeepSeek Harness lists its runner's catalogue whichever key it spends.
+        var models = AgentDefaults.models(engine: console.engine, provider: console.provider,
+                                          catalog: console.modelCatalog,
                                           configured: console.configuredProviders)
         // A Runtime may report a valid default that has not appeared in its catalog yet. Preserve
         // it as a selectable row so choosing another model does not make the original unreachable.
-        if !models.contains(where: { $0.id == console.modelID }) {
+        if !models.contains(where: { $0.id == menuModelID }) {
             models.insert(ModelOption(
-                id: console.modelID,
-                name: AgentDefaults.friendlyName(console.modelID, for: console.providerChoice,
+                id: menuModelID,
+                name: AgentDefaults.friendlyName(menuModelID, engine: console.engine,
+                                                  provider: console.provider,
                                                   catalog: console.modelCatalog,
                                                   configured: console.configuredProviders)), at: 0)
         }
         return models
+    }
+
+    /// The model row the session is on: its model value, except that a Cursor CLI variant carries its
+    /// settings beside the model (`claude-opus-5-5[context=1m]`), which the Context and Speed rows say.
+    private var menuModelID: String {
+        console.engine == CursorRuntime.engine
+            ? CursorRuntime.pick(console.modelID, catalog: console.modelCatalog).model : console.modelID
     }
 
     /// Every mode, on every engine. A mode this engine cannot honor is still the user's stored
@@ -161,17 +273,18 @@ struct ComposerView: View {
     }
 
     private func modeSupported(_ mode: PermissionMode) -> Bool {
-        AgentDefaults.isSupported(mode, provider: console.provider, configured: console.configuredProviders)
+        AgentDefaults.isSupported(mode, engine: console.engine)
     }
 
     /// Keep a stored project-defined OpenCode variant visible until a catalog explicitly says it
-    /// is incompatible. This mirrors the model picker's preservation of non-catalog values.
+    /// is incompatible. This mirrors the model picker's preservation of non-catalog values. The
+    /// engine's vocabulary, never the provider slug's: a key on Codex's protocol offers Codex's levels.
     private var effortMenuItems: [Effort] {
-        let options = AgentDefaults.efforts(for: console.provider, model: console.modelID,
-                                            catalog: console.modelCatalog,
+        let options = AgentDefaults.efforts(for: console.engine, provider: console.provider,
+                                            model: console.modelID, catalog: console.modelCatalog,
                                             configured: console.configuredProviders)
         let current = AgentDefaults.normalizedEffort(
-            console.effort, for: console.provider, model: console.modelID,
+            console.effort, for: console.engine, provider: console.provider, model: console.modelID,
             catalog: console.modelCatalog, configured: console.configuredProviders)
         return options.contains(current) ? options : [current] + options
     }
@@ -183,7 +296,18 @@ struct ComposerView: View {
     }
 
     private var placeholder: String {
-        console.replyContext?.placeholder ?? "Message…"
+        // An offered suggestion takes the placeholder's line (`PromptSuggestionLine`).
+        if offeredSuggestion != nil { return "" }
+        // Cursor CLI takes no message mid-turn: one written now waits for the turn to end (contract §3.2).
+        if cursorTurnRunning, console.replyContext == nil { return CursorRuntime.runningPlaceholder }
+        return console.replyContext?.placeholder ?? "Message…"
+    }
+
+    /// A turn of a Cursor CLI session is running now, read off the authoritative record the Stop morph
+    /// reads, or the stream before that record catches up.
+    private var cursorTurnRunning: Bool {
+        guard console.engine == CursorRuntime.engine, !console.isDraft else { return false }
+        return (app.session(id: console.sessionID)?.isGenerating ?? false) || console.sessionStatus == .running
     }
 
     private var showsCompletedResumeNotice: Bool {
@@ -193,6 +317,46 @@ struct ComposerView: View {
             capabilities: session.capabilities
         )
     }
+
+    /// The engine's guess at the next message, when the empty box offers it (`ComposerLogic`,
+    /// docs/prompt-suggestions-design.md §4): the transcript's own `promptSuggestion`, held to the
+    /// same authoritative record the Stop morph reads.
+    private var offeredSuggestion: String? {
+        guard !console.isDraft else { return nil }
+        let session = app.session(id: console.sessionID)
+        return ComposerLogic.offeredPromptSuggestion(
+            console.state.promptSuggestion,
+            session: session?.effectiveRunState,
+            // A message on its way is a turn in flight before the record or the stream says so: the
+            // suggestion it answered must not come back into the box it just left.
+            generating: (session?.isGenerating ?? false) || console.sending || console.awaitingReply,
+            stream: console.state.status,
+            hasText: !console.composerText.isEmpty,
+            hasAttachments: !console.pendingAttachments.isEmpty,
+            replying: console.replyContext != nil,
+            waitingOnReader: !console.state.pendingApprovals.isEmpty
+                || (session?.pendingApprovals ?? 0) > 0 || session?.waitingKind != nil,
+            sendable: console.sendBlockedMessage == nil && console.runnerOnline != false
+                && session?.effectiveLifecycleState == .open)
+    }
+
+    /// Into the box, and the box focused: a guess is where the message starts, not a message sent.
+    /// The person reads it, edits it if they like, and sends it themselves.
+    private func acceptSuggestion() {
+        guard let suggestion = offeredSuggestion else { return }
+        console.composerText = suggestion
+        requestFocus()
+    }
+
+    #if os(iOS)
+    /// A touch screen's way to take it: a double-tap on the field's line (`GrowingTextEditor`), or
+    /// VoiceOver's "Use suggestion". A light tap says it landed.
+    private func useSuggestionByTouch() {
+        guard offeredSuggestion != nil else { return }
+        PlatformHaptics.tap()
+        acceptSuggestion()
+    }
+    #endif
 
     // Whether the composer box should draw its focused ring/shadow. macOS keys off the field's
     // @FocusState; iOS off the UITextView editor's begin/end-editing (mirrored into `composerEditing`).
@@ -263,6 +427,16 @@ struct ComposerView: View {
                 ComposerAttachmentsView(console: console)
 
                 inputField
+                    // The guess sits on the empty field's first line, where the placeholder would.
+                    .overlay(alignment: .topLeading) {
+                        if let suggestion = offeredSuggestion {
+                            #if os(iOS)
+                            PromptSuggestionLine(text: suggestion)
+                            #else
+                            PromptSuggestionLine(text: suggestion, accept: acceptSuggestion)
+                            #endif
+                        }
+                    }
                     .onChange(of: console.slashToken) { _, new in
                         slashIndex = 0
                         if new == nil { console.slashScope = nil }
@@ -286,13 +460,8 @@ struct ComposerView: View {
             // shadow. Focus deepens the border toward the accent and lifts the shadow a touch instead
             // of flipping to a hard blue outline. The corner is `cardRadius` because the toolbar's two
             // round ends sit 8pt in from the edges with their centres 24pt from both — on the
-            // corner's own centre.
-            .background(
-                RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous)
-                    .fill(Color.editorSurface)
-                    .shadow(color: .black.opacity(boxFocused ? 0.12 : 0.06),
-                            radius: boxFocused ? 7 : 4, y: 1.5)
-            )
+            // corner's own centre. On iOS 26 the surface is glass instead (`composerCardSurface`).
+            .composerCardSurface(cornerRadius: Self.cardRadius, focused: boxFocused)
             .overlay {
                 RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous)
                     .strokeBorder(Color.primary.opacity(boxFocused ? 0.22 : 0.10), lineWidth: 1)
@@ -372,7 +541,8 @@ struct ComposerView: View {
     private var inputField: some View {
         #if os(iOS)
         GrowingTextEditor(text: $console.composerText, placeholder: placeholder,
-                          maxLines: 6, isEditing: $console.composerEditing.animation(Self.editingChange))
+                          maxLines: 6, isEditing: $console.composerEditing.animation(Self.editingChange),
+                          suggestion: offeredSuggestion, useSuggestion: useSuggestionByTouch)
             .frame(maxWidth: .infinity)
         #else
         TextField(placeholder, text: $console.composerText, axis: .vertical)
@@ -385,6 +555,13 @@ struct ComposerView: View {
             .onSubmit { onReturn() }
             .onKeyPress(.upArrow) { moveSlash(-1) }
             .onKeyPress(.downArrow) { moveSlash(1) }
+            // Tab takes the offered suggestion, as on the web; with none on offer it moves focus as
+            // it always has. The box is empty whenever one is offered, so no `/` menu is open.
+            .onKeyPress(keys: [.tab]) { press in
+                guard press.modifiers.isEmpty, offeredSuggestion != nil else { return .ignored }
+                acceptSuggestion()
+                return .handled
+            }
             .onKeyPress(.escape) {
                 if showSlash {
                     slashDismissed = console.slashToken
@@ -417,7 +594,9 @@ struct ComposerView: View {
             // default priority took one of those shares while the labels beside it truncated.
             // With room to spare it still takes everything left over.
             Spacer(minLength: 8).layoutPriority(-1)
-            modelMenu
+            // No model to show where a first session cannot start yet: the managed default workspace
+            // before its runner was ever ready (`ConsoleModel.managed`), as on the web.
+            if console.managed?.blocksNewSession != true { modelMenu }
             // A session on an account pool spends one of its accounts at a time: name that account
             // beside the quota, which is that account's own (web parity — the pool's name is the
             // model control's provider row, and says nothing about whose quota this is). Beside
@@ -442,12 +621,15 @@ struct ComposerView: View {
             }
             // Context stays visible even before the first turn reports tokens — a New Session
             // reads 0%. Rightmost gauge, next to Send.
-            if !(console.provider == "opencode" && console.modelID.isEmpty) {
+            if !(console.engine == "opencode" && console.modelID.isEmpty) {
                 ContextWindowIndicator(tokens: console.state.contextTokens ?? 0,
                                        reportedWindow: console.state.contextWindow,
                                        model: console.modelID, provider: console.provider,
                                        modelCatalog: console.modelCatalog,
-                                       configured: console.configuredProviders)
+                                       configured: console.configuredProviders,
+                                       unavailable: console.engine == CursorRuntime.engine
+                                           ? CursorRuntime.contextUnavailable : nil,
+                                       modelLine: console.engine == CursorRuntime.engine ? cursorModelLine : nil)
             }
             sendControls
         }
@@ -464,14 +646,15 @@ struct ComposerView: View {
     @ViewBuilder
     private var sendControls: some View {
         // One primary button that morphs between Send and Stop, mirroring the web composer
-        // (`showStop`): while a turn is running and there's nothing staged to send it's a
-        // Stop (interrupt); the moment the user types a follow-up it becomes Send again so
-        // the message can queue mid-turn. The running check reads the session's AUTHORITATIVE
-        // status (the live control-plane record the nav-bar title uses), not the stream-
-        // derived `console.state.status` — that never reaches `.running` on a cold open of an
-        // already-running session, so the stop affordance used to never appear.
+        // (`showStop`): while a turn is generating — or the session still has work it left
+        // running — and there's nothing staged to send, it's a Stop (interrupt); the moment the
+        // user types a follow-up it becomes Send again so the message can queue mid-turn. The
+        // check reads the session's AUTHORITATIVE record (the live control-plane row the nav-bar
+        // title and status glyph use), not the stream-derived `console.state.status` — that never
+        // reaches `.running` on a cold open of an already-running session, so the stop affordance
+        // used to never appear.
         if ComposerLogic.showsInterrupt(
-            session: app.session(id: console.sessionID)?.effectiveRunStatus,
+            session: app.session(id: console.sessionID),
             stream: console.state.status,
             hasText: !console.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             hasAttachments: !console.pendingAttachments.isEmpty,
@@ -498,7 +681,7 @@ struct ComposerView: View {
             // (`showsInterrupt`).
             #if !os(iOS)
             if ComposerLogic.offersInterruptAndSend(
-                session: app.session(id: console.sessionID)?.effectiveRunStatus,
+                session: app.session(id: console.sessionID),
                 stream: console.state.status,
                 canSend: console.canSend,
                 ordinaryDraft: !ComposerLogic.parseShell(console.composerText).shell
@@ -538,7 +721,30 @@ struct ComposerView: View {
             }
             .buttonStyle(.plain)
             .disabled(!console.canSend)
+            // Held on a phone, right-clicked on a Mac: the other way to send it while a turn runs —
+            // queued for the next turn instead of into this one (decided 2026-10-16,
+            // docs/mocks/steer-tray). The web's ⌥Enter; here ⌥Return is the system's line break.
+            .contextMenu {
+                if queueOffered {
+                    Button {
+                        let status = app.session(id: console.sessionID)?.effectiveRunStatus
+                        Task { await console.send(authoritative: status, queueForNextTurn: true) }
+                    } label: {
+                        Label("Queue for next turn", systemImage: "text.line.last.and.arrowtriangle.forward")
+                    }
+                }
+            }
+            .help(queueOffered ? "Send into the current turn — right-click to queue it for the next turn" : "Send")
         }
+    }
+
+    /// Whether Send can also queue the message for the next turn: a turn is running on an engine that
+    /// would otherwise send it into that turn, and an ordinary message is typed (a `!cmd` always waits).
+    private var queueOffered: Bool {
+        (app.session(id: console.sessionID)?.effectiveRunStatus ?? console.state.status) == .running
+            && SteerDelivery.runtimeTakesMidTurnSteer(console.engine)
+            && console.canSend && console.replyContext == nil
+            && !ComposerLogic.parseShell(console.composerText).shell
     }
 
     /// The permission mode, on the toolbar's left where the web composer has it. It outranks the
@@ -554,9 +760,13 @@ struct ComposerView: View {
                     console.permissionModeWasEdited = true
                     Task { await console.applyConfig(permissionMode: mode.rawValue) }
                 } label: {
-                    menuItemLabel(modeSupported(mode) ? AgentDefaults.label(mode)
-                                      : "\(AgentDefaults.label(mode)) — not on DeepSeek Harness",
-                                  selected: mode == console.permissionMode)
+                    if console.engine == CursorRuntime.engine {
+                        cursorModeLabel(mode)
+                    } else {
+                        menuItemLabel(modeSupported(mode) ? AgentDefaults.label(mode)
+                                          : "\(AgentDefaults.label(mode)) — not on DeepSeek Harness",
+                                      selected: mode == console.permissionMode)
+                    }
                 }
                 .disabled(!modeRunnable(mode))
             }
@@ -567,15 +777,89 @@ struct ComposerView: View {
         .layoutPriority(2)
     }
 
-    /// The model menu's title: the engine running this session, and — while a held pick stands on a
-    /// different engine — where the next turn goes (`SessionProviderChoices.engineTitle`, web
-    /// `engineTitleFor`). The held pick has already replaced `provider`, so the stored half comes
-    /// from `pendingResumeFrom`.
+    /// A mode on Cursor CLI, with what it does there under its name (board iOS 6 ②): the shared short
+    /// note the web's mode picker writes after the mode's name (`CursorRuntime.modeNote`) — Default's,
+    /// greyed, says why it can't run.
+    @ViewBuilder
+    private func cursorModeLabel(_ mode: PermissionMode) -> some View {
+        let note = CursorRuntime.modeNote(mode)
+        #if os(iOS)
+        accountRowLabel(AgentDefaults.label(mode), detail: note, selected: mode == console.permissionMode)
+        #else
+        menuItemLabel(note.map { "\(AgentDefaults.label(mode)) — \($0)" } ?? AgentDefaults.label(mode),
+                      selected: mode == console.permissionMode)
+        #endif
+    }
+
+    /// The session's Cursor CLI model read against the runner's catalogue, Auto aside: the model, its row
+    /// and the settings its value names (`CursorRuntime.pick`).
+    private var cursorPick: CursorRuntime.Pick? {
+        guard console.engine == CursorRuntime.engine, !cursorAuto else { return nil }
+        return CursorRuntime.pick(console.modelID, catalog: console.modelCatalog)
+    }
+
+    /// Cursor CLI's Context and Speed (board iOS 5 ②, web `cursorSettingRows`): settings of the model in the
+    /// runner's catalogue, carried in the session's model value — `claude-opus-5-5[context=1m,fast=true]`,
+    /// shared `cursorModels.ts` — while its effort stays in the effort field. Only the settings the model
+    /// takes.
+    @ViewBuilder private func cursorSettingMenus(_ pick: CursorRuntime.Pick) -> some View {
+        ForEach(CursorRuntime.settingRows(pick), id: \.id) { row in
+            Menu {
+                ForEach(row.values, id: \.value) { option in
+                    Button { pickCursorSetting(row.id, option.value, pick: pick) } label: {
+                        menuItemLabel(option.label ?? option.value, selected: option.value == row.value)
+                    }
+                }
+            } label: {
+                menuSubmenuLabel(row.title, value: row.label)
+            }
+        }
+    }
+
+    /// A Cursor CLI model's setting picked: the session's model value carries it — one back at the model's
+    /// own default is taken out of it — applied and remembered as a model pick is.
+    private func pickCursorSetting(_ id: String, _ value: String, pick: CursorRuntime.Pick) {
+        var settings: [String: String?] = pick.parameters.mapValues { Optional($0) }
+        settings[id] = value
+        let model = CursorRuntime.encodeModel(pick.model, settings, row: pick.row)
+        let clampedPermissionMode = console.selectModel(model)
+        app.rememberDefaultModel(model, engine: console.engine, provider: console.provider)
+        let permissionMode = clampedPermissionMode ? console.permissionMode.rawValue : nil
+        Task { await console.applyConfig(model: model, permissionMode: permissionMode) }
+    }
+
+    /// The model a Cursor CLI session runs as the chip says it — "Auto", "Claude Opus 5.5 High · 1M · Fast" —
+    /// for the context sheet's Model row (board iOS 5 ④), never the bracketed value.
+    private var cursorModelLine: String {
+        chipEffortLabel.isEmpty ? modelDisplayName : "\(modelDisplayName) \(chipEffortLabel)"
+    }
+
+    /// The chip's words for a Cursor CLI model's settings — "1M", "Fast" — after its effort.
+    private var cursorChipSettings: [String] {
+        CursorRuntime.chipSettings(CursorRuntime.settingRows(cursorPick))
+    }
+
+    /// Cursor CLI on Auto — its catalogue's `default`, or no model named at all, which runs as Auto: it
+    /// takes no parameters (contract §10), so the menu has no Effort to offer and the chip none to name.
+    private var cursorAuto: Bool {
+        console.engine == CursorRuntime.engine && CursorRuntime.isAuto(console.modelID)
+    }
+
+    /// The model menu's title: the engine this session runs on — its own, recorded when it started and
+    /// never changed, so no pick below can move it (board iOS 5 ③); a draft's is the one the hero
+    /// picked (`SessionProviderChoices.engineTitle`, web `engineTitleFor`).
     private var engineTitleLabel: String {
-        SessionProviderChoices.engineTitle(
-            provider: console.pendingResumeFrom ?? console.provider,
-            configured: console.configuredProviders,
-            nextProvider: console.pendingResumeProvider).label
+        SessionProviderChoices.engineTitle(console.engine)
+    }
+
+    /// What the Provider row says the session is on: an engine's own sign-in by the account in use —
+    /// Automatic while Orbit picks it — OpenCode's own configuration as its own sign-in, anything else by
+    /// its own name; and what became of the session's key when its engine no longer lists it.
+    private var providerValue: String {
+        if let gone = console.keyGone { return gone.status }
+        return SessionProviderChoices.providerValue(
+            console.providerSwitchChoices.first { $0.slug == console.provider }, provider: console.provider,
+            automatic: console.accountRowsOffered && console.sessionAutomatic, accountLabel: console.accountLabel)
     }
 
     /// Provider, model and effort are one control, written the way the reference composer writes
@@ -621,64 +905,49 @@ struct ComposerView: View {
                 }
                 Divider()
             }
-            // Only when there is somewhere to go: a second account with the same vendor, another
-            // endpoint on the same CLI, or another of the runner's accounts of this engine. One entry
-            // means no switch is possible, and the row is left out rather than shown inert.
+            // Only when there is somewhere to go: another credential the session's engine runs — a key,
+            // a pool, its own sign-in — or another of the runner's accounts. One entry means no switch is
+            // possible, and the row is left out rather than shown inert — the common case, one Claude
+            // sign-in and no keys. Grouped by where a credential comes from (board iOS 4 ④): the
+            // runner's own sign-in, the account pools, the keys — only what the session's engine runs.
             if console.providerSwitchChoices.count > 1 || console.accountRowsOffered {
                 Menu {
-                    ForEach(console.providerSwitchChoices) { choice in
-                        // A choice this runner can't run stays listed and carries its reason
-                        // (web parity): hiding it turns "not signed in on this machine" into
-                        // "Orbit lost my provider". The running one is exempt — it is the row's
-                        // own caption, and a parenthetical there would sit under every turn.
-                        let blocked = choice.unavailable != nil && choice.slug != console.providerChoice
-                        // Each built-in engine's accounts under it (web parity): on the engine the
-                        // session (or draft) is on, the ones it moves
-                        // between; under another, the ones a switch onto that engine lands on.
-                        let here = choice.slug == console.accountEngine
-                        let elsewhere = here || blocked ? [] : console.accountChoices(for: choice.slug)
-                        // With its accounts listed under it, the tick is on the account (or on
-                        // Automatic) rather than on the engine.
-                        let listsAccounts = (here && console.accountRowsOffered) || !elsewhere.isEmpty
-                        // An account pool the server says cannot run at all: no runner fixes
-                        // that, so it is greyed out with its reason instead.
-                        let fixable = blocked && choice.fixEngine != nil
-                        let reason = choice.unavailable ?? ""
-                        let fix = fixable ? (["antigravity", "dsh", DshRuntime.connectFix].contains(choice.fixEngine ?? "") ? " →" : ", sign in →") : ""
-                        // On iOS the engine names a section of its accounts instead of a row above
-                        // them (`accountsUnderHeader`).
-                        let headsSection = Self.accountsUnderHeader && listsAccounts
-                        if !headsSection {
-                            Button {
-                                // Picking a blocked row isn't a switch — it's a request for the
-                                // sign-in that would make it one, so go to that runner's Engines
-                                // section rather than doing nothing.
-                                if fixable {
-                                    if let rid = console.runnerID, let url = console.webFixURL(engine: choice.fixEngine ?? "", runnerID: rid) { openURL(url) }
-                                    else if let rid = console.runnerID { app.route(to: .runner(rid)) }
-                                } else if !blocked {
-                                    Task { await console.selectProvider(choice.slug) }
+                    let choices = console.providerSwitchChoices
+                    ForEach(SessionProviderChoices.menuGroups(choices, listed: console.providerListed,
+                                                              runnerName: console.runnerName)) { group in
+                        Section(group.title) {
+                            ForEach(group.choices) { choice in
+                                if group.id == "session" {
+                                    sessionKeyItem(choice)
+                                } else {
+                                    providerItems(choice)
                                 }
-                            } label: {
-                                menuItemLabel(
-                                    blocked ? "\(choice.label) — \(reason)\(fix)" : [choice.label, choice.labelDetail].compactMap { $0 }.joined(separator: " · "),
-                                    selected: choice.slug == console.providerChoice && !listsAccounts)
                             }
-                            .disabled(blocked && !fixable)
                         }
-                        if headsSection {
-                            Section([choice.label, choice.labelDetail].compactMap { $0 }.joined(separator: " · ")) {
-                                engineAccountItems(choice.slug, here: here, elsewhere: elsewhere)
-                            }
-                        } else {
-                            engineAccountItems(choice.slug, here: here, elsewhere: elsewhere)
+                    }
+                    // A Claude subscription token is the one key on Anthropic's protocol OpenCode does
+                    // not run, so its absence under OpenCode is said rather than left to be wondered
+                    // about (board iOS 4 ⑤).
+                    if let note = SessionProviderChoices.subscriptionOnlyNote(engine: console.engine,
+                                                                               configured: console.configuredProviders) {
+                        Section {
+                            Text(note)
+                        }
+                    }
+                    // A Cursor CLI session that has talked: why its other accounts and keys are listed
+                    // but greyed (board iOS 6 ⑤, D5).
+                    if console.cursorMoveBlocked {
+                        Section {
+                            #if os(macOS)
+                            ForEach(Array(ComposerLogic.menuLines(CursorRuntime.moveBlockedNote).enumerated()),
+                                    id: \.offset) { _, line in Text(line) }
+                            #else
+                            ForEach(ComposerLogic.sentences(CursorRuntime.moveBlockedNote), id: \.self) { Text($0) }
+                            #endif
                         }
                     }
                 } label: {
-                    menuSubmenuLabel(
-                        "Provider",
-                        value: console.providerSwitchChoices.first { $0.slug == console.providerChoice }?.label
-                            ?? AgentDefaults.providerName(console.provider, configured: console.configuredProviders))
+                    menuSubmenuLabel("Provider", value: providerValue)
                 }
                 Divider()
             }
@@ -687,11 +956,13 @@ struct ComposerView: View {
                     // An OpenCode variant is model-defined: a model switch can strip it. A model
                     // that declares its levels moves the effort onto them instead (web parity).
                     let nextEffort = AgentDefaults.normalizedEffort(
-                        console.effort, for: console.provider, model: m.id,
+                        console.effort, for: console.engine, provider: console.provider, model: m.id,
                         catalog: console.modelCatalog, configured: console.configuredProviders)
                     let resetEffort = nextEffort != console.effort
                     let clampedPermissionMode = console.selectModel(m.id)
-                    app.rememberDefaultModel(m.id, for: console.providerChoice)
+                    // Remembered per engine and provider (`<engine>:<provider>`, contract §6.5): one
+                    // key's model on Claude Code is not its model on DeepSeek Harness.
+                    app.rememberDefaultModel(m.id, engine: console.engine, provider: console.provider)
                     let permissionMode = clampedPermissionMode
                         ? console.permissionMode.rawValue
                         : nil
@@ -702,27 +973,44 @@ struct ComposerView: View {
                             effort: resetEffort ? nextEffort.rawValue : nil)
                     }
                 } label: {
-                    menuItemLabel(m.name, selected: m.id == console.modelID)
+                    menuItemLabel(m.name, selected: m.id == menuModelID)
                 }
                 // No model space until the provider identity resolves: the row shows the value it
                 // will run with, and cannot be switched yet.
                 .disabled(!console.providerCapabilitiesResolved)
             }
             Divider()
-            Menu {
-                ForEach(effortMenuItems) { e in
-                    Button {
-                        console.selectEffort(e)
-                        Task { await console.applyConfig(effort: e.rawValue) }
-                        // Remember this as the account default so the next new session (here or
-                        // on web) starts at it — the cross-device port of web's localStorage write.
-                        app.rememberDefaultEffort(e.rawValue)
-                    } label: {
-                        menuItemLabel(e.label, selected: e == console.effort)
+            // Cursor CLI's Auto takes no parameters: a line on what it does instead of an Effort row.
+            if cursorAuto {
+                Section {
+                    #if os(macOS)
+                    ForEach(Array(ComposerLogic.menuLines(CursorRuntime.autoNote).enumerated()), id: \.offset) { _, line in
+                        Text(line)
                     }
+                    #else
+                    // An iOS menu item ends at its third line: the note's two sentences are two items.
+                    ForEach(ComposerLogic.clauses(CursorRuntime.autoNote), id: \.self) { Text($0) }
+                    #endif
                 }
-            } label: {
-                menuSubmenuLabel("Effort", value: console.effort.label)
+            } else {
+                Menu {
+                    ForEach(effortMenuItems) { e in
+                        Button {
+                            console.selectEffort(e)
+                            Task { await console.applyConfig(effort: e.rawValue) }
+                            // Remember this as the account default so the next new session (here or
+                            // on web) starts at it — the cross-device port of web's localStorage write.
+                            app.rememberDefaultEffort(e.rawValue)
+                        } label: {
+                            menuItemLabel(e.label, selected: e == console.effort)
+                        }
+                    }
+                } label: {
+                    menuSubmenuLabel("Effort", value: console.effort.label)
+                }
+                if let pick = cursorPick {
+                    cursorSettingMenus(pick)
+                }
             }
             // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast"
             // tier both exist on some models and not others, so a row drawn regardless would be a
@@ -769,7 +1057,8 @@ struct ComposerView: View {
 
     /// What the chip is called aloud — web parity, the chip's `aria-label`.
     private var chipAccessibilityLabel: String {
-        let base = "Model \(modelDisplayName), effort \(console.effort.label)"
+        let base = cursorAuto ? "Model \(modelDisplayName)"
+            : "Model \(modelDisplayName), effort \(console.effort.label)" + cursorChipSettings.map { ", \($0)" }.joined()
         return smartRoute == nil ? base : base + TaskDetailCopy.chipPickedBySmartSelection
     }
 
@@ -788,7 +1077,7 @@ struct ComposerView: View {
         !console.providerCapabilitiesResolved && console.isDraft
             ? "Runtime default"
             : AgentDefaults.friendlyName(
-                console.modelID, for: console.providerChoice,
+                console.modelID, engine: console.engine, provider: console.provider,
                 catalog: console.modelCatalog,
                 configured: console.configuredProviders)
     }
@@ -813,10 +1102,12 @@ struct ComposerView: View {
                 .foregroundStyle(Color.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            Text(chipEffortLabel)
-                .foregroundStyle(Color.secondary)
-                .lineLimit(1)
-                .fixedSize()
+            if !chipEffortLabel.isEmpty {
+                Text(chipEffortLabel)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
         }
         .padding(.horizontal, smart ? 7 : 0)
         .padding(.vertical, smart ? 2 : 0)
@@ -825,7 +1116,7 @@ struct ComposerView: View {
         #else
         (Text(smart ? "✦ " : "").foregroundStyle(Color.accentColor)
             + Text(modelDisplayName).fontWeight(.semibold).foregroundStyle(Color.primary)
-            + Text(" ")
+            + Text(chipEffortLabel.isEmpty ? "" : " ")
             + Text(chipEffortLabel).foregroundStyle(Color.secondary))
             .lineLimit(1)
         #endif
@@ -835,23 +1126,22 @@ struct ComposerView: View {
     /// "Max · Fast". Web parity (`.composer-model-effort`); the lane is named there too rather than
     /// given a pill of its own, so the chip keeps saying one thing about the model.
     private var chipEffortLabel: String {
-        fastModeUsable && console.fastMode ? "\(console.effort.label) · Fast" : console.effort.label
+        // Auto on Cursor CLI has no effort to name; another Cursor CLI model names its settings after it.
+        if cursorAuto { return "" }
+        if !cursorChipSettings.isEmpty { return ([console.effort.label] + cursorChipSettings).joined(separator: " · ") }
+        return fastModeUsable && console.fastMode ? "\(console.effort.label) · Fast" : console.effort.label
     }
 
     /// Whether this session has a fast lane to offer at all — Claude Code's `/fast` on the models
     /// that carry it, Codex's "Fast" service tier on a model whose row in this runner's catalogue
-    /// advertises it. Asked of the RUNTIME, never the provider slug, for the same reason the other
-    /// capability questions ask that way: a configured (BYOK) identity borrows one. Unresolved
-    /// means no, which is the safe direction — a row that appears and then vanishes is worse than
-    /// one that appears a moment late, and the server polices the same fact at dispatch.
-    /// Web parity (`fastModeUsable`).
+    /// advertises it. Asked of the session's ENGINE, never the provider slug: a key runs on whichever
+    /// engine the session has. Unresolved means no, which is the safe direction — a row that appears
+    /// and then vanishes is worse than one that appears a moment late, and the server polices the same
+    /// fact at dispatch. Web parity (`fastModeUsable`).
     private var fastModeUsable: Bool {
         console.providerCapabilitiesResolved
-            && AgentDefaults.fastModeAvailable(
-                runtime: AgentDefaults.runtime(for: console.provider,
-                                               configured: console.configuredProviders),
-                model: console.modelID,
-                catalog: console.modelCatalog)
+            && AgentDefaults.fastModeAvailable(runtime: console.engine, model: console.modelID,
+                                               catalog: console.modelCatalog)
     }
 
     // MARK: + menu (mirrors the web composer's `+` dropdown)
@@ -947,6 +1237,82 @@ struct ComposerView: View {
             .contentShape(Rectangle())
     }
 
+    /// One credential of the Provider submenu — or, for an engine's own sign-in with more than one
+    /// account on this runner, its accounts in its place (web `providerRows`): the sign-in row would name
+    /// nothing they do not. On the sign-in the session is on, they are the ones it moves between; on a
+    /// session spending a key or a pool of the same engine, the ones a switch onto the sign-in lands on.
+    @ViewBuilder
+    private func providerItems(_ choice: ProviderChoice) -> some View {
+        // A choice this runner can't run stays listed and carries its reason (web parity): hiding it
+        // turns "not signed in on this machine" into "Orbit lost my provider". The running one is
+        // exempt — it is the row's own caption, and a parenthetical there would sit under every turn.
+        let blocked = choice.unavailable != nil && choice.slug != console.provider
+        let here = choice.slug == console.accountEngine
+        let elsewhere = here || blocked ? [] : console.accountChoices(for: choice.slug)
+        let listsAccounts = (here && console.accountRowsOffered) || !elsewhere.isEmpty
+        // An account pool the server says cannot run at all: no runner fixes that, so it is greyed out
+        // with its reason instead.
+        let fixable = blocked && choice.fixEngine != nil
+        if listsAccounts {
+            engineAccountItems(choice.slug, here: here, elsewhere: elsewhere)
+        } else {
+            Button {
+                // Picking a blocked row isn't a switch — it's a request for the sign-in (or install)
+                // that would make it one, so go to that engine's page on the runner rather than doing
+                // nothing.
+                if fixable {
+                    let engine = choice.fixEngine ?? ""
+                    if let url = console.webFixURL(engine: engine) { openURL(url) }
+                    else if let rid = console.runnerID { app.openRunnerEngine(rid, engine: engine) }
+                } else if !blocked {
+                    Task { await console.selectProvider(choice.slug) }
+                }
+            } label: {
+                providerRowLabel(choice, blocked: blocked, fixable: fixable)
+            }
+            .disabled((blocked && !fixable) || (console.cursorMoveBlocked && choice.slug != console.provider))
+        }
+    }
+
+    /// A credential's row: its own name — an engine's sign-in by the engine where it says why it can't
+    /// run — and, under it on iOS, how it signs in (`labelDetail`) and "Current" on the one in use.
+    @ViewBuilder
+    private func providerRowLabel(_ choice: ProviderChoice, blocked: Bool, fixable: Bool) -> some View {
+        let selected = choice.slug == console.provider
+        if blocked {
+            let fix = fixable ? SessionProviderChoices.fixSuffix(choice.fixEngine) : ""
+            menuItemLabel("\(SessionProviderChoices.providerName(on: console.engine, choice)) — \(choice.unavailable ?? "")\(fix)",
+                          selected: false)
+        } else {
+            #if os(iOS)
+            accountRowLabel(choice.label, detail: choice.labelDetail, selected: selected)
+            #else
+            menuItemLabel([choice.label, choice.labelDetail].compactMap { $0 }.joined(separator: " · "),
+                          selected: selected)
+            #endif
+        }
+    }
+
+    /// The session's own provider when its engine's menu no longer lists it — a key turned off or
+    /// deleted, the legacy built-in `dsh` — under its own heading, saying what became of it: a
+    /// turned-off key opens its page on the web, where it is turned back on; a deleted one is no choice
+    /// at all, and a credential of the same engine below is what fixes the session (board iOS 5 ④).
+    @ViewBuilder
+    private func sessionKeyItem(_ choice: ProviderChoice) -> some View {
+        let gone = console.keyGone
+        Button {
+            if case .turnedOff(let id?) = gone { openURL(console.webKeyURL(id)) }
+        } label: {
+            #if os(iOS)
+            accountRowLabel(choice.label, detail: gone?.rowStatus ?? choice.labelDetail, selected: gone == nil)
+            #else
+            menuItemLabel([choice.label, gone?.rowStatus ?? choice.labelDetail].compactMap { $0 }.joined(separator: " · "),
+                          selected: gone == nil)
+            #endif
+        }
+        .disabled(gone == .deleted)
+    }
+
     /// An engine's accounts in the Provider submenu: on the engine the session is on, the ones it moves
     /// between; under another, the ones a switch onto that engine lands on.
     @ViewBuilder
@@ -957,17 +1323,6 @@ struct ComposerView: View {
             switchAccountItems(engine, elsewhere)
         }
     }
-
-    /// iOS 26 gives every row of a menu the image column once any row has an image, so an account
-    /// can't be drawn one level in from its engine: the engine names a section of its accounts
-    /// instead. Its own row would add nothing there — on the session's engine it is the pick already
-    /// (`selectProvider` returns), and a switch onto another lands through its Automatic row or an
-    /// account. macOS keeps the engine row with its accounts under it.
-    #if os(iOS)
-    private static let accountsUnderHeader = true
-    #else
-    private static let accountsUnderHeader = false
-    #endif
 
     /// The runner's accounts of the session's engine, right under it in the Provider submenu (web
     /// parity): Automatic first where its workspace leaves the account to Orbit, then each account with
@@ -988,6 +1343,7 @@ struct ComposerView: View {
                 menuItemLabel("Automatic · Switches to soonest reset", selected: console.sessionAutomatic)
                 #endif
             }
+            .disabled(console.cursorMoveBlocked)
         }
         ForEach(console.accountChoices) { account in
             Button {
@@ -1008,6 +1364,7 @@ struct ComposerView: View {
                     selected: !console.sessionAutomatic && account.id == console.account(for: engine))
                 #endif
             }
+            .disabled(console.cursorMoveBlocked)
         }
     }
 
@@ -1028,6 +1385,7 @@ struct ComposerView: View {
                 menuItemLabel("Automatic · Switches to soonest reset", selected: false)
                 #endif
             }
+            .disabled(console.cursorMoveBlocked)
         }
         ForEach(rows) { account in
             Button {
@@ -1048,6 +1406,7 @@ struct ComposerView: View {
                     selected: false)
                 #endif
             }
+            .disabled(console.cursorMoveBlocked)
         }
     }
 
@@ -1080,9 +1439,10 @@ struct ComposerView: View {
     }
 
     #if os(iOS)
-    /// An account in its engine's section of the Provider submenu (`accountsUnderHeader`), on the
-    /// margin like every other row. Its quota — or what Automatic does — goes underneath; the account
-    /// the session is on says "Current" there first.
+    /// A row of the Provider submenu — an account under its machine's heading, or a credential — on the
+    /// margin like every other row: iOS 26 gives every row of a menu the image column once any row has an
+    /// image, so nothing here is drawn one level in. Its quota, what Automatic does or how it signs in
+    /// goes underneath; the one the session is on says "Current" there first.
     @ViewBuilder
     private func accountRowLabel(_ name: String, detail: String?, selected: Bool) -> some View {
         Text(Self.menuBreakable(name))
@@ -1269,6 +1629,77 @@ struct ComposerView: View {
     #endif
 }
 
+/// The engine's guess at the next message, drawn on the empty field's first line where the
+/// placeholder would be (docs/prompt-suggestions-design.md §4.1). On a Mac, Use at its end (or Tab)
+/// takes it, and only Use takes the click. A touch screen has no button: a double-tap on the line
+/// takes it (`GrowingTextEditor`), and the words are followed by
+/// "Double-tap to use". Either way a tap anywhere else lands in the field, to type something else.
+private struct PromptSuggestionLine: View {
+    let text: String
+    #if !os(iOS)
+    let accept: () -> Void
+    #endif
+
+    var body: some View {
+        #if os(iOS)
+        // The words give way before the hint does, and the hint is smaller, so the line keeps the
+        // field's own line height and the words sit exactly where typed ones would.
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            words
+            Text("Double-tap to use")
+                .font(.orbitLabel)
+                .foregroundStyle(Self.placeholderColor)
+                .fixedSize()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .allowsHitTesting(false)
+        // VoiceOver hears the guess from the field itself, with its "Use suggestion" action.
+        .accessibilityHidden(true)
+        #else
+        words
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // Room for Use, which hangs over the line's end instead of setting its height: the line
+            // keeps the field's own line height, so the words sit exactly where typed ones would.
+            .padding(.trailing, 64)
+            .allowsHitTesting(false)
+            .overlay(alignment: .trailing) {
+                Button(action: accept) {
+                    HStack(spacing: 5) {
+                        Text("Use")
+                        Text("⇥").foregroundStyle(.secondary)
+                    }
+                    .font(.orbitLabel.weight(.semibold))
+                    .padding(.horizontal, 11)
+                    .frame(height: 26)
+                    .background(Color.accentColor.opacity(0.12), in: Capsule())
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                .accessibilityLabel("Use suggestion: \(text)")
+                .help("Use this suggestion")
+            }
+        #endif
+    }
+
+    private var words: some View {
+        Text(text)
+            .font(.orbitControl)
+            .foregroundStyle(Self.placeholderColor)
+            .lineLimit(1)
+            .truncationMode(.tail)
+    }
+
+    /// The field's own placeholder colour, so the guess reads as the box's grey line and not as text.
+    private static var placeholderColor: Color {
+        #if os(iOS)
+        Color(uiColor: .placeholderText)
+        #else
+        Color(nsColor: .placeholderTextColor)
+        #endif
+    }
+}
+
 /// The staged attachments a message is about to carry: 48² thumbnails for images, name + size
 /// chips for other files. It sits at the top of the composer card, above the text it goes out with
 /// (web parity: `.composer-attachments` is the first row of `.composer-box`), so a screenshot you
@@ -1405,6 +1836,11 @@ private struct GrowingTextEditor: UIViewRepresentable {
     let placeholder: String
     let maxLines: Int
     @Binding var isEditing: Bool
+    /// The guess the empty field offers (`PromptSuggestionLine` draws it), nil when there is none.
+    /// While there is one, a double-tap on the field takes it with `useSuggestion`, and so does
+    /// VoiceOver's "Use suggestion" action: VoiceOver's own double-tap is its "activate".
+    var suggestion: String? = nil
+    var useSuggestion: () -> Void = {}
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -1426,6 +1862,15 @@ private struct GrowingTextEditor: UIViewRepresentable {
         // scrolls within that cap once it's exceeded rather than clipping.
         view.isScrollEnabled = true
         view.placeholderLabel.font = view.font
+        // Off until a suggestion is on offer (`updateUIView`). The field's own taps wait on it then
+        // (the coordinator's delegate, below); its touches still reach it as they always have.
+        let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.doubleTapped(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.delaysTouchesEnded = false
+        doubleTap.isEnabled = false
+        doubleTap.delegate = context.coordinator
+        view.addGestureRecognizer(doubleTap)
+        context.coordinator.doubleTap = doubleTap
         return view
     }
 
@@ -1435,6 +1880,9 @@ private struct GrowingTextEditor: UIViewRepresentable {
         view.placeholderLabel.text = placeholder
         view.placeholderLabel.isHidden = !text.isEmpty
         view.setNeedsLayout()
+        context.coordinator.doubleTap?.isEnabled = suggestion != nil
+        view.accessibilityHint = suggestion.map { "Suggested reply: \($0)." }
+        view.accessibilityCustomActions = suggestion == nil ? nil : [context.coordinator.useAction]
         // Drive focus from the binding, but never fight the field's own responder state.
         if isEditing, !view.isFirstResponder { view.becomeFirstResponder() }
         else if !isEditing, view.isFirstResponder { view.resignFirstResponder() }
@@ -1450,9 +1898,42 @@ private struct GrowingTextEditor: UIViewRepresentable {
         return CGSize(width: width, height: ceil(min(fit.height, line * CGFloat(maxLines))))
     }
 
-    final class Coordinator: NSObject, UITextViewDelegate {
+    final class Coordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate {
         var parent: GrowingTextEditor
+        weak var doubleTap: UITapGestureRecognizer?
+        lazy var useAction = UIAccessibilityCustomAction(name: "Use suggestion") { [weak self] _ in
+            guard let self, self.parent.suggestion != nil else { return false }
+            self.parent.useSuggestion()
+            return true
+        }
         init(_ parent: GrowingTextEditor) { self.parent = parent }
+
+        @objc func doubleTapped(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended, parent.suggestion != nil else { return }
+            parent.useSuggestion()
+        }
+
+        // While a guess is on offer, the field's own taps wait to see whether a second one follows. A
+        // first tap that raised the keyboard at once would lift the composer with it, and the second
+        // would land on the keyboard (typing a key or a candidate) instead of the field; a second tap
+        // the field took too would drop the caret into the words just filled in, or open the edit
+        // menu. So the keyboard comes up a double-tap interval late then. The field's own taps are not
+        // all `UITapGestureRecognizer`s — on iOS 26 its single tap is a `UITextMultiTapRecognizer`,
+        // which won the second tap on a CI run — so any of its gestures named for a tap waits too.
+        // Held back, the multi-tap still focuses the field but no longer toggles the edit menu: while a
+        // guess is on offer, Paste into the empty field is a press and hold (the loupe's, untouched).
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+            guard gestureRecognizer === doubleTap, let field = gestureRecognizer.view,
+                  other.view?.isDescendant(of: field) == true else { return false }
+            return other is UITapGestureRecognizer || NSStringFromClass(type(of: other)).contains("Tap")
+        }
+
+        // And whatever of the field's own does begin (its loupe, a scroll) never stops the double-tap.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            gestureRecognizer === doubleTap
+        }
 
         func textViewDidChange(_ view: UITextView) {
             if parent.text != view.text { parent.text = view.text }
@@ -1581,6 +2062,12 @@ private struct ContextWindowIndicator: View {
     let modelCatalog: RunnerModelCatalog?
     /// Configured providers' model rows carry their own context windows (from the control plane).
     let configured: [ConfiguredProvider]
+    /// Why there will never be a reading: an engine that does not report context use (Cursor CLI over
+    /// ACP, contract §4.1), in a sentence. Never a 0% or a token count then — a dashed empty ring.
+    var unavailable: String? = nil
+    /// The model the session runs, as the chip names it, for a row of its own under the reading — what
+    /// the context is of, when there is no number to read (Cursor CLI, board iOS 5 ④).
+    var modelLine: String? = nil
     @State private var showDetail = false
 
     private var window: Int? {
@@ -1602,22 +2089,27 @@ private struct ContextWindowIndicator: View {
     var body: some View {
         Button { showDetail.toggle() } label: {
             HStack(spacing: 5) {
-                UsageRing(percent: pct).frame(width: gaugeShowsNumber ? 14 : 16,
-                                              height: gaugeShowsNumber ? 14 : 16)
+                UsageRing(percent: pct, unavailable: unavailable != nil)
+                    .frame(width: gaugeShowsNumber ? 14 : 16, height: gaugeShowsNumber ? 14 : 16)
                 if gaugeShowsNumber {
                     // See PlanUsageIndicator: pin the pill to its ideal width so a tight toolbar
                     // never wraps the "%" onto a second line.
                     Text(headline).foregroundStyle(.secondary).fixedSize()
                 }
             }
+            // The ring is only a stroke — dashed when there is no reading — and a plain button takes
+            // a tap only where it draws: the whole gauge opens the detail, its hollow centre too.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(helpText)
         .accessibilityLabel(helpText)
-        .modifier(ContextWindowDetailPresentation(isPresented: $showDetail, tokens: tokens, window: window, pct: pct, known: known))
+        .modifier(ContextWindowDetailPresentation(isPresented: $showDetail, tokens: tokens, window: window, pct: pct,
+                                                  known: known, unavailable: unavailable, modelLine: modelLine))
     }
 
     private var helpText: String {
+        if unavailable != nil { return "Context window unavailable" }
         guard known else {
             guard let window, window > 0 else { return "Context window not reported yet" }
             return "Context window not reported yet · \(fmtTokens(window)) window"
@@ -1659,6 +2151,10 @@ private struct ContextWindowDetailPresentation: ViewModifier {
     let window: Int?
     let pct: Int
     let known: Bool
+    /// An engine that never reports a reading, and why (`ContextWindowIndicator.unavailable`).
+    var unavailable: String? = nil
+    /// The model row under the reading (`ContextWindowIndicator.modelLine`).
+    var modelLine: String? = nil
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
@@ -1670,14 +2166,24 @@ private struct ContextWindowDetailPresentation: ViewModifier {
             HStack {
                 Text("Context window").foregroundStyle(.secondary)
                 Spacer()
-                Text(!known ? "—" : sized ? "\(pct)%" : fmtTokens(tokens)).monospacedDigit()
+                Text(unavailable != nil ? "Unavailable" : !known ? "—" : sized ? "\(pct)%" : fmtTokens(tokens))
+                    .monospacedDigit()
             }
-            if sized { UsageBar(percent: pct).frame(height: 4) }
+            if sized && unavailable == nil { UsageBar(percent: pct).frame(height: 4) }
             Text(detailCaption).font(.caption).foregroundStyle(.secondary)
+            if let modelLine {
+                Divider().padding(.vertical, 4)
+                HStack {
+                    Text("Model").foregroundStyle(.secondary)
+                    Spacer()
+                    Text(modelLine).lineLimit(1)
+                }
+            }
         }
     }
 
     private var detailCaption: String {
+        if let unavailable { return unavailable }
         guard known else {
             guard let window, window > 0 else { return "Not reported yet" }
             return "Not reported yet · \(fmtTokens(window)) window"
@@ -1716,7 +2222,7 @@ private struct ContextWindowDetailPresentation: ViewModifier {
                     Spacer(minLength: 0)
                 }
                 .padding(20)
-                .presentationDetents([.height(160)])
+                .presentationDetents([.height(modelLine == nil ? 160 : 210)])
                 .presentationDragIndicator(.visible)
             }
         }
@@ -1909,6 +2415,9 @@ private struct UsageBar: View {
 /// window fills. Mirrors the web `.context-ring`.
 private struct UsageRing: View {
     let percent: Int
+    /// No reading will ever come (an engine that reports none): a dashed empty ring, apart from the
+    /// solid empty ring of a reading still to come.
+    var unavailable = false
     private var fraction: CGFloat { CGFloat(min(100, max(0, percent))) / 100 }
     private var tint: Color {
         if percent >= 90 { return .red }
@@ -1918,11 +2427,15 @@ private struct UsageRing: View {
 
     var body: some View {
         ZStack {
-            Circle().stroke(.quaternary, lineWidth: 2.5)
-            Circle()
-                .trim(from: 0, to: fraction)
-                .stroke(tint, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                .rotationEffect(.degrees(-90))
+            if unavailable {
+                Circle().stroke(Color.secondary.opacity(0.6), style: StrokeStyle(lineWidth: 1.5, dash: [2.2, 2.2]))
+            } else {
+                Circle().stroke(.quaternary, lineWidth: 2.5)
+                Circle()
+                    .trim(from: 0, to: fraction)
+                    .stroke(tint, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
         }
         .padding(1.25)
     }

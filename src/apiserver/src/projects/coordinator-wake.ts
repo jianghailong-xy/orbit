@@ -75,6 +75,10 @@ import type { CriterionLanding } from './project-criterion-landing';
  *     used and does not wake a second time. That is the intended reading. Waking a coordinator to
  *     judge a world it has already judged, with nothing whatsoever changed, is the self-referential
  *     loop §0 exists to remove.
+ *
+ *     `CRITERION_UNLANDED` no longer pays that price (`deliveryVersion`, since 2026-10-16): a task
+ *     sent back and delivered again comes back DONE with work its first delivery never had, so
+ *     something HAS changed — only nothing the pairs carry.
  */
 
 /** The closed set of facts that may wake a coordinator. */
@@ -276,6 +280,55 @@ export function settlementVersion(tasks: readonly TaskSettlement[]): string {
     .map((task): [string, string] => [task.taskId, task.status])
     .sort((left, right) => compare(left[0], right[0]));
   return createHash('sha256').update(canonicalJson(pairs)).digest('hex');
+}
+
+/**
+ * One task serving a criterion as `CRITERION_UNLANDED` is defined over it: its settlement, and
+ * which of its deliveries that settlement is.
+ */
+export interface ServingDelivery extends TaskSettlement {
+  /**
+   * 0271's `task_progress.lifecycle_epoch`: how many times the task has left DONE, CANCELLED or
+   * FAILED for OPEN or IN_PROGRESS. 0, or absent, for a task that never has.
+   */
+  lifecycleEpoch?: number;
+}
+
+/**
+ * §2's digest for `CRITERION_UNLANDED`: `settlementVersion`'s pairs, with the lifecycle epoch added
+ * to the pair of every task that has been sent back.
+ *
+ * WHY THE PAIRS ALONE WERE NOT ENOUGH
+ * ===================================
+ * A task sent back with `task_reopen` and delivered again is DONE again, so when nothing else under
+ * its criterion moved — always, for a criterion one task serves — its pairs were the ones its first
+ * delivery had already spent. The claim answered ALREADY_AWAKE and `CompletionInputRouter.spend`
+ * stops there: nothing read what the new delivery changed, and the coordinator was told nothing. Up
+ * to 2026-10-16, 4 of the 8 tasks in production that were reviewed, sent back and delivered again
+ * had no `CRITERION_UNLANDED` wake after the send-back, every one of them the only task serving its
+ * criterion. That is not §2's "nothing whatsoever changed": the delivery is new, and nobody has
+ * judged it.
+ *
+ * The epoch is what tells the two deliveries apart. 0271's trigger advances it on every write that
+ * reopens a task, whoever made it, and nothing else moves it — a renamed title or a progress report
+ * leaves the version where it was. It is also the boundary `WakeDispositionService` already reads a
+ * delivery by: what the task delivered since it was last sent back.
+ *
+ * WHY ONLY FOR A TASK THAT HAS ONE
+ * ================================
+ * A task never sent back keeps its bare pair, so a criterion none of whose work was ever sent back
+ * derives byte for byte the version `settlementVersion` gave it: the key every such fact spent before
+ * this change is held under. Folding in a 0 instead would have derived every unlanded criterion again
+ * on deploy, and told its coordinator about the same work a second time.
+ */
+export function deliveryVersion(serving: readonly ServingDelivery[]): string {
+  const entries = serving
+    .map((task): [string, string] | [string, string, number] => (task.lifecycleEpoch
+      ? [task.taskId, task.status, task.lifecycleEpoch]
+      : [task.taskId, task.status]))
+    // Sorted here for `settlementVersion`'s reason.
+    .sort((left, right) => compare(left[0], right[0]));
+  return createHash('sha256').update(canonicalJson(entries)).digest('hex');
 }
 
 /**
@@ -588,16 +641,17 @@ export function criterionReadyFact(
  *
  * THE VERSION IS THE SETTLEMENT, AND NOT THE RECEIPTS
  * ==================================================
- * `settlementVersion` again, so one finished task set wakes a coordinator about its landing at
- * most once. Folding the receipts into the version instead would make PARTIAL progress towards
- * landing — one of three serving tasks merged, the criterion still not on main — a second fact
- * about the same unfinished situation, which is §0's loop with a merge in the middle of it. When
- * the receipts complete, the answer stops being this fact at all.
+ * The settlement again, so one finished task set wakes a coordinator about its landing at most
+ * once — counting a task sent back and delivered again as a new delivery (`deliveryVersion`).
+ * Folding the receipts into the version instead would make PARTIAL progress towards landing — one
+ * of three serving tasks merged, the criterion still not on main — a second fact about the same
+ * unfinished situation, which is §0's loop with a merge in the middle of it. When the receipts
+ * complete, the answer stops being this fact at all.
  */
 export function criterionUnlandedFact(
   projectId: string,
   criterionKey: string,
-  serving: readonly TaskSettlement[],
+  serving: readonly ServingDelivery[],
   landing: CriterionLanding,
 ): WakeFact | null {
   if (landing === 'LANDED') return null;
@@ -608,7 +662,7 @@ export function criterionUnlandedFact(
     projectId,
     subjectType: 'CRITERION',
     subjectId: criterionSubjectId(projectId, criterionKey),
-    subjectVersion: settlementVersion(serving),
+    subjectVersion: deliveryVersion(serving),
     detail: { criterionKey, taskCount: serving.length, landing },
   };
 }

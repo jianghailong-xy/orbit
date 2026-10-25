@@ -1,0 +1,16 @@
+{
+  "answer": {
+    "assignedRunnerId": "34hlwBWrKOm4SMrYIA6An",
+    "code": null,
+    "engine": "claude",
+    "id": "34hlxjW1Gs60pKc1WJR04",
+    "message": null,
+    "provider": "deepseek",
+    "status": "PENDING"
+  },
+  "at": "2026-10-18T00:42:26.605+00:00",
+  "kind": "session",
+  "managedState": "READY",
+  "owner": "amy",
+  "status": 201
+}

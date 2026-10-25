@@ -1,5 +1,5 @@
-import { Tooltip } from 'antd';
 import { Link } from 'react-router-dom';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * §13.8: what happened to each @-mention a comment made.
@@ -62,7 +62,7 @@ export function MentionDeliveryNotes({
     if (!mentions?.length) return null;
     return (
       <div className="tdp-mention-deliveries">
-        <Tooltip title="This comment predates mention delivery tracking, so whether these agents received it was never recorded.">
+        <Tooltip content="This comment predates mention delivery tracking, so whether these agents received it was never recorded.">
           <span className="tdp-mention-delivery tdp-mention-delivery-untracked">
             delivery not tracked
           </span>
@@ -96,7 +96,7 @@ export function MentionDeliveryNotes({
           </span>
         );
         return detail ? (
-          <Tooltip key={delivery.id} title={detail}>
+          <Tooltip key={delivery.id} content={detail}>
             {body}
           </Tooltip>
         ) : (

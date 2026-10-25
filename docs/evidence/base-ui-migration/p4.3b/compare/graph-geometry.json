@@ -1,0 +1,2030 @@
+{
+ "p0-matrix": {
+  "del": {
+   "chromium-dark-desktop": {
+    "639": {
+     "clipped": 31.0,
+     "lowestMarkBottom": 657.42,
+     "marks": [
+      {
+       "bottom": 465.42,
+       "label": "Inventory existing componentsD",
+       "x": 235.5,
+       "y": 401.42
+      },
+      {
+       "bottom": 561.42,
+       "label": "Capture browser baselinesReady",
+       "x": 235.5,
+       "y": 497.42
+      },
+      {
+       "bottom": 657.42,
+       "label": "Migrate shared controlsWaiting",
+       "x": 235.5,
+       "y": 593.42
+      }
+     ],
+     "strip": {
+      "bottom": 626.42,
+      "height": 304,
+      "top": 322.42,
+      "width": 607
+     }
+    },
+    "641": {
+     "clipped": -3.65,
+     "lowestMarkBottom": 590.55,
+     "marks": [
+      {
+       "bottom": 590.55,
+       "label": "Inventory existing componentsD",
+       "x": 49,
+       "y": 531.85
+      },
+      {
+       "bottom": 590.55,
+       "label": "Capture browser baselinesReady",
+       "x": 243.45,
+       "y": 531.85
+      },
+      {
+       "bottom": 590.55,
+       "label": "Migrate shared controlsWaiting",
+       "x": 437.91,
+       "y": 531.85
+      }
+     ],
+     "strip": {
+      "bottom": 594.2,
+      "height": 240,
+      "top": 354.2,
+      "width": 609
+     }
+    },
+    "1280": {
+     "clipped": -1.0,
+     "lowestMarkBottom": 569.3,
+     "marks": [
+      {
+       "bottom": 569.3,
+       "label": "Inventory existing componentsD",
+       "x": 484,
+       "y": 505.3
+      },
+      {
+       "bottom": 569.3,
+       "label": "Capture browser baselinesReady",
+       "x": 696,
+       "y": 505.3
+      },
+      {
+       "bottom": 569.3,
+       "label": "Migrate shared controlsWaiting",
+       "x": 908,
+       "y": 505.3
+      }
+     ],
+     "strip": {
+      "bottom": 570.3,
+      "height": 240,
+      "top": 330.3,
+      "width": 936
+     }
+    }
+   },
+   "chromium-light-desktop": {
+    "639": {
+     "clipped": 31.0,
+     "lowestMarkBottom": 657.42,
+     "marks": [
+      {
+       "bottom": 465.42,
+       "label": "Inventory existing componentsD",
+       "x": 235.5,
+       "y": 401.42
+      },
+      {
+       "bottom": 561.42,
+       "label": "Capture browser baselinesReady",
+       "x": 235.5,
+       "y": 497.42
+      },
+      {
+       "bottom": 657.42,
+       "label": "Migrate shared controlsWaiting",
+       "x": 235.5,
+       "y": 593.42
+      }
+     ],
+     "strip": {
+      "bottom": 626.42,
+      "height": 304,
+      "top": 322.42,
+      "width": 607
+     }
+    },
+    "641": {
+     "clipped": -3.65,
+     "lowestMarkBottom": 590.55,
+     "marks": [
+      {
+       "bottom": 590.55,
+       "label": "Inventory existing componentsD",
+       "x": 49,
+       "y": 531.85
+      },
+      {
+       "bottom": 590.55,
+       "label": "Capture browser baselinesReady",
+       "x": 243.45,
+       "y": 531.85
+      },
+      {
+       "bottom": 590.55,
+       "label": "Migrate shared controlsWaiting",
+       "x": 437.91,
+       "y": 531.85
+      }
+     ],
+     "strip": {
+      "bottom": 594.2,
+      "height": 240,
+      "top": 354.2,
+      "width": 609
+     }
+    },
+    "1280": {
+     "clipped": -1.0,
+     "lowestMarkBottom": 569.3,
+     "marks": [
+      {
+       "bottom": 569.3,
+       "label": "Inventory existing componentsD",
+       "x": 484,
+       "y": 505.3
+      },
+      {
+       "bottom": 569.3,
+       "label": "Capture browser baselinesReady",
+       "x": 696,
+       "y": 505.3
+      },
+      {
+       "bottom": 569.3,
+       "label": "Migrate shared controlsWaiting",
+       "x": 908,
+       "y": 505.3
+      }
+     ],
+     "strip": {
+      "bottom": 570.3,
+      "height": 240,
+      "top": 330.3,
+      "width": 936
+     }
+    }
+   },
+   "webkit-dark-desktop": {
+    "639": {
+     "clipped": 31.0,
+     "lowestMarkBottom": 656.42,
+     "marks": [
+      {
+       "bottom": 464.42,
+       "label": "Inventory existing componentsD",
+       "x": 231.5,
+       "y": 400.42
+      },
+      {
+       "bottom": 560.42,
+       "label": "Capture browser baselinesReady",
+       "x": 231.5,
+       "y": 496.42
+      },
+      {
+       "bottom": 656.42,
+       "label": "Migrate shared controlsWaiting",
+       "x": 231.5,
+       "y": 592.42
+      }
+     ],
+     "strip": {
+      "bottom": 625.42,
+      "height": 304,
+      "top": 321.42,
+      "width": 599
+     }
+    },
+    "641": {
+     "clipped": -4.08,
+     "lowestMarkBottom": 589.15,
+     "marks": [
+      {
+       "bottom": 589.15,
+       "label": "Inventory existing componentsD",
+       "x": 50,
+       "y": 531.32
+      },
+      {
+       "bottom": 589.15,
+       "label": "Capture browser baselinesReady",
+       "x": 241.59,
+       "y": 531.32
+      },
+      {
+       "bottom": 589.15,
+       "label": "Migrate shared controlsWaiting",
+       "x": 433.18,
+       "y": 531.32
+      }
+     ],
+     "strip": {
+      "bottom": 593.23,
+      "height": 240,
+      "top": 353.23,
+      "width": 601
+     }
+    },
+    "1280": {
+     "clipped": -1.0,
+     "lowestMarkBottom": 568.33,
+     "marks": [
+      {
+       "bottom": 568.33,
+       "label": "Inventory existing componentsD",
+       "x": 480,
+       "y": 504.33
+      },
+      {
+       "bottom": 568.33,
+       "label": "Capture browser baselinesReady",
+       "x": 692,
+       "y": 504.33
+      },
+      {
+       "bottom": 568.33,
+       "label": "Migrate shared controlsWaiting",
+       "x": 904,
+       "y": 504.33
+      }
+     ],
+     "strip": {
+      "bottom": 569.33,
+      "height": 240,
+      "top": 329.33,
+      "width": 928
+     }
+    }
+   },
+   "webkit-light-desktop": {
+    "639": {
+     "clipped": 31.0,
+     "lowestMarkBottom": 656.42,
+     "marks": [
+      {
+       "bottom": 464.42,
+       "label": "Inventory existing componentsD",
+       "x": 231.5,
+       "y": 400.42
+      },
+      {
+       "bottom": 560.42,
+       "label": "Capture browser baselinesReady",
+       "x": 231.5,
+       "y": 496.42
+      },
+      {
+       "bottom": 656.42,
+       "label": "Migrate shared controlsWaiting",
+       "x": 231.5,
+       "y": 592.42
+      }
+     ],
+     "strip": {
+      "bottom": 625.42,
+      "height": 304,
+      "top": 321.42,
+      "width": 599
+     }
+    },
+    "641": {
+     "clipped": -4.08,
+     "lowestMarkBottom": 589.15,
+     "marks": [
+      {
+       "bottom": 589.15,
+       "label": "Inventory existing componentsD",
+       "x": 50,
+       "y": 531.32
+      },
+      {
+       "bottom": 589.15,
+       "label": "Capture browser baselinesReady",
+       "x": 241.59,
+       "y": 531.32
+      },
+      {
+       "bottom": 589.15,
+       "label": "Migrate shared controlsWaiting",
+       "x": 433.18,
+       "y": 531.32
+      }
+     ],
+     "strip": {
+      "bottom": 593.23,
+      "height": 240,
+      "top": 353.23,
+      "width": 601
+     }
+    },
+    "1280": {
+     "clipped": -1.0,
+     "lowestMarkBottom": 568.33,
+     "marks": [
+      {
+       "bottom": 568.33,
+       "label": "Inventory existing componentsD",
+       "x": 480,
+       "y": 504.33
+      },
+      {
+       "bottom": 568.33,
+       "label": "Capture browser baselinesReady",
+       "x": 692,
+       "y": 504.33
+      },
+      {
+       "bottom": 568.33,
+       "label": "Migrate shared controlsWaiting",
+       "x": 904,
+       "y": 504.33
+      }
+     ],
+     "strip": {
+      "bottom": 569.33,
+      "height": 240,
+      "top": 329.33,
+      "width": 928
+     }
+    }
+   }
+  },
+  "ref": {
+   "chromium-dark-desktop": {
+    "639": {
+     "clipped": 31.0,
+     "lowestMarkBottom": 657.42,
+     "marks": [
+      {
+       "bottom": 465.42,
+       "label": "Inventory existing componentsD",
+       "x": 235.5,
+       "y": 401.42
+      },
+      {
+       "bottom": 561.42,
+       "label": "Capture browser baselinesReady",
+       "x": 235.5,
+       "y": 497.42
+      },
+      {
+       "bottom": 657.42,
+       "label": "Migrate shared controlsWaiting",
+       "x": 235.5,
+       "y": 593.42
+      }
+     ],
+     "strip": {
+      "bottom": 626.42,
+      "height": 304,
+      "top": 322.42,
+      "width": 607
+     }
+    },
+    "641": {
+     "clipped": -3.65,
+     "lowestMarkBottom": 590.55,
+     "marks": [
+      {
+       "bottom": 590.55,
+       "label": "Inventory existing componentsD",
+       "x": 49,
+       "y": 531.85
+      },
+      {
+       "bottom": 590.55,
+       "label": "Capture browser baselinesReady",
+       "x": 243.45,
+       "y": 531.85
+      },
+      {
+       "bottom": 590.55,
+       "label": "Migrate shared controlsWaiting",
+       "x": 437.91,
+       "y": 531.85
+      }
+     ],
+     "strip": {
+      "bottom": 594.2,
+      "height": 240,
+      "top": 354.2,
+      "width": 609
+     }
+    },
+    "1280": {
+     "clipped": -1.0,
+     "lowestMarkBottom": 569.3,
+     "marks": [
+      {
+       "bottom": 569.3,
+       "label": "Inventory existing componentsD",
+       "x": 484,
+       "y": 505.3
+      },
+      {
+       "bottom": 569.3,
+       "label": "Capture browser baselinesReady",
+       "x": 696,
+       "y": 505.3
+      },
+      {
+       "bottom": 569.3,
+       "label": "Migrate shared controlsWaiting",
+       "x": 908,
+       "y": 505.3
+      }
+     ],
+     "strip": {
+      "bottom": 570.3,
+      "height": 240,
+      "top": 330.3,
+      "width": 936
+     }
+    }
+   },
+   "chromium-light-desktop": {
+    "639": {
+     "clipped": 31.0,
+     "lowestMarkBottom": 657.42,
+     "marks": [
+      {
+       "bottom": 465.42,
+       "label": "Inventory existing componentsD",
+       "x": 235.5,
+       "y": 401.42
+      },
+      {
+       "bottom": 561.42,
+       "label": "Capture browser baselinesReady",
+       "x": 235.5,
+       "y": 497.42
+      },
+      {
+       "bottom": 657.42,
+       "label": "Migrate shared controlsWaiting",
+       "x": 235.5,
+       "y": 593.42
+      }
+     ],
+     "strip": {
+      "bottom": 626.42,
+      "height": 304,
+      "top": 322.42,
+      "width": 607
+     }
+    },
+    "641": {
+     "clipped": -3.65,
+     "lowestMarkBottom": 590.55,
+     "marks": [
+      {
+       "bottom": 590.55,
+       "label": "Inventory existing componentsD",
+       "x": 49,
+       "y": 531.85
+      },
+      {
+       "bottom": 590.55,
+       "label": "Capture browser baselinesReady",
+       "x": 243.45,
+       "y": 531.85
+      },
+      {
+       "bottom": 590.55,
+       "label": "Migrate shared controlsWaiting",
+       "x": 437.91,
+       "y": 531.85
+      }
+     ],
+     "strip": {
+      "bottom": 594.2,
+      "height": 240,
+      "top": 354.2,
+      "width": 609
+     }
+    },
+    "1280": {
+     "clipped": -1.0,
+     "lowestMarkBottom": 569.3,
+     "marks": [
+      {
+       "bottom": 569.3,
+       "label": "Inventory existing componentsD",
+       "x": 484,
+       "y": 505.3
+      },
+      {
+       "bottom": 569.3,
+       "label": "Capture browser baselinesReady",
+       "x": 696,
+       "y": 505.3
+      },
+      {
+       "bottom": 569.3,
+       "label": "Migrate shared controlsWaiting",
+       "x": 908,
+       "y": 505.3
+      }
+     ],
+     "strip": {
+      "bottom": 570.3,
+      "height": 240,
+      "top": 330.3,
+      "width": 936
+     }
+    }
+   },
+   "webkit-dark-desktop": {
+    "639": {
+     "clipped": 31.0,
+     "lowestMarkBottom": 656.42,
+     "marks": [
+      {
+       "bottom": 464.42,
+       "label": "Inventory existing componentsD",
+       "x": 231.5,
+       "y": 400.42
+      },
+      {
+       "bottom": 560.42,
+       "label": "Capture browser baselinesReady",
+       "x": 231.5,
+       "y": 496.42
+      },
+      {
+       "bottom": 656.42,
+       "label": "Migrate shared controlsWaiting",
+       "x": 231.5,
+       "y": 592.42
+      }
+     ],
+     "strip": {
+      "bottom": 625.42,
+      "height": 304,
+      "top": 321.42,
+      "width": 599
+     }
+    },
+    "641": {
+     "clipped": -4.08,
+     "lowestMarkBottom": 589.15,
+     "marks": [
+      {
+       "bottom": 589.15,
+       "label": "Inventory existing componentsD",
+       "x": 50,
+       "y": 531.32
+      },
+      {
+       "bottom": 589.15,
+       "label": "Capture browser baselinesReady",
+       "x": 241.59,
+       "y": 531.32
+      },
+      {
+       "bottom": 589.15,
+       "label": "Migrate shared controlsWaiting",
+       "x": 433.18,
+       "y": 531.32
+      }
+     ],
+     "strip": {
+      "bottom": 593.23,
+      "height": 240,
+      "top": 353.23,
+      "width": 601
+     }
+    },
+    "1280": {
+     "clipped": -1.0,
+     "lowestMarkBottom": 568.33,
+     "marks": [
+      {
+       "bottom": 568.33,
+       "label": "Inventory existing componentsD",
+       "x": 480,
+       "y": 504.33
+      },
+      {
+       "bottom": 568.33,
+       "label": "Capture browser baselinesReady",
+       "x": 692,
+       "y": 504.33
+      },
+      {
+       "bottom": 568.33,
+       "label": "Migrate shared controlsWaiting",
+       "x": 904,
+       "y": 504.33
+      }
+     ],
+     "strip": {
+      "bottom": 569.33,
+      "height": 240,
+      "top": 329.33,
+      "width": 928
+     }
+    }
+   },
+   "webkit-light-desktop": {
+    "639": {
+     "clipped": 31.0,
+     "lowestMarkBottom": 656.42,
+     "marks": [
+      {
+       "bottom": 464.42,
+       "label": "Inventory existing componentsD",
+       "x": 231.5,
+       "y": 400.42
+      },
+      {
+       "bottom": 560.42,
+       "label": "Capture browser baselinesReady",
+       "x": 231.5,
+       "y": 496.42
+      },
+      {
+       "bottom": 656.42,
+       "label": "Migrate shared controlsWaiting",
+       "x": 231.5,
+       "y": 592.42
+      }
+     ],
+     "strip": {
+      "bottom": 625.42,
+      "height": 304,
+      "top": 321.42,
+      "width": 599
+     }
+    },
+    "641": {
+     "clipped": -4.08,
+     "lowestMarkBottom": 589.15,
+     "marks": [
+      {
+       "bottom": 589.15,
+       "label": "Inventory existing componentsD",
+       "x": 50,
+       "y": 531.32
+      },
+      {
+       "bottom": 589.15,
+       "label": "Capture browser baselinesReady",
+       "x": 241.59,
+       "y": 531.32
+      },
+      {
+       "bottom": 589.15,
+       "label": "Migrate shared controlsWaiting",
+       "x": 433.18,
+       "y": 531.32
+      }
+     ],
+     "strip": {
+      "bottom": 593.23,
+      "height": 240,
+      "top": 353.23,
+      "width": 601
+     }
+    },
+    "1280": {
+     "clipped": -1.0,
+     "lowestMarkBottom": 568.33,
+     "marks": [
+      {
+       "bottom": 568.33,
+       "label": "Inventory existing componentsD",
+       "x": 480,
+       "y": 504.33
+      },
+      {
+       "bottom": 568.33,
+       "label": "Capture browser baselinesReady",
+       "x": 692,
+       "y": 504.33
+      },
+      {
+       "bottom": 568.33,
+       "label": "Migrate shared controlsWaiting",
+       "x": 904,
+       "y": 504.33
+      }
+     ],
+     "strip": {
+      "bottom": 569.33,
+      "height": 240,
+      "top": 329.33,
+      "width": 928
+     }
+    }
+   }
+  }
+ },
+ "p0.2": {
+  "chromium-dark-desktop": {
+   "639": {
+    "clipped": 31.0,
+    "lowestMarkBottom": 656.84,
+    "marks": [
+     {
+      "bottom": 464.84,
+      "label": "Inventory existing componentsD",
+      "x": 235.5,
+      "y": 400.84
+     },
+     {
+      "bottom": 560.84,
+      "label": "Capture browser baselinesReady",
+      "x": 235.5,
+      "y": 496.84
+     },
+     {
+      "bottom": 656.84,
+      "label": "Migrate shared controlsWaiting",
+      "x": 235.5,
+      "y": 592.84
+     }
+    ],
+    "strip": {
+     "bottom": 625.84,
+     "height": 304,
+     "top": 321.84,
+     "width": 607
+    }
+   },
+   "641": {
+    "clipped": -3.65,
+    "lowestMarkBottom": 589.98,
+    "marks": [
+     {
+      "bottom": 589.98,
+      "label": "Inventory existing componentsD",
+      "x": 49,
+      "y": 531.27
+     },
+     {
+      "bottom": 589.98,
+      "label": "Capture browser baselinesReady",
+      "x": 243.45,
+      "y": 531.27
+     },
+     {
+      "bottom": 589.98,
+      "label": "Migrate shared controlsWaiting",
+      "x": 437.91,
+      "y": 531.27
+     }
+    ],
+    "strip": {
+     "bottom": 593.62,
+     "height": 240,
+     "top": 353.62,
+     "width": 609
+    }
+   },
+   "1280": {
+    "clipped": -1.0,
+    "lowestMarkBottom": 568.72,
+    "marks": [
+     {
+      "bottom": 568.72,
+      "label": "Inventory existing componentsD",
+      "x": 484,
+      "y": 504.72
+     },
+     {
+      "bottom": 568.72,
+      "label": "Capture browser baselinesReady",
+      "x": 696,
+      "y": 504.72
+     },
+     {
+      "bottom": 568.72,
+      "label": "Migrate shared controlsWaiting",
+      "x": 908,
+      "y": 504.72
+     }
+    ],
+    "strip": {
+     "bottom": 569.72,
+     "height": 240,
+     "top": 329.72,
+     "width": 936
+    }
+   }
+  },
+  "chromium-light-desktop": {
+   "639": {
+    "clipped": 31.0,
+    "lowestMarkBottom": 656.84,
+    "marks": [
+     {
+      "bottom": 464.84,
+      "label": "Inventory existing componentsD",
+      "x": 235.5,
+      "y": 400.84
+     },
+     {
+      "bottom": 560.84,
+      "label": "Capture browser baselinesReady",
+      "x": 235.5,
+      "y": 496.84
+     },
+     {
+      "bottom": 656.84,
+      "label": "Migrate shared controlsWaiting",
+      "x": 235.5,
+      "y": 592.84
+     }
+    ],
+    "strip": {
+     "bottom": 625.84,
+     "height": 304,
+     "top": 321.84,
+     "width": 607
+    }
+   },
+   "641": {
+    "clipped": -3.65,
+    "lowestMarkBottom": 589.98,
+    "marks": [
+     {
+      "bottom": 589.98,
+      "label": "Inventory existing componentsD",
+      "x": 49,
+      "y": 531.27
+     },
+     {
+      "bottom": 589.98,
+      "label": "Capture browser baselinesReady",
+      "x": 243.45,
+      "y": 531.27
+     },
+     {
+      "bottom": 589.98,
+      "label": "Migrate shared controlsWaiting",
+      "x": 437.91,
+      "y": 531.27
+     }
+    ],
+    "strip": {
+     "bottom": 593.62,
+     "height": 240,
+     "top": 353.62,
+     "width": 609
+    }
+   },
+   "1280": {
+    "clipped": -1.0,
+    "lowestMarkBottom": 568.72,
+    "marks": [
+     {
+      "bottom": 568.72,
+      "label": "Inventory existing componentsD",
+      "x": 484,
+      "y": 504.72
+     },
+     {
+      "bottom": 568.72,
+      "label": "Capture browser baselinesReady",
+      "x": 696,
+      "y": 504.72
+     },
+     {
+      "bottom": 568.72,
+      "label": "Migrate shared controlsWaiting",
+      "x": 908,
+      "y": 504.72
+     }
+    ],
+    "strip": {
+     "bottom": 569.72,
+     "height": 240,
+     "top": 329.72,
+     "width": 936
+    }
+   }
+  },
+  "webkit-dark-desktop": {
+   "639": {
+    "clipped": 31.0,
+    "lowestMarkBottom": 656.84,
+    "marks": [
+     {
+      "bottom": 464.84,
+      "label": "Inventory existing componentsD",
+      "x": 231.5,
+      "y": 400.84
+     },
+     {
+      "bottom": 560.84,
+      "label": "Capture browser baselinesReady",
+      "x": 231.5,
+      "y": 496.84
+     },
+     {
+      "bottom": 656.84,
+      "label": "Migrate shared controlsWaiting",
+      "x": 231.5,
+      "y": 592.84
+     }
+    ],
+    "strip": {
+     "bottom": 625.84,
+     "height": 304,
+     "top": 321.84,
+     "width": 599
+    }
+   },
+   "641": {
+    "clipped": -4.08,
+    "lowestMarkBottom": 589.58,
+    "marks": [
+     {
+      "bottom": 589.58,
+      "label": "Inventory existing componentsD",
+      "x": 50,
+      "y": 531.74
+     },
+     {
+      "bottom": 589.58,
+      "label": "Capture browser baselinesReady",
+      "x": 241.59,
+      "y": 531.74
+     },
+     {
+      "bottom": 589.58,
+      "label": "Migrate shared controlsWaiting",
+      "x": 433.18,
+      "y": 531.74
+     }
+    ],
+    "strip": {
+     "bottom": 593.66,
+     "height": 240,
+     "top": 353.66,
+     "width": 601
+    }
+   },
+   "1280": {
+    "clipped": -1.0,
+    "lowestMarkBottom": 568.75,
+    "marks": [
+     {
+      "bottom": 568.75,
+      "label": "Inventory existing componentsD",
+      "x": 480,
+      "y": 504.75
+     },
+     {
+      "bottom": 568.75,
+      "label": "Capture browser baselinesReady",
+      "x": 692,
+      "y": 504.75
+     },
+     {
+      "bottom": 568.75,
+      "label": "Migrate shared controlsWaiting",
+      "x": 904,
+      "y": 504.75
+     }
+    ],
+    "strip": {
+     "bottom": 569.75,
+     "height": 240,
+     "top": 329.75,
+     "width": 928
+    }
+   }
+  },
+  "webkit-light-desktop": {
+   "639": {
+    "clipped": 31.0,
+    "lowestMarkBottom": 656.84,
+    "marks": [
+     {
+      "bottom": 464.84,
+      "label": "Inventory existing componentsD",
+      "x": 231.5,
+      "y": 400.84
+     },
+     {
+      "bottom": 560.84,
+      "label": "Capture browser baselinesReady",
+      "x": 231.5,
+      "y": 496.84
+     },
+     {
+      "bottom": 656.84,
+      "label": "Migrate shared controlsWaiting",
+      "x": 231.5,
+      "y": 592.84
+     }
+    ],
+    "strip": {
+     "bottom": 625.84,
+     "height": 304,
+     "top": 321.84,
+     "width": 599
+    }
+   },
+   "641": {
+    "clipped": -4.08,
+    "lowestMarkBottom": 589.58,
+    "marks": [
+     {
+      "bottom": 589.58,
+      "label": "Inventory existing componentsD",
+      "x": 50,
+      "y": 531.74
+     },
+     {
+      "bottom": 589.58,
+      "label": "Capture browser baselinesReady",
+      "x": 241.59,
+      "y": 531.74
+     },
+     {
+      "bottom": 589.58,
+      "label": "Migrate shared controlsWaiting",
+      "x": 433.18,
+      "y": 531.74
+     }
+    ],
+    "strip": {
+     "bottom": 593.66,
+     "height": 240,
+     "top": 353.66,
+     "width": 601
+    }
+   },
+   "1280": {
+    "clipped": -1.0,
+    "lowestMarkBottom": 568.75,
+    "marks": [
+     {
+      "bottom": 568.75,
+      "label": "Inventory existing componentsD",
+      "x": 480,
+      "y": 504.75
+     },
+     {
+      "bottom": 568.75,
+      "label": "Capture browser baselinesReady",
+      "x": 692,
+      "y": 504.75
+     },
+     {
+      "bottom": 568.75,
+      "label": "Migrate shared controlsWaiting",
+      "x": 904,
+      "y": 504.75
+     }
+    ],
+    "strip": {
+     "bottom": 569.75,
+     "height": 240,
+     "top": 329.75,
+     "width": 928
+    }
+   }
+  }
+ },
+ "p43b-case": {
+  "del": {
+   "chromium-dark-desktop": {
+    "639": {
+     "clippedBelow": 31,
+     "controls": {
+      "bottom": 610.42,
+      "right": 62,
+      "x": 32,
+      "y": 524.42
+     },
+     "marks": [
+      {
+       "bottom": 465.42,
+       "label": "Inventory existing componentsDone",
+       "x": 235.5,
+       "y": 401.42
+      },
+      {
+       "bottom": 561.42,
+       "label": "Capture browser baselinesReady to run",
+       "x": 235.5,
+       "y": 497.42
+      },
+      {
+       "bottom": 657.42,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 235.5,
+       "y": 593.42
+      }
+     ],
+     "overlapsControls": [],
+     "strip": {
+      "bottom": 626.42,
+      "height": 304,
+      "width": 607,
+      "y": 322.42
+     }
+    },
+    "641": {
+     "clippedBelow": 0,
+     "controls": {
+      "bottom": 578.2,
+      "right": 62,
+      "x": 32,
+      "y": 492.2
+     },
+     "marks": [
+      {
+       "bottom": 590.55,
+       "label": "Inventory existing componentsDone",
+       "x": 49,
+       "y": 531.85
+      },
+      {
+       "bottom": 590.55,
+       "label": "Capture browser baselinesReady to run",
+       "x": 243.45,
+       "y": 531.85
+      },
+      {
+       "bottom": 590.55,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 437.91,
+       "y": 531.85
+      }
+     ],
+     "overlapsControls": [
+      "Inventory existing componentsDone"
+     ],
+     "strip": {
+      "bottom": 594.2,
+      "height": 240,
+      "width": 609,
+      "y": 354.2
+     }
+    },
+    "1280": {
+     "clippedBelow": 0,
+     "controls": {
+      "bottom": 554.3,
+      "right": 358,
+      "x": 328,
+      "y": 468.3
+     },
+     "marks": [
+      {
+       "bottom": 569.3,
+       "label": "Inventory existing componentsDone",
+       "x": 484,
+       "y": 505.3
+      },
+      {
+       "bottom": 569.3,
+       "label": "Capture browser baselinesReady to run",
+       "x": 696,
+       "y": 505.3
+      },
+      {
+       "bottom": 569.3,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 908,
+       "y": 505.3
+      }
+     ],
+     "overlapsControls": [],
+     "strip": {
+      "bottom": 570.3,
+      "height": 240,
+      "width": 936,
+      "y": 330.3
+     }
+    }
+   },
+   "chromium-light-desktop": {
+    "639": {
+     "clippedBelow": 31,
+     "controls": {
+      "bottom": 610.42,
+      "right": 62,
+      "x": 32,
+      "y": 524.42
+     },
+     "marks": [
+      {
+       "bottom": 465.42,
+       "label": "Inventory existing componentsDone",
+       "x": 235.5,
+       "y": 401.42
+      },
+      {
+       "bottom": 561.42,
+       "label": "Capture browser baselinesReady to run",
+       "x": 235.5,
+       "y": 497.42
+      },
+      {
+       "bottom": 657.42,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 235.5,
+       "y": 593.42
+      }
+     ],
+     "overlapsControls": [],
+     "strip": {
+      "bottom": 626.42,
+      "height": 304,
+      "width": 607,
+      "y": 322.42
+     }
+    },
+    "641": {
+     "clippedBelow": 0,
+     "controls": {
+      "bottom": 578.2,
+      "right": 62,
+      "x": 32,
+      "y": 492.2
+     },
+     "marks": [
+      {
+       "bottom": 590.55,
+       "label": "Inventory existing componentsDone",
+       "x": 49,
+       "y": 531.85
+      },
+      {
+       "bottom": 590.55,
+       "label": "Capture browser baselinesReady to run",
+       "x": 243.45,
+       "y": 531.85
+      },
+      {
+       "bottom": 590.55,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 437.91,
+       "y": 531.85
+      }
+     ],
+     "overlapsControls": [
+      "Inventory existing componentsDone"
+     ],
+     "strip": {
+      "bottom": 594.2,
+      "height": 240,
+      "width": 609,
+      "y": 354.2
+     }
+    },
+    "1280": {
+     "clippedBelow": 0,
+     "controls": {
+      "bottom": 554.3,
+      "right": 358,
+      "x": 328,
+      "y": 468.3
+     },
+     "marks": [
+      {
+       "bottom": 569.3,
+       "label": "Inventory existing componentsDone",
+       "x": 484,
+       "y": 505.3
+      },
+      {
+       "bottom": 569.3,
+       "label": "Capture browser baselinesReady to run",
+       "x": 696,
+       "y": 505.3
+      },
+      {
+       "bottom": 569.3,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 908,
+       "y": 505.3
+      }
+     ],
+     "overlapsControls": [],
+     "strip": {
+      "bottom": 570.3,
+      "height": 240,
+      "width": 936,
+      "y": 330.3
+     }
+    }
+   },
+   "webkit-dark-desktop": {
+    "639": {
+     "clippedBelow": 31,
+     "controls": {
+      "bottom": 609.42,
+      "right": 62,
+      "x": 32,
+      "y": 523.42
+     },
+     "marks": [
+      {
+       "bottom": 464.42,
+       "label": "Inventory existing componentsDone",
+       "x": 231.5,
+       "y": 400.42
+      },
+      {
+       "bottom": 560.42,
+       "label": "Capture browser baselinesReady to run",
+       "x": 231.5,
+       "y": 496.42
+      },
+      {
+       "bottom": 656.42,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 231.5,
+       "y": 592.42
+      }
+     ],
+     "overlapsControls": [],
+     "strip": {
+      "bottom": 625.42,
+      "height": 304,
+      "width": 599,
+      "y": 321.42
+     }
+    },
+    "641": {
+     "clippedBelow": 0,
+     "controls": {
+      "bottom": 577.23,
+      "right": 62,
+      "x": 32,
+      "y": 491.23
+     },
+     "marks": [
+      {
+       "bottom": 589.15,
+       "label": "Inventory existing componentsDone",
+       "x": 50,
+       "y": 531.32
+      },
+      {
+       "bottom": 589.15,
+       "label": "Capture browser baselinesReady to run",
+       "x": 241.59,
+       "y": 531.32
+      },
+      {
+       "bottom": 589.15,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 433.18,
+       "y": 531.32
+      }
+     ],
+     "overlapsControls": [
+      "Inventory existing componentsDone"
+     ],
+     "strip": {
+      "bottom": 593.23,
+      "height": 240,
+      "width": 601,
+      "y": 353.23
+     }
+    },
+    "1280": {
+     "clippedBelow": 0,
+     "controls": {
+      "bottom": 553.33,
+      "right": 358,
+      "x": 328,
+      "y": 467.33
+     },
+     "marks": [
+      {
+       "bottom": 568.33,
+       "label": "Inventory existing componentsDone",
+       "x": 480,
+       "y": 504.33
+      },
+      {
+       "bottom": 568.33,
+       "label": "Capture browser baselinesReady to run",
+       "x": 692,
+       "y": 504.33
+      },
+      {
+       "bottom": 568.33,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 904,
+       "y": 504.33
+      }
+     ],
+     "overlapsControls": [],
+     "strip": {
+      "bottom": 569.33,
+      "height": 240,
+      "width": 928,
+      "y": 329.33
+     }
+    }
+   },
+   "webkit-light-desktop": {
+    "639": {
+     "clippedBelow": 31,
+     "controls": {
+      "bottom": 609.42,
+      "right": 62,
+      "x": 32,
+      "y": 523.42
+     },
+     "marks": [
+      {
+       "bottom": 464.42,
+       "label": "Inventory existing componentsDone",
+       "x": 231.5,
+       "y": 400.42
+      },
+      {
+       "bottom": 560.42,
+       "label": "Capture browser baselinesReady to run",
+       "x": 231.5,
+       "y": 496.42
+      },
+      {
+       "bottom": 656.42,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 231.5,
+       "y": 592.42
+      }
+     ],
+     "overlapsControls": [],
+     "strip": {
+      "bottom": 625.42,
+      "height": 304,
+      "width": 599,
+      "y": 321.42
+     }
+    },
+    "641": {
+     "clippedBelow": 0,
+     "controls": {
+      "bottom": 577.23,
+      "right": 62,
+      "x": 32,
+      "y": 491.23
+     },
+     "marks": [
+      {
+       "bottom": 589.15,
+       "label": "Inventory existing componentsDone",
+       "x": 50,
+       "y": 531.32
+      },
+      {
+       "bottom": 589.15,
+       "label": "Capture browser baselinesReady to run",
+       "x": 241.59,
+       "y": 531.32
+      },
+      {
+       "bottom": 589.15,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 433.18,
+       "y": 531.32
+      }
+     ],
+     "overlapsControls": [
+      "Inventory existing componentsDone"
+     ],
+     "strip": {
+      "bottom": 593.23,
+      "height": 240,
+      "width": 601,
+      "y": 353.23
+     }
+    },
+    "1280": {
+     "clippedBelow": 0,
+     "controls": {
+      "bottom": 553.33,
+      "right": 358,
+      "x": 328,
+      "y": 467.33
+     },
+     "marks": [
+      {
+       "bottom": 568.33,
+       "label": "Inventory existing componentsDone",
+       "x": 480,
+       "y": 504.33
+      },
+      {
+       "bottom": 568.33,
+       "label": "Capture browser baselinesReady to run",
+       "x": 692,
+       "y": 504.33
+      },
+      {
+       "bottom": 568.33,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 904,
+       "y": 504.33
+      }
+     ],
+     "overlapsControls": [],
+     "strip": {
+      "bottom": 569.33,
+      "height": 240,
+      "width": 928,
+      "y": 329.33
+     }
+    }
+   }
+  },
+  "ref": {
+   "chromium-dark-desktop": {
+    "639": {
+     "clippedBelow": 31,
+     "controls": {
+      "bottom": 610.42,
+      "right": 62,
+      "x": 32,
+      "y": 524.42
+     },
+     "marks": [
+      {
+       "bottom": 465.42,
+       "label": "Inventory existing componentsDone",
+       "x": 235.5,
+       "y": 401.42
+      },
+      {
+       "bottom": 561.42,
+       "label": "Capture browser baselinesReady to run",
+       "x": 235.5,
+       "y": 497.42
+      },
+      {
+       "bottom": 657.42,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 235.5,
+       "y": 593.42
+      }
+     ],
+     "overlapsControls": [],
+     "strip": {
+      "bottom": 626.42,
+      "height": 304,
+      "width": 607,
+      "y": 322.42
+     }
+    },
+    "641": {
+     "clippedBelow": 0,
+     "controls": {
+      "bottom": 578.2,
+      "right": 62,
+      "x": 32,
+      "y": 492.2
+     },
+     "marks": [
+      {
+       "bottom": 590.55,
+       "label": "Inventory existing componentsDone",
+       "x": 49,
+       "y": 531.85
+      },
+      {
+       "bottom": 590.55,
+       "label": "Capture browser baselinesReady to run",
+       "x": 243.45,
+       "y": 531.85
+      },
+      {
+       "bottom": 590.55,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 437.91,
+       "y": 531.85
+      }
+     ],
+     "overlapsControls": [
+      "Inventory existing componentsDone"
+     ],
+     "strip": {
+      "bottom": 594.2,
+      "height": 240,
+      "width": 609,
+      "y": 354.2
+     }
+    },
+    "1280": {
+     "clippedBelow": 0,
+     "controls": {
+      "bottom": 554.3,
+      "right": 358,
+      "x": 328,
+      "y": 468.3
+     },
+     "marks": [
+      {
+       "bottom": 569.3,
+       "label": "Inventory existing componentsDone",
+       "x": 484,
+       "y": 505.3
+      },
+      {
+       "bottom": 569.3,
+       "label": "Capture browser baselinesReady to run",
+       "x": 696,
+       "y": 505.3
+      },
+      {
+       "bottom": 569.3,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 908,
+       "y": 505.3
+      }
+     ],
+     "overlapsControls": [],
+     "strip": {
+      "bottom": 570.3,
+      "height": 240,
+      "width": 936,
+      "y": 330.3
+     }
+    }
+   },
+   "chromium-light-desktop": {
+    "639": {
+     "clippedBelow": 31,
+     "controls": {
+      "bottom": 610.42,
+      "right": 62,
+      "x": 32,
+      "y": 524.42
+     },
+     "marks": [
+      {
+       "bottom": 465.42,
+       "label": "Inventory existing componentsDone",
+       "x": 235.5,
+       "y": 401.42
+      },
+      {
+       "bottom": 561.42,
+       "label": "Capture browser baselinesReady to run",
+       "x": 235.5,
+       "y": 497.42
+      },
+      {
+       "bottom": 657.42,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 235.5,
+       "y": 593.42
+      }
+     ],
+     "overlapsControls": [],
+     "strip": {
+      "bottom": 626.42,
+      "height": 304,
+      "width": 607,
+      "y": 322.42
+     }
+    },
+    "641": {
+     "clippedBelow": 0,
+     "controls": {
+      "bottom": 578.2,
+      "right": 62,
+      "x": 32,
+      "y": 492.2
+     },
+     "marks": [
+      {
+       "bottom": 590.55,
+       "label": "Inventory existing componentsDone",
+       "x": 49,
+       "y": 531.85
+      },
+      {
+       "bottom": 590.55,
+       "label": "Capture browser baselinesReady to run",
+       "x": 243.45,
+       "y": 531.85
+      },
+      {
+       "bottom": 590.55,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 437.91,
+       "y": 531.85
+      }
+     ],
+     "overlapsControls": [
+      "Inventory existing componentsDone"
+     ],
+     "strip": {
+      "bottom": 594.2,
+      "height": 240,
+      "width": 609,
+      "y": 354.2
+     }
+    },
+    "1280": {
+     "clippedBelow": 0,
+     "controls": {
+      "bottom": 554.3,
+      "right": 358,
+      "x": 328,
+      "y": 468.3
+     },
+     "marks": [
+      {
+       "bottom": 569.3,
+       "label": "Inventory existing componentsDone",
+       "x": 484,
+       "y": 505.3
+      },
+      {
+       "bottom": 569.3,
+       "label": "Capture browser baselinesReady to run",
+       "x": 696,
+       "y": 505.3
+      },
+      {
+       "bottom": 569.3,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 908,
+       "y": 505.3
+      }
+     ],
+     "overlapsControls": [],
+     "strip": {
+      "bottom": 570.3,
+      "height": 240,
+      "width": 936,
+      "y": 330.3
+     }
+    }
+   },
+   "webkit-dark-desktop": {
+    "639": {
+     "clippedBelow": 31,
+     "controls": {
+      "bottom": 609.42,
+      "right": 62,
+      "x": 32,
+      "y": 523.42
+     },
+     "marks": [
+      {
+       "bottom": 464.42,
+       "label": "Inventory existing componentsDone",
+       "x": 231.5,
+       "y": 400.42
+      },
+      {
+       "bottom": 560.42,
+       "label": "Capture browser baselinesReady to run",
+       "x": 231.5,
+       "y": 496.42
+      },
+      {
+       "bottom": 656.42,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 231.5,
+       "y": 592.42
+      }
+     ],
+     "overlapsControls": [],
+     "strip": {
+      "bottom": 625.42,
+      "height": 304,
+      "width": 599,
+      "y": 321.42
+     }
+    },
+    "641": {
+     "clippedBelow": 0,
+     "controls": {
+      "bottom": 577.23,
+      "right": 62,
+      "x": 32,
+      "y": 491.23
+     },
+     "marks": [
+      {
+       "bottom": 589.15,
+       "label": "Inventory existing componentsDone",
+       "x": 50,
+       "y": 531.32
+      },
+      {
+       "bottom": 589.15,
+       "label": "Capture browser baselinesReady to run",
+       "x": 241.59,
+       "y": 531.32
+      },
+      {
+       "bottom": 589.15,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 433.18,
+       "y": 531.32
+      }
+     ],
+     "overlapsControls": [
+      "Inventory existing componentsDone"
+     ],
+     "strip": {
+      "bottom": 593.23,
+      "height": 240,
+      "width": 601,
+      "y": 353.23
+     }
+    },
+    "1280": {
+     "clippedBelow": 0,
+     "controls": {
+      "bottom": 553.33,
+      "right": 358,
+      "x": 328,
+      "y": 467.33
+     },
+     "marks": [
+      {
+       "bottom": 568.33,
+       "label": "Inventory existing componentsDone",
+       "x": 480,
+       "y": 504.33
+      },
+      {
+       "bottom": 568.33,
+       "label": "Capture browser baselinesReady to run",
+       "x": 692,
+       "y": 504.33
+      },
+      {
+       "bottom": 568.33,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 904,
+       "y": 504.33
+      }
+     ],
+     "overlapsControls": [],
+     "strip": {
+      "bottom": 569.33,
+      "height": 240,
+      "width": 928,
+      "y": 329.33
+     }
+    }
+   },
+   "webkit-light-desktop": {
+    "639": {
+     "clippedBelow": 31,
+     "controls": {
+      "bottom": 609.42,
+      "right": 62,
+      "x": 32,
+      "y": 523.42
+     },
+     "marks": [
+      {
+       "bottom": 464.42,
+       "label": "Inventory existing componentsDone",
+       "x": 231.5,
+       "y": 400.42
+      },
+      {
+       "bottom": 560.42,
+       "label": "Capture browser baselinesReady to run",
+       "x": 231.5,
+       "y": 496.42
+      },
+      {
+       "bottom": 656.42,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 231.5,
+       "y": 592.42
+      }
+     ],
+     "overlapsControls": [],
+     "strip": {
+      "bottom": 625.42,
+      "height": 304,
+      "width": 599,
+      "y": 321.42
+     }
+    },
+    "641": {
+     "clippedBelow": 0,
+     "controls": {
+      "bottom": 577.23,
+      "right": 62,
+      "x": 32,
+      "y": 491.23
+     },
+     "marks": [
+      {
+       "bottom": 589.15,
+       "label": "Inventory existing componentsDone",
+       "x": 50,
+       "y": 531.32
+      },
+      {
+       "bottom": 589.15,
+       "label": "Capture browser baselinesReady to run",
+       "x": 241.59,
+       "y": 531.32
+      },
+      {
+       "bottom": 589.15,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 433.18,
+       "y": 531.32
+      }
+     ],
+     "overlapsControls": [
+      "Inventory existing componentsDone"
+     ],
+     "strip": {
+      "bottom": 593.23,
+      "height": 240,
+      "width": 601,
+      "y": 353.23
+     }
+    },
+    "1280": {
+     "clippedBelow": 0,
+     "controls": {
+      "bottom": 553.33,
+      "right": 358,
+      "x": 328,
+      "y": 467.33
+     },
+     "marks": [
+      {
+       "bottom": 568.33,
+       "label": "Inventory existing componentsDone",
+       "x": 480,
+       "y": 504.33
+      },
+      {
+       "bottom": 568.33,
+       "label": "Capture browser baselinesReady to run",
+       "x": 692,
+       "y": 504.33
+      },
+      {
+       "bottom": 568.33,
+       "label": "Migrate shared controlsWaiting on 1",
+       "x": 904,
+       "y": 504.33
+      }
+     ],
+     "overlapsControls": [],
+     "strip": {
+      "bottom": 569.33,
+      "height": 240,
+      "width": 928,
+      "y": 329.33
+     }
+    }
+   }
+  }
+ },
+ "referenceEqualsDelivery": {
+  "p0-matrix": {
+   "chromium-dark-desktop": true,
+   "chromium-light-desktop": true,
+   "webkit-dark-desktop": true,
+   "webkit-light-desktop": true
+  },
+  "p43b-case": {
+   "chromium-dark-desktop": true,
+   "chromium-light-desktop": true,
+   "webkit-dark-desktop": true,
+   "webkit-light-desktop": true
+  }
+ }
+}

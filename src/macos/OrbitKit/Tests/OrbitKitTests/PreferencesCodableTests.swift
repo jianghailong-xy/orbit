@@ -122,6 +122,37 @@ final class PreferencesCodableTests: XCTestCase {
         }
     }
 
+    /// The account's Session recaps switch: on unless it is exactly `false`. Absent (an account that
+    /// never touched it) and anything but a boolean decode nil — never a failed `me` — and both read
+    /// as on, so only opting out is ever written.
+    func testPreferencesDecodesTheSessionRecapsSwitchLeniently() throws {
+        func prefs(_ body: String) throws -> UserPreferences? {
+            try JSONDecoder().decode(User.self, from: Data(#"{"id":"u1","email":"a@b.com","preferences":\#(body)}"#.utf8)).preferences
+        }
+        XCTAssertEqual(try prefs(#"{"recaps":false}"#)?.showRecaps, false)
+        XCTAssertEqual(try prefs(#"{"recaps":true}"#)?.showRecaps, true)
+        let bare = try prefs(#"{"theme":"light"}"#)
+        XCTAssertNil(bare?.recaps)
+        XCTAssertEqual(bare?.showRecaps, true, "absent is on")
+        for odd in [#""true""#, "1", "null", #"{"on":true}"#] {
+            let p = try prefs(#"{"theme":"dark","recaps":\#(odd)}"#)
+            XCTAssertNil(p?.recaps, odd)
+            XCTAssertEqual(p?.showRecaps, true, odd)
+            XCTAssertEqual(p?.theme, "dark", "the rest of the preferences still decode")
+        }
+    }
+
+    /// Flipping it sends `recaps` alone, `false` included — PATCH /users/me/preferences {recaps}, as
+    /// the web Settings page does.
+    func testUpdatePreferencesSessionRecapsOnly() throws {
+        for value in [true, false] {
+            let obj = try jsonObject(UpdatePreferencesRequest(recaps: value))
+            XCTAssertEqual(obj["recaps"] as? Bool, value)
+            XCTAssertEqual(obj.count, 1)
+        }
+        XCTAssertFalse(try jsonObject(UpdatePreferencesRequest(theme: "dark")).keys.contains("recaps"))
+    }
+
     /// Flipping it sends `modelRouting` alone, `false` included — PATCH /users/me/preferences
     /// {modelRouting}, as the web Settings page does.
     func testUpdatePreferencesModelRoutingOnly() throws {

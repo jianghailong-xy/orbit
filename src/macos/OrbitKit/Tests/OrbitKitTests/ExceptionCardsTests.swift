@@ -88,10 +88,18 @@ final class ExceptionCardsTests: XCTestCase {
         var escalatedAt: String? = "2026-09-19T21:02:23.903Z"
         var taskId: String? = "01a03f58-40bd-76ac-85c1-d9c6b29f8ca9"
         var sessionId: String? = "489fc485-949c-533a-9b56-7712a68762ef"
+        /// The merge candidate the item is about, for the kinds that name one.
+        var promotionId: String?
         var fuseEpisodeId: String?
         /// Where the item is on its way to the coordinator: the address `Open coordinator` reaches.
         var delivery: ProjectOpenItemRow.Delivery?
         var actions: [ProjectOpenItemAction] = [.askCoordinatorAgain, .openTaskSession, .cancelTask]
+        /// The server's one sentence about what has to happen next (T9), nil for an older server.
+        var requiredAction: String?
+        /// The door the server says the card leads with (T9).
+        var primaryAction: ProjectOpenItemAction?
+        /// The tasks filed as this item's fixes (§4.7).
+        var handledBy: [OpenItemFixTask]?
         var question: CoordinatorQuestion?
         /// What the item's payload holds, as the read serves it (§7.5). Nil for an older item.
         var facts: OpenItemFacts?
@@ -101,8 +109,10 @@ final class ExceptionCardsTests: XCTestCase {
                                waitingSince: waitingSince, assignee: assignee,
                                assigneeReason: assigneeReason, escalateAt: escalateAt,
                                escalatedAt: escalatedAt, taskId: taskId, sessionId: sessionId,
+                               promotionId: promotionId,
                                fuseEpisodeId: fuseEpisodeId, delivery: delivery, actions: actions,
-                               question: question, facts: facts)
+                               requiredAction: requiredAction, primaryAction: primaryAction,
+                               handledBy: handledBy, question: question, facts: facts)
         }
     }
 
@@ -212,10 +222,8 @@ final class ExceptionCardsTests: XCTestCase {
         let since = "2026-09-19T19:01:41.497Z"
         let escalated = SessionOwnerItem(itemId: "i", kind: .escalated, title: "t", since: since)
         let paused = SessionOwnerItem(itemId: "i", kind: .fusePaused, title: "t", since: since)
-        XCTAssertEqual(NeedsYouLogic.ownerItemText(escalated, project: nil),
-                       ExceptionCards.escalatedTitle)
-        XCTAssertEqual(NeedsYouLogic.ownerItemText(paused, project: nil),
-                       ExceptionCards.pauseTitle)
+        XCTAssertEqual(NeedsYouLogic.ownerItemWord(escalated), ExceptionCards.escalatedTitle)
+        XCTAssertEqual(NeedsYouLogic.ownerItemWord(paused), ExceptionCards.pauseTitle)
     }
 
     // MARK: what gets a card
@@ -287,15 +295,34 @@ final class ExceptionCardsTests: XCTestCase {
         }), "1s")
     }
 
-    /// The footer and the wait, in the browser's `ownerLine` and `formatSpan` words.
-    func testTheFooterAndTheWait() {
-        XCTAssertEqual(ExceptionCards.ownerLine(row(), now: now), "Owner: you · waiting 1d 16h")
+    /// The footer and the wait, in the browser's `ownerLine` and `formatSpan` words — including the
+    /// clause an ESCALATED row adds: when the clock handed it over. Without it the line said only
+    /// that the item had been waiting, which the heading above it already said (the browser's own
+    /// fix, `ownerLine`).
+    func testTheFooterAndTheWait() throws {
+        // The fixture escalated 2h after it opened (19:01:41 → 21:02:23), which is what the new
+        // clause counts from — the wait the coordinator had, not the wait since.
+        XCTAssertEqual(ExceptionCards.ownerLine(row(), now: now),
+                       "Owner: you · waiting 1d 16h · came to the owner at 2h")
         // Two days and sixteen hours would floor to `2d 16h` only past the second day: the span
         // says the smaller of the two numbers, and both clients have to floor the same way.
         XCTAssertEqual(ExceptionCards.waited(row { $0.waitingSince = "2026-09-19T12:00:00Z" },
                                              now: now), "2d")
-        XCTAssertEqual(ExceptionCards.ownerLine(row { $0.waitingSince = "2026-09-21T11:45:00Z" },
+        // An item that never escalated says the wait and stops: there is no instant to name, and
+        // the browser's own arm is the same `escalatedAt == null` test.
+        XCTAssertEqual(ExceptionCards.ownerLine(row { $0.escalatedAt = nil
+                                                      $0.waitingSince = "2026-09-21T11:45:00Z" },
                                                now: now), "Owner: you · waiting 15m")
+        // …and one the clock moved this morning says so, however long it has waited since: the
+        // clause counts the wait the COORDINATOR had (11:45 → 11:58), not the wait since.
+        XCTAssertEqual(ExceptionCards.ownerLine(row { $0.waitingSince = "2026-09-21T11:45:00Z"
+                                                      $0.escalatedAt = "2026-09-21T11:58:00Z" },
+                                               now: now),
+                       "Owner: you · waiting 15m · came to the owner at 13m")
+        // The browser's own template, so neither the separator nor the sentence can be reworded
+        // here alone.
+        let web = try webSource()
+        try require(web, "\(ExceptionCards.cameToOwnerAt)${waitedBeforeEscalation(row)}")
     }
 
     // MARK: what the card offers
@@ -427,15 +454,24 @@ final class ExceptionCardsTests: XCTestCase {
         guard case .rows(let block) = ExceptionCards.facts(decoded) else {
             return XCTFail("a payload this build reads draws rows, not the server's sentence")
         }
-        // The mock's own rows, in its own words, from the payload's own fields.
-        XCTAssertEqual(block.rows, [
-            ExceptionCards.FactRow(label: "Task", value: "核实 ScheduleWakeup 是否随 warm 回收丢失"),
-            ExceptionCards.FactRow(label: "Into", value: "project/bg-jobs at b70a446"),
-            ExceptionCards.FactRow(
-                label: "Check",
-                value: "cd src/runner-go && go test -count=1 ./... · exit 1 after 5m 40s"),
-            ExceptionCards.FactRow(label: "Branch", value: ExceptionCards.branchUnchanged),
+        // The mock's own rows, in its own words, from the payload's own fields — and the Check row
+        // in the three runs the browser sets it in: the command in the mono face, the verdict in
+        // red, the measurement between them in prose.
+        XCTAssertEqual(block.rows.map(\.label), ["Task", "Into", "Check", "Branch"])
+        XCTAssertEqual(block.rows[0], ExceptionCards.FactRow(
+            label: "Task", value: "核实 ScheduleWakeup 是否随 warm 回收丢失"))
+        XCTAssertEqual(block.rows[1], ExceptionCards.FactRow(
+            label: "Into", value: "project/bg-jobs at b70a446"))
+        XCTAssertEqual(block.rows[2].runs, [
+            .init(text: "cd src/runner-go && go test -count=1 ./...", face: .mono),
+            .init(text: " · "),
+            .init(text: "exit 1", face: .bad),
+            .init(text: " after 5m 40s"),
         ])
+        XCTAssertEqual(block.rows[2].value, "cd src/runner-go && go test -count=1 ./... · exit 1 after 5m 40s",
+                       "joining the runs is the one sentence the row says")
+        XCTAssertEqual(block.rows[3], ExceptionCards.FactRow(
+            label: "Branch", value: ExceptionCards.branchUnchanged))
         try requireTheBrowsersWords()
         // The tail is the last 16 KB of what the check printed, with its colour off — an ESC byte
         // is invisible in a native Text, so what would show is literal "[31m" garbage.
@@ -444,6 +480,15 @@ final class ExceptionCardsTests: XCTestCase {
                                     "FAIL\torbit\t341.207s"])
         XCTAssertEqual(tail.shown, tail.lines, "three lines fit under the fold")
         XCTAssertNil(tail.more)
+        // …and it hangs off the CHECK row rather than off the block: the browser draws the log
+        // inside that row's own fragment, between it and the next fact, and a block that drew it
+        // after every row put the log under a fact it did not come from.
+        XCTAssertEqual(block.rows[2].logTail, tail)
+        XCTAssertTrue(block.rows.filter { $0.logTail != nil }.count == 1,
+                      "one check, one log, one place")
+        let web = try webSource()
+        try require(web, "project-open-item-mono")
+        try require(web, "project-open-item-bad")
     }
 
     /// A tail longer than the fold keeps its END on screen and offers the rest: the reason a check
@@ -565,9 +610,13 @@ final class ExceptionCardsTests: XCTestCase {
                           $0.facts = OpenItemFacts(check: IntegrationCheckResult(
                               name: "MERGE_CHECK", command: "npm test", exitCode: 1, durationMs: 48_000)) }
         guard case .rows(let rows) = ExceptionCards.facts(quiet) else { return XCTFail("rows") }
-        XCTAssertEqual(rows.rows, [ExceptionCards.FactRow(label: "Check",
-                                                          value: "npm test · exit 1 after 48s")])
+        XCTAssertEqual(rows.rows.map(\.value), ["npm test · exit 1 after 48s"])
+        XCTAssertEqual(rows.rows.first?.runs, [.init(text: "npm test", face: .mono),
+                                               .init(text: " · "),
+                                               .init(text: "exit 1", face: .bad),
+                                               .init(text: " after 48s")])
         XCTAssertNil(rows.logTail)
+        XCTAssertNil(rows.rows.first?.logTail, "no output is no log, folded or otherwise")
     }
 
     /// The two sentences this card must not have invented: every label and every word around a value
@@ -671,6 +720,177 @@ final class ExceptionCardsTests: XCTestCase {
         try require(web, "TASK_FAILED: 'RETRY'")
     }
 
+    /// The first thing a card says is what has to happen next (§7.5, T9's `requiredAction`): the
+    /// server's one sentence, the item's own fact when a server predates the field, and — with
+    /// neither — the browser's standing sentence rather than a blank line. Under it, the tasks
+    /// already filed as this item's fixes, so a reader weighs a door knowing somebody may be on it.
+    func testTheCardOpensWithWhatHasToHappenNext() throws {
+        let web = try webSource()
+        let said = row { $0.requiredAction = "Nothing on the project branch reaches main until this "
+            + "check passes — re-run it or ask the coordinator to fix it." }
+        XCTAssertEqual(ExceptionCards.requiredAction(said),
+                       "Nothing on the project branch reaches main until this check passes — "
+                       + "re-run it or ask the coordinator to fix it.")
+        // No `requiredAction`: the fact that opened the item, which is what the card drew before
+        // the field existed.
+        XCTAssertEqual(ExceptionCards.requiredAction(row()), row().detailLine)
+        // Neither: the browser's own fallback, so the line is never empty.
+        let bare = row { $0.detailLine = "" }
+        XCTAssertEqual(ExceptionCards.requiredAction(bare), ExceptionCards.requiredActionFallback)
+        XCTAssertEqual(try declaration(web, "REQUIRED_ACTION_FALLBACK"),
+                       ExceptionCards.requiredActionFallback)
+
+        XCTAssertNil(ExceptionCards.handledByLine(row()),
+                     "nothing filed: the browser draws no line rather than an empty one")
+        XCTAssertNil(ExceptionCards.handledByLine(row { $0.handledBy = [] }))
+        let fixed = row { $0.handledBy = [.init(taskId: "t9", title: "Fix the branch", state: "IN_PROGRESS"),
+                                          .init(taskId: "t8", title: "Re-check later", state: "OPEN")] }
+        XCTAssertEqual(ExceptionCards.handledByLine(fixed),
+                       "The coordinator is fixing this in Fix the branch. · "
+                       + "The coordinator is fixing this in Re-check later.")
+        try require(web, "The coordinator is fixing this in ${task.title}.")
+    }
+
+    /// Every door wears the browser's own label and the browser's own one line saying what pressing
+    /// it does — the row is never a bare verb — and the whole table is looked up in the web source,
+    /// so neither end can reword a door alone.
+    func testEveryDoorWearsItsLabelAndItsConsequence() throws {
+        let web = try webSource()
+        for (action, key) in [(ProjectOpenItemAction.review, "REVIEW"),
+                              (.answer, "ANSWER"), (.resume, "RESUME"),
+                              (.openCoordinator, "OPEN_COORDINATOR"),
+                              (.openTaskSession, "OPEN_TASK_SESSION"), (.retry, "RETRY"),
+                              (.cancelTask, "CANCEL_TASK"),
+                              (.askCoordinatorAgain, "ASK_COORDINATOR_AGAIN")] {
+            // A RETRY wears three sets of words and the map holds the landing-retry ones; the
+            // sample below is an integration row, which is the row that wears them. The other two
+            // — the candidate's re-check and the failed task's run-again — are asserted where
+            // their doors are (`testARerunOfACheckIsSaidSoAndCarriesAReason`,
+            // `testARunAgainOnAFailedTaskIsSaidSo`).
+            let sample = action == .retry ? row { $0.kind = .integrationError } : row()
+            let label = try XCTUnwrap(ExceptionCards.actionLabel(sample, action), "\(key) has a label")
+            try require(web, "\(key): '\(label)'")
+            try require(web, "\(key): '\(ExceptionCards.actionConsequence(sample, action))'")
+        }
+        // A door the browser's map has no label for is not drawn at all — and an action this build
+        // has never heard of is not a door.
+        XCTAssertNil(ExceptionCards.actionLabel(row(), .unknown))
+        XCTAssertEqual(ExceptionCards.drawn(row { $0.actions = [.unknown, .askCoordinatorAgain] }),
+                       [.askCoordinatorAgain])
+
+        let conflict = row { $0.kind = .integrationConflict
+                             $0.assignee = .coordinator; $0.assigneeReason = .defaultReason
+                             $0.actions = [.openCoordinator, .openTaskSession, .retry, .cancelTask]
+                             $0.delivery = .init(state: "DELIVERED", sessionId: "s") }
+        let doors = ExceptionCards.presses(conflict)
+        XCTAssertEqual(doors.map(\.label),
+                       ["Open task session", "Retry", "Open coordinator", "Cancel task"])
+        XCTAssertEqual(doors.map(\.consequence),
+                       ["Open the task session to repair the branch.",
+                        "A new integration attempt is queued with your reason.",
+                        "Open the coordinator conversation.",
+                        "The task is cancelled and its open item closes."])
+        XCTAssertEqual(doors.map(\.tier), [.primary, .secondary, .link, .link])
+    }
+
+    /// T9's `primaryAction` is the server's own answer about the first door, and the card leads with
+    /// it whenever the row carries one — the kind's fallback is only for a server that predates the
+    /// field. A `primaryAction` the row's own list does not hold is not a door either.
+    func testTheServerDecidesWhichDoorLeads() {
+        let serverLed = row { $0.kind = .integrationConflict
+                              $0.actions = [.openTaskSession, .retry, .cancelTask]
+                              $0.primaryAction = .retry }
+        let led = ExceptionCards.presses(serverLed)
+        XCTAssertEqual(led.map(\.action), [.retry, .openTaskSession, .cancelTask],
+                       "the server's answer leads, the rest of its list follows in its own order")
+        XCTAssertEqual(led.map(\.tier), [.primary, .secondary, .link])
+        // Without one, the kind decides as it always did.
+        let kindLed = row { $0.kind = .integrationConflict
+                            $0.actions = [.openCoordinator, .openTaskSession, .retry, .cancelTask]
+                            $0.delivery = .init(state: "DELIVERED", sessionId: "s") }
+        XCTAssertEqual(ExceptionCards.presses(kindLed).map(\.action).first, .openTaskSession)
+        // A `primaryAction` the row does not list is not drawn into one: the card never offers a
+        // press the server did not serve.
+        let unlisted = row { $0.actions = [.askCoordinatorAgain]; $0.primaryAction = .retry }
+        XCTAssertEqual(ExceptionCards.presses(unlisted).map(\.action), [.askCoordinatorAgain])
+    }
+
+    /// A RETRY on a row that names a merge candidate is the RERUN of that candidate's check — the
+    /// same door the browser sends through
+    /// `POST /projects/:id/promotions/:promotionId/integration/retry` — and it wears the re-check
+    /// words, not the landing-retry ones. Its reason is the item's own sentence about the failure,
+    /// and the browser's fallback when the row has none: the door requires one, so a press never
+    /// travels empty.
+    func testARerunOfACheckIsSaidSoAndCarriesAReason() throws {
+        let promoted = row { $0.kind = .integrationCheckFailed
+                             $0.promotionId = "01a0bb0b-b3fb-744c-b9a6-2fd68b4420b4"
+                             $0.taskId = nil; $0.sessionId = nil
+                             $0.requiredAction = "Nothing reaches main until this check passes."
+                             $0.actions = [.askCoordinatorAgain, .retry] }
+        let press = try XCTUnwrap(ExceptionCards.presses(promoted).first { $0.action == .retry })
+        XCTAssertEqual(press.label, ExceptionCards.rerunCheck)
+        XCTAssertEqual(press.consequence, ExceptionCards.promotionRetryConsequence)
+        XCTAssertEqual(ExceptionCards.retryReason(promoted),
+                       "Nothing reaches main until this check passes.")
+        // A row with no sentence of its own still carries one: the browser's `RETRY_REASON_FALLBACK`.
+        let bare = row { $0.kind = .taskFailed; $0.requiredAction = nil }
+        XCTAssertEqual(ExceptionCards.retryReason(bare), ExceptionCards.retryReasonFallback)
+        XCTAssertEqual(ExceptionCards.retryReason(row { $0.requiredAction = "   " }),
+                       ExceptionCards.retryReasonFallback)
+
+        let web = try webSource()
+        XCTAssertEqual(ExceptionCards.rerunCheck, try declaration(web, "RERUN_CHECK_ACTION_LABEL"))
+        XCTAssertEqual(ExceptionCards.promotionRetryConsequence,
+                       try declaration(web, "PROMOTION_RETRY_CONSEQUENCE"))
+        XCTAssertEqual(ExceptionCards.retryReasonFallback,
+                       try declaration(web, "RETRY_REASON_FALLBACK"))
+        try require(web, "const reason = row.requiredAction?.trim() || RETRY_REASON_FALLBACK;")
+        // The route the re-run travels: the candidate's, on the row that names one (T5's owner door).
+        try require(web, "/integration/retry")
+    }
+
+    /// A RETRY on a FAILED task is the run-again door (`taskFailureDoors`, §4.7): the task starts a
+    /// new run through the owner's own route — the very one Run now presses — and the item closes
+    /// with that fact. It wears the run-again consequence rather than the landing-retry one, and
+    /// both words are the browser's.
+    func testARunAgainOnAFailedTaskIsSaidSo() throws {
+        let failed = row { $0.kind = .taskFailed
+                           $0.actions = [.askCoordinatorAgain, .openTaskSession, .retry] }
+        let press = try XCTUnwrap(ExceptionCards.presses(failed).first { $0.action == .retry })
+        XCTAssertEqual(press.consequence, ExceptionCards.taskRunAgainConsequence)
+        // The landing-retry line belongs to the integration rows: those have a landing to queue
+        // again, and a failed task has no finished delivery to deliver.
+        XCTAssertEqual(ExceptionCards.actionConsequence(row { $0.kind = .integrationError }, .retry),
+                       "A new integration attempt is queued with your reason.")
+
+        let web = try webSource()
+        XCTAssertEqual(ExceptionCards.taskRunAgainConsequence,
+                       try declaration(web, "TASK_RUN_AGAIN_CONSEQUENCE"))
+        XCTAssertEqual(ExceptionCards.notRunAgain, try declaration(web, "TASK_RUN_AGAIN_ERROR"))
+        // The route the press travels: the owner's own execute door (the one Run now presses).
+        try require(web, "`/tasks/${encodeURIComponent(taskId)}/execute`")
+    }
+
+    /// `Review` is a way to the merge card and nothing else: it is drawn only where THAT card is on
+    /// the page (the browser's `currentPromotionId`), and a row naming a candidate whose card is not
+    /// here — a superseded one, a page that never mounted it — gets no door rather than a dead link
+    /// (the account owner's report, 2026-10-02).
+    func testReviewIsDrawnOnlyWhereTheMergeCardIs() {
+        let promoted = row { $0.kind = .integrationError
+                             $0.promotionId = "pr-1"
+                             $0.actions = [.review, .askCoordinatorAgain] }
+        XCTAssertEqual(ExceptionCards.drawn(promoted, mergeCard: "pr-1"), [.review, .askCoordinatorAgain])
+        XCTAssertEqual(ExceptionCards.drawn(promoted, mergeCard: "pr-other"), [.askCoordinatorAgain])
+        XCTAssertEqual(ExceptionCards.drawn(promoted), [.askCoordinatorAgain],
+                       "nil is `the card is not here`, never `do not filter`")
+        // …and it takes the card's weights like any other door: `Review` is not one of the leading
+        // actions (mock 7), so the hand-back leads and the review follows it — but it IS drawn,
+        // which is the press that used to fall into the card's default and never appear.
+        let presses = ExceptionCards.presses(promoted, mergeCard: "pr-1")
+        XCTAssertEqual(presses.map(\.action), [.askCoordinatorAgain, .review])
+        XCTAssertEqual(presses.map(\.tier), [.primary, .link])
+    }
+
     /// (d) The owner's own ending (§4.7, mock 7 方案 B): offered only where the item is theirs and
     /// its kind is one the door closes by hand, drawn last and quietest, and never sent without a
     /// reason — the door requires one.
@@ -717,6 +937,9 @@ final class ExceptionCardsTests: XCTestCase {
                        try declaration(web, "MARK_HANDLED_MODAL_BODY"))
         try require(web, "Why is it no longer open?")
         try require(web, "headline=\"The item was not closed\"")
+        // It is a door of the map like any other, with the same one line under it saying what it
+        // ends — the line the card draws from the model, not from a constant in the view.
+        try require(web, "MARK_HANDLED: '\(ExceptionCards.markHandledConsequence)'")
         // And the same four kinds the browser closes by hand, in the same set the server's own door
         // names.
         for kind in ["INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR",

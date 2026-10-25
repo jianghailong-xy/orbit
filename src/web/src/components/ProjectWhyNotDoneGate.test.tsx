@@ -29,9 +29,10 @@ import {
  * not call it done — the owner's ruling of 2026-10-06 09:29Z, which put back the condition the card
  * had before 0f47238c1. The owner's ruling of 2026-10-07 04:20Z then took the question out of the
  * conversation altogether: NOTHING is drawn in that state, or in any other OPEN one — see
- * `ProjectDoneConversation.test.tsx`, which draws the conversation state by state, and the three
+ * `ProjectDoneConversation.test.tsx`, which draws the conversation state by state, and the two
  * drawings that stay: the owner's card while a DONE_REQUEST or this conversation's own receipt
- * stands, Orbit's DONE as the old card's terminal state, the owner's DONE as its receipt.
+ * stands, and the owner's DONE as its receipt. Orbit's DONE, the old card's terminal state, left
+ * the conversation on 2026-10-25 (the owner's ruling): the project page draws the ending.
  *
  * The condition and the tally are kept because the components that state them are (the projection
  * card's own hold, the terminal card's tally), which is what the cases below are about; the tally
@@ -112,7 +113,7 @@ function finished(
   };
 }
 
-/** The antd migration the owner reported on 2026-10-06: started, OPEN, six criteria and every one
+/** The component migration the owner reported on 2026-10-06: started, OPEN, six criteria and every one
  *  of them Not met yet — whose coordinator conversation carried the card all the same, with "Ask
  *  the coordinator to handle it" on it. */
 function antdMigration(over: Partial<Doc> = {}): Doc {
@@ -143,7 +144,7 @@ describe('what “looks finished” means', () => {
     expect(held(finished({ tasksByStatus: {} }))).toBe(true);
   });
 
-  it('holds of nothing with a criterion still unmet — the antd migration the owner reported', () => {
+  it('holds of nothing with a criterion still unmet — the component migration the owner reported', () => {
     expect(held(antdMigration())).toBe(false);
     const oneUnmet = finished({}, [criterion('c1', true, null), criterion('c2', false, 'CODELESS')]);
     expect(held(oneUnmet)).toBe(false);
@@ -425,7 +426,24 @@ describe('the coordinator conversation', () => {
     }
   });
 
-  describe('the three drawings that stay', () => {
+  it.each([['DERIVED' as const], [null]])('draws nothing for Orbit’s DONE — the old card’s terminal state left too (doneBy %s)', async (doneBy) => {
+    server.document = finished({
+      status: 'DONE',
+      doneBy,
+      doneAt: '2026-10-06T09:00:00.000Z',
+      derivedDone: { ...finished().derivedDone!, status: 'DONE', done: true, withheld: [] },
+    });
+    await mount();
+    // "This project is done · recorded by Orbit" was drawn here until the owner's ruling of
+    // 2026-10-25; the project page draws the ending now.
+    expect(whyCard()).toBeNull();
+    expect(node!.querySelector('.project-settlement')).toBeNull();
+    expect(text()).not.toContain(PROJECT_DONE_COPY.thisProjectIsDone);
+    expect(text()).not.toContain(PROJECT_DONE_COPY.receiptPrefix);
+    expect(text()).not.toContain(PROJECT_DONE_COPY.heading);
+  });
+
+  describe('the two drawings that stay', () => {
     it('draws the closeout card for a DONE_REQUEST, even on a project with every criterion unmet', async () => {
       server.document = antdMigration({ tasksByStatus: { IN_PROGRESS: 2 } });
       server.openItems = DONE_REQUEST;
@@ -453,21 +471,6 @@ describe('the coordinator conversation', () => {
       await read();
       expect(text()).toContain(PROJECT_DONE_COPY.receiptPrefix);
       expect(whyCard()).toBeNull();
-    });
-
-    it.each([['DERIVED' as const], [null]])('draws This project is done · recorded by Orbit for Orbit’s DONE (doneBy %s)', async (doneBy) => {
-      server.document = finished({
-        status: 'DONE',
-        doneBy,
-        doneAt: '2026-10-06T09:00:00.000Z',
-        derivedDone: { ...finished().derivedDone!, status: 'DONE', done: true, withheld: [] },
-      });
-      await mount();
-      const card = node!.querySelector('.project-why-not-done.is-settled');
-      expect(card).not.toBeNull();
-      expect(card?.querySelector('.project-settlement-heading')?.textContent).toBe(PROJECT_DONE_COPY.thisProjectIsDone);
-      expect(card?.querySelector('.criteria-provenance')?.textContent).toBe(PROJECT_DONE_COPY.recordedByOrbit);
-      expect(text()).not.toContain(PROJECT_DONE_COPY.receiptPrefix);
     });
 
     it('keeps the owner’s receipt for the owner’s DONE, criteria unmet or not', async () => {

@@ -16,6 +16,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.painterResource
+import io.orbitd.android.R
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.serialization.json.JsonObject
 import io.orbitd.android.core.cards.*
@@ -62,6 +64,8 @@ fun TaskRowView(task: JsonObject, modifier: Modifier = Modifier) {
                 TaskRowPhrase.PrerequisiteCancelled -> MaterialTheme.colorScheme.error
                 else -> muted
             }
+            // A report with its reviewer says so beside iOS's clock (A08-1).
+            if (phrase == TaskRowPhrase.UnderReview) Icon(painterResource(R.drawable.ic_clock), null, Modifier.size(12.dp), tint = muted)
             Text(TaskListLogic.phraseText(task, phrase), style = MaterialTheme.typography.bodySmall, color = phraseColor, maxLines = 1,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
             task.strings("labels").firstOrNull()?.let { label ->

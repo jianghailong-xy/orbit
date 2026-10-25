@@ -1,0 +1,6 @@
+reference/registry.json: 206 main drift references
+accepted/registry.json: 43 entries, by decision {'34Za39ACSBoCkYKc80Md8': 23, '34Za39Ov1yysHZaYL6wgJ': 8, '34cBi0yt6bFcSmbJFgDPj': 11, '34Za39Do3N6tkmIMP0GBP': 1}, replacing {'p0-drift': 41, 'p0.2': 2}
+expected assembly: 44 P0.2 originals, 165 main drift references, 43 accepted migration differences
+README accepted-list row for P5.3: entries column = 8
+/mnt/data/tmp/34dTUdzY6mgNk4CGh7ZHl/runs/final-round-1: printed (44, 165, 43), sources.json {'p0-drift': 165, 'p0.2': 44, 'accepted': 43}: consistent
+/mnt/data/tmp/34dTUdzY6mgNk4CGh7ZHl/runs/final-round-2: printed (44, 165, 43), sources.json {'p0-drift': 165, 'p0.2': 44, 'accepted': 43}: consistent

@@ -1,0 +1,15 @@
+{
+  "attachments": [
+    {
+      "fileName": "t03-real-attachment.txt",
+      "id": "34jQVd6kNURq9hBaAg6pu",
+      "sha256": "1963388c480e7fd56a812f91db15ae43ff23bc3cb5a1f5dc577b589575540b0a"
+    }
+  ],
+  "branch": "orbit/t03-real-deepseek-session-5d6195",
+  "engine": "claude",
+  "id": "34jQVdG6XLGfbeqCTBRit",
+  "model": null,
+  "provider": "deepseek-3",
+  "status": "PENDING"
+}

@@ -1,0 +1,29 @@
+== checkout: fb93b94037850d725c76a9ba4c0a900323906909 test(managed-runners): the recovery reasons in the shared client states, and eac
+== services
+orbit-apiserver orbit-apiserver:local Up 52 seconds (healthy)
+orbit-docker-channel orbit-docker-channel:local Up 21 seconds (healthy)
+orbit-gateway nginx:alpine Up About an hour (healthy)
+orbit-pgbackup postgres:16-alpine Up About an hour
+orbit-postgres postgres:16-alpine Up About an hour (healthy)
+orbit-web orbit-web Up 30 seconds (healthy)
+orbit-wiki-worker orbit-apiserver:local Up 30 seconds
+== images
+orbit-managed-runner:local f0600d1af26e 2 minutes ago
+orbit-apiserver:local e6908c28afa3 19 minutes ago
+orbit-web:latest 4317862ff820 39 minutes ago
+orbit-web:previous-release fe8bceb28c41 About an hour ago
+orbit-docker-channel:local 04da46b43ac5 About an hour ago
+nginx:alpine 892bb2152464 2 days ago
+postgres:16-alpine 721873c34ceb 4 weeks ago
+== runner image in the files
+  "image": "sha256:f0600d1af26ec4d56835f76caee6f81373a1e4afea68442a136b4a67219e9618",
+    "image": "sha256:f0600d1af26ec4d56835f76caee6f81373a1e4afea68442a136b4a67219e9618",
+== the apiserver build has the D7 manager
+3
+1
+== the runner image revision
+fb93b94037850d725c76a9ba4c0a900323906909
+== lifecycle in profile.json
+{'maxAttempts': 5, 'backoffBaseSeconds': 10, 'backoffMaxSeconds': 300, 'startupDeadlineSeconds': 1800, 'requestTimeoutSeconds': 60, 'leaseSeconds': 60, 'pollIntervalSeconds': 5, 'heartbeatFreshSeconds': 120, 'idleSeconds': 3600, 'capacityRetrySeconds': 60, 'drainSeconds': 600}
+== the manager is on
+[Nest] 130  - 10/17/2026, 5:16:37 PM     LOG [ManagedRunners] managed runners are enabled in orbit-5260bc6c (Docker instance orbit-5260bc6c)

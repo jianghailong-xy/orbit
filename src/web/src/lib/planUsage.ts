@@ -45,6 +45,11 @@ export function planUsageSnapshotForProvider(
     if (usage.antigravity) return usage.antigravity;
     return usage.provider === 'antigravity' ? usage : null;
   }
+  // Cursor CLI's is only ever nested (PlanUsage.cursor); a flat one names itself.
+  if (provider === AgentProvider.CURSOR) {
+    if (usage.cursor) return usage.cursor;
+    return usage.provider === AgentProvider.CURSOR ? usage : null;
+  }
   if (provider === 'codex') {
     if (usage.codex) return usage.codex;
     if (usage.provider && usage.provider !== 'codex') return null;
@@ -71,25 +76,26 @@ export function codexAccountPlanUsage(
 }
 
 /**
- * The quota to show for a session running on `provider`.
+ * The quota to show for a session on `engine` spending `provider`.
  *
  * Quota belongs to the credential the session actually spends, so the lookup follows the same
- * order dispatch does: a configured provider bills its own key and reports against that account,
- * while a built-in engine runs on the runner's own login and reports through the heartbeat. A
- * configured slug therefore never falls back to the runner's numbers — those are a different
- * subscription — and simply has no gauge when its credential has no quota to report.
+ * order dispatch does: an engine's own sign-in runs on the runner's login and reports through the
+ * heartbeat, while a key (or pool) bills its own account and reports against that — on whichever
+ * engine runs it. A key therefore never falls back to the runner's numbers — those are a different
+ * subscription — and simply has no gauge when its credential has no quota to report. OpenCode's own
+ * configuration and the legacy built-in `dsh` report none.
  */
 export function sessionPlanUsage(
+  engine: string,
   provider: string,
   runnerUsage: PlanUsage | null | undefined,
   configured?: ConfiguredProvider[] | null,
 ): PlanUsageSnapshot | null {
-  // A configured row that shadows a built-in slug is not what dispatch runs (isBuiltinProvider
-  // wins), so its credential is not the one being spent either.
+  // An engine's own sign-in: the slug is the engine's name. A configured row that shadows it is not
+  // what dispatch runs (isBuiltinProvider wins), so its credential is not the one being spent either.
+  if (provider === engine) return planUsageSnapshotForProvider(runnerUsage, engine);
   const builtin = Object.values(AgentProvider).some((p) => p === provider);
-  const row = builtin ? undefined : configured?.find((p) => p.slug === provider);
-  if (row) return row.planUsage ?? null;
-  return planUsageSnapshotForProvider(runnerUsage, provider);
+  return (builtin ? undefined : configured?.find((p) => p.slug === provider))?.planUsage ?? null;
 }
 
 /** Split a runner's possibly multi-runtime quota payload into display sections. */
@@ -139,11 +145,22 @@ export function planUsageSnapshots(usage: PlanUsage): PlanUsageSectionInfo[] {
   ];
 }
 
-const CLAUDE_ROWS: { key: 'fiveHour' | 'sevenDay' | 'sevenDayOpus' | 'sevenDaySonnet'; label: string }[] = [
+type NamedWindowKey = 'fiveHour' | 'sevenDay' | 'sevenDayOpus' | 'sevenDaySonnet' | 'month';
+
+const CLAUDE_ROWS: { key: NamedWindowKey; label: string }[] = [
   { key: 'fiveHour', label: '5-hour limit' },
   { key: 'sevenDay', label: 'Weekly · all models' },
   { key: 'sevenDayOpus', label: 'Weekly · Opus' },
   { key: 'sevenDaySonnet', label: 'Weekly · Sonnet' },
+];
+
+/** Kimi Code's windows (PlanUsageSnapshot), in the words its own /usage panel uses for them. The month
+ *  is one bar, its total: the coding share of it (`monthCode`) is not drawn, on every client — the
+ *  owner's call, 2026-10-08 — though the quota decisions in @orbit/shared still read it. */
+const KIMI_ROWS: { key: NamedWindowKey; label: string }[] = [
+  { key: 'fiveHour', label: '5h limit' },
+  { key: 'sevenDay', label: 'Weekly limit' },
+  { key: 'month', label: 'Monthly limit' },
 ];
 
 function clampPercent(value: number): number {
@@ -212,7 +229,48 @@ function codexRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
   });
 }
 
+/**
+ * A Cursor CLI account's included usage (PlanUsageIncludedUsage) as rows: one window, its period's —
+ * a paid plan's week, else the billing month — and only while Cursor reports some of it used. Its 0% is
+ * no reading (docs/cursor-runtime-contract.md §11: the Free plan's requests and Auto never move it), so
+ * an account with none has no row, and every reader says "Usage unavailable" rather than draw 0%.
+ * Whether the account is spent is not a reading at all but a turn that met the limit (cursorUsageLimit).
+ */
+function cursorRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
+  const included = usage.includedUsage;
+  const used = included?.percentUsed;
+  if (!included || typeof used !== 'number' || !Number.isFinite(used) || used <= 0) return [];
+  return [
+    {
+      key: 'included',
+      label: included.period === 'weekly' ? 'Weekly limit' : 'Monthly limit',
+      window: { utilization: used, ...(included.resetsAt ? { resetsAt: included.resetsAt } : {}) },
+      percent: clampPercent(used),
+      nearLimit: used >= 90,
+    },
+  ];
+}
+
+/**
+ * When a Cursor CLI account met Cursor's usage limit this period ("Upgrade your plan to continue",
+ * contract §12): spent until its included usage resets, which `resetsAt` names when Cursor did — and
+ * not at all once that has passed, or for a limit met before this period began. Null for an account
+ * that can run. The same judgement @orbit/shared's quota gates make of the snapshot (cursorWindows).
+ */
+export function cursorUsageLimit(
+  usage: PlanUsageSnapshot | null | undefined,
+  now: number = Date.now(),
+): { resetsAt?: string } | null {
+  const included = usage?.includedUsage;
+  const reached = Date.parse(included?.limitReachedAt ?? '');
+  if (!included || Number.isNaN(reached) || reached < Date.parse(included.startsAt ?? '')) return null;
+  const resets = Date.parse(included.resetsAt ?? '');
+  if (resets <= now) return null;
+  return resets > reached ? { resetsAt: included.resetsAt } : {};
+}
+
 export function planUsageRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
+  if (usage.provider === AgentProvider.CURSOR) return cursorRows(usage);
   if (usage.provider === 'antigravity') return (usage.buckets ?? []).map((bucket) => {
     const used = (1 - bucket.remainingFraction) * 100;
     return {
@@ -227,7 +285,7 @@ export function planUsageRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
   });
   const codex = usage.provider === 'codex' || !!usage.primary || !!usage.secondary || !!usage.rateLimits?.length;
   if (codex) return codexRows(usage);
-  return CLAUDE_ROWS.flatMap(({ key, label }) => {
+  return (usage.provider === 'kimi' ? KIMI_ROWS : CLAUDE_ROWS).flatMap(({ key, label }) => {
     const window = usage[key];
     if (!window || typeof window.utilization !== 'number') return [];
     const percent = clampPercent(window.utilization);
@@ -241,6 +299,24 @@ export function planUsageRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
       },
     ];
   });
+}
+
+/**
+ * A Kimi login whose plan carries no quota limit: the runner read its quota and the answer held no
+ * window at all — Kimi Code's /usage skips a limit the backend omits, so a plan with none reads as
+ * none. Distinct from a login never read or whose read failed ("No quota reported"): this one was
+ * read, and there is no quota to gauge. The coding share of the month (`monthCode`) counts as a
+ * window here though it is never drawn: a plan that reports it has a limit.
+ */
+export function kimiNoQuotaLimit(snapshot: PlanUsageSnapshot | null | undefined): boolean {
+  return (
+    !!snapshot &&
+    snapshot.provider === 'kimi' &&
+    !snapshot.fiveHour &&
+    !snapshot.sevenDay &&
+    !snapshot.month &&
+    !snapshot.monthCode
+  );
 }
 
 /**

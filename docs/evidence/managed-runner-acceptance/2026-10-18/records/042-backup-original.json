@@ -1,0 +1,201 @@
+{
+ "checks": [
+  {
+   "check": "ann: the same runner, PVC, PV, volume handle, RBD image and workspace after the backup and the restore",
+   "ok": true,
+   "value": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834"
+  },
+  {
+   "check": "ann: the same runner, PVC, PV, volume handle, RBD image and workspace woken after the restore check: on the original volume",
+   "ok": true,
+   "value": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834"
+  },
+  {
+   "check": "ann: the engine resumed the session after the backup: its request carried the earlier conversation",
+   "ok": true,
+   "value": {
+    "messages": 41,
+    "secrets": [
+     "annfirst"
+    ]
+   }
+  },
+  {
+   "check": "ann: the probe written before the backup is unchanged on the original",
+   "ok": true,
+   "value": {
+    "gitHead": true,
+    "randomSha256": true,
+    "rows": true,
+    "rowsSha256": true
+   }
+  }
+ ],
+ "endedAt": "2026-10-18T12:56:48.642+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "backup",
+ "result": {
+  "answered": {
+   "event": {
+    "created_at": "2026-10-18T12:56:47.942",
+    "ingested_at": "2026-10-18T12:56:48.018486+00:00",
+    "ingested_by_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "seq": 117,
+    "session_id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+    "type": "assistant"
+   },
+   "modelRequests": [
+    {
+     "at": "2026-10-18T12:56:47Z",
+     "kind": "text",
+     "messages": 41,
+     "n": 30,
+     "secrets": [
+      "annfirst"
+     ],
+     "tool": null
+    }
+   ],
+   "session": {
+    "assigned_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "created_at": "2026-10-18T12:37:47.476",
+    "engine": "claude",
+    "id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+    "provider": "deepseek-2",
+    "runtime_session_id": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+    "status": "RUNNING",
+    "task_id": null
+   }
+  },
+  "enabled": {
+   "answer": {
+    "disabledAt": null,
+    "email": "t08-ann@lab.invalid",
+    "id": "34i3N7YWPyZxFmU3WOzzQ"
+   },
+   "at": "2026-10-18T12:56:35.370+00:00",
+   "disabled": false,
+   "owner": "ann",
+   "status": 200
+  },
+  "identity": {
+   "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+   "generation": 6,
+   "podUid": null,
+   "pool": "orbit-mr-rbd",
+   "pvName": "pvc-4caa2267-5150-455d-9fc8-e9efd7e63154",
+   "pvUid": "db2d8021-0ab2-45ec-a5f4-f6a5fe9452bc",
+   "pvcName": "mr-data-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+   "pvcUid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+   "rbdImage": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+   "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+   "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-803a7868-15d8-4471-80c9-6a33de2d9834",
+   "workspaceId": "01a14f03-ec43-720c-b116-29d91c569ca6"
+  },
+  "originalRbdInfo": {
+   "access_timestamp": "Sun Oct 18 12:55:56 2026",
+   "block_name_prefix": "rbd_data.2f67fd3d8d0a2",
+   "create_timestamp": "Sun Oct 18 12:36:59 2026",
+   "features": [
+    "layering"
+   ],
+   "flags": [],
+   "format": 2,
+   "id": "2f67fd3d8d0a2",
+   "modify_timestamp": "Sun Oct 18 12:36:59 2026",
+   "name": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+   "object_size": 4194304,
+   "objects": 512,
+   "op_features": [],
+   "order": 22,
+   "size": 2147483648,
+   "snapshot_count": 0
+  },
+  "probe": {
+   "action": "check",
+   "allSame": true,
+   "at": "2026-10-18T12:56:48.642+00:00",
+   "data": {
+    "gitFsckExit": 0,
+    "gitHead": "7f8108f5328cfc3357e2c01ac8eb1a4d121a5e37",
+    "integrityCheck": "ok",
+    "maxRow": 150,
+    "mount": [
+     [
+      "/dev/rbd1",
+      "/var/lib/orbit",
+      "ext4"
+     ]
+    ],
+    "randomSha256": "b146e40fe13f66c4cd0ce89ee7e865a774da66b107108013528efe79d6c67207",
+    "rows": 150,
+    "rowsSha256": "8436f7a9143c40be270617776226e4957e33183e8a50cb8ae90591334ede5596"
+   },
+   "generation": 6,
+   "owner": "ann",
+   "pod": "fbf0ed0d-8a7f-4b36-a907-4a191c4493ec",
+   "run": "b125243",
+   "same": {
+    "gitHead": true,
+    "randomSha256": true,
+    "rows": true,
+    "rowsSha256": true
+   },
+   "sameRunnerId": true,
+   "volume": {
+    "managedInstance": {
+     "generation": 6,
+     "podUid": "fbf0ed0d-8a7f-4b36-a907-4a191c4493ec",
+     "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36"
+    },
+    "repos": [
+     "default"
+    ],
+    "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "worktrees": [
+     "01a14f04-a754-73a1-9d1b-91a624ffc84d"
+    ]
+   },
+   "writtenAt": "2026-10-18T12:53:00.625+00:00",
+   "writtenByGeneration": 5,
+   "writtenByPod": "9f389de8-9abe-430f-a6fb-40041929e1a4"
+  },
+  "signedIn": {
+   "at": "2026-10-18T12:56:35.383+00:00",
+   "ms": 32.0,
+   "status": 201
+  },
+  "turn": {
+   "answer": {
+    "code": null,
+    "id": null,
+    "message": null,
+    "seq": 13,
+    "status": null
+   },
+   "at": "2026-10-18T12:56:35.422+00:00",
+   "kind": "turn",
+   "session": "34i3WAGGhr09tgpAvF8px",
+   "status": 201
+  },
+  "turnAt": "2026-10-18T12:56:35.422+00:00",
+  "woken": {
+   "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+   "generation": 6,
+   "podUid": "fbf0ed0d-8a7f-4b36-a907-4a191c4493ec",
+   "pool": "orbit-mr-rbd",
+   "pvName": "pvc-4caa2267-5150-455d-9fc8-e9efd7e63154",
+   "pvUid": "db2d8021-0ab2-45ec-a5f4-f6a5fe9452bc",
+   "pvcName": "mr-data-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+   "pvcUid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+   "rbdImage": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+   "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+   "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-803a7868-15d8-4471-80c9-6a33de2d9834",
+   "workspaceId": "01a14f03-ec43-720c-b116-29d91c569ca6"
+  }
+ },
+ "seconds": 14.3,
+ "startedAt": "2026-10-18T12:56:34.344+00:00",
+ "step": "original"
+}

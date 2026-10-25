@@ -1,0 +1,48 @@
+argv: env TREE=after npx playwright test --config ui-migration/rename-probe-v2.config.mjs --project chromium-light-desktop --project webkit-light-desktop --project webkit-dark-desktop --repeat-each=5
+tree: /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del
+head: 822c00ff04b3f00af6d983e043b4275ad2f025c0
+uncommitted:
+?? src/web/ui-migration/rename-probe-v2.config.mjs
+?? src/web/ui-migration/rename-probe.browser.mjs
+load: 24.55 28.56 32.26 12/5750 97059
+disk: / 85372M available, TMPDIR /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/tmp
+started: 2026-10-08T12:17:18Z
+
+
+Running 30 tests using 1 worker
+
+  ✓   1 [chromium-light-desktop] › ui-migration/rename-probe.browser.mjs:7:1 › rename from the account menu (4.4s)
+  ✓   2 [chromium-light-desktop] › ui-migration/rename-probe.browser.mjs:45:1 › configure from the workspace menu (2.2s)
+  ✓   3 [chromium-light-desktop] › ui-migration/rename-probe.browser.mjs:7:1 › rename from the account menu (3.8s)
+  ✓   4 [chromium-light-desktop] › ui-migration/rename-probe.browser.mjs:45:1 › configure from the workspace menu (2.9s)
+  ✓   5 [chromium-light-desktop] › ui-migration/rename-probe.browser.mjs:7:1 › rename from the account menu (3.0s)
+  ✓   6 [chromium-light-desktop] › ui-migration/rename-probe.browser.mjs:45:1 › configure from the workspace menu (2.1s)
+  ✓   7 [chromium-light-desktop] › ui-migration/rename-probe.browser.mjs:7:1 › rename from the account menu (2.8s)
+  ✓   8 [chromium-light-desktop] › ui-migration/rename-probe.browser.mjs:45:1 › configure from the workspace menu (2.2s)
+  ✓   9 [chromium-light-desktop] › ui-migration/rename-probe.browser.mjs:7:1 › rename from the account menu (3.3s)
+  ✓  10 [chromium-light-desktop] › ui-migration/rename-probe.browser.mjs:45:1 › configure from the workspace menu (2.3s)
+  ✓  11 [webkit-light-desktop] › ui-migration/rename-probe.browser.mjs:7:1 › rename from the account menu (4.2s)
+  ✓  12 [webkit-light-desktop] › ui-migration/rename-probe.browser.mjs:45:1 › configure from the workspace menu (6.0s)
+  ✓  13 [webkit-light-desktop] › ui-migration/rename-probe.browser.mjs:7:1 › rename from the account menu (3.9s)
+  ✓  14 [webkit-light-desktop] › ui-migration/rename-probe.browser.mjs:45:1 › configure from the workspace menu (3.3s)
+  ✓  15 [webkit-light-desktop] › ui-migration/rename-probe.browser.mjs:7:1 › rename from the account menu (11.1s)
+  ✓  16 [webkit-light-desktop] › ui-migration/rename-probe.browser.mjs:45:1 › configure from the workspace menu (6.7s)
+  ✓  17 [webkit-light-desktop] › ui-migration/rename-probe.browser.mjs:7:1 › rename from the account menu (4.0s)
+  ✓  18 [webkit-light-desktop] › ui-migration/rename-probe.browser.mjs:45:1 › configure from the workspace menu (4.0s)
+  ✓  19 [webkit-light-desktop] › ui-migration/rename-probe.browser.mjs:7:1 › rename from the account menu (4.9s)
+  ✓  20 [webkit-light-desktop] › ui-migration/rename-probe.browser.mjs:45:1 › configure from the workspace menu (6.7s)
+  ✓  21 [webkit-dark-desktop] › ui-migration/rename-probe.browser.mjs:7:1 › rename from the account menu (5.1s)
+  ✓  22 [webkit-dark-desktop] › ui-migration/rename-probe.browser.mjs:45:1 › configure from the workspace menu (4.7s)
+  ✓  23 [webkit-dark-desktop] › ui-migration/rename-probe.browser.mjs:7:1 › rename from the account menu (4.3s)
+  ✓  24 [webkit-dark-desktop] › ui-migration/rename-probe.browser.mjs:45:1 › configure from the workspace menu (3.8s)
+  ✓  25 [webkit-dark-desktop] › ui-migration/rename-probe.browser.mjs:7:1 › rename from the account menu (14.3s)
+  ✓  26 [webkit-dark-desktop] › ui-migration/rename-probe.browser.mjs:45:1 › configure from the workspace menu (7.7s)
+  ✓  27 [webkit-dark-desktop] › ui-migration/rename-probe.browser.mjs:7:1 › rename from the account menu (4.3s)
+  ✓  28 [webkit-dark-desktop] › ui-migration/rename-probe.browser.mjs:45:1 › configure from the workspace menu (2.5s)
+  ✓  29 [webkit-dark-desktop] › ui-migration/rename-probe.browser.mjs:7:1 › rename from the account menu (8.6s)
+  ✓  30 [webkit-dark-desktop] › ui-migration/rename-probe.browser.mjs:45:1 › configure from the workspace menu (4.9s)
+
+  30 passed (2.9m)
+exit=0
+load: 43.25 35.57 34.28 24/6088 127582
+ended: 2026-10-08T12:20:20Z

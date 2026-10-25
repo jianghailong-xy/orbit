@@ -254,12 +254,13 @@ const SETTING_NAMES: Record<ProjectStartSettingKey, string> = {
   mergeCheckCommand: 'the merge check',
 };
 
-/** The settings a start left the project with, in one line, as the message says them. */
+/** The settings a start left the project with, in one line, as the message says them. "main" is
+ *  the project's main branch by its name when the start recorded one. */
 function projectStartSettingsLine(settings: ProjectStartSettings): string {
   const line = settings.line === 'PROJECT_BRANCH'
     ? `tasks land on the project branch ${
       settings.projectBranchName ? branchName(settings.projectBranchName) : 'of its own'} first`
-    : 'tasks land directly into main';
+    : `tasks land directly into ${settings.upstreamRef ? branchName(settings.upstreamRef) : 'main'}`;
   const tasks = settings.maxConcurrentTasks === 1 ? 'task' : 'tasks';
   return [
     line,

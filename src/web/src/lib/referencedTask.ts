@@ -11,9 +11,10 @@ import { encodeId } from './idCodec';
  * into cards. What it replaces there is a plain-text table, and with it the one thing on it worth
  * the most: the task's id sits in the opening tag, where a reader could see it and not click it.
  *
- * The block is written in one wording only (it has never been reworded, unlike background-jobs), so
- * a reworded field is read as no field at all and the note keeps the shape it has always had. That
- * is the intended failure: a card missing the row a reader came for is worse than the text.
+ * The block has two wordings: the English it is written in since the copy became English (2026-10),
+ * and the Chinese every older transcript holds. Both are read, label for label, and nothing else: a
+ * field reworded beyond them is read as no field at all and the note keeps the shape it has always
+ * had. That is the intended failure: a card missing the row a reader came for is worse than the text.
  *
  * Only `referenced-task`. Delivery writes `<referenced-list>` too, but this deployment's record
  * holds not one of them, and a shape nobody has seen is not one to guess at — such a block stays in
@@ -27,7 +28,7 @@ export interface ReferencedTask {
   title: string;
   /** `DONE` | `OPEN` | `FAILED` | … — the lifecycle name, never translated. */
   status: string;
-  /** What the status line said after it: `验收任务`, `协调任务`. */
+  /** What the status line said after it: `verification task`, `coordinating task` (`验收任务`, `协调任务`). */
   suffixes: string[];
   /** The list it is filed under, or the block's own words for being in none. */
   list: string;
@@ -47,10 +48,11 @@ export interface ReferencedTasks {
 
 const BLOCK = /<referenced-task id="([^"\n]*)">\n([\s\S]*?)\n<\/referenced-task>/g;
 /** A field line: two spaces, the label, and the value. The narration line matches no label. */
-const FIELD = /^ {2}(标题|状态|所属|运行) +(.*)$/;
-/** `(无列表) · 负责 orbit` — greedy, so a list whose own title says it keeps it. */
-const PLACE = /^(.*) · 负责 (.*)$/;
-const RUNS = /^共 (\d+) 次，其中执行过 turn 的 (\d+) 次；最近一次：(.*)$/;
+const FIELD = /^ {2}(Title|Status|List|Runs|标题|状态|所属|运行) +(.*)$/;
+/** `(no list) · assignee orbit` — greedy, so a list whose own title says it keeps it. */
+const PLACE = /^(.*) · (?:assignee|负责) (.*)$/;
+/** `1 in total, 1 of them took a turn; last: …`, or `共 1 次，其中执行过 turn 的 1 次；最近一次：…`. */
+const RUNS = /^(?:共 )?(\d+)(?: in total, | 次，其中执行过 turn 的 )(\d+)(?: of them took a turn; last: | 次；最近一次：)(.*)$/;
 /** What the status line hangs its suffixes off, and what a card hangs them off in turn. */
 const SUFFIX = ' · ';
 
@@ -86,10 +88,10 @@ function parseTask(id: string, body: string): ReferencedTask | null {
     const field = FIELD.exec(line);
     if (field) fields.set(field[1], field[2]);
   }
-  const title = fields.get('标题');
-  const [status, ...suffixes] = (fields.get('状态') ?? '').split(SUFFIX);
-  const place = PLACE.exec(fields.get('所属') ?? '');
-  const runs = RUNS.exec(fields.get('运行') ?? '');
+  const title = fields.get('Title') ?? fields.get('标题');
+  const [status, ...suffixes] = (fields.get('Status') ?? fields.get('状态') ?? '').split(SUFFIX);
+  const place = PLACE.exec(fields.get('List') ?? fields.get('所属') ?? '');
+  const runs = RUNS.exec(fields.get('Runs') ?? fields.get('运行') ?? '');
   if (!title || !status || !place || !runs) return null;
   return {
     id,

@@ -1,4 +1,5 @@
 import { AgentProvider } from './enums';
+import { decodeCursorModel } from './cursorModels';
 import type { RunnerModelCatalog, RunnerModelInfo } from './dto';
 
 /** The model each provider falls back to when neither the session nor its Runtime supplies one.
@@ -19,6 +20,10 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
   // ACP supplies opaque model tokens via configOptions. No static model or window fallback:
   // a blank selection leaves the Harness's current/default choice intact (P0 contract §4).
   [AgentProvider.DSH]: '',
+  // Cursor CLI's ACP model values are parameterized variants (`gpt-5.5[context=272k,…]`, Auto is
+  // `default[]`) that only the runner's live catalogue lists. Blank leaves a new session on Auto
+  // (docs/cursor-runtime-contract.md §10, §16.3).
+  [AgentProvider.CURSOR]: '',
 };
 
 /**
@@ -72,7 +77,9 @@ export const FAST_MODE_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
  * One model's row in the assigned runner's catalogue for the runtime that will execute it.
  *
  * Shared by the two capability questions that used to be answered from static tables, so both
- * read the same row and cannot disagree about whether the runner has spoken.
+ * read the same row and cannot disagree about whether the runner has spoken. A Cursor CLI variant
+ * (`claude-opus-5-5[context=1m]`) the catalogue does not list as it stands is its model's row: the
+ * catalogue lists each model once, by its bare name, with the settings a variant names (cursorModels.ts).
  */
 export function runnerCatalogRow(
   runtime: string,
@@ -81,7 +88,10 @@ export function runnerCatalogRow(
 ): RunnerModelInfo | undefined {
   const rows = modelCatalog?.[runtime as AgentProvider];
   if (!Array.isArray(rows)) return undefined;
-  return rows.find((row) => row?.value === model);
+  const row = rows.find((entry) => entry?.value === model);
+  if (row || runtime !== AgentProvider.CURSOR) return row;
+  const name = decodeCursorModel(model).model;
+  return rows.find((entry) => entry?.value === name);
 }
 
 /**
@@ -197,7 +207,8 @@ export function modelForProvider(
   const model = override || fallback;
   // Harness configOptions values are opaque tokens, not ids that can be rebuilt or validated
   // using another runtime's prefixes. Admission checks them against that runtime's live list.
-  if (provider === AgentProvider.DSH) return model;
+  // Cursor CLI's are too, and it runs other vendors' models: a `claude-…` or `gpt-…` id is its own.
+  if (provider === AgentProvider.DSH || provider === AgentProvider.CURSOR) return model;
   // OpenCode's selector is always `provider/model`. A provider-only API patch from an older
   // client can leave the prior runtime's model on the agent; omit that invalid bare id instead
   // of passing it to the CLI. A namespaced id is opaque here — it may legitimately name any

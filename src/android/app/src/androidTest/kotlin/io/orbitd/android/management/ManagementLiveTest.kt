@@ -117,7 +117,7 @@ class ManagementLiveTest {
         click(hasText("Settings") and hasClickAction())
         await("Default permission")
     }
-    private fun providers() { settings(); click(hasText("Providers") and hasClickAction()); await("Account pools") }
+    private fun providers() { settings(); click(hasText("Infrastructure") and hasClickAction()); await("Account pools") }
     private fun pick(row: String, option: String) { click(hasText(row) and hasClickAction()); click(hasText(option) and hasClickAction(), scroll = false) }
     private fun field(label: String) = compose.onNode(hasSetTextAction() and hasText(label))
     private fun back() = compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
@@ -234,7 +234,7 @@ class ManagementLiveTest {
     @Test fun step3ARunnerIsApprovedFromThePhoneByItsCode() {
         val owner = account("owner")
         signIn(owner); settings()
-        click(hasText("Runners") and hasClickAction()); await("Add Runner")
+        click(hasText("Infrastructure") and hasClickAction()); await("Add Runner")
         click(hasText("Add Runner") and hasClickAction())
         await("No browser on that machine?")
         field("Code").performScrollTo().performTextInput(arg("a13DeviceCode"))
@@ -251,7 +251,7 @@ class ManagementLiveTest {
     @Test fun step4RunnerManagementReachesTheRunnerAndTheServer() {
         val owner = account("owner")
         signIn(owner); settings()
-        click(hasText("Runners") and hasClickAction())
+        click(hasText("Infrastructure") and hasClickAction())
         click(hasText("a13-box") and hasClickAction()); await("About This Runner")
         val activity = System.identityHashCode(compose.activity)
         compose.waitForIdle(); Thread.sleep(2_000); await("About This Runner")
@@ -322,7 +322,7 @@ class ManagementLiveTest {
         signIn(owner)
         openWorkspace(workspace)
         compose.onNodeWithContentDescription("Workspace settings").performClick()
-        await("Smart model selection for tasks")
+        await("Working directory")
         field("Name").performTextReplacement("Stack workspace 2")
         compose.onAllNodes(hasSetTextAction()).filter(hasText("Name").not() and hasText("Path").not()).onFirst().performTextInput("Be brief.")
         capture("live-workspace-settings")
@@ -330,12 +330,12 @@ class ManagementLiveTest {
         eventually("server: workspace name and instructions saved") {
             read(owner, "workspaces/$workspace").jsonObject.let { it.s("name") == "Stack workspace 2" && it.s("appendSystemPrompt") == "Be brief." }
         }
-        compose.onNodeWithContentDescription("Workspace settings").performClick(); await("Smart model selection for tasks")
+        compose.onNodeWithContentDescription("Workspace settings").performClick(); await("Working directory")
         field("Name").performTextReplacement("Cancelled edit")
         click(hasText("Cancel") and hasClickAction(), scroll = false)
         compose.waitForIdle(); Thread.sleep(1_500)
         ok("server: Cancel wrote nothing", read(owner, "workspaces/$workspace").jsonObject.s("name") == "Stack workspace 2")
-        compose.onNodeWithContentDescription("Workspace settings").performClick(); await("Smart model selection for tasks")
+        compose.onNodeWithContentDescription("Workspace settings").performClick(); await("Working directory")
         ok("the form opens again on the server's record, not the cancelled edit", shows(hasSetTextAction() and hasText("Stack workspace 2")))
         click(hasText("Cancel") and hasClickAction(), scroll = false)
     }
@@ -422,7 +422,7 @@ class ManagementLiveTest {
     @Test fun step8RotatingAndRemovingTheRunner() {
         val owner = account("owner")
         signIn(owner); settings()
-        click(hasText("Runners") and hasClickAction())
+        click(hasText("Infrastructure") and hasClickAction())
         click(hasText("Stack box") and hasClickAction()); await("About This Runner")
         val id = runner(owner).s("id")!!
         click(hasText("Rotate Token…") and hasClickAction())

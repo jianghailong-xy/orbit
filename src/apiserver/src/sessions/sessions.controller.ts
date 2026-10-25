@@ -387,6 +387,9 @@ export class SessionsController {
     // Page size. Omitted (every native client) means the whole list, as before.
     @Query('limit') limit?: string,
     @Query('projectId', PublicIdPipe) projectId?: string,
+    // Contract §2.9 LS6: the project sessions page asks for its LANDING sessions too, through
+    // `includeLanding=1`. Honoured only beside `projectId`; every flat list stays conversations.
+    @Query('includeLanding') includeLanding?: string,
     // The Open list as a delta against the cursor of the copy already held (see
     // SessionsService.listOpenSince). Present at all — even empty — asks for the delta shape, which
     // is how a client gets its first cursor; absent keeps the plain array every older client reads.
@@ -395,10 +398,11 @@ export class SessionsController {
     @Res({ passthrough: true }) res?: Response,
   ) {
     const confinedTo = workspaceConfinement(user);
+    const withLanding = includeLanding === '1' && projectId !== undefined;
     if (since !== undefined && (view === undefined || view === 'open' || view === 'active')) {
       return this.sessions.listOpenSince(
         user.userId,
-        { runnerId, workspaceId: workspaceId ?? agentId, tagId, projectId, confinedTo },
+        { runnerId, workspaceId: workspaceId ?? agentId, tagId, projectId, includeLanding: withLanding, confinedTo },
         since,
       );
     }
@@ -408,6 +412,7 @@ export class SessionsController {
       workspaceId: workspaceId ?? agentId,
       tagId,
       projectId,
+      includeLanding: withLanding,
       confinedTo,
       view,
       limit: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
@@ -417,13 +422,19 @@ export class SessionsController {
     // serialized. The 304 is ended here rather than left to Express's `req.fresh`, which refuses
     // any request carrying `Cache-Control: no-cache` (as fetch() adds to every conditional one);
     // what Nest sends after it is a no-op on a finished response. Other views keep Express's
-    // body-hash ETag.
-    if (res && isOpenListView(view)) {
-      const etag = openListEtag(await this.sessions.openListVersion(user.userId), {
+    // body-hash ETag. A landing-aware read is a different list, so it has its own version scope:
+    // an insert or a settlement moves that one and leaves the plain list's where it was.
+    // A plain project read (`projectId` without `includeLanding`) is built every time instead: a
+    // workspace list sends one for each project it shows, every 4 s while its stream is down, and
+    // the version reads the whole account (~230 ms on 6.7k sessions) to spare a few rows that take
+    // milliseconds — one such tab was most of production's database time on 2026-10-20.
+    if (res && isOpenListView(view) && (projectId === undefined || withLanding)) {
+      const etag = openListEtag(await this.sessions.openListVersion(user.userId, withLanding), {
         runnerId: filters.runnerId,
         workspaceId: filters.workspaceId,
         tagId,
         projectId,
+        includeLanding: withLanding ? 1 : undefined,
         confinedTo: confinedTo?.join(','),
         limit: filters.limit,
       });
@@ -492,6 +503,43 @@ export class SessionsController {
     return this.sessions.getForOrchestration(user.userId, id);
   }
 
+  /**
+   * One page of a landing session's check output (contract §2.9 LS2): the landing page's read of
+   * what a check printed while the landing ran. The user gate is the session's owner, and another
+   * account's session — or one that is not a landing session — is 404.
+   *
+   * `jobId` names an attempt from the landing view's generations (the newest when absent); `claim`,
+   * `round` and `check` narrow within it, and `cursor` continues the page a previous answer named.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @Get(':id/landing/log')
+  landingLog(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('jobId', PublicIdPipe) jobId?: string,
+    @Query('claim') claim?: string,
+    @Query('round') round?: string,
+    @Query('check') check?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    return this.sessions.landingLog(user.userId, id, {
+      ...(jobId ? { jobId } : {}),
+      ...(claim !== undefined ? { claim: SessionsController.landingPageNumber('claim', claim) } : {}),
+      ...(round !== undefined ? { round: SessionsController.landingPageNumber('round', round) } : {}),
+      ...(check !== undefined ? { check: SessionsController.landingPageNumber('check', check) } : {}),
+      ...(cursor?.trim() ? { cursor: cursor.trim() } : {}),
+    });
+  }
+
+  /** One paging selector a landing-log read may omit but not send malformed. */
+  private static landingPageNumber(field: string, raw: string): number {
+    const value = raw.trim();
+    if (!/^\d+$/.test(value)) {
+      throw new BadRequestException(`${field} must be a non-negative integer`);
+    }
+    return Number(value);
+  }
+
   @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Get(':id/artifacts')
   async artifact(
@@ -530,6 +578,15 @@ export class SessionsController {
   @Post(':id/diff/refresh')
   refreshDiff(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.requestDiffRefresh(user.userId, id);
+  }
+
+  /** Rewrite this session's recap now, ignoring the settle hooks' two-minute window. Answers with
+   *  the pass's outcome: the new text and the event seq it covers, or the reason there is none
+   *  (no key configured, too little to recap). */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/recap')
+  refreshRecap(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.refreshRecap(user.userId, id);
   }
 
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
@@ -579,6 +636,18 @@ export class SessionsController {
     @Param('turnId', PublicIdPipe) turnId: string,
   ) {
     return this.sessions.cancelQueuedTurn(user.userId, id, turnId);
+  }
+
+  // Send a message queued for the next turn into the one running now (the tray's Steer). The same
+  // turnId as the DELETE beside it.
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/turns/:turnId/steer')
+  steerTurn(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('turnId', PublicIdPipe) turnId: string,
+  ) {
+    return this.sessions.steerQueuedTurn(user.userId, id, turnId);
   }
 
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' }, body: { stopSessionId: 'session' } } })

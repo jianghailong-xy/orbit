@@ -1,0 +1,2 @@
+chromium-light-phone   p44-doc-footnote-44.png        all=  1958 gt2=    12 max=  7 clusters=  1 [12px x72-87 y760-767 m7]
+chromium-light-phone   p44-doc-mark-footnote.png      all= 49602 gt2= 28508 max=249 clusters=  1 [28508px x16-303 y480-591 m249]

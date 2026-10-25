@@ -1,6 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { DownOutlined } from '@ant-design/icons';
-import { Button, Dropdown, Space } from 'antd';
 import {
   type CoordinatorFuseUsage,
   type CoordinatorWakeups,
@@ -8,6 +7,8 @@ import {
   SessionRunState,
 } from '@orbit/shared';
 import { CoordinatorProgressRows } from './ProjectProgressStatus';
+import { Button } from './ui/Button';
+import { Menu } from './ui/Menu';
 
 /**
  * A project's coordination session, drawn as the four states it can actually be in — and, inside
@@ -152,16 +153,22 @@ type Glyph = 'disc' | 'ring' | 'diamond';
  * The three sub-states a LIVE coordinator shows, exactly as the contract's "Card shows / Predicate"
  * table spells them.
  *
- * The rows are evaluated with `pendingApprovals > 0` FIRST rather than in table order, because a
- * pending approval blocks *inside* the turn: the session is RUNNING while the card is up, so the
- * literal top-down read would answer "Working" for the one case the table added that clause for and
- * leave it unreachable. It is also what the rest of the console already does
- * (`WorkspaceView.tsx:659` puts "Waiting for approval" ahead of "Running").
+ * "Needs you" is `pendingApprovals > 0` and nothing else: the cards the conversation is being asked
+ * plus the owner decisions drawn in it (a question it asked with `ask_owner`, an escalation, a merge
+ * to approve), the count the session list puts on the same row. It is asked FIRST, because a pending
+ * approval blocks *inside* the turn — the session is RUNNING while the card is up — and because
+ * whatever waits on the reader is the one thing on this card they can act on. It is also what the
+ * rest of the console already does (`WorkspaceView.tsx:659` puts "Waiting for approval" ahead of
+ * "Running").
+ *
+ * A turn that ended on its own is not one of them. A coordinator parks at AWAITING_INPUT between
+ * Orbit's wake-ups, so that is its resting state: it waits on the next message, whoever sends it,
+ * and nothing in it waits on the reader. It reads "Idle" (owner decision, 2026-10-15).
  *
  * The third row's `lifecycleState !== "TRASH"` clause is not re-tested here: a trashed pointer is
  * the `TRASHED` state, never `LIVE` (the truth table's T column), so this is only ever asked about
  * a session that has already passed it. A COMPLETED one never reaches this function either — it is
- * decided before the sub-states, because every row here answers with a reply to make.
+ * decided before the sub-states, because every row here is about a conversation still going on.
  */
 function liveSubState(session: CoordinatorSession): { label: string; tone: Tone; glyph: Glyph } {
   if (session.pendingApprovals > 0) return { label: 'Needs you', tone: 'warning', glyph: 'disc' };
@@ -172,11 +179,9 @@ function liveSubState(session: CoordinatorSession): { label: string; tone: Tone;
   ) {
     return { label: 'Working', tone: 'brand', glyph: 'disc' };
   }
-  if (session.runState === SessionRunState.AWAITING_INPUT) {
-    return { label: 'Needs you', tone: 'warning', glyph: 'disc' };
-  }
-  // QUEUED, SUCCEEDED, FAILED, INTERRUPTED, ENDED. FAILED sits here on purpose: the server reuses
-  // a failed coordinator rather than replacing it, so it is a conversation to reopen.
+  // AWAITING_INPUT between turns, QUEUED, SUCCEEDED, FAILED, INTERRUPTED, ENDED. FAILED sits here on
+  // purpose: the server reuses a failed coordinator rather than replacing it, so it is a
+  // conversation to reopen.
   return { label: 'Idle', tone: 'neutral', glyph: 'ring' };
 }
 
@@ -375,8 +380,8 @@ export function ProjectCoordinatorCard({
   // The state the payload's four do not separate, because it is a property of the CONVERSATION and
   // not of the pointer: `state` stays LIVE for a coordinator somebody completed. Reading it off
   // `lifecycleState` is what keeps a finished conversation from being drawn as one that is merely
-  // between turns — the run state alone says AWAITING_INPUT or ENDED, which is "Needs you" or
-  // "Idle", and both invite a reply to a conversation that is over.
+  // between turns — the run state alone says AWAITING_INPUT or ENDED, which reads "Idle", as though
+  // a conversation that is over could still be picked up.
   const finished =
     status.state === 'LIVE' && session?.lifecycleState === SessionLifecycleState.COMPLETED;
   const live = status.state === 'LIVE' && session && !finished ? liveSubState(session) : null;
@@ -433,7 +438,7 @@ export function ProjectCoordinatorCard({
           coordination={coordination}
           readAt={status.readAt}
           openTaskCount={openTaskCount}
-          needsReply={live?.label === 'Needs you'}
+          needsYou={live?.label === 'Needs you'}
           finished={finished}
           onAction={onAction}
         />
@@ -490,7 +495,7 @@ function NeverOpened({
                 <span style={{ fontSize: 12.5, color: 'var(--text-2)' }}>Opens in</span>
                 <NameChip name={landing.workspaceName as string} tone="neutral" />
               </span>
-              <Button type="link" size="small" style={{ padding: 0, height: 'auto' }} onClick={() => onAction?.('change-workspace')}>
+              <Button variant="link" size="small" style={{ padding: 0, height: 'auto' }} onClick={() => onAction?.('change-workspace')}>
                 Change
               </Button>
             </div>
@@ -506,11 +511,11 @@ function NeverOpened({
           // Not a disabled Start: the press would 400, and what clears that refusal is naming a
           // workspace, which is a thing this card can ask for. The name travels with the open,
           // so this button decides the landing and opens the conversation in one press.
-          <Button type="primary" block onClick={() => onAction?.('change-workspace')}>
+          <Button variant="primary" style={{ width: '100%' }} onClick={() => onAction?.('change-workspace')}>
             Choose a workspace…
           </Button>
         ) : (
-          <Button type="primary" block onClick={() => onAction?.('start')}>
+          <Button variant="primary" style={{ width: '100%' }} onClick={() => onAction?.('start')}>
             Start coordinator
           </Button>
         )}
@@ -526,7 +531,7 @@ function Live({
   coordination,
   readAt,
   openTaskCount,
-  needsReply,
+  needsYou,
   finished,
   onAction,
 }: {
@@ -534,7 +539,8 @@ function Live({
   coordination: CoordinatorStatus['coordination'];
   readAt: string;
   openTaskCount?: number;
-  needsReply: boolean;
+  /** Something in this conversation waits on the reader: `session.pendingApprovals` of it. */
+  needsYou: boolean;
   /** The conversation was COMPLETED. It is still this project's coordinator and still readable —
    *  what changed is that it is over, so the card offers the next one instead of a reply. */
   finished: boolean;
@@ -626,36 +632,35 @@ function Live({
           completed on the way), so it sits behind the caret, where it is chosen rather than hit.
           The menu states the consequence, and the page asks again before ending a live one.
         */}
-        <Space.Compact block>
-          <Button type="primary" style={{ flex: 1 }} onClick={() => onAction?.('open')}>
-            {finished || !needsReply ? 'Open coordinator' : 'Reply to coordinator'}
+        <div className="project-coordinator-split">
+          <Button variant="primary" className="project-coordinator-lead" style={{ flex: 1 }} onClick={() => onAction?.('open')}>
+            {finished || !needsYou
+              ? 'Open coordinator'
+              : `Review ${session.pendingApprovals} request${session.pendingApprovals === 1 ? '' : 's'}`}
           </Button>
-          <Dropdown
-            trigger={['click']}
-            placement="bottomRight"
-            menu={{
-              style: { width: 330 },
-              items: [
-                {
-                  key: 'replace',
-                  label: (
-                    <div style={{ padding: '3px 0', maxWidth: 300 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 600 }}>Start a new coordinator</div>
-                      <div style={{ ...MUTED, whiteSpace: 'normal' }}>
-                        {finished
-                          ? 'Opens empty. This conversation stays completed and readable, and stops being the one this project is coordinated from.'
-                          : 'Completes this conversation first, then opens an empty one. Nothing is deleted — it stays readable.'}
-                      </div>
+          <Menu
+            align="end"
+            popupStyle={{ width: 330 }}
+            items={[
+              {
+                key: 'replace',
+                textValue: 'Start a new coordinator',
+                label: (
+                  <div style={{ padding: '3px 0', maxWidth: 300 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600 }}>Start a new coordinator</div>
+                    <div style={{ ...MUTED, whiteSpace: 'normal' }}>
+                      {finished
+                        ? 'Opens empty. This conversation stays completed and readable, and stops being the one this project is coordinated from.'
+                        : 'Completes this conversation first, then opens an empty one. Nothing is deleted — it stays readable.'}
                     </div>
-                  ),
-                  onClick: () => onAction?.('replace'),
-                },
-              ],
-            }}
-          >
-            <Button type="primary" aria-label="More coordinator actions" icon={<DownOutlined />} />
-          </Dropdown>
-        </Space.Compact>
+                  </div>
+                ),
+                onSelect: () => onAction?.('replace'),
+              },
+            ]}
+            trigger={<Button variant="primary" className="project-coordinator-caret" aria-label="More coordinator actions" icon={<DownOutlined />} />}
+          />
+        </div>
       </div>
     </>
   );
@@ -695,7 +700,7 @@ function Trashed({
       ) : null}
 
       <div style={ACTIONS}>
-        <Button type="primary" style={{ flex: 1 }} onClick={() => onAction?.('start')}>
+        <Button variant="primary" style={{ flex: 1 }} onClick={() => onAction?.('start')}>
           Start a {nth(coordination.coordinatorGeneration, 2)} coordinator
         </Button>
         {restorable ? <Button onClick={() => onAction?.('restore-session')}>Restore</Button> : null}
@@ -731,7 +736,7 @@ function Unavailable({
 
       <div style={ACTIONS}>
         {fix ? (
-          <Button type="primary" size="small" onClick={() => onAction?.(fix.action)}>
+          <Button variant="primary" size="small" onClick={() => onAction?.(fix.action)}>
             {fix.label}
           </Button>
         ) : null}

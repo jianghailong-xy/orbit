@@ -1,0 +1,171 @@
+<!doctype html>
+<!-- Design board: Infrastructure (web) re-ordered around the user's own machines and their own keys and
+     pools; the engine overview demoted to a list at the end. Real-page captures ("现在" HEAD 6ee3143c2;
+     "改后" + prototype.patch), fed by capture/data.mjs. Not shipped code. Render: render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Web · Infrastructure：机器和自己配的 provider 是视觉重心</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="../cursor-engine/board.css">
+<style>
+  .m-sheet { width: 1980px; }
+  .frames.tight { gap: 22px 30px; }
+  .frame .m-cap { max-width: 930px; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 0; }
+  .kv b { color: var(--text-1); }
+  .num { font-variant-numeric: tabular-nums; }
+  .t-rules th:first-child, .t-rules td:first-child { width: 150px; }
+  .t-rules .now-col { color: var(--text-3); }
+  .ask h4 { margin: 0 0 6px; font-size: 13.5px; color: var(--text-1); display: flex; align-items: center; gap: 8px; }
+  .ask + .ask { margin-top: 18px; }
+  .unchanged { margin: 12px 0 0; padding: 10px 14px; border-radius: 8px; background: var(--fill-muted); font-size: 12.5px; line-height: 1.7; color: var(--text-2); }
+  .unchanged b { color: var(--text-1); }
+</style>
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<script src="../cursor-engine/kit.js"></script>
+<script src="shots/marks.js"></script>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Web · Infrastructure 重排：机器和自己配的 provider 是视觉重心，引擎概览退到页尾</h1>
+  <p class="m-sub zh">现在这一页从「需要处理」提醒条和 7 张引擎卡开始：<b>机器在约 840px 以下，自己的 key 在约 1330px 以下</b>，一个 900px 高的窗口里一台机器也看不到。改后的顺序是 <b>Machines → API keys（每个厂商一张卡）→ Account pools → By engine</b>（一行一个 engine 的列表）。登出的 engine 不再单独起一条提醒，而是画成机器卡上的橙色 chip + Sign in；每台机器的卡头多一行 chips，说这台机器能跑什么。整页从 2900px 缩到 2080px。所有网页帧都是真实页面截图（本分支 <code>src/web</code> 跑在 vite 上，示例数据按你 10-25 的截图搭：4 台机器、5 个厂商 6 把 key、1 个 Codex pool、4 个登出的 engine、1 个没装的 Cursor CLI；名字是样例）；「改后」是同一页面加上 <code>prototype.patch</code> 的原型代码，只为出图。灰色字母标现在的位置，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 第一屏（1280×900，含侧栏）：打开页面不滚动看到什么</div>
+    <div class="frames" id="s1"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 整页：现在（缩一半）与改后（1:1）</div>
+    <div class="frames" id="s2"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 按下 chip 上的 Sign in（左，wikova · Kimi Code）· 手机 390（右）</div>
+    <div class="frames" id="s3"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">④ 两个可选变体（都只画页顶到第一张机器卡）</div>
+    <div class="frames" id="s4"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑤ 规则</div>
+    <table class="t-rules zh">
+      <tr><th>位置</th><th>现在</th><th>改后</th></tr>
+      <tr><td>页顶</td><td class="now-col">「需要处理」提醒条：登出的 engine 每个一行 + Sign in；离线的机器一行；不可用的 pool 一行。</td>
+        <td><span class="new">去掉。</span>登出的 engine → 机器卡上的橙色 chip + Sign in；离线的机器 → 卡头本来就有 <span class="ui">Offline</span> 徽标（灰卡）；不可用的 pool → pool 卡头本来就写不可用。<b>变体 B</b>：保留提醒条，放在 Machines 之上。</td></tr>
+      <tr><td>引擎概览</td><td class="now-col">「What your agents can run on」：7 张卡，约 600px。</td>
+        <td>页尾 <span class="ui">By engine</span>：一行一个 engine，<span class="ui">Ready</span> / <span class="ui">Not set up</span> + 来源（<b>Subscription</b> · 机器 ×账号数 · <b>API key</b> · key 名 · <b>Pool</b> · pool 名，不再写每把 key 的模型——厂商卡里有）；Not set up 行保留原来的两个链接。<b>变体 C</b>：页顶一行 chips，只写 ✓ / not set up。</td></tr>
+      <tr><td>Machines</td><td class="now-col">第 3 段，约 840px 处。</td><td><span class="new">第 1 段</span>，标题下就是机器卡；标题右侧的「4 machines · 6 / 52 slots busy」不变。</td></tr>
+      <tr><td>机器卡头</td><td class="now-col">名字 · N / M running · 主机 · 版本 · 槽位条 · 警告行；右侧写「4 of 5 signed in」/「Installing…」。</td>
+        <td><span class="new">多一行 engine chips</span>：登录了的 engine 一枚（×N = 登录的账号数）；登出的（装了、CLI 说 no）橙色 + <b>signed out</b> + 自己的 <span class="ui">Sign in</span>；没装的、CLI 说不清的（auth unknown）不画；DeepSeek Harness 装了就画；Cursor CLI 只在 runner 能跑它时画。右侧<b>只留机器级状态</b>（Installing… / Updating… / Update failed / N engines not updating），登录计数由 chips 表达。展开后 chips 仍在卡头；离线的卡 chips 跟着变淡。</td></tr>
+      <tr><td>chip 上的 Sign in</td><td class="now-col">—</td><td>展开卡片，打开那个 engine 自己的登录面板——今天行上的 Sign in 打开的同一个 <code>RunnerSignIn</code>（③ 左）。不是新流程。</td></tr>
+      <tr><td>API keys</td><td class="now-col">表格：Key / Models / Endpoint / Enabled / Last used / Edit · Delete，按厂商分组行；约 1330px 处。</td>
+        <td><span class="new">每个厂商一张卡</span>（和机器卡同款）：卡头厂商标 · 名字 · N keys · <span class="ui">+ Add key</span>；每把 key 一行：名字 + 跑在哪些 engine（subscription token 照旧注明「Claude Code only」）+ DeepSeek 余额 / Cursor 检查；<span class="ui">Starts on</span> + 默认模型；<span class="ui">Enabled</span> + 「Used 16d ago」/「Never used」；<span class="ui">Edit</span> · <span class="ui">Delete</span>。<b>Models 数和 Endpoint 不再列</b>（编辑页有；长 URL 也是今天把表格撑宽的原因）。</td></tr>
+      <tr><td>Connect another provider</td><td class="now-col">9 张厂商卡的画廊。</td><td><span class="new">一行胶囊</span>，只列还没接的厂商 + Custom；接过的厂商在自己卡头 + Add key。没有任何 key 时仍是原来的空状态 + 完整画廊。</td></tr>
+      <tr><td>Account pools</td><td class="now-col">页尾。</td><td>紧跟 API keys；pool 卡、<span class="ui">New pool</span>、PoolHint（够 2 把可入池的 key 且还没有 pool 时）都不变。</td></tr>
+      <tr><td>Add ▾ / 锚点</td><td class="now-col">Register a machine · Connect an API key · New account pool；<code>#keys</code> / <code>#pools</code>。</td><td class="same">不变。</td></tr>
+      <tr><td>手机</td><td class="now-col">表格只留 Key 列和图标按钮。</td><td>chips 换行，<b>chip 和它的 Sign in 作为一组换行</b>；key 行竖排：名字、engine、Starts on、Enabled + Used、按钮（③ 右）。</td></tr>
+    </table>
+    <p class="unchanged zh"><b>没变的：</b>机器卡展开后的 engine 行、账号行、Add account、Install；pool 卡和 pool 页；<code>/providers/new/:slug</code> 和 <code>/providers/:id</code>；服务端和 runner 一行不动——页面读的还是同样的 5 个请求。</p>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑥ 改动的文件（web）</div>
+    <div class="two">
+      <ul class="files zh">
+        <li><b><code>src/web/src/pages/InfrastructurePage.tsx</code></b> — 段落顺序；<code>keysTable</code> → <code>ProviderKeyCards</code> + <code>ConnectMore</code>；<code>NeedsAttention</code> 去掉（选 B 则保留）；页尾 <code>&lt;EngineOverview variant="compact"&gt;</code>（选 C 则页顶 strip）。</li>
+        <li><b><code>src/web/src/components/RunnerEngines.tsx</code></b> — 卡头加 <code>MachineChips</code>；<code>summaryOf</code> 拆成机器级状态和登录计数两半；Sign in 复用 <code>ownSignInPanel</code>。</li>
+        <li><b><code>src/web/src/components/InfrastructureOverview.tsx</code></b> — <code>EngineOverview</code> 的 compact / strip 变体；<code>NeedsAttention</code> 按决定去留。</li>
+        <li><b><code>src/web/src/components/ProviderKeyCards.tsx</code></b>（新） — 厂商卡、<code>ConnectMore</code>；<code>KeyEngines</code> 从页面搬过来。</li>
+        <li><b><code>src/web/src/index.css</code></b> — <code>.re-chips / .re-chip-*</code>、<code>.vk-*</code>、<code>.pv-*</code>、<code>.infra-index*</code>（原型里 <code>patch/proto.css</code> 的样式）。</li>
+      </ul>
+      <ul class="files zh">
+        <li><b>测试</b> — <code>InfrastructurePage.test.tsx</code>、<code>.overview</code>、<code>.keys</code>、<code>.machines</code>、<code>App.infrastructure.test.tsx</code>、<code>RunnerEngines.*.test.tsx</code> 改断言（段落顺序、表格列、提醒条）；新增 chips（×N、signed out、Sign in 打开面板）、厂商卡（Starts on、Used、Never used、subscription token）、By engine 的用例；<code>copyLanguage.test.ts</code> 不受影响，文案全英文。</li>
+        <li><b>不改</b> — 服务端、runner、<code>src/shared</code>、iOS / macOS / Android（它们的 Infrastructure 也是概览在前，见待你定 5）。</li>
+        <li><b>本板的工具</b> — <code>capture/</code>（真实页面截图：<code>unshare -n run-ns.sh &lt;tree&gt; scenes.mjs</code>）、<code>patch/apply.py</code>（原型）、<code>prototype.patch</code>（原型相对 HEAD 的 diff）、<code>render.mjs</code>（本板出图）。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑦ 待你定（建议项带绿框；板上按建议画）</div>
+    <div class="ask zh">
+      <h4><span class="tbd">1</span>页顶的「需要处理」提醒条</h4>
+      <div class="ab"><div class="ab-opt rec"><h5><span class="ab-k">A</span>去掉，登出的 engine 画在机器卡上（②、③）</h5><div class="ab-sub">同一件事只出现一次，而且出现在它所属的机器上；机器现在就在第一屏，不会藏起来。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">B</span>保留提醒条（④ 左）</h5><div class="ab-sub">「需要处理」永远在最上面，代价是每个登出的 engine 出现两次，第一屏又被它顶下去 4 行。</div></div></div>
+    </div>
+    <div class="ask zh">
+      <h4><span class="tbd">2</span>引擎概览</h4>
+      <div class="ab three"><div class="ab-opt rec"><h5><span class="ab-k">A</span>页尾「By engine」列表（②）</h5><div class="ab-sub">信息一条不少，从 600px 收到 300px；它是从上面三段推出来的索引，排在后面。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">C</span>页顶一行 chips（④ 右）</h5><div class="ab-sub">「哪个 engine 能用」一眼可见，但只有 ✓ / not set up，来源要到各卡上看；Not set up 的链接没地方放。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">D</span>删掉</h5><div class="ab-sub">Not set up 的 engine 只在 Add 菜单和「Connect another provider」里出现；新会话的 engine 列表本来也会说。</div></div></div>
+    </div>
+    <div class="ask zh">
+      <h4><span class="tbd">3</span>API keys 的形态</h4>
+      <div class="ab"><div class="ab-opt rec"><h5><span class="ab-k">A</span>厂商卡，每把 key 一行（②）</h5><div class="ab-sub">和机器卡同一款，两段看起来是同一类东西：你自己的；默认模型和余额跟着 key 走。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">B</span>保留表格，只上移并去掉 Models、Endpoint 两列</h5><div class="ab-sub">改动最小；但表格在四张卡下面读起来仍像附录，默认模型还是只在引擎概览里出现。</div></div></div>
+    </div>
+    <div class="ask zh">
+      <h4><span class="tbd">4</span>「Connect another provider」</h4>
+      <div class="ab"><div class="ab-opt rec"><h5><span class="ab-k">A</span>一行胶囊，只列还没接的（②）</h5><div class="ab-sub">接过的厂商已经有自己的卡和 Add key，再在画廊里出现一次是重复。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">B</span>保留 9 张卡的画廊</h5><div class="ab-sub">「Already signed in on wikova」这类提示保留得更完整，代价是约 330px。</div></div></div>
+    </div>
+    <div class="ask zh">
+      <h4><span class="tbd">5</span>其他客户端</h4>
+      <div class="ab"><div class="ab-opt rec"><h5><span class="ab-k">A</span>这次只改 web</h5><div class="ab-sub">iOS / macOS / Android 的 Infrastructure 也是概览在前、机器在后；先把 web 定下来，再给它们另出一块板。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">B</span>三端同步重排</h5><div class="ab-sub">同一轮做完，但 iOS 的分组列表没有 chips 行和厂商卡的现成构件，要先画。</div></div></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑧ 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+<script>
+const frame = (kind, label, html, cap = '') => `<div class="frame"><div class="lbl zh"><span class="m-k${kind === '改后' ? ' new' : ''}">${kind}</span>${label}</div>${html}${cap ? `<p class="m-cap zh">${cap}</p>` : ''}</div>`;
+document.getElementById('s1').innerHTML =
+  frame('现在', '第一屏：4 条提醒 + 7 张引擎卡', shot('today-fold', { width: 900 }),
+    '一台机器也看不到；Machines 的标题在 840px 处，要滚一整屏。') +
+  frame('改后', '第一屏：4 台机器，连同各自能跑什么、谁登出了', shot('new-fold', { width: 900 }),
+    '机器从 150px 处开始；第一屏末尾已经露出 API keys 的第一张卡。');
+document.getElementById('s2').innerHTML =
+  frame('现在', 'HEAD 6ee3143c2（缩一半，2900px 高）', shot('today-page', { width: 466, marks: [
+    { box: 'attn', n: 'A', pad: 2 }, { box: 'engines', n: 'B', pad: 2 }, { box: 'machines', n: 'C', pad: 2 },
+    { box: 'keys', n: 'D', pad: 2 }, { box: 'gallery', n: 'E', pad: 2 }, { box: 'pools', n: 'F', pad: 2 }] }),
+    'A 提醒条 → ②；B 引擎卡 → ⑧；C Machines → 第 1 段；D 表格 → ④；E 画廊 → ⑦；F pools 紧跟 API keys。') +
+  frame('改后', 'Machines → API keys → Account pools → By engine（1:1，2080px 高）', shot('new-page', { width: 932, marks: [
+    { box: 'chips', n: 1, pad: 3 }, { box: 'signin', n: 2, pad: 3 }, { box: 'status', n: 3, pad: 4 }, { box: 'vhead', n: 4, pad: 2 },
+    { box: 'model', n: 5, pad: 4 }, { box: 'state', n: 6, pad: 4 }, { box: 'more', n: 7, pad: 3 }, { box: 'index', n: 8, pad: 2 }] }));
+document.getElementById('s3').innerHTML =
+  frame('改后', '按下 wikova 卡上 Kimi Code 的 Sign in', shot('new-signin', { width: 902, marks: [{ box: 'row', n: 2, pad: 2 }, { box: 'panel', n: '', pad: 2, label: '今天就有的登录面板' }] }),
+    '卡片展开到 Kimi Code 那一行，打开它自己的登录面板（这里是 Kimi 的站点选择）。chips 行在展开后仍在卡头；OpenCode 行正在重装、更新失败的说明也照旧。') +
+  frame('改后', '手机 390：页顶到第一张厂商卡', shot('new-phone', { width: 374, marks: [{ box: 'chips', n: 1, pad: 3 }] }),
+    'chips 换行；chip 和它的 Sign in 一组。key 行竖排。');
+document.getElementById('s4').innerHTML =
+  frame('变体 B', '保留页顶提醒条（待你定 1）', shot('new-banner', { width: 900, marks: [{ box: 'attn', n: 'B', pad: 2 }] }),
+    '同一个登出的 engine 出现两次：提醒条一行，机器卡一枚 chip；第一屏少 4 行机器。') +
+  frame('变体 C', '引擎状态条放页顶（待你定 2）', shot('new-strip', { width: 900, marks: [{ box: 'strip', n: 'C', pad: 3 }] }),
+    '一行 chips 只回答「能不能用」；来源在各机器卡、厂商卡上；Not set up 的 engine 没有链接可放。页尾不再有 By engine。');
+document.getElementById('notes').innerHTML = notes([
+  [1, '<b>机器卡上的 engine chips</b>：每台机器自己说能跑什么——登录了的 engine 一枚 chip，×N 是登录的账号数（Claude Code ×3）；DeepSeek Harness 装了就画；没装的、CLI 说不清的（HPC 上的 OpenCode）不画。读的是今天引擎概览已经在读的同一份 <code>runner.engines</code>。'],
+  [2, '<b>登出的 engine</b>：橙色 chip「Kimi Code · signed out」+ 自己的 Sign in，取代页顶提醒条里的那一行；判定和今天 <code>NeedsAttention</code> 的 <code>signedOutOn</code> 相同（装了、CLI 说 no、没有一个账号登录）。按下展开卡片、打开该 engine 的登录面板（③）。'],
+  [3, '<b>卡头右侧</b>只剩机器级状态：Installing… / Updating… / Update failed / N engines not updating；「4 of 5 signed in」「All signed in」不再写，chips 已经说了。'],
+  [4, '<b>API keys 变厂商卡</b>，和机器卡同一款：厂商标 + 名字 + N keys + Add key（原来分组行上的三样东西）。每把 key 一行；Models 数和 Endpoint 两列不再列。'],
+  [5, '<b>Starts on + 默认模型</b>：会话在这把 key 上默认起的模型（<code>defaultModel</code>，否则列表第一个），原来只出现在引擎概览的 key 名后面；现在跟着 key 走。'],
+  [6, '<b>Enabled + Used 16d ago</b>：状态和最后使用合成一列，悬停仍有精确时间；没用过写 Never used。'],
+  [7, '<b>Connect another provider</b> 收成一行胶囊，只列还没接的厂商 + Custom（原画廊的过滤规则不变：Cursor 只在有 runner 认识它时出现）。'],
+  [8, '<b>By engine</b>：原引擎概览的信息一条不少——Ready / Not set up、来源、Not set up 行的两个链接——从 7 张卡约 600px 收成约 300px 的列表，放在页尾。'],
+  ['·', '<b>数字</b>（示例数据、900px 宽的内容列）：现在整页 2900px，Machines 在 840px，API keys 在 1330px；改后整页 2080px，Machines 在 150px，API keys 在 740px。'],
+]);
+finish();
+</script>
+</body>
+</html>

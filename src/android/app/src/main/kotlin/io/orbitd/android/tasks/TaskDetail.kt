@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -32,6 +33,13 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
+import io.orbitd.android.directory.orderedWorkspaceRows
+import io.orbitd.android.composer.ComposerCatalog
+import io.orbitd.android.composer.CredentialKind
+import io.orbitd.android.composer.EngineCopy
+import io.orbitd.android.composer.ProviderEngines
+import io.orbitd.android.management.LocalSmartSelection
+import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.navigation.*
 import io.orbitd.android.projects.TaskDependencyGraphView
 import io.orbitd.android.taskprojects.*
@@ -72,6 +80,8 @@ private class TaskDetailData {
     var lists by mutableStateOf<List<JsonObject>>(emptyList())
     var share by mutableStateOf<JsonObject?>(null)
     var runner by mutableStateOf<JsonObject?>(null)
+    /** Every runner of the account: whether Cursor CLI is offered as a pin at all (ProviderEngines.androidShowsEngine). */
+    var runners by mutableStateOf<List<JsonObject>>(emptyList())
     var providers by mutableStateOf<List<JsonObject>>(emptyList())
     var busy by mutableStateOf(false)
     /** A refusal of what an open sheet sent, said on the sheet: the page's banner is behind it. */
@@ -122,7 +132,12 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                 val share = async { runCatching { api.share(id) }.getOrNull() }
                 val runnerId = workspaces.firstOrNull { ObjectId.same(it.text("id"), task.obj("assignee")?.text("id")) }?.text("runnerId")
                 val runner = async { runnerId?.let { runCatching { api.read(listOf("runners", it)) as? JsonObject }.getOrNull() } }
-                val providers = async { runCatching { (api.read(listOf("providers")) as? JsonArray).orEmpty().filterIsInstance<JsonObject>() }.getOrNull() }
+                // The keys with the engines each runs on, and the account pools read as providers: what a pin can name.
+                fun rows(vararg path: String) = async { runCatching { (api.read(path.toList()) as? JsonArray).orEmpty().filterIsInstance<JsonObject>() }.getOrNull() }
+                val providers = rows("providers")
+                val runners = rows("runners")
+                val pools = rows("providers", "pools")
+                val sharedPools = rows("providers", "shared-pools")
                 data.owner = owner.await()
                 attribution.await().onSuccess { data.attribution = it; data.attributionFailed = false }.onFailure { if (data.attribution == null) data.attributionFailed = true }
                 graph.await()?.let { data.graph = it }
@@ -130,7 +145,11 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                 lists.await()?.let { data.lists = it }
                 share.await()?.let { data.share = it }
                 runner.await()?.let { data.runner = it }
-                providers.await()?.let { data.providers = it }
+                runners.await()?.let { data.runners = it }
+                providers.await()?.let { keys ->
+                    data.providers = (keys + pools.await().orEmpty().map { ProviderEngines.poolRow(it, ProviderEngines.CLAUDE) } +
+                        sharedPools.await().orEmpty().map { ProviderEngines.poolRow(it, ProviderEngines.CODEX) }).distinctBy { it.text("slug") }
+                }
             }
         } catch (cancel: CancellationException) { throw cancel }
         catch (failure: Exception) {
@@ -149,6 +168,10 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
     val busyRun = data.task?.let(TaskListLogic::isBusy) == true
     // While a run of it is going, the page follows it: that is when its owner may be asked something.
     LaunchedEffect(handle, id, busyRun) { while (busyRun) { delay(4000); load() } }
+    // §2.7a's cadence, while the landing is live: 4 s for one that runs, 15 s for one that waits.
+    // A busy run already re-reads every 4 s, which covers a running landing too.
+    val landingEvery = if (busyRun) null else TaskLandingLogic.refetchInterval(TaskIntegrationView.of(data.task))
+    LaunchedEffect(handle, id, landingEvery) { while (landingEvery != null) { delay(landingEvery); load() } }
     LaunchedEffect(data.notice) { if (data.notice != null) { delay(3000); data.notice = null } }
 
     /** A write belongs to the app, not to this page (iOS's model-owned Task): leaving does not cancel it,
@@ -178,6 +201,9 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
     fun revisionOf(task: JsonObject) = "${task.text("id")}:${task.text("updatedAt")}"
     fun patch(fields: JsonObject, saved: String? = null, fromSheet: String? = null, done: () -> Unit = {}) { val task = data.task ?: return
         mutate(fromSheet, done) { api.update(id, fields, revisionOf(task) + ":" + fields); saved?.let { data.notice = it } } }
+    /** The engine and credential this task's runs use (board 6), as TaskApi.pin writes them. */
+    fun pin(change: TaskPin) { val task = data.task ?: return
+        mutate { api.pin(id, change, revisionOf(task) + ":" + change.request()) } }
     fun closeSheet() { sheet = null; data.sheetError = null }
 
     val task = data.task
@@ -264,6 +290,11 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                     }, confirmDone = { mutate { api.confirmOwner(id, revisionOf(task)) } }, reopen = { confirm = DetailConfirm.Reopen })
                 }
             }
+            // Where the task's work stands after DONE (§2.7a): the newest landing attempt and why it
+            // waits or where it stopped, apart from the status above — the web's first block.
+            TaskLandingLogic.status(TaskIntegrationView.of(task))?.let { landing ->
+                item(key = "landing") { LandingSection(landing, open) }
+            }
             if (TaskJudgment.isGateRow(task) || task.obj("verifier") != null) item(key = "verifier") {
                 TaskSectionHeader(TaskJudgmentCopy.verifierCardHeading)
                 val verifier = task.obj("verifier")
@@ -275,7 +306,7 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                     OutlinedButton(onClick = { verifier.text("id")?.let { open(OrbitRoute(Destination.TASK, it)) } }) { Text(TaskJudgmentCopy.verifierCardEntry) }
                 }
             }
-            item(key = "details") { DetailsSection(task, data, workspaces, assigneeWorkspace, enabled, open, edit = { sheet = it }) { fields -> patch(fields) } }
+            item(key = "details") { DetailsSection(task, data, workspaces, assigneeWorkspace, enabled, open, edit = { sheet = it }, pin = { pin(it) }) { fields -> patch(fields) } }
             item(key = "dependencies") {
                 TaskSectionHeader(TaskDetailCopy.dependenciesHeading)
                 Column(Modifier.testTag("task-dependencies-section"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -444,12 +475,12 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
             mutate(fromSheet = "dependency", done = { closeSheet() }) { api.addDependency(id, prerequisite, revisionOf(task)) }
         }
         else -> if (current.startsWith("why:")) task.objects("sessions").firstOrNull { it.text("id") == current.removePrefix("why:") }?.let { run ->
-            TaskDetailLogic.runRoute(run)?.let { route -> RouteWhySheet(route, { modelName(it, task, data) }) { sheet = null } }
+            TaskDetailLogic.runRoute(run, LocalSmartSelection.current)?.let { route -> RouteWhySheet(route, { modelName(it, task, data) }) { sheet = null } }
         } ?: run { sheet = null }
     }
 }
 
-/** The two presses under the title, and the reason a run cannot start when it cannot. */
+/** The two presses under the title, and the reason a run cannot start when it cannot — or, when it can, that it is the task's only start. */
 @Composable
 private fun ActionRow(row: TaskActionRow, canStart: Boolean, enabled: Boolean, task: JsonObject, assigneeHasRunner: Boolean,
     open: (OrbitRoute) -> Unit, run: () -> Unit, confirmDone: () -> Unit, reopen: () -> Unit) {
@@ -484,37 +515,125 @@ private fun ActionRow(row: TaskActionRow, canStart: Boolean, enabled: Boolean, t
             trailing?.invoke(Modifier.weight(1f), true)
         }
         val trailingKind = row.trailing
-        if (trailingKind != null && trailingKind !is TaskActionRow.Trailing.OpenRun && !canStart)
-            TaskDetailLogic.runDisabledHint(task, assigneeHasRunner)?.let { Text(it, Modifier.testTag("task-run-hint"), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (trailingKind != null && trailingKind !is TaskActionRow.Trailing.OpenRun)
+            (if (canStart) TaskDetailLogic.runNowHint(task) else TaskDetailLogic.runDisabledHint(task, assigneeHasRunner))?.let {
+                Text(it, Modifier.testTag("task-run-hint"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+}
+
+/** The task's Landing section (§2.7a, web `LandTaskStatus`): the badge, the generation, the step it
+ * is on or stopped at, a silent runner's report, the reason and the receipt, the six facts — then
+ * the one way into its landing session. Read-only: no retry, merge or release door lives here. */
+@Composable
+private fun LandingSection(status: TaskLandingStatus, open: (OrbitRoute) -> Unit) {
+    TaskSectionHeader(TaskLandingCopy.landingSection, status.generation?.let { "${TaskLandingCopy.generation} $it" })
+    Column(Modifier.fillMaxWidth().testTag("task-landing"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            status.badge?.let { badge ->
+                val ink = landingInk(badge.tone)
+                Text(badge.label, Modifier.testTag("task-landing-badge").background(ink.copy(alpha = 0.14f), RoundedCornerShape(50))
+                    .padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = ink)
+            }
+            status.step?.let { Text(it, Modifier.testTag("task-landing-step"), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2) }
+        }
+        status.noReport?.let { Text(it, Modifier.testTag("task-landing-no-report"), style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold, color = LocalOrbitColors.current.needsYou) }
+        status.reason?.let { Text(it, Modifier.testTag("task-landing-reason"), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        status.receipt?.let { Text(it, Modifier.testTag("task-landing-receipt"), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (status.facts.isNotEmpty()) Column(Modifier.testTag("task-landing-facts"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            status.facts.forEach { fact ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(fact.label, Modifier.width(92.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(fact.value, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        TaskLandingLogic.route(status)?.let { route ->
+            TextButton(onClick = { open(route) }, modifier = Modifier.testTag("task-landing-open")) { Text("${TaskLandingCopy.openLanding} ›") }
+        }
     }
 }
 
 @Composable
+private fun landingInk(tone: String): Color = when (tone) {
+    "amber" -> LocalOrbitColors.current.needsYou
+    "blue" -> LocalOrbitColors.current.running
+    "green" -> LocalOrbitColors.current.success
+    "red" -> MaterialTheme.colorScheme.error
+    else -> MaterialTheme.colorScheme.onSurfaceVariant
+}
+
+@Composable
 private fun DetailsSection(task: JsonObject, data: TaskDetailData, workspaces: List<JsonObject>, assignee: JsonObject?, enabled: Boolean,
-    open: (OrbitRoute) -> Unit, edit: (String) -> Unit, patch: (JsonObject) -> Unit) {
+    open: (OrbitRoute) -> Unit, edit: (String) -> Unit, pin: (TaskPin) -> Unit, patch: (JsonObject) -> Unit) {
     TaskSectionHeader(TaskDetailCopy.detailsHeading)
     Column(Modifier.testTag("task-details"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         val currentAssignee = task.obj("assignee")
         PickerRow(TaskDetailCopy.assigneeLabel, currentAssignee?.text("name") ?: TaskListCopy.unassigned, enabled,
-            listOf<Pair<String?, String>>(null to TaskListCopy.unassigned) + workspaces.map { it.text("id") to (it.text("name") ?: "Workspace") } +
+            listOf<Pair<String?, String>>(null to TaskListCopy.unassigned) + orderedWorkspaceRows(workspaces).map { it.text("id") to (it.text("name") ?: "Workspace") } +
                 listOfNotNull(currentAssignee?.takeIf { a -> workspaces.none { ObjectId.same(it.text("id"), a.text("id")) } }?.let { it.text("id") to (it.text("name") ?: it.text("id").orEmpty()) }),
             tag = "task-assignee") { patch(buildJsonObject { put("assigneeId", it?.let(::JsonPrimitive) ?: JsonNull) }) }
+        // The account's switch for smart model selection, off by default: then none of it is drawn here — no Suggested, no ✦
+        // placeholder, no coordinator's reason — as on the web and iOS (9fb3ae6ee).
+        val smartSelection = LocalSmartSelection.current
         val picks = TaskDetailLogic.modelHintPicks(task.objects("modelHintOptions"))
-        PickerRow(TaskDetailCopy.suggestedLabel, picks.firstOrNull { it.value == task.text("modelHint") }?.label ?: task.text("modelHint") ?: TaskDetailCopy.noSuggestion,
+        if (smartSelection) PickerRow(TaskDetailCopy.suggestedLabel, picks.firstOrNull { it.value == task.text("modelHint") }?.label ?: task.text("modelHint") ?: TaskDetailCopy.noSuggestion,
             enabled, picks.map { it.value to it.label }, details = picks.associate { it.value to it.detail }, tag = "task-suggested") { patch(TaskDetailLogic.modelHintRequest(it)) }
-        val catalog = data.runner?.let { io.orbitd.android.composer.ComposerCatalog(it, data.providers) }
-        val inherited = assignee?.text("provider") ?: assignee?.text("lastProvider")
-        val providerOptions = catalog?.options(task.text("provider") ?: inherited ?: "claude", newSession = true).orEmpty()
-        PickerRow(TaskDetailCopy.providerLabel, task.text("provider")?.let { p -> providerOptions.firstOrNull { it.id == p }?.label ?: p } ?: inherited?.let { "Assignee's ($it)" } ?: "Assignee's",
-            enabled, listOf<Pair<String?, String>>(null to (inherited?.let { "Assignee's ($it)" } ?: "Assignee's")) + providerOptions.map { it.id to it.label } +
-                listOfNotNull(task.text("provider")?.takeIf { p -> providerOptions.none { it.id == p } }?.let { it to it }), tag = "task-provider") {
-            // A model id means something only inside one provider: changing the provider clears it.
-            patch(buildJsonObject { put("provider", it?.let(::JsonPrimitive) ?: JsonNull); put("model", JsonNull) })
+        // The run pins (board 6): first the engine — unpinned it follows what the assignee's project last ran — then a credential
+        // that engine runs, then a model of the pair (docs/provider-engine-contract.md §1.2).
+        val catalog = data.runner?.let { ComposerCatalog(it, data.providers) }
+        val assigneeProvider = assignee?.text("lastProvider") ?: assignee?.text("provider") ?: ProviderEngines.CLAUDE
+        val assigneeEngine = ProviderEngines.sessionEngine(assignee?.text("lastEngine"), assigneeProvider, data.providers)
+        val pinnedProvider = task.text("provider")
+        val pinnedEngine = task.text("engine")?.takeIf(ProviderEngines::isEngine)
+        // A credential pinned alone, by an older client, runs on its default engine.
+        val runEngine = pinnedEngine ?: pinnedProvider?.let { ProviderEngines.defaultEngineOf(it, data.providers) } ?: assigneeEngine
+        PickerRow(EngineCopy.ENGINE, if (pinnedEngine == null && pinnedProvider == null) "${EngineCopy.ASSIGNEES} · ${ProviderEngines.cliName(assigneeEngine)}"
+            else ProviderEngines.cliName(runEngine), enabled,
+            listOf<Pair<String?, String>>(null to EngineCopy.ASSIGNEES) +
+                // Cursor CLI once a runner of the account knows it, as every list of engines offers it.
+                ProviderEngines.ALL_ENGINES.filter { ProviderEngines.androidShowsEngine(it, data.runners + listOfNotNull(data.runner)) }
+                    .map { it to ProviderEngines.cliName(it) },
+            details = mapOf(null to ProviderEngines.cliName(assigneeEngine)), tag = "task-engine") { engine ->
+            TaskPins.engine(engine, pinnedEngine, pinnedProvider, ProviderEngines.providerEngines(pinnedProvider, data.providers))?.let(pin)
         }
-        val effective = task.text("provider") ?: inherited ?: "claude"
-        val models = catalog?.models(effective).orEmpty()
-        val unpinned = if (assignee?.flag("modelRouting") == true) TaskDetailCopy.smartSelectionPlaceholder else "Provider default"
+        // Past the engine's default credential — its own sign-in on the runner, OpenCode's own configuration, DeepSeek Harness's first
+        // DeepSeek key, which "Engine default" stands for — the account pools and the keys the engine runs. A pinned credential it no
+        // longer lists stays on top, so the row still says what is pinned.
+        val credentials = catalog?.credentials(runEngine).orEmpty().filter { it.kind == CredentialKind.POOL || it.kind == CredentialKind.KEY }
+        val firstDeepSeekKey = catalog?.credentials(ProviderEngines.DSH)?.firstOrNull { it.kind == CredentialKind.KEY }
+        val runnerName = data.runner?.let(RunnerPage::displayName)
+        val engineDefault = when (runEngine) {
+            ProviderEngines.DSH -> firstDeepSeekKey?.label ?: EngineCopy.FIRST_DEEPSEEK_KEY
+            ProviderEngines.OPENCODE -> EngineCopy.OPENCODE_OWN
+            else -> runnerName?.let(EngineCopy::signInOn) ?: EngineCopy.RUNNER_SIGN_IN
+        }
+        fun pinLabel(slug: String) = credentials.firstOrNull { it.id == slug }?.label ?: when {
+            slug in ProviderEngines.LOGIN_ENGINES -> (runnerName?.let(EngineCopy::signInOn) ?: EngineCopy.RUNNER_SIGN_IN).replaceFirstChar { it.uppercase() }
+            slug == ProviderEngines.OPENCODE -> EngineCopy.OPENCODE_OWN
+            else -> data.providers.firstOrNull { it.text("slug") == slug }?.text("label") ?: slug
+        }
+        val offList = pinnedProvider?.takeIf { slug -> credentials.none { it.id == slug } }
+        val pools = credentials.filter { it.kind == CredentialKind.POOL }
+        val keys = credentials.filter { it.kind == CredentialKind.KEY }
+        PickerRow(TaskDetailCopy.providerLabel, pinnedProvider?.let(::pinLabel) ?: "${EngineCopy.ENGINE_DEFAULT} · $engineDefault", enabled,
+            listOf<Pair<String?, String>>(null to EngineCopy.ENGINE_DEFAULT) + listOfNotNull(offList?.let { it to pinLabel(it) }) +
+                (pools + keys).map { it.id to it.label },
+            details = mapOf<String?, String>(null to when (runEngine) {
+                ProviderEngines.DSH -> EngineCopy.FIRST_DEEPSEEK_KEY; ProviderEngines.OPENCODE -> EngineCopy.OWN_SIGN_IN; else -> EngineCopy.RUNNER_SIGN_IN
+            }) + credentials.mapNotNull { option -> option.unavailable?.let { option.id to it } },
+            headers = listOfNotNull(pools.firstOrNull()?.let { it.id to EngineCopy.ACCOUNT_POOLS },
+                keys.firstOrNull()?.let { it.id to if (runEngine == ProviderEngines.DSH) EngineCopy.YOUR_DEEPSEEK_KEYS else EngineCopy.YOUR_KEYS }).toMap(),
+            tag = "task-provider") { slug -> TaskPins.provider(slug, pinnedProvider, runEngine)?.let(pin) }
+        // The credential whose model space the Model row lists: the task's own pin, the engine's default credential under an engine
+        // pinned alone, else the assignee's.
+        val runProvider = pinnedProvider ?: pinnedEngine?.let { engine -> if (engine == ProviderEngines.DSH) firstDeepSeekKey?.id ?: engine else engine }
+            ?: assigneeProvider
+        val models = catalog?.models(runEngine, runProvider).orEmpty()
+        val unpinned = if (smartSelection && assignee?.flag("modelRouting") == true) TaskDetailCopy.smartSelectionPlaceholder else "Provider default"
         PickerRow(TaskDetailCopy.modelLabel, task.text("model")?.let { m -> models.firstOrNull { it.text("value") == m }?.text("label") ?: m } ?: unpinned, enabled,
             listOf<Pair<String?, String>>(null to unpinned) + models.map { it.text("value") to (it.text("label") ?: it.text("value").orEmpty()) } +
                 listOfNotNull(task.text("model")?.takeIf { m -> models.none { it.text("value") == m } }?.let { it to it }), tag = "task-model") {
@@ -528,7 +647,7 @@ private fun DetailsSection(task: JsonObject, data: TaskDetailData, workspaces: L
         DetailRow(TaskDetailCopy.startAtLabel, TaskDetailLogic.scheduleValue(task.text("runAt")), "⌄", enabled, "task-start-at") { edit("schedule") }
         task.obj("creatorSession")?.let { source -> DetailRow(TaskDetailCopy.createdFromLabel, source.text("title") ?: TaskDetailCopy.untitledSession, "›", true, "task-created-from") {
             source.text("id")?.let { open(OrbitRoute(Destination.SESSION, it)) } } }
-        TaskDetailLogic.modelHintNote(task)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (smartSelection) TaskDetailLogic.modelHintNote(task)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         val creator = task.text("creatorName") ?: workspaces.firstOrNull { task.text("creatorType") == "AGENT" && ObjectId.same(it.text("id"), task.text("creatorId")) }?.text("name")
         TaskDetailLogic.createdFootnote(creator, task.text("createdAt"))?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
@@ -537,12 +656,16 @@ private fun DetailsSection(task: JsonObject, data: TaskDetailData, workspaces: L
 /** A form row: the label, the value in grey with its chooser mark, and a menu of choices. */
 @Composable
 private fun PickerRow(label: String, value: String, enabled: Boolean, options: List<Pair<String?, String>>, details: Map<String?, String> = emptyMap(),
-    tag: String, choose: (String?) -> Unit) {
+    headers: Map<String?, String> = emptyMap(), tag: String, choose: (String?) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         DetailRow(label, value, "⇕", enabled, tag) { open = true }
         DropdownMenu(open, { open = false }) {
-            options.distinctBy { it.first }.forEach { (option, title) -> DropdownMenuItem(text = { Column {
+            options.distinctBy { it.first }.forEach { (option, title) ->
+                // A group's name over its first row (board 6 ②: Account pools, Your keys), never a choice itself.
+                headers[option]?.let { Text(it, Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                DropdownMenuItem(text = { Column {
                 Text(title); details[option]?.takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             } }, onClick = { open = false; choose(option) }) }
         }
@@ -608,7 +731,8 @@ private fun RunRow(run: JsonObject, task: JsonObject, data: TaskDetailData, open
     val state = resolvedRunState(run)
     val color = when (state) { "RUNNING" -> LocalOrbitColors.current.running; "QUEUED", "AWAITING_INPUT" -> LocalOrbitColors.current.needsYou
         "SUCCEEDED" -> LocalOrbitColors.current.success; "FAILED" -> MaterialTheme.colorScheme.error; else -> MaterialTheme.colorScheme.onSurfaceVariant }
-    val route = TaskDetailLogic.runRoute(run)
+    val smartSelection = LocalSmartSelection.current
+    val route = TaskDetailLogic.runRoute(run, smartSelection)
     val name: (String) -> String = { modelName(it, task, data) }
     Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { run.text("id")?.let { open(OrbitRoute(Destination.SESSION, it)) } }.padding(vertical = 6.dp)
         .testTag("task-run:${run.text("id")}"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -621,7 +745,7 @@ private fun RunRow(run: JsonObject, task: JsonObject, data: TaskDetailData, open
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(TaskDetailLogic.runLabel(run), style = MaterialTheme.typography.bodySmall, color = color)
-                TaskDetailLogic.runModelLine(run, name)?.let { Text("· $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                TaskDetailLogic.runModelLine(run, smartSelection, name)?.let { Text("· $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)) }
                 if (route?.flag("applied") == true) Text(TaskDetailLogic.routeTierTag(route), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
                     color = if (route.flag("escalated")) LocalOrbitColors.current.needsYou else LocalOrbitColors.current.running)

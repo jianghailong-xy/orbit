@@ -80,8 +80,8 @@ final class ProjectDoneWiringTests: XCTestCase {
         // closing card down, as the browser draws none.
         XCTAssertTrue(adopt.contains("case .none: if projectDone != nil { decisionCards.removeAll { $0.kind == .projectDone || $0.kind == .projectNotDone } }"),
                       "a read that answered with nothing to ask leaves no closing card behind")
-        XCTAssertTrue(adopt.contains("decisionCards.removeAll { $0.kind == .projectDone } deliver(.projectNotDone)"),
-                      "why it is not done replaces the done card")
+        XCTAssertFalse(adopt.contains("deliver(.projectNotDone)"),
+                       "why it is not done is delivered to a conversation again — Orbit's own DONE included (2026-10-25)")
         XCTAssertTrue(adopt.contains("decisionCards.removeAll { $0.kind == .projectNotDone } deliver(.projectDone, placement: donePlacement(live))"),
                       "the done card replaces why it is not done")
         // A read asked for after a press here that still says the project is not DONE retires the
@@ -171,7 +171,9 @@ final class ProjectDoneWiringTests: XCTestCase {
         for call in ["ProjectDone.meta(projectTitle: subject.title, asked: request != nil, waiting: waiting)",
                      "return ProjectDone.requestWaiting(askedAt)",
                      "Text(request.judgment)", "ProjectDone.doneWhenHead(count)",
-                     "Text(ProjectDone.cardTally(counts))", "ProjectDoneGapList(subject: subject, gaps: gaps)",
+                     "Text(ProjectDone.cardTally(counts, main: subject.main))",
+                     "Text(ProjectDone.criterionState(criterion, main: subject.main))",
+                     "ProjectDoneGapList(subject: subject, gaps: gaps)",
                      "ProjectDone.orbitCheckedLine(counts: counts, confirmedAt: confirmedAt,",
                      "Text(ProjectDone.recordingExplanation)", "Text(ProjectDone.recordLabel(counts))",
                      "Text(ProjectDone.notYet)", "TextField(ProjectDone.missingBeforeDone, text: $note, axis: .vertical)",
@@ -192,9 +194,9 @@ final class ProjectDoneWiringTests: XCTestCase {
         for call in ["ProjectDone.WhyNotDone(subject: subject, withCoordinator: withCoordinator,",
                      "title: ProjectDone.whyHeading", "group(ProjectDone.waitingOnWork, why.waiting, waiting: true,",
                      "group(ProjectDone.needsYourCall, why.needsCall, waiting: false,",
-                     "Text(ProjectDone.whyNotDoneTally(subject.derivedDone))",
-                     "Text(ProjectDone.rowState(criterion))",
-                     "Text(ProjectDone.rowDetail(criterion, waitingOnWork: waiting))",
+                     "Text(ProjectDone.whyNotDoneTally(subject.derivedDone, main: subject.main))",
+                     "Text(ProjectDone.rowState(criterion, main: subject.main))",
+                     "Text(ProjectDone.rowDetail(criterion, waitingOnWork: waiting, main: subject.main))",
                      "ProjectDone.askedAside(waiting: ProjectDone.requestWaiting($0))",
                      "Text(ProjectDone.reviewDoneRequest)", "Text(ProjectDone.askCoordinator)",
                      "if why.saysCoordinatorIsOnIt {", "badge: ProjectDone.settledBadge(subject.doneBy))"] {

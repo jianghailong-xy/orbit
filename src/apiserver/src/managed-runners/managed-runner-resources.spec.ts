@@ -16,6 +16,7 @@ import {
   podIdentityProblem,
   pvIdentityProblem,
   pvcIdentityProblem,
+  secretGeneration,
   secretIdentityProblem,
 } from './managed-runner-resources';
 
@@ -118,12 +119,16 @@ function readYaml(text: string): unknown {
   return block(0);
 }
 
-test('the Pod is deploy/managed-runner/runner-pod.yaml.example filled in, with exactly the documented differences', () => {
+test('the Pod is deploy/managed-runner/runner-pod.yaml.example, filled in and nothing else', () => {
   const pod = buildManagedPod(identity, PVC_UID, profile);
   const fill: Record<string, string> = {
     __FIXED_USER_POD_NAME__: managedPodName(RUNNER),
     __AUTHORIZED_TEST_NAMESPACE__: profile.kubernetes.namespace,
     __TEST_ENVIRONMENT_ID__: profile.environmentId,
+    __OWNER_UUID__: OWNER,
+    __RUNNER_UUID__: RUNNER,
+    __RESERVED_GENERATION__: '1',
+    __DATA_PVC_UID__: PVC_UID,
     __RUNNER_IMAGE_AT_SHA256_DIGEST__: profile.runner.image,
     __INIT_CPU_REQUEST__: profile.runner.resources.init.requests.cpu,
     __INIT_MEMORY_REQUEST__: profile.runner.resources.init.requests.memory,
@@ -138,39 +143,23 @@ test('the Pod is deploy/managed-runner/runner-pod.yaml.example filled in, with e
     __RUNNER_MEMORY_LIMIT__: profile.runner.resources.runner.limits.memory,
     __EXISTING_PER_USER_TEST_PVC__: managedPvcName(RUNNER),
     __AUTHORIZED_TMP_SIZE__: profile.runner.tmpSizeLimit,
-    __TARGET_USERS_ONE_TIME_TEST_ENROLLMENT_SECRET__: managedSecretName(RUNNER),
+    __BOOTSTRAP_SECRET__: managedSecretName(RUNNER),
   };
   const yaml = readFileSync(path.join(DEPLOY, 'runner-pod.yaml.example'), 'utf8')
     .replace(/__[A-Z0-9_]+__/g, (token) => {
       assert.ok(token in fill, `the example has a placeholder the manager does not fill: ${token}`);
       return fill[token];
     });
-  const example = readYaml(yaml) as { metadata: Record<string, any>; spec: Record<string, any> };
-
-  // The documented differences, applied to the example: identity annotations; the runner's
-  // pre-created ID; and the bootstrap credential mounted where the enrollment token was.
-  example.metadata.annotations = {
-    'orbit.dev/owner-id': OWNER,
-    'orbit.dev/runner-id': RUNNER,
-    'orbit.dev/generation': '1',
-    'orbit.dev/pvc-uid': PVC_UID,
-  };
-  const runner = example.spec.containers[0];
-  runner.env = [
-    ...runner.env.filter((e: { name: string }) => e.name !== 'ORBIT_RUNNER_ENROLLMENT_TOKEN_FILE'),
-    { name: 'ORBIT_RUNNER_EXPECTED_ID', value: RUNNER },
-    { name: 'ORBIT_RUNNER_CREDENTIAL_FILE', value: '/run/orbit-bootstrap/token' },
-  ];
-  runner.volumeMounts = runner.volumeMounts.map((m: { name: string }) =>
-    m.name === 'enrollment' ? { name: 'bootstrap', mountPath: '/run/orbit-bootstrap', readOnly: true } : m,
-  );
-  example.spec.volumes = example.spec.volumes.map((v: { name: string }) => (v.name === 'enrollment' ? { ...v, name: 'bootstrap' } : v));
-
-  assert.deepEqual(pod, example);
+  assert.deepEqual(pod, readYaml(yaml));
   assert.equal(pod.spec.restartPolicy, 'Never');
   assert.equal(pod.spec.automountServiceAccountToken, false);
   assert.equal(pod.spec.terminationGracePeriodSeconds, 240);
-  assert.ok(!JSON.stringify(pod).includes('ENROLLMENT'), 'an image that only knows enrollment gets no token to enroll with');
+  assert.ok(!JSON.stringify(pod).includes('ENROLLMENT'), 'a managed runner is never given an enrollment token');
+  // The instance identity comes from the API server's own record of the Pod (the Downward API), so
+  // the runner can only ever name the generation and Pod UID it really is.
+  const env = (pod.spec.containers as Array<{ env: Array<{ name: string; valueFrom?: { fieldRef?: { fieldPath?: string } } }> }>)[0].env;
+  assert.equal(env.find((e) => e.name === 'ORBIT_MANAGED_RUNNER_GENERATION')?.valueFrom?.fieldRef?.fieldPath, "metadata.annotations['orbit.dev/generation']");
+  assert.equal(env.find((e) => e.name === 'ORBIT_MANAGED_RUNNER_POD_UID')?.valueFrom?.fieldRef?.fieldPath, 'metadata.uid');
 });
 
 test('the bootstrap Secret carries the credential and the generation it is for, and is immutable', () => {
@@ -178,6 +167,8 @@ test('the bootstrap Secret carries the credential and the generation it is for, 
   assert.equal(secret.metadata.name, managedSecretName(RUNNER));
   assert.equal(secret.immutable, true);
   assert.equal(bootstrapCredentialOf(secret), 'credential-of-generation-1');
+  assert.equal(Buffer.from(secret.data!.generation, 'base64').toString('utf8'), '1', 'the entrypoint checks it against the Pod');
+  assert.equal(secretGeneration(secret), 1);
   assert.equal(secretIdentityProblem(secret, identity), null);
   assert.match(secretIdentityProblem(secret, { ...identity, generation: 2 })!, /another generation/);
   assert.match(secretIdentityProblem(secret, { ...identity, ownerId: RUNNER })!, /another owner/);

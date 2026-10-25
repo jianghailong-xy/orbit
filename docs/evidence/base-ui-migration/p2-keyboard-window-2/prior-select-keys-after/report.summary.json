@@ -1,0 +1,6361 @@
+{
+ "stats": {
+  "startTime": "2026-10-07T15:16:50.529Z",
+  "duration": 591927.9330000001,
+  "expected": 276,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ },
+ "errors": [],
+ "tests": [
+  {
+   "title": "orbit-field down-down-enter burst sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1928,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "41a4bdd44945c310ec4af2311f6f15c0adefc8dc371fcd6a9c209b4ff7b6ce52"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1525,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "94302651ea675e6ebfdd2f10d67696de576ff189e1e2ef145d96c4f6938b9e25"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1462,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "cb92bf43b3a1e165e28990a3a362a5cfe83be2a4a92ebac78808c5a8962f4993"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 3",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1467,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "134175055bec1109e082e68727661a294bebdd5b84792e81770e0dab32d30f03"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 4",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1502,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "cbc6e25686f3c1d549102c1d9fc18c935d5517ca25bddf98ecdbc4828c45eb2d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 5",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1372,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a48c9a6be4ae738dc761962ec40fe8ba048b6e662f040d6a652e90369094d1af"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 6",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1460,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d616a18001daf9a451330dd2ad8b598f62e86c39937d3785d5fed1124b54b6cd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 7",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1558,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "24a5924c9ffbe09b19388b80fe55270e3c346b89206371d4ea877e726e759cdf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 8",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1390,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b05002fc4ff0f401abb82998708fa6fd8f2654979dee2085042b34905023053b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 9",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1439,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "93b3382372215de014fc683bc9c93492a9a4996e60f98cb88755bcf998588824"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 10",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1397,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f9194e132d0862bce6d9027bced1a246f0f827e7ea0cd7e40965530606f710ca"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 11",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1565,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "794688fbb96c22bebd18f4981e83938b56dc61b5c477dfea32b1ab2a7c326965"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 12",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1665,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c57bad693bd13632185e5d5d925648f8f684bfc6413e45e7d361a526f7f8f7d7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 13",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1512,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "04953fd068ebc0c21763001fde35088c70189eedf31890689acf83426e3d3f17"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 14",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1571,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4490ce1083a89178614cfa700759e4e9cbdad12071b8f324ed6ec87fb078cf21"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 15",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1396,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4881e1a51f879981e7a4888066ef75599e594a2d324cd327c9e1a33b31c380b2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 16",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1467,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a12ecd78228a58b3ac9765f40e0d5b2f8c3509c41a44face98449375c9c0c3b9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 17",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1383,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9207e41d48ab981f39557bf20f97fd8d55ed2e15801764f226ad94073a80b04f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 18",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1485,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f777a7c80531f2f2ec7b134db4031e7dce3b7a396d4d4b1fb34efe1fe2b10a70"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter burst sample 19",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1346,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e90592517640a29a14c50fb12e969df5c3a5bff29ef3a70cf7b816f83d9bbce3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter paced sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2323,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "47b5094b5dac28539c3045ff75cb9c6e4cb3e60a1137f9a247364ecda7a3254b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter paced sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2389,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e896ff84a20506f8f8577d5ba66ca0b6d7c356d2d4098d729c67b56f6715aeaf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-down-enter paced sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2294,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7e3ef164f58d4ca8b5c520d0c0a6e0c28cc67c031ac18ce84690f070661b63f9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1417,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "612b45247edcf6b6d55f78e8ec5b429b9d09065241798b3c5da2c42194e62279"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1315,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "85f2904b5046846edc11ef997e53d83dbf3e89ce7e1787dcb9e8982ff9861ab9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1320,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d81d0b8619aba1ec604002c152ad48740bdbeda895e5a6f9684a892820fedb27"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 3",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1486,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9b806ee47810d9fbbc208b9801ac2b19ef9bb7c38c1e426a4e23d7ec90e7a3bf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 4",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1344,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "18da332b56c10559913bc535ef7f36bd0b2fdd026e544ce9dae46c36756efe7c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 5",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1531,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b8fe02074e62065fd1004283c7e559260acd8af3ae7365f4176ca913e0d3e2b2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 6",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1399,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2bf92d3c82936f6cbfe11ee2d35d9aae1268caef0429debf72a3bc081fcc41f3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 7",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1352,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6ead582f7ec35ccc1005cbad1286931deb0c800daf613caca67960a746052d7f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 8",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1380,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0e33e5c61d15ede3f79cde3ff446ba0f153bd1d934c921faa4d303a11b9bb16c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 9",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1433,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7769aa6b69709f2f756d937bdc341c9157d0ced86c0e09e72a6a1b6ac7a4e0f0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 10",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1313,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d25e9b9a6fdfbaeaa5fa8bf8c1a98a9aa16406dc84b956fe4420bb77e33ed773"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 11",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1391,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2806f5a0011c54fb4d28cd11d9169e815913342368dd1c3835090185fbe35e77"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 12",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1326,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7fdfbd57b1de3eae6f84c1ba0b31ae61568bb32292cc15a14ceafe83b1a211d7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 13",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1586,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8f15a2351a4d4f969ebb3a9cf7247efabb2afbf37333e43149267248c3f307eb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 14",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1309,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "368d822fdd04666544e4288388d1607e5b539e104b4a02feaf286413576ed87a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 15",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1330,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7b557c2e592508fae70a773b25715ce973be5cbc97ba9e8f9d48b70b637ad76b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 16",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1704,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3aa5cde6be72dcbcbd03d6308b548682aec015554b8e22c06d884d4cf1cf5d37"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 17",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1291,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "61df66a0aca4fbe127953ceef86df1121f5c79db7ba7a2dc5065a03316d6c959"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 18",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1440,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d8beefa043376559a735975c8dccf0fd8c6b609bbbddd872e89984feb2f29a95"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter burst sample 19",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1336,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a016eaee54d022fe0707f7b92dcc62e52e180119d9980ca1895966d578b8f48f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter paced sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2311,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9e4f14ca7f1e2ac9ec40369e89c7c0df2c46f3dc81e188aabdc6f5970b8adb58"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter paced sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2491,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a8b164376aaccec63dfcf723eb9bc2f075c93f6ace110b3be1b5123dc2198e03"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-down-enter paced sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2391,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3d7708d22ac60e74bd7b078e90b4924144961a7c4d29c19abad39c2edbbdf844"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1425,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4a51063b459d8413443571aebd9e50bf544b3611f396885e13b1bf7262eb5c55"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1434,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ee4149d4074afcd9cf0dcf28f5ac538e8127832b98c781c3ba86e1e160e7efde"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1290,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4a0ea6a05ba9523ac062437d1698ffa9b0bc618e09a3316a0e6f3a1d922ff91a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 3",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1611,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "929c84ec001f2ab686a60c751fbfebc9f57790e6fe059a4ccf09b99656635256"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 4",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1525,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f74e118d065b857e659d7f00cfae0fa712b9f3c3649e7e1c23c6d0fc041316d9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 5",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1625,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9294346a0e2fca80ee8e7e07004209763a46a7a1a74691a06cf5ac3eb1db940d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 6",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1575,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e3103504d101b65f35b5cc96254daca245af8483947da64d048e2ae447b56fdd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 7",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1507,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7203162e580b3d736929116f524c92db812de70f29a8d0daa1b544ce8e21b7b2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 8",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1472,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "608c17958f1fed771e939a554e3710bde3f9e7ce794ba17968185639fb64ddf1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 9",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1438,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "89bb3a76f72aa532c7a40a4378ef0f48f469b8ef3e2bd0d505f665abb13b0d6c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 10",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1464,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0afb4f23e8f64ea43085e94d503feedc216dcbe751c8074265a5dae80134a046"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 11",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1300,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "26f49a14deb789e593317dceed46b4cd4a54f0279c00acc83db1343a75ae3a73"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 12",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1354,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a11f122e4810c1c7496653e97e6ada85a1fcd3afe1b70005dc53b74f73ee4fd9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 13",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1508,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "fb599cc4aea4543e11e677998ab805a88330903d3e993da1e10493e88365bd58"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 14",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1523,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "cf59c17f9e8c0d0053c06dedae0ceffe7021b9afb38d05273d9e60b5daed325e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 15",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1648,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c7654f6c3fe7c39946ea48892effba1a32aba73198363b8d6c0e90b5bd7bfe50"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 16",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1449,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "feae3f16be091cf94e93fd93fe010a717116ce8119e7efbafcd66165a8be5b7d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 17",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1686,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bf546aecb9b1dd38700da758639be3409e4f2a1c8c10e62ea0d99fa49565d573"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 18",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1499,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5df0ce36459f823f52c5724d45105706be597adc9f7054031b0996c78499d644"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter burst sample 19",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1461,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2846b27d62c17ee168d2bdfed69a564266a446b787d3ea49720e6e5dc2566d6c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter paced sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2439,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2b90b1a2ea749d59e7acf5a164633b78a10acc188d9b3015a9c6f2754fde359b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter paced sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2503,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bc76f91607b0001f0e1f8d5d4dca89838d7b02633a01e9494d2b99f467eb6176"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-down-enter paced sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2362,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "37d2e2a7d006d5ea25e5cbb0e667c098da1d920ba7561094ea53c09e37852d3f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1320,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "646d3c056c07e0c7fe85798023d2807c633d01ce7386f79c69b850f9eee00894"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1490,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "939ddac4b44de6fe382cc2a24ee7e95087f7686d0d5b723bc55258aef66ed048"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1468,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c9aa09c032f1730c2b880898c6abe7696786eebf4af4d7fa3c15e3f1cee6b061"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 3",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1439,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "47c2ca316d90e05679f6640ba5f343ff18e2594119f1748468f7942cca997064"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 4",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1603,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "12877cd500cc67dabf6df099ed754bca3bc5d9c0af88818e6b11ae7fd8a4decf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 5",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1510,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1992f3dacb92a5ff08d59404e04b3e36d7157ee308ffb463d240b56bae5e71d0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 6",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1444,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ff1f09ca54afffbe8c90d4455abde76fec669722f3c91a66f7587f5eecb4380d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 7",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1708,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ca01d847dfa62eaafa7f0523144e8a9c06cc55be61bb5d39f49d92204e3e346b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 8",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1713,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3881df487c6df10ec4334364621e0993c4df4505a1d148eea20aa9a9541866af"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 9",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1795,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "738527d7029cc09046143d57ff14862e0b8dbfcde1babc9f60862146b4df0eb9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 10",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1739,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "20442fd4df3dd1f142f10ba52f854a192e8e51249f8559c0167a86fbfa4e96ba"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 11",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1655,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6dd240aa6044c1fcc8a1e125f9b9b2c31d351f918efb00d11db8053fb49cdb7c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 12",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1738,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "65b3564764f9f1d46dced8e89b2b3369cb2ace92ab7c58e6b4d41a841b81c8de"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 13",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1521,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9a8c20bcc431843ccaead8603d35bf0b54389ce76bf405334c71e5e1fe48a16b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 14",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1535,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "07940ae92ef9579763084d0b626b1ddedb9919f9077e79cc846f93084a42c6d1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 15",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1541,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f75590cef520501606264f4738f1174a78c3630b49d81716cf601e2d40753e51"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 16",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1537,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "715f984a025e341b2b0b529c164cc84ae8e49dca6baa1d17f1c9ca41e5aef82d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 17",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1532,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e2eb0ec0852da07345ce706cacf57362ec426d9e5cbc5301f7910074a174754b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 18",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1700,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6f7b88c886c93c8945c57b3bb897acb98f90c90fe2be74e5d99908e95c193f3c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter burst sample 19",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1813,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d301faab28bd6f18580cf24ce7f1cbfb4f58cf408ce2fb20dc66e05aa7f4655f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter paced sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2497,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f3bf809a0232665fbddfa2a752cbc7dc5b7416151a95d2072cabc3ae6b139035"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter paced sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2404,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3cdc91beb1b887294a93a45d0a08fff55db6b5292b833f28ad22e793f8a06dff"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-combobox down-down-enter paced sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2770,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "78347d9dcacbe820dedc28d5b0aa16f6140b00b657b77a42e886296b18b040eb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1597,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "053a92680d50190e84f9f77050b29daa5ba1a848364ea7cdbdaf9d6157f9cc5b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1509,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4a760efb8785cc3859bf63d794b905372e71f6071a7a8751e92ba86eb2ebc5b3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1621,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c78b1ee6da13fba2686914fda0777ce621427456a1e65f88a50664e42b96e140"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 3",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2029,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e992f55b6e355c0d5771467614499f33609ffcd04a14916186b82ec2b0381134"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 4",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2115,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c3e97c39d1537f20ea6f996e9c09e8d0112b9b75cc0692d65836bd1e1cb7a4b7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 5",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1510,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "865dc80b42e3f85fa8fd44a655f9287ec42eba112a8ae2fe0ff77af9fcb02898"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 6",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1617,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "90efc8c200b4c913f01456c1662add246ae9474f365cebc17be9b6d9cbd159cc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 7",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1509,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "690664ce15ed695e340e9d525254acb4d4903994539890eebcce92f420703135"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 8",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1970,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "adb7d7197d7f4817778fb9c1a968d55eefc33a6014d5bbbe499982077ff69e6c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 9",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1628,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f939c1886b44c968a8c23e99ac7dfe5615d7c8edb28730a76fe45fafa32ceba4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 10",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1402,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e4743104932302e658c8182fe6ad02a0538d5a30d51fde9c687ceb6da95b648a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 11",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1475,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d193bb60e626ce0293bfe40491d83df106f2ebac666643ce25288fa17b57f2ba"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 12",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1322,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5da41797b4a52e8e846ddf2d7893b30a2b479094e8e770acfc3d5c4998ab747f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 13",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1320,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a24e60acf443285b108afaf4b91973934c1786e4344a5bc85c1b0c0b12a917e1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 14",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1412,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c1c64445a7473c2a1ed901f4f56e36104d888a25ab85a21e4097b96a9437e870"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 15",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1478,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "07977d856fc0b4f91b367c608f4ab66a4bcc49aefc82f1490f1a69ec2fe4895c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 16",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1307,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d5475733210e801577da86384e037de92ecf673e83934a7afefff918b92e573c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 17",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1411,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a565b94d27d007d16d7ce214b90bdc1674220d968eb8dc6d98256f4344b335c2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 18",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1646,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e3ddc3c99ffd67b2bddc276dc35791a83c1394083aa6de4fd36f3c12b9746d12"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter burst sample 19",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1652,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "10323e40b84eba2253deb6c0f53ddd37bbf68951b6ecbbbdb157a8a9abad5a5e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter paced sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2467,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "468b792bfc8d3f8562e6ca7d6cff124a5bc6fa7424f2bc76f9b0c1ec548f35f5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter paced sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3169,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "109ec4ba30e7b38ed7bf8ebcbd2586373ab445a473b49e0ba3f86a364f8e1506"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-search down-down-enter paced sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3588,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7a112ad4b0066c303a46833d5b8dbe06f88239dfc2067eb501a04cd75bc59b5f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2679,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c3c6a6bd280a1f2353f2a7aa155c64a207b499f95e13fc7e820b722cdc717f01"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2473,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4c0fe4a7cb388038443e4a83ee34038088dfb37f2349bae74e718fd6bbe514a3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2280,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a803a7d3c87e9870fc5c4e73155aa4bbb89a51d22cdf9febcc8f3b15503d8779"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 3",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2413,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f45a3987b577cd7119be830e8a9fc5b4d6471459522c0dded5acdc677fb75fac"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 4",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2586,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8e454456cfc09c544664aaf050e5607bdd79e55fe1ca3a14c47ea2b0742e9e0a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 5",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2619,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "00d2596d012c426d8a42f3f7c008b16e0545e291a08e5716f55f58996138fb95"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 6",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2249,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c58fc19125df203541fc7db8a8683c8e7e881bcd91151c0561c0e953ad4a9419"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 7",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1932,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e8879ce1900a71b63c13ebea61acf6095b1907eff96edce81db3f446b64070e5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 8",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2146,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b9597845d96468c8c0426f5dd54e16ee3b4a3f0fdb07e762f082c3ce5e32d812"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 9",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1951,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f7b0e274b6a74d89b86e7e33225ab79dc0bdc48781fdf0a8a272b5745b44d557"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 10",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1672,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "885f8958cd4feb4264066778eeaab12861c9bb15dddff1a69a2a0eb7702fe9f6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 11",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1615,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "af1799a4d76dc56c9bbb7b17ca4d3df5d862830ab93ddba1129c7d7e899a174f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 12",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1663,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bda6564476045b80ed0ef9f96715307a8311c03d64ef11d664619cbddfd02ca9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 13",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1771,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f999792eea31f264721fde124191096368bab543993d5b4ba5b0ce1f793c1216"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 14",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1660,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e663b17ddca1fd093dad80b9a506248232e954071f3760985f4b38fdb30ec20f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 15",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1573,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "542975cf5a55c011d7ead6812cadf4d44b782e6045b3fe0a9fa1c766f57f89ac"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 16",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1570,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1644c0d3b51d9b4b9f860a038aee53bd75e661643c29317a1f6ecf05bc6e6c87"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 17",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1551,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5bf16f4ab7fb7b009140b1b69acee116418fe05385d81735bdc53deb107f70b9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 18",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1592,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9ea1f746492b86efffa787ba981febd8e2ff4ce3e5945c471cf231bfe2062841"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter burst sample 19",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1495,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d545209c10298340f353daeb99f10d08189a952b4d4dedade84ed817744ac0e7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter paced sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2417,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "dd9ee9cf4da0b9327d057bfdc4ec5934cb08f25deccf5cf48c256745b3ff2d64"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter paced sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2371,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4e45c8c9af0d16e5076a8aec76b781c5fbb4dbd750cdbe7e74c1040b8c89303d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-multiselect down-down-enter paced sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2468,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "14918a1c1ee22d7ca18f343af9d6b52aec218f16f504eb143f29c920cba2cd6e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1553,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f1b70980ebe8b4636021ab130f629b4a5b1d21ea6b10eda421c27640e1b755ec"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1489,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d4f1b7ae3960fe2ad6d16d03f9bb247c722c187b9f5e041b146e61da1b96ea5b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1472,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "02b480f8c2fe07895b3ce0115473c3b004b239f321f86fc24565e10b69e3ea53"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 3",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1503,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2514ec2e8688c12edbbc014338c144f81a06558b673fea9a54f0d8c1f8760e94"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 4",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1544,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2cbe8e6e2f1d7b659c8152fa5646e18d36f9cd9dad98ce5a8820ffb3b9356598"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 5",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1630,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "24304722aa88406b26ec48cf239af56507c93721d25043bf77ff74e9b276109e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 6",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1576,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "383d4f15ad64e3a2b0c0b0466153c2f72ca455bf7b50b32258acd341f7fb1a88"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 7",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1470,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e344edfd1f67512acc9a8f47617c48eecff0469984b0c79870c9ee6959b8206c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 8",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1651,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "465947d8dc575e3be16d1e1bb04fb9505ba0397a8a0a117c5e0d1f2c355bb6b3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 9",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1583,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5a90dfdf2f916e2b2fb8d43361c9c436736c034f7ce59f45015ce93d3ed61bbc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 10",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1585,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d1baa1afc78995f097c39d8800278d94b1c58f7b407e694c697a4ef42987a44a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 11",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1590,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "17e00a5c51d4ec7227b591731cc880855b249b31ac55749ccf11322a586faa21"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 12",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1433,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7e6922c536ba56d62d2a8126cea329f12640343c2fa4b501a0b63f3e7c41798b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 13",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1587,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "633cb30d2bd18d587edd4bf5358653ffb158191041e73dc67c9921925cd4098d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 14",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1449,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "eaa8d4243da1034e1d4892b9612027028a58c767b194ab5dbde4a654a3261319"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 15",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1452,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "05b892d9ec04e8f1112567c1cb2ab2fff4b42f3f2e2777f810abf20af6f6d75a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 16",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1433,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ef0aa0cb8c5f59af7c8ddeb3e4ee87594944838d18655e4596f16b4760d54d01"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 17",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1566,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c4bafee84422b9efc6db2b5e24d81210c108c4e407da363d9d8349cd44dad067"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 18",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1611,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bb76f0324641665f0461cce9949fe87e5d9f893cac0a383b60c07d3c95773ed6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter burst sample 19",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1497,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b29cda6c7d2ea7e17c555f4d58e28b107998ef14abd834de86009e6ba2aa23e6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter paced sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2596,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "38610ef1ef72e70efb3e5a44036fb40d8c349b3844f6be412b649db98beac092"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter paced sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2647,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "32e172f1b1efff97e495653e75a0992f6035b82e2bffaf70da5c28fa89ca649e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-multiple down-down-enter paced sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2994,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "64e63446483e9efd043ded94af7ab8afc3d5d72a603fc6626dc14fc58a461b24"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1935,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "688b6914166e41dcc4dec3dd0592d7dde05cd5d40a0bfb6ecae3c6ecf5f8d99a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1489,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "190592fa014d2966f15553a4c163fd1404b45747a1862aa63ac6ef9c51c72087"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1609,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8ec5ae677dde2436bc33493055dc2379c78090148b331da5c5c4864abe74608a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 3",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1531,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "cbfae44982afa8488ad37cd4ea5f5f54cbd7ba76333a0a73bc46c4f218c58785"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 4",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1613,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "14bb4a4239999851cf044cd2c71a98ea4d19317f4553e0f6b4669a2a30e43b73"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 5",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1504,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d1deeb0b8a6ca518c8f26d0b7d731291269fcf71da9d16bacaf3f208674abcb2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 6",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1550,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f4b78cb5d81fb206324d9711c3e6eeb2932e5e1900ca509d2c422a3350832e67"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 7",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1551,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "48a3310b59f3fc4ba9f5e032d757c2169ee9347c3a0bc90eb84248905c81453b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 8",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1557,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9cbf21a598b39ee7b8593b37e486b33427ea875e90715dbc28441acf2dc3e2b1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 9",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1607,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "512d7f7da23cbc7b6c8226c17b04f7c962b9a2cc1d9955bf61fc2d6b734d76ad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 10",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1650,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "cbc5072161e94ed6b8c37225d5b1a30ec62b66135afc65478758f945aad62a65"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 11",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1711,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "463229a4519ff2a899faae1e4c6a612989b278ec4be2a0d2dcbe0ea9c0b0c66e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 12",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1716,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "010f63bb06d1a308457eca719c409afacb2c6758e66d66626824fbdf0f10f3ca"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 13",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1656,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "28962750bcce9f4a3a7010b853b423536279fce5ecfaf3e96ae8d0a2a8e120ad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 14",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1684,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bac6c224d5f9fde23a3294261d803ad8010a52a40b38b60d152a038da76241ef"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 15",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1529,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e085c64acef887c89efcbae0ac0ef8bd2ab32bc82fd38125c8899ff346085506"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 16",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1599,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f9b2713a7621cd16c99ec68912e73f57907697937001eff9fcb46dbd75ca6b22"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 17",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1549,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "33fa0381a7668822c6862a944bd713f3e1bf3c9f378f2edbf50e755d7a18f034"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 18",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1599,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "22f78d6c18e31bde4fe2e2bdc4c2f6e3de1a6a9bbd4cfb8d2d50dfeefbedbc7f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter burst sample 19",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1739,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4f0932a4bf747a90c352476a07a239b91dd40f51c7362146052ea3d07737ab4e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter paced sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2670,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3bf2ac0d61ca39178749f67ab2e3909e037ed60eb93b50f3006f321e2df5af53"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter paced sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2743,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f4c3123b8a2955d737630a31fdbf8dc975e03f225d4780148c82c240a796ef7b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-menu down-down-enter paced sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2601,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2e0c589e3a76e7cc2a4ec9df024d94a77dab6ad9826288328a5878467f18cb3e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2982,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "09fc9145c791b9937c43a0b43f09be90dc34d6e2b466ac0c1ef92b9eb1d2af73"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2889,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3ed4ce14bbfc8a42e2bfba0f06c60813912e51caa336ce188b5c121d7b7b3d9c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3156,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c06459ab182a95e50d84b53ef5dded0c04e0c1cc32118e360307ebe6f1c01436"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 3",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2938,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ff8640904cbc1ee2a855abe10981e6e4930a68cbf5f1c640d3cfdd8784c36617"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 4",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2928,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0a958286ded3a7d5c4544ad885054448ac284264bf2babc9c1ac38d70f038dc4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 5",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3831,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "282555fce07021b83902c2cd689ec83fedf10c79bde0573de93bff5f5b75fa7d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 6",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2789,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e966d2db2f1511a32df36efd59b639129959b3e5033c6ca1d7852a5fd501d2e9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 7",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2961,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f3d3c8af83a3cf33c9df578d4357dad8fea9ae320b38642825a32e87c9fc05de"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 8",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2960,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "acf9e4ac851fedd52d5c1073ba6eebb05b9b155ed090e3111f186b60255ef0a1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 9",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2767,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "68011c7ad35e436be0111aa9939ebddd0ce5bb54f3f9d04f301eeec3524a6599"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 10",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2832,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "de4166726ac9378681e268a24e57e6615e05b0a55ea7131f3f328748931c29de"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 11",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2835,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "60ca5208c679e4ad0c4bb5767c43e430d9dc963d8a7d08c793e17b919df39a98"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 12",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2877,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6c5eaf378dbd028c71d7fb9f91e5986f6f98373f0468e0b849e9a7997f361d36"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 13",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3111,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4c06a44c57c5acb673d2aea7db8f20be1c907c4fe9ba7e440b5f235654a25b7e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 14",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2947,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1921d4c8c6aec5e50c8f27ccd168b40980e030fd876e0a59bcc731284ecea266"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 15",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2916,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "109d0e96cc294dfb4d1dca4903a7c93315add6762b1100fab5c2fa62f017b8af"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 16",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2961,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "54762e18b840038e0178d98e20912fed7be031521a8f28a04b029865e56bcb85"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 17",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2899,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "93e6838833747d00415bedde63ae0fd4d3f702b2229215e8849cbd3c618d2a9c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 18",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2876,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6862aa040711bebbf9c12ff0c06eafad4991421c610e45eb27e80174be2de1a3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter burst sample 19",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3189,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9eab6cf4d3b843424d6485b6886d44f3f4bc524c03891b5107965b008795100a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter paced sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3759,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "05ee2fd4de54db8b484c5e653827ad1bdb55a14d663b35217ba11f1d724decfd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter paced sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3741,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "826e21b129cfc2802474e57ebe69646299750a984d0e67555514062a8d685564"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-up-enter paced sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4048,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1e47270ce7c33bfb6509f0bf5bf8bbefbe5daab37572b4814450134a73311bfd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2890,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a6ccfe0858b3d3eb6d64bf41bbf2f8eaa2d47fdd3398d939bb806ab7b78fc0e8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2811,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "aed904461bf4397f9dbf242ba873815d0a55538f76b32f14eb23aab0f818dac3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2700,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "29c517d94a7dc3a313d6cf752e77c2990b1b3cb203d47a9efd7c65bd149dd177"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 3",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2750,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ee7838e48582bed152bd5bfdbaa48388b8c992874d689b8ca1bb36637357f8d2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 4",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2653,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "af10be99e03443ff4e1967688a6c11c8183b8479c733a5af374705dafc1679a4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 5",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2966,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "433dccdcfe3203f44c7a68200b25d6ea7db4fefbb73683ce3ebf950155b3c9a7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 6",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2941,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "902cb8e70bf8c15eba3d106cd959a38940b1a458ee8591159e9b9e042b91eff0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 7",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2920,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ac255ea43bbb35b5455b93dafe750877f89f9cc2f1695361c7c3efecbd951149"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 8",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2902,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "25294c8698ee413980a01b89f4f01d51703cfd189f4d66fe09ab9f30ad08d738"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 9",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2958,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "af5d4a65baebdfe97e2b9a583d522d69c228e9375659ce19586488546eb7e600"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 10",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2761,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8f278ad44ecd20c29befd679d19a15c660ed39f76f0324a95ad705d7a0698d81"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 11",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2903,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3299af54ba296ed9e55844328382582fbde40923524b329aed30328be387cbfd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 12",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2898,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2a7c4e4112e9f9aeb6b393389ef916a06684ed9f6779200e5e5d99bdac095c43"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 13",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3017,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6057c0b62dd5758ffb5793c2d7d1587ee69c729962ded9fe8f5e416c03c2652c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 14",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2876,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "94e5adfafb9009f2cb19ae349637061a277c80b75697d17fb465e8298641799d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 15",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2760,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "be5fcddc11ccc62df7ee094f860cea216ff61cc80127f8272746322c21c2007a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 16",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3235,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "32d7cc8434131075f92b88109dc0baccbea454a70260261501107fe94be3aebf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 17",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3044,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6c0143f003f25ce240fd4b8959c07495394b72b3a33e370ea56ba7ac2c448765"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 18",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2920,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "444b855edaf13a502387c3ca709dec996f09a78e556700743001ab458f02d368"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter burst sample 19",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2970,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "89ffd907e5cd824fd2c3fff5d30339720b0da96801ae7ece99c96e9e66d916e3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter paced sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3591,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f38415171273c73a913d5b67dff0d035f781fe510d341471351e023f372a9ac4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter paced sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3583,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b4dc6a57e64f9bc7d2b0afcd6c422a86c77f39bffaf02a988368ccc86a719940"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-sample down-up-enter paced sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4254,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "37143dedf1c9acb9291aff16e1392ebad3ce64ec988f3c67e965478301d8a251"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2676,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ed67c99048224e138e53539622527f3e85a64821763110338b2b23f7f19bf137"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2612,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0037d89906d2d746125e8b11c8dccd7ea99fd4f60a54fded54f6dcb81f2fdc07"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2585,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e9a12d63de5d0147cd822f0c25dbed7077f3501c4a04aa92ce9f0dae83169e87"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 3",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2828,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "cbd0a8439597fc1dc0fa6e0711cd96a6fe28723df1d0462a2425591237fe758d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 4",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2801,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c452f64b5a5884b5fddfccc40f341700e6b1a782f9ecd3a75d9aad7eeeb09d11"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 5",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2825,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e144cd96c7c624295f5cda03f971d4f50c4b35bb3403b2378339a89ed7ab93c4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 6",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2678,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "cc5da2dc6f1917bb50a3b07671eb3c29ffc0f614d4c63d43a297e7761ba06546"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 7",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2619,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d2b8223e53cd1a1740080e91319de64406790cdeae330212b9083ffe92285dc2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 8",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2803,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5fdf08968505252300b4b7c6cbe2ccbea9456c28954b5fd10ec68e91a26a151f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 9",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2738,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "581fe3448038ffe5fc7cdbdb54f0d412a7276090fef2eec18cce8b540b126389"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 10",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2621,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b4dc3a8ef2ee6c0e1d6b43b1ffc03bf537d78ee76fa99c35c3280e4e493b276d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 11",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2862,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d2c0d2721a2fd74cd3dfe06b44921d1ff30c6b376e49106e4a105416be5d5e34"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 12",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2759,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "23ed446da60132dd9a3b6fbb06037dc2c4bfc9af97e79a3d709efd0b00485533"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 13",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2696,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "549e09a9e735a1591c1d7bd685b1231cdea07a1cd125a407d8a5c13cf6f7004d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 14",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2704,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1d606fe37157a3599314c369168b244c54b80b6dfbd03607a1c2b573367e7f59"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 15",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2730,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8e8682acf67302aa1c21f053303a276ea1735d84e6c5c5de79f930b2fe8e1ebd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 16",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2798,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0b39f75b7f965e6d8cd45584dde3e5e5eb3e4f7e8458d0768bb9b1f7646df78e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 17",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2839,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bf137311083089907f051b3c3d45626a83afac951266b6ae30836334edc6d893"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 18",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2619,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7de9e45d98da8a8fdc0319f73b9f7a4239a3e34ccf2554a04ccb6b6afd5a5a0a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter burst sample 19",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2617,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8853b8e603917220d0fe29e8a7cd5614d041553b4c777a662e0af7dd186dce5f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter paced sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3763,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b76338f1de5118a4eaf32e19787d0f813dba9dbac07f59c78ffed4f693597f8f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter paced sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4349,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "234b63d2d9ddeb914ea108a969658762891755c76511297ed94271cad0c982db"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "antd-sample down-up-enter paced sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4739,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bb47c6fd0f4f3dd5c53e98c9f073c819aa50a80f22653fdbce00377c754cea9e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2578,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "294f8c644276a70d989f17578e85e36d93b76cb5d9283fd9d31bbb0fcaa9b2bc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 5748,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "96e8ea1d40304a8137a52e7d07fe3d9cc4e8fc81eeb1467b1bd08cb1a0daed5b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 5269,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "855f65ef81c4655ec8353b9ad9a84df876287dab32eed3369a2343821a57aaa7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 3",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4821,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "be86f589e3565a14964915261150a0cdbe8c75d6e117b276f9ad8fb3aaf44883"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 4",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2971,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d3c80aba2aa9d408d7c3788086d2b60970e9a590fea9771f76f5e8edcdebd151"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 5",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3021,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "744effd9cb755afb1cdb569c0279ad6347ea0be95f6d3f549c7f97e435417e5c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 6",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2059,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "102b86212a83c940dfd49cbfb7f7ce5d215a246b906c07de3117d04c267acb7f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 7",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4078,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2f31ff23e080d399542c89e48812d270f28fcdc596b4543eb4aecf6e27559265"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 8",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2237,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9cf900a1479b8b9cb8a9d4c772238e19a3ee35779dfd9d129e7930783e9b2aab"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 9",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2258,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "21e72a91a92000e889fe523860d641d38b63bca6a1cb735e50c782270b456098"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 10",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2151,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a70b2945c0b4e63297fea09b701daf9606420d1477459346e461e835ce0f192b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 11",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1996,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2397b23a381baad23b638ab56c116d8038867ee3eb6987fa408eca8449b3a1dc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 12",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1817,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4254f4ce6c80577d8144bd033e6a0254cd8294c47f2c82cb1bdb8866410b75b6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 13",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1978,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b5772a5fcd37a633b81b98b46d807fc960426effa90cc72204d566e63280ee2d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 14",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1940,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "74f7966760fd0b5cb450b3f667e10e6fe632982075da8bb6e905d6f69b72ad9d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 15",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1773,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bb13ba9a315b73f0320b7b61fd5b52d4eba273efdb8547dc3ffab21d10dc8054"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 16",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2030,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3651bb1d8146250fe06801da834cf686011f858d415eec57684d7fa727668aee"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 17",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1895,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4264f5a83e1d00e810d19610fcae5cf208212f35b0bcaebc8e5486e6e1483617"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 18",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2510,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "741bd2e35eb45b53fb10f77f858ba9fc29854d3ddb41d905cfcb4a53a4f376fe"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter burst sample 19",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2221,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d566ca8ec11586c6b33a6c322abfbe80da521401b7a86c3bdb2122f53561648c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter paced sample 0",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2344,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1c36b80cff23f23c5d6957c30fc93c071c864b853284d4c4c2766d129403eeb1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter paced sample 1",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3052,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a351a2feb57221de0ac810ad4561db513aff99987ea47bda33ac79b7f0e0158c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "orbit-field down-enter paced sample 2",
+   "location": "select-keys-burst.browser.mjs:60",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2548,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select-keys",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "edc75ca12caf4a8bfab72f9dd322caa5d92b9ba27bcb9e82f14aea3cca80143a"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

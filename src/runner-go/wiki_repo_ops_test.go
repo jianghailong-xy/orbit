@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The repository operations (contracts/wiki.contract.json `repoOps`, design §7), against a throwaway
@@ -210,31 +211,42 @@ func TestWikiRepoOpSnapshotSkipsACommitTheServerAlreadyHolds(t *testing.T) {
 	}
 }
 
-func TestWikiRepoOpReadIsBoundedAndReadsOneSection(t *testing.T) {
+func TestWikiRepoOpReadAnswersWithTheWholeFile(t *testing.T) {
 	f := newWikiRepoOpFixture(t)
-	// A document far larger than one section's material: the item's own limit is read against it, and so
-	// is the request's budget.
-	long := strings.Repeat("文", 30000)
-	head := f.push(t, "long", func() { f.write(t, "docs/long.md", "# Long\n\n## Wall\n\n"+long+"\n") })
+	// A document far past the old window (22,000 characters): the whole file comes back, byte for byte.
+	body := strings.Repeat("文", 30000)
+	content := "# Long\n\n## Wall\n\n" + body + "\n"
+	head := f.push(t, "long", func() { f.write(t, "docs/long.md", content) })
 
-	// A whole file is read within the limit the item asks for, and says that it was cut.
 	outcome := runWikiRepoOp(f.command(t, "read", map[string]interface{}{
 		"sha": head,
 		"items": []map[string]interface{}{
-			{"path": "src/a.ts", "maxChars": 40},
+			{"path": "docs/long.md"},
 			{"path": "docs/design.md", "section": "§4.3 Snapshots"},
 			{"path": "contracts/thing.contract.json"},
 		},
 	}), nil)
+	if outcome.state != "succeeded" {
+		t.Fatalf("read failed: %s", outcome.err)
+	}
+	if outcome.payload != "" {
+		t.Fatalf("a read of %d bytes should travel inside the result, not in fragments", len(content))
+	}
 	answer := decodeResult[wikiRepoOpReadAnswer](t, outcome, "read")
 	if len(answer.Items) != 3 {
 		t.Fatalf("the read answered %d items, want 3", len(answer.Items))
 	}
-	first := answer.Items[0]
-	if !first.Found || first.Chars != 40 || !first.Truncated {
-		t.Fatalf("the whole-file read was not cut at exactly its limit: %+v", first)
+	whole := answer.Items[0]
+	if !whole.Found || whole.Truncated {
+		t.Fatalf("the whole file was not answered whole: %+v", whole)
 	}
-	// One section: its heading and its lines, and nothing of the section after it.
+	if whole.Text != content {
+		t.Fatalf("the whole file is not byte for byte what the commit has: %d runes, want %d", len([]rune(whole.Text)), len([]rune(content)))
+	}
+	if whole.Chars != len([]rune(content)) || whole.Size != int64(len(content)) {
+		t.Fatalf("the answer's sizes are wrong: chars=%d size=%d", whole.Chars, whole.Size)
+	}
+	// One section still reads as its own section when a caller asks for one.
 	section := answer.Items[1]
 	if !strings.Contains(section.Text, "§4.3 Snapshots") || !strings.Contains(section.Text, "The runner builds one per commit.") {
 		t.Fatalf("the section read is wrong: %q", section.Text)
@@ -242,36 +254,98 @@ func TestWikiRepoOpReadIsBoundedAndReadsOneSection(t *testing.T) {
 	if strings.Contains(section.Text, "Four questions") || strings.Contains(section.Text, "The design") {
 		t.Fatalf("the section read took more than its own section: %q", section.Text)
 	}
-	// A contract gets the contract default, and an item naming no limit is still an answer.
 	if answer.Items[2].Chars == 0 || !strings.Contains(answer.Items[2].Text, "\"table\"") {
 		t.Fatalf("the contract was not read: %+v", answer.Items[2])
 	}
-	if answer.Chars != first.Chars+section.Chars+answer.Items[2].Chars {
+	if answer.Chars != whole.Chars+section.Chars+answer.Items[2].Chars {
 		t.Fatalf("the answer's total is not its items': %d", answer.Chars)
 	}
-	// A path the commit does not have is an answer, not a failure: found=false.
+
+	// A path the commit does not have is an answer, not a failure: found=false, and no reason.
 	missing := runWikiRepoOp(f.command(t, "read", map[string]interface{}{
 		"sha": head, "items": []map[string]interface{}{{"path": "docs/nope.md"}},
 	}), nil)
 	absent := decodeResult[wikiRepoOpReadAnswer](t, missing, "read")
-	if absent.Items[0].Found {
+	if absent.Items[0].Found || absent.Items[0].Reason != "" || absent.Items[0].Size != 0 {
 		t.Fatalf("a read of a path the tree has not found something: %+v", absent.Items[0])
 	}
 
-	// The whole request is one section's material: 22,000 characters in all, however many items.
-	whole := runWikiRepoOp(f.command(t, "read", map[string]interface{}{
+	// A request that names a limit is answered within it: what an older control plane asks by.
+	bounded := runWikiRepoOp(f.command(t, "read", map[string]interface{}{
 		"sha": head,
 		"items": []map[string]interface{}{
-			{"path": "docs/long.md", "maxChars": 22000},
-			{"path": "docs/design.md"},
+			{"path": "docs/long.md", "maxChars": 1000},
 		},
 	}), nil)
-	bounded := decodeResult[wikiRepoOpReadAnswer](t, whole, "read")
-	if bounded.Chars > wikiRepoOpSectionChars {
-		t.Fatalf("the read answered %d characters, more than one section's material", bounded.Chars)
+	cut := decodeResult[wikiRepoOpReadAnswer](t, bounded, "read")
+	if !cut.Items[0].Found || !cut.Items[0].Truncated || cut.Items[0].Chars != 1000 {
+		t.Fatalf("a bounded read was not cut at exactly its limit: %+v", cut.Items[0])
 	}
-	if !bounded.Items[1].Truncated {
-		t.Fatalf("the second item took more than the material left for it: %+v", bounded.Items[1])
+}
+
+func TestWikiRepoOpReadRefusesAFileOverTheLimit(t *testing.T) {
+	f := newWikiRepoOpFixture(t)
+	// Just over the file cap: missing with the reason, and the size it would have been.
+	big := strings.Repeat("y", wikiRepoOpWholeFileBytes+1)
+	head := f.push(t, "big", func() { f.write(t, "docs/big.md", big) })
+
+	outcome := runWikiRepoOp(f.command(t, "read", map[string]interface{}{
+		"sha": head, "items": []map[string]interface{}{{"path": "docs/big.md"}, {"path": "docs/design.md"}},
+	}), nil)
+	answer := decodeResult[wikiRepoOpReadAnswer](t, outcome, "read")
+	over := answer.Items[0]
+	if over.Found || over.Reason != "too_large" || over.Size != int64(len(big)) || over.Text != "" {
+		t.Fatalf("a file over the limit was not refused with its reason: %+v", over)
+	}
+	// The rest of the request is answered: one file over the limit is one missing item, not a failed read.
+	if !answer.Items[1].Found || !strings.Contains(answer.Items[1].Text, "The design") {
+		t.Fatalf("the item after the refused one was not read: %+v", answer.Items[1])
+	}
+}
+
+func TestWikiRepoOpReadUploadsALargeAnswerInFragments(t *testing.T) {
+	f := newWikiRepoOpFixture(t)
+	// Three files that fit the file cap but not one request body: the answer travels in fragments.
+	piece := strings.Repeat("z", 1500*1024)
+	head := f.push(t, "huge", func() {
+		for _, name := range []string{"docs/one.md", "docs/two.md", "docs/three.md"} {
+			f.write(t, name, "# "+name+"\n\n"+piece+"\n")
+		}
+	})
+	outcome := runWikiRepoOp(f.command(t, "read", map[string]interface{}{
+		"sha": head,
+		"items": []map[string]interface{}{
+			{"path": "docs/one.md"}, {"path": "docs/two.md"}, {"path": "docs/three.md"},
+		},
+	}), nil)
+	if outcome.state != "succeeded" {
+		t.Fatalf("read failed: %s", outcome.err)
+	}
+	if outcome.payload == "" {
+		t.Fatalf("an answer of more than %d bytes should travel in fragments", wikiRepoOpInlineBytes)
+	}
+	if outcome.payloadKey != "read" || outcome.sha != head {
+		t.Fatalf("the fragmented answer is not the read's: key=%q sha=%q", outcome.payloadKey, outcome.sha)
+	}
+	fragments := wikiRepoOpFragments(outcome.payload)
+	if len(fragments) < 2 {
+		t.Fatalf("the answer was not split: %d fragments", len(fragments))
+	}
+	for _, fragment := range fragments {
+		if len(fragment) > wikiRepoOpFragmentBytes {
+			t.Fatalf("a fragment of %d bytes is over the contract's %d", len(fragment), wikiRepoOpFragmentBytes)
+		}
+	}
+	// Reassembled by ordinal, the answer is byte for byte what the runner read.
+	if got := strings.Join(fragments, ""); got != outcome.payload {
+		t.Fatalf("the fragments do not reassemble to the answer: %d bytes, want %d", len(got), len(outcome.payload))
+	}
+	var answer wikiRepoOpReadAnswer
+	if err := json.Unmarshal([]byte(outcome.payload), &answer); err != nil {
+		t.Fatalf("the reassembled answer does not read back: %v", err)
+	}
+	if len(answer.Items) != 3 || answer.Items[0].Text != "# docs/one.md\n\n"+piece+"\n" {
+		t.Fatalf("the reassembled answer is not the three files")
 	}
 }
 
@@ -411,6 +485,144 @@ func TestWikiRepoOpRefusesACheckoutThatIsNotTheSpacesRepository(t *testing.T) {
 	// And the URL check still passes for that checkout: it is the root commit that refused it.
 	if normalizeWikiRepoURL(f.bare) != cmd.RepoURLNorm {
 		t.Fatalf("the fixture's url norm moved: %q", cmd.RepoURLNorm)
+	}
+}
+
+// A read or a diff of commits the checkout already has runs no fetch: a commit is the same text whichever
+// fetch brought it, so origin/main stays where it was. The first commit is still held — asked of the
+// commits named rather than of origin/main. A commit the checkout lacks is fetched, and a snapshot always is.
+func TestWikiRepoOpReadAndDiffOfCommitsTheCheckoutHasRunNoFetch(t *testing.T) {
+	f := newWikiRepoOpFixture(t)
+	second := f.push(t, "second", func() { f.write(t, "docs/other.md", "# The other half\n\nSecond.\n") })
+	mustGit(t, f.checkout, "fetch", "-q", "origin")
+	third := f.push(t, "third", func() { f.write(t, "docs/other.md", "# The other half\n\nThird.\n") })
+	originMain := func() string { return mustGit(t, f.checkout, "rev-parse", "refs/remotes/origin/main") }
+
+	read := runWikiRepoOp(f.command(t, "read", map[string]interface{}{
+		"sha": second, "items": []map[string]interface{}{{"path": "docs/other.md"}},
+	}), nil)
+	if answer := decodeResult[wikiRepoOpReadAnswer](t, read, "read"); !strings.Contains(answer.Items[0].Text, "Second.") {
+		t.Fatalf("the read at %s answered %+v", second, answer.Items)
+	}
+	diff := runWikiRepoOp(f.command(t, "diff", map[string]interface{}{"from": f.first, "to": second}), nil)
+	if answer := decodeResult[wikiRepoOpDiffAnswer](t, diff, "diff"); len(answer.Files) != 1 || answer.Files[0].Path != "docs/other.md" {
+		t.Fatalf("the diff answered %+v", answer.Files)
+	}
+	if got := originMain(); got != second {
+		t.Fatalf("origin/main is %s after a read and a diff of commits the checkout has, want %s where it was: they fetched", got, second)
+	}
+
+	// A commit of another history in the checkout — it does not start from the space's first commit — is
+	// another repository's, and is refused although nothing was fetched.
+	mustGit(t, f.checkout, "checkout", "-q", "--orphan", "stranger")
+	if err := os.WriteFile(filepath.Join(f.checkout, "stranger.md"), []byte("# not the space's\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, f.checkout, "add", "stranger.md")
+	mustGit(t, f.checkout, "commit", "-q", "-m", "a history of its own")
+	stranger := mustGit(t, f.checkout, "rev-parse", "HEAD")
+	mustGit(t, f.checkout, "checkout", "-q", "main")
+	for _, cmd := range []WikiRepoOpCommand{
+		f.command(t, "read", map[string]interface{}{"sha": stranger, "items": []map[string]interface{}{{"path": "stranger.md"}}}),
+		f.command(t, "diff", map[string]interface{}{"from": f.first, "to": stranger}),
+	} {
+		refused := runWikiRepoOp(cmd, nil)
+		if refused.state != "failed" || !strings.Contains(refused.err, "does not start from the space's first commit") {
+			t.Fatalf("a %s of a commit from another history was answered: %+v", cmd.Kind, refused)
+		}
+	}
+	if got := originMain(); got != second {
+		t.Fatalf("origin/main is %s after the refusals, want %s: they fetched", got, second)
+	}
+
+	// A commit the checkout does not have is fetched first.
+	fetched := runWikiRepoOp(f.command(t, "read", map[string]interface{}{
+		"sha": third, "items": []map[string]interface{}{{"path": "docs/other.md"}},
+	}), nil)
+	if answer := decodeResult[wikiRepoOpReadAnswer](t, fetched, "read"); !strings.Contains(answer.Items[0].Text, "Third.") {
+		t.Fatalf("the read at %s answered %+v", third, answer.Items)
+	}
+	if got := originMain(); got != third {
+		t.Fatalf("origin/main is %s after a read of a commit the checkout lacked, want %s: it did not fetch", got, third)
+	}
+	// A snapshot asks about origin/main as it is now, and always fetches.
+	fourth := f.push(t, "fourth", func() { f.write(t, "docs/other.md", "# The other half\n\nFourth.\n") })
+	snapshot := runWikiRepoOp(f.command(t, "snapshot", map[string]interface{}{"skipSha": third}), nil)
+	if snapshot.state != "succeeded" || snapshot.sha != fourth {
+		t.Fatalf("the snapshot = %s at %q (%s), want one built at %s", snapshot.state, snapshot.sha, snapshot.err, fourth)
+	}
+}
+
+// holdOriginMainRefLock takes the lock git itself takes on refs/remotes/origin/main, the way a fetch the
+// wiki's own lock does not cover — a session starting in the checkout, an integration job — holds it for
+// the moment it writes the ref.
+func holdOriginMainRefLock(t *testing.T, checkout string) string {
+	t.Helper()
+	lock := filepath.Join(checkout, ".git", "refs", "remotes", "origin", "main.lock")
+	if err := os.MkdirAll(filepath.Dir(lock), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(lock) })
+	return lock
+}
+
+// pauseBetweenRefLockAttempts replaces the wait between two fetches of a ref another process held with
+// `pause`, for this test.
+func pauseBetweenRefLockAttempts(t *testing.T, pause func(time.Duration)) {
+	t.Helper()
+	restore := integrationFetchLockPause
+	integrationFetchLockPause = pause
+	t.Cleanup(func() { integrationFetchLockPause = restore })
+}
+
+// Another fetch holding the ref's lock is waited out: the operation's fetch is refused it, and the same
+// fetch, tried again once that fetch is done, answers (integrationFetch's answer to the same race).
+func TestWikiRepoOpFetchWaitsOutARefLockAnotherFetchHolds(t *testing.T) {
+	f := newWikiRepoOpFixture(t)
+	moved := f.push(t, "main moves", func() { f.write(t, "docs/moved.md", "# Moved\n") })
+	lock := holdOriginMainRefLock(t, f.checkout)
+	released := false
+	pauseBetweenRefLockAttempts(t, func(time.Duration) {
+		if !released {
+			released = true
+			_ = os.Remove(lock)
+		}
+	})
+
+	outcome := runWikiRepoOp(f.command(t, "snapshot", map[string]interface{}{}), nil)
+	if outcome.state != "succeeded" || outcome.result["sha"] != moved {
+		t.Fatalf("the snapshot = %s %v (%s), want one at %s once the other fetch let go", outcome.state, outcome.result["sha"], outcome.err, moved)
+	}
+	if !released {
+		t.Fatal("the fetch never met the held ref lock, so this tested nothing")
+	}
+}
+
+// A fetch that fails says which operation it was, in which checkout, and what git said — in the
+// operation's own words.
+func TestWikiRepoOpFetchFailureSaysWhichOperationInWhichCheckout(t *testing.T) {
+	f := newWikiRepoOpFixture(t)
+	moved := f.push(t, "main moves", func() { f.write(t, "docs/moved.md", "# Moved\n") })
+	root := mustGit(t, f.checkout, "rev-parse", "--show-toplevel")
+	// Held for every attempt: a lock that outlives the retries is a failure, and is reported as one.
+	holdOriginMainRefLock(t, f.checkout)
+	pauseBetweenRefLockAttempts(t, func(time.Duration) {})
+
+	// The read first: a fetch refused the ref still stores what it brought, and a read of a commit the
+	// checkout then has would rightly run no fetch at all.
+	for _, cmd := range []WikiRepoOpCommand{
+		f.command(t, "read", map[string]interface{}{"sha": moved, "items": []map[string]interface{}{{"path": "docs/moved.md"}}}),
+		f.command(t, "snapshot", map[string]interface{}{}),
+		f.command(t, "anchors", map[string]interface{}{"anchors": []map[string]interface{}{{"index": 0, "type": "path", "path": "docs/moved.md"}}}),
+	} {
+		outcome := runWikiRepoOp(cmd, nil)
+		want := "the " + cmd.Kind + " operation could not fetch origin main into the checkout " + root + ", so nothing was read: "
+		if outcome.state != "failed" || !strings.Contains(outcome.err, want) || !strings.Contains(outcome.err, "cannot lock ref 'refs/remotes/origin/main'") {
+			t.Fatalf("the %s's failed fetch = %s %q, want %q with git's own words", cmd.Kind, outcome.state, outcome.err, want)
+		}
 	}
 }
 

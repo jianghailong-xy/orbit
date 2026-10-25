@@ -16,7 +16,8 @@ import {
   type ProviderPool,
 } from './providerPools';
 import type { ProviderRow } from './providerAdmin';
-import { defaultModelForProvider, modelOptionsForProvider, runtimeForProvider } from './workspaceDefaults';
+import { AgentProvider } from '@orbit/shared';
+import { defaultEngineOf, defaultModelFor, modelOptionsFor } from './workspaceDefaults';
 
 const HOUR = 60 * 60 * 1000;
 const NOW = Date.parse('2026-09-25T09:00:00.000Z');
@@ -253,12 +254,12 @@ describe('a pool as a provider the composer can run', () => {
   const providers = poolsAsProviders([pool([member(1)])]);
   const catalog = { claude: [{ value: 'claude-opus-5', label: 'Opus 5' }] } as never;
 
-  it("runs on Claude, with the Claude CLI's own models", () => {
-    expect(runtimeForProvider('claude-accounts', providers)).toBe('claude');
-    expect(modelOptionsForProvider('claude-accounts', catalog, providers)).toEqual([
+  it("runs on Claude Code, with the Claude CLI's own models", () => {
+    expect(defaultEngineOf('claude-accounts', providers)).toBe('claude');
+    expect(modelOptionsFor(AgentProvider.CLAUDE, 'claude-accounts', catalog, providers)).toEqual([
       { value: 'claude-opus-5', label: 'Opus 5' },
     ]);
-    expect(defaultModelForProvider('claude-accounts', catalog, providers)).toBe('claude-opus-5');
+    expect(defaultModelFor(AgentProvider.CLAUDE, 'claude-accounts', catalog, providers)).toBe('claude-opus-5');
   });
 
   it('carries no quota of its own', () => {

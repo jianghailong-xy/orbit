@@ -104,12 +104,7 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             }
             struct Maintenance: Decodable {
                 struct Form: Decodable {
-                    struct Field: Decodable {
-                        let label: String
-                        let note: String
-                    }
                     struct Defaults: Decodable {
-                        let provider: String
                         let dailyRunLimit: Int
                         let min: Int
                         let max: Int
@@ -123,7 +118,6 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                         let max: Int
                     }
                     let title: String
-                    let fields: [Field]
                     let unit: String
                     let cancel: String
                     let turnOn: String
@@ -153,24 +147,16 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                     let workspace: Workspace
                     let says: String
                 }
-                struct ProviderLabel: Decodable {
-                    let provider: String
-                    let model: String?
-                    let says: String
-                }
                 let name: String
-                let note: String
                 let off: String
                 let on: String
                 let setUp: String
                 let form: Form
-                let rows: [String]
                 let edit: String
                 let turnOff: String
                 let runsADay: [Runs]
                 let lookbacks: [LookbackCase]
                 let workspaceLabels: [WorkspaceLabel]
-                let providerLabels: [ProviderLabel]
             }
             struct Fallback: Decodable {
                 let settings: WikiSpaceSettings
@@ -319,25 +305,17 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         XCTAssertEqual(WikiModeCopy.floorsLead, settings.floors.lead)
         XCTAssertEqual(WikiModeCopy.floorsNote, settings.floors.note)
 
+        // The rows once on, the form's fields and the sentence under the card are the server-execution fixture's
+        // (`WikiServerExecutionCopyParityTests`).
         let maintenance = settings.maintenance
-        XCTAssertEqual([WikiModeCopy.maintenanceName, WikiModeCopy.maintenanceNote, WikiModeCopy.off, WikiModeCopy.on,
-                        WikiModeCopy.setUp],
-                       [maintenance.name, maintenance.note, maintenance.off, maintenance.on, maintenance.setUp])
+        XCTAssertEqual([WikiModeCopy.maintenanceName, WikiModeCopy.off, WikiModeCopy.on, WikiModeCopy.setUp],
+                       [maintenance.name, maintenance.off, maintenance.on, maintenance.setUp])
         XCTAssertEqual(WikiModeCopy.setUpTitle, maintenance.form.title)
-        XCTAssertEqual([WikiModeCopy.workspace, WikiModeCopy.provider, WikiModeCopy.dailyLimit, WikiModeCopy.lookback],
-                       maintenance.form.fields.map(\.label))
-        XCTAssertEqual([WikiModeCopy.workspaceNote, WikiModeCopy.providerNote, WikiModeCopy.dailyLimitNote,
-                        WikiModeCopy.lookbackNote],
-                       maintenance.form.fields.map(\.note))
         XCTAssertEqual(WikiModeCopy.runsADayUnit, maintenance.form.unit)
         XCTAssertEqual([WikiModeCopy.cancel, WikiModeCopy.turnOn, WikiModeCopy.save],
                        [maintenance.form.cancel, maintenance.form.turnOn, maintenance.form.save])
-        XCTAssertEqual(WikiMaintenanceSettings.default.provider, maintenance.form.defaults.provider)
         XCTAssertEqual(WikiMaintenanceSettings.default.dailyRunLimit, maintenance.form.defaults.dailyRunLimit)
         XCTAssertEqual(WikiMaintenanceSettings.dailyRunLimitRange, maintenance.form.defaults.min...maintenance.form.defaults.max)
-        XCTAssertEqual([WikiModeCopy.status, WikiModeCopy.workspace, WikiModeCopy.provider, WikiModeCopy.dailyLimit,
-                        WikiModeCopy.lookback],
-                       maintenance.rows)
         XCTAssertEqual([WikiModeCopy.maintenanceEdit, WikiModeCopy.turnOff], [maintenance.edit, maintenance.turnOff])
         for row in maintenance.runsADay { XCTAssertEqual(WikiModeCopy.runsADay(row.runs), row.says) }
         // The look-back: from now on, some days, all of history — the form opening on the contract's 14 days.
@@ -361,9 +339,6 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         for row in maintenance.workspaceLabels {
             let runner = row.workspace.runner.flatMap { $0.displayName ?? $0.name }
             XCTAssertEqual(WikiModeLogic.workspaceLabel(name: row.workspace.name, runner: runner), row.says)
-        }
-        for row in maintenance.providerLabels {
-            XCTAssertEqual(WikiModeLogic.providerLabel(row.provider, model: row.model), row.says)
         }
     }
 
@@ -498,17 +473,11 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             ("WIKI_FLOORS_LEAD", WikiModeCopy.floorsLead),
             ("WIKI_FLOORS_NOTE", WikiModeCopy.floorsNote),
             ("WIKI_MAINTENANCE", WikiModeCopy.maintenance),
-            ("WIKI_MAINTENANCE_NOTE", WikiModeCopy.maintenanceNote),
             ("WIKI_OFF", WikiModeCopy.off),
             ("WIKI_ON", WikiModeCopy.on),
             ("WIKI_SET_UP", WikiModeCopy.setUp),
             ("WIKI_SET_UP_TITLE", WikiModeCopy.setUpTitle),
             ("WIKI_STATUS", WikiModeCopy.status),
-            ("WIKI_WORKSPACE", WikiModeCopy.workspace),
-            ("WIKI_WORKSPACE_NOTE", WikiModeCopy.workspaceNote),
-            ("WIKI_PROVIDER", WikiModeCopy.provider),
-            ("WIKI_PROVIDER_NOTE", WikiModeCopy.providerNote),
-            ("WIKI_PINNED_NO_FALLBACK", WikiModeCopy.pinnedNoFallback),
             ("WIKI_DAILY_LIMIT", WikiModeCopy.dailyLimit),
             ("WIKI_RUNS_A_DAY", WikiModeCopy.runsADayUnit),
             ("WIKI_DAILY_LIMIT_NOTE", WikiModeCopy.dailyLimitNote),
@@ -553,6 +522,11 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         for (name, word) in pairs { assertDeclares(lib, name, word) }
         // The sentence for a run Review no longer held is gone with the branch that said it.
         XCTAssertFalse(lib.contains("WIKI_NO_SUCH_RUN"), "\(Self.lib) still says a run cannot be opened")
+        // So are the runner's: its workspace, its pinned provider and its own sentences (P11's clients' clean-up).
+        for gone in ["WIKI_MAINTENANCE_NOTE =", "WIKI_WORKSPACE =", "WIKI_WORKSPACE_NOTE", "WIKI_PROVIDER", "WIKI_PINNED_NO_FALLBACK",
+                     "wikiProviderLabel", "wikiModeNote", "WIKI_MODE_NOTE_AUTOMATIC_SERVER"] {
+            XCTAssertFalse(lib.contains(gone), "\(Self.lib) still declares \(gone)")
+        }
         // The one constant that names another, and the tables.
         assertSays(lib, "export const WIKI_MAINTENANCE_NAME = WIKI_HISTORY_MAINTENANCE;", in: Self.lib)
         XCTAssertEqual(WikiModeCopy.maintenanceName, WikiCopy.historyMaintenance)
@@ -590,7 +564,9 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
     // MARK: the pages, in order at both ends
 
     /// Review mode, then Maintenance; the lead, the three modes, the spot check under Automatic, the
-    /// floors; maintenance off, its form and its rows once on.
+    /// floors; maintenance off, its form and its rows once on — where the repository is read from and,
+    /// while the read says the server executes the wiki (mock 35 ①②), the System model, read-only, with the
+    /// privacy note after them.
     func testTheSettingsPagesDrawTheSameBlocksInTheSameOrder() throws {
         let page = try web(Self.settingsPage)
         assertOrder(page, ["title={WIKI_REVIEW_MODE}", "title={WIKI_MAINTENANCE}"], "the web page's cards")
@@ -600,18 +576,28 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                                  "{WIKI_MODE_DEFAULT}", "{WIKI_MODE_NOTES[value]}", "{WIKI_SPOT_CHECK}",
                                  "{WIKI_SPOT_CHECK_NOTE}", "{WIKI_FLOORS_LEAD}"], "the web's Review mode card")
         assertSays(reviewMode, "disabled={mode !== 'automatic' || write.isPending}", in: Self.settingsPage)
+        let off = try slice(page, from: "<div className=\"wk-maint-off\">", to: "{setUp && (")
+        assertOrder(off, ["{WIKI_MAINTENANCE_NAME}", "{WIKI_MAINTENANCE_NOTE_SERVER}",
+                          "{WIKI_OFF}", "{WIKI_SET_UP}", "{server && <WikiPrivacyNote />}"], "the web's maintenance off")
         let on = try slice(page, from: "function MaintenanceOn(", to: "function MaintenanceSetUp(")
-        assertOrder(on, ["{WIKI_STATUS}", "{WIKI_WORKSPACE}", "{WIKI_PROVIDER}", "{WIKI_DAILY_LIMIT}", "{WIKI_LOOKBACK}",
-                         "{wikiLookbackLabel(maintenance.lookbackDays)}", "{WIKI_MAINTENANCE_EDIT}", "{WIKI_TURN_OFF}"],
+        assertOrder(on, ["{WIKI_STATUS}", "{WIKI_REPO_FROM}", "{server && (", "<WikiModelLine model={server} />",
+                         "{WIKI_DAILY_LIMIT}", "{WIKI_LOOKBACK}",
+                         "{wikiLookbackLabel(maintenance.lookbackDays)}", "{server && <WikiPrivacyNote />}",
+                         "{WIKI_MAINTENANCE_EDIT}", "{WIKI_TURN_OFF}"],
                     "the web's maintenance rows")
-        let form = try slice(page, from: "function MaintenanceSetUp(", to: "</Modal>")
-        assertOrder(form, ["{WIKI_MAINTENANCE_NOTE}", "{WIKI_WORKSPACE}", "{WIKI_WORKSPACE_NOTE}", "{WIKI_PROVIDER}",
-                           "{WIKI_PROVIDER_NOTE}", "{WIKI_DAILY_LIMIT}", "{WIKI_RUNS_A_DAY}", "{WIKI_DAILY_LIMIT_NOTE}",
+        let form = try slice(page, from: "function MaintenanceSetUp(", to: "</Dialog>")
+        assertOrder(form, ["{WIKI_MAINTENANCE_NOTE_SERVER}", "{WIKI_REPO_FROM}",
+                           "{WIKI_REPO_FROM_NOTE}", "{server && (", "{WIKI_MODEL}", "<WikiModelLine model={server} />",
+                           "{WIKI_MODEL_NOTE}", "{WIKI_DAILY_LIMIT}", "{WIKI_RUNS_A_DAY}", "{WIKI_DAILY_LIMIT_NOTE}",
                            "{WIKI_LOOKBACK}", "WIKI_LOOKBACK_CHOICES.map(", "{lookback === 'days' && (",
-                           "<span>{WIKI_LOOKBACK_UNIT}</span>", "{WIKI_LOOKBACK_NOTE}"],
+                           "<span>{WIKI_LOOKBACK_UNIT}</span>", "{WIKI_LOOKBACK_NOTE}", "{server && <WikiPrivacyNote />}"],
                     "the web's Set up form")
-        assertSays(form, "okText={maintenance.enabled ? WIKI_SAVE : WIKI_TURN_ON}", in: Self.settingsPage)
+        assertSays(form, "{maintenance.enabled ? WIKI_SAVE : WIKI_TURN_ON}", in: Self.settingsPage)
         assertSays(form, "lookbackDays: wikiLookbackDays(lookback, days)", in: Self.settingsPage)
+        // Nothing writes a provider, and none is picked or shown.
+        XCTAssertFalse(form.contains("provider"), "the web's Set up form still has a provider")
+        XCTAssertFalse(on.contains("maintenance.provider"), "the web's maintenance rows still show a provider")
+        assertSays(page, "const server = systemModel.data?.executor?.serverExecutes ? systemModel.data : null;", in: Self.settingsPage)
 
         let native = try self.native("Views/WikiSettingsView.swift")
         let nativePage = try slice(native, from: "struct WikiSettingsPage: View {", to: "struct WikiPickerOption")
@@ -621,19 +607,31 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         let arms = try slice(nativePage, from: "switch section {", to: "private func modeRow(")
         assertOrder(arms, ["case .reviewMode:", "ForEach(WikiModeLogic.modes, id: \\.self)", "Text(WikiModeCopy.spotCheck)",
                            "Text(WikiModeCopy.spotCheckNote)", ".disabled(mode != .automatic)", "Text(WikiModeCopy.floorsLead)",
-                           "case .maintenance:", "WikiModeCopy.status", "WikiModeCopy.workspace", "WikiModeCopy.provider",
+                           "case .maintenance:", "WikiModeCopy.status",
+                           "LabeledContent(WikiModeCopy.repoFrom, value: place)", "if let server {",
+                           "LabeledContent(WikiModeCopy.model) { WikiModelValue(model: server) }",
                            "WikiModeCopy.dailyLimit", "WikiModeCopy.lookbackLabel(maintenance.lookbackDays)",
                            "WikiModeCopy.maintenanceName", "WikiModeCopy.setUp",
+                           "Text(WikiModeCopy.maintenanceNoteServer)", "Text(WikiModeCopy.privacyNote)",
+                           "} else if !maintenance.enabled {",
                            "WikiModeCopy.maintenanceEdit + \"…\"", "WikiModeCopy.turnOff"], "the native page's sections")
+        XCTAssertFalse(arms.contains("provider"), "the native page still shows a provider")
         let row = try slice(nativePage, from: "private func modeRow(", to: "private func fallbackBanner(")
         assertOrder(row, ["WikiModeCopy.modeLabel(value)", "WikiModeCopy.modeDefault", "WikiModeCopy.modeNote(value)",
                           "Image(systemName: \"checkmark\")"], "a mode's row")
+        let model = try slice(native, from: "struct WikiModelValue: View {", to: "struct WikiPickerOption")
+        assertOrder(model, ["Text(WikiRunsCopy.systemModelLabel(model.model))", "WikiModelStateText(model: model)"],
+                    "the System model, its name over its state")
         let nativeForm = try slice(native, from: "struct WikiMaintenanceForm: View {", to: "struct WikiSettingsView: View {")
-        assertOrder(nativeForm, ["Text(WikiModeCopy.maintenanceNote)", "Text(WikiModeCopy.workspace)", "Text(WikiModeCopy.workspaceNote)",
-                                 "Text(WikiModeCopy.provider)", "Text(WikiModeCopy.providerNote)", "WikiModeCopy.runsADay(",
+        assertOrder(nativeForm, ["Text(WikiModeCopy.maintenanceNoteServer)",
+                                 "Text(WikiModeCopy.repoFrom)",
+                                 "Text(WikiModeCopy.repoFromNote)",
+                                 "if let server {", "LabeledContent(WikiModeCopy.model) { WikiModelValue(model: server) }",
+                                 "Text(WikiModeCopy.model)", "Text(WikiModeCopy.modelNote)", "WikiModeCopy.runsADay(",
                                  "Text(WikiModeCopy.dailyLimitNote)", "Picker(WikiModeCopy.lookback, selection: $choice.lookback)",
                                  "ForEach(WikiModeLogic.LookbackChoice.allCases", "if choice.lookback == .days {",
-                                 "Text(WikiModeCopy.lookback)", "Text(WikiModeCopy.lookbackNote)"], "the native Set up form")
+                                 "Text(WikiModeCopy.lookback)", "Text(WikiModeCopy.lookbackNote)",
+                                 "if server != nil { Text(WikiModeCopy.privacyNote) }"], "the native Set up form")
         assertSays(nativeForm, "Button(enabled ? WikiModeCopy.save : WikiModeCopy.turnOn)", in: "WikiSettingsView.swift")
         assertSays(nativeForm, "Stepper(value: $choice.dailyRunLimit, in: WikiMaintenanceSettings.dailyRunLimitRange)",
                    in: "WikiSettingsView.swift")
@@ -643,13 +641,18 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         let screen = try slice(native, from: "struct WikiSettingsView: View {", to: "private func actions(")
         assertSays(screen, "lookbackDays: .some(WikiModeLogic.lookbackDays(choice.lookback, days: choice.lookbackDays))",
                    in: "WikiSettingsView.swift")
+        // The System model is read with the page, and nothing picks or writes a provider.
+        assertSays(screen, "server: wiki.serverModel", in: "WikiSettingsView.swift")
+        assertSays(screen, "await wiki.loadSystemModel()", in: "WikiSettingsView.swift")
+        XCTAssertFalse(nativeForm.contains("provider"), "the native Set up form still has a provider")
+        XCTAssertFalse(screen.contains("provider"), "the native settings screen still writes a provider")
     }
 
     /// An entry a mode applied: Confirm, then Reject ▾ with the four reasons and where the reason goes,
     /// then the bar — before Details, at both ends.
     func testTheEntrysAnswersAndBarAreInTheSameOrder() throws {
         let drawer = try web(Self.drawer)
-        assertOrder(drawer, ["<WikiEntryAnswers entry={data} />", "<>{WIKI_ACTION_EDIT}</>", "<WikiMarkBar entry={data} />",
+        assertOrder(drawer, ["<WikiEntryAnswers entry={data} />", "wikiEntryAnswerable(data) ? null : WIKI_ACTION_EDIT}", "<WikiMarkBar entry={data} />",
                              "<Section title={WIKI_SECTION_DETAILS}>"], "the drawer's head, bar and first section")
         assertSays(drawer, "{WIKI_NOT_SENT_UNREVIEWED}", in: Self.drawer)
         let marks = try web(Self.marks)
@@ -661,7 +664,7 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         assertOrder(marks, ["<b>{banner.lead}</b> · {banner.text}", "{line && <div className=\"wk-markbar-line\">{line}</div>}"],
                     "the bar's two lines")
         let run = try web(Self.runPage)
-        assertOrder(run, ["...WIKI_REJECT_MENU.map(({ reason, label }) => ({ key: reason, label }))", "{WIKI_REJECT_ON_RECORD}"],
+        assertOrder(run, ["...WIKI_REJECT_MENU.map(({ reason, label }) => ({ key: reason, label, onSelect: () => onReject(reason) }))", "{WIKI_REJECT_ON_RECORD}"],
                     "the reasons, then where they go")
 
         let view = try native("Views/WikiView.swift")
@@ -690,9 +693,9 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                              "{wikiRunWhen(changeset.createdAt)}", "{WIKI_REVERT_RUN}", "{WIKI_OPEN_SESSION}",
                              "wikiRunCounts(summary).map(", "title={WIKI_RUN_ADDED}", "title={WIKI_RUN_AMENDED}",
                              "title={WIKI_RUN_REINFORCED}"], "the web's run drawer")
-        let confirm = try slice(run, from: "export function useRevertRun(", to: "onOk:")
+        let confirm = try slice(run, from: "export function useRevertRun(", to: "onConfirm:")
         assertOrder(confirm, ["title: WIKI_REVERT_TITLE", "{wikiRevertBody(summary)}", "{WIKI_REVERT_KEEPS}",
-                              "okText: WIKI_REVERT_RUN_CONFIRM", "okButtonProps: { danger: true }", "cancelText: WIKI_CANCEL"],
+                              "confirmText: WIKI_REVERT_RUN_CONFIRM", "danger: true,", "cancelText: WIKI_CANCEL"],
                     "the web's Revert confirm")
         let row = try slice(run, from: "export function WikiRunTimelineRow(", to: "export function WikiRejectButton(")
         assertOrder(row, ["{WIKI_ORIGIN_WORDS[origin] ?? origin}", "{wikiAppliedChanges(summary?.applied ?? changes)}",

@@ -4,7 +4,6 @@ import {
   QueryClientProvider,
   QueryObserver,
 } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -69,13 +68,11 @@ function renderList(
   if (active) qc.setQueryData(['tasks', 'active', LIST_ID], active);
   return renderToStaticMarkup(
     <QueryClientProvider client={qc}>
-      <AntApp>
-        <MemoryRouter initialEntries={[`/lists/${LIST_ID}?filter=ALL`]}>
-          <Routes>
-            <Route path="/lists/:key" element={<TaskListView />} />
-          </Routes>
-        </MemoryRouter>
-      </AntApp>
+      <MemoryRouter initialEntries={[`/lists/${LIST_ID}?filter=ALL`]}>
+        <Routes>
+          <Route path="/lists/:key" element={<TaskListView />} />
+        </Routes>
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }

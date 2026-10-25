@@ -1,0 +1,116 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .grid4 { display: grid; grid-template-columns: repeat(4, 440px); gap: 0 40px; align-items: start; }
+  .lede, .foot { max-width: 1880px; }
+  .sub { margin-top: 14px; }
+  .sub .k { margin-bottom: 8px; }
+</style>
+<body>
+<h1>Recap 展示优化 · 会话页（内页）· 三个方向</h1>
+<p class="lede">同一个会话：你列表里的「调研其他可接入的 Coding Agent」，打开时落在最后一条回复的尾巴上（会话页打开就在尾部）。左一是<b>现状</b>：这一页没有 recap。
+右边三个是把 recap 放进来的三种位置。recap 用的是这个会话 1:44 交出结论之后<b>该有</b>的那句（今天它停在 1:20 的那句，原因和修法见 03）；回复正文是原文。灰字 = 上线文案（英文），说明用中文。</p>
+
+<div class="grid4">
+  <div class="col"><span class="tag now">现状</span><div id="today"></div><div class="cap" id="cap-today"></div></div>
+  <div class="col"><span class="tag rec">A · 我建议</span><div id="A"></div><div class="cap" id="cap-A"></div></div>
+  <div class="col"><span class="tag alt">B</span><div id="B"></div><div class="sub"><p class="k">按下胶囊：</p><div id="B2"></div></div><div class="cap" id="cap-B"></div></div>
+  <div class="col"><span class="tag alt">C</span><div id="C"></div><div class="cap" id="cap-C"></div></div>
+</div>
+
+<p class="foot" id="foot"></p>
+
+<script>
+const WHEN = 'Sat, Oct 17, 1:44 PM';
+const TEXT = RECAP.researchNew;
+const BOTTOM_TODAY = 956 - COMP_TOP + 16;   // 最后一行离输入框 16pt
+const CARD_BOTTOM = 956 - COMP_TOP + 14;
+
+// 现状：尾部 + 输入框
+document.getElementById('today').innerHTML = phone('dark',
+  `${sessionNav()}${edge('dark')}${transcript(RESEARCH_TAIL, BOTTOM_TODAY)}${composer()}`);
+// A：尾部多一张 Recap 卡（转录的最后一行）
+document.getElementById('A').innerHTML = phone('dark',
+  `${sessionNav()}${edge('dark')}<div id="A-tx">${transcript(RESEARCH_TAIL, 0)}</div>${recapCard({ when: WHEN, text: TEXT, bottom: CARD_BOTTOM })}${composer()}`);
+// B：尾部时导航中间放 recap 胶囊
+const ncap = `<div class="ncap">${ic('align', 15, 'var(--l2)', 2.1)}<span class="q">${TEXT}</span></div>`;
+document.getElementById('B').innerHTML = phone('dark',
+  `${sessionNav({ centre: ncap })}${edge('dark')}${transcript(RESEARCH_TAIL, BOTTOM_TODAY)}${composer()}`);
+const pop = `<div class="pop" style="top:116px"><div class="hd">${ic('align', 15, 'var(--l2)', 2.1)}<span class="w">Recap</span><span>· ${WHEN}</span></div><div class="bd">${TEXT}</div><span class="ref">${ic('refresh', 16, 'var(--l1)', 2.2)}Refresh</span></div>`;
+document.getElementById('B2').innerHTML = phone('dark',
+  `${sessionNav({ centre: ncap })}${edge('dark')}${transcript(RESEARCH_TAIL, BOTTOM_TODAY)}<div class="scrim"></div>${pop}`, { h: 340, cls: 'top' });
+// C：⋯ 菜单最上面一组
+const item = (g, t, sub = '', cls = '') => `<div class="it ${cls}"><span class="g">${ic(g, 19, cls === 'red' ? 'rgb(255,69,58)' : 'var(--l1)', 1.9)}</span><span class="tx2">${t}${sub ? `<span class="sub">${sub}</span>` : ''}</span></div>`;
+const menu = `<div class="menu" style="top:114px;right:16px">
+${item('align', 'Recap', `<span style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${TEXT}</span><span style="display:block;margin-top:3px;color:var(--l3)">${WHEN}</span>`)}<div class="hl"></div>
+${item('refresh', 'Refresh Recap')}
+<div class="gap"></div>
+${item('share', 'Share')}<div class="hl"></div>${item('link', 'Copy Link')}
+<div class="gap"></div>
+${item('pencil', 'Rename…')}<div class="hl"></div>${item('pin', 'Pin')}<div class="hl"></div>${item('folder', 'Move…')}<div class="hl"></div>${item('tag', 'Tags…')}
+<div class="gap"></div>
+${item('check', 'Complete Session')}
+<div class="gap"></div>
+${item('trash', 'Move to Trash', '', 'red')}
+</div>`;
+document.getElementById('C').innerHTML = phone('dark',
+  `${sessionNav()}${edge('dark')}${transcript(RESEARCH_TAIL, BOTTOM_TODAY)}${composer()}${menu}`);
+
+const ph = (id) => document.querySelector(`#${id} .ph`);
+function rectIn(id, el) {
+  const p = ph(id).getBoundingClientRect(), r = el.getBoundingClientRect();
+  return { x: r.left - p.left, y: r.top - p.top, w: r.width, h: r.height };
+}
+function mark(id, r, n, { pad = 3, at = 'tr', cls = '' } = {}) {
+  const inner = ph(id).firstElementChild;
+  const x0 = r.x - pad, y0 = r.y - pad, x1 = r.x + r.w + pad, y1 = r.y + r.h + pad;
+  const pos = { tr: [x1 - 10, y0 - 12], tl: [x0 - 10, y0 - 12], br: [x1 - 10, y1 - 8], bl: [x0 - 10, y1 - 8], tri: [x1 - 24, y0 + 4] }[at];
+  inner.insertAdjacentHTML('beforeend', mk(x0, y0, x1 - x0, y1 - y0, cls) + num(n, pos[0], pos[1], cls));
+}
+
+document.fonts.ready.then(() => {
+  // A：卡的高度量出来，转录贴在卡上面 18pt
+  const card = ph('A').querySelector('.rcard');
+  ph('A').querySelector('#A-tx .tx').style.bottom = `${CARD_BOTTOM + card.getBoundingClientRect().height + 18}px`;
+
+  // 现状的标注
+  const last = ph('today').querySelector('.tx .last');
+  mark('today', rectIn('today', last), 1, { at: 'tl' });
+  mark('today', { x: 150, y: 62, w: 140, h: 44 }, 2, { at: 'br' });
+  // A 的标注（蓝）
+  mark('A', rectIn('A', card), 4, { cls: 'blue', at: 'tl' });
+  mark('A', rectIn('A', card.querySelector('.rf')), 5, { cls: 'blue', pad: 1, at: 'tr' });
+  // B / C
+  mark('B', rectIn('B', ph('B').querySelector('.ncap')), 6, { at: 'br' });
+  mark('C', rectIn('C', ph('C').querySelector('.menu .it')), 7, { at: 'tl' });
+
+  document.getElementById('cap-today').innerHTML = `<h3>现状</h3><ul>
+<li><span class="n">1</span>进来先看到的是回复的尾巴：「下一步：要不要我…」。结论（「最该接 GitHub Copilot CLI」）在往上三屏。</li>
+<li><span class="n">2</span>导航中间那一格在尾部是空的（10-15 定的：只在往上翻时放「↑ 你的问题」）；这一页没有标题，也没有 recap。</li>
+<li>recap 只活在列表那一行里；会话页没有它，也没有地方刷新它——服务端早有 <code>POST /sessions/:id/recap</code>，四端都没接。</li>
+<li>从通知、链接、项目页、抽屉的 Recents 直接进会话的，根本没经过列表那一行。</li>
+</ul></div>`;
+  document.getElementById('cap-A').innerHTML = `<h3>A · 转录尾部一张 Recap 卡</h3><ul>
+<li><span class="n blue">4</span>卡是<b>转录的最后一行</b>，不是新的栏：进来就在眼前，往上翻就跟着滚走；导航、输入框都不动。</li>
+<li>头一行就是今天列表行上那个 label，原词原格式（<code>recapLabel</code>）挪进来——时间在这里才有用：它说这句话是几点写的。正文是全文（80 字以内，三行左右）。</li>
+<li><span class="n blue">5</span>右边 ↻ 接上服务端现成的 <code>POST /sessions/:id/recap</code>；转圈时正文变淡，写好就换（见 03）。</li>
+<li><b>只在会话静止时出现</b>，而且这次进来以后只要开始新一轮（你开口，或它自己被唤醒），卡就让位，下次进来再出现——聊天当中不会在每条回复下面冒出来、把正文顶上去。</li>
+<li>Settings 关掉 Session recaps = 没有卡。</li>
+</ul>占高 <span class="cost">0</span>（在内容里；卡本身约 ${Math.round(card.getBoundingClientRect().height)}pt）</div>`;
+  document.getElementById('cap-B').innerHTML = `<h3>B · 导航中间放 recap 胶囊</h3><ul>
+<li><span class="n">6</span>尾部时，导航中间那一格放一枚 recap 胶囊（往上翻时照旧换成「↑ 你的问题」）；按下展开全文、时间和 Refresh。</li>
+<li>不占高度。</li>
+<li>代价：等于把 10-15 拿掉的标题位又用回来；一格两用，同一个位置有时是 recap、有时是问题；胶囊 296pt 宽，只放得下十四五个字，全文要再按一下。</li>
+</ul>占高 <span class="cost">0</span></div>`;
+  document.getElementById('cap-C').innerHTML = `<h3>C · 只放进 ⋯ 菜单</h3><ul>
+<li><span class="n">7</span>⋯ 菜单最上面加一组：Recap（全文最多三行 + 时间）和 <code>Refresh Recap</code>。</li>
+<li>页面本身一点不变。</li>
+<li>代价：要去找才看得到；进来的那一刻得不到「上回说到哪」——而这正是内页要 recap 的理由。</li>
+</ul>占高 <span class="cost">0</span></div>`;
+
+  document.getElementById('foot').innerHTML = `<b>三个方案都不动的</b>：会话页打开落在尾部；没有标题（10-15）；往上翻时中间放「↑ 你的问题」；Settings 的 Session recaps 一个开关管列表和会话页。<br>
+<b>A 要动的</b>：OrbitKit 的 <code>TranscriptRows</code> 在尾部多一种行 <code>.recap</code>（会话静止、有 recap、开关开着、本次进来还没开始新一轮）；iOS / Mac 一个 <code>RecapCardView</code>；<code>APIClient.refreshRecap(id)</code>；web 的 <code>Transcript</code> 尾部同一张卡；Android 同。新文案只有 ↻ 的读屏名 <code>Refresh recap</code> 和刷新没写成时的几句提示（见 03）。`;
+});
+</script>
+</body></html>

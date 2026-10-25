@@ -1,10 +1,13 @@
 import { useRef, useState, type JSX, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { LandingLink } from './LandingLink';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert } from 'antd';
+import { Alert } from './ui/Alert';
 import type {
   IntegrationCheckResult,
+  ProjectLandTask,
   ProjectOpenItemRow,
+  ProjectOpenItemsView,
   ProjectPromotionView,
 } from '@orbit/shared';
 import { CardActionButton, CardActions } from './CardAction';
@@ -26,15 +29,19 @@ import {
 } from '../lib/coordinatorChat';
 import { encodeId } from '../lib/idCodec';
 import {
+  projectIntegrationQuery,
   projectOpenItemsQuery,
   projectPromotionQuery,
 } from '../lib/queries';
 import { ago, formatSpan } from '../lib/watches';
 import {
+  BLOCKED_BY,
   REVIEW,
+  promotionBlockedBy,
   promotionEventLine,
   promotionReceiptLine,
 } from '../lib/projectMerge';
+import { DEFAULT_MAIN_BRANCH, mainBranchName } from '../lib/projectStart';
 
 /**
  * The card that asks the account owner to merge a project branch into main (mock 4,
@@ -72,6 +79,10 @@ import {
 /** The three presses, and the words the mock gives them. Exported because the tests press by name
  *  and both hosts should be able to say "the card with the Merge to main button". */
 export const MERGE_TO_MAIN = 'Merge to main';
+/** The same press, said of the branch the candidate merges into: the project's main branch, by name. */
+export function mergeTo(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `Merge to ${main}`;
+}
 export const NOT_NOW = 'Not now';
 export const MERGING = 'Merging…';
 export const CANCEL_MERGE = 'Cancel';
@@ -95,6 +106,13 @@ export const MERGED_HEADING = '✓ Merged into main';
  *  branch because the check was clean (§3.3 M-T11). The receipt is the only place the owner learns
  *  it happened, so it says so first. */
 export const MERGED_AUTOMATICALLY_HEADING = '✓ Merged into main automatically';
+/** The two headings above, said of the branch the candidate merged into. */
+export function mergedHeading(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `✓ Merged into ${main}`;
+}
+export function mergedAutomaticallyHeading(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `✓ Merged into ${main} automatically`;
+}
 /** Who merged it, where a pressed merge says "by you". */
 export const UNDER_AUTOMATIC = 'under your Automatic setting';
 export const NOTHING_TO_DO =
@@ -161,10 +179,10 @@ function plural(n: number, one: string, many = `${one}s`): string {
 /** The heading, which is the whole of what the card is at a glance (§3.3's four states). */
 export function promotionHeading(promotion: ProjectPromotionView): string {
   const source = shortRef(promotion.sourceRef);
-  const upstream = shortRef(promotion.upstreamRef);
+  const upstream = mainBranchName(promotion.upstreamRef);
   switch (promotion.state) {
     case 'MERGED':
-      return promotion.merged?.automatic ? MERGED_AUTOMATICALLY_HEADING : MERGED_HEADING;
+      return promotion.merged?.automatic ? mergedAutomaticallyHeading(upstream) : mergedHeading(upstream);
     case 'CONFIRMED':
     case 'RECHECKING':
       if (promotion.execution?.state === 'QUEUED') return `Merge queued: ${source} into ${upstream}`;
@@ -264,7 +282,7 @@ function ReadyRows({
   project: PromotionProjectView | null;
   now: number;
 }): JSX.Element {
-  const upstream = shortRef(promotion.upstreamRef);
+  const upstream = mainBranchName(promotion.upstreamRef);
   const tally = criteriaTally(project);
   // The blockers row reads the row's own ids rather than the titles beside them: it asks which of
   // the tasks this merge would carry are still holding somebody up, and that is the recorded set.
@@ -351,7 +369,7 @@ function ReadyRows({
 
 /** State B's body: why it is still going, and that the reader is not the one it is waiting for. */
 function MergingRows({ promotion, now }: { promotion: ProjectPromotionView; now: number }): JSX.Element {
-  const upstream = shortRef(promotion.upstreamRef);
+  const upstream = mainBranchName(promotion.upstreamRef);
   const execution = promotion.execution;
   const running = execution?.state === 'RUNNING';
   const rechecking = running && execution.phase === 'CHECK';
@@ -414,10 +432,10 @@ function MergedRows({
         <span className="promotion-mono">{shortSha(merged.sha)}</span>
         {` · merge of ${source} · ${merged.automatic ? UNDER_AUTOMATIC : 'by you'} · ${ago(merged.at, now)}`}
       </Row>
-      <Row k={`Now on ${shortRef(promotion.upstreamRef)}`}>
+      <Row k={`Now on ${mainBranchName(promotion.upstreamRef)}`}>
         {plural(promotion.taskIds.length, 'task')}
         {ordinals.length > 0
-          ? ` · ${ordinals.length === 1 ? 'criterion' : 'criteria'} ${ordinals.join(', ')} show “on ${shortRef(promotion.upstreamRef)}”`
+          ? ` · ${ordinals.length === 1 ? 'criterion' : 'criteria'} ${ordinals.join(', ')} show “on ${mainBranchName(promotion.upstreamRef)}”`
           : null}
         {/* By name: a count says how much went onto main, not what. */}
         {(promotion.tasks ?? []).length > 0 ? (
@@ -440,6 +458,14 @@ function MergedRows({
             ? `${source} keeps going — ${plural(open, 'task')} still open`
             : `${source} has no open tasks left`}
       </Row>
+      {/* The round's own way into its landing session (§2.9 LS6, board v4 04 c7): the row that
+          opens this receipt is unchanged, and the landing is one press further in. A round that
+          recorded no session — an older server — draws nothing here rather than a dead link. */}
+      {promotion.landingSessionId ? (
+        <div className="project-promotion-landing">
+          <LandingLink className="session-project-merge-link" sessionId={promotion.landingSessionId} />
+        </div>
+      ) : null}
     </>
   );
 }
@@ -454,20 +480,32 @@ function MergedRows({
 function BlockedRows({
   promotion,
   item,
+  landings,
   now,
 }: {
   promotion: ProjectPromotionView;
   item: ProjectOpenItemRow | null;
+  /** The landings the project's own line has in flight, for WHO is in front of this merge. */
+  landings: readonly ProjectLandTask[] | null;
   now: number;
 }): JSX.Element {
-  const upstream = shortRef(promotion.upstreamRef);
+  const inFront = promotionBlockedBy(promotion, landings);
+  const upstream = mainBranchName(promotion.upstreamRef);
   const failed = promotion.checks.filter((check) => !passed(check));
   const escalatesIn =
     item?.escalateAt != null ? Date.parse(item.escalateAt) - now : null;
   return (
     <>
       <Row k="Why">
-        {promotion.conflicts.length > 0 ? (
+        {/* The job's own reason first (0409): nothing to merge, and an error before any check, both
+            leave no checks and no conflicts behind, which read as a build that failed. */}
+        {promotion.blockedReason === 'ALREADY_LANDED' ? (
+          <span className="promotion-bad">
+            {`Nothing to merge — ${shortRef(promotion.sourceRef)} is already on ${upstream}`}
+          </span>
+        ) : promotion.blockedReason === 'ERROR' ? (
+          <span className="promotion-bad">The merge stopped on an error — no check failed</span>
+        ) : promotion.conflicts.length > 0 ? (
           <>
             <span className="promotion-bad">{`${plural(promotion.conflicts.length, 'file')} conflict`}</span>
             {` with ${upstream} after syncing: `}
@@ -491,6 +529,10 @@ function BlockedRows({
           </span>
         )}
       </Row>
+      {/* Who is in front of it, when the project's own line is busy: the landing holding this
+          branch, and — in that landing's own `blockingReason` — what is holding IT. Absent when
+          the line is doing nothing on these branches. */}
+      {inFront ? <Row k={BLOCKED_BY}>{inFront}</Row> : null}
       <Row k="Then">
         {`checks re-run and this card comes back as “Merge ${shortRef(promotion.sourceRef)} into ${upstream}?”`}
         {escalatesIn != null && escalatesIn > 0
@@ -503,10 +545,14 @@ function BlockedRows({
   );
 }
 
-/** State D's `Why` row in words, for a chat about the candidate: the same three answers, in the
- *  same order, that `BlockedRows` draws. */
+/** State D's `Why` row in words, for a chat about the candidate: the same answers, in the same
+ *  order, that `BlockedRows` draws. */
 function blockedWhy(promotion: ProjectPromotionView): string {
-  const upstream = shortRef(promotion.upstreamRef);
+  const upstream = mainBranchName(promotion.upstreamRef);
+  if (promotion.blockedReason === 'ALREADY_LANDED') {
+    return `nothing to merge — ${shortRef(promotion.sourceRef)} is already on ${upstream}`;
+  }
+  if (promotion.blockedReason === 'ERROR') return 'the merge stopped on an error — no check failed';
   if (promotion.conflicts.length > 0) {
     return `${plural(promotion.conflicts.length, 'file')} conflict with ${upstream} after syncing: `
       + promotion.conflicts.join(', ');
@@ -549,7 +595,7 @@ export function promotionChatContext({
   now: number;
 }): string {
   const source = shortRef(promotion.sourceRef);
-  const upstream = shortRef(promotion.upstreamRef);
+  const upstream = mainBranchName(promotion.upstreamRef);
   const ids = [
     `project ${projectId}`,
     `promotion ${promotion.promotionId}`,
@@ -563,11 +609,24 @@ export function promotionChatContext({
     `Why: ${blockedWhy(promotion)}`,
     ...(item ? [`Exception: ${item.title}${item.detailLine ? ` — ${item.detailLine}` : ''}`] : []),
     `Where it stands: ${
-      item ? itemStandingLine(item, now) : 'no exception item has been filed for it yet'
+      item ? itemStandingLine(item, now, upstream) : 'no exception item has been filed for it yet'
     }`,
     '',
     `(${ids.join(' · ')})`,
   ].join('\n');
+}
+
+/**
+ * The exception item holding a candidate, off the project's open items: `undefined` while that read
+ * has not come back, `null` when it has and no item names the candidate — nobody holds it.
+ */
+export function promotionItem(
+  items: Pick<ProjectOpenItemsView, 'needsYou' | 'withCoordinator'> | undefined,
+  promotionId: string,
+): ProjectOpenItemRow | null | undefined {
+  if (!items) return undefined;
+  return [...(items.needsYou ?? []), ...(items.withCoordinator ?? [])]
+    .find((row) => row.promotionId === promotionId) ?? null;
 }
 
 /**
@@ -576,13 +635,17 @@ export function promotionChatContext({
  *
  * The mark is `.promotion-spin`, the card's one moving part, and it says somebody else is working
  * on the branch — so it is drawn over the coordinator's sentence and not over the reader's own,
- * which is waiting on them rather than on anybody. A card whose item has not been read says who
- * state D means and stops, exactly as the row did without one: the wait is the item's to know.
+ * which is waiting on them rather than on anybody. A card whose item has not been read
+ * (`undefined`) says who state D means and stops, exactly as the row did without one: the wait is
+ * the item's to know. One whose project's items were read with none holding it (`null`) has
+ * nobody to name, and has no press: on 2026-10-09 it said "Coordinator is resolving it", mark
+ * turning, about work the coordinator had closed as already on main.
  */
 export function resolvingPress(
-  item: ProjectOpenItemRow | null,
+  item: ProjectOpenItemRow | null | undefined,
   now: number,
-): { label: string; spinning: boolean } {
+): { label: string; spinning: boolean } | null {
+  if (item === null) return null;
   const waited = item ? formatSpan(now - Date.parse(item.waitingSince)) : null;
   if (item && item.assignee !== 'COORDINATOR') {
     return { label: `${IT_IS_YOURS}${waited ? ` · waiting ${waited}` : ''}`, spinning: false };
@@ -639,6 +702,7 @@ export function ProjectPromotionCard({
   promotion,
   item,
   project,
+  landings = null,
   now,
   onChat,
   asLine = false,
@@ -646,8 +710,12 @@ export function ProjectPromotionCard({
 }: {
   projectId: string;
   promotion: ProjectPromotionView;
-  /** The exception item holding a BLOCKED candidate, when one has been filed. */
-  item: ProjectOpenItemRow | null;
+  /** The exception item holding a BLOCKED candidate (`promotionItem`): undefined while the
+   *  project's items have not been read, null when they have and none holds it. */
+  item: ProjectOpenItemRow | null | undefined;
+  /** The project's current landings, for the row that says what is in front of a blocked candidate
+   *  (`promotionBlockedBy`). Null where the host has not read them. */
+  landings?: readonly ProjectLandTask[] | null;
   /** The project document, for the criteria tally (M8). Null when it has not been read. */
   project: PromotionProjectView | null;
   /** Passed in so a test reads a fixed clock; the hosts give it `Date.now()`. */
@@ -704,7 +772,7 @@ export function ProjectPromotionCard({
   const coordinator =
     chat?.sessionId ?? item?.delivery.sessionId ?? project?.coordinatorSessionId ?? null;
   const chatRefusal = chat?.refusal ?? (!onChat && !coordinator ? 'NO_COORDINATOR' : null);
-  const chatSubject: CoordinatorChatSubject = { kind: 'promotion', promotion, item };
+  const chatSubject: CoordinatorChatSubject = { kind: 'promotion', promotion, item: item ?? null };
   const chatAbout = (): void => {
     if (chatRefusal != null) return;
     setReviewOpen(false);
@@ -735,7 +803,7 @@ export function ProjectPromotionCard({
         ) : merging ? (
           <MergingRows promotion={promotion} now={now} />
         ) : blocked ? (
-          <BlockedRows promotion={promotion} item={item} now={now} />
+          <BlockedRows promotion={promotion} item={item ?? null} landings={landings} now={now} />
         ) : (
           <ReadyRows promotion={promotion} project={project} now={now} />
         )}
@@ -743,9 +811,8 @@ export function ProjectPromotionCard({
       {decide.isError ? (
         <Alert
           type="error"
-          showIcon
           className="project-promotion-error"
-          message={`${shortRef(promotion.sourceRef)} was not merged`}
+          title={`${shortRef(promotion.sourceRef)} was not merged`}
           description={(decide.error as Error).message}
         />
       ) : null}
@@ -756,33 +823,36 @@ export function ProjectPromotionCard({
             blocked && chatRefusal != null ? ' has-chat-refusal' : ''
           }`}
         >
-          <CardActionButton
-            tone="primary"
-            // The one rule `CardAction` exists for: a press that the door would refuse — a merge
-            // while the tree is blocked, or one already under way — is disabled, never lit. A
-            // blocked one is disabled AND says who has the branch instead, so a grey button reads
-            // as a state rather than as a refusal (`resolvingPress`).
-            disabled={merging || blocked || decide.isPending}
-            onClick={() => decide.mutate('confirm')}
-          >
-            {merging ? (
-              promotion.execution?.state === 'QUEUED' ? 'Queued'
-                : promotion.execution?.state !== 'RUNNING' ? 'Confirmed'
-                  : promotion.execution.phase === 'CHECK' ? 'Re-checking…' : MERGING
-            ) : blocked ? (
-              <>
-                {resolving.spinning ? (
-                  <span className="promotion-spin" aria-hidden="true" />
-                ) : null}
-                {resolving.label}
-              </>
-            ) : (
-              <>
-                {MERGE_TO_MAIN}
-                {keys && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
-              </>
-            )}
-          </CardActionButton>
+          {/* A blocked candidate nobody holds has nobody to name, so it has no press at all. */}
+          {blocked && resolving === null ? null : (
+            <CardActionButton
+              tone="primary"
+              // The one rule `CardAction` exists for: a press that the door would refuse — a merge
+              // while the tree is blocked, or one already under way — is disabled, never lit. A
+              // blocked one is disabled AND says who has the branch instead, so a grey button reads
+              // as a state rather than as a refusal (`resolvingPress`).
+              disabled={merging || blocked || decide.isPending}
+              onClick={() => decide.mutate('confirm')}
+            >
+              {merging ? (
+                promotion.execution?.state === 'QUEUED' ? 'Queued'
+                  : promotion.execution?.state !== 'RUNNING' ? 'Confirmed'
+                    : promotion.execution.phase === 'CHECK' ? 'Re-checking…' : MERGING
+              ) : blocked && resolving ? (
+                <>
+                  {resolving.spinning ? (
+                    <span className="promotion-spin" aria-hidden="true" />
+                  ) : null}
+                  {resolving.label}
+                </>
+              ) : (
+                <>
+                  {mergeTo(mainBranchName(promotion.upstreamRef))}
+                  {keys && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
+                </>
+              )}
+            </CardActionButton>
+          )}
           {merging ? (
             <CardActionButton disabled={decide.isPending || promotion.execution?.phase === 'PUSH'} onClick={() => decide.mutate('cancel')}>
               {CANCEL_MERGE}
@@ -899,18 +969,27 @@ export function ProjectPromotion({
     queryFn: () => api<PromotionProjectView>(`/projects/${encodeURIComponent(projectId!)}`),
     enabled: Boolean(projectId),
   });
+  // What the project's line is landing, read only while that is worth saying: a blocked candidate
+  // names the landing in front of it, and the three states that are not blocked have nothing to
+  // look past.
+  const blocked = promotion.data?.state === 'BLOCKED';
+  const integration = useQuery({
+    ...projectIntegrationQuery(projectId ?? ''),
+    enabled: Boolean(projectId) && blocked,
+    refetchInterval: blocked ? 20_000 : false,
+  });
   const current = promotion.data;
   if (!projectId || !current) return null;
   // A candidate with a moment is drawn by the transcript, and one whose stamp nothing can read
   // stays here rather than going nowhere (`promotionRecordMoment`).
   if (!drawRecords && promotionRecordMoment(current) !== null) return null;
-  const rows = [...(items.data?.needsYou ?? []), ...(items.data?.withCoordinator ?? [])];
   return (
     <ProjectPromotionCard
       projectId={projectId}
       promotion={current}
-      item={rows.find((row) => row.promotionId === current.promotionId) ?? null}
+      item={promotionItem(items.data, current.promotionId)}
       project={project.data ?? null}
+      landings={integration.data?.landTasks ?? null}
       now={now}
       onChat={onChat}
       asLine={asLine}

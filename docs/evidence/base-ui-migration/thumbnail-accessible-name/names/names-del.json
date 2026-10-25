@@ -1,0 +1,259 @@
+{
+  "port": 4383,
+  "results": [
+    {
+      "env": "chromium-light-desktop",
+      "dom": [
+        {
+          "tag": "span",
+          "role": "button",
+          "tabindex": "0",
+          "ariaLabel": "screenshot.png",
+          "imgAlt": ""
+        },
+        {
+          "tag": "span",
+          "role": "button",
+          "tabindex": "0",
+          "ariaLabel": "Preview image",
+          "imgAlt": ""
+        }
+      ],
+      "snapshot": "- button \"screenshot.png\":\n  - img \"eye\"\n- button \"Remove image\":\n  - img \"close\"\n- button \"Preview image\":\n  - img \"eye\"\n- button \"Remove image\":\n  - img \"close\"",
+      "byName": {
+        "screenshot.png": 1,
+        "Preview image": 1,
+        "eye": 0
+      },
+      "chromiumTree": [
+        {
+          "role": "button",
+          "name": "screenshot.png",
+          "ignored": false,
+          "sources": [
+            {
+              "type": "attribute",
+              "attribute": "aria-label",
+              "value": "screenshot.png"
+            },
+            {
+              "type": "contents",
+              "value": "eye",
+              "superseded": true
+            }
+          ]
+        },
+        {
+          "role": "button",
+          "name": "Preview image",
+          "ignored": false,
+          "sources": [
+            {
+              "type": "attribute",
+              "attribute": "aria-label",
+              "value": "Preview image"
+            },
+            {
+              "type": "contents",
+              "value": "eye",
+              "superseded": true
+            }
+          ]
+        }
+      ],
+      "keyboard": {
+        "viewer": "Image preview",
+        "focusInViewer": "Close",
+        "focusAfter": {
+          "tag": "span",
+          "cls": "orbit-image",
+          "ariaLabel": "screenshot.png"
+        },
+        "focusAfterSnapshot": "- button \"screenshot.png\":\n  - img \"eye\"",
+        "focusAfterTree": {
+          "role": "button",
+          "name": "screenshot.png",
+          "ignored": false,
+          "sources": [
+            {
+              "type": "attribute",
+              "attribute": "aria-label",
+              "value": "screenshot.png"
+            },
+            {
+              "type": "contents",
+              "value": "eye",
+              "superseded": true
+            }
+          ]
+        }
+      },
+      "errors": []
+    },
+    {
+      "env": "chromium-light-phone",
+      "dom": [
+        {
+          "tag": "span",
+          "role": "button",
+          "tabindex": "0",
+          "ariaLabel": "screenshot.png",
+          "imgAlt": ""
+        },
+        {
+          "tag": "span",
+          "role": "button",
+          "tabindex": "0",
+          "ariaLabel": "Preview image",
+          "imgAlt": ""
+        }
+      ],
+      "snapshot": "- button \"screenshot.png\":\n  - img \"eye\"\n- button \"Remove image\":\n  - img \"close\"\n- button \"Preview image\":\n  - img \"eye\"\n- button \"Remove image\":\n  - img \"close\"",
+      "byName": {
+        "screenshot.png": 1,
+        "Preview image": 1,
+        "eye": 0
+      },
+      "chromiumTree": [
+        {
+          "role": "button",
+          "name": "screenshot.png",
+          "ignored": false,
+          "sources": [
+            {
+              "type": "attribute",
+              "attribute": "aria-label",
+              "value": "screenshot.png"
+            },
+            {
+              "type": "contents",
+              "value": "eye",
+              "superseded": true
+            }
+          ]
+        },
+        {
+          "role": "button",
+          "name": "Preview image",
+          "ignored": false,
+          "sources": [
+            {
+              "type": "attribute",
+              "attribute": "aria-label",
+              "value": "Preview image"
+            },
+            {
+              "type": "contents",
+              "value": "eye",
+              "superseded": true
+            }
+          ]
+        }
+      ],
+      "keyboard": {
+        "viewer": "Image preview",
+        "focusInViewer": "Close",
+        "focusAfter": {
+          "tag": "span",
+          "cls": "orbit-image",
+          "ariaLabel": "screenshot.png"
+        },
+        "focusAfterSnapshot": "- button \"screenshot.png\":\n  - img \"eye\"",
+        "focusAfterTree": {
+          "role": "button",
+          "name": "screenshot.png",
+          "ignored": false,
+          "sources": [
+            {
+              "type": "attribute",
+              "attribute": "aria-label",
+              "value": "screenshot.png"
+            },
+            {
+              "type": "contents",
+              "value": "eye",
+              "superseded": true
+            }
+          ]
+        }
+      },
+      "errors": []
+    },
+    {
+      "env": "webkit-light-desktop",
+      "dom": [
+        {
+          "tag": "span",
+          "role": "button",
+          "tabindex": "0",
+          "ariaLabel": "screenshot.png",
+          "imgAlt": ""
+        },
+        {
+          "tag": "span",
+          "role": "button",
+          "tabindex": "0",
+          "ariaLabel": "Preview image",
+          "imgAlt": ""
+        }
+      ],
+      "snapshot": "- button \"screenshot.png\":\n  - img \"eye\"\n- button \"Remove image\":\n  - img \"close\"\n- button \"Preview image\":\n  - img \"eye\"\n- button \"Remove image\":\n  - img \"close\"",
+      "byName": {
+        "screenshot.png": 1,
+        "Preview image": 1,
+        "eye": 0
+      },
+      "chromiumTree": null,
+      "keyboard": {
+        "viewer": "Image preview",
+        "focusInViewer": "Close",
+        "focusAfter": {
+          "tag": "span",
+          "cls": "orbit-image",
+          "ariaLabel": "screenshot.png"
+        },
+        "focusAfterSnapshot": "- button \"screenshot.png\":\n  - img \"eye\"",
+        "focusAfterTree": null
+      },
+      "errors": []
+    },
+    {
+      "env": "webkit-light-phone",
+      "dom": [
+        {
+          "tag": "span",
+          "role": "button",
+          "tabindex": "0",
+          "ariaLabel": "screenshot.png",
+          "imgAlt": ""
+        },
+        {
+          "tag": "span",
+          "role": "button",
+          "tabindex": "0",
+          "ariaLabel": "Preview image",
+          "imgAlt": ""
+        }
+      ],
+      "snapshot": "- button \"screenshot.png\":\n  - img \"eye\"\n- button \"Remove image\":\n  - img \"close\"\n- button \"Preview image\":\n  - img \"eye\"\n- button \"Remove image\":\n  - img \"close\"",
+      "byName": {
+        "screenshot.png": 1,
+        "Preview image": 1,
+        "eye": 0
+      },
+      "chromiumTree": null,
+      "keyboard": {
+        "viewer": "Image preview",
+        "focusInViewer": "Close",
+        "focusAfter": {
+          "tag": "span",
+          "cls": "orbit-image",
+          "ariaLabel": "screenshot.png"
+        },
+        "focusAfterSnapshot": "- button \"screenshot.png\":\n  - img \"eye\"",
+        "focusAfterTree": null
+      },
+      "errors": []
+    }
+  ]
+}

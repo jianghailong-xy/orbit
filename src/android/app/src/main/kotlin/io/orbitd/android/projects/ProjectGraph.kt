@@ -75,7 +75,16 @@ fun ProjectGraph(graph: JsonObject, openTask: (String) -> Unit) {
             Text("⚠ $title $detail", style = MaterialTheme.typography.labelMedium, color = LocalOrbitColors.current.needsYou)
         }
     }
-    if (fullscreen) Dialog(onDismissRequest = { fullscreen = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    if (fullscreen) TaskGraphFullScreen(marks, edges, close = { fullscreen = false }) { mark ->
+        if (mark.kind == MarkKind.TASK) { fullscreen = false; openTask(mark.taskId ?: mark.id) } else press(mark)
+    }
+}
+
+/** The whole plan full screen, pinch or buttons to zoom (iOS `ProjectGraphFullScreen`): the project page's Expand graph, and the start
+ * card's Task graph for a plan it lists by level. [press] is the host's: a task opens, a fold opens in place. */
+@Composable
+internal fun TaskGraphFullScreen(marks: List<GraphMark>, edges: List<GraphEdge>, close: () -> Unit, press: (GraphMark) -> Unit) {
+    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize().testTag("project-graph-fullscreen")) {
             var zoom by rememberSaveable { mutableFloatStateOf(1f) }
             var pan by remember { mutableStateOf(Offset.Zero) }
@@ -84,14 +93,22 @@ fun ProjectGraph(graph: JsonObject, openTask: (String) -> Unit) {
                     Text("Task graph", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                     TextButton(onClick = { zoom = (zoom / 1.25f).coerceIn(0.2f, 3f) }) { Text("Zoom out") }
                     TextButton(onClick = { zoom = (zoom * 1.25f).coerceIn(0.2f, 3f) }) { Text("Zoom in") }
-                    TextButton(onClick = { fullscreen = false }) { Text("Done") }
+                    TextButton(onClick = close) { Text("Done") }
                 }
-                FullGraph(marks, edges, zoom, pan, { z, p -> zoom = z; pan = p }) { mark ->
-                    if (mark.kind == MarkKind.TASK) { fullscreen = false; openTask(mark.taskId ?: mark.id) } else press(mark)
-                }
+                FullGraph(marks, edges, zoom, pan, { z, p -> zoom = z; pan = p }, press)
             }
         }
     }
+}
+
+/** The plan drawn whole at [scale] (iOS `ProjectGraphCanvas` under the start card's `scaleEffect`): no viewport of its own — it is as
+ * tall as its layout, so the card scrolls past it like a picture. */
+@Composable
+internal fun PlanGraphCanvas(layout: ProjectGraphLayout.Layout, edges: List<GraphEdge>, scale: Float, modifier: Modifier = Modifier,
+    press: (GraphMark) -> Unit) {
+    val width = (layout.width * scale).toFloat()
+    val height = (layout.height * scale).toFloat()
+    Box(modifier.size(width.dp, height.dp).clipToBounds()) { GraphContent(layout, edges, scale, Offset.Zero, width, height, null, press) }
 }
 
 /** The task page's dependency component: inline only, the task being read outlined and inert. */

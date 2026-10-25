@@ -1,0 +1,99 @@
+{
+ "scenario": "repo-config-with-flags",
+ "process": "repo",
+ "version": "2026.10.14-941492e",
+ "exit": {
+  "code": null,
+  "signal": "SIGKILL"
+ },
+ "actions": [
+  {
+   "t": 14,
+   "channel": "spawn",
+   "value": {
+    "args": [
+     "-f",
+     "-qq",
+     "-e",
+     "trace=execve",
+     "-o",
+     "<RUN>/turn.strace",
+     "<CLI>/cursor-agent",
+     "acp",
+     "--disable-project-configs",
+     "--exclude-workspace-context"
+    ],
+    "cwd": "<RUN>/repo",
+    "envKeys": [
+     "AGENT_CLI_CREDENTIAL_STORE",
+     "CURSOR_API_KEY",
+     "CURSOR_CONFIG_DIR",
+     "CURSOR_DATA_DIR",
+     "HOME",
+     "LANG",
+     "NO_OPEN_BROWSER",
+     "ORBIT_P0_CANARY",
+     "PATH",
+     "TERM",
+     "XDG_CACHE_HOME",
+     "XDG_CONFIG_HOME",
+     "XDG_DATA_HOME"
+    ]
+   }
+  },
+  {
+   "t": 14,
+   "channel": "client->agent",
+   "id": 1,
+   "method": "initialize"
+  },
+  {
+   "t": 619,
+   "channel": "client->agent",
+   "id": 2,
+   "method": "session/new"
+  },
+  {
+   "t": 7370,
+   "channel": "client->agent",
+   "id": 3,
+   "method": "session/prompt"
+  },
+  {
+   "t": 23224,
+   "channel": "client->agent",
+   "id": 0,
+   "method": null
+  },
+  {
+   "t": 26014,
+   "channel": "client->agent",
+   "id": 1,
+   "method": null
+  },
+  {
+   "t": 30869,
+   "channel": "client->agent",
+   "id": 2,
+   "method": null
+  },
+  {
+   "t": 75986,
+   "channel": "close-stdin",
+   "value": null
+  },
+  {
+   "t": 90992,
+   "channel": "signal",
+   "value": "SIGTERM"
+  },
+  {
+   "t": 101000,
+   "channel": "exit",
+   "value": {
+    "code": null,
+    "signal": "SIGKILL"
+   }
+  }
+ ]
+}

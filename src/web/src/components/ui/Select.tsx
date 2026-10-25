@@ -1,4 +1,4 @@
-import { useRef, type AriaAttributes, type CSSProperties, type ReactNode, type Ref } from 'react';
+import { useLayoutEffect, useRef, type AriaAttributes, type CSSProperties, type ReactNode, type Ref } from 'react';
 import { Select as BaseSelect } from '@base-ui/react/select';
 import { CloseCircleFilled, DownOutlined, LoadingOutlined } from '@ant-design/icons';
 import { SelectEmpty } from './SelectEmpty';
@@ -10,6 +10,8 @@ export interface SelectOption<Value extends string = string> {
   value: Value;
   label: string;
   disabled?: boolean;
+  /** Said when the pointer rests on the option (the native title), in a searchable list. */
+  title?: string;
 }
 export interface SelectGroup<Value extends string = string> {
   label: string;
@@ -54,6 +56,9 @@ export function Select<Value extends string = string>({ options, value, onValueC
   const { positioner, ...placement } = useDropdownPlacement(layer.open, anchor, 4, align);
   const trigger = useRef<HTMLButtonElement | null>(null);
   const popup = useRef<HTMLDivElement>(null);
+  // From the list opening until focus first enters it (the popup's onFocus).
+  const opening = useRef(false);
+  useLayoutEffect(() => { opening.current = layer.open; }, [layer.open]);
   const flat = flattenOptions(options);
   const selected = flat.find((item) => item.value === value);
   const item = (option: SelectOption<Value>) => <BaseSelect.Item key={option.value} value={option.value} disabled={option.disabled} className="orbit-select-option">
@@ -70,15 +75,23 @@ export function Select<Value extends string = string>({ options, value, onValueC
       }} className="orbit-select-trigger" aria-busy={loading || undefined} onKeyDown={(event) => {
         // Base UI moves focus into an opened list on the next animation frame. Until then the trigger
         // would restart the highlight (arrows) or close the list unselected (Enter), so hand these keys
-        // to the element focus is moving to; they then act as in the list, as with AntD.
+        // to the element focus is moving to; they then act as in the list, as with the replaced select. Tab and Shift+Tab
+        // would leave from the trigger rather than the list: Tab moves focus first and lets the browser
+        // tab on from there, Shift+Tab is handed over like the others.
         const list = popup.current;
-        if (!layer.open || !list || !['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) return;
+        if (!layer.open || !list || !['ArrowDown', 'ArrowUp', 'Enter', 'Tab'].includes(event.key)) return;
+        if (event.key === 'Tab' && !event.shiftKey) {
+          (list.querySelector<HTMLElement>('[data-highlighted]') ?? list).focus({ preventScroll: true });
+          return;
+        }
         event.preventDefault();
         event.stopPropagation();
         event.preventBaseUIHandler();
         const target = list.querySelector<HTMLElement>('[data-highlighted]') ?? list;
         target.focus({ preventScroll: true });
-        target.dispatchEvent(new KeyboardEvent('keydown', { key: event.key, code: event.code, bubbles: true, cancelable: true,
+        // Focus on the list itself can move on to its first option (the popup's onFocus): the key goes where focus is.
+        const focused = list.ownerDocument.activeElement;
+        (focused instanceof HTMLElement && list.contains(focused) ? focused : target).dispatchEvent(new KeyboardEvent('keydown', { key: event.key, code: event.code, bubbles: true, cancelable: true,
           shiftKey: event.shiftKey, ctrlKey: event.ctrlKey, altKey: event.altKey, metaKey: event.metaKey }));
       }}>
         <BaseSelect.Value className="orbit-choice-value" placeholder={placeholder}>
@@ -91,10 +104,20 @@ export function Select<Value extends string = string>({ options, value, onValueC
         onClick={() => { onValueChange(null); trigger.current?.focus(); }}><CloseCircleFilled aria-hidden /></button>}
     </span>
     <BaseSelect.Portal container={layer.container()}>
-      <BaseSelect.Positioner ref={positioner} anchor={anchor} alignItemWithTrigger={false} side={side} align={align} {...placement}
+      <BaseSelect.Positioner ref={positioner} anchor={anchor} alignItemWithTrigger={false} side={side} align={align} {...placement} positionMethod={layer.positionMethod}
         className="orbit-floating-positioner orbit-choice-positioner" data-match-width={matchTriggerWidth}
         style={{ zIndex: layer.zIndex, '--orbit-choice-anchor-width': anchorWidth === undefined ? undefined : `${anchorWidth}px` } as CSSProperties}>
-        <BaseSelect.Popup ref={popup} className={`orbit-select-popup${popupClassName ? ` ${popupClassName}` : ''}`} style={popupStyle} finalFocus={returnFocus}>
+        <BaseSelect.Popup ref={popup} className={`orbit-select-popup${popupClassName ? ` ${popupClassName}` : ''}`} style={popupStyle} finalFocus={returnFocus}
+          onFocus={(event) => {
+            // With no option holding the value, the replaced select opened on its first enabled option
+            // (rc-select's defaultActiveFirstOption): highlighted, and Enter picked it. Base UI highlights an
+            // option only for a key that opens the list; opened otherwise, focus first lands on the list
+            // itself. It moves on to that option, which highlights it as an arrow key would.
+            if (!opening.current) return;
+            opening.current = false;
+            if (event.target !== event.currentTarget || selected) return;
+            event.currentTarget.querySelector<HTMLElement>('[role="option"]:not([data-disabled])')?.focus({ preventScroll: true });
+          }}>
           <BaseSelect.List className="orbit-select-list">
             {options.map((entry) => 'options' in entry ? <BaseSelect.Group key={entry.label}>
               <BaseSelect.GroupLabel className="orbit-select-group-label">{entry.label}</BaseSelect.GroupLabel>{entry.options.map(item)}

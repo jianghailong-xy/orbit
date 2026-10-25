@@ -1,0 +1,144 @@
+<!doctype html>
+<!-- Evidence for the iOS / macOS half of "Kimi Code 多账号" (task 34cM1TV1GJPlqc6iTps0t): each frame of the iOS board
+     (docs/mocks/kimi-accounts/02-ios.html, cut by frames.cjs into design/, left) beside the same screen photographed on
+     the real iPhone app (right) — the app's own CompactShell and Settings sheet, built from this branch's shared sources
+     on GitHub's macos-26 runner (iPhone simulator, iOS 26) and driven by XCUITest against probe-harness/stub.py, whose
+     data follows the board (HPC: Default on kimi.ai, Work on kimi.com; Work's 5 hours at 91%). The real screens are
+     downscaled from 3x to 2x. Clock-bound words (checked … ago, Resets …) differ from the board's. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Kimi Code accounts · iOS · real app vs board</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../mocks/project-progress/mock.css">
+<style>
+  .m-sheet { width: 1840px; }
+  .kc-row { display: flex; gap: 30px; align-items: flex-start; }
+  .kc-row + .kc-row { margin-top: 26px; }
+  .kc-fig { width: 393px; }
+  .kc-fig img { display: block; width: 393px; border-radius: 26px; box-shadow: 0 1px 4px rgba(15, 23, 42, .14); }
+  .kc-fig.cut img { border-radius: 14px; }
+  .kc-lbl { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-2); margin: 0 0 10px; }
+  .kc-sep { align-self: stretch; width: 1px; background: #dde0e6; }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 8px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .m-cap code, .m-sub code { font-size: 11.5px; padding: 0 4px; border-radius: 4px; background: #eef0f3; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Kimi Code 多账号 · iOS / macOS：真实 iPhone 界面逐帧对照 02-ios 设计图</h1>
+  <p class="m-sub zh">左边是设计图 <code>docs/mocks/kimi-accounts/02-ios.html</code> 的一帧，右边是本分支真实 App 的同一屏：iPhone 版自己的
+    CompactShell 和 Settings，在 GitHub 的 macos-26 上用 iOS 26 模拟器跑，XCUITest 按设计图的步骤去点，接口是照设计图造的数据（HPC：Default 在
+    kimi.ai，Work 在 kimi.com，Work 的 5 小时用到 91%）。按 owner 2026-10-08 的决定：月度只画一条（总额）；四个引擎的引擎页都在 NEXT 账号名旁标 NEXT（⑤）。
+    macOS 用的是同一批视图（Mac 自己的画法），这里只拍 iPhone；Mac 版 OrbitApp 在同一次 CI 里编译通过。和时间有关的字（checked … ago、Resets …）随截图时刻不同。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 引擎页：只有一个 Kimi 账号</div>
+    <div class="kc-row">
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k">设计图</span>现在</div><img src="design/design-p01.png" alt=""></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>旧 runner 上</div><img src="ios-01-kimi-older-runner.png" alt="">
+        <p class="m-cap zh">没声明 <code>kimi-account-login/v1</code> 的 runner 照旧：区名 Sign-In、一个登录、只写站点、No quota reported、没有 Add Account。</p></div>
+      <div class="kc-sep"></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k">设计图</span>改后</div><img src="design/design-p02.png" alt=""></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>改后</div><img src="ios-02-kimi-one-account.png" alt="">
+        <p class="m-cap zh"><b>1</b> 区名 Accounts；<b>2</b> 副标题「站点 · 目录」；<b>3</b> 三条额度 5h / Weekly / Monthly（月度只一条，总额）；<b>4</b> Add Account。一个账号时不标 NEXT。</p></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 加账号：先起名，再选站点；设备码写站点</div>
+    <div class="kc-row">
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k">设计图</span>点 Add Account</div><img src="design/design-p03.png" alt=""></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>点 Add Account</div><img src="ios-03-add-account-name-then-sites.png" alt="">
+        <p class="m-cap zh"><b>5</b> 名字先填好 Account 2；<b>6</b> 不马上登录，先问站点，两个都不标 Current。</p></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>名字清空</div><img src="ios-04-add-account-no-name.png" alt="">
+        <p class="m-cap zh">名字清空时站点按钮变灰，按不动。</p></div>
+    </div>
+    <div class="kc-row">
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k">设计图</span>选了 kimi.com</div><img src="design/design-p04.png" alt=""></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>选了 kimi.com</div><img src="ios-05-add-account-device-code-kimi-com.png" alt="">
+        <p class="m-cap zh"><b>7</b>「Sign in with the kimi.com account you are adding, then enter this one-time code:」，按钮复制代码并打开 kimi.com；<b>8</b> Use kimi.ai instead 用同一个名字到 kimi.ai 重来。请求体里是 <code>accountName: Work</code>、<code>region: mainland-cn</code>。</p></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>批准后</div><img src="ios-06-added-work-folded.png" alt="">
+        <p class="m-cap zh">登录成功、名字存好后卡片自己收起，多出 Work 一行（kimi.com · ~/.orbit/kimi-accounts/5c2e91a0）。</p></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 两个账号：Default 在 kimi.ai，Work 在 kimi.com</div>
+    <div class="kc-row">
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k">设计图</span>引擎页</div><img src="design/design-p05.png" alt=""></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>引擎页</div><img src="ios-07-kimi-two-accounts-next-default.png" alt="">
+        <p class="m-cap zh"><b>9</b> 每行先写站点、再写目录，放不下从中间省略；<b>10</b> 各算各的额度，Work 的 5 小时 91% 变橙。Default 名旁的 NEXT 见 ⑤。</p></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>往下</div><img src="ios-08-kimi-two-accounts-work.png" alt=""></div>
+    </div>
+    <div class="kc-row">
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k">设计图</span>运行器页</div><img src="design/design-p06.png" alt=""></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>运行器页</div><img src="ios-09-runner-page-next.png" alt="">
+        <p class="m-cap zh"><b>11</b>「2 accounts signed in」，行上不再写站点；「Next: Default」下面挂它最接近上限的一条（Weekly 34%）。Claude Code 那行是「3 accounts signed in · Next: alex.team@example.com」。</p></div>
+    </div>
+    <div class="kc-row">
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k">设计图</span>长按 Work → Sign In Again</div><img src="design/design-p07.png" alt=""></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>长按菜单</div><img src="ios-10a-work-menu.png" alt=""></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>Sign In Again</div><img src="ios-10-work-sign-in-again-current-kimi-com.png" alt="">
+        <p class="m-cap zh"><b>12</b> 还是那两个站点，Current 标的是 Work 自己的站点 kimi.com，不是 Default 的 kimi.ai。</p></div>
+    </div>
+    <div class="kc-row">
+      <div class="kc-fig cut"><div class="kc-lbl zh"><span class="m-k">设计图</span>b 只有一个账号</div><img src="design/design-cut-b.png" alt=""></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>b</div><img src="ios-21-runner-row-one-account.png" alt="">
+        <p class="m-cap zh">只有一个账号：照旧写站点（2.1.1 · kimi.ai），再挂一条额度。</p></div>
+    </div>
+    <div class="kc-row">
+      <div class="kc-fig cut"><div class="kc-lbl zh"><span class="m-k">设计图</span>c Work 掉线</div><img src="design/design-cut-c.png" alt=""></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>c 运行器页</div><img src="ios-22-runner-row-work-signed-out.png" alt=""></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>c 引擎页</div><img src="ios-23-kimi-work-signed-out.png" alt="">
+        <p class="m-cap zh">Work 掉线：行上写 Signed out 和 Sign In，Next 从还登录着的 Default 里选；Work 那行在引擎页出 Sign In。</p></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">④ 会话换 Kimi 账号：输入框点模型 → Provider</div>
+    <div class="kc-row">
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>Kimi 会话在 Work 上</div><img src="ios-14-console-on-work.png" alt="">
+        <p class="m-cap zh"><b>14</b> 额度条是这个会话正在用的账号的：Work 的 5 小时 91%，橙色。</p></div>
+      <div class="kc-sep"></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k">设计图</span>菜单多出 Provider</div><img src="design/design-p09.png" alt=""></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>菜单</div><img src="ios-15-model-menu-provider.png" alt="">
+        <p class="m-cap zh"><b>13</b> runner 有两个 Kimi 账号并声明 <code>kimi-account-move/v1</code>：出现 Provider 一行。</p></div>
+    </div>
+    <div class="kc-row">
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k">设计图</span>Provider → Kimi 的账号</div><img src="design/design-p10.png" alt=""></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>Provider</div><img src="ios-16-provider-kimi-accounts.png" alt="">
+        <p class="m-cap zh"><b>15</b> Kimi 一节：Automatic、Default（Weekly 34%）、Work（Current · 5h 91%）。</p></div>
+    </div>
+    <div class="kc-row">
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k">设计图</span>换到 Default，接着聊</div><img src="design/design-p11.png" alt=""></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>点 Default 之后</div><img src="ios-17-moved-to-default.png" alt="">
+        <p class="m-cap zh">点 Default：<code>PATCH /sessions/S1/account {"account":"default"}</code>；<b>17</b> 额度条换成 Default 的（每周 34%）。</p></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>接着说</div><img src="ios-18-same-conversation-goes-on.png" alt="">
+        <p class="m-cap zh"><b>16</b> 还是同一段对话，接着往下说。</p></div>
+    </div>
+    <div class="kc-row">
+      <div class="kc-fig cut"><div class="kc-lbl zh"><span class="m-k">设计图</span>Plan usage</div><img src="design/design-plan-usage.png" alt=""></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>Plan usage</div><img src="ios-19-plan-usage-default.png" alt="">
+        <p class="m-cap zh">第一行写明 Account：Default，下面是它的三条（月度只一条）。</p></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑤ NEXT：四个引擎的引擎页，在 NEXT 账号名旁标 NEXT（owner 2026-10-08 定；设计图上没有）</div>
+    <div class="kc-row">
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>Kimi Code</div><img src="ios-07-kimi-two-accounts-next-default.png" alt="">
+        <p class="m-cap zh">NEXT 在 Default：Work 的 5 小时过了 80%，排到后面。</p></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>Claude Code</div><img src="ios-11-claude-next-team.png" alt="">
+        <p class="m-cap zh">NEXT 在 alex.team@example.com，不是 Default：它的一周最早到期。</p></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>Codex</div><img src="ios-12-codex-next-pro.png" alt="">
+        <p class="m-cap zh">NEXT 在 Pro：Default 的 5 小时用完了。</p></div>
+      <div class="kc-fig"><div class="kc-lbl zh"><span class="m-k new">真实</span>Antigravity</div><img src="ios-13-antigravity-next-default.png" alt="">
+        <p class="m-cap zh">NEXT 在 Default：Work 的 5 小时只剩 4%。</p></div>
+    </div>
+    <p class="m-cap zh" style="margin-top: 14px">规则同 web 的 <code>accountToStartOn</code>：取 <code>CodexAccounts.toStartOn</code>，两个及以上账号才有；标记是账号池行现成的 <code>PoolChip</code> + <code>SharedPoolPage.nextChip</code>；运行器页的「Next: 账号」保留（③）。</p>
+  </div>
+</section>
+</body>
+</html>

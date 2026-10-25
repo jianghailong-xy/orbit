@@ -37,6 +37,8 @@
 .orbit-button-primary { color: var(--orbit-control-on-primary); background: var(--orbit-control-primary); border-color: transparent; }
 .orbit-button-primary:hover:where(:not(:disabled)) { color: var(--orbit-control-on-primary); background: var(--orbit-control-primary-hover); border-color: transparent; }
 .orbit-button-primary:active:where(:not(:disabled)) { color: var(--orbit-control-on-primary); background: var(--orbit-control-primary-active); border-color: transparent; }
+/* Dashed: the default button with a dashed frame. */
+.orbit-button-dashed { border-style: dashed; }
 .orbit-button-text, .orbit-button-link { background: transparent; border-color: transparent; }
 .orbit-button-text:hover:where(:not(:disabled)) { color: var(--text-1); background: var(--orbit-control-hover-bg); border-color: transparent; }
 .orbit-button-text:active:where(:not(:disabled)) { color: var(--text-1); background: var(--orbit-control-active-bg); border-color: transparent; }

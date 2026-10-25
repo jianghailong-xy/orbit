@@ -1,0 +1,73 @@
+{
+ "checks": [
+  {
+   "check": "ann: the long turn was answered",
+   "ok": true
+  },
+  {
+   "check": "bob: the background job ran out and exited 0",
+   "ok": true,
+   "value": [
+    {
+     "created_at": "2026-10-18T12:41:51.281+00:00",
+     "exit_code": 0,
+     "job_id": "bgj_48fc3ac4ec85",
+     "reason": null,
+     "status": "completed",
+     "updated_at": "2026-10-18T12:41:51.281+00:00"
+    }
+   ]
+  }
+ ],
+ "endedAt": "2026-10-18T12:41:51.745+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "sessions",
+ "result": {
+  "annSlowTurn": {
+   "event": {
+    "created_at": "2026-10-18T12:41:51.182",
+    "ingested_at": "2026-10-18T12:41:51.353825+00:00",
+    "ingested_by_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "seq": 20,
+    "session_id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+    "type": "assistant"
+   },
+   "modelRequests": [
+    {
+     "at": "2026-10-18T12:37:51Z",
+     "kind": "text",
+     "messages": 8,
+     "n": 11,
+     "secrets": [
+      "annfirst"
+     ],
+     "tool": null
+    }
+   ],
+   "session": {
+    "assigned_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "created_at": "2026-10-18T12:37:47.476",
+    "engine": "claude",
+    "id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+    "provider": "deepseek-2",
+    "runtime_session_id": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+    "status": "AWAITING_INPUT",
+    "task_id": null
+   }
+  },
+  "bobJobs": [
+   {
+    "created_at": "2026-10-18T12:41:51.281+00:00",
+    "exit_code": 0,
+    "job_id": "bgj_48fc3ac4ec85",
+    "reason": null,
+    "status": "completed",
+    "updated_at": "2026-10-18T12:41:51.281+00:00"
+   }
+  ]
+ },
+ "seconds": 130.8,
+ "startedAt": "2026-10-18T12:39:40.973+00:00",
+ "step": "busy-end"
+}

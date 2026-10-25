@@ -1,0 +1,18 @@
+{
+  "created": true,
+  "owner": "erin",
+  "signIn": {
+    "at": "2026-10-17T23:36:30.925+00:00",
+    "ms": 46.8,
+    "port": 13710,
+    "status": 201
+  },
+  "user": {
+    "email": "t05-erin@lab.invalid",
+    "id": "34hkLQ8LZayiRZwU7JNrb"
+  },
+  "usersMe": {
+    "id": "34hkLQ8LZayiRZwU7JNrb",
+    "status": 200
+  }
+}

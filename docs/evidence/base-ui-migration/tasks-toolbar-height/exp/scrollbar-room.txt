@@ -1,0 +1,10 @@
+argv: node scrollbar-room.mjs   (from the delivery's src/web)
+load: 39.42 44.27 36.05 45/6428 1879228
+started: 2026-10-10T01:00:57Z
+
+webkit 26.6 default scrollbars outer width 10
+webkit 26.6 the app's 8px ::-webkit-scrollbar outer width 18
+chromium 153.0.8010.12 default scrollbars outer width 10
+chromium 153.0.8010.12 the app's 8px ::-webkit-scrollbar outer width 10
+exit=0
+ended: 2026-10-10T01:01:03Z

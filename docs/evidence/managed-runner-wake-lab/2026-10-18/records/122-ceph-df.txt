@@ -1,0 +1,9 @@
+--- RAW STORAGE ---
+CLASS    SIZE   AVAIL     USED  RAW USED  %RAW USED
+hdd    60 GiB  58 GiB  1.5 GiB   1.5 GiB       2.58
+TOTAL  60 GiB  58 GiB  1.5 GiB   1.5 GiB       2.58
+ 
+--- POOLS ---
+POOL          ID  PGS   STORED  OBJECTS     USED  %USED  MAX AVAIL
+.mgr           1    1  320 KiB        2  972 KiB      0     18 GiB
+orbit-mr-rbd   2   32  390 MiB      435  1.1 GiB   2.02     18 GiB

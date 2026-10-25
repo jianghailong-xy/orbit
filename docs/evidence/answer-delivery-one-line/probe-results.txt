@@ -1,0 +1,38 @@
+probe/answer-delivery-one-line (the iOS pictures in this directory; the branch is never merged)
+run: https://github.com/jianghailong-xy/orbit/actions/runs/38045204559
+probe commit: 32e5d1fd9b3edd2398b174ad7df8fabc256a0df9 (parent 7aa1e5de0 + .oal-probe/ + client.yml)
+jobs: macOS (OrbitKit swift test + OrbitApp swift build) 114193224494 success; iOS (generate + build the app) 114193224405 success; iPhone probe 114193224576 success; results push 114196168816 success
+macOS OrbitKit: test=success build=success (swift test exit status; the kept summary is cut at 300 lines, before the total)
+macOS OrbitKit, this task's suites: 37 passed, 0 failed (OwnerAnswerTests, OwnerAnswerCopyParityTests, QueuedTurnCardsTests, UserTurnRowWiringTests, AcceptedTurnPlaceholderTests)
+macOS OrbitApp: Build complete! (152.48s)
+iOS app: ** BUILD SUCCEEDED **
+Android CI on the same commit: https://github.com/jianghailong-xy/orbit/actions/runs/38045204608 — Android (test + lint + debug APK) 114193224449 success
+
+== iPhone UI tests (LineShotTests, en_GB + Asia/Shanghai unless noted) ==
+Test Case '-[OalProbeUITests.LineShotTests test1TheLineUnderTheAnsweredCard]' passed (86.191 seconds).
+Test Case '-[OalProbeUITests.LineShotTests test2TheLineOpensToTheWords]' passed (54.866 seconds).
+Test Case '-[OalProbeUITests.LineShotTests test3NotYetIsTheSameLine]' passed (42.178 seconds).
+Test Case '-[OalProbeUITests.LineShotTests test4AQueuedAnswerIsTheSameLine]' passed (40.948 seconds).
+Test Case '-[OalProbeUITests.LineShotTests test5TheClockFollowsTheDevice]' passed (16.130 seconds).
+** TEST SUCCEEDED **
+
+== the line, as each test found it (notes) ==
+line: line 9 label="Sent to the coordinator · 08:29" value=""
+sheet: line 9 label="Sent to the coordinator · 08:29" value=""
+not-yet: line 9 label="Sent to the coordinator · 08:41" value=""
+queued: line 9 label="Sent to the coordinator · 08:29" value=""
+en-us: line 9 label="Sent to the coordinator · 8:29 AM" value=""
+
+== what the app read from the fixture API (requests.log, excerpt) ==
+10:44:31 "GET /api/sessions/C1/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+10:44:31 "GET /api/sessions/C1/turns?view=active HTTP/1.1" 200 -
+10:44:34 "GET /api/projects/P1/open-items HTTP/1.1" 200 -
+10:45:33 "GET /api/sessions/C1/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+10:45:33 "GET /api/sessions/C1/turns?view=active HTTP/1.1" 200 -
+10:45:35 "GET /api/projects/P1/open-items HTTP/1.1" 200 -
+10:46:18 "GET /api/sessions/C2/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+10:46:20 "GET /api/sessions/C2/turns?view=active HTTP/1.1" 200 -
+10:46:22 "GET /api/projects/P2/open-items HTTP/1.1" 200 -
+10:47:03 "GET /api/sessions/C3/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+10:47:05 "GET /api/sessions/C3/turns?view=active HTTP/1.1" 200 -
+10:47:09 "GET /api/projects/P3/open-items HTTP/1.1" 200 -

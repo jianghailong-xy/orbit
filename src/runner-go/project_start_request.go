@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -84,10 +85,52 @@ func projectStartRequestBody(args map[string]interface{}) (map[string]interface{
 		}
 		body["projectBranchName"] = branch
 	}
+	// The main branch is a suggestion with either line, sent as given: whether it names a branch is
+	// the server's to say.
+	if upstream := strings.TrimSpace(getString(args, "upstreamRef")); upstream != "" {
+		body["upstreamRef"] = upstream
+	}
 	if check := strings.TrimSpace(getString(args, "mergeCheckCommand")); check != "" {
 		body["mergeCheckCommand"] = check
 	}
+	// The check's budget travels with the command and is named on its own when it is: the owner's
+	// card opens on what is sent and may change either before pressing Start. Left out it is not
+	// named, and the start then leaves the project's own budget as it stands.
+	if raw, present := args["mergeCheckTimeoutSeconds"]; present && raw != nil {
+		seconds, err := positiveSeconds(raw, "mergeCheckTimeoutSeconds")
+		if err != nil {
+			return nil, err
+		}
+		body["mergeCheckTimeoutSeconds"] = seconds
+	}
 	return body, nil
+}
+
+// positiveSeconds reads a whole number of seconds a caller named: 1 or more, however many. A
+// value whose shape the server would only refuse is refused here, so a typo costs no round trip.
+func positiveSeconds(raw interface{}, key string) (int, error) {
+	bad := fmt.Errorf("%s must be a positive whole number of seconds (how long the check may run "+
+		"before the landing is stopped); leave it out for the one-hour default", key)
+	switch value := raw.(type) {
+	case float64:
+		if value < 1 || value != float64(int(value)) {
+			return 0, bad
+		}
+		return int(value), nil
+	case int:
+		if value < 1 {
+			return 0, bad
+		}
+		return value, nil
+	case string:
+		// Models routinely send numbers quoted, so a numeric string counts too.
+		parsed, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || parsed < 1 {
+			return 0, bad
+		}
+		return parsed, nil
+	}
+	return 0, bad
 }
 
 // formatStartFindings renders findings one per line: the code and what it found, what it is about,

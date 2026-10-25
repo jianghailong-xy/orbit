@@ -1,0 +1,8 @@
+05:55:48Z applying migrations
+apiserver (orbit-mr-lab-api): active, source eaf89abdbfa79b61935feb37bd29c2947bf9b995
+TLS front (orbit-mr-lab-tls): active
+fake model (orbit-mr-lab-fake-model): active
+PostgreSQL (orbit-mr-lab-pg): running
+listening: 127.0.0.1:13710 127.0.0.1:13711 127.0.0.1:13712 127.0.0.1:15433
+Pods use: https://10.0.2.2:13711 (CA /mnt/data/managed-runner-lab/test-server-t07/tls/ca.crt); host API http://127.0.0.1:13710/api
+state: /mnt/data/managed-runner-lab/test-server-t07; managed runners: false

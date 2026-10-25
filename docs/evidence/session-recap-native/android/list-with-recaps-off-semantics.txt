@@ -1,0 +1,132 @@
+Printing with useUnmergedTree = 'false'
+Node #1 at (l=0.0, t=0.0, r=411.0, b=900.0)px
+ |-Node #55 at (l=16.0, t=8.0, r=395.0, b=73.0)px
+ | ContentDataType = 'AndroidContentDataType(androidAutofillType=1)'
+ | EditableText = ''
+ | Focused = 'false'
+ | ImeAction = 'Default'
+ | InputText = ''
+ | IsEditable = 'true'
+ | Text = '[Search sessions]'
+ | TextSelectionRange = 'TextRange(0, 0)'
+ | Actions = [ClearTextSubstitution, GetTextLayoutResult, InsertTextAtCursor, OnAutofillText, OnClick, OnLongClick, PasteText, PerformImeAction, RequestFocus, SetSelection, SetText, SetTextSubstitution, ShowTextSubstitution]
+ | MergeDescendants = 'true'
+ |-Node #66 at (l=0.0, t=81.0, r=411.0, b=900.0)px, Tag: 'directory-list'
+   CollectionInfo = 'androidx.compose.ui.semantics.CollectionInfo@2a2dc71d'
+   IsTraversalGroup = 'true'
+   VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+   Actions = [GetScrollViewportLength, IndexForKey, ScrollBy, ScrollByOffset, ScrollToIndex]
+    |-Node #69 at (l=0.0, t=81.0, r=411.0, b=129.0)px
+    | HorizontalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+    | IsTraversalGroup = 'true'
+    | Actions = [ScrollBy, ScrollByOffset]
+    |  |-Node #70 at (l=16.0, t=89.0, r=88.0, b=121.0)px
+    |  | Focused = 'false'
+    |  | Role = 'Checkbox'
+    |  | Selected = 'true'
+    |  | Text = '[Open]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #74 at (l=96.0, t=89.0, r=212.0, b=121.0)px
+    |  | Focused = 'false'
+    |  | Role = 'Checkbox'
+    |  | Selected = 'false'
+    |  | Text = '[Completed]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #78 at (l=220.0, t=89.0, r=295.0, b=121.0)px
+    |    Focused = 'false'
+    |    Role = 'Checkbox'
+    |    Selected = 'false'
+    |    Text = '[Trash]'
+    |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |    MergeDescendants = 'true'
+    |-Node #82 at (l=0.0, t=129.0, r=411.0, b=177.0)px
+    | HorizontalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+    | IsTraversalGroup = 'true'
+    | Actions = [ScrollBy, ScrollByOffset]
+    |  |-Node #83 at (l=16.0, t=133.0, r=97.0, b=173.0)px
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[By time]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #86 at (l=105.0, t=137.0, r=194.0, b=169.0)px
+    |    Focused = 'false'
+    |    Role = 'Checkbox'
+    |    Selected = 'true'
+    |    Text = '[All tags]'
+    |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |    MergeDescendants = 'true'
+    |-Node #92 at (l=0.0, t=177.0, r=411.0, b=225.0)px
+    | HorizontalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+    | IsTraversalGroup = 'true'
+    | Actions = [ScrollBy, ScrollByOffset]
+    |  |-Node #93 at (l=16.0, t=181.0, r=137.0, b=221.0)px
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[New session]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #96 at (l=137.0, t=181.0, r=244.0, b=221.0)px
+    |    Focused = 'false'
+    |    Role = 'Button'
+    |    Text = '[New folder]'
+    |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |    MergeDescendants = 'true'
+    |-Node #100 at (l=16.0, t=237.0, r=47.0, b=252.0)px
+    | Text = '[Older]'
+    | [Heading]
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |-Node #102 at (l=0.0, t=264.0, r=411.0, b=355.0)px
+    | Focused = 'false'
+    | IsContainer = 'true'
+    | Role = 'Button'
+    | Text = '[Recap on the session list row, Awaiting input, Committed the row change.]'
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    | MergeDescendants = 'true'
+    |  |-Node #114 at (l=351.0, t=280.0, r=391.0, b=320.0)px
+    |    ContentDescription = '[Options for Recap on the session list row]'
+    |    Focused = 'false'
+    |    Role = 'Button'
+    |    Actions = [OnClick, RequestFocus]
+    |    MergeDescendants = 'true'
+    |-Node #117 at (l=0.0, t=355.0, r=411.0, b=446.0)px
+    | Focused = 'false'
+    | IsContainer = 'true'
+    | Role = 'Button'
+    | Text = '[Drawer shadow fix, Awaiting input, Pushed the drawer fix.]'
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    | MergeDescendants = 'true'
+    |  |-Node #129 at (l=351.0, t=371.0, r=391.0, b=411.0)px
+    |    ContentDescription = '[Options for Drawer shadow fix]'
+    |    Focused = 'false'
+    |    Role = 'Button'
+    |    Actions = [OnClick, RequestFocus]
+    |    MergeDescendants = 'true'
+    |-Node #132 at (l=0.0, t=446.0, r=411.0, b=537.0)px
+    | Focused = 'false'
+    | IsContainer = 'true'
+    | Role = 'Button'
+    | Text = '[Rebasing the fixtures, Awaiting input, Rebased the fixtures; the suite is green.]'
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    | MergeDescendants = 'true'
+    |  |-Node #144 at (l=351.0, t=462.0, r=391.0, b=502.0)px
+    |    ContentDescription = '[Options for Rebasing the fixtures]'
+    |    Focused = 'false'
+    |    Role = 'Button'
+    |    Actions = [OnClick, RequestFocus]
+    |    MergeDescendants = 'true'
+    |-Node #147 at (l=0.0, t=537.0, r=411.0, b=609.0)px
+      Focused = 'false'
+      IsContainer = 'true'
+      Role = 'Button'
+      Text = '[Rebuilding the transcript page, Running]'
+      Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+      MergeDescendants = 'true'
+       |-Node #158 at (l=351.0, t=553.0, r=391.0, b=593.0)px
+         ContentDescription = '[Options for Rebuilding the transcript page]'
+         Focused = 'false'
+         Role = 'Button'
+         Actions = [OnClick, RequestFocus]
+         MergeDescendants = 'true'

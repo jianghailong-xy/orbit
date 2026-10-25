@@ -15,7 +15,7 @@
 #   A11_STACK_PG_CONTAINER (a11-stack-pg)  NM_SRC (a checkout with node_modules from the same lockfile; found if unset)
 #   A11_STACK_REV + A11_STACK_API_TREE + A11_STACK_SHARED_TREE + A11_STACK_LOCK_SHA256 (another server version; all four)
 #
-# usage: setup.sh build | db | start | stop | seed | status | reset | clean | verify | snapshot
+# usage: setup.sh build | db | start | stop | seed | status | reset | clean | verify | snapshot | stuck | unstick
 #        (register <token>: used by seed)
 #   reset = stop + wipe runner state and sandbox repo + db (fresh tmpfs database, migrations) + start
 #           + seed (seed.mjs, then seed-blocker.mjs; both through the real API, ids into seed.json)
@@ -47,7 +47,7 @@ RUNNER_BIN=$S/bin
 # no /usr/local/bin (codex) and no /root/.local/bin (claude, agy): the only engine the runner can find is ours
 RUNNER_PATH=$S/runner-path:/usr/bin:/bin
 # what prepare() copies from the checkout into $S (the fake engine goes to $S/runner-path/claude)
-INSTALLED=(setup.sh lib.mjs api.mjs seed.mjs seed-blocker.mjs seed-start.mjs verify.mjs snapshot.mjs loopback-only.cjs)
+INSTALLED=(setup.sh lib.mjs api.mjs seed.mjs seed-blocker.mjs seed-start.mjs seed-close.mjs seed-stuck.mjs verify.mjs snapshot.mjs loopback-only.cjs)
 
 die() { echo "setup.sh: $*" >&2; exit 1; }
 pid_alive() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
@@ -290,10 +290,12 @@ node_env() {
 }
 
 cmd_seed() {  # seed.mjs: accounts, runner, workspace, tasks, 2 projects; seed-blocker.mjs: the automatic project;
-              # seed-start.mjs: two projects nobody has started, one with its coordinator's start request
+              # seed-start.mjs: two projects nobody has started, one with its coordinator's start request;
+              # seed-close.mjs: two done requests, two crossings and a run queue (A11c)
   node_env node "$S/seed.mjs"
   node_env node "$S/seed-blocker.mjs"
   node_env node "$S/seed-start.mjs"
+  node_env node "$S/seed-close.mjs"
 }
 
 cmd_clean() {
@@ -307,7 +309,7 @@ cmd_clean() {
 }
 
 case "${1:-}" in
-  build|db|start|seed|reset|verify|snapshot|register) prepare ;;
+  build|db|start|seed|reset|verify|snapshot|stuck|register) prepare ;;
 esac
 case "${1:-}" in
   build) cmd_build ;;
@@ -321,6 +323,8 @@ case "${1:-}" in
          rm -f "$LOG/fake-claude.jsonl"; cmd_db; cmd_start; cmd_seed ;;
   clean) cmd_clean ;;
   verify) node_env node "$S/verify.mjs" ;;
+  stuck) node_env node "$S/seed-stuck.mjs" ;;  # A11c: leaves the runner stopped (SIGSTOP) with a timed-out landing
+  unstick) pid_alive "$S/runner.pid" && kill -CONT "$(cat "$S/runner.pid")" && echo "runner $(cat "$S/runner.pid") continued" ;;
   snapshot) node_env node "$S/snapshot.mjs" ;;
-  *) echo "usage: $0 build|db|start|stop|seed|status|reset|clean|verify|snapshot|register <token>" >&2; exit 2 ;;
+  *) echo "usage: $0 build|db|start|stop|seed|status|reset|clean|verify|snapshot|stuck|unstick|register <token>" >&2; exit 2 ;;
 esac

@@ -16,15 +16,19 @@ data class ServerAddress private constructor(val value: String) {
     }
 
     companion object {
-        /** HTTP is only for explicit loopback test fixtures, never a remote credential endpoint. */
+        /**
+         * http:// or https://, on any host and port, in every build, as iOS ServerURL takes them (e017a6d44): the account
+         * owner's decision of 2026-10-15 (card 34g6JcZwpKTUcwc5WvuVx), which accepts that the password and bearer tokens sent
+         * to an http:// instance cross the network unencrypted. An address typed without a scheme, such as the login page's
+         * orbitd.io, is HTTPS (iOS ServerURL takes a bare host too). [allowLoopbackHttp], once the debug builds' loopback-only
+         * exception, is no longer read; it stays so the fixtures and tests that pass it compile unchanged.
+         */
         fun parse(input: String, allowLoopbackHttp: Boolean = false): ServerAddress {
-            val text = input.trim()
+            val text = input.trim().let { if (it.isEmpty() || "://" in it) it else "https://$it" }
             val url = text.toHttpUrlOrNull() ?: throw InvalidServerAddress()
             if (text.any { it.isISOControl() } || '\\' in text ||
                 url.username.isNotEmpty() || url.password.isNotEmpty() ||
-                url.query != null || url.fragment != null ||
-                (url.scheme != "https" && !(allowLoopbackHttp &&
-                    url.host in setOf("localhost", "127.0.0.1", "::1")))
+                url.query != null || url.fragment != null
             ) throw InvalidServerAddress()
             // Both an instance root and a pasted /api URL denote the same instance.
             val segments = url.pathSegments.dropLastWhile { it.isEmpty() }.let {
@@ -42,4 +46,4 @@ data class ServerAddress private constructor(val value: String) {
     }
 }
 
-class InvalidServerAddress : IllegalArgumentException("Enter an HTTPS instance address without credentials, query or fragment")
+class InvalidServerAddress : IllegalArgumentException("Enter an instance address without credentials, query or fragment")

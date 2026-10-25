@@ -1,0 +1,48 @@
+{
+ "about": "The coordinator decision on the evidence of P5.3 (34Za39Ov1yysHZaYL6wgJ) that this registration cites, copied verbatim from Orbit records. evidenceRevisions: `orbit task evidence-list 34Za39Ov1yysHZaYL6wgJ --json` as read by this registration session on 2026-10-10 (one revision; the evidence body is omitted, its digest identifies it). decisionCall: the coordinator session 34b245G3NiwgVVUj2JFJw called task_evidence_decide on revision 1; the call input and the server response are copied from that session transcript (path in transcript).",
+ "task": "34Za39Ov1yysHZaYL6wgJ",
+ "evidenceRevisions": [
+  {
+   "revision": "1",
+   "id": "4YaPO25KrZzGyHllghOKYg",
+   "evidenceDigest": "6f0931ccd70e1d4f7d2b0920a9245931732498837a3cc9780c64b8cd928c01c2",
+   "submittedAt": "2026-10-10T11:42:51.872Z",
+   "sourceSessionId": "1xbYaTs6a51aVlNrpOZAY7",
+   "decision": {
+    "decision": "CONFIRM",
+    "decidedAt": "2026-10-10T11:44:02.913Z",
+    "decidedByType": "AGENT"
+   }
+  }
+ ],
+ "transcript": "/root/.claude/projects/-root--orbit-worktrees-01a10f8f-a15b-7306-96d0-11c294fab7f8/9c787a99-55d7-4401-bc23-0a0df17502ad.jsonl",
+ "decisionCall": {
+  "toolUseId": "call_00_M1GCIfSHB3jxYjkOp0gs2174",
+  "evidenceRevision": 1,
+  "call": {
+   "timestamp": "2026-10-10T11:44:02.604Z",
+   "tool": "mcp__orbit__task_evidence_decide",
+   "input": {
+    "decision": "CONFIRM",
+    "evidenceRevision": "1",
+    "note": "协调者判定：CONFIRM（第 1 版）。核对：会话侧组件在交付上已无 antd 导入（我按 928b9c162 全量 grep，只剩 P6 清单的 StatusTag、测试 __fixtures__ 与两个已有归属的页面测试），提交结构干净（公共组件/业务切换/用例/合并各一），检查矩阵（严格 56/56、模拟器 23/23、合并检查 399 文件 5163、OrbitKit 3669、P0 矩阵 101）齐全。逐条处置：\n1) 标准 P0 的 6 个失败 = 本批迁移差异，接受：session-attachment-staged（2 个明色桌面）是已验收焦点约定「关闭后焦点回到发起按钮」的可见结果（焦点回到 + 落在输入框 :focus-within 内；输入框内部逐像素相同，只有轮廓与阴影；暗色在阈值内）；session-attachment-menu（4 个手机）是 P2.2 任务指定的 17px 附件变体。两者都需要按已接受层登记（CONFIRM + 落地之后）——我会另立登记任务，并让它按比较器重新确认哪些截图需要条目（手机上过附件菜单后还有 session-attachment-staged）。\n2) 交判的三条：行菜单指针打开不自动高亮第一项——接受（与 2026-10-07 已记录的「焦点进入菜单本身」约定一致；键盘打开仍高亮第一项）；头部菜单切换标签后焦点留在菜单内下一个可聚焦项——接受（优于被替换菜单丢到 body，符合焦点不落 body 的约定）；输入框缩略图按钮无可访问名称——接受为已记录差异，修复牵涉新增文案与 P5.2 Image 接口，另立跟进任务处理（不塞进本版）。\n3) 真机与输入法：按账号所有者的决定放 P7.2（清单在证据目录，README 标注待其执行）；模拟器 Gboard 不组词、iOS Safari 未跑，已如实记入缺口，P7.2 的真实设备清单覆盖这一项。模拟器证据已正确标注为模拟器。\n4) test:ui-composer 未重跑：接受（其旧字段一侧依赖 P3.2/P5.3 按计划移除的 .ant-input 选择器；composer 对照由同提交运行覆盖）。\n5) 跟随尾部缺陷本批未出现（会话无异步图片）：如实记录即可。\n6) COMMIT 引用因未落地预期读不到、探针 bgj 记录 HEAD 与干净树：接受。",
+    "taskId": "34Za39Ov1yysHZaYL6wgJ"
+   }
+  },
+  "response": {
+   "timestamp": "2026-10-10T11:44:06.549Z",
+   "isError": false,
+   "text": "{\n  \"id\": \"61sATHPY66znwxRZorvP8d\",\n  \"taskId\": \"34Za39Ov1yysHZaYL6wgJ\",\n  \"evidenceId\": \"4YaPO25KrZzGyHllghOKYg\",\n  \"evidenceRevision\": \"1\",\n  \"criterionRevision\": \"0905df920243784467852698a6570186dd3d99284215dbdfdea4bc91272157ee\",\n  \"evidenceDigest\": \"6f0931ccd70e1d4f7d2b0920a9245931732498837a3cc9780c64b8cd928c01c2\",\n  \"decision\": \"CONFIRM\",\n  \"note\": \"协调者判定：CONFIRM（第 1 版）。核对：会话侧组件在交付上已无 antd 导入（我按 928b9c162 全量 grep，只剩 P6 清单的 StatusTag、测试 __fixtures__ 与两个已有归属的页面测试），提交结构干净（公共组件/业务切换/用例/合并各一），检查矩阵（严格 56/56、模拟器 23/23、合并检查 399 文件 5163、OrbitKit 3669、P0 矩阵 101）齐全。逐条处置：\\n1) 标准 P0 的 6 个失败 = 本批迁移差异，接受：session-attachment-staged（2 个明色桌面）是已验收焦点约定「关闭后焦点回到发起按钮」的可见结果（焦点回到 + 落在输入框 :focus-within 内；输入框内部逐像素相同，只有轮廓与阴影；暗色在阈值内）；session-attachment-menu（4 个手机）是 P2.2 任务指定的 17px 附件变体。两者都需要按已接受层登记（CONFIRM + 落地之后）——我会另立登记任务，并让它按比较器重新确认哪些截图需要条目（手机上过附件菜单后还有 session-attachment-staged）。\\n2) 交判的三条：行菜单指针打开不自动高亮第一项——接受（与 2026-10-07 已记录的「焦点进入菜单本身」约定一致；键盘打开仍高亮第一项）；头部菜单切换标签后焦点留在菜单内下一个可聚焦项——接受（优于被替换菜单丢到 body，符合焦点不落 body 的约定）；输入框缩略图按钮无可访问名称——接受为已记录差异，修复牵涉新增文案与 P5.2 Image 接口，另立跟进任务处理（不塞进本版）。\\n3) 真机与输入法：按账号所有者的决定放 P7.2（清单在证据目录，README 标注待其执行）；模拟器 Gboard 不组词、iOS Safari 未跑，已如实记入缺口，P7.2 的真实设备清单覆盖这一项。模拟器证据已正确标注为模拟器。\\n4) test:ui-composer 未重跑：接受（其旧字段一侧依赖 P3.2/P5.3 按计划移除的 .ant-input 选择器；composer 对照由同提交运行覆盖）。\\n5) 跟随尾部缺陷本批未出现（会话无异步图片）：如实记录即可。\\n6) COMMIT 引用因未落地预期读不到、探针 bgj 记录 HEAD 与干净树：接受。\",\n  \"decidedAt\": \"2026-10-10T11:44:02.913Z\",\n  \"decidedByType\": \"AGENT\",\n  \"decidedById\": \"34ZHGcIxwsZUxkgh2z65V\",\n  \"decidingSessionId\": \"34b245G3NiwgVVUj2JFJw\",\n  \"publicId\": \"61sATHPY66znwxRZorvP8d\",\n  \"taskPublicId\": \"34Za39Ov1yysHZaYL6wgJ\",\n  \"decidedByPublicId\": \"34ZHGcIxwsZUxkgh2z65V\",\n  \"evidencePublicId\": \"4YaPO25KrZzGyHllghOKYg\",\n  \"decidingSessionPublicId\": \"34b245G3NiwgVVUj2JFJw\"\n}"
+  }
+ },
+ "cited": {
+  "taskId": "34Za39Ov1yysHZaYL6wgJ",
+  "evidenceRevision": 1,
+  "evidenceDigest": "6f0931ccd70e1d4f7d2b0920a9245931732498837a3cc9780c64b8cd928c01c2",
+  "verdict": "CONFIRM",
+  "decisionRecord": "61sATHPY66znwxRZorvP8d",
+  "decidedAt": "2026-10-10T11:44:02.913Z",
+  "decidingSessionId": "34b245G3NiwgVVUj2JFJw",
+  "document": "p5.3/README.md"
+ }
+}

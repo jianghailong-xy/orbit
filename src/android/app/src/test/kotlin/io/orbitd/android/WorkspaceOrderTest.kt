@@ -3,6 +3,9 @@ package io.orbitd.android
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.*
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -37,5 +40,8 @@ class WorkspaceOrderTest {
         val rows = workspaces(server)
         assertEquals(ios, orderedWorkspaces(rows.reversed()).map { it.id })
         assertEquals(ios, orderedWorkspaces(rows.sortedBy { it.name }).map { it.id })
+        // The realtime directory's raw rows (Tasks' assignee lists, A05-2) come out in the same order.
+        val raw = Wire.json.parseToJsonElement(server).jsonArray.map { it.jsonObject }
+        assertEquals(ios, orderedWorkspaceRows(raw.reversed()).map { it.getValue("id").jsonPrimitive.content })
     }
 }

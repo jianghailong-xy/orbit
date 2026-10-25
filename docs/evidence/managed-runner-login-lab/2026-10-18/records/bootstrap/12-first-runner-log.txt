@@ -1,0 +1,6 @@
+[orbit-runner 2026-10-17T23:49:13.061Z] managed runner instance identity read; it is sent with every request
+[orbit-runner 2026-10-17T23:49:13.062Z] runner "orbit-managed" online -> https://10.0.2.2:13711 (max 2 concurrent)
+[orbit-runner 2026-10-17T23:49:28.063Z] claude plan-usage unavailable: open /var/lib/orbit/home/.claude/.credentials.json: no such file or directory
+[orbit-runner 2026-10-17T23:49:49.145Z] session 01a14c45-8cba-738b-8d51-ce71943b8178 — auto-initialized git repo at "/var/lib/orbit/home/orbit-repos/default" (autoInitGit)
+[orbit-runner 2026-10-17T23:49:49.155Z] session 01a14c45-8cba-738b-8d51-ce71943b8178 — isolated in worktree /var/lib/orbit/home/.orbit/worktrees/01a14c45-8cba-738b-8d51-ce71943b8178 (branch orbit/t05-first-user-first-session-37ce87 @ 5c47ffce)
+[orbit-runner 2026-10-17T23:49:49.208Z] > interactive run 01a14c45-8cba-738b-8d51-ce71943b8178 — t05 first user first session

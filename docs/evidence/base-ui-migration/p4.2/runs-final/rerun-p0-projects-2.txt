@@ -1,0 +1,21 @@
+argv: env P32_SNAPSHOTS=/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-p0-projects-2-shots P32_OUTPUT=/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-p0-projects-2-out P32_PORT=4173 npx playwright test --config ui-migration/p32-reference.config.mjs --update-snapshots=all --project chromium-dark-phone -g projects
+head: a794459b14424e0fbc239a6947d589fa4852e946
+started: 2026-10-08T13:28:54Z
+
+P0 expected screenshots: 88 P0.2 originals, 150 main drift references, 14 accepted migration differences.
+
+Running 3 tests using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-p0-projects-2-shots/chromium-dark-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-p0-projects-2-shots/chromium-dark-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-p0-projects-2-shots/chromium-dark-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-p0-projects-2-shots/chromium-dark-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-p0-projects-2-shots/chromium-dark-phone/project-graph-fullscreen.png, writing actual.
+  ✓  1 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-p0-projects-2-shots/chromium-dark-phone/projects-loading.png, writing actual.
+  ✓  2 [chromium-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (658ms)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-p0-projects-2-shots/chromium-dark-phone/projects-error.png, writing actual.
+  ✓  3 [chromium-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.8s)
+
+  3 passed (11.8s)
+exit=0

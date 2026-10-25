@@ -241,7 +241,9 @@ SELECT id, runner_id, consume_state, consume_outcome, refresh_state, failure_cod
    - `CAPABILITY_MISSING`：runner 版本不支持。
    - `RUNNER_DRAINING`：正在升级。
    - `SNAPSHOT_MISSING`：没有带账户的块。
-2. `runner.heartbeat_lease_owner`、`heartbeat_draining`、`capabilities`、`last_heartbeat_at` 能直接看到原因。
+2. `runner.heartbeat_lease_owner`、`heartbeat_draining`、`capabilities` 和最近一次心跳能直接看到原因。最近一次心跳是
+   `GREATEST(runner_presence.last_beat_at, runner.last_heartbeat_at)`：每次心跳都写 `runner_presence`，
+   `runner.last_heartbeat_at` 最多每 5 分钟才写一次，单看它会晚最多 5 分钟。
 3. 不需要处理：期限到后结算为 NOT_ATTEMPTED/CONSUME_EXPIRED（从未 claim，确定未扣费）。
 
 ### 4.2 一直 CONSUMING
@@ -454,7 +456,9 @@ bash scripts/test-codex-reset-fault-injection.sh
    - 检查每台 runner 是否已声明 capability：
      ```sql
      SELECT name, version, 'codex-rate-limit-reset-v1' = ANY (capabilities) AS reset
-       FROM runner ORDER BY last_heartbeat_at DESC NULLS LAST;
+       FROM runner
+      ORDER BY GREATEST((SELECT p.last_beat_at FROM runner_presence p WHERE p.runner_id = runner.id),
+                        last_heartbeat_at) DESC NULLS LAST;
      ```
    - ChatGPT 登录的 runner，下一次 usage 读取后出现 reset credit（读取周期见 §2.4）。
 

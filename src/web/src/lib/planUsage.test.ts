@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   bindingPlanUsageRow,
   currentPlanUsageRows,
+  kimiNoQuotaLimit,
   planUsageRows,
   planUsageSnapshotForProvider,
   planUsageSnapshots,
@@ -57,6 +58,42 @@ describe('planUsageRows', () => {
     });
   });
 
+  it("names Kimi Code's windows as its own /usage panel does: one monthly bar, the total", () => {
+    const rows = planUsageRows({
+      provider: 'kimi',
+      fiveHour: { utilization: 12 },
+      sevenDay: { utilization: 34 },
+      month: { utilization: 91.4 },
+      monthCode: { utilization: 30 },
+    });
+    expect(rows.map(({ key, label, percent, nearLimit }) => ({ key, label, percent, nearLimit }))).toEqual([
+      { key: 'fiveHour', label: '5h limit', percent: 12, nearLimit: false },
+      { key: 'sevenDay', label: 'Weekly limit', percent: 34, nearLimit: false },
+      { key: 'month', label: 'Monthly limit', percent: 91, nearLimit: true },
+    ]);
+    // What stops the login is its month, though its 5-hour window has room.
+    expect(bindingPlanUsageRow(rows)?.key).toBe('month');
+    // A window the runner did not read is not drawn.
+    expect(planUsageRows({ provider: 'kimi', sevenDay: { utilization: 7 } }).map((row) => row.label)).toEqual(['Weekly limit']);
+  });
+
+  it("never draws Kimi's coding share of the month, nor names it as what stops the login", () => {
+    // A share above its month cannot come from Kimi — it is part of the month — and stands here so
+    // that a reader still weighing it would name it.
+    const rows = currentPlanUsageRows({
+      provider: 'kimi',
+      fiveHour: { utilization: 12 },
+      sevenDay: { utilization: 34 },
+      month: { utilization: 41 },
+      monthCode: { utilization: 97 },
+    });
+    expect(rows.map((row) => row.label)).toEqual(['5h limit', 'Weekly limit', 'Monthly limit']);
+    expect(rows.map((row) => row.label)).not.toContain('Monthly · code');
+    expect(bindingPlanUsageRow(rows)).toMatchObject({ key: 'month', percent: 41 });
+    // A coding share alone is nothing to draw.
+    expect(planUsageRows({ provider: 'kimi', monthCode: { utilization: 30 } })).toEqual([]);
+  });
+
   it('selects Kimi quota without leaking a flat Kimi snapshot into Claude', () => {
     const nested = {
       claude: { provider: 'claude', fiveHour: { utilization: 18 } },
@@ -70,28 +107,42 @@ describe('planUsageRows', () => {
     expect(planUsageSnapshotForProvider(flatKimi, 'claude')).toBeNull();
     expect(planUsageSnapshotForProvider(flatKimi, 'codex')).toBeNull();
   });
+
+  it('knows a Kimi login with no quota limit from one never read or one whose read failed', () => {
+    // Read, and the answer held no window: a plan with no quota limit.
+    expect(kimiNoQuotaLimit({ provider: 'kimi', fetchedAt: '2026-10-09T00:00:00Z' })).toBe(true);
+    // The month's coding share counts though it is never drawn: a plan reporting it has a limit.
+    expect(kimiNoQuotaLimit({ provider: 'kimi', monthCode: { utilization: 30 } })).toBe(false);
+    expect(kimiNoQuotaLimit({ provider: 'kimi', fiveHour: { utilization: 0 } })).toBe(false);
+    // Never read at all, or a windowless read of another engine's — both "No quota reported".
+    expect(kimiNoQuotaLimit(null)).toBe(false);
+    expect(kimiNoQuotaLimit({ provider: 'claude' })).toBe(false);
+  });
 });
 
 describe('sessionPlanUsage', () => {
   const runner = { claude: { fiveHour: { utilization: 100 } }, codex: { primary: { utilization: 4 } } };
 
-  it('shows a built-in engine the quota of the login the runner reported', () => {
-    expect(sessionPlanUsage('claude', runner)?.fiveHour?.utilization).toBe(100);
-    expect(sessionPlanUsage('codex', runner)?.primary?.utilization).toBe(4);
+  it('shows an engine’s own sign-in the quota of the login the runner reported', () => {
+    expect(sessionPlanUsage('claude', 'claude', runner)?.fiveHour?.utilization).toBe(100);
+    expect(sessionPlanUsage('codex', 'codex', runner)?.primary?.utilization).toBe(4);
   });
 
-  it('shows a configured provider the quota of its own credential', () => {
+  it('shows a key the quota of its own credential, on whichever engine runs it', () => {
     const configured = [
       { slug: 'anthropic', label: 'Anthropic', runtime: 'claude', models: [], planUsage: { fiveHour: { utilization: 12 } } },
     ];
-    expect(sessionPlanUsage('anthropic', runner, configured)?.fiveHour?.utilization).toBe(12);
+    expect(sessionPlanUsage('claude', 'anthropic', runner, configured)?.fiveHour?.utilization).toBe(12);
   });
 
-  it('never lets a configured provider inherit the runner login it does not bill', () => {
+  it('never lets a key inherit the runner login it does not bill', () => {
     const configured = [{ slug: 'anthropic', label: 'Anthropic', runtime: 'claude', models: [] }];
-    expect(sessionPlanUsage('anthropic', runner, configured)).toBeNull();
+    expect(sessionPlanUsage('claude', 'anthropic', runner, configured)).toBeNull();
     // Unknown slug (a row since deleted) resolves the same way, not to the runner's numbers.
-    expect(sessionPlanUsage('anthropic', runner, [])).toBeNull();
+    expect(sessionPlanUsage('claude', 'anthropic', runner, [])).toBeNull();
+    // A DeepSeek key on DeepSeek Harness or OpenCode is no sign-in either; nor is OpenCode's own config.
+    expect(sessionPlanUsage('dsh', 'deepseek', runner, [])).toBeNull();
+    expect(sessionPlanUsage('opencode', 'opencode', runner)).toBeNull();
   });
 
   it('keeps a row that shadows a built-in slug out of the way of the engine it shadows', () => {
@@ -99,7 +150,7 @@ describe('sessionPlanUsage', () => {
       { slug: 'claude', label: 'Claude', runtime: 'claude', models: [], planUsage: { fiveHour: { utilization: 1 } } },
     ];
     // isBuiltinProvider wins at dispatch, so the runner's login is the credential being spent.
-    expect(sessionPlanUsage('claude', runner, shadow)?.fiveHour?.utilization).toBe(100);
+    expect(sessionPlanUsage('claude', 'claude', runner, shadow)?.fiveHour?.utilization).toBe(100);
   });
 });
 

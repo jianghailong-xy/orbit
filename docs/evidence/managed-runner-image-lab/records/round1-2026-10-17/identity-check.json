@@ -1,0 +1,8 @@
+{
+ "workspaceId": "34hN5H8kTS11gHpbHImR5",
+ "sessionId": "34hN5HBZmCEWnq7IcjQeJ",
+ "status": "AWAITING_INPUT",
+ "shellOutput": [
+  "baseline: Orbit Runner <runner@orbit.invalid> | Orbit Runner <runner@orbit.invalid> | orbit: baseline\n0\nfile:/etc/gitconfig\trunner@orbit.invalid\n"
+ ]
+}

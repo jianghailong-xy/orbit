@@ -54,8 +54,9 @@ reading/cache APIs; auth, wire DTOs, the unified destination and A07/A08 interfa
   deliberately excludes the content-padding origin. A touch pauses following for selection;
   scrolling to the bottom or Jump to latest resumes it. Historical reading stays in place.
   A linked record has its own saved position, so reading it does not replace the return source's
-  bookmark. Recreating an already-open record restores its current position. Connection notices
-  share a fixed-height status row so reconnecting does not displace the transcript.
+  bookmark. Recreating an already-open record restores its current position. The reconnect notice
+  ("Saved messages · Reconnecting…" and Retry) shows only while reconnecting, under the transcript,
+  so its coming and going never displaces the line being read (A06-18).
 - Saved reading windows use account-scoped storage, at most 200 events and 1 MiB. Large windows
   shrink around the anchor. If even one event exceeds that limit, only position metadata is
   stored and restoration pages to its sequence; offline failure offers Retry rather than
@@ -75,17 +76,19 @@ reading/cache APIs; auth, wire DTOs, the unified destination and A07/A08 interfa
   fetches truncated payloads first, so a collapsed preview is not silently copied as full output.
 - Tool inputs/results, error status, live snapshots, subagent records and background jobs remain
   readable. Background REST fields are `toolUseId`, `shellId` and `latestOutput`, with live whole
-  snapshots overlaid. Session details include branch/base/worktree state, changed files, diff,
+  snapshots overlaid. Session details (the ⋯ menu's, A06-18) include branch/base/worktree state, changed files, diff,
   and related task/project/session routes. Interactive cards remain their feature tasks' work.
 - An unexplained failed `turn_end` has a readable, copyable notice at its original sequence.
   Success/completed, absent subtype, authoritative status and already explained outcomes do not
   add that notice. A page starting mid-turn does not infer that an off-page reply was missing.
 - Authenticated attachment and same-session legacy artifact images use the existing API. Other
-  HTTPS images use a separate client with no auth or redirects. Images are sampled to at most
-  1440×2560 within a fixed preview area to avoid late layout shifts; a dialog allows zoom/pan.
-  File links use Android's document destination chooser. Images/downloads are bounded to the
-  server's 25 MiB upload limit; opt-in full-event responses are bounded to 40 MiB. These bounds
-  do not alter default REST/auth requests.
+  HTTP and HTTPS images, from any host as on iOS (the account owner's decision of 2026-10-15,
+  card 34g6JcZwpKTUcwc5WvuVx), use a separate client with no auth. Unlike iOS, that client
+  follows no redirects, and an address carrying credentials is refused. Images are sampled to at
+  most 1440×2560 within a fixed preview area to avoid late layout shifts; a dialog allows
+  zoom/pan. File links use Android's document destination chooser. Images/downloads are bounded
+  to the server's 25 MiB upload limit; opt-in full-event responses are bounded to 40 MiB. These
+  bounds do not alter default REST/auth requests.
 
 Compatibility observation for A01: web also accepts old `payload.images`; the referenced iOS
 reducer uses `attachments` and does not establish that legacy format as a confirmed iOS requirement.
@@ -171,3 +174,79 @@ package and task comment. This code repair does not resubmit a completion envelo
 external gaps, pass A05 as a whole, or authorize A07/A08 to start.
 
 Parser reference: [commonmark-java 0.25.1](https://github.com/commonmark/commonmark-java/tree/commonmark-parent-0.25.1).
+
+## A06c: increments since c6792d4bf and the baseline gaps
+
+A01b's list (part 2/6, A06) and the four gaps its part 1/6 named, ported from the iOS sources at 4f695a286.
+Each is a projection in `reader/` beside the A06 rows, not a second renderer.
+
+- **Engine stderr and transient errors** (`EngineErrors.kt`, `TranscriptRows.kt` `EngineReading`): a `system`
+  event's `notice`, or stderr whose `diagnostic` is recoverable/degraded (A06-1; a persisted codex 401
+  `token_invalidated` line is matched by the legacy rule), is a notice row. Other stderr is an error row: ANSI
+  stripped, the two known provider-noise lines dropped, repeats folded `×N`, verification continuations joined,
+  and an apply_patch/parser failure settles the unresolved call it names. A reply or `error` event that is the
+  provider failing becomes an `auto_retry` row (`variant` quota/apiError, `stale`, `afterUserMsg`) or an error
+  row, classified by the copy of @orbit/shared `events.ts` that `EngineErrorsParityTest` reads back — Codex's
+  exhausted 429 budget is transient (A06-2). The countdown/Retry card itself is A07c's.
+- **Sticky question capsule** (`StickyQuestions.kt`): the newest question above the item that owns the
+  list's top line; card turns are named by their card's words and a background job's news is not a question.
+  Both answers go through `StickyQuestionHold` (A06-4). Since A06-18 (iOS d87e5fa67, e9c1552f5) it is a one-line
+  capsule in the bar's middle — the arrow alone over the reader's own words, a card's label as it stands — shown only
+  off the live tail (when the jump row shows), and the bar names no session; it folds away with the bar while a
+  phone's composer is focused.
+- **Tail pinning on resize** (`TailPinning.kt`, A06-5): the list's own measure asks `followsResize`.
+- **Workflow progress** (`TaskProgress.kt`, `TaskProgressViews.kt`): `task_progress` frames, or the end's
+  `progress` (background_task / REST background list), drawn as phases, agent rows and totals on Agent/Workflow
+  calls and in Session details' background list; `TaskProgressCopyParityTest` reads the shared golden table.
+  Agent rows open to model, error and the Agent call's nested activity (A06-6).
+- **Orbit context card** (`AttachedNote.kt`, A06-9) and the bubble split at `controlPlaneNote`.
+- **Image file rows** (`text/MarkdownFileRef.kt`, A06-3) for links the session can serve as an image.
+- **Worktree bar** (`Worktree*.kt`, `MergeRecovery*.kt`) above the composer: Commit/Merge/Resolve/Retry/Adopt,
+  the target caret, merge recovery's row and review, the changed files with diffs, a binary file's current bytes
+  (A06-7, `GET sessions/:id/worktree-file`), and a coordinator's integration line (A06-8). Outcomes are said in
+  the bar until the app has a toast host (A05-4).
+
+`transcript-fixture.py` mode `A06C` (28 events, worktree detail, merge/commit/resume POSTs, diff, worktree-file,
+artifacts and background reads) backs `TranscriptDeviceTest#a06cReaderIncrements`:
+
+```sh
+A06_TEST=io.orbitd.android.reader.TranscriptDeviceTest#a06cReaderIncrements bash src/android/scripts/reader-device-test.sh 36 \
+  <app-debug.apk> <app-debug-androidTest.apk> <new evidence dir> emulator-5554
+```
+
+Its last step (A06-5, the keyboard rising) runs at the emulator's own `wm size`/`wm density` and puts back the
+script's 720x1280 @320 after: at 360×640 dp the toolbar, link row, status and composer leave the transcript no
+height above the keyboard (iOS folds that chrome while you type; task 34cgb905954FvbeD2Wknw). The script checks
+its logs with `rg`, so ripgrep has to be on `PATH`.
+
+`WorktreeRealStackDeviceTest` commits and merges a real worktree on the A11 isolated stack (its runner and the
+stand-in engine that writes `A11_STACK_NOTES.md`), through `tasks-projects-stack-device-test.sh` with
+`A11_TEST=io.orbitd.android.reader.WorktreeRealStackDeviceTest` and the args file from `tasks-projects-stack-args.py`.
+
+## A06d: increments since 4f695a286
+
+A01c's list (part 2/7: A06-11, 12, 13, 14, 15 and 17), ported from the iOS sources at 9530c051f.
+
+- **Thinking rows** (`ThinkingRows.kt`, `TranscriptRows.kt`, core `Transcript.kt`; A06-11, iOS d55e9900b and
+  471b2afbb): adjacent blocks fold into one settled row, folded until tapped, that says
+  `Thought for 1m 47s · 3 blocks · 21k chars` from the runner's stored `thinkingMs` (summed as blocks fold), or
+  `Thought · 84 chars` without it. A block closed empty keeps what this device streamed into it — its local copy
+  only, also across a reconnect's overlap — and with nothing streamed draws no row. Reasoning still being written is
+  open and held to 160 dp at its newest line. There is no device-clock fallback: streamed deltas carry no stamp and
+  a reconnect replays the prefix, so it could only guess.
+- **Fade into the composer band** (`SessionReader.kt` `fadesIntoComposerBand`; A06-12, iOS 9d3751ec2): the list's last
+  20 dp dissolve (offscreen + DstIn) and its tail row keeps that room (20 + 1 dp). Jump to latest stays a row under
+  the list, so it is never in the fade.
+- **The tail follows its rows** (`TailPinning.kt` `followsGeometry`; A06-13, iOS 900e1810d and 66c42e852): asked on
+  every layout of a pinned, still list, a tail pushed out of view by rows that grew is followed back within 80 dp
+  (in place within 0.25 dp); a scroll never is. The in-list card rail re-pins as it grows.
+- **One turn gate** (`WorktreeBarLogic.turnActive`; A06-14, iOS f759d743e): the worktree bar and merge recovery's
+  review hold Merge, Commit and the recovery steps while the turn is PENDING or RUNNING, or AWAITING_INPUT or
+  INTERRUPTED with the composer's message on its way or sub-agents still running.
+- **Answered questions** (core `QuestionRecords.kt`, `QuestionRecordViews.kt`; A06-15, iOS 94f61b52c and 010e59792):
+  folded, the card is the record — each question's opening and its answer, or the reply given in the conversation;
+  a tap replays every option with its whole description and the pick ticked. `QuestionRecordsParityTest` reads
+  `src/shared/src/question-record.fixture.json`.
+- **A running agent's live line** (`SubagentLiveLine.kt`; A06-17, iOS ea175e5af): a folded, running Agent, Task or
+  Workflow card says its sub-agent's last step in place of its progress line. `ToolLine` approximates OrbitKit's
+  `ToolDisplay` (label and file, else label and summary).

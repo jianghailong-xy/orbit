@@ -399,8 +399,14 @@ body {
     <tr><td>不做:在这页删登录</td><td>“Sign out” 收在 <code>⋯</code> 里,不给独立按钮。清掉一台机器的凭据是个破坏性动作,不该和 Edit/Delete 一样显眼。</td></tr>
     <tr><td>老 runner 的兼容</td><td>没上报 <code>engines[]</code> 的旧 runner:整卡显示一行
       “This runner is on v0.1.7x — update it to see engine status”,<b>不要拿三行 Unknown 糊过去</b>。</td></tr>
-    <tr><td>OpenCode 呢</td><td>不进这一段。它是第四个 <code>AgentProvider</code> 但不是 <code>LoginEngine</code>,没有可中继的登录流程,
-      放进来会多出一行永远只能显示 Unknown 的东西。</td></tr>
+    <tr><td>OpenCode 呢</td><td>它也有自己的一行:这一段的入选规则是 <b>Orbit 能替你装的引擎</b>(<code>InstallEngine</code> 的六个:
+      <code>claude / codex / kimi / antigravity / opencode / dsh</code>,<code>src/shared/src/dto.ts:1109</code>),
+      登录中继只是 <code>LoginEngine</code> 四家装好之后的附加能力,不是入选条件。它没有可中继的登录流程 ——
+      所以这行不给 Sign in:没装时写 “Not installed” + <b>Install</b>,装上之后的登录在机器上做
+      (<code>opencode auth login</code>,它要交互式地问用哪个底层 provider),或让它用已配置的 key。
+      装好之后状态那一列照旧有话说,而且不是 Unknown 一条道 —— runner 自己跑 <code>opencode auth list</code>:
+      有凭据就是 Signed in,问不出来才写 Unknown(零凭据也算问不出来,因为本地 / 免鉴权的 provider 不需要凭据);
+      空的是额度那一列(<code>—</code>):没有可读的额度。</td></tr>
     <tr><td>iOS / macOS</td><td>本稿只画 web。原生端如果跟,建议直接跟 <b>A</b> 的行组件(logo + 名 + 状态 pill + 额度条),
       两端的 runner 详情页已经有同款额度条,视觉不用新造。</td></tr>
   </table>

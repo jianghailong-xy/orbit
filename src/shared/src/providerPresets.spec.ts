@@ -20,7 +20,8 @@ describe('PROVIDER_PRESETS', () => {
     for (const p of PROVIDER_PRESETS) {
       // Harness choices are opaque ACP values that must come from configOptions. It has no
       // static model/default/window fallback (docs/deepseek-harness-runtime-contract.md §4).
-      if (p.runtime === AgentProvider.DSH) {
+      // Neither has Cursor CLI, whose ACP catalogue is read per key or account (cursor contract §10).
+      if (p.runtime === AgentProvider.DSH || p.runtime === AgentProvider.CURSOR) {
         expect(p.modelsFromRuntime).toBe(true);
         expect(p.models).toEqual([]);
         expect(p.defaultModel).toBe('');

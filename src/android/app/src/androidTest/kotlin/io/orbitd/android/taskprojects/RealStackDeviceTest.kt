@@ -12,12 +12,18 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.*
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.projects.ProjectAttention
+import io.orbitd.android.projects.ProjectCrossings
+import io.orbitd.android.projects.ProjectDone
 import io.orbitd.android.projects.ProjectPage
 import io.orbitd.android.projects.RunSettings
 import io.orbitd.android.projects.StartProjectCopy
@@ -162,11 +168,11 @@ class RealStackDeviceTest {
         app.getSharedPreferences("orbit.tasks", Context.MODE_PRIVATE).edit().clear().commit()
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
         if (app.session.state.value is AuthState.SignedIn) runBlocking { app.session.logout() }
-        awaitText("Instance address")
-        compose.onNodeWithText("Instance address").performTextReplacement(server)
+        awaitText("Welcome back")
+        compose.chooseServer(server)
         compose.onNodeWithText("Email").performTextReplacement(arg("${who}Email"))
         compose.onNodeWithText("Password").performTextReplacement(arg("${who}Password"))
-        compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
+        compose.onNodeWithText("Sign In").performScrollTo().performClick()
         compose.waitUntil(30_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
         val account = (app.session.state.value as AuthState.SignedIn).handle.account
         assertEquals("signed in as the stack's $who", seed.obj("accounts")!!.obj(who)!!.text("id"), account.userId)
@@ -386,7 +392,7 @@ class RealStackDeviceTest {
         compose.onNodeWithTag("item:$item:MARK_HANDLED").performScrollTo().performClick()
         compose.onNodeWithText("Why is it no longer open?").performScrollTo().performTextInput(note)
         hideKeyboard()
-        compose.onNodeWithTag("item:$item:MARK_HANDLED").performScrollTo().performClick()
+        compose.onNodeWithTag("item:$item:mark-handled-confirm").performScrollTo().performClick()
         compose.waitUntil(30_000) { get("/projects/$id/open-items").jsonObject.objects("needsYou").none { it.text("itemId") == item } }
         val settled = get("/projects/$id/open-items").jsonObject.objects("settled").firstOrNull { it.text("itemId") == item }
         record("item after Mark handled", settled ?: "not open, not in settled")
@@ -402,12 +408,16 @@ class RealStackDeviceTest {
         val before = get("/projects/$id/promotions/current").jsonObject
         record("promotion before", "${before.text("promotionId")} ${before.text("state")} ${before.text("sourceSha")}")
         signIn(); open("orbit-project:$id"); awaitTag("project-detail"); awaitIn("project-detail", main.text("title")!!)
-        awaitScrollTo("project-detail", hasTestTag("open-item:${item.text("id")}")); compose.onNodeWithTag("open-item:${item.text("id")}").performClick()
+        // A11-4: the project's open items are in the toolbar's sheet; the merge's item opens its line in the coordinator conversation.
+        tap("project-open-items"); awaitTag("open-item:${item.text("id")}"); compose.onNodeWithTag("open-item:${item.text("id")}").performClick()
         awaitTag("interaction-cards")
         compose.waitUntil(30_000) { runCatching { compose.onNodeWithTag("promotion:$promotion").assertIsDisplayed() }.isSuccess }
         capture("stack-merge-card")
-        compose.onNodeWithTag("promotion:$promotion:CONFIRM_MERGE").performScrollTo().performClick()
-        awaitTag("confirm:CONFIRM_MERGE"); capture("stack-merge-confirm"); compose.onNodeWithTag("confirm:CONFIRM_MERGE").performClick()
+        // A11-9: the merge is one line in the conversation; Merge to main is pressed in the review it opens (iOS: no second ask).
+        tap("promotion:$promotion:preview"); awaitTag("card-review")
+        compose.waitUntil(30_000) { compose.onAllNodes(hasTestTag("promotion:$promotion:CONFIRM_MERGE") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        capture("stack-merge-review")
+        compose.onNodeWithTag("promotion:$promotion:CONFIRM_MERGE").performClick()
         fun state() = runCatching { get("/projects/$id/promotions/current").jsonObject }.getOrNull()
             ?.takeIf { it.text("promotionId") == promotion }?.text("state")
             ?: if (get("/projects/$id/promotions/merged").toString().contains(promotion)) "MERGED (listed under merged)" else "not current"
@@ -487,6 +497,8 @@ class RealStackDeviceTest {
         awaitScrollTo("project-detail", hasTestTag("start-request")); capture("stack-start-asked-0-row")
         tap("start-request:action")
         awaitTag("interaction-cards"); awaitScrollTo("transcript-list", hasTestTag(card))
+        // A08-2: the start card is a preview in the conversation, read and answered in the review it opens.
+        tap("$card:preview"); awaitTag("card-review")
         compose.waitUntil(60_000) { compose.onAllNodes(hasTestTag("$card:START") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("$card-asked").assertTextContains("${StartProjectCopy.coordinatorAsked} ", substring = true)
         capture("stack-start-asked-1-top")
@@ -556,5 +568,205 @@ class RealStackDeviceTest {
         compose.waitUntil(60_000) { projectRecord(id).text("status") == "OPEN" }
         record("after Reopen", projectRecord(id).let { "status=${it.text("status")} doneBy=${it["doneBy"]}" })
         capture("stack-reopened")
+    }
+
+    // MARK: A11c · closing, crossings, the run queue, a landing that stopped reporting (seed-close.mjs, seed-stuck.mjs)
+
+    /** A11-2, the conversation: the coordinator's "Is this project done?" drawn whole in the conversation it was asked from;
+     * Record as done is the server's record (DONE, by the owner, the request answered), and Reopen project on the receipt opens
+     * it again. */
+    @Test fun s16_theCoordinatorAsksIfItIsDoneAndTheOwnerRecordsItInItsConversation() = journey("stack-done-asked") {
+        val asked = project("closeAsked"); val id = asked.text("id")!!
+        val row = record("GET /projects/$id/open-items → doneRequest", get("/projects/$id/open-items").jsonObject.obj("doneRequest")!!)
+        val request = row.obj("doneRequest")!!
+        signIn(); open("orbit-session:${asked.text("coordinatorSessionId")}")
+        awaitScrollTo("transcript-list", hasTestTag("done:$id"), 60_000)
+        compose.onNodeWithTag("done:$id-judgment").assertTextEquals(request.text("judgment")!!)
+        compose.onNodeWithTag("done:$id-meta").assertTextContains("${asked.text("title")} · asked by the coordinator · waiting ", substring = true)
+        compose.onNodeWithTag("done:$id-meta").performScrollTo(); capture("stack-done-asked-0-card")
+        compose.onNodeWithTag("done:$id-gap:${request.objects("gaps").single().text("criterionKey")}").performScrollTo()
+        capture("stack-done-asked-0b-gap")
+        compose.onNodeWithTag("done:$id-record").performScrollTo().assertTextEquals(ProjectDone.recordAsDone).performClick()
+        compose.waitUntil(60_000) { projectRecord(id).text("status") == "DONE" }
+        val done = projectRecord(id)
+        record("after Record as done", "status=${done.text("status")} doneBy=${done.text("doneBy")} acceptedGaps=${done.objects("acceptedGaps").map { it.text("criterionKey") }}")
+        assertEquals("OWNER", done.text("doneBy"))
+        record("GET /projects/$id/open-items → doneRequest after", get("/projects/$id/open-items").jsonObject["doneRequest"])
+        awaitScrollTo("transcript-list", hasTestTag("done:$id-receipt"))
+        compose.onNodeWithTag("done:$id-receipt-line").assertTextContains("You recorded this project done · ", substring = true)
+        capture("stack-done-asked-1-receipt")
+        compose.onNodeWithTag("done:$id-reopen").performScrollTo().performClick()
+        compose.waitUntil(60_000) { projectRecord(id).text("status") == "OPEN" }
+        record("after Reopen project", projectRecord(id).let { "status=${it.text("status")} doneBy=${it["doneBy"]}" })
+        capture("stack-done-asked-2-reopened")
+    }
+
+    /** A11-2 and A11-4, the project page: the projects list says Ready to close, the page's Open items entry and reminder count
+     * the request, its row opens the card, and Not yet… with a note ends the request on the server and hands the note to the
+     * coordinator as its next message. */
+    @Test fun s17_notYetSendsTheOwnersNoteToTheCoordinator() = journey("stack-done-not-yet") {
+        val decline = project("closeDecline"); val id = decline.text("id")!!; val coordinator = decline.text("coordinatorSessionId")!!
+        val request = record("GET /projects/$id/open-items → doneRequest", get("/projects/$id/open-items").jsonObject.obj("doneRequest")!!)
+        signIn(); drawer("Projects"); awaitTag("projects-list"); awaitScrollTo("projects-list", hasTestTag("project:$id"))
+        val ready = hasText(ProjectAttention.readyToCloseSays, substring = true)
+        compose.waitUntil(30_000) { compose.onAllNodes((hasTestTag("project:$id") and ready) or (ready and hasAnyAncestor(hasTestTag("project:$id")))).fetchSemanticsNodes().isNotEmpty() }
+        capture("stack-done-not-yet-0-list")
+        tap("project:$id", "projects-list"); awaitTag("project-detail"); awaitIn("project-detail", decline.text("title")!!)
+        compose.waitUntil(30_000) { compose.onAllNodesWithTag("project-open-items-count", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("project-open-items-count", useUnmergedTree = true).assertTextEquals("1")
+        awaitScrollTo("project-detail", hasTestTag("open-items-attention"))
+        compose.onNodeWithTag("open-items-attention").assertTextContains("1 item needs you", substring = true)
+        capture("stack-done-not-yet-1-page")
+        tap("open-items-attention", "project-detail"); awaitTag("project-done-request")
+        compose.onNodeWithTag("project-done-request").assertTextContains("The coordinator asked · 1 gaps it couldn’t prove", substring = true)
+        capture("stack-done-not-yet-2-open-items")
+        tap("project-done-request:action"); awaitTag("project-done-sheet")
+        compose.onNodeWithTag("project-done-judgment").assertTextEquals(request.obj("doneRequest")!!.text("judgment")!!)
+        capture("stack-done-not-yet-3-card")
+        compose.onNodeWithTag("project-done-not-yet").performScrollTo().performClick()
+        val note = "The testers have not confirmed the notes page yet ($stamp)."
+        compose.onNodeWithTag("project-done-note").performScrollTo().performTextInput(note); hideKeyboard()
+        capture("stack-done-not-yet-4-note")
+        compose.onNodeWithTag("project-done-send").performScrollTo().performClick()
+        compose.waitUntil(60_000) { get("/projects/$id/open-items").jsonObject["doneRequest"].let { it == null || it is JsonNull } }
+        record("GET /projects/$id/open-items → doneRequest after Not yet", get("/projects/$id/open-items").jsonObject["doneRequest"])
+        assertEquals("OPEN", record("project status after Not yet", projectRecord(id).text("status")))
+        // The note is the coordinator's next message: queued, or already in its conversation.
+        fun told() = listOf("/sessions/$coordinator/turns", "/sessions/$coordinator/events/page?limit=200").firstOrNull { note in get(it).toString() }
+        compose.waitUntil(60_000) { told() != null }
+        record("the note, read back from", told())
+        awaitGone("project-done-sheet"); capture("stack-done-not-yet-5-sent")
+    }
+
+    /** A11-3: the crossings the launch project is an end of, each answered in two presses — one approved (the task moves, read
+     * back from the task), one refused (it stays where it was) — and each answer read back from the project's crossings. */
+    @Test fun s18_crossingsAreAnsweredOnTheProjectPage() = journey("stack-crossings") {
+        val to = project("crossTo"); val id = to.text("id")!!; val from = project("crossFrom")
+        val approve = to.obj("moves")!!.obj("approve")!!; val refuse = to.obj("moves")!!.obj("refuse")!!
+        fun crossings() = requireNotNull(ProjectCrossings.rows(get("/projects/$id/handoffs"))) { "unreadable crossings" }
+        fun crossing(taskId: String?) = crossings().single { ProjectCrossings.subjectId(it) == taskId }
+        record("GET /projects/$id/handoffs", crossings().map { "${it.text("id")} ${it.text("kind")} ${it.text("state")} subject=${ProjectCrossings.subjectId(it)}" })
+        val yes = crossing(approve.text("taskId")).text("id")!!; val no = crossing(refuse.text("taskId")).text("id")!!
+        signIn(); open("orbit-project:$id"); awaitTag("project-detail"); awaitIn("project-detail", to.text("title")!!)
+        awaitScrollTo("project-detail", hasTestTag("crossing:$yes"), 60_000)
+        compose.onNodeWithTag("crossings-head").assert(hasAnyChild(hasText(ProjectCrossings.waiting(2))))
+        capture("stack-crossings-0")
+        tap("crossing:$yes:approve", "project-detail"); awaitTag("crossing:$yes:confirm")
+        compose.onNodeWithText("Approve moving “${approve.text("title")}” from ${from.text("title")} to ${to.text("title")}?").assertExists()
+        capture("stack-crossings-1-approve")
+        tap("crossing:$yes:answer", "project-detail")
+        compose.waitUntil(60_000) { crossing(approve.text("taskId")).text("state") != "PENDING" }
+        record("after Approve", crossing(approve.text("taskId")).let { "state=${it.text("state")} decidedAt=${it.text("decidedAt")}" })
+        assertEquals("the approved task moved", id, record("GET /tasks/${approve.text("taskId")} → projectId", taskRecord(approve.text("taskId")!!).text("projectId")))
+        awaitGone("crossing:$yes:confirm"); capture("stack-crossings-2-approved")
+        tap("crossing:$no:refuse", "project-detail"); awaitTag("crossing:$no:confirm")
+        capture("stack-crossings-3-refuse")
+        tap("crossing:$no:answer", "project-detail")
+        compose.waitUntil(60_000) { crossing(refuse.text("taskId")).text("state") != "PENDING" }
+        assertEquals("DENIED", record("after Refuse", crossing(refuse.text("taskId")).text("state")))
+        assertEquals("the refused task stays", from.text("id"), record("GET /tasks/${refuse.text("taskId")} → projectId", taskRecord(refuse.text("taskId")!!).text("projectId")))
+        awaitGone("crossing:$no:confirm"); capture("stack-crossings-4-refused")
+    }
+
+    /** A11-7: the run queue's play press runs a task set to start by hand; the run is the stack runner's, read back to its end. */
+    @Test fun s19_theRunQueuePlayPressRunsTheTask() = journey("stack-run-press") {
+        val queue = project("runQueue"); val id = queue.text("id")!!; val taskId = queue.text("taskId")!!
+        record("GET /projects/$id/panorama/ready → items", get("/projects/$id/panorama/ready?limit=5").jsonObject.objects("items").map { "${it.text("taskId")} ${it.text("runState")}" })
+        signIn(); open("orbit-project:$id"); awaitTag("project-detail"); awaitIn("project-detail", queue.text("title")!!)
+        awaitScrollTo("project-detail", hasTestTag("queue:$taskId:run"), 60_000)
+        compose.onNodeWithTag("queue:$taskId:run").assertTextEquals(ProjectPage.runPress).assertHeightIsAtLeast(48.dp)
+        compose.onNodeWithTag("queue:$taskId:run:play", useUnmergedTree = true).assertExists()
+        capture("stack-run-press-0")
+        tap("queue:$taskId:run")
+        compose.waitUntil(60_000) { taskRecord(taskId).text("status") != "OPEN" }
+        record("status after the press", taskRecord(taskId).text("status"))
+        compose.waitUntil(240_000) { taskRecord(taskId).text("status") in setOf("DONE", "FAILED", "CANCELLED") }
+        assertEquals("DONE", record("status when the run ended", taskRecord(taskId).text("status")))
+        record("its run", taskRecord(taskId).objects("sessions").map { "${it.text("id")} ${it.text("status")} ${it.text("createdAt")}" })
+        capture("stack-run-press-1-ran")
+    }
+
+    /** A11-10: the landing row opens the jobs in flight, and the landing whose runner stopped reporting is retried from its row —
+     * the server ends that generation and queues the next, retried by the owner. Needs `setup.sh stuck` first (it leaves the
+     * stack runner stopped until `setup.sh unstick`). */
+    @Test fun s20_aLandingThatStoppedReportingIsRetriedFromItsJob() = journey("stack-landing-retry") {
+        val stuck = project("landingStuck"); val id = stuck.text("id")!!; val jobId = stuck.text("jobId")!!
+        fun inFlight() = get("/projects/$id/integration").jsonObject.objects("inFlightJobs")
+        record("GET /projects/$id/integration → inFlightJobs", inFlight().map {
+            "${it.text("jobId")} ${it.text("kind")} ${it.text("state")} ${it.text("phase")} timedOut=${it["timedOut"]} retryable=${it["retryable"]} generation=${it["generation"]} limit=${it["limitSeconds"]}s"
+        })
+        assertEquals(true, inFlight().single { it.text("jobId") == jobId }.flag("retryable"))
+        signIn(); open("orbit-project:$id"); awaitTag("project-detail"); awaitIn("project-detail", stuck.text("title")!!)
+        awaitScrollTo("project-detail", hasTestTag("landing-card"), 60_000)
+        compose.onNodeWithTag("landing-head:timed-out", useUnmergedTree = true).assertExists()
+        capture("stack-landing-0-card")
+        tap("landing-card:body", "project-detail"); awaitTag("landing-jobs-sheet")
+        compose.onNodeWithTag("landing-job:$jobId:retry").assertTextEquals(ProjectPage.landingRetry)
+        capture("stack-landing-1-jobs")
+        tap("landing-job:$jobId:retry")
+        compose.waitUntil(60_000) { inFlight().none { it.text("jobId") == jobId } }
+        val next = inFlight().single { it.text("kind") == "LAND_TASK" }
+        record("after Retry", "${next.text("jobId")} ${next.text("state")} generation=${next["generation"]} retriedBy=${next.text("retriedBy")}")
+        assertEquals("OWNER", next.text("retriedBy")); assertEquals(2, next.number("generation"))
+        awaitText("Generation 2 · retried by you at"); capture("stack-landing-2-retried")
+    }
+
+    // MARK: A08c · a batch create's review and a merge-check change, answered on cards the stack runner's own doors filed
+    // (scripts/a11-stack/seed-a08c.mjs, from the main project's coordinator session). The answer is read back from the server here;
+    // finish-a08c.mjs then plays the runner's part (the batch created, the check written) and reads that back.
+
+    private val a08c by lazy { seed.obj("a08c")!! }
+    /** The card as the server holds it now, by the id the runner's door returned. */
+    private fun card(id: String) = get("/sessions/${a08c.text("sessionId")}/approvals").jsonArray.map { it.jsonObject }
+        .single { ObjectId.same(it.text("id"), id) }
+
+    /** A08-7: the batch's review lists its tasks by level and opens each one's page; its yes names the count, and the server
+     * records it on the card the runner filed. */
+    @Test fun s21_a08cTheBatchIsReviewedByLevelAndAllowedOnItsCard() = journey("stack-a08c-batch") {
+        val batch = a08c.obj("batch")!!
+        val before = card(batch.text("approvalId")!!); val key = "approval:${before.text("id")}"
+        record("GET approvals → the batch card", "${before.text("toolName")} ${before.text("status")} taskCount=${before.obj("input")?.obj("preview")?.number("taskCount")}")
+        assertEquals("PENDING", before.text("status"))
+        signIn(); open("orbit-session:${a08c.text("sessionId")}"); awaitTag("interaction-cards")
+        awaitScrollTo("transcript-list", hasTestTag("$key:preview")); capture("stack-a08c-batch-0-preview")
+        tap("$key:preview"); awaitTag("card-review"); awaitTag("batch-level:2")
+        compose.onNodeWithTag("card-review:title").assertTextEquals(CardPreviews.batchTitle(3))
+        batch.strings("titles").forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
+        capture("stack-a08c-batch-1-levels")
+        compose.onNodeWithTag("batch-row:3").performScrollTo().performClick(); awaitTag("batch-task-page:3")
+        capture("stack-a08c-batch-2-task-page")
+        compose.onNodeWithTag("batch-task-page:back").performScrollTo().performClick(); awaitTag("batch-level:1")
+        compose.waitUntil(30_000) { compose.onAllNodes(hasTestTag("$key:CREATE_BATCH") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("$key:CREATE_BATCH").assertTextEquals(BatchReview.createAction(3)).performClick()
+        compose.waitUntil(30_000) { card(before.text("id")!!).text("status") != "PENDING" }
+        val after = record("GET approvals → the batch card after Create 3 tasks", card(before.text("id")!!).let { "${it.text("status")} decidedAt=${it.text("decidedAt")}" })
+        assertTrue(after, after.startsWith("ALLOWED"))
+        // The review stays open as the record the batch's yes made, who answered where its buttons were.
+        compose.waitUntil(30_000) {
+            compose.onAllNodes(hasTestTag("card-review:footer-line") and hasText("Approved by you · ", substring = true)).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("card-review:title").assertTextEquals(CardPreviews.answeredTitle)
+        capture("stack-a08c-batch-3-recorded")
+        tap("card-review:close"); awaitGone("card-review")
+    }
+
+    /** A08-8: the merge-check change offers no standing yes and no Deny — saying no is Chat about this — and Allow is recorded on
+     * the card the runner filed. */
+    @Test fun s22_a08cTheMergeCheckChangeIsAllowedWithNoStandingYes() = journey("stack-a08c-merge") {
+        val merge = a08c.obj("merge")!!
+        val before = card(merge.text("approvalId")!!); val key = "approval:${before.text("id")}"
+        record("GET approvals → the merge-check card", "${before.text("toolName")} ${before.text("status")} input=${before.obj("input")}")
+        assertEquals("PENDING", before.text("status"))
+        signIn(); open("orbit-session:${a08c.text("sessionId")}"); awaitTag("interaction-cards")
+        awaitScrollTo("transcript-list", hasTestTag(key))
+        compose.waitUntil(30_000) { compose.onAllNodes(hasTestTag("$key:ALLOW") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("$key:CHAT").assertExists()
+        compose.onNodeWithTag("$key:DENY").assertDoesNotExist(); compose.onNodeWithTag("$key:REMEMBER").assertDoesNotExist()
+        capture("stack-a08c-merge-0-card")
+        compose.onNodeWithTag("$key:ALLOW").performScrollTo().performClick()
+        compose.waitUntil(30_000) { card(before.text("id")!!).text("status") != "PENDING" }
+        val after = record("GET approvals → the merge-check card after Allow", card(before.text("id")!!).let { "${it.text("status")} decidedAt=${it.text("decidedAt")}" })
+        assertTrue(after, after.startsWith("ALLOWED"))
+        awaitText("Allowed · recorded by the server"); capture("stack-a08c-merge-1-recorded")
     }
 }

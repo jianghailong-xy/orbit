@@ -1,0 +1,8 @@
+mac-list-with-recaps-off: no window after launch; pressing ⌘N
+mac-list-with-recaps-off: 1 window(s)
+mac: Recap on the session list row is up; the fallback its line falls back to follows
+mac: S1 falls back to its raw reply shown
+mac: S4 falls back to its raw reply shown
+mac: no Recap ·  label anywhere confirmed
+mac: S2 still shows its raw reply shown
+mac: S3 still shows Running Bash… shown

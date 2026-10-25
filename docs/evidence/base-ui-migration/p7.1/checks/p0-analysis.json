@@ -1,0 +1,315 @@
+{
+ "stats": {
+  "startTime": "2026-10-10T18:46:11.509Z",
+  "duration": 166615.399,
+  "expected": 101,
+  "skipped": 11,
+  "unexpected": 0,
+  "flaky": 0
+ },
+ "globalErrors": [],
+ "tests": 112,
+ "expectedStatusCounts": {
+  "passed": 101,
+  "skipped": 11
+ },
+ "statusCounts": {
+  "expected": 101,
+  "skipped": 11
+ },
+ "byFileStatus": {
+  "breakpoints.browser.mjs expected": 4,
+  "breakpoints.browser.mjs skipped": 4,
+  "feedback-production.browser.mjs expected": 8,
+  "known-failures.browser.mjs expected": 16,
+  "pages.browser.mjs expected": 56,
+  "performance.browser.mjs expected": 1,
+  "performance.browser.mjs skipped": 7,
+  "states.browser.mjs expected": 16
+ },
+ "byProject": {
+  "chromium-dark-desktop": {
+   "expected": 13,
+   "skipped": 1
+  },
+  "chromium-dark-phone": {
+   "skipped": 2,
+   "expected": 12
+  },
+  "chromium-light-desktop": {
+   "expected": 14
+  },
+  "chromium-light-phone": {
+   "skipped": 2,
+   "expected": 12
+  },
+  "webkit-dark-desktop": {
+   "expected": 13,
+   "skipped": 1
+  },
+  "webkit-dark-phone": {
+   "skipped": 2,
+   "expected": 12
+  },
+  "webkit-light-desktop": {
+   "expected": 13,
+   "skipped": 1
+  },
+  "webkit-light-phone": {
+   "skipped": 2,
+   "expected": 12
+  }
+ },
+ "retriesAboveZero": 0,
+ "notExpected": [],
+ "skipped": [
+  {
+   "file": "breakpoints.browser.mjs",
+   "title": "both sides of existing 600, 640 and 960px rules",
+   "project": "chromium-light-phone",
+   "annotations": [
+    {
+     "type": "skip",
+     "description": "Phone/touch is covered at 390px; boundary probes use a desktop pointer."
+    }
+   ]
+  },
+  {
+   "file": "breakpoints.browser.mjs",
+   "title": "both sides of existing 600, 640 and 960px rules",
+   "project": "chromium-dark-phone",
+   "annotations": [
+    {
+     "type": "skip",
+     "description": "Phone/touch is covered at 390px; boundary probes use a desktop pointer."
+    }
+   ]
+  },
+  {
+   "file": "breakpoints.browser.mjs",
+   "title": "both sides of existing 600, 640 and 960px rules",
+   "project": "webkit-light-phone",
+   "annotations": [
+    {
+     "type": "skip",
+     "description": "Phone/touch is covered at 390px; boundary probes use a desktop pointer."
+    }
+   ]
+  },
+  {
+   "file": "breakpoints.browser.mjs",
+   "title": "both sides of existing 600, 640 and 960px rules",
+   "project": "webkit-dark-phone",
+   "annotations": [
+    {
+     "type": "skip",
+     "description": "Phone/touch is covered at 390px; boundary probes use a desktop pointer."
+    }
+   ]
+  },
+  {
+   "file": "performance.browser.mjs",
+   "title": "record browser performance baseline",
+   "project": "chromium-light-phone",
+   "annotations": [
+    {
+     "type": "skip",
+     "description": "Performance samples use one fixed browser/theme/viewport."
+    }
+   ]
+  },
+  {
+   "file": "performance.browser.mjs",
+   "title": "record browser performance baseline",
+   "project": "chromium-dark-desktop",
+   "annotations": [
+    {
+     "type": "skip",
+     "description": "Performance samples use one fixed browser/theme/viewport."
+    }
+   ]
+  },
+  {
+   "file": "performance.browser.mjs",
+   "title": "record browser performance baseline",
+   "project": "chromium-dark-phone",
+   "annotations": [
+    {
+     "type": "skip",
+     "description": "Performance samples use one fixed browser/theme/viewport."
+    }
+   ]
+  },
+  {
+   "file": "performance.browser.mjs",
+   "title": "record browser performance baseline",
+   "project": "webkit-light-desktop",
+   "annotations": [
+    {
+     "type": "skip",
+     "description": "Performance samples use one fixed browser/theme/viewport."
+    }
+   ]
+  },
+  {
+   "file": "performance.browser.mjs",
+   "title": "record browser performance baseline",
+   "project": "webkit-light-phone",
+   "annotations": [
+    {
+     "type": "skip",
+     "description": "Performance samples use one fixed browser/theme/viewport."
+    }
+   ]
+  },
+  {
+   "file": "performance.browser.mjs",
+   "title": "record browser performance baseline",
+   "project": "webkit-dark-desktop",
+   "annotations": [
+    {
+     "type": "skip",
+     "description": "Performance samples use one fixed browser/theme/viewport."
+    }
+   ]
+  },
+  {
+   "file": "performance.browser.mjs",
+   "title": "record browser performance baseline",
+   "project": "webkit-dark-phone",
+   "annotations": [
+    {
+     "type": "skip",
+     "description": "Performance samples use one fixed browser/theme/viewport."
+    }
+   ]
+  }
+ ],
+ "expectedLayers": {
+  "p0-drift": 165,
+  "p0.2": 44,
+  "accepted": 43
+ },
+ "screenshotsAsserted": {
+  "expected": 252,
+  "captured": 252,
+  "unique": 252,
+  "missing": [],
+  "extra": [],
+  "duplicates": []
+ },
+ "durationsSeconds": {
+  "chromium-light-desktop | breakpoints.browser.mjs | both sides of existing 600, 640 and 960px rules": 6.68,
+  "chromium-light-phone | breakpoints.browser.mjs | both sides of existing 600, 640 and 960px rules": 0.05,
+  "chromium-dark-desktop | breakpoints.browser.mjs | both sides of existing 600, 640 and 960px rules": 6.67,
+  "chromium-dark-phone | breakpoints.browser.mjs | both sides of existing 600, 640 and 960px rules": 0.04,
+  "webkit-light-desktop | breakpoints.browser.mjs | both sides of existing 600, 640 and 960px rules": 7.43,
+  "webkit-light-phone | breakpoints.browser.mjs | both sides of existing 600, 640 and 960px rules": 0.13,
+  "webkit-dark-desktop | breakpoints.browser.mjs | both sides of existing 600, 640 and 960px rules": 6.95,
+  "webkit-dark-phone | breakpoints.browser.mjs | both sides of existing 600, 640 and 960px rules": 0.14,
+  "chromium-light-desktop | feedback-production.browser.mjs | P2.3 production notification compatibility": 1.47,
+  "chromium-light-phone | feedback-production.browser.mjs | P2.3 production notification compatibility": 1.52,
+  "chromium-dark-desktop | feedback-production.browser.mjs | P2.3 production notification compatibility": 1.49,
+  "chromium-dark-phone | feedback-production.browser.mjs | P2.3 production notification compatibility": 1.4,
+  "webkit-light-desktop | feedback-production.browser.mjs | P2.3 production notification compatibility": 1.9,
+  "webkit-light-phone | feedback-production.browser.mjs | P2.3 production notification compatibility": 1.69,
+  "webkit-dark-desktop | feedback-production.browser.mjs | P2.3 production notification compatibility": 1.95,
+  "webkit-dark-phone | feedback-production.browser.mjs | P2.3 production notification compatibility": 1.74,
+  "chromium-light-desktop | known-failures.browser.mjs | P0.2-FOCUS-1: task share Escape restores focus": 0.76,
+  "chromium-light-desktop | known-failures.browser.mjs | P0.2-FOCUS-2: task share Done restores focus": 0.8,
+  "chromium-light-phone | known-failures.browser.mjs | P0.2-FOCUS-1: task share Escape restores focus": 0.74,
+  "chromium-light-phone | known-failures.browser.mjs | P0.2-FOCUS-2: task share Done restores focus": 0.77,
+  "chromium-dark-desktop | known-failures.browser.mjs | P0.2-FOCUS-1: task share Escape restores focus": 0.76,
+  "chromium-dark-desktop | known-failures.browser.mjs | P0.2-FOCUS-2: task share Done restores focus": 0.76,
+  "chromium-dark-phone | known-failures.browser.mjs | P0.2-FOCUS-1: task share Escape restores focus": 0.74,
+  "chromium-dark-phone | known-failures.browser.mjs | P0.2-FOCUS-2: task share Done restores focus": 0.77,
+  "webkit-light-desktop | known-failures.browser.mjs | P0.2-FOCUS-1: task share Escape restores focus": 1.07,
+  "webkit-light-desktop | known-failures.browser.mjs | P0.2-FOCUS-2: task share Done restores focus": 1.12,
+  "webkit-light-phone | known-failures.browser.mjs | P0.2-FOCUS-1: task share Escape restores focus": 1.08,
+  "webkit-light-phone | known-failures.browser.mjs | P0.2-FOCUS-2: task share Done restores focus": 1.04,
+  "webkit-dark-desktop | known-failures.browser.mjs | P0.2-FOCUS-1: task share Escape restores focus": 1.06,
+  "webkit-dark-desktop | known-failures.browser.mjs | P0.2-FOCUS-2: task share Done restores focus": 1.08,
+  "webkit-dark-phone | known-failures.browser.mjs | P0.2-FOCUS-1: task share Escape restores focus": 1.11,
+  "webkit-dark-phone | known-failures.browser.mjs | P0.2-FOCUS-2: task share Done restores focus": 1.09,
+  "chromium-light-desktop | pages.browser.mjs | task": 1.83,
+  "chromium-light-desktop | pages.browser.mjs | share": 0.41,
+  "chromium-light-desktop | pages.browser.mjs | projects": 1.76,
+  "chromium-light-desktop | pages.browser.mjs | wiki": 0.69,
+  "chromium-light-desktop | pages.browser.mjs | settings": 0.63,
+  "chromium-light-desktop | pages.browser.mjs | profile": 0.72,
+  "chromium-light-desktop | pages.browser.mjs | session": 2.24,
+  "chromium-light-phone | pages.browser.mjs | task": 1.71,
+  "chromium-light-phone | pages.browser.mjs | share": 0.4,
+  "chromium-light-phone | pages.browser.mjs | projects": 1.83,
+  "chromium-light-phone | pages.browser.mjs | wiki": 0.72,
+  "chromium-light-phone | pages.browser.mjs | settings": 0.61,
+  "chromium-light-phone | pages.browser.mjs | profile": 0.67,
+  "chromium-light-phone | pages.browser.mjs | session": 1.98,
+  "chromium-dark-desktop | pages.browser.mjs | task": 1.71,
+  "chromium-dark-desktop | pages.browser.mjs | share": 0.41,
+  "chromium-dark-desktop | pages.browser.mjs | projects": 1.75,
+  "chromium-dark-desktop | pages.browser.mjs | wiki": 0.66,
+  "chromium-dark-desktop | pages.browser.mjs | settings": 0.63,
+  "chromium-dark-desktop | pages.browser.mjs | profile": 0.72,
+  "chromium-dark-desktop | pages.browser.mjs | session": 2.08,
+  "chromium-dark-phone | pages.browser.mjs | task": 1.58,
+  "chromium-dark-phone | pages.browser.mjs | share": 0.34,
+  "chromium-dark-phone | pages.browser.mjs | projects": 1.63,
+  "chromium-dark-phone | pages.browser.mjs | wiki": 0.8,
+  "chromium-dark-phone | pages.browser.mjs | settings": 0.6,
+  "chromium-dark-phone | pages.browser.mjs | profile": 0.71,
+  "chromium-dark-phone | pages.browser.mjs | session": 2.17,
+  "webkit-light-desktop | pages.browser.mjs | task": 2.31,
+  "webkit-light-desktop | pages.browser.mjs | share": 0.6,
+  "webkit-light-desktop | pages.browser.mjs | projects": 2.27,
+  "webkit-light-desktop | pages.browser.mjs | wiki": 1.02,
+  "webkit-light-desktop | pages.browser.mjs | settings": 0.84,
+  "webkit-light-desktop | pages.browser.mjs | profile": 0.92,
+  "webkit-light-desktop | pages.browser.mjs | session": 2.69,
+  "webkit-light-phone | pages.browser.mjs | task": 1.98,
+  "webkit-light-phone | pages.browser.mjs | share": 0.53,
+  "webkit-light-phone | pages.browser.mjs | projects": 1.8,
+  "webkit-light-phone | pages.browser.mjs | wiki": 1.06,
+  "webkit-light-phone | pages.browser.mjs | settings": 0.76,
+  "webkit-light-phone | pages.browser.mjs | profile": 0.8,
+  "webkit-light-phone | pages.browser.mjs | session": 2.38,
+  "webkit-dark-desktop | pages.browser.mjs | task": 2.06,
+  "webkit-dark-desktop | pages.browser.mjs | share": 0.6,
+  "webkit-dark-desktop | pages.browser.mjs | projects": 2.07,
+  "webkit-dark-desktop | pages.browser.mjs | wiki": 0.99,
+  "webkit-dark-desktop | pages.browser.mjs | settings": 0.91,
+  "webkit-dark-desktop | pages.browser.mjs | profile": 0.96,
+  "webkit-dark-desktop | pages.browser.mjs | session": 2.73,
+  "webkit-dark-phone | pages.browser.mjs | task": 2.1,
+  "webkit-dark-phone | pages.browser.mjs | share": 0.55,
+  "webkit-dark-phone | pages.browser.mjs | projects": 1.78,
+  "webkit-dark-phone | pages.browser.mjs | wiki": 1.09,
+  "webkit-dark-phone | pages.browser.mjs | settings": 0.74,
+  "webkit-dark-phone | pages.browser.mjs | profile": 0.81,
+  "webkit-dark-phone | pages.browser.mjs | session": 2.31,
+  "chromium-light-desktop | performance.browser.mjs | record browser performance baseline": 10.64,
+  "chromium-light-phone | performance.browser.mjs | record browser performance baseline": 0.0,
+  "chromium-dark-desktop | performance.browser.mjs | record browser performance baseline": 0.0,
+  "chromium-dark-phone | performance.browser.mjs | record browser performance baseline": 0.0,
+  "webkit-light-desktop | performance.browser.mjs | record browser performance baseline": 0.0,
+  "webkit-light-phone | performance.browser.mjs | record browser performance baseline": 0.0,
+  "webkit-dark-desktop | performance.browser.mjs | record browser performance baseline": 0.0,
+  "webkit-dark-phone | performance.browser.mjs | record browser performance baseline": 0.0,
+  "chromium-light-desktop | states.browser.mjs | projects loading and release": 0.45,
+  "chromium-light-phone | states.browser.mjs | projects loading and release": 0.42,
+  "chromium-dark-desktop | states.browser.mjs | projects loading and release": 0.42,
+  "chromium-dark-phone | states.browser.mjs | projects loading and release": 0.4,
+  "webkit-light-desktop | states.browser.mjs | projects loading and release": 0.72,
+  "webkit-light-phone | states.browser.mjs | projects loading and release": 0.67,
+  "webkit-dark-desktop | states.browser.mjs | projects loading and release": 0.72,
+  "webkit-dark-phone | states.browser.mjs | projects loading and release": 0.67,
+  "chromium-light-desktop | states.browser.mjs | projects error and retry": 1.72,
+  "chromium-light-phone | states.browser.mjs | projects error and retry": 1.69,
+  "chromium-dark-desktop | states.browser.mjs | projects error and retry": 1.7,
+  "chromium-dark-phone | states.browser.mjs | projects error and retry": 1.65,
+  "webkit-light-desktop | states.browser.mjs | projects error and retry": 3.2,
+  "webkit-light-phone | states.browser.mjs | projects error and retry": 3.21,
+  "webkit-dark-desktop | states.browser.mjs | projects error and retry": 3.24,
+  "webkit-dark-phone | states.browser.mjs | projects error and retry": 3.18
+ }
+}

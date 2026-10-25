@@ -1,0 +1,29 @@
+-- 0410 — a landing that pushed nothing because the target already had the work.
+--
+-- WHAT IT ADDS
+-- ============
+-- `project_integration_job.source_fully_applied`: the runner's own measurement, taken when it
+-- answers NOTHING_TO_LAND, of whether the branch carried commits of its own that the base already
+-- had, every one of them (src/runner-go/integrate.go, J-S4). TRUE: the rebase was handed commits and
+-- dropped all of them ("patch contents already upstream"), so the replay came back at the base. FALSE:
+-- the branch carried no commit of its own (J-S3's empty branch, and an empty range J-S4 replays). NULL:
+-- not measured, which is every row written before this, every other answer, and any older runner.
+--
+-- WHY IT EXISTS
+-- =============
+-- On 2026-10-09 (project 34PBlWiEZytRLTcPufJht) a line was rebuilt from main's tip after main had taken
+-- the project's work in by another route. Every task's branch was then handed to it again. Each rebase
+-- dropped every commit, each push was a no-op, and each job reported LANDED with a receipt for a
+-- landing that moved nothing. The runner now answers NOTHING_TO_LAND there and pushes nothing. That
+-- answer was already the empty branch's, and the two are not the same fact: the empty branch has
+-- nothing of the task's anywhere, while this branch's work IS on the target. The control plane reads
+-- them apart by this column (J8 and §1.4).
+--
+-- BACKWARD COMPATIBLE
+-- ===================
+-- One nullable BOOLEAN with no default and no constraint, like 0346's `source_on_upstream`:
+-- catalog-only, no row is rewritten, backfilled or refused. A NOTHING_TO_LAND already stored reads
+-- NULL, which every reader treats exactly as before this column existed. No trigger, function or type
+-- is created, replaced or dropped.
+
+ALTER TABLE "project_integration_job" ADD COLUMN "source_fully_applied" boolean;

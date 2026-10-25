@@ -1,0 +1,17 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 npm run test:ui-choices -w @orbit/web -- --project chromium-dark-desktop'",
+ "commit": "f162a2f9de3cb4bdea8e9a6120dd28a8e2184328",
+ "webTree": "d8ae59f026644577041afea38b5994da1eef0f9f",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-08T03:51:57Z",
+ "endedAt": "2026-10-08T03:55:05+00:00",
+ "loadAverage": {
+  "start": "23.61 25.02 27.41",
+  "end": [
+   "29.18",
+   "26.05",
+   "27.26"
+  ]
+ },
+ "exitCode": 0
+}

@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>37 wiki comment → session (web phone | iOS)</title>
+<link rel="stylesheet" href="comment-session.css">
+</head>
+<body>
+<script src="wiki-desktop-icons.js"></script>
+<script src="wiki-p2-icons.js"></script>
+<script src="wiki-p3-icons.js"></script>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="x-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="x-back" viewBox="0 0 24 24"><path d="M15 4l-8 8 8 8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+  <symbol id="x-list" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="4" cy="6" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="4" cy="18" r="1.6"/></g><path d="M9 6h12M9 12h12M9 18h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="x-bubble" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/><path d="M8 8h8M8 11.5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="x-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2.5" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M16 5V4.5A1.5 1.5 0 0 0 14.5 3h-9A1.5 1.5 0 0 0 4 4.5v11A1.5 1.5 0 0 0 5.5 17H6" stroke="currentColor" stroke-width="1.8" fill="none"/></symbol>
+  <symbol id="x-chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+  <symbol id="x-sig" viewBox="0 0 20 12"><rect x="0" y="8" width="3.2" height="4" rx="1"/><rect x="5.3" y="5.5" width="3.2" height="6.5" rx="1"/><rect x="10.6" y="3" width="3.2" height="9" rx="1"/><rect x="15.9" y="0" width="3.2" height="12" rx="1"/></symbol>
+  <symbol id="x-wifi" viewBox="0 0 18 13"><path d="M9 12.5l2.4-2.9a3.6 3.6 0 0 0-4.8 0z"/><path d="M9 5.6a7.6 7.6 0 0 1 5.4 2.2l1.5-1.8A10 10 0 0 0 9 3.2 10 10 0 0 0 2.1 6l1.5 1.8A7.6 7.6 0 0 1 9 5.6z"/><path d="M9 0a13.4 13.4 0 0 0-9 3.5l1.4 1.7A11.2 11.2 0 0 1 9 2.3a11.2 11.2 0 0 1 7.6 2.9L18 3.5A13.4 13.4 0 0 0 9 0z"/></symbol>
+</svg>
+<div class="board">
+<h1 class="b-h1">37 · 从 wiki 评论发起改动（web 手机 ｜ iOS ｜ 说明）</h1>
+<p class="b-sub">同图 36 的例子：《3.1 会话运行模型与长连接》§3，心跳那一句。两端区块与顺序逐一对应：<b>选中（iOS 长按段落）→ 评论 sheet → 文档上的标记 → 合并后的评论 sheet</b>。
+<b>评论、会话、合并 <code>7f3e2a1</code> 和重写后的句子是示意</b>；界面英文，正文与你的话按原文。owner 10-09 定：全部按推荐；现在的缺口一起补（⑤）。</p>
+<div class="b-legend"><span><span class="tag new">新</span>新加的界面</span><span><span class="tag keep">沿用</span>现成组件照用</span><span><span class="tag word">新词</span>新的英文文案</span><span><span class="tag done">已定</span>owner 10-09 按推荐定了</span><span><span class="tag demo">示意</span>演示用的内容</span></div>
+
+<div class="ph-grid">
+  <div class="ph-colhead">web 手机 <span>· 400 CSS px · /wiki/orbit/d/session-runtime#s3</span></div>
+  <div class="ph-colhead">iOS <span>· 402×874pt · WikiDocView</span></div>
+  <div class="ph-colhead">说明</div>
+
+  <!-- 1 select / long-press -->
+  <div class="band"><span class="bn">1</span>选中 → Comment <small>· web 手机用系统选区；iOS 长按段落</small></div>
+  <div class="wp">
+    <div class="wp-top"><svg class="ic"><use href="#x-menu"/></svg>Orbit</div>
+    <div class="wp-body" id="wb1">
+      <div class="wp-crumb">Wiki<span>›</span>会话<span>›</span>3.1 会话运行模型与长连接</div>
+      <div class="wp-sech"><span class="num">3</span>turn 投递与 inbox 领取：long-poll 与心跳</div>
+      <p class="o-p">Runner 通过出站 HTTP 轮询领取工作，不依赖入站连接，因此无需开放入站端口。<span class="fn">[5][2]</span>当用户提交 turn 后，服务器将该 turn 持久化为 <code>ConversationTurn</code> 行。<span class="fn">[2]</span><span class="cut">…</span></p>
+      <p class="o-p">心跳机制用于控制面探测失联的 runner。<span class="snap" id="wsnap1">Runner 每 30 秒发送一次心跳，<span class="sel" id="wsel1">控制面连续 90 秒未收到心跳即判定 runner 离线</span>，此时 resume 功能不可用。</span><span class="fn">[5][12]</span>该机制确保控制面能及时感知 runner 状态变化，为后续的会话恢复或回收提供依据。</p>
+      <p class="o-p">选择 long-poll 而非 WebSocket 的原因包括：runner 仅支持出站 HTTP、网关 nginx 配置限制 WebSocket 握手。<span class="fn">[2]</span></p>
+      <span class="handle s" data-hs="wsel1"></span><span class="handle e" data-he="wsel1"></span>
+      <span class="oscall" data-call="wsnap1"><span>Copy</span><span>Select all</span><span>Share</span></span>
+    </div>
+    <div class="wp-cbar mko"><svg class="ic"><use href="#x-bubble"/></svg>Comment on 1 sentence<i class="pin">1</i></div>
+  </div>
+  <div class="ios" id="ios1">
+    <div class="island"></div>
+    <div class="sb"><span>9:41</span><span class="r"><svg class="ic" style="width:19px;height:12px"><use href="#x-sig"/></svg><svg class="ic" style="width:17px;height:12px"><use href="#x-wifi"/></svg><span class="bat"></span></span></div>
+    <div class="nav"><span class="glass"><svg class="ic"><use href="#x-back"/></svg></span><span class="glass"><svg class="ic"><use href="#x-list"/></svg></span></div>
+    <div class="body">
+      <div class="crumb">Wiki<span>·</span>会话</div>
+      <div class="h3"><span class="num">3</span>turn 投递与 inbox 领取：long-poll 与心跳</div>
+      <p class="pp">Runner 通过出站 HTTP 轮询领取工作，不依赖入站连接，因此无需开放入站端口。<span class="fn">[5][2]</span><span style="color:#8e8e93">…</span></p>
+      <p class="pp" id="ip1">心跳机制用于控制面探测失联的 runner。Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。<span class="fn">[5][12]</span>该机制确保控制面能及时感知 runner 状态变化，为后续的会话恢复或回收提供依据。</p>
+      <p class="pp">选择 long-poll 而非 WebSocket 的原因包括：runner 仅支持出站 HTTP、网关 nginx 配置限制 WebSocket 握手。<span class="fn">[2]</span></p>
+    </div>
+    <div class="blur"></div>
+    <div class="lift" data-lift="ip1"><p class="pp">心跳机制用于控制面探测失联的 runner。Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。<span class="fn">[5][12]</span>该机制确保控制面能及时感知 runner 状态变化，为后续的会话恢复或回收提供依据。</p></div>
+    <div class="cmenu mko" data-menu="ip1"><div class="mi">Comment<svg class="ic"><use href="#x-bubble"/></svg></div><div class="mi">Copy<svg class="ic"><use href="#x-copy"/></svg></div><i class="pin">2</i></div>
+  </div>
+  <div class="notes">
+    <ol>
+      <li><span class="n">1</span><span class="tag new">新</span><b>web 手机</b>：选区是系统的，拖柄和系统菜单都照旧，我们不去改。选区落在正文里时，底部浮出 <b>Comment on 1 sentence</b>，不和系统菜单抢位置。吸附、跨段、最多 20 句，同桌面。</li>
+      <li><span class="n">2</span><span class="tag new">新</span><b>iOS</b>：长按一段，系统上下文菜单里第一项是 <b>Comment</b>，第二项 Copy。正文是 SwiftUI <code>Text</code>：系统选区只能整块选，也加不进自定义菜单项，所以先选段，再到 sheet 里点句 <span class="tag done">已定 3</span>。不做真选区（那要把正文换成 <code>UITextView</code> / TextKit 渲染）。</li>
+    </ol>
+  </div>
+
+  <!-- 2 comment sheet -->
+  <div class="band"><span class="bn">2</span>评论 sheet <small>· 两端同一张单</small></div>
+  <div class="wp">
+    <div class="wp-top"><svg class="ic"><use href="#x-menu"/></svg>Orbit</div>
+    <div class="wp-body">
+      <div class="wp-crumb">Wiki<span>›</span>会话<span>›</span>3.1 会话运行模型与长连接</div>
+      <div class="wp-sech"><span class="num">3</span>turn 投递与 inbox 领取：long-poll 与心跳</div>
+      <p class="o-p">心跳机制用于控制面探测失联的 runner。<span class="snap">Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。</span><span class="fn">[5][12]</span></p>
+    </div>
+    <div class="dim"></div>
+    <div class="wp-sheet">
+      <div class="grab"></div>
+      <div class="h"><svg class="ic" style="color:var(--brand)"><use href="#x-bubble"/></svg>Comment<span class="x"><svg class="ic"><use href="#i-close"/></svg></span></div>
+      <div class="where">3.1 › §3 turn 投递与 inbox 领取 · 1 sentence</div>
+      <div class="o-quote mko" style="position:relative">Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。<span class="fn">[5][12]</span><i class="pin">3</i></div>
+      <div class="o-lab">Orbit attaches</div>
+      <div class="o-src"><span class="no">[5]</span><span class="k">Design doc</span><span class="p"><span class="m">docs/architecture.md</span> § Realtime and recovery</span></div>
+      <div class="o-src"><span class="no">[12]</span><span class="k">Code</span><span class="p"><span class="m">session-state.ts</span> L17–18 · 99cd3c4</span></div>
+      <div class="o-ta">90 秒太久了：runner 掉线后一分半里，Resume 看着能点、点了没反应。能不能缩到 45 秒左右？心跳间隔要不要跟着改，你先看代码再定。<span class="caret"></span></div>
+      <div class="o-lab">Run in</div>
+      <div class="o-runin mko" style="margin-top:0;position:relative"><span class="o-pick">orbit · wikova<svg class="ic"><use href="#i-caret-down"/></svg></span><span class="o-pick">Claude Opus 5.5<svg class="ic"><use href="#i-caret-down"/></svg></span><span class="o-pick">Default<svg class="ic"><use href="#i-caret-down"/></svg></span><i class="pin">6</i></div>
+      <div class="btns mko" style="position:relative"><div class="bb pri">Start session</div><div class="bb">Save</div><i class="pin">5</i></div>
+    </div>
+  </div>
+  <div class="ios">
+    <div class="island"></div>
+    <div class="sb" style="color:#000"><span>9:41</span><span class="r"><svg class="ic" style="width:19px;height:12px"><use href="#x-sig"/></svg><svg class="ic" style="width:17px;height:12px"><use href="#x-wifi"/></svg><span class="bat"></span></span></div>
+    <div class="isheet">
+      <div class="grab"></div>
+      <div class="snav"><span class="l">Cancel</span><span class="c">Comment</span></div>
+      <div class="sec">3.1 › §3 · tap the sentences you mean</div>
+      <div class="grp mko" style="position:relative;overflow:visible">
+        <div class="r dimr"><span class="ck"></span><span>心跳机制用于控制面探测失联的 runner。</span></div>
+        <div class="r"><span class="ck on"></span><span>Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。<span class="fn">[5][12]</span></span></div>
+        <div class="r dimr"><span class="ck"></span><span>该机制确保控制面能及时感知 runner 状态变化，为后续的会话恢复或回收提供依据。</span></div>
+        <i class="pin">4</i>
+      </div>
+      <div class="sec">Orbit attaches · 2</div>
+      <div class="grp">
+        <div class="r"><span class="k">Design doc</span><span><span class="m">docs/architecture.md</span> § Realtime and recovery</span></div>
+        <div class="r"><span class="k">Code</span><span><span class="m">session-state.ts</span> L17–18 · 99cd3c4</span></div>
+      </div>
+      <div class="sec">What should change, and why?</div>
+      <div class="field">90 秒太久了：runner 掉线后一分半里，Resume 看着能点、点了没反应。能不能缩到 45 秒左右？心跳间隔要不要跟着改，你先看代码再定。<span class="caret"></span></div>
+      <div class="grp" style="margin-top:12px"><div class="kv"><span>Run in</span><span class="v">orbit · wikova · Opus 5.5<svg class="ic"><use href="#x-chev"/></svg></span></div></div>
+      <div class="ibtns"><div class="bb pri">Start session</div><div class="bb">Save</div></div>
+    </div>
+  </div>
+  <div class="notes">
+    <ol>
+      <li><span class="n">3</span><span class="tag keep">沿用</span>两端<b>同一张单、同一个顺序</b>：原文 → Orbit attaches → 你的话 → Run in → 按钮。字段名和桌面一字不差。</li>
+      <li><span class="n">4</span><span class="tag new">新</span>iOS 的原文是长按那一段，一句一行，<b>点哪句选哪句</b>；一句没选时 Start session 灰着。web 手机已经用选区选好了，直接显示原文。</li>
+      <li><span class="n">5</span><span class="tag keep">沿用</span>按钮照 §15.1 第 1 条：手机上整宽竖排，<b>Start session</b> 在上，<b>Save</b> 在下（Save 是 P2）。</li>
+      <li><span class="n">6</span><span class="tag keep">沿用</span><b>Run in</b> 的默认值同桌面；点开是 New session 那套选择器。iOS 合成一行，点进去再分 workspace、引擎、模式。</li>
+    </ol>
+  </div>
+
+  <!-- 3 marker after start -->
+  <div class="band"><span class="bn">3</span>开了会话之后：留在文档上，句子带标记 <small>· 气泡颜色 = 评论的状态</small></div>
+  <div class="wp">
+    <div class="wp-top"><svg class="ic"><use href="#x-menu"/></svg>Orbit</div>
+    <div class="wp-body">
+      <div class="wp-crumb">Wiki<span>›</span>会话<span>›</span>3.1 会话运行模型与长连接</div>
+      <div class="wp-sech"><span class="num">3</span>turn 投递与 inbox 领取：long-poll 与心跳</div>
+      <p class="o-p">Runner 通过出站 HTTP 轮询领取工作，不依赖入站连接，因此无需开放入站端口。<span class="fn">[5][2]</span><span class="cut">…</span></p>
+      <p class="o-p">心跳机制用于控制面探测失联的 runner。<span class="hl">Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。</span><span class="fn">[5][12]</span><span class="o-badge mko" style="position:relative"><svg class="ic"><use href="#x-bubble"/></svg>1<i class="pin">7</i></span>该机制确保控制面能及时感知 runner 状态变化，为后续的会话恢复或回收提供依据。</p>
+      <p class="o-p">选择 long-poll 而非 WebSocket 的原因包括：runner 仅支持出站 HTTP、网关 nginx 配置限制 WebSocket 握手。<span class="fn">[2]</span></p>
+    </div>
+    <div class="toast mko"><svg class="ic"><use href="#x-bubble"/></svg>Session started in orbit<b>Open</b><i class="pin">8</i></div>
+  </div>
+  <div class="ios">
+    <div class="island"></div>
+    <div class="sb"><span>9:41</span><span class="r"><svg class="ic" style="width:19px;height:12px"><use href="#x-sig"/></svg><svg class="ic" style="width:17px;height:12px"><use href="#x-wifi"/></svg><span class="bat"></span></span></div>
+    <div class="nav"><span class="glass"><svg class="ic"><use href="#x-back"/></svg></span><span class="glass"><svg class="ic"><use href="#x-list"/></svg></span></div>
+    <div class="body">
+      <div class="crumb">Wiki<span>·</span>会话</div>
+      <div class="h3"><span class="num">3</span>turn 投递与 inbox 领取：long-poll 与心跳</div>
+      <p class="pp">Runner 通过出站 HTTP 轮询领取工作，不依赖入站连接，因此无需开放入站端口。<span class="fn">[5][2]</span><span style="color:#8e8e93">…</span></p>
+      <p class="pp">心跳机制用于控制面探测失联的 runner。<span class="hl">Runner 每 30 秒发送一次心跳，控制面连续 90 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。</span><span class="fn">[5][12]</span><span class="ibadge"><svg class="ic"><use href="#x-bubble"/></svg>1</span>该机制确保控制面能及时感知 runner 状态变化，为后续的会话恢复或回收提供依据。</p>
+      <p class="pp">选择 long-poll 而非 WebSocket 的原因包括：runner 仅支持出站 HTTP、网关 nginx 配置限制 WebSocket 握手。<span class="fn">[2]</span></p>
+    </div>
+    <div class="cap1"><svg class="ic"><use href="#x-bubble"/></svg>Session started in orbit <b>Open</b></div>
+  </div>
+  <div class="notes">
+    <ol>
+      <li><span class="n">7</span><span class="tag new">新</span>sheet 关掉，<b>留在文档上</b> <span class="tag done">已定 1</span>。被评论的句子淡黄底，最后一句后面跟气泡和数字。气泡的颜色就是评论的状态：<b>蓝</b> = 进行中，<b>琥珀</b> = 等你或出了问题，<b>绿</b> = 已解决，<b>灰</b> = 没开会话或会话已结束。</li>
+      <li><span class="n">8</span><span class="tag keep">沿用</span>web 手机底部 toast，iOS 底部胶囊：<b>Session started in orbit · Open</b>，点 Open 进会话。会话页同桌面：来处标签、⊕ Orbit attached，合并后的两行 Wiki 记录（图 36 ②）。</li>
+    </ol>
+  </div>
+
+  <!-- 4 after merge -->
+  <div class="band"><span class="bn">4</span>合并之后：点气泡，看结果 <small>· Wiki updated · See changes</small></div>
+  <div class="wp">
+    <div class="wp-top"><svg class="ic"><use href="#x-menu"/></svg>Orbit</div>
+    <div class="wp-body">
+      <div class="wp-crumb">Wiki<span>›</span>会话<span>›</span>3.1 会话运行模型与长连接</div>
+      <p class="o-p">心跳机制用于控制面探测失联的 runner。<span class="newline">Runner 每 15 秒发送一次心跳，控制面连续 45 秒（三次心跳）未收到即判定 runner 离线，此时 resume 功能不可用。</span><span class="fn">[5][12][46]</span><span class="o-badge ok"><svg class="ic"><use href="#x-bubble"/></svg>1</span></p>
+    </div>
+    <div class="dim"></div>
+    <div class="wp-sheet">
+      <div class="grab"></div>
+      <div class="h" style="color:var(--success)"><svg class="ic"><use href="#i-check-circle-f"/></svg>Wiki updated · Resolved<span class="x"><svg class="ic"><use href="#i-close"/></svg></span></div>
+      <div class="o-card" style="border:0;box-shadow:none;padding:0;margin-top:4px">
+        <div class="who">You · 10:42</div>
+        <div class="said">90 秒太久了：runner 掉线后一分半里，Resume 看着能点、点了没反应。能不能缩到 45 秒左右？</div>
+        <div class="sess"><svg class="ic"><use href="#i-message"/></svg><span><a>缩短 runner 判离线时间</a> · merged <code style="font:12px var(--mono)">7f3e2a1</code></span></div>
+      </div>
+      <div class="o-diff mko" style="position:relative">
+        <div class="dh">See changes · §3 · 1 sentence changed</div>
+        <div class="o-del">Runner 每 <mark>30</mark> 秒发送一次心跳，控制面连续 <mark>90</mark> 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。</div>
+        <div class="o-ins">Runner 每 <mark>15</mark> 秒发送一次心跳，控制面连续 <mark>45</mark> 秒（三次心跳）未收到即判定 runner 离线，此时 resume 功能不可用。<span class="fn">[12][46]</span></div>
+        <div class="o-newfn"><span style="color:var(--brand)">[46]</span><span class="p">runloop.go L23 @ 7f3e2a1</span><span class="v">✓</span></div>
+        <div class="o-also"><svg class="ic"><use href="#i-sync"/></svg><span>Also rewritten: <a>7.1 §2 · 2 sentences ›</a></span></div>
+        <i class="pin">9</i>
+      </div>
+      <div class="btns"><div class="bb">Reopen</div></div>
+    </div>
+  </div>
+  <div class="ios">
+    <div class="island"></div>
+    <div class="sb"><span>9:41</span><span class="r"><svg class="ic" style="width:19px;height:12px"><use href="#x-sig"/></svg><svg class="ic" style="width:17px;height:12px"><use href="#x-wifi"/></svg><span class="bat"></span></span></div>
+    <div class="isheet">
+      <div class="grab"></div>
+      <div class="snav"><span class="l">Done</span><span class="c">Comment</span></div>
+      <div class="stl"><svg class="ic"><use href="#i-check-circle-f"/></svg>Wiki updated · Resolved</div>
+      <div class="who">You · 10:42</div>
+      <div class="said">90 秒太久了：runner 掉线后一分半里，Resume 看着能点、点了没反应。能不能缩到 45 秒左右？</div>
+      <div class="grp" style="margin-top:12px"><div class="kv"><span style="font-size:15.5px">缩短 runner 判离线时间</span><span class="v">merged 7f3e2a1<svg class="ic"><use href="#x-chev"/></svg></span></div></div>
+      <div class="sec">See changes · §3 · 1 sentence changed</div>
+      <div class="dgrp">
+        <div class="o-del">Runner 每 <mark>30</mark> 秒发送一次心跳，控制面连续 <mark>90</mark> 秒未收到心跳即判定 runner 离线，此时 resume 功能不可用。</div>
+        <div class="o-ins">Runner 每 <mark>15</mark> 秒发送一次心跳，控制面连续 <mark>45</mark> 秒（三次心跳）未收到即判定 runner 离线，此时 resume 功能不可用。<span class="fn">[12][46]</span></div>
+        <div class="o-newfn"><span style="color:#007aff">[46]</span><span class="p">runloop.go L23 @ 7f3e2a1</span><span class="v">✓</span></div>
+      </div>
+      <div class="grp" style="margin-top:12px"><div class="kv"><span style="font-size:15.5px">Also rewritten: 7.1 §2</span><span class="v">2 sentences<svg class="ic"><use href="#x-chev"/></svg></span></div></div>
+      <div class="ibtns"><div class="bb">Reopen</div></div>
+    </div>
+  </div>
+  <div class="notes">
+    <ol>
+      <li><span class="n">9</span><span class="tag new">新</span>点气泡出评论 sheet：<b>状态行 → 你的话 → 会话 → See changes 逐句对照 → 新脚注 → 连带重写的节 → Reopen</b>。iOS 的会话行和连带的节都是 push 进去的行。</li>
+      <li><span class="n">10</span>其余状态（图 36 ④ 那 11 种）在 sheet 顶上是同一个状态行，按钮也和桌面一样，手机上整宽竖排。</li>
+      <li><span class="n">11</span><span class="tag word">新词</span>本图新句子：<b>Comment on N sentences</b> · <b>tap the sentences you mean</b> · <b>Session started in orbit</b>。其余同图 36，英文先在 <code>lib/wikiComments.ts</code> 定义，Swift 的 <code>WikiCopy</code> 镜像，parity 测试钉住。</li>
+    </ol>
+  </div>
+
+  <!-- 5 G2 on phones -->
+  <div class="band"><span class="bn">5</span>现在的缺口一起补：被重写的节标 Updated，点开看改了什么 <small>· 没有评论也一样 · 同图 36 ⑥ 的 7.1 §2</small></div>
+  <div class="wp">
+    <div class="wp-top"><svg class="ic"><use href="#x-menu"/></svg>Orbit</div>
+    <div class="wp-body">
+      <div class="wp-crumb">Wiki<span>›</span>Runner 与引擎<span>›</span>7.1 Runner 架构与注册</div>
+      <div class="wp-sech"><span class="num">2</span>心跳与离线判定<span class="o-upd"><span class="bd"></span>Updated</span></div>
+      <p class="o-p">Runner 的心跳间隔是 <code>heartbeatInterval</code>，默认 15 秒。<span class="fn">[3]</span>控制面连续 45 秒（三次心跳）收不到心跳，就把 runner 记为离线，这时它上面的会话不能 Resume。<span class="fn">[4]</span></p>
+    </div>
+    <div class="dim"></div>
+    <div class="wp-sheet mko" style="position:absolute">
+      <div class="grab"></div>
+      <div class="h">See changes<span class="x"><svg class="ic"><use href="#i-close"/></svg></span></div>
+      <div class="where">7.1 › §2 心跳与离线判定 · 2 sentences changed</div>
+      <div class="o-pop" style="position:static;width:auto;border:0;box-shadow:none;padding:0">
+        <div class="cause"><svg class="ic"><use href="#i-merge"/></svg><span>After <a>缩短 runner 判离线时间</a> merged · <code>7f3e2a1</code> · Oct 9 10:47</span></div>
+        <div class="o-del">Runner 的心跳间隔是 heartbeatInterval，默认 <mark>30</mark> 秒。</div>
+        <div class="o-ins">Runner 的心跳间隔是 heartbeatInterval，默认 <mark>15</mark> 秒。<span class="fn">[3]</span></div>
+        <div class="o-del">控制面连续 <mark>90</mark> 秒收不到心跳，就把 runner 记为离线，这时它上面的会话不能 Resume。</div>
+        <div class="o-ins">控制面连续 <mark>45</mark> 秒<mark>（三次心跳）</mark>收不到心跳，就把 runner 记为离线，这时它上面的会话不能 Resume。<span class="fn">[4]</span></div>
+        <div class="older">Earlier changes (1) ›</div>
+      </div>
+      <i class="pin" style="top:10px;right:10px">12</i>
+    </div>
+  </div>
+  <div class="ios">
+    <div class="island"></div>
+    <div class="sb"><span>9:41</span><span class="r"><svg class="ic" style="width:19px;height:12px"><use href="#x-sig"/></svg><svg class="ic" style="width:17px;height:12px"><use href="#x-wifi"/></svg><span class="bat"></span></span></div>
+    <div class="nav"><span class="glass"><svg class="ic"><use href="#x-back"/></svg></span><span class="glass"><svg class="ic"><use href="#x-list"/></svg></span></div>
+    <div class="body">
+      <div class="crumb">Wiki<span>·</span>Runner 与引擎</div>
+      <div class="h3"><span class="num">2</span>心跳与离线判定<span class="ibadge" style="margin-left:8px"><span style="width:6px;height:6px;border-radius:50%;background:#007aff;display:inline-block"></span>Updated</span></div>
+      <p class="pp">Runner 的心跳间隔是 <code>heartbeatInterval</code>，默认 15 秒。<span class="fn">[3]</span>控制面连续 45 秒（三次心跳）收不到心跳，就把 runner 记为离线，这时它上面的会话不能 Resume。<span class="fn">[4]</span></p>
+    </div>
+    <div class="isheet" style="top:330px">
+      <div class="grab"></div>
+      <div class="snav"><span class="l">Done</span><span class="c">See changes</span></div>
+      <div class="sec">7.1 › §2 · 2 sentences changed</div>
+      <div class="grp"><div class="kv"><span style="font-size:15px">After 缩短 runner 判离线时间 merged</span><span class="v">7f3e2a1<svg class="ic"><use href="#x-chev"/></svg></span></div></div>
+      <div class="dgrp" style="margin-top:12px">
+        <div class="o-del">Runner 的心跳间隔是 heartbeatInterval，默认 <mark>30</mark> 秒。</div>
+        <div class="o-ins">Runner 的心跳间隔是 heartbeatInterval，默认 <mark>15</mark> 秒。<span class="fn">[3]</span></div>
+        <div class="o-del">控制面连续 <mark>90</mark> 秒收不到心跳，就把 runner 记为离线，这时它上面的会话不能 Resume。</div>
+        <div class="o-ins">控制面连续 <mark>45</mark> 秒<mark>（三次心跳）</mark>收不到心跳，就把 runner 记为离线，这时它上面的会话不能 Resume。<span class="fn">[4]</span></div>
+      </div>
+      <div class="grp" style="margin-top:12px"><div class="kv"><span style="font-size:15.5px">Earlier changes</span><span class="v">1<svg class="ic"><use href="#x-chev"/></svg></span></div></div>
+    </div>
+  </div>
+  <div class="notes">
+    <ol>
+      <li><span class="n">12</span><span class="tag new">新</span>你上次打开这篇之后被重写的节，标题旁有带蓝点的 <b>Updated</b>；点它出 <b>See changes</b>：web 手机是底部 sheet，iOS 是 sheet。内容和桌面一样：原因一行、逐句对照、Earlier changes。iOS 的原因是一行，点进去是那场会话或任务。</li>
+      <li><span class="n">13</span>Activity 的 <b>Recently changed</b> 在手机和 iOS 上多同一种 <b>Docs</b> 行（图 36 ⑥ 的 4），手机上原因折到第二行。web 手机上<b>只有评论</b>在 P2，这一块 P1 就有。Android 在 P2。</li>
+    </ol>
+  </div>
+</div>
+</div>
+<script>
+// Selection handles + system callout on the web phone; the lifted paragraph and menu on iOS.
+window.drawMarks = function () {
+  for (const el of document.querySelectorAll('[data-hs],[data-he],[data-call]')) {
+    const id = el.dataset.hs || el.dataset.he || el.dataset.call;
+    const t = document.getElementById(id), host = el.offsetParent, h = host.getBoundingClientRect();
+    const rs = [...t.getClientRects()];
+    if (el.dataset.hs) { const r = rs[0]; el.style.left = (r.left - h.left - 1) + 'px'; el.style.top = (r.top - h.top) + 'px'; el.style.height = r.height + 'px'; }
+    if (el.dataset.he) { const r = rs[rs.length - 1]; el.style.left = (r.right - h.left) + 'px'; el.style.top = (r.top - h.top) + 'px'; el.style.height = r.height + 'px'; }
+    if (el.dataset.call) { const r = rs[0]; el.style.left = Math.max(4, Math.min(r.left - h.left - 30, h.width - el.offsetWidth - 10)) + 'px'; el.style.top = (r.top - h.top - el.offsetHeight - 14) + 'px'; }
+  }
+  for (const el of document.querySelectorAll('[data-lift]')) {
+    const t = document.getElementById(el.dataset.lift), host = el.offsetParent, h = host.getBoundingClientRect();
+    el.style.top = (t.getBoundingClientRect().top - h.top - 12) + 'px';
+  }
+  for (const el of document.querySelectorAll('[data-menu]')) {
+    const lift = document.querySelector('[data-lift="' + el.dataset.menu + '"]');
+    el.style.left = '14px';
+    el.style.top = (lift.offsetTop + lift.offsetHeight + 10) + 'px';
+  }
+};
+</script>
+</body>
+</html>

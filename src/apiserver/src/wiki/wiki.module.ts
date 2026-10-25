@@ -1,15 +1,18 @@
 import { Module } from '@nestjs/common';
 import { PushModule } from '../push/push.module';
+import { AdminRoleGuard } from '../users/admin-role.guard';
 import { WikiController } from './wiki.controller';
+import { AdminWikiController } from './wiki-admin.controller';
 import { WikiArticles } from './wiki-articles';
 import { WikiArticlesController } from './wiki-articles.controller';
 import { WikiDocs } from './wiki-docs';
 import { WikiDocsController } from './wiki-docs.controller';
 import { WikiHealth } from './wiki-health';
 import { WikiHealthController } from './wiki-health.controller';
+import { WikiJobReads } from './wiki-job-reads';
+import { WikiJobsController } from './wiki-jobs.controller';
 import { WikiMaintenance } from './wiki-maintenance';
 import { WikiMaintenanceTrigger } from './wiki-maintenance-run';
-import { WikiPlanJobFacts } from './wiki-plan-job';
 import { WikiPlans } from './wiki-plan';
 import { WikiPlanController } from './wiki-plan.controller';
 import { WikiRetrieval } from './wiki-retrieval';
@@ -37,22 +40,24 @@ import { WikiSystemModelController } from './wiki-system-model.controller';
   // The articles' reads (contract `articles`), one run's read (contract `reviewModes.run`) and a
   // space's health (contract `maintenance.health`) and the plan (contract `plan`) are controllers of their
   // own, so WikiController's hand-built specs construct it as before — and so are the documents (contract `docs`).
-  controllers: [WikiController, WikiArticlesController, WikiRunsController, WikiHealthController, WikiPlanController, WikiDocsController, WikiSystemModelController],
-  // WikiMaintenance serves the maintenance run's dossiers and cursor (contract `maintenance`) to
-  // `RunnerWikiMaintenanceController`, and reads the Sessions' and Projects' rows the way the other two
-  // do: through Prisma, with no service of theirs. WikiArticles serves the articles to both doors the
-  // same way (contract `articles`).
-  // WikiMaintenanceTrigger makes a space's maintenance task when a committed fact finds it due (contract
+  // The administrators' wiki routes (contract `plan.jobs.rebuild.support`) are a controller of their own, behind the
+  // admin area's guard rather than the wiki's flag, which reads the caller's account.
+  controllers: [WikiController, WikiArticlesController, WikiRunsController, WikiHealthController, WikiPlanController, WikiDocsController, WikiSystemModelController, WikiJobsController, AdminWikiController],
+  // WikiMaintenance serves the maintenance run's dossiers and cursor (contract `maintenance`) to the server's
+  // maintenance job, and reads the Sessions' and Projects' rows the way the other two do: through Prisma,
+  // with no service of theirs. WikiArticles serves the articles the same way (contract `articles`).
+  // WikiMaintenanceTrigger makes a space's maintenance job when a committed fact finds it due (contract
   // `maintenance.job.trigger`): it takes the events this replica publishes as hints, through the global
   // RealtimeService, and reads and writes rows through Prisma alone.
   // WikiRunReads answers one run's page from the same rows, through Prisma alone, and WikiHealth the
-  // Wiki home's status line. WikiPlans keeps the plan and its gate (contract `plan`) for both doors, the
-  // same way, and WikiDocs the documents written from it (contract `docs`). WikiPlanJobFacts moves the
-  // plan's jobs on when a task of the owner's changes (contract `plan.jobs.trigger`), from the same
-  // published events as the maintenance trigger.
+  // Wiki home's status line. WikiPlans keeps the plan and its gate (contract `plan`), the same way, and
+  // WikiDocs the documents written from it (contract `docs`).
   // WikiSystemModelReads reads the System model's name and state from the row the wiki-worker writes (contract
-  // `systemModel.read`), through Prisma alone, for a controller of its own.
-  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiMaintenanceTrigger, WikiRunReads, WikiHealth, WikiPlans, WikiPlanJobFacts, WikiDocs, WikiSystemModelReads],
+  // `systemModel.read`), through Prisma alone, for a controller of its own; WikiJobReads a space's server runs and
+  // their calls (contract `jobs.read`) for Activity, the same way.
+  // AdminRoleGuard depends only on the global PrismaService, so it is provided here too (UsersModule does not export
+  // it), as ProvidersModule does for its admin controller.
+  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiMaintenanceTrigger, WikiRunReads, WikiHealth, WikiPlans, WikiDocs, WikiSystemModelReads, WikiJobReads, AdminRoleGuard],
   exports: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiPlans, WikiDocs],
 })
 export class WikiModule {}

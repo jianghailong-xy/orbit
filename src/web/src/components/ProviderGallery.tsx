@@ -1,17 +1,27 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { PROVIDER_PRESETS, type RunnerEngineHealth } from '@orbit/shared';
+import {
+  AgentProvider,
+  credentialEngines,
+  ENGINE_CLI_NAMES,
+  PROVIDER_PRESETS,
+  type RunnerEngineHealth,
+} from '@orbit/shared';
 import { api } from '../api';
+import { DSH_PRESET_SLUG } from '../lib/dshRuntime';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { runnersQuery } from '../lib/queries';
-import { brandForProvider, ENGINE_PRESET, providerDisplayLabel, runtimeSummary } from '../lib/sessionProviderChoices';
+import { webShowsEngine } from '../lib/runnerEngines';
+import { brandForProvider, ENGINE_PRESET } from '../lib/sessionProviderChoices';
 
-/** Just the part of a runner this gallery reads: which engines it is signed into, and its name. */
+/** Just the part of a runner this gallery reads: which engines it is signed into, and its name — and
+ *  what it declares, which says whether Cursor CLI is drawn at all (webShowsEngine). */
 interface SignedInRunner {
   name: string;
   displayName?: string | null;
   engines?: RunnerEngineHealth[] | null;
+  capabilities?: string[] | null;
 }
 
 // Match the iOS provider tile: a white glyph over the brand gradient, or a monogram when unknown.
@@ -55,7 +65,8 @@ export function ProviderTile({
         height: size,
         borderRadius: radius,
         background: `linear-gradient(135deg, ${brand.from}, ${brand.to})`,
-        border: glyphKey === 'antigravity' ? '1px solid rgba(255,255,255,0.16)' : undefined,
+        // A near-black tile keeps an edge against a dark page (Antigravity's, and Cursor's cube).
+        border: glyphKey === 'antigravity' || glyphKey === 'cursor-api' ? '1px solid rgba(255,255,255,0.16)' : undefined,
       }}
     >
       {glyph ? (
@@ -74,25 +85,84 @@ export function ProviderTile({
   );
 }
 
+/** An engine's mark, as its row on a machine card draws it: its vendor's, Antigravity's own, OpenCode's
+ *  monogram — and DeepSeek's for DeepSeek Harness, DeepSeek's own agent. */
+export function EngineTile({ engine, size }: { engine: AgentProvider; size: number }) {
+  const slug = engine === AgentProvider.DSH ? 'deepseek' : (ENGINE_PRESET[engine] ?? engine);
+  return <ProviderTile slug={slug} label={ENGINE_CLI_NAMES[engine]} size={size} />;
+}
+
+/** Each vendor by the company's own name — in the gallery, on its connect page and over its keys — and
+ *  never by an engine: one key runs on several (the owner's choice A, 2026-10-09). */
+const VENDOR_NAMES: Record<string, string> = {
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
+  gemini: 'Google Gemini',
+  deepseek: 'DeepSeek',
+  moonshot: 'Moonshot (Kimi)',
+  glm: 'Z.AI (GLM)',
+  minimax: 'MiniMax',
+  qwen: 'Qwen',
+  custom: 'Custom',
+};
+
+/** The vendor a key is counted and grouped under: the preset it was made from — a row from the retired
+ *  DeepSeek Harness preset is a DeepSeek key like any other — or `custom` for an endpoint of its own. */
+export const vendorOf = (presetSlug: string | null | undefined): string =>
+  !presetSlug ? 'custom' : presetSlug === DSH_PRESET_SLUG ? 'deepseek' : presetSlug;
+
+export const vendorName = (vendor: string): string =>
+  VENDOR_NAMES[vendor] ?? PROVIDER_PRESETS.find((p) => p.slug === vendor)?.label ?? vendor;
+
+/** The engines a key not yet connected will run on, by the shared compatibility table: what a vendor's
+ *  card and its connect form promise before the server has a key to answer for. A saved key's own are
+ *  the server's (`ProviderRow.engines`), which alone can tell a Claude subscription token — that one
+ *  runs on Claude Code only. */
+export const newKeyEngines = (key: { runtime?: string | null; presetSlug: string | null; baseUrl: string }): AgentProvider[] =>
+  credentialEngines({
+    kind: 'key',
+    runtime: key.runtime ?? AgentProvider.CLAUDE,
+    presetSlug: key.presetSlug,
+    baseUrl: key.baseUrl,
+    subscriptionToken: false,
+  });
+
+/** The vendors offered to connect: every preset but the retired DeepSeek Harness one, less any whose keys
+ *  run on no engine this page draws — Cursor's run on Cursor CLI alone, which the web draws once a runner
+ *  of the account knows it (webShowsEngine). */
+const offeredPresets = (runners: readonly SignedInRunner[]) =>
+  PROVIDER_PRESETS.filter((p) => p.slug !== DSH_PRESET_SLUG
+    && newKeyEngines({ runtime: p.runtime, presetSlug: p.slug, baseUrl: p.baseUrl })
+      .some((engine) => webShowsEngine(engine, runners)));
+
+/** How many of the user's keys each vendor accounts for. A row records the preset it was created from,
+ *  so a second Anthropic key — which lands on the slug "anthropic-2" — still counts towards Anthropic,
+ *  and a key from the retired DeepSeek Harness preset towards DeepSeek (vendorOf). */
+function connectedCounts(rows: readonly ProviderRow[]): Map<string, number> {
+  const connected = new Map<string, number>();
+  for (const p of rows) {
+    if (!p.presetSlug) continue;
+    const vendor = vendorOf(p.presetSlug);
+    connected.set(vendor, (connected.get(vendor) ?? 0) + 1);
+  }
+  return connected;
+}
+
 /** The vendor picker. Every card is a link into the connect page, so a vendor's onboarding is
  *  deep-linkable (/providers/new/anthropic) and the browser's back button works.
  *
- *  A vendor already connected says so on its card — otherwise the gallery is a wall of identical
- *  logos with no way to tell what's set up. It stays a link either way: a second key for the same
- *  vendor is a supported thing to want. */
+ *  A card is a vendor, never an engine — DeepSeek Harness is one of the engines a DeepSeek key runs
+ *  on, so it has no card of its own; until a vendor is connected, its card says which engines its key
+ *  runs on. A vendor already connected says so on its card — otherwise the gallery is a wall of
+ *  identical logos with no way to tell what's set up. It stays a link either way: a second key for the
+ *  same vendor is a supported thing to want. */
 export function ProviderGallery() {
   const providers = useQuery({
     queryKey: PROVIDERS_LIST_KEY,
     queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
   });
   const runners = useQuery(runnersQuery());
-  // How many of the user's providers each vendor accounts for. A row records the preset it was
-  // created from, so a second Anthropic key — which lands on the slug "anthropic-2" — still counts
-  // towards Anthropic.
-  const connected = new Map<string, number>();
-  for (const p of providers.data ?? []) {
-    if (p.presetSlug) connected.set(p.presetSlug, (connected.get(p.presetSlug) ?? 0) + 1);
-  }
+  const connected = connectedCounts(providers.data ?? []);
   // Three of these vendors are also engines the user may already be signed into on a machine of
   // their own. Say so on the card: buying a key for a subscription you already pay for is the one
   // mistake this gallery can lead someone into. It stays a link — a key alongside a sign-in is a
@@ -110,7 +180,7 @@ export function ProviderGallery() {
 
   return (
     <div className="provider-gallery">
-      {PROVIDER_PRESETS.map((p) => {
+      {offeredPresets((runners.data ?? []) as SignedInRunner[]).map((p) => {
         const count = connected.get(p.slug) ?? 0;
         return (
           <Link
@@ -121,7 +191,7 @@ export function ProviderGallery() {
             {/* The check rides on the logo's corner rather than the row, so marking a card costs
                 no width — these names already fill it. */}
             <span className="pc-logo">
-              <ProviderTile slug={p.slug} label={providerDisplayLabel(p.label, p.slug)} />
+              <ProviderTile slug={p.slug} label={vendorName(p.slug)} />
               {count > 0 && (
                 <span className="pc-check" aria-hidden="true">
                   ✓
@@ -129,12 +199,14 @@ export function ProviderGallery() {
               )}
             </span>
             <div style={{ minWidth: 0 }}>
-              <div className="pc-name">{providerDisplayLabel(p.label, p.slug)}</div>
+              <div className="pc-name">{vendorName(p.slug)}</div>
               <div className={`pc-sub${!count && signedInOn.has(p.slug) ? ' pc-local' : ''}`}>
                 {count === 0
                   ? (signedInOn.get(p.slug)
                       ? `Already signed in on ${signedInOn.get(p.slug)}`
-                      : runtimeSummary(p.runtime, p.slug))
+                      : newKeyEngines({ runtime: p.runtime, presetSlug: p.slug, baseUrl: p.baseUrl })
+                          .map((engine) => ENGINE_CLI_NAMES[engine])
+                          .join(' · '))
                   : count === 1
                     ? 'Connected'
                     : `Connected · ${count} keys`}
@@ -149,6 +221,37 @@ export function ProviderGallery() {
           <div className="pc-name">Custom</div>
           <div className="pc-sub">Manual endpoint</div>
         </div>
+      </Link>
+    </div>
+  );
+}
+
+/**
+ * The vendor picker under the keys there are (docs/mocks/infrastructure-focus): one line, a pill for each
+ * vendor with no key yet and one for Custom, each a link into its connect page as the gallery's cards are.
+ * A vendor already connected takes another key from its own card's + Add key.
+ */
+export function ProviderPills() {
+  const providers = useQuery({
+    queryKey: PROVIDERS_LIST_KEY,
+    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
+  });
+  const runners = useQuery(runnersQuery());
+  const connected = connectedCounts(providers.data ?? []);
+  return (
+    <div className="pv-more">
+      <span className="pv-more-l">Connect another provider</span>
+      {offeredPresets((runners.data ?? []) as SignedInRunner[])
+        .filter((p) => !connected.has(p.slug))
+        .map((p) => (
+          <Link key={p.slug} to={`/providers/new/${p.slug}`} className="pv-pill">
+            <ProviderTile slug={p.slug} label={vendorName(p.slug)} size={18} />
+            {vendorName(p.slug)}
+          </Link>
+        ))}
+      <Link to="/providers/new/custom" className="pv-pill">
+        <ProviderTile slug="custom" label="Custom" size={18} muted />
+        Custom
       </Link>
     </div>
   );

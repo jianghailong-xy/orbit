@@ -88,6 +88,32 @@ export function SettingsPage() {
             loading={save.isPending}
           />
         </Field>
+        {/* Absent means on, like the switches below. The engine reads it when it starts, so a
+            session already running keeps what it started with. */}
+        <Field
+          label="Suggested replies"
+          hint="When a Claude turn ends, the empty message box offers what you'd probably type next. Each suggestion is one more request on that session's Claude account."
+        >
+          <Switch
+            aria-label="Suggested replies"
+            checked={prefs.promptSuggestions ?? true}
+            onCheckedChange={(v) => save.mutate({ promptSuggestions: v })}
+            loading={save.isPending}
+          />
+        </Field>
+        {/* Absent means on, like the switch above. Read by every client's session list, so turning
+            it off holds on the phone and the Mac too — it is one account-wide answer. */}
+        <Field
+          label="Session recaps"
+          hint="Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply, and the conversation ends with it. Off: the raw last reply, and no summary in the conversation."
+        >
+          <Switch
+            aria-label="Session recaps"
+            checked={prefs.recaps ?? true}
+            onCheckedChange={(v) => save.mutate({ recaps: v })}
+            loading={save.isPending}
+          />
+        </Field>
       </Card>
 
       {/* One switch for the whole account, not one per workspace: the server reads it live on

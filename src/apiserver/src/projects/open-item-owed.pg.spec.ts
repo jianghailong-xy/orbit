@@ -57,22 +57,28 @@ import { ProjectsService } from './projects.service';
  *
  * THE ZOMBIES ARE MADE BY HAND, ON PURPOSE. Each is an item row written open beside a fact that
  * should have closed it — a candidate superseded or cancelled, a merge card whose candidate is not
- * READY, a task cancelled or replaced — which is exactly what a missed edge leaves, and something
- * no door does on purpose. Beside each one is the item that IS still owed, so a reader that
- * counted nothing at all, or a backstop that closed everything, fails on the control:
+ * READY, a task cancelled or replaced, a failure whose task moved on — which is exactly what a
+ * missed edge leaves, and something no door does on purpose. Beside each one is the item that IS
+ * still owed, so a reader that counted nothing at all, or a backstop that closed everything, fails
+ * on the control:
  *
  *  (1) the backstop closes the zombies — the one already escalated to the owner too — with the
  *      ending the edge would have written and a `backstop:` note, warns once per item, recounts the
  *      owner's badge, writes no turn, session, wake or delivery, and finds nothing the second time;
  *      it leaves a truly BLOCKED candidate's failure, a READY candidate's card, a live task's
- *      conflict, a task's failure and a landed task's conflict open (the last one reported); and
- *      `scripts/project-liveness-audit.sql`'s count of them goes from five to none;
+ *      conflict, a still-failed task's failure and a landed task's conflict open (the last one
+ *      reported); and `scripts/project-liveness-audit.sql`'s count of them goes from six to none;
  *  (2) the sweep neither escalates a zombie nor announces it, and the tick closes it;
  *  (3) the open-items read, the session row's owner items and count, the workspace's needs-you,
  *      the APNs badge and the owner-item push, the Needs-you signals and the project list's
  *      attention all leave the zombies out — and all of them count the owed item beside it;
  *  (4) M-T11 does not hold an automatic landing back on a zombie, and does on the owed item;
- *  (5) a project that looks finished still does with a zombie open, and not with an owed item.
+ *  (5) a project that looks finished still does with a zombie open, and not with an owed item;
+ *  (6) the endings a task's own facts decide: a failure whose task is done, cancelled, replaced or
+ *      being attempted again, and a delivery review whose task left DONE, was replaced or cancelled,
+ *      each closed by the backstop with the resolution `resolveByFact` writes for that same fact —
+ *      asserted against the edge, on an item of the same shape — and neither closing the ones that
+ *      are still owed.
  *
  * Not destructive: every case owns freshly generated ids and asserts over its own project. The
  * backstop is database-wide, so what each case reads of it is narrowed to its own project.
@@ -444,8 +450,10 @@ test('(1) the backstop closes every item nobody owes, the escalated one too, onc
       const cancelled = await candidate(stack, w, 'CANCELLED');
       const blocked = await candidate(stack, w, 'BLOCKED');
       const ready = await candidate(stack, w, 'READY');
-      // The tasks: one cancelled, one replaced by another that is still being worked, one landed.
+      // The tasks: one cancelled, one replaced by another that is still being worked, one landed,
+      // and one that is still where its failure left it.
       const gone = await task(stack, w, TaskStatus.CANCELLED, 'cancelled');
+      const failed = await task(stack, w, TaskStatus.FAILED, 'failed');
       const successor = await task(stack, w, TaskStatus.OPEN, 'successor');
       const replaced = await task(stack, w, TaskStatus.FAILED, 'replaced');
       await stack.db.task.update({
@@ -468,6 +476,9 @@ test('(1) the backstop closes every item nobody owes, the escalated one too, onc
         }),
         cancelledTask: await openItem(stack, w, { kind: 'INTEGRATION_CONFLICT', taskId: gone }),
         replacedTask: await openItem(stack, w, { kind: 'INTEGRATION_ERROR', taskId: replaced }),
+        // A failure whose task is cancelled has moved on too: `resolveByFact` answers it with
+        // TASK_CLOSED, and this predicate reads the same fact.
+        cancelledFailure: await openItem(stack, w, { kind: 'TASK_FAILED', taskId: gone }),
       };
       const owed = {
         blocked: await openItem(stack, w, { kind: 'INTEGRATION_CHECK_FAILED', promotionId: blocked }),
@@ -475,8 +486,8 @@ test('(1) the backstop closes every item nobody owes, the escalated one too, onc
           kind: 'PROMOTION_APPROVAL', promotionId: ready, assignee: 'OWNER', escalateAt: null,
         }),
         live: await openItem(stack, w, { kind: 'INTEGRATION_CONFLICT', taskId: successor }),
-        // A task's own failure is answered by the task (`resolveByFact`), not by this predicate.
-        failure: await openItem(stack, w, { kind: 'TASK_FAILED', taskId: gone }),
+        // A failure whose task is still failed is owed by the task, and stays open.
+        failure: await openItem(stack, w, { kind: 'TASK_FAILED', taskId: failed }),
         landed: await openItem(stack, w, { kind: 'INTEGRATION_CONFLICT', taskId: landed }),
       };
       // The landed task's work reached a branch an hour after its conflict was opened — a branch
@@ -504,8 +515,9 @@ test('(1) the backstop closes every item nobody owes, the escalated one too, onc
           { kind: 'INTEGRATION_CONFLICT', openNotOwed: 2, withOwner: 0 },
           { kind: 'INTEGRATION_ERROR', openNotOwed: 1, withOwner: 0 },
           { kind: 'PROMOTION_APPROVAL', openNotOwed: 1, withOwner: 1 },
+          { kind: 'TASK_FAILED', openNotOwed: 1, withOwner: 0 },
         ],
-        'before the backstop, the audit counts the five zombies by kind, two of them the owner\'s',
+        'before the backstop, the audit counts the six zombies by kind, two of them the owner\'s',
       );
 
       const { push, told } = recordingPush();
@@ -516,7 +528,7 @@ test('(1) the backstop closes every item nobody owes, the escalated one too, onc
       const after = await agentWork(stack.db);
 
       assert.deepEqual(closed.map((row) => row.itemId).sort(), Object.values(zombie).sort(),
-        'the backstop closed the five zombies and reported each');
+        'the backstop closed the six zombies and reported each');
       const ended = async (id: string) => {
         const row = await reread(stack, id);
         return [row.state, row.resolution, row.resolvedBy, row.resolutionNote];
@@ -538,9 +550,13 @@ test('(1) the backstop closes every item nobody owes, the escalated one too, onc
         'RESOLVED', 'TASK_CLOSED', 'PLATFORM', `backstop: task ${gone}@CANCELLED was cancelled${tail}`,
       ]);
       assert.deepEqual(await ended(zombie.replacedTask), [
+        'RESOLVED', 'SUCCESSOR_FILED', 'PLATFORM',
+        `backstop: task ${replaced}@FAILED was superseded by task ${successor}${tail}`,
+      ], 'a task whose successor took it over ends an integration item as `task_create` declares it');
+      assert.deepEqual(await ended(zombie.cancelledFailure), [
         'RESOLVED', 'TASK_CLOSED', 'PLATFORM',
-        `backstop: task ${replaced}@FAILED was replaced by task ${successor}${tail}`,
-      ]);
+        `backstop: task ${gone}@CANCELLED was cancelled${tail}`,
+      ], 'a failure whose task was cancelled ends as `resolveByFact`\'s first statement ends it');
       for (const id of Object.values(zombie)) {
         assert.ok((await reread(stack, id)).resolvedAt, 'a closed item says when');
       }
@@ -554,7 +570,7 @@ test('(1) the backstop closes every item nobody owes, the escalated one too, onc
       // One warning per item closed: its kind, what it was about and where that stands, how long it
       // was open, and whose it was. And one for the landed conflict it left open.
       const mine = log.warned.filter((line) => line.includes(w.projectId));
-      assert.equal(mine.filter((line) => line.startsWith('backstop closed ')).length, 5, mine.join('\n'));
+      assert.equal(mine.filter((line) => line.startsWith('backstop closed ')).length, 6, mine.join('\n'));
       const escalatedLine = mine.find((line) => line.includes(zombie.escalated));
       assert.ok(escalatedLine, 'the escalated zombie was warned about');
       assert.match(escalatedLine!, /^backstop closed INTEGRATION_CHECK_FAILED /);
@@ -620,6 +636,9 @@ test('(2) the sweep neither escalates nor announces an item nobody owes, and the
       const owed = await openItem(stack, w, {
         kind: 'INTEGRATION_CHECK_FAILED', promotionId: blocked, ...due,
       });
+      // And a failure whose task is DONE: overdue by the same clock, owed by nobody.
+      const done = await task(stack, w, TaskStatus.DONE, 'done');
+      const failureZombie = await openItem(stack, w, { kind: 'TASK_FAILED', taskId: done, ...due });
 
       const clock = new ProjectOpenItemEscalationService(stack.prisma);
       const escalated = (await clock.sweep()).filter((row) => row.projectId === w.projectId);
@@ -628,6 +647,12 @@ test('(2) the sweep neither escalates nor announces an item nobody owes, and the
       const left = await reread(stack, zombie);
       assert.deepEqual([left.state, left.assignee, left.assigneeReason, left.escalatedAt],
         ['OPEN', 'COORDINATOR', 'DEFAULT', null], 'the zombie was not handed to anybody');
+      const leftFailure = await reread(stack, failureZombie);
+      assert.deepEqual(
+        [leftFailure.state, leftFailure.assignee, leftFailure.assigneeReason, leftFailure.escalatedAt],
+        ['OPEN', 'COORDINATOR', 'DEFAULT', null],
+        'nor was a failure whose task moved on, however long it has waited',
+      );
       const handed = await reread(stack, owed);
       assert.deepEqual([handed.assignee, handed.assigneeReason], ['OWNER', 'ESCALATED']);
 
@@ -665,6 +690,13 @@ test('(2) the sweep neither escalates nor announces an item nobody owes, and the
       assert.deepEqual([closed.state, closed.resolution, closed.resolvedBy],
         ['SUPERSEDED', 'PROMOTION_MOVED_ON', 'PLATFORM'], 'the tick closed the zombie');
       assert.match(closed.resolutionNote ?? '', /^backstop: /);
+      const closedFailure = await reread(stack, failureZombie);
+      assert.deepEqual(
+        [closedFailure.state, closedFailure.resolution, closedFailure.resolvedBy],
+        ['RESOLVED', 'TASK_DONE', 'PLATFORM'],
+        'the tick closed the failure whose task is done, as `resolveByFact` would have',
+      );
+      assert.match(closedFailure.resolutionNote ?? '', /^backstop: /);
       assert.deepEqual(told.filter((call) => call.args[0] === zombie), [],
         'nobody was told about the zombie');
       assert.deepEqual(told.filter((call) => call.args[0] === w.ownerId),
@@ -736,15 +768,18 @@ test('(3) every reader leaves out an item nobody owes, and counts the owed one b
         };
       };
 
-      // The zombies: the 2026-10-02 item, escalated to the owner about a superseded candidate, and a
-      // conflict the coordinator holds about a task that was cancelled.
+      // The zombies: the 2026-10-02 item, escalated to the owner about a superseded candidate, a
+      // conflict the coordinator holds about a task that was cancelled, and a failure whose task is
+      // DONE — an item the clock would have carried to the owner had the readers taken OPEN for owed.
       const superseded = await candidate(stack, w, 'SUPERSEDED');
       const gone = await task(stack, w, TaskStatus.CANCELLED, 'cancelled');
+      const done = await task(stack, w, TaskStatus.DONE, 'done');
       const zombie = await openItem(stack, w, {
         kind: 'INTEGRATION_CHECK_FAILED', promotionId: superseded,
         assignee: 'OWNER', assigneeReason: 'ESCALATED', escalatedAt: new Date(),
       });
       await openItem(stack, w, { kind: 'INTEGRATION_CONFLICT', taskId: gone });
+      await openItem(stack, w, { kind: 'TASK_FAILED', taskId: done });
 
       assert.deepEqual(await reads(), {
         needsYou: [],
@@ -761,26 +796,29 @@ test('(3) every reader leaves out an item nobody owes, and counts the owed one b
       await push.notifyOwnerItem(zombie);
       assert.deepEqual(pushed, [], 'and nobody’s phone rings about it');
 
-      // The same two, owed: a failed check about a candidate that is truly BLOCKED, and a conflict
-      // about a task still being worked. Every reader counts exactly these.
+      // The same three, owed: a failed check about a candidate that is truly BLOCKED, a conflict
+      // about a task still being worked, and a failure whose task is still failed. Every reader
+      // counts exactly these.
       const blocked = await candidate(stack, w, 'BLOCKED');
       const live = await task(stack, w, TaskStatus.OPEN, 'live');
+      const failed = await task(stack, w, TaskStatus.FAILED, 'failed');
       const escalated = await openItem(stack, w, {
         kind: 'INTEGRATION_CHECK_FAILED', promotionId: blocked,
         assignee: 'OWNER', assigneeReason: 'ESCALATED', escalatedAt: new Date(),
       });
       const held = await openItem(stack, w, { kind: 'INTEGRATION_CONFLICT', taskId: live });
+      const failureHeld = await openItem(stack, w, { kind: 'TASK_FAILED', taskId: failed });
 
       assert.deepEqual(await reads(), {
         needsYou: [escalated],
-        withCoordinator: [held],
+        withCoordinator: [held, failureHeld],
         rowOwnerItems: [escalated],
         rowCount: 1,
         workspaceNeedsYou: 1,
         badge: true,
         signals: [escalated],
         listOwnerItems: [['ESCALATED', 1]],
-        listCoordinatorItems: 1,
+        listCoordinatorItems: 2,
       }, 'every reader counts the owed items, and only those');
       await push.notifyOwnerItem(escalated);
       assert.deepEqual(pushed, [escalated], 'the owed one rings the phone');
@@ -816,10 +854,17 @@ test('(4) an item nobody owes does not hold an automatic landing back; an owed o
       assert.equal(await refusal(), null,
         'the landing goes out: the only open integration item is about a candidate that is gone');
 
+      // A task whose landing on the project branch conflicted, done and not landed: its item is owed,
+      // and still about work that is in nothing this merge carries (owner decision 2026-10-15).
+      const unlanded = await task(stack, w, TaskStatus.DONE, 'unlanded');
+      await openItem(stack, w, { kind: 'INTEGRATION_CONFLICT', taskId: unlanded });
+      assert.equal(await refusal(), null,
+        'the landing goes out: a task\'s failed landing on the project branch holds the merge into main back no longer');
+
       const blocked = await candidate(stack, w, 'BLOCKED');
       await openItem(stack, w, { kind: 'INTEGRATION_CONFLICT', promotionId: blocked });
-      assert.equal(await refusal(), 'an integration exception is still open on this project',
-        'an owed integration item still holds it back');
+      assert.equal(await refusal(), 'an exception on this project\'s merge into main is still open',
+        'an owed item on the merge into main still holds it back');
     } finally {
       await stack.db.$disconnect();
     }
@@ -871,15 +916,183 @@ test('(5) a project that looks finished still does with an item nobody owes open
       const finish = async () => (await readProjectFinish(stack.prisma, w.projectId)).state;
       assert.equal(await finish(), 'LOOKS_FINISHED', 'the fixture looks finished before any item');
 
-      // A conflict left open about a task that was cancelled: nobody is handling anything.
+      // A conflict left open about a task that was cancelled, and the failure that task left
+      // behind: nobody is handling anything.
       const gone = await task(stack, w, TaskStatus.CANCELLED, 'cancelled');
       await openItem(stack, w, { kind: 'INTEGRATION_CONFLICT', taskId: gone });
+      await openItem(stack, w, { kind: 'TASK_FAILED', taskId: gone });
       assert.equal(await finish(), 'LOOKS_FINISHED',
-        'an item about a task that is gone does not keep the project from looking finished');
+        'an item about a task that is gone — its failure included — does not keep the project from '
+        + 'looking finished');
 
       // The same item about the task that is done and not yet landed is somebody's work.
       await openItem(stack, w, { kind: 'INTEGRATION_CONFLICT', taskId: served.id });
       assert.equal(await finish(), 'NOT_FINISHED', 'an owed item does');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ═══ (6) the endings the task's own facts decide ══════════════════════════════════════════════════
+
+test('(6) the backstop writes the ending the task’s own edge would have written, and the fact',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'task-endings');
+      // One failure per fact `resolveByFact`'s first statement answers one with, and one that has
+      // none of them: its task is still failed and stays owed.
+      const landed = await task(stack, w, TaskStatus.DONE, 'done');
+      const cancelled = await task(stack, w, TaskStatus.CANCELLED, 'cancelled');
+      const successor = await task(stack, w, TaskStatus.OPEN, 'successor');
+      const replaced = await task(stack, w, TaskStatus.FAILED, 'replaced');
+      await stack.db.task.update({
+        where: { id: replaced },
+        data: { supersededByTaskId: successor, terminalReason: 'SUPERSEDED', supersededAt: new Date() },
+      });
+      // A retry is a live attempt at the task, other than the one the item was opened by — and the
+      // row can still read FAILED while that attempt is on its way, which is why the note below has
+      // to say what is happening rather than what the status column says.
+      const retried = await task(stack, w, TaskStatus.FAILED, 'retried');
+      await stack.db.session.create({
+        data: {
+          id: randomUUID(),
+          ownerId: w.ownerId,
+          creatorId: w.ownerId,
+          taskId: retried,
+          workspaceId: w.workspaceId,
+          assignedRunnerId: w.runnerId,
+          title: 'attempting it again',
+          prompt: 'do the work',
+          provider: 'claude',
+          status: RunStatus.RUNNING,
+          dispatchOrigin: SessionDispatchOrigin.USER,
+          startsTaskWork: true,
+          startedAt: new Date(),
+        },
+      });
+      const stillFailed = await task(stack, w, TaskStatus.FAILED, 'still failed');
+
+      // The delivery reviews: one whose task left the DONE delivery it describes, one whose task was
+      // replaced, one cancelled — beside the one that is still the delivery it reviews.
+      const reviewing = await task(stack, w, TaskStatus.DONE, 'under review');
+      const returned = await task(stack, w, TaskStatus.IN_PROGRESS, 'returned');
+      const replacedReview = await task(stack, w, TaskStatus.CANCELLED, 'review replaced');
+      await stack.db.task.update({
+        where: { id: replacedReview },
+        data: { supersededByTaskId: successor, terminalReason: 'SUPERSEDED', supersededAt: new Date() },
+      });
+      const cancelledReview = await task(stack, w, TaskStatus.CANCELLED, 'review cancelled');
+
+      const zombie = {
+        done: await openItem(stack, w, { kind: 'TASK_FAILED', taskId: landed }),
+        cancelled: await openItem(stack, w, { kind: 'TASK_FAILED', taskId: cancelled }),
+        replaced: await openItem(stack, w, { kind: 'TASK_FAILED', taskId: replaced }),
+        retried: await openItem(stack, w, { kind: 'TASK_FAILED', taskId: retried }),
+        reviewReturned: await openItem(stack, w, { kind: 'DELIVERY_REVIEW', taskId: returned }),
+        reviewReplaced: await openItem(stack, w, { kind: 'DELIVERY_REVIEW', taskId: replacedReview }),
+        reviewCancelled: await openItem(stack, w, { kind: 'DELIVERY_REVIEW', taskId: cancelledReview }),
+      };
+      const owed = {
+        failure: await openItem(stack, w, { kind: 'TASK_FAILED', taskId: stillFailed }),
+        review: await openItem(stack, w, { kind: 'DELIVERY_REVIEW', taskId: reviewing }),
+      };
+
+      // The audit reads the same predicate the backstop is about to write by, and holds the SQL to
+      // the TypeScript.
+      const [, owedAudit] = auditStatements();
+      assert.ok(layoutFree(owedAudit!).includes(layoutFree(openItemOwed('item').sql)),
+        'scripts/project-liveness-audit.sql spells openItemOwed as the TypeScript does');
+      assert.deepEqual(
+        (await audit(stack, w.projectId)).sort((a, b) => a.kind.localeCompare(b.kind)),
+        [
+          { kind: 'DELIVERY_REVIEW', openNotOwed: 3, withOwner: 0 },
+          { kind: 'TASK_FAILED', openNotOwed: 4, withOwner: 0 },
+        ],
+        'before the backstop, the audit counts every one of these by kind',
+      );
+
+      const before = await agentWork(stack.db);
+      const clock = new ProjectOpenItemEscalationService(stack.prisma);
+      const log = quietLog(clock);
+      const closed = (await clock.reconcile()).filter((row) => row.projectId === w.projectId);
+      const after = await agentWork(stack.db);
+
+      assert.deepEqual(closed.map((row) => row.itemId).sort(), Object.values(zombie).sort(),
+        'the backstop closed all seven and reported each');
+      const ended = async (id: string) => {
+        const row = await reread(stack, id);
+        return [row.state, row.resolution, row.resolvedBy, row.resolutionNote];
+      };
+      const tail = '; no edge closed this item when that happened';
+      assert.deepEqual(await ended(zombie.done), [
+        'RESOLVED', 'TASK_DONE', 'PLATFORM', `backstop: task ${landed}@DONE left FAILED${tail}`,
+      ], 'a failure whose task is done ends as `resolveByFact` ends it: TASK_DONE');
+      assert.deepEqual(await ended(zombie.cancelled), [
+        'RESOLVED', 'TASK_CLOSED', 'PLATFORM',
+        `backstop: task ${cancelled}@CANCELLED was cancelled${tail}`,
+      ], 'a failure whose task was cancelled ends TASK_CLOSED');
+      assert.deepEqual(await ended(zombie.replaced), [
+        'RESOLVED', 'SUCCESSOR_FILED', 'PLATFORM',
+        `backstop: task ${replaced}@FAILED was superseded by task ${successor}${tail}`,
+      ], 'a failure whose task a successor took over ends SUCCESSOR_FILED');
+      assert.deepEqual(await ended(zombie.retried), [
+        'RESOLVED', 'RETRIED', 'PLATFORM',
+        `backstop: task ${retried}@FAILED is being attempted again${tail}`,
+      ], 'a failure whose task is being attempted again ends RETRIED');
+      assert.deepEqual(await ended(zombie.reviewReturned), [
+        'RESOLVED', 'RETRIED', 'PLATFORM',
+        `backstop: task ${returned}@IN_PROGRESS left DONE${tail}`,
+      ], 'a review whose task was returned to work ends RETRIED');
+      const returnedNote = (await reread(stack, zombie.reviewReturned)).resolutionNote ?? '';
+      assert.ok(!returnedNote.includes('cancelled'),
+        `a review returned to work is not called a cancellation: ${returnedNote}`);
+      assert.deepEqual(await ended(zombie.reviewReplaced), [
+        'RESOLVED', 'SUCCESSOR_FILED', 'PLATFORM',
+        `backstop: task ${replacedReview}@CANCELLED was superseded by task ${successor}${tail}`,
+      ], 'a review whose task was replaced ends SUCCESSOR_FILED, before the cancellation it also is');
+      assert.deepEqual(await ended(zombie.reviewCancelled), [
+        'RESOLVED', 'TASK_CLOSED', 'PLATFORM',
+        `backstop: task ${cancelledReview}@CANCELLED was cancelled${tail}`,
+      ], 'a review whose task was cancelled ends TASK_CLOSED');
+
+      assert.deepEqual(after, before, 'the backstop writes nothing an agent would run: '
+        + `${JSON.stringify(before)} → ${JSON.stringify(after)}`);
+      assert.deepEqual(log.errors, []);
+      for (const [what, id] of Object.entries(owed)) {
+        const row = await reread(stack, id);
+        assert.deepEqual([row.state, row.resolution], ['OPEN', null],
+          `the ${what} item is still owed and stays open`);
+      }
+      assert.deepEqual(await audit(stack, w.projectId), [],
+        'after the backstop, the audit counts no open item nobody owes');
+
+      // And the same facts through the edge, on an item of the same shape: `resolveByFact` writes the
+      // resolution the backstop just wrote, and leaves the two owed controls exactly where they are.
+      const cases: Array<[string, 'TASK_FAILED' | 'DELIVERY_REVIEW', string]> = [
+        ['done', 'TASK_FAILED', landed],
+        ['cancelled', 'TASK_FAILED', cancelled],
+        ['replaced', 'TASK_FAILED', replaced],
+        ['retried', 'TASK_FAILED', retried],
+        ['reviewReturned', 'DELIVERY_REVIEW', returned],
+        ['reviewReplaced', 'DELIVERY_REVIEW', replacedReview],
+        ['reviewCancelled', 'DELIVERY_REVIEW', cancelledReview],
+      ];
+      for (const [what, kind, taskId] of cases) {
+        const twin = await openItem(stack, w, { kind, taskId });
+        await stack.openItems.resolveByFact([taskId]);
+        const edge = await reread(stack, twin);
+        const backstop = await reread(stack, zombie[what as keyof typeof zombie]);
+        assert.deepEqual([edge.state, edge.resolution], [backstop.state, backstop.resolution],
+          `${what}: the edge writes the ending the backstop wrote`);
+        assert.equal(edge.resolutionNote, null, `${what}: and the edge writes no backstop note`);
+      }
+      await stack.openItems.resolveByFact([stillFailed, reviewing]);
+      for (const [what, id] of Object.entries(owed)) {
+        const row = await reread(stack, id);
+        assert.deepEqual([row.state, row.resolution], ['OPEN', null],
+          `the ${what} item is owed by the edge too, and stays open`);
+      }
     } finally {
       await stack.db.$disconnect();
     }

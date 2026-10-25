@@ -1,0 +1,8 @@
+[orbit-runner 2026-10-18T04:19:49.561Z] runner "t06b-real-selfhost" online -> http://127.0.0.1:13710 (max 2 concurrent)
+[orbit-runner 2026-10-18T04:19:49.602Z] reclaiming session 01a14d3c-76fa-778c-903f-358357cd01f4 — t06b self-managed
+[orbit-runner 2026-10-18T04:19:49.664Z] codex model catalog refresh failed: exit status 1
+[orbit-runner 2026-10-18T04:19:49.788Z] background job service unavailable for 01a14d3c-76fa-778c-903f-358357cd01f4: background job socket path is too long for a unix socket (105 > 100): /mnt/data/tmp/34hpKqWRaAJbUXoikQ3U4/selfhost/orbit-home/runs/01a14d3c-76fa-778c-903f-358357cd01f4/bg.sock
+[orbit-runner 2026-10-18T04:19:49.788Z] > interactive run 01a14d3c-76fa-778c-903f-358357cd01f4 — t06b self-managed
+[orbit-runner 2026-10-18T04:19:50.014Z] ■ interactive run 01a14d3c-76fa-778c-903f-358357cd01f4 → FAILED
+[orbit-runner 2026-10-18T04:20:04.561Z] claude plan-usage unavailable: open /mnt/data/tmp/34hpKqWRaAJbUXoikQ3U4/selfhost/home/.claude/.credentials.json: no such file or directory
+[orbit-runner 2026-10-18T04:20:34.366Z] runner stopping; draining session supervisors...

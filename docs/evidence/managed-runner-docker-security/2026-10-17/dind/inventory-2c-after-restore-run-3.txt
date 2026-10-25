@@ -1,0 +1,22 @@
+== inventory 2c-after-restore-run-3 at 2026-10-17T14:28:02Z, checkout d4462648316c03b46363632e676c6878904192e9
+-- managed runner containers
+mr-01a14a02-f987-712b-8893-d9440d0d9c09	running	Up 33 seconds	generation=12	uid=084d50fd-0020-4aae-b812-66e060cb6ed2	,mr-boot-01a14a…,mr-data-01a14a…
+mr-01a14a02-f8f0-752a-9c45-2e748a13c38f	running	Up 3 minutes	generation=8	uid=54a48542-f873-4c91-a32c-c45d81641747	,mr-boot-01a14a…,mr-data-01a14a…
+-- managed runner volumes
+mr-boot-01a14a02-f8f0-752a-9c45-2e748a13c38f-g8	kind=bootstrap	owner=01a14a02-f8c6-753e-b29c-4bc79e921790	uid=
+mr-boot-01a14a02-f987-712b-8893-d9440d0d9c09-g12	kind=bootstrap	owner=01a14a02-f943-7425-8cd8-ed87d1ff47e0	uid=
+mr-data-01a14a02-f8f0-752a-9c45-2e748a13c38f	kind=data	owner=01a14a02-f8c6-753e-b29c-4bc79e921790	uid=cd9b5abc-479f-434e-9167-f2349c186dbc
+mr-data-01a14a02-f987-712b-8893-d9440d0d9c09	kind=data	owner=01a14a02-f943-7425-8cd8-ed87d1ff47e0	uid=f223651a-cf96-4598-8fb0-4196da11727f
+-- stack
+orbit-docker-channel	running	Up 7 minutes (healthy)
+orbit-web	running	Up 7 minutes (healthy)
+orbit-gateway	running	Up 7 minutes (healthy)
+orbit-wiki-worker	running	Up 7 minutes
+orbit-pgbackup	running	Up 7 minutes
+orbit-apiserver	running	Up 7 minutes (healthy)
+orbit-postgres	running	Up 7 minutes (healthy)
+-- managed_runner rows
+a@d5-drill.test | READY | RUNNING | 8 | mr-data-01a14a02-f8f0-752a-9c45-2e748a13c38f | mr-01a14a02-f8f0-752a-9c45-2e748a13c38f | 54a48542-f873-4c91-a32c-c45d81641747 | 
+b@d5-drill.test | READY | RUNNING | 12 | mr-data-01a14a02-f987-712b-8893-d9440d0d9c09 | mr-01a14a02-f987-712b-8893-d9440d0d9c09 | 084d50fd-0020-4aae-b812-66e060cb6ed2 | 
+-- capacity pool (reserved)
+18000 | 4000 | 12077248512 | 8589934592 | 2 | 2 | 15277258878370 | 42949672960

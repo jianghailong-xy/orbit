@@ -29,6 +29,11 @@
  *       requeue must never produce, so the turn stays ANSWERED and the inbox offers nothing.
  *   (5) A `!`-shell turn. It is answered by its exit code and never produces assistant text at all;
  *       it must not be dragged back into the queue by a rule about replies.
+ *   (8) The loop the requeue rule can become. The same message goes out, comes back unanswered, and
+ *       goes out again — for as long as the engine keeps swallowing it (2026-10-10: 67 rounds in
+ *       three minutes). Up to a budget that is still the point (the turn is handed out again); at
+ *       the budget the run settles FAILED with a sentence saying what happened, the turn is consumed
+ *       rather than requeued, and the retry ladder — not the queue — carries the message from there.
  *
  * (2) is what makes (1) a fact about the absent answer rather than about the words in the report.
  *
@@ -380,5 +385,81 @@ test('a turn nothing answered goes back in the queue instead of being marked ANS
     const after = await row(f.turnId);
     assert.equal(after.status, 'ANSWERED', 'the size of a usage report never decides the answer');
     assert.equal(await poll(api, f), null, 'and nothing is left queued behind it');
+  });
+
+  await t.test('(8) a message the engine keeps swallowing is consumed, not redelivered forever', async () => {
+    const f = await fixture(db, 'swallowed');
+    // The session and its error over the same second connection the turn is read on. The wait is
+    // computed INSIDE PostgreSQL: `retry_at` is a timezone-naive column written from the Node clock
+    // and read back by node-postgres as local time, so subtracting the two in JS is two hours out on
+    // any host that is not UTC (this one is CEST). In the database both sides share one clock.
+    async function sessionRow() {
+      const r = await sql.query(
+        `SELECT status, error, "retry_at", EXTRACT(EPOCH FROM ("retry_at" - now())) AS wait_seconds
+           FROM "session" WHERE id = $1::uuid`,
+        [f.sessionId],
+      );
+      return r.rows[0] as {
+        status: string;
+        error: string | null;
+        retry_at: Date | null;
+        wait_seconds: string | null;
+      };
+    }
+    // What the engine reports for a turn it swallowed: the turn ended and it runs one ACP prompt
+    // per Orbit turn, so the counters are ordinary — and nothing under the turn answers it.
+    const SWALLOWED = {
+      status: SharedRunStatus.SUCCEEDED,
+      subtype: 'success',
+      numTurns: 1,
+      costUsd: 0,
+    } as const;
+    // The runner announces every hand-over the same way: a `user` event under the turn. That is the
+    // delivery count's whole source, and it is what survives the requeue (the row's own columns are
+    // reset by it).
+    let seq = 0;
+    const handOver = async () => {
+      seq += 1;
+      await say(api, f, seq, RunEventType.USER, { text: '把这两张图里的报错讲清楚' });
+      await api.turnComplete({ id: f.runnerId }, f.sessionId, { turnId: f.turnId, ...SWALLOWED });
+    };
+
+    // The first hand-over is the fixture's own: the row is already out on delivery.
+    await handOver();
+
+    // The second is still the question the person asked: below the budget the inbox hands the same
+    // turn back out, and nothing about the requeue rule has changed.
+    assert.equal((await poll(api, f))?.turnId, f.turnId, 'the second delivery is still owed an answer');
+    await handOver();
+    assert.equal((await row(f.turnId)).status, 'PENDING',
+      'below the budget the unanswered turn goes back in the queue, exactly as it always has');
+    assert.equal((await sessionRow()).status, 'RUNNING', 'and the session stays live, waiting on an answer');
+
+    // The budget-th. The engine has now been handed this message three times and nothing answered
+    // under any of them.
+    assert.equal((await poll(api, f))?.turnId, f.turnId, 'the last delivery before the budget is an ordinary one');
+    await handOver();
+
+    const consumed = await row(f.turnId);
+    assert.equal(consumed.status, 'ANSWERED',
+      'a message handed over its whole budget is taken out of the queue rather than put back on it');
+    assert.ok(consumed.answered_at instanceof Date, 'and the moment it stopped being owed is recorded');
+    assert.equal(
+      await db.conversationTurn.count({ where: { sessionId: f.sessionId, status: 'PENDING' } }),
+      0,
+      'nothing is queued behind it — this is what ends the loop',
+    );
+    await assert.rejects(poll(api, f), /no longer open/,
+      'and the runner is told the session is not live rather than handed the message again');
+
+    const settled = await sessionRow();
+    assert.equal(settled.status, 'FAILED',
+      'the run settles failed the way an engine that never came up does, so the list shows it');
+    assert.match(settled.error ?? '', /Nothing answered this message across 3 deliveries/,
+      'and the reason says what the control plane watched happen, not "run failed"');
+    assert.ok(settled.retry_at instanceof Date, 'the message is left on the retry ladder');
+    const waitSeconds = Number(settled.wait_seconds);
+    assert.ok(waitSeconds > 0 && waitSeconds <= 2 * 60 + 5,
+      `the first ladder step is two minutes away, not a hot loop (got ${Math.round(waitSeconds)}s)`);
   });
 });

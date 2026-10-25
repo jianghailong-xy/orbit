@@ -347,6 +347,43 @@ func TestAntigravityGoogleLoginReplayExitZeroIsNotSuccess(t *testing.T) {
 	h.wait(t, loginFailed)
 }
 
+// googlePromptAfterExit holds back the PTY output that completes agy's authorization prompt until
+// agy has exited and been reaped, and half a second longer: the relay sees the exit first.
+type googlePromptAfterExit struct {
+	out     io.Writer
+	pidFile string
+	seen    []byte
+	held    bool
+}
+
+func (w *googlePromptAfterExit) Write(p []byte) (int, error) {
+	w.seen = append(w.seen, p...)
+	if !w.held && antigravityGoogleLoginProgress(string(w.seen)) != nil {
+		w.held = true
+		// The fake agy writes its pid first thing, and only the relay's cmd.Wait reaps it.
+		b, _ := os.ReadFile(w.pidFile)
+		for pid, _ := strconv.Atoi(string(b)); pid > 0 && syscall.Kill(pid, 0) == nil; {
+			time.Sleep(5 * time.Millisecond)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return w.out.Write(p)
+}
+
+func TestAntigravityGoogleLoginReplayExitSeenBeforeLastOutput(t *testing.T) {
+	h := newGoogleLoginHarness(t, "exit_zero")
+	previous := antigravityGooglePTYOutput
+	antigravityGooglePTYOutput = func(out io.Writer) io.Writer {
+		return &googlePromptAfterExit{out: out, pidFile: filepath.Join(h.dir, "pid")}
+	}
+	t.Cleanup(func() { antigravityGooglePTYOutput = previous })
+	h.start()
+	if res := h.wait(t, loginAwaitingCode); res.URL != googleReplayURL {
+		t.Fatal("the prompt agy printed before exiting was not published")
+	}
+	h.wait(t, loginFailed)
+}
+
 func TestAntigravityGoogleLoginReplayFailedUsageIsNotSuccess(t *testing.T) {
 	h := newGoogleLoginHarness(t, "success")
 	t.Setenv("GOOGLE_REPLAY_PROBE_EXIT", "1")

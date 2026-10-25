@@ -55,14 +55,14 @@ final class EngineAuthTests: XCTestCase {
     func testAntigravityCardsNameTheRunnerAndOfferEncryptedKeys() {
         XCTAssertEqual(EngineAuth.antigravityTitle(.needsKey, runnerName: "HPC"), "Antigravity needs authentication")
         XCTAssertEqual(EngineAuth.antigravityBody(.needsKey, runnerName: nil, runnerVersion: nil),
-                       "Sign in with Google on this runner, or connect a Gemini API key in Providers.")
+                       "Sign in with Google on this runner, or connect a Gemini API key in Infrastructure.")
         XCTAssertEqual(EngineAuth.antigravityTitle(.updateRunner, runnerName: "HPC"), "Waiting for a newer runner")
         XCTAssertEqual(EngineAuth.antigravityBody(.updateRunner, runnerName: "HPC", runnerVersion: "0.1.208"),
                        "HPC runs Orbit runner 0.1.208; Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then.")
         XCTAssertEqual(EngineAuth.antigravityTitle(.notInstalled, runnerName: "workstation"),
                        "Antigravity CLI isn't installed on workstation")
         XCTAssertEqual(EngineAuth.antigravityBody(.notInstalled, runnerName: "workstation", runnerVersion: nil),
-                       "Install it from Providers, then send your message again.")
+                       "Install it from Infrastructure, then send your message again.")
         XCTAssertEqual(EngineAuth.antigravityTitle(.notInstalled, runnerName: nil), "Antigravity CLI isn't installed on this runner")
         XCTAssertTrue(EngineAuth.antigravityBody(.updateRunner, runnerName: "", runnerVersion: "").contains("this runner runs Orbit runner an unknown version"))
     }

@@ -95,6 +95,7 @@ interface Stack {
   jobs: IntegrationJobRelay;
   openItems: ProjectOpenItemService;
   ownerRetry: ProjectIntegrationRetryController;
+  promotions: ProjectPromotionService;
 }
 
 /** The production wiring over one client, with the real completion-input router behind task writes. */
@@ -149,7 +150,7 @@ async function connect(): Promise<Stack> {
     undefined,
     new ProjectPromotionService(prisma),
   );
-  return { db, sessions, tasks, api, jobs, openItems, ownerRetry };
+  return { db, sessions, tasks, api, jobs, openItems, ownerRetry, promotions: new ProjectPromotionService(prisma) };
 }
 
 interface World {
@@ -553,6 +554,11 @@ interface ItemRow {
   payload: {
     failureClass?: string;
     generation?: number;
+    /** §2.9 LS1: the landing session the attempt belongs to; null when the job had no subject. */
+    landingSessionId?: string | null;
+    /** The round the failed claim last reported; null when no report measured one. */
+    round?: number | null;
+    errorDetail?: Record<string, unknown> | null;
     retry?: { retryOfJobId?: string; failureClass?: string; reason?: string; requestedBySessionId?: string; requestedByUserId?: string };
     check?: { name: string; timedOut?: boolean };
   };
@@ -610,6 +616,17 @@ function ownerPromotionRetry(stack: Stack, w: World, promotionId: string, reason
   );
 }
 
+/** The coordinator door for a candidate's check, as the runner route calls it. */
+function promotionRetry(stack: Stack, w: World, promotionId: string, reason: string, sessionId?: string) {
+  return stack.openItems.retryPromotionCheck(
+    w.ownerId,
+    w.projectId,
+    promotionId,
+    { reason },
+    sessionId === undefined ? w.coordinatorSessionId : sessionId,
+  );
+}
+
 /** The status and the code a refusal carries. */
 async function denied(run: () => Promise<unknown>): Promise<{ status: number; code?: string; message: string }> {
   const thrown = await run().then(() => null, (error: unknown) => error);
@@ -634,6 +651,14 @@ test('Automatic: the coordinator reruns a red landing with a reason — one new 
       assert.equal(opened?.payload.generation, 1);
 
       const retried = await retry(stack, w, task.taskId, `  ${REASON}  `);
+
+      // §2.9 LS6: the answer addresses the landing session the new generation belongs to — the
+      // task's open segment, whose id was settled when the subject opened.
+      const segment = await stack.db.projectLanding.findFirstOrThrow({
+        where: { taskId: task.taskId, subject: 'TASK' },
+        select: { sessionId: true },
+      });
+      assert.equal(retried.landingSessionId, segment.sessionId);
 
       const rows = await landings(stack.db, task.taskId);
       assert.deepEqual(rows.map((row) => [row.generation, row.state]), [[1, 'CHECK_FAILED'], [2, 'QUEUED']],
@@ -791,12 +816,12 @@ test('failing again: the next red opens a classified item for the coordinator, n
         select: { content: true },
       });
       const told = turns.at(-1)?.content ?? '';
-      assert.match(told, /失败分类：CHECK_TIMED_OUT/);
-      assert.match(told, /这是这项任务的第 2 代落地，由协调会话要求重跑/);
+      assert.match(told, /Failure class: CHECK_TIMED_OUT/);
+      assert.match(told, /This is generation 2 of this task’s landing, rerun at the coordinator session’s request/);
       assert.ok(told.includes(REASON), `the message does not carry the rerun's reason — ${told}`);
-      assert.match(told, /不要再原样重跑/);
+      assert.match(told, /do not rerun it as it stands/);
       assert.match(told, /integration_retry/);
-      assert.match(told, /task_start 只会再跑一遍任务、开一条新分支，不会重新排这次落地/);
+      assert.match(told, /starting the task again runs it on a new branch and does not queue this landing again/);
 
       // And it can decide again: a third generation, rerunning the second.
       const third = await retry(stack, w, task.taskId, 'the runner was overloaded; the check now has the machine to itself');
@@ -873,6 +898,22 @@ test('CHECK_TIMED_OUT and ERROR are rerun, a CONFLICT is not',
       const clash = await failedLanding(stack, conflicted, 'retry-conflict', CONFLICTED);
       const [conflictItem] = await itemsOf(stack.db, clash.task.taskId);
       assert.equal(conflictItem?.payload.failureClass, 'CONFLICT');
+      // §4.2 / §2.9 LS1: a conflict's payload names the landing it belongs to at its top level —
+      // never inside the runner's `errorDetail` — and states the round it failed in only when a
+      // report measured one (a result carries no round report, so this one is null).
+      const conflictJob = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: conflictItem!.integrationJobId! },
+        select: { landingId: true },
+      });
+      const conflictLanding = await stack.db.projectLanding.findUniqueOrThrow({
+        where: { id: conflictJob.landingId! },
+        select: { sessionId: true },
+      });
+      assert.equal(conflictItem?.payload.landingSessionId, conflictLanding.sessionId,
+        'the conflict names the landing its attempt belongs to');
+      assert.equal(conflictItem?.payload.round, null, 'a result reports no round');
+      assert.equal('landingSessionId' in (conflictItem?.payload.errorDetail ?? {}), false,
+        'the landing is not hidden inside the quoted error detail');
       const refused = await denied(() => retry(stack, conflicted, clash.task.taskId, 'try again'));
       assert.equal(refused.status, 409);
       assert.equal(refused.code, 'INTEGRATION_RETRY_NOT_APPLICABLE');
@@ -1243,6 +1284,12 @@ test('owner promotion recheck records USER and a READY result is automatically m
         data: { assignee: 'OWNER', assigneeReason: 'ESCALATED', assignedAt: new Date(), escalatedAt: new Date() },
       });
       const retried = await ownerPromotionRetry(stack, w, promotionId, REASON);
+      // §2.9 LS6: a promotion check's answer addresses the round it belongs to.
+      const round = await stack.db.projectLanding.findFirstOrThrow({
+        where: { promotionId, subject: 'PROMOTION' },
+        select: { sessionId: true },
+      });
+      assert.equal(retried.landingSessionId, round.sessionId);
       const job = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: retried.jobId } });
       assert.equal(job.generation, 2);
       assert.equal(job.retryRequestedByUserId, w.ownerId);
@@ -1355,7 +1402,7 @@ test('a task of another project is refused, as is one that is not DONE, one that
   });
 
 test('timed out: the owner retries a landing whose runner never answered its claim — the lost generation '
-  + 'ends ERROR · RUNNER_LOST and the next one is queued as theirs (§2.2 J-T9)',
+  + 'ends ERROR · PUSH_OUTCOME_UNKNOWN and the next one is queued as theirs (§2.2 J-T9, J12)',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
@@ -1384,8 +1431,10 @@ test('timed out: the owner retries a landing whose runner never answered its cla
         where: { id: lost.jobId },
         select: { errorCode: true, errorDetail: true, finishedAt: true },
       });
-      assert.equal(ended.errorCode, 'RUNNER_LOST');
+      assert.equal(ended.errorCode, 'PUSH_OUTCOME_UNKNOWN',
+        'a legacy claim cannot prove that nothing was pushed (J12)');
       assert.equal((ended.errorDetail as { pushRecorded?: boolean; phase?: string }).pushRecorded, false);
+      assert.equal((ended.errorDetail as { pushOutcome?: string }).pushOutcome, 'UNKNOWN');
       assert.equal((ended.errorDetail as { phase?: string }).phase, 'FETCH');
       assert.ok(ended.finishedAt, 'the lost generation is finished');
       const next = rows[1]!;
@@ -1398,6 +1447,18 @@ test('timed out: the owner retries a landing whose runner never answered its cla
       // The press answers with the view the job list redraws from: the next generation, the owner's.
       assert.deepEqual(view.inFlightJobs?.map((job) => [job.generation, job.state, job.retriedBy, job.timedOut]),
         [[2, 'QUEUED', 'OWNER', false]]);
+      // §2.9 LS6: the answer carries the landing session of the generation it queued, on the queue
+      // item and on the task's current landing alike.
+      const segment = await stack.db.projectLanding.findFirstOrThrow({
+        where: { taskId: task.taskId, subject: 'TASK' },
+        select: { sessionId: true },
+      });
+      assert.equal(view.landingSessionId, segment.sessionId, 'the press answers the landing it queued');
+      assert.deepEqual(view.inFlightJobs?.map((job) => job.landingSessionId), [segment.sessionId]);
+      assert.equal(
+        view.landTasks?.find((entry) => entry.taskId === task.taskId)?.integration.landTask?.landingSessionId,
+        segment.sessionId,
+      );
       // The retry is the answer to the timeout: no item is opened about it.
       assert.deepEqual(await itemsOf(stack.db, task.taskId), []);
 
@@ -1439,6 +1500,230 @@ test('timed out: the coordinator\'s integration_retry takes a landing whose runn
     assert.equal(running?.jobId, rows[1]!.id);
     const refused = await denied(() => retry(stack, w, task.taskId, 'pressed while it runs'));
     assert.deepEqual([refused.status, refused.code], [409, 'INTEGRATION_RETRY_IN_FLIGHT']);
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+test('the 2026-10-09 incident: a re-check of an owner-confirmed candidate carries no stale confirmation — '
+  + 'the clean result is accepted and the Automatic setting confirms it', { skip, timeout: 180_000 }, async () => {
+  const stack = await connect();
+  try {
+    const w = await world(stack, 'incident-stale-confirm', true);
+    // The runner has not declared promotion-automatic-land yet: a clean check goes to the owner as a
+    // card instead of being confirmed by the Automatic setting.
+    const { promotionId } = await failedPromotion(stack, w, 'incident-stale-confirm');
+
+    // The coordinator's re-check passes; the candidate waits on the owner's card.
+    const retried = await promotionRetry(stack, w, promotionId, REASON);
+    const [second] = await claim(stack, w, 'incident-stale-confirm-rerun');
+    assert.equal(second?.jobId, retried.jobId);
+    await report(stack, w, second!, {
+      state: 'READY',
+      phase: 'CHECK',
+      sourceSha: 'd'.repeat(40),
+      targetShaBefore: 'f'.repeat(40),
+      upstreamSha: 'f'.repeat(40),
+      testedSha: '2'.repeat(40),
+      testedTreeSha: '3'.repeat(40),
+      checks: [GREEN_MERGE_CHECK],
+      conflicts: [],
+    });
+    const ready = await stack.db.projectPromotion.findUniqueOrThrow({ where: { id: promotionId } });
+    assert.equal(ready.state, 'READY');
+    assert.equal(ready.confirmedByUserId, null);
+
+    // The owner confirms; the merge the card asked about is queued.
+    await stack.promotions.confirm({ userId: w.ownerId }, w.projectId, promotionId);
+    const confirmed = await stack.db.projectPromotion.findUniqueOrThrow({ where: { id: promotionId } });
+    assert.equal(confirmed.state, 'CONFIRMED');
+    assert.equal(confirmed.confirmedByUserId, w.ownerId);
+
+    // The merge is re-checked on the combined tree and fails (main's own guard was red at that
+    // hour): the candidate blocks still carrying the owner's confirmation — the state production
+    // was left in on 2026-10-09.
+    const [land] = await claim(stack, w, 'incident-stale-confirm-land');
+    assert.equal(land?.kind, 'LAND_PROMOTION');
+    await report(stack, w, land!, {
+      ...RED_MERGE_CHECK,
+      sourceSha: 'd'.repeat(40),
+      targetShaBefore: 'f'.repeat(40),
+      upstreamSha: 'f'.repeat(40),
+      testedSha: '2'.repeat(40),
+      testedTreeSha: '3'.repeat(40),
+    });
+    const blocked = await stack.db.projectPromotion.findUniqueOrThrow({ where: { id: promotionId } });
+    assert.equal(blocked.state, 'BLOCKED');
+    assert.equal(blocked.confirmedByUserId, w.ownerId, 'the stale confirmation is still on the row');
+
+    // integration_retry re-checks. The re-check asks the merge question anew, so the stale
+    // confirmation is cleared with it — before the fix it stood, and the clean result's Automatic
+    // confirmation violated project_promotion_automatic_chk (P2039), 500'd, and the lost result
+    // left the job RUNNING forever.
+    const rerun = await promotionRetry(stack, w, promotionId, REASON);
+    const asking = await stack.db.projectPromotion.findUniqueOrThrow({ where: { id: promotionId } });
+    assert.equal(asking.state, 'CHECKING');
+    assert.equal(asking.confirmedByUserId, null, 'the re-check cleared the stale confirmation');
+    assert.equal(asking.confirmedAt, null);
+    assert.equal(asking.confirmedAutomatically, false);
+    assert.equal(asking.checkJobId, rerun.jobId);
+
+    await stack.db.runner.update({
+      where: { id: w.runnerId },
+      data: { capabilities: [INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND] },
+    });
+    const [third] = await claim(stack, w, 'incident-stale-confirm-rerun-2');
+    assert.equal(third?.jobId, rerun.jobId);
+    const accepted = await report(stack, w, third!, {
+      state: 'READY',
+      phase: 'CHECK',
+      sourceSha: 'd'.repeat(40),
+      targetShaBefore: 'f'.repeat(40),
+      upstreamSha: 'f'.repeat(40),
+      testedSha: '2'.repeat(40),
+      testedTreeSha: '3'.repeat(40),
+      checks: [GREEN_MERGE_CHECK],
+      conflicts: [],
+    });
+    assert.equal(accepted.accepted, true,
+      'the clean result is accepted, not refused by project_promotion_automatic_chk');
+    const automatic = await stack.db.projectPromotion.findUniqueOrThrow({ where: { id: promotionId } });
+    assert.equal(automatic.state, 'CONFIRMED');
+    assert.equal(automatic.confirmedAutomatically, true);
+    assert.equal(automatic.confirmedByUserId, null);
+
+    const [merge] = await claim(stack, w, 'incident-stale-confirm-land-2', [PROMOTION_AUTOMATIC_LAND]);
+    assert.equal(merge?.kind, 'LAND_PROMOTION');
+    await report(stack, w, merge!, {
+      state: 'LANDED',
+      phase: 'PUSH',
+      sourceSha: 'd'.repeat(40),
+      targetShaBefore: 'f'.repeat(40),
+      upstreamSha: 'f'.repeat(40),
+      testedSha: '2'.repeat(40),
+      testedTreeSha: '3'.repeat(40),
+      landedSha: '4'.repeat(40),
+      landedTreeSha: '3'.repeat(40),
+      aheadOfUpstream: 1,
+      checks: [GREEN_MERGE_CHECK],
+      conflicts: [],
+    });
+    assert.equal((await stack.db.projectPromotion.findUniqueOrThrow({ where: { id: promotionId } })).state,
+      'MERGED', 'the re-checked candidate goes on to merge');
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+test('timed out: integration_retry (promotionId) ends a silent RUNNING check and requeues it, '
+  + 'with the candidate readmitted from CHECKING (§2.2 J-T9)', { skip, timeout: 180_000 }, async () => {
+  const stack = await connect();
+  try {
+    const w = await world(stack, 'timeout-check', true);
+    const { promotionId } = await failedPromotion(stack, w, 'timeout-check');
+    const retried = await promotionRetry(stack, w, promotionId, REASON);
+    const round = await stack.db.projectLanding.findFirstOrThrow({
+      where: { promotionId, subject: 'PROMOTION' },
+      select: { sessionId: true },
+    });
+    assert.equal(retried.landingSessionId, round.sessionId,
+      'a rerun answers the round the candidate belongs to');
+    const [running] = await claim(stack, w, 'timeout-check-rerun');
+    assert.equal(running?.jobId, retried.jobId);
+
+    // Still inside its lease: the candidate is CHECKING and its check is RUNNING — refused, as ever.
+    const early = await denied(() => promotionRetry(stack, w, promotionId, 'pressed while it runs'));
+    assert.deepEqual([early.status, early.code], [409, 'INTEGRATION_RETRY_IN_FLIGHT']);
+
+    // The runner then says nothing past the lease: the job will never end by itself, and it holds
+    // the serial key the project's later checks queue behind.
+    const silentSince = new Date(Date.now() - 11 * 60_000);
+    await stack.db.projectIntegrationJob.update({
+      where: { id: running!.jobId },
+      data: { claimedAt: silentSince, heartbeatAt: silentSince },
+    });
+
+    const queued = await promotionRetry(stack, w, promotionId,
+      'its runner stopped reporting: the job holds the project\'s check slot');
+    const rows = await stack.db.projectIntegrationJob.findMany({
+      where: { promotionId },
+      orderBy: [{ generation: 'asc' }],
+      select: {
+        id: true, generation: true, state: true, retryOfJobId: true, retryFailureClass: true,
+        retryRequestedBySessionId: true, errorCode: true, claimGeneration: true, finishedAt: true,
+      },
+    });
+    assert.deepEqual(rows.map((row) => [row.generation, row.state]),
+      [[1, 'CHECK_FAILED'], [2, 'ERROR'], [3, 'QUEUED']]);
+    const lost = rows[1]!;
+    assert.equal(lost.errorCode, 'RUNNER_LOST', 'the silent check ends as the ERROR it is');
+    assert.ok(lost.finishedAt, 'the lost generation is finished');
+    assert.equal(Number(lost.claimGeneration), Number(running!.claimGeneration) + 1,
+      'the lost claim is fenced off: a late result from it is refused');
+    const next = rows[2]!;
+    assert.equal(queued.jobId, next.id);
+    assert.equal(queued.retryOfJobId, running!.jobId);
+    assert.equal(next.retryOfJobId, running!.jobId, 'the new generation names the one it reruns');
+    assert.equal(next.retryFailureClass, 'ERROR');
+    assert.equal(next.retryRequestedBySessionId, w.coordinatorSessionId);
+    assert.equal((await stack.db.projectPromotion.findUniqueOrThrow({ where: { id: promotionId } })).state,
+      'CHECKING', 'the candidate is asking again');
+
+    // The old claim's late result finds the job finished: nothing of it is taken.
+    const late = await report(stack, w, running!, LANDED);
+    assert.equal(late.accepted, false);
+
+    // The requeued check is handed out, and a healthy press of it is in flight again.
+    const [handed] = await claim(stack, w, 'timeout-check-rerun-2');
+    assert.equal(handed?.jobId, next.id);
+    const again = await denied(() => promotionRetry(stack, w, promotionId, 'pressed while the rerun runs'));
+    assert.deepEqual([again.status, again.code], [409, 'INTEGRATION_RETRY_IN_FLIGHT']);
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+test('timed out: the owner\'s promotion retry ends the silent check without an item of theirs, '
+  + 'and a healthy check is refused on the owner door too', { skip, timeout: 180_000 }, async () => {
+  const stack = await connect();
+  try {
+    const w = await world(stack, 'timeout-owner-check', true);
+    const { promotionId } = await failedPromotion(stack, w, 'timeout-owner-check');
+    const retried = await promotionRetry(stack, w, promotionId, REASON);
+    const [running] = await claim(stack, w, 'timeout-owner-check-rerun');
+    assert.equal(running?.jobId, retried.jobId);
+
+    const early = await denied(() => ownerPromotionRetry(stack, w, promotionId, 'pressed while it runs'));
+    assert.deepEqual([early.status, early.code], [409, 'INTEGRATION_RETRY_IN_FLIGHT']);
+
+    const silentSince = new Date(Date.now() - 11 * 60_000);
+    await stack.db.projectIntegrationJob.update({
+      where: { id: running!.jobId },
+      data: { claimedAt: silentSince, heartbeatAt: silentSince },
+    });
+
+    // No item about the candidate is the owner's — nothing about a lost job has opened one — and a
+    // timed-out check may still be pressed by the owner, exactly as a timed-out landing (J-T1b).
+    const pressed = await ownerPromotionRetry(stack, w, promotionId, 'its runner is gone; re-run the check');
+    assert.deepEqual(pressed.handlingItemIds, [], 'no item of the owner\'s is marked handling');
+    const round = await stack.db.projectLanding.findFirstOrThrow({
+      where: { promotionId, subject: 'PROMOTION' },
+      select: { sessionId: true },
+    });
+    assert.equal(pressed.landingSessionId, round.sessionId,
+      'the owner\'s door answers the same landing session as the coordinator\'s');
+    const rows = await stack.db.projectIntegrationJob.findMany({
+      where: { promotionId },
+      orderBy: [{ generation: 'asc' }],
+      select: { generation: true, state: true, retryRequestedByUserId: true, retryRequestedBySessionId: true },
+    });
+    assert.deepEqual(rows.map((row) => [row.generation, row.state]),
+      [[1, 'CHECK_FAILED'], [2, 'ERROR'], [3, 'QUEUED']]);
+    assert.equal(pressed.retryOfJobId, running!.jobId);
+    assert.equal(rows[2]!.retryRequestedByUserId, w.ownerId, 'the owner\'s press records a USER requester');
+    assert.equal(rows[2]!.retryRequestedBySessionId, null);
+    assert.equal((await stack.db.projectPromotion.findUniqueOrThrow({ where: { id: promotionId } })).state,
+      'CHECKING');
   } finally {
     await stack.db.$disconnect();
   }

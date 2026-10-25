@@ -1,0 +1,156 @@
+Attributes: Application, 0x1039fb200, pid: 42017, label: 'LandingSessionProbe'
+Element subtree:
+ →Application, 0x1039fb200, pid: 42017, label: 'LandingSessionProbe'
+    Window (Main), 0x1039fb5c0, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x1039fb700, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x1039fb840, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x1039fb980, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x1039fbac0, {{0.0, 0.0}, {402.0, 874.0}}
+              StaticText, 0x1039fbc00, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x1039fbd40, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x1039fbe80, {{0.0, 128.0}, {305.7, 746.0}}
+                Other, 0x114cd9680, {{0.0, -1364.0}, {305.7, 3286.3}}
+                Cell, 0x114cd97c0, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x114cd9900, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x114cd9a40, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x114cd9b80, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x114cda800, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x114cda940, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x114cdaa80, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x114cdabc0, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x114cdad00, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x114cdae40, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x114cdaf80, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x114cdb0c0, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x114cdb200, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x114cdb980, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x114cdbac0, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x114cdbc00, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x114cdbd40, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x114cdbe80, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x114cdb340, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x114cdb480, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x114cdb5c0, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x114cdb700, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x114cdb840, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x114cd9cc0, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x114cd9e00, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x114cd9f40, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x114cda080, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x114cda1c0, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x114cda300, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x114cda440, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x114cda580, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x114cda6c0, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x11442c000, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x11442c140, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x11442c280, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x11442c3c0, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x11442c500, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x11442c640, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x11442c780, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x11442da40, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x11442db80, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x11442dcc0, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x11442de00, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x11442df40, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x11442e080, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x11442e1c0, {{0.0, 305.7}, {305.3, 44.3}}, label: 'orbit-macos,  · wikova'
+                          Other, 0x11442e300, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x11442e440, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x11442e580, {{58.0, 317.7}, {93.0, 20.3}}, label: 'orbit-macos'
+                          StaticText, 0x11442e6c0, {{151.0, 317.7}, {65.0, 20.3}}, label: ' · wikova'
+                Cell, 0x11442e800, {{0.0, 350.0}, {305.3, 36.0}}
+                  Other, 0x11442e940, {{0.0, 350.0}, {305.3, 36.0}}
+                    Other, 0x11442ea80, {{0.0, 350.0}, {305.3, 36.0}}
+                      Other, 0x11442c8c0, {{0.0, 350.0}, {305.3, 36.0}}
+                  Other, 0x11442ca00, {{0.0, 350.0}, {305.3, 36.0}}
+                    Other, 0x11442cb40, {{0.0, 350.0}, {305.3, 36.0}}
+                      Other, 0x11442cc80, {{0.0, 350.0}, {305.3, 36.0}}
+                        StaticText, 0x11442cdc0, {{22.0, 364.0}, {59.0, 18.0}}, label: 'Projects'
+                        StaticText, 0x11442cf00, {{89.0, 366.3}, {5.3, 13.3}}, label: '1'
+                Cell, 0x11442d040, {{0.0, 386.0}, {305.3, 44.3}}
+                  Other, 0x11442d180, {{0.0, 386.0}, {305.3, 44.3}}
+                    Other, 0x11442d2c0, {{0.0, 386.0}, {305.3, 44.3}}
+                      Other, 0x11442d400, {{0.0, 386.0}, {305.3, 44.3}}
+                  Other, 0x11442d540, {{0.0, 386.0}, {305.3, 44.3}}
+                    Other, 0x11442d680, {{0.0, 386.0}, {305.3, 44.3}}
+                      Other, 0x11442d7c0, {{0.0, 386.0}, {305.3, 44.3}}
+                        Button, 0x11442ed00, {{0.0, 386.0}, {305.3, 44.3}}, label: 'Runner hardening'
+                Other, 0x11442ebc0, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x11442d900, {{299.3, 649.7}, {3.0, 221.3}}
+                Other, 0x11442f840, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x11442ee40, {{299.3, 649.7}, {3.0, 221.3}}
+              Button, 0x11442f200, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x11442f0c0, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x11442ef80, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x114457840, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x114457980, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x114457ac0, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                  Button, 0x114457c00, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Back'
+                Other, 0x114457d40, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x114457e80, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x114456300, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x114454dc0, {{0.0, 0.0}, {402.0, 874.0}}
+                        ScrollView, 0x114454f00, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x114455180, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x114455040, {{0.0, 0.0}, {402.0, 230.8}}
+                          Other, 0x114457700, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x1144566c0, {{0.0, 166.0}, {402.0, 396.3}}
+                            StaticText, 0x114456800, {{16.0, 182.0}, {242.3, 49.0}}, label: 'Merge project/P1 → main · #3'
+                            Image, 0x114456940, {{274.3, 191.7}, {13.7, 11.3}}, identifier: 'arrow.triangle.2.circlepath', label: 'Syncing'
+                            StaticText, 0x114456a80, {{291.7, 190.7}, {43.7, 13.3}}, label: 'Landing'
+                            Button, 0x114456bc0, {{368.3, 187.3}, {17.7, 17.0}}, identifier: 'landing-more', label: 'More actions'
+                              Button, 0x114456d00, {{368.3, 187.3}, {17.7, 17.0}}
+                                Image, 0x114456e40, {{369.7, 188.3}, {15.0, 15.0}}, identifier: 'ellipsis.circle', label: 'More'
+                            StaticText, 0x114456f80, {{16.0, 235.0}, {193.3, 18.0}}, label: 'Run by Orbit · runner wikova'
+                            Image, 0x1144570c0, {{35.3, 295.0}, {15.0, 12.3}}, identifier: 'arrow.triangle.2.circlepath', label: 'Syncing'
+                            StaticText, 0x114457200, {{69.0, 281.0}, {102.7, 20.3}}, label: 'Merge check'
+                            StaticText, 0x114457340, {{329.3, 282.2}, {44.7, 18.0}}, label: 'Ready'
+                            StaticText, 0x114457480, {{69.0, 303.3}, {277.0, 18.0}}, label: 'Passed the check · waiting for the owner'
+                            StaticText, 0x114456440, {{16.0, 353.3}, {98.7, 15.7}}, label: 'Merge check · 1'
+                            StaticText, 0x1144575c0, {{16.0, 377.0}, {31.3, 13.3}}, label: '00:50'
+                            StaticText, 0x1144552c0, {{59.7, 377.0}, {7.3, 13.3}}, label: '≡'
+                            StaticText, 0x114455400, {{79.3, 375.0}, {247.0, 15.7}}, label: 'Merge check queued · project/P1 → main'
+                            StaticText, 0x114455540, {{16.0, 398.7}, {31.3, 13.3}}, label: '00:50'
+                            StaticText, 0x114455680, {{58.7, 398.7}, {9.3, 13.3}}, label: '↻'
+                            StaticText, 0x1144557c0, {{79.3, 396.7}, {207.7, 15.7}}, label: 'Claimed by runner wikova · claim 1'
+                            StaticText, 0x114455900, {{16.0, 420.3}, {31.3, 13.3}}, label: '00:50'
+                            StaticText, 0x114455a40, {{58.7, 420.3}, {9.3, 13.3}}, label: '↻'
+                            StaticText, 0x114455b80, {{79.3, 418.3}, {48.3, 15.7}}, label: 'Round 1'
+                            StaticText, 0x114455cc0, {{16.0, 442.0}, {31.3, 13.3}}, label: '00:51'
+                            StaticText, 0x114455e00, {{58.3, 442.0}, {10.0, 13.3}}, label: '✓'
+                            StaticText, 0x114455f40, {{79.3, 440.0}, {136.3, 15.7}}, label: 'Fetched · synced main'
+                            StaticText, 0x114456080, {{16.0, 463.7}, {31.3, 13.3}}, label: '00:51'
+                            StaticText, 0x1144561c0, {{58.7, 463.7}, {9.3, 13.3}}, label: '↻'
+                            StaticText, 0x114456580, {{79.3, 461.7}, {229.7, 15.7}}, label: 'Merge check started · claim 1 · wikova'
+                            StaticText, 0x114cf0000, {{16.0, 485.3}, {31.3, 13.3}}, label: '01:08'
+                            StaticText, 0x114cf0140, {{58.3, 485.3}, {10.0, 13.3}}, label: '✓'
+                            StaticText, 0x114cf0280, {{79.3, 483.3}, {187.3, 15.7}}, label: 'Merge check passed · 17m 02s'
+                            Button, 0x114cf03c0, {{357.7, 485.3}, {28.3, 13.3}}, label: 'Log ›'
+                            StaticText, 0x114cf0500, {{16.0, 507.0}, {31.3, 13.3}}, label: '01:08'
+                            StaticText, 0x114cf0640, {{58.3, 507.0}, {10.0, 13.3}}, label: '✓'
+                            StaticText, 0x114cf0780, {{79.3, 505.0}, {154.3, 15.7}}, label: 'Ready to merge into main'
+                            StaticText, 0x114cf08c0, {{16.0, 528.7}, {31.3, 13.3}}, label: '01:08'
+                            StaticText, 0x114cf0a00, {{58.7, 528.7}, {9.3, 13.3}}, label: '↻'
+                            StaticText, 0x114cf0b40, {{79.3, 526.7}, {218.0, 15.7}}, label: 'Asked the owner to merge into main'
+                          Other, 0x114cf0c80, {{369.0, 166.0}, {30.0, 631.7}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x114cf0dc0, {{396.0, 404.3}, {3.0, 390.3}}
+                          Other, 0x114cf0f00, {{369.0, 166.0}, {30.0, 631.7}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x114cf1040, {{396.0, 404.3}, {3.0, 390.3}}
+                        StaticText, 0x114cf1180, {{16.0, 805.7}, {132.7, 26.3}}, label: 'Orbit runs this landing — nothing to type here.'
+                        StaticText, 0x114cf12c0, {{152.7, 805.7}, {144.3, 26.3}}, label: 'Merging is decided on the merge card'
+                        Button, 0x114cf1400, {{301.0, 812.2}, {73.7, 13.3}}, label: 'Review Card ›'
+                        Button, 0x114cf1540, {{16.0, 116.0}, {370.0, 44.0}}, identifier: 'needs-you-bar', label: '1 open question'
+                          Image, 0x114cf1680, {{23.0, 123.0}, {30.0, 30.0}}, identifier: 'questionmark.bubble.fill', label: 'questionmark.bubble.fill'
+                          StaticText, 0x114cf17c0, {{63.0, 129.0}, {112.7, 18.0}}, label: '1 open question'
+                          Image, 0x114cf1900, {{356.7, 134.7}, {11.7, 6.7}}, identifier: 'chevron.down', label: 'Go Down'
+                Other, 0x114cf1a40, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x114cf1b80, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x1039fb200, pid: 42017, label: 'LandingSessionProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.landingsessionprobe'
+  Output: {
+    Application, 0x114cf1cc0, pid: 42017, label: 'LandingSessionProbe'
+  }

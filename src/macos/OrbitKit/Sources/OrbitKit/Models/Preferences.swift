@@ -30,13 +30,26 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     /// unless it is exactly `true`: absent, or anything but a boolean, decodes nil and reads as off
     /// (`smartModelSelection`), so a stray value never fails the whole `me` payload.
     public let modelRouting: Bool?
+    /// Whether this account's Claude sessions offer the next message it would probably type once a
+    /// turn ends (docs/prompt-suggestions-design.md). Absent means on; only opting out is ever
+    /// written. Tolerant like `modelRouting`: a stray value reads as absent rather than failing `me`.
+    public let promptSuggestions: Bool?
+    /// Whether this account's clients show the server's rolling recap (Session.recapText, 0418) on
+    /// a session's list row in place of its raw last reply. Absent means on; only opting out is ever
+    /// written. Tolerant like the two above: a stray value reads as absent rather than failing `me`.
+    public let recaps: Bool?
 
     /// Whether smart model selection is on for this account — only an explicit `true` turns it on.
     public var smartModelSelection: Bool { modelRouting == true }
+    /// Whether suggested replies are on for this account — on unless explicitly turned off.
+    public var suggestedReplies: Bool { promptSuggestions != false }
+    /// Whether session recaps are on for this account — on unless explicitly turned off.
+    public var showRecaps: Bool { recaps != false }
 
     private enum CodingKeys: String, CodingKey {
         case theme, defaultModel, defaultModels, defaultPermissionMode, defaultEffort
-        case enableOrchestration, notifySessionFinished, notifyAgentMessage, modelRouting
+        case enableOrchestration, notifySessionFinished, notifyAgentMessage, modelRouting, promptSuggestions
+        case recaps
     }
 
     public init(from decoder: Decoder) throws {
@@ -50,6 +63,8 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         notifySessionFinished = try c.decodeIfPresent(Bool.self, forKey: .notifySessionFinished)
         notifyAgentMessage = try c.decodeIfPresent(Bool.self, forKey: .notifyAgentMessage)
         modelRouting = (try? c.decodeIfPresent(Bool.self, forKey: .modelRouting)) ?? nil
+        promptSuggestions = (try? c.decodeIfPresent(Bool.self, forKey: .promptSuggestions)) ?? nil
+        recaps = (try? c.decodeIfPresent(Bool.self, forKey: .recaps)) ?? nil
     }
 }
 
@@ -65,11 +80,13 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
     public var notifySessionFinished: Bool?
     public var notifyAgentMessage: Bool?
     public var modelRouting: Bool?
+    public var promptSuggestions: Bool?
+    public var recaps: Bool?
     public init(theme: String? = nil, defaultModel: String? = nil, defaultModels: [String: String]? = nil,
                 defaultPermissionMode: String? = nil,
                 defaultEffort: String? = nil, enableOrchestration: Bool? = nil,
                 notifySessionFinished: Bool? = nil, notifyAgentMessage: Bool? = nil,
-                modelRouting: Bool? = nil) {
+                modelRouting: Bool? = nil, promptSuggestions: Bool? = nil, recaps: Bool? = nil) {
         self.theme = theme
         self.defaultModel = defaultModel
         self.defaultModels = defaultModels
@@ -79,5 +96,7 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
         self.notifySessionFinished = notifySessionFinished
         self.notifyAgentMessage = notifyAgentMessage
         self.modelRouting = modelRouting
+        self.promptSuggestions = promptSuggestions
+        self.recaps = recaps
     }
 }

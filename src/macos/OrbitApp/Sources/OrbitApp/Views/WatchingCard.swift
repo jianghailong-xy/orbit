@@ -46,9 +46,7 @@ struct WatchingCardStack: View {
                 }
             }
             // The tray's floating-card language, so the stack above the composer reads as one system.
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
+            .composerBandCard()
             .padding(.bottom, .composerBandGap)
         }
     }

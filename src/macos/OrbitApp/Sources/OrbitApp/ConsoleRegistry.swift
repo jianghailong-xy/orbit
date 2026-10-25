@@ -35,6 +35,9 @@ final class ConsoleRegistry {
     @ObservationIgnored var accountDefaultModels: () -> [String: String] = { [:] }
     /// Apply the app's cached session and catalog before a new console can be rendered.
     @ObservationIgnored var seedSessionContext: (ConsoleModel) -> Void = { _ in }
+    /// The account's managed runner (docs/managed-runner-design.md), set once by `AppModel` and handed
+    /// to every console this registry makes, as `onToast` is.
+    @ObservationIgnored weak var managedRunner: ManagedRunnerModel?
 
     private var models: [String: ConsoleModel] = [:]
     /// The one session whose SSE stream is currently running (at most one), or nil when no console is
@@ -45,6 +48,19 @@ final class ConsoleRegistry {
     private var savedSeq: [String: Int] = [:]
     /// Records a link asked a console to open at, held until that console is made (`openRecord`).
     private var pendingRecords: [String: String] = [:]
+    /// The account a draft about to open for a workspace starts on, by workspace id: what the usage-limit
+    /// card's "start a new session on …" asks for (board iOS 5 ⑧), taken by that draft as it appears.
+    @ObservationIgnored private var pendingDraftAccounts: [String: (engine: String, account: String)] = [:]
+
+    /// Ask the next draft for `agentID` to start on `engine`'s `account`.
+    func queueDraftAccount(agentID: String, engine: String, account: String) {
+        pendingDraftAccounts[agentID] = (engine, account)
+    }
+
+    /// The account queued for the next draft of `agentID`, once.
+    func takeDraftAccount(agentID: String) -> (engine: String, account: String)? {
+        pendingDraftAccounts.removeValue(forKey: agentID)
+    }
     /// Merges and commits a console here asked for that the runner hasn't answered yet. They're
     /// followed here, not in the console: its poll stops with its focus, so leaving the session
     /// meant the result card never came — or came late, the next time the session was opened. From
@@ -98,10 +114,13 @@ final class ConsoleRegistry {
                     accountDefaultEffort: String? = nil,
                     folderID: String? = nil,
                     onCreated: @escaping (Session) -> Void) -> ConsoleModel {
+        let configured = configuredProviders
+            + ProviderPools.asProviders(SharedPools.asProviderPools(sharedPools) + providerPools)
+        // The model last picked for what the workspace last ran on — its engine and its provider.
         let seed = AgentDefaults.newSessionModel(
-            for: agent.defaultProvider, accountModels: accountDefaultModels(), fallback: defaultModel,
-            catalog: modelCatalog, configured: configuredProviders
-                + ProviderPools.asProviders(SharedPools.asProviderPools(sharedPools) + providerPools))
+            engine: agent.defaultEngine(configured: configured), provider: agent.defaultProvider,
+            accountModels: accountDefaultModels(), fallback: defaultModel,
+            catalog: modelCatalog, configured: configured)
         let model = ConsoleModel(draftFor: agent, defaultModel: seed,
                                  configuredProviders: configuredProviders,
                                  configuredProvidersLoaded: configuredProvidersLoaded,
@@ -119,6 +138,7 @@ final class ConsoleRegistry {
         }
         model.onToast = { [weak self] request in self?.onToast(request, nil) }
         wireAccountDefaults(model)
+        model.managedRunner = managedRunner
         return model
     }
 
@@ -220,6 +240,7 @@ final class ConsoleRegistry {
             self.report(settled, detail)
         }
         wireAccountDefaults(model)
+        model.managedRunner = managedRunner
         seedSessionContext(model)
         if let record = pendingRecords.removeValue(forKey: sessionID) { model.openRecord(record) }
         return model

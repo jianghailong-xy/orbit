@@ -1,0 +1,80 @@
+probe: probe-start-scroll3.browser.mjs tree: del head: e21fad17277ffe30d40e76097191ca77e5b7f884 projects: chromium-light-desktop webkit-light-desktop started: 2026-10-09T14:06:09Z load: 10.96 8.87 6.63 9/4219 3984607
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +1ms
+PROBE del chromium-light-desktop {"what":"reading","scrolled":[],"page":0,"surfaceTop":100,"focus":"DIV.orbit-overlay orbit-dialog sta"}
+PROBE   {"kind":"focus","target":"DIV.orbit-overlay orbit-dialog start-card-di[tabindex=-1]","options":{"preventScroll":true},"before":null,"after":null,"stack":"    at t.focus (http://127.0.0.1:4461/assets/Floating-BAq9quQp.js:55:96106) |     at initialFocus (http://127.0.0.1:4461/assets/Floating-BAq9quQp.js:55:96827) |     at http://127.0.0.1:4461/assets/Floating-BAq9quQp.js:55:40778"}
+PROBE del chromium-light-desktop {"what":"start card","scrolled":[],"page":0,"surfaceTop":100,"focus":"DIV.orbit-overlay orbit-dialog sta"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +0ms
+PROBE del chromium-light-desktop {"what":"automatic off","scrolled":[],"page":0,"surfaceTop":100,"focus":"SPAN.orbit-switch"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +0ms
+PROBE del chromium-light-desktop {"what":"automatic on","scrolled":[],"page":0,"surfaceTop":100,"focus":"SPAN.orbit-switch"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +0ms
+PROBE del chromium-light-desktop {"what":"line menu open","scrolled":[],"page":0,"surfaceTop":100,"focus":"DIV.orbit-select-option"}
+PROBE   {"kind":"scrollIntoView","target":"DIV.orbit-select-option[tabindex=0]","arg":{"block":"nearest","inline":"nearest"}}
+PROBE   {"kind":"focus","target":"DIV.orbit-select-option[tabindex=0]","options":{"preventScroll":false},"before":null,"after":null,"stack":"    at a (http://127.0.0.1:4461/assets/Floating-BAq9quQp.js:55:31433)"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +1ms
+PROBE del chromium-light-desktop {"what":"main chosen","scrolled":[],"page":0,"surfaceTop":100,"focus":"BUTTON.orbit-select-trigger"}
+PROBE   {"kind":"focus","target":"DIV.orbit-select-option[tabindex=0]","options":{"preventScroll":true},"before":null,"after":null,"stack":"    at a (http://127.0.0.1:4461/assets/Floating-BAq9quQp.js:55:31433) |     at Ki (http://127.0.0.1:4461/assets/Floating-BAq9quQp.js:55:31470) |     at e (http://127.0.0.1:4461/assets/Transcript-6UVU7lhg.js:78:14820) |     at Object.<anonymous> (http://127.0.0.1:4461/assets/Transcript-6UVU7lhg.js:78:14903)"}
+PROBE   {"kind":"focus","target":"DIV.orbit-select-option[tabindex=0]","options":{"preventScroll":true},"before":null,"after":null,"stack":"    at onClick (http://127.0.0.1:4461/assets/Transcript-6UVU7lhg.js:78:17505) |     at http://127.0.0.1:4461/assets/Floating-BAq9quQp.js:55:9707 |     at http://127.0.0.1:4461/assets/Floating-BAq9quQp.js:55:9590 |     at onClick (http://127.0.0.1:4461/assets/Floating-BAq9quQp.js:55:11431)"}
+PROBE   {"kind":"focus","target":"BUTTON.orbit-select-trigger[tabindex=0]","options":{"preventScroll":true},"before":null,"after":null,"stack":"    at http://127.0.0.1:4461/assets/Floating-BAq9quQp.js:55:42130"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +0ms
+PROBE del chromium-light-desktop {"what":"merge check opened","scrolled":[],"page":0,"surfaceTop":100,"focus":"BUTTON.start-card-row-head start-card"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +1ms
+PROBE del chromium-light-desktop {"what":"check clicked","scrolled":[],"page":0,"surfaceTop":100,"focus":"TEXTAREA.orbit-text-control orbit-texta"}
+PROBE del chromium-light-desktop {"what":"check select all","scrolled":[],"page":0,"surfaceTop":100,"focus":"TEXTAREA.orbit-text-control orbit-texta"}
+PROBE del chromium-light-desktop {"what":"check typed","scrolled":[],"page":0,"surfaceTop":100,"focus":"TEXTAREA.orbit-text-control orbit-texta"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +0ms
+PROBE del chromium-light-desktop {"what":"count clicked","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.orbit-number-input-field"}
+PROBE del chromium-light-desktop {"what":"count select all","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.orbit-number-input-field"}
+PROBE del chromium-light-desktop {"what":"count typed","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.orbit-number-input-field"}
+PROBE del chromium-light-desktop {"what":"a second later","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.orbit-number-input-field"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +0ms
+PROBE del chromium-light-desktop {"what":"fill again","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.orbit-number-input-field"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +2ms
+PROBE del webkit-light-desktop {"what":"reading","scrolled":[],"page":0,"surfaceTop":100,"focus":"DIV.orbit-overlay orbit-dialog sta"}
+PROBE   {"kind":"focus","target":"DIV.orbit-overlay orbit-dialog start-card-di[tabindex=-1]","options":{"preventScroll":true},"before":null,"after":null,"stack":"@http://127.0.0.1:4461/assets/Floating-BAq9quQp.js:55:40779"}
+PROBE del webkit-light-desktop {"what":"start card","scrolled":[],"page":0,"surfaceTop":100,"focus":"DIV.orbit-overlay orbit-dialog sta"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +1ms
+PROBE del webkit-light-desktop {"what":"automatic off","scrolled":[],"page":0,"surfaceTop":100,"focus":"SPAN.orbit-switch"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +2ms
+PROBE del webkit-light-desktop {"what":"automatic on","scrolled":[],"page":0,"surfaceTop":100,"focus":"SPAN.orbit-switch"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +1ms
+PROBE del webkit-light-desktop {"what":"line menu open","scrolled":[],"page":0,"surfaceTop":100,"focus":"DIV.orbit-select-option"}
+PROBE   {"kind":"scrollIntoView","target":"DIV.orbit-select-option[tabindex=0]","arg":{"block":"nearest","inline":"nearest"}}
+PROBE   {"kind":"focus","target":"DIV.orbit-select-option[tabindex=0]","options":{"preventScroll":false},"before":null,"after":null,"stack":""}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +1ms
+PROBE del webkit-light-desktop {"what":"main chosen","scrolled":[],"page":0,"surfaceTop":100,"focus":"BUTTON.orbit-select-trigger"}
+PROBE   {"kind":"focus","target":"DIV.orbit-select-option[tabindex=0]","options":{"preventScroll":true},"before":null,"after":null,"stack":"Ki@http://127.0.0.1:4461/assets/Floating-BAq9quQp.js:55:31471 | e@http://127.0.0.1:4461/assets/Transcript-6UVU7lhg.js:78:14821 | @http://127.0.0.1:4461/assets/Transcript-6UVU7lhg.js:78:14904 | @http://127.0.0.1:4461/assets/Transcript-6UVU7lhg.js:78:15675"}
+PROBE   {"kind":"focus","target":"DIV.orbit-select-option[tabindex=0]","options":{"preventScroll":true},"before":null,"after":null,"stack":"onClick@http://127.0.0.1:4461/assets/Floating-BAq9quQp.js:55:11431 | Uf@http://127.0.0.1:4461/assets/Transcript-6UVU7lhg.js:35:139249 | @http://127.0.0.1:4461/assets/Transcript-6UVU7lhg.js:35:143980 | yn@http://127.0.0.1:4461/assets/Transcript-6UVU7lhg.js:35:15195"}
+PROBE   {"kind":"focus","target":"BUTTON.orbit-select-trigger[tabindex=0]","options":{"preventScroll":true},"before":null,"after":null,"stack":""}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +0ms
+PROBE del webkit-light-desktop {"what":"merge check opened","scrolled":[],"page":0,"surfaceTop":100,"focus":"BUTTON.start-card-row-head start-card"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +0ms
+PROBE del webkit-light-desktop {"what":"check clicked","scrolled":[],"page":0,"surfaceTop":100,"focus":"TEXTAREA.orbit-text-control orbit-texta"}
+PROBE del webkit-light-desktop {"what":"check select all","scrolled":[],"page":0,"surfaceTop":100,"focus":"TEXTAREA.orbit-text-control orbit-texta"}
+PROBE del webkit-light-desktop {"what":"check typed","scrolled":[],"page":0,"surfaceTop":100,"focus":"TEXTAREA.orbit-text-control orbit-texta"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +2ms
+PROBE del webkit-light-desktop {"what":"count clicked","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.orbit-number-input-field"}
+PROBE del webkit-light-desktop {"what":"count select all","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.orbit-number-input-field"}
+PROBE del webkit-light-desktop {"what":"count typed","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.orbit-number-input-field"}
+PROBE del webkit-light-desktop {"what":"a second later","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.orbit-number-input-field"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +2ms
+PROBE del webkit-light-desktop {"what":"fill again","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.orbit-number-input-field"}
+  2 passed (7.3s)

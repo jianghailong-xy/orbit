@@ -523,7 +523,7 @@ test('(6) an item that cannot be read is left out, and the rest of the card is d
     // CONTROL: everything readable, everything there.
     const whole = await readOwnerConfirmation(tx, w.ownerId, taskId, s.tasks);
     assert.deepEqual(Object.keys(whole?.ifConfirmed ?? {}).sort(),
-      ['branch', 'endsSession', 'landing', 'startsAfterLanding', 'startsTasks']);
+      ['branch', 'endsSession', 'landing', 'mainBranch', 'startsAfterLanding', 'startsTasks']);
 
     // The completion edge cannot be asked: no tasks are named — and nothing else is lost.
     const noRelease = await readOwnerConfirmation(tx, w.ownerId, taskId, {
@@ -536,6 +536,8 @@ test('(6) an item that cannot be read is left out, and the rest of the card is d
       startsAfterLanding: false,
       branch: { name: branch.branch, linesAdded: 125, linesRemoved: 30, files: 3, onMain: 'YES' },
       endsSession: { sessionId: run.sessionId, runningBgJobs: 0 },
+      // A task in no project names no project's main branch.
+      mainBranch: null,
     });
 
     // The merge receipts cannot be read: the branch is left out rather than guessed at.
@@ -552,6 +554,7 @@ test('(6) an item that cannot be read is left out, and the rest of the card is d
       landing: 'NONE',
       startsAfterLanding: false,
       endsSession: { sessionId: run.sessionId, runningBgJobs: 0 },
+      mainBranch: null,
     });
   } finally {
     await s.db.$disconnect();

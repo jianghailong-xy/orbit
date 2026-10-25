@@ -1,0 +1,161 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .grid4 { display: grid; grid-template-columns: repeat(4, 440px); gap: 26px 40px; align-items: start; }
+  .lede, .foot, .wide { max-width: 1880px; }
+  table.ev { border-collapse: collapse; font-size: 13.5px; background: #fff; border-radius: 10px; overflow: hidden; }
+  table.ev th, table.ev td { padding: 7px 14px; text-align: left; border-bottom: 1px solid #ececf0; vertical-align: top; }
+  table.ev th { background: #f4f4f7; font-weight: 650; color: #16161a; }
+  table.ev td { color: #3a3a40; }
+  table.ev .bad { color: #b3261e; font-weight: 650; }
+  table.ev .ok { color: #1f7a37; font-weight: 650; }
+  #spec table.tok { width: 1880px; }
+  #spec table.tok td { line-height: 1.55; }
+  .two { display: flex; gap: 40px; align-items: flex-start; }
+</style>
+<body>
+<h1>Recap 展示 · 定稿：列表一行（去标签、去 Recap · 时间）+ 会话页尾部 Recap 卡 + 服务端补齐</h1>
+<p class="lede">你 10-22 定的三件事画在一张上：<b>列表</b>还是一行，标签胶囊和「Recap · 时间」都去掉，整行给那一句；<b>会话页</b>用 02 的 A，静止时转录最后一行是一张 Recap 卡；<b>服务端</b>补齐，recap 跟上最后一轮。
+现状照 6:15 截图重画；标题、标签、时间和 recap 开头照截图，recap 后半句按各会话最后一条回复补写（示意）。灰字 = 上线文案（英文），说明用中文。</p>
+
+<div class="grid4">
+  <div class="col"><span class="tag now">现状</span><div id="today"></div><div class="cap" id="cap-today"></div></div>
+  <div class="col"><span class="tag rec">定稿 · 列表</span><div id="D"></div><div class="cap" id="cap-D"></div></div>
+  <div class="col"><span class="tag rec">定稿 · 列表 · 亮色</span><div id="Dl"></div><div class="cap" id="cap-Dl"></div></div>
+  <div class="col"><span class="tag rec">定稿 · 会话页</span><div id="S"></div><div class="cap" id="cap-S"></div></div>
+</div>
+
+<h2>① 列表行 · 每种情况（规则不变，只是去掉了标签和 label）</h2>
+<div class="grid4" id="rows"></div>
+
+<h2>② 会话页 · Recap 卡的几种样子</h2>
+<div class="grid4" id="cards"></div>
+
+<h2>③ 规格和文案</h2>
+<div id="spec"></div>
+
+<h2>④ 服务端补齐（看不见，但列表敢不写时间靠它）</h2>
+<div class="wide" id="fix"></div>
+
+<p class="foot" id="foot"></p>
+
+<script>
+// ── 顶上一排 ──────────────────────────────────────────
+document.getElementById('today').innerHTML = listPhone('dark', 'today');
+document.getElementById('D').innerHTML = listPhone('dark', 'D');
+document.getElementById('Dl').innerHTML = listPhone('light', 'D');
+const WHEN = 'Sat, Oct 17, 1:44 PM';
+const CARD_BOTTOM = 956 - COMP_TOP + 14;
+document.getElementById('S').innerHTML = phone('dark',
+  `${sessionNav()}${edge('dark')}<div class="cx">${transcript(RESEARCH_TAIL, 0)}</div>${recapCard({ when: WHEN, text: RECAP.researchNew, bottom: CARD_BOTTOM })}${composer()}`);
+
+// ── ① 列表行 ───────────────────────────────────────────
+const strip = (mode, r) => phone(mode, `<div class="lr" style="top:15px">${rowD(mode, r)}</div>`, { h: 72, cls: 'strip' });
+const CASES = [
+  [{ title: '磁盘空间不足排查', rel: '1d ago', fail: true, recap: RECAP.disk },
+   '<b>静止</b>：整行是 recap，尾截。失败的会话照旧只多一个红点。'],
+  [{ title: 'Recap 展示优化', spin: true, now: 'Running Bash…', tone: 'run' },
+   '<b>在做事</b>：照旧是蓝字的 <code>Running Bash…</code> / <code>Running Agent…</code>（recap 让位，和今天一样）。'],
+  [{ title: 'Plan 模式工具调用误报拒绝', needs: true, rel: '3d ago', now: 'Waiting for approval', tone: 'amb' },
+   '<b>等你</b>：琥珀色那句照旧（<code>waitingWord</code>）。'],
+  [{ title: '头像显示问题排查', spin: true, now: 'You: 部署之后 session 列表变慢，帮我查一下' },
+   '<b>你发出、还没回</b>：<code>You: …</code> 照旧。'],
+  [{ title: '本地 canary 栈', rel: '40m ago', now: 'Background process running…' },
+   '<b>停着、留了后台进程</b>（watch、排队同理）：灰字那句照旧。'],
+  [{ title: '整理 Wiki 文章报告', rel: '5m ago', recap: '我先读了 articles 报表和最近三次构建的日志：失败都在 index 这一步。' },
+   '<b>还没有 recap</b>（新会话、服务端没 key，或 Settings 关了 recap）：原始回复，和今天一样。'],
+  [LIST[2], '<b>项目行</b>：进度块不是标签，留着；那句今天就不带 label，不变。'],
+  [{ kind: 'proj', title: '落地会话：每次落地都有自己的会话', rel: '2h ago', needs: true, meter: [9, 14], line: 'Question from coordinator · 2h', tone: 'amb' },
+   '<b>项目行 · 等你</b>：不变。'],
+];
+document.getElementById('rows').innerHTML = CASES.map(([r, k]) => `<div><p class="k">${k}</p>${strip('dark', r)}</div>`).join('');
+
+// ── ② 卡的几种样子 ──────────────────────────────────────
+const BOT = 956 - COMP_TOP + 14;
+const bottomOf = (mode, inner) => phone(mode, inner, { h: 380, off: 576, cls: 'strip' });
+const scene = (mode, o, { running = false, after = '' } = {}) =>
+  `<div class="cx">${transcript(RESEARCH_TAIL + after, 0)}</div>${o ? recapCard({ ...o, bottom: BOT }) : ''}${composer({ running })}`;
+const SC = [
+  ['dark', { when: WHEN, text: RECAP.researchNew, busy: true }, {}, '<b>按了 ↻</b>：转圈，正文变淡；不挡别的操作。'],
+  ['dark', { when: '6:15 AM', text: RECAP.researchNew }, {}, '<b>写好了</b>：换正文和时间（今天写的只写钟点，原 <code>recapLabel</code> 规则）。'],
+  ['dark', null, { running: true, after: '<div class="ubub">先给 Copilot CLI 建一个协议实测任务</div><div class="dots3"><i></i><i></i><i></i></div>' },
+   '<b>开始新一轮之后</b>：卡让位，这次进来不再回来；下次进来、会话又静止时再出现（那时已是新写的那句）。'],
+  ['light', { when: WHEN, text: RECAP.researchNew }, {}, '<b>亮色</b>：灰 10% 的底、label 色正文。'],
+];
+document.getElementById('cards').innerHTML = SC.map(([mode, o, opt, k], i) => `<div><p class="k">${k}</p><div data-sc="${i}">${bottomOf(mode, scene(mode, o, opt))}</div></div>`).join('');
+
+// ── ③ 规格 ─────────────────────────────────────────────
+document.getElementById('spec').innerHTML = `<table class="tok">
+<tr><td>列表 · 第二行</td><td>一行，15pt（subheadline）、secondaryLabel、尾截——字号、颜色、行高（75pt）都和今天一样。<b>只少两样</b>：行首的标签胶囊、灰字 <code>Recap · 时间</code>。哪一句占这一行，顺序照旧：等你 &gt; 审阅中 &gt; 在做事 &gt; 排队 &gt; watch / 后台进程 &gt; 你发出还没回 &gt; <b>recap</b> &gt; 原始回复 &gt; 状态词。</td></tr>
+<tr><td>标签</td><td>列表行上不再画（iPhone 的胶囊、iPad 的那一个胶囊、Mac 标题后的色点、web 和 Android 的胶囊一起去掉）。标签本身不动：筛选、按标签分组、<code>Tags…</code> 照旧；行上不画，读屏也不再念。项目行的进度块和 <code>Done</code> 不是标签，留着。</td></tr>
+<tr><td>Recap 卡</td><td>左右 16（和转录一样）、圆角 14、底 gray 12%（亮 10%）、内边 11 / 14 / 13；头一行 footnote 13：<code>text.alignleft</code>（Settings 里 Session recaps 那一行的图标）+ <b>Recap</b> 半粗 + <code>· 时间</code>（就是今天列表行上那段，原词原格式 <code>recapLabel</code>），secondaryLabel；右边 <code>arrow.clockwise</code> 17pt，点按区 44；正文 subheadline 15.5 / 22、label 色、不截断（≤80 字，三行左右）。离上一条回复 18、离输入框 14。长按 = Copy。</td></tr>
+<tr><td>卡什么时候在</td><td>会话静止（不在生成、没有待你答的卡）、有 recap、Session recaps 开着、<b>这次进来还没开始新一轮</b>。一开始新一轮（你开口，或它被唤醒）就收起，这次不再回来。</td></tr>
+<tr><td>刷新</td><td><code>POST /sessions/:id/recap</code>（服务端已有）。写成 → 换正文和时间；没写成按 <code>reason</code> 弹一句：<code>no-events</code>「The recap is already up to date.」· <code>too-few-events</code>「There's too little to recap yet.」· <code>no-key</code> / <code>disabled</code>「Recaps aren't available on this server.」· <code>llm-failed</code> / <code>error</code>「Couldn't refresh the recap. Try again.」· <code>cas-lost</code> 不说话，重新读一次。</td></tr>
+<tr><td>文案</td><td>列表上没有新词（只是少了 <code>Recap · 时间</code>）。新的只有：↻ 的读屏名 <code>Refresh recap</code>、上面四句提示；Settings 里 Session recaps 的说明改成「Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply, and the conversation ends with it. Off: the raw last reply, and no summary in the conversation.」</td></tr>
+<tr><td>读屏</td><td>列表行：标题、那一句全文（不截断）；卡：「Recap, Saturday October 17, 1:44 PM, …」+ 按钮「Refresh recap」。</td></tr>
+</table>`;
+
+// ── ④ 服务端补齐 ────────────────────────────────────────
+document.getElementById('fix').innerHTML = `<p class="k" style="font-size:14px">截图里 7 条 recap 有 2 条停在半路（时间对的是各会话最后一轮的 <code>lastTurnAt</code>）：</p>
+<table class="ev">
+<tr><th>会话</th><th>列表上的 recap 时间</th><th>最后一轮</th><th>为什么没跟上</th></tr>
+<tr><td>Watching 会话合并入 Tasks 停车条设计</td><td>Sat 4:05 PM</td><td>Sat 4:07 PM</td><td class="bad">2 分钟节流窗里跳过，之后没人补</td></tr>
+<tr><td>调研其他可接入的 Coding Agent</td><td>Sat 1:20 PM</td><td>Sat 1:44 PM</td><td class="bad">最可能是引擎自己开的一轮（后台调研回报），这种轮不走 <code>/turn-complete</code>，不要 recap</td></tr>
+</table>
+<p class="k" style="font-size:14px;margin-top:12px"><b>两处修法，只动服务端</b>：① 被节流窗跳过的结算，在窗到点时补一次 pass（进程内定时、同一个队列；重启丢了也只是回到今天的样子）；② ingest 看到会话停着时 <code>engineTurnActive</code> 从 true 变回 false（引擎自己开的一轮结束），和 <code>/turn-complete</code> 一样叫 <code>recapAfterTurn</code>。修好以后列表上那句说的就是最后一轮，所以行上不用再写时间；卡上留着时间，给偶尔没写成（没 key、模型失败）的那一次。</p>`;
+
+document.fonts.ready.then(() => {
+  const ph = (id) => document.querySelector(`#${id} .ph`);
+  // 卡：量出卡高，转录贴在卡上面 18pt；没有卡的贴在输入框上面 16pt
+  const fit = (p) => {
+    const card = p.querySelector('.rcard');
+    const tx = p.querySelector('.cx .tx');
+    tx.style.bottom = card ? `${CARD_BOTTOM + card.getBoundingClientRect().height + 18}px` : `${956 - COMP_TOP + 16}px`;
+  };
+  fit(ph('S'));
+  document.querySelectorAll('[data-sc] .ph').forEach(fit);
+
+  // 标注
+  const rectIn = (id, el) => {
+    const p = ph(id).getBoundingClientRect(), r = el.getBoundingClientRect();
+    return { x: r.left - p.left, y: r.top - p.top, w: r.width, h: r.height };
+  };
+  const mark = (id, r, n, { pad = 3, at = 'tr', cls = '' } = {}) => {
+    const x0 = r.x - pad, y0 = r.y - pad, x1 = r.x + r.w + pad, y1 = r.y + r.h + pad;
+    const pos = { tr: [x1 - 10, y0 - 12], tl: [x0 - 10, y0 - 12], br: [x1 - 10, y1 - 8], bl: [x0 - 10, y1 - 8] }[at];
+    ph(id).firstElementChild.insertAdjacentHTML('beforeend', mk(x0, y0, x1 - x0, y1 - y0, cls) + num(n, pos[0], pos[1], cls));
+  };
+  const w = ph('today').querySelector('.lr[data-i="4"]');
+  mark('today', rectIn('today', w.querySelector('.chips')), 1, { at: 'bl' });
+  mark('today', rectIn('today', w.querySelector('.lb')), 2, { at: 'br' });
+  const d = ph('D').querySelector('.lr[data-i="4"] .pv');
+  mark('D', rectIn('D', d), 3, { cls: 'blue', at: 'br' });
+  mark('S', rectIn('S', ph('S').querySelector('.rcard')), 4, { cls: 'blue', at: 'tl' });
+
+  const S = { today: phoneStats(ph('today')), D: phoneStats(ph('D')) };
+  const stat = (v) => `<span class="stat">每条 recap 平均露出 ${S[v].pct}%</span><span class="stat">整句读完 ${S[v].full} / ${S[v].recaps} 条</span><span class="stat">一屏约 ${(800 / PITCH[v]).toFixed(1)} 行</span>`;
+  document.getElementById('cap-today').innerHTML = `<h3>现状</h3>${stat('today')}<ul>
+<li><span class="n">1</span><span class="n">2</span>第二行先是两枚标签、再是灰字 <code>Recap · Sat, Oct 17, 4:05 PM</code>，两样加起来占掉七成，recap 只露 4–10 个字。</li>
+</ul></div>`;
+  document.getElementById('cap-D').innerHTML = `<h3>定稿 · 列表</h3>${stat('D')}<ul>
+<li><span class="n blue">3</span>第二行只剩那一句：静止时是 recap，在做事 / 等你 / 你发出还没回时照旧是那句（见 ①）。</li>
+<li>中文 recap 一行露出二十六七个字，英文五十来个字符；短的整句读完。</li>
+<li>行高 75pt、一屏行数都和今天一样；第一行（标题、状态点、相对时间）不动。</li>
+<li>标签只是不在行上画了：筛选、分组、<code>Tags…</code> 照旧。</li>
+</ul></div>`;
+  document.getElementById('cap-Dl').innerHTML = `<h3>亮色</h3><ul>
+<li>同一套规则；项目行的进度块、<code>Done</code> 照旧。</li>
+<li>iPad 的 regular 行、Mac 的列表、web、Android 同一条规则。</li>
+</ul></div>`;
+  document.getElementById('cap-S').innerHTML = `<h3>定稿 · 会话页（02 的 A）</h3><ul>
+<li><span class="n blue">4</span>会话静止时，转录最后一行是 Recap 卡：头一行就是从列表行上拿下来的那段 <code>Recap · 时间</code>，正文是全文——列表上只读得到一半的那句，在这里读完。</li>
+<li>右边 ↻ 接服务端现成的 <code>POST /sessions/:id/recap</code>。</li>
+<li>卡在内容里，不加栏；这次进来一开始新一轮就让位。</li>
+</ul></div>`;
+
+  document.getElementById('foot').innerHTML = `<b>确认这张后的改法</b>（四端 + 服务端，没有新的数据字段——<code>recapText</code> / <code>recapAt</code> 已经在列表、详情和 <code>session.updated</code> 里）：<br>
+服务端 ④ 两处 → OrbitKit <code>SessionLine</code> 不再给 recap 挂 <code>label</code>（<code>recapLabel</code> 留给卡用），iOS / Mac 列表行去掉 <code>SessionTagChips</code> / <code>SessionTagDots</code>，<code>TranscriptRows</code> 尾部多一种 <code>.recap</code> 行 + <code>RecapCardView</code> + <code>APIClient.refreshRecap</code> → web：<code>sessionLine</code> 去 label、行上去 <code>SessionTagChips</code>、<code>Transcript</code> 尾部同一张卡 → Android：目录行同样两处、会话页尾部同一张卡。各端的 copy parity 测试跟着改。`;
+});
+</script>
+</body></html>

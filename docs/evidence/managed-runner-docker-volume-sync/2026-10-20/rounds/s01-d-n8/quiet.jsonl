@@ -1,0 +1,1 @@
+{"mono": 1489821.782, "waiting": {"journalWriteMBps": 0.023, "load": ["10.30", "12.78", "13.50"], "memAvailableMiB": 8496, "othersReadMBps": 0.0, "othersWriteMBps": 0.008, "qemu": "0", "readMBps": 4.348, "seconds": 15, "testHostReadMBps": 4.349, "testHostWriteMBps": 0.968, "utilPercent": 23.81, "writeMBps": 0.998}, "wall": 1792443967.652}

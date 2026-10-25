@@ -5,7 +5,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { App as AntApp } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiArticleDirectory, WikiArticleIndex, WikiArticleView, WikiEntry } from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
@@ -233,18 +232,16 @@ async function open(path: string): Promise<void> {
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[path]}>
-          <AntApp>
-            <Routes>
-              <Route path="/wiki/:space" element={<WikiPage route="home" />} />
-              <Route path="/wiki/:space/browse" element={<WikiPage route="browse" />} />
-              <Route path="/wiki/:space/az" element={<WikiPage route="index" />} />
-              <Route path="/wiki/:space/t/:topic" element={<WikiPage route="topic" />} />
-              <Route path="/wiki/:space/t/:topic/:part" element={<WikiPage route="topic" />} />
-              <Route path="/wiki/:space/e/:entry" element={<WikiPage route="entry" />} />
-              <Route path="/wiki/review" element={<span>review</span>} />
-            </Routes>
-            <Where />
-          </AntApp>
+          <Routes>
+            <Route path="/wiki/:space" element={<WikiPage route="home" />} />
+            <Route path="/wiki/:space/browse" element={<WikiPage route="browse" />} />
+            <Route path="/wiki/:space/az" element={<WikiPage route="index" />} />
+            <Route path="/wiki/:space/t/:topic" element={<WikiPage route="topic" />} />
+            <Route path="/wiki/:space/t/:topic/:part" element={<WikiPage route="topic" />} />
+            <Route path="/wiki/:space/e/:entry" element={<WikiPage route="entry" />} />
+            <Route path="/wiki/review" element={<span>review</span>} />
+          </Routes>
+          <Where />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -324,7 +321,7 @@ describe("a topic's article", () => {
     const marker = [...page().querySelectorAll<HTMLButtonElement>('.wk-fn-n')].find((node) => node.textContent === '[2]')!;
     await act(async () => marker.click());
     await settle();
-    const card = document.querySelector<HTMLElement>('.ant-popover .wk-fncard')!;
+    const card = document.querySelector<HTMLElement>('.orbit-popover .wk-fncard')!;
     expect(card).toBeTruthy();
     expect(words('.k', card)).toEqual(['[2] Recipe Auto']);
     expect(text('.t', card)).toEqual([CHROMIUM.title]);
@@ -349,7 +346,7 @@ describe("a topic's article", () => {
     const marker = [...page().querySelectorAll<HTMLButtonElement>('.wk-fn-n')].find((node) => node.textContent === '[1]')!;
     await act(async () => marker.click());
     await settle();
-    expect(document.querySelector('.ant-popover')).toBeNull();
+    expect(document.querySelector('.orbit-popover')).toBeNull();
     const sheet = document.querySelector<HTMLElement>('.wk-fnsheet .wk-fncard.sheet')!;
     expect(sheet).toBeTruthy();
     expect(words('.k', sheet)).toEqual(['[1] Convention Confirmed']);

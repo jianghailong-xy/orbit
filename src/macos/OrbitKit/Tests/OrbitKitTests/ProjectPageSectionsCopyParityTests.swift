@@ -93,11 +93,53 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
                             ("RETRIED_BY_COORDINATOR", ProjectPage.landingRetriedByCoordinator)] {
             assertSays(web, "\(key): '\(word)'", in: Self.panorama)
         }
+        // §7.2 V6's words (board docs/mocks/landing-session/v4, 05), every one of them in the web's
+        // `LANDING_LIVENESS_WORDS`; Kotlin's ProjectPage may only use these.
+        for (key, word) in [("OUTPUT", ProjectPage.landingOutput),
+                            ("NO_OUTPUT_FOR", ProjectPage.landingNoOutputFor),
+                            ("WITHIN_ITS", ProjectPage.landingWithinIts),
+                            ("BUDGET", ProjectPage.landingBudget),
+                            ("NO_WORD_FROM_RUNNER", ProjectPage.landingNoWordFromRunner),
+                            ("NO_WORD_FROM_THE_RUNNER", ProjectPage.landingNoWordFromTheRunner),
+                            ("REPORTS_ONLY_BETWEEN_STEPS", ProjectPage.landingReportsOnlyBetweenSteps),
+                            ("CLAIM", ProjectPage.landingClaim),
+                            ("ROUND", ProjectPage.landingRound),
+                            ("OF", ProjectPage.landingOf),
+                            ("TAKEN_OVER", ProjectPage.landingTakenOver),
+                            ("FIRST_STARTED", ProjectPage.landingFirstStarted),
+                            ("USUALLY", ProjectPage.landingUsually)] {
+            assertSays(web, "\(key): '\(word)'", in: Self.panorama)
+        }
+        // A runner that stopped reporting says so — a fact about the REPORTS, worded apart from
+        // `Update unavailable` (the app failing to read the server) and from any timeout (the job's
+        // own verdict, which only the server's `blockingReason` words).
+        assertSays(web, "export const LANDING_NO_REPORT = '\(ProjectPage.landingNoReport)';", in: Self.panorama)
+        assertSays(web, "export const landingNoReportFor = (minutes: number): string => `No report for ${minutes}m`;",
+                   in: Self.panorama)
+        assertSays(web, "export const LANDING_NO_REPORT_YET = '\(ProjectPage.landingNoReportYet)';", in: Self.panorama)
+        XCTAssertEqual(ProjectPage.landingNoReportFor(11), "No report for 11m")
+        // The card the landing is drawn as (owner decision 2026-10-11, docs/mocks/project-landing-card)
+        // says the row's words and three of its own; both ends write those three here.
+        assertSays(web, "export const landingOnto = (ref: string): string => `onto ${ref}`;", in: Self.panorama)
+        assertSays(web, "export const LANDING_NOTHING_TO_DO = '\(ProjectPage.landingNothingToDo)';",
+                   in: Self.panorama)
+        assertSays(web, "export const LANDING_ALL_JOBS = '\(ProjectPage.landingAllJobs)';", in: Self.panorama)
+        // The head's title is the row's name slot with the word in front of it: "Landing 2 jobs",
+        // and the count is the one the row already counts.
+        assertSays(web, "title: several && line.what ? `${line.word} ${line.what}` : line.word,",
+                   in: Self.panorama)
+        // The head both cards wear since 2026-10-11 (board docs/mocks/project-merge-check-row): one
+        // new word, and one composition the two ends run — `ProjectPage.landingHead` /
+        // `landingHead`, which the merge check card and the landing card each read.
+        assertSays(web, "export const LANDING_WAITED = '\(ProjectPage.landingWaited)';", in: Self.panorama)
+        assertSays(web, "export function landingHead(", in: Self.panorama)
     }
 
     func testTheCoordinatorCardsWords() throws {
         let web = try source(Self.coordinator)
-        assertSays(web, "'Open coordinator' : 'Reply to coordinator'", in: Self.coordinator)
+        assertSays(web, "? 'Open coordinator'", in: Self.coordinator)
+        assertSays(web, ": `Review ${session.pendingApprovals} request${session.pendingApprovals === 1 ? '' : 's'}`",
+                   in: Self.coordinator)
         assertSays(web, "'Open work' : 'Manual dispatch'", in: Self.coordinator)
         for text in ["Open tasks are coordinated from this conversation.", "No open tasks remain.",
                      "A completed conversation is told nothing new, and this project still points at it.",
@@ -116,7 +158,7 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
         let page = try source(Self.page)
         assertSays(page, "title: '\(ProjectPage.replaceCoordinatorQuestion)'", in: Self.page)
         assertSays(page, "'\(ProjectPage.replaceCoordinatorDetail)'", in: Self.page)
-        assertSays(page, "okText: '\(ProjectPage.replaceCoordinatorConfirm)'", in: Self.page)
+        assertSays(page, "confirmText: '\(ProjectPage.replaceCoordinatorConfirm)'", in: Self.page)
         assertSays(page, "cancelText: '\(ProjectPage.replaceCoordinatorKeep)'", in: Self.page)
     }
 
@@ -183,7 +225,7 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
         assertSays(web, "`${pausedCount} ready in paused lists`", in: Self.queue)
         assertSays(web, ProjectPage.queueEmpty, in: Self.queue)
         let truncated = ProjectPage.queueImpactTruncated(maxTasks: 9)
-        assertSays(web, "message=\"\(truncated.title)\"", in: Self.queue)
+        assertSays(web, "title=\"\(truncated.title)\"", in: Self.queue)
         assertSays(web, "unfinished tasks, so tasks are shown without downstream impact ranking.", in: Self.queue)
         for state in ["Work in progress", "Waiting for runner", "List paused", "Prerequisites complete"] {
             assertSays(web, state, in: Self.queue)

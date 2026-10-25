@@ -1,0 +1,2032 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/p42.config.mjs",
+   "--update-snapshots=all",
+   "--project",
+   "webkit-dark-desktop",
+   "--project",
+   "webkit-light-desktop",
+   "-g",
+   "engines|its menus",
+   "--repeat-each=5"
+  ],
+  "configFile": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/p42.config.mjs",
+  "rootDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p42*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p42*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p42*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p42*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out",
+    "repeatEach": 5,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p42*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p42*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out",
+    "repeatEach": 5,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p42*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p42*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "all",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run preview -- --host 127.0.0.1 --port 4173 --strictPort",
+   "cwd": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del/src/web/",
+   "url": "http://127.0.0.1:4173",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "p42.browser.mjs",
+   "file": "p42.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [],
+   "suites": [
+    {
+     "title": "P4.2 providers",
+     "file": "p42.browser.mjs",
+     "line": 108,
+     "column": 6,
+     "specs": [
+      {
+       "title": "engines: an account menu, its remove question and the pause dialog",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 5438,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-providers.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-engine-menu.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-engine-remove.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-account-pause.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-account-pause-custom.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:08:14.182Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p42-providers-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-providers.png"
+            },
+            {
+             "name": "p42-providers-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-light-desktop/p42-providers-actual.png"
+            },
+            {
+             "name": "p42-engine-menu-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-engine-menu.png"
+            },
+            {
+             "name": "p42-engine-menu-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-light-desktop/p42-engine-menu-actual.png"
+            },
+            {
+             "name": "p42-engine-remove-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-engine-remove.png"
+            },
+            {
+             "name": "p42-engine-remove-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-light-desktop/p42-engine-remove-actual.png"
+            },
+            {
+             "name": "p42-account-pause-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-account-pause.png"
+            },
+            {
+             "name": "p42-account-pause-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-light-desktop/p42-account-pause-actual.png"
+            },
+            {
+             "name": "p42-account-pause-custom-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-account-pause-custom.png"
+            },
+            {
+             "name": "p42-account-pause-custom-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-light-desktop/p42-account-pause-custom-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-light-desktop/attachments/computed-styles-and-timings-f8f72183918137b26a4fe3173ab2e8dbc75cfe26.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-c1599c432b9295d7b4e2",
+       "file": "p42.browser.mjs",
+       "line": 109,
+       "column": 3
+      },
+      {
+       "title": "engines: an account menu, its remove question and the pause dialog",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 8285,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:08:35.743Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-light-desktop-repeat1/attachments/computed-styles-and-timings-cd0974a5ce30189949b04d9ee8440290d1032343.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-3df39f37220d65a0623b",
+       "file": "p42.browser.mjs",
+       "line": 109,
+       "column": 3
+      },
+      {
+       "title": "engines: an account menu, its remove question and the pause dialog",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4488,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:08:58.848Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-light-desktop-repeat2/attachments/computed-styles-and-timings-22c415b5f945e698e96ede5d17863b93216fcc42.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-23cca583d335f6887860",
+       "file": "p42.browser.mjs",
+       "line": 109,
+       "column": 3
+      },
+      {
+       "title": "engines: an account menu, its remove question and the pause dialog",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 3,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 3939,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:09:15.942Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-light-desktop-repeat3/attachments/computed-styles-and-timings-16211ea8d461ef804fc4347fc54a13d5e0ff6f35.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-28fa5b52f511c4f3286a",
+       "file": "p42.browser.mjs",
+       "line": 109,
+       "column": 3
+      },
+      {
+       "title": "engines: an account menu, its remove question and the pause dialog",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 4,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4047,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:09:32.750Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-light-desktop-repeat4/attachments/computed-styles-and-timings-ea92572d3650c948fdcd6511c270d54d76e7c54d.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-9e96618ac6a3f64d174a",
+       "file": "p42.browser.mjs",
+       "line": 109,
+       "column": 3
+      },
+      {
+       "title": "engines: an account menu, its remove question and the pause dialog",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 5,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 5203,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-providers.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-engine-menu.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-engine-remove.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-account-pause.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-account-pause-custom.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:09:50.341Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p42-providers-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-providers.png"
+            },
+            {
+             "name": "p42-providers-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-dark-desktop/p42-providers-actual.png"
+            },
+            {
+             "name": "p42-engine-menu-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-engine-menu.png"
+            },
+            {
+             "name": "p42-engine-menu-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-dark-desktop/p42-engine-menu-actual.png"
+            },
+            {
+             "name": "p42-engine-remove-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-engine-remove.png"
+            },
+            {
+             "name": "p42-engine-remove-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-dark-desktop/p42-engine-remove-actual.png"
+            },
+            {
+             "name": "p42-account-pause-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-account-pause.png"
+            },
+            {
+             "name": "p42-account-pause-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-dark-desktop/p42-account-pause-actual.png"
+            },
+            {
+             "name": "p42-account-pause-custom-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-account-pause-custom.png"
+            },
+            {
+             "name": "p42-account-pause-custom-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-dark-desktop/p42-account-pause-custom-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-dark-desktop/attachments/computed-styles-and-timings-f848513e9ae771ea8692edb1d7a2b5bcbe62ebdb.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-db67f3fc494ffc0c522c",
+       "file": "p42.browser.mjs",
+       "line": 109,
+       "column": 3
+      },
+      {
+       "title": "engines: an account menu, its remove question and the pause dialog",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 6,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 3927,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:10:09.718Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-dark-desktop-repeat1/attachments/computed-styles-and-timings-74526c13b793faa43bd9977a77b79ed93acb2223.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-83db3760afece1af55f6",
+       "file": "p42.browser.mjs",
+       "line": 109,
+       "column": 3
+      },
+      {
+       "title": "engines: an account menu, its remove question and the pause dialog",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 7,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 5004,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:10:27.310Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-dark-desktop-repeat2/attachments/computed-styles-and-timings-cd040ad3e075ea780fcb0b6de55dd5a61b21158e.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-71409aad2a63d92d2e06",
+       "file": "p42.browser.mjs",
+       "line": 109,
+       "column": 3
+      },
+      {
+       "title": "engines: an account menu, its remove question and the pause dialog",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 8,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4275,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:10:46.060Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-dark-desktop-repeat3/attachments/computed-styles-and-timings-e82de3af13ea01b65ae4863f9c604cf104ea1a8f.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-3f73afdd538ea5ccfbab",
+       "file": "p42.browser.mjs",
+       "line": 109,
+       "column": 3
+      },
+      {
+       "title": "engines: an account menu, its remove question and the pause dialog",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 9,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4867,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:11:05.145Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-provi-57f83-estion-and-the-pause-dialog-webkit-dark-desktop-repeat4/attachments/computed-styles-and-timings-bfc6e7cb686d8e3c28ceb7210bb409c3ec6c87e6.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-96e998c78f1b69ec85df",
+       "file": "p42.browser.mjs",
+       "line": 109,
+       "column": 3
+      }
+     ]
+    },
+    {
+     "title": "P4.2 a pool on its own page",
+     "file": "p42.browser.mjs",
+     "line": 429,
+     "column": 6,
+     "specs": [
+      {
+       "title": "a Codex pool of one\u2019s own: who can use it, its menus and questions",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 9377,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-codex.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-who.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-person-menu.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-just-mine.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-share.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-replace-key.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-signout.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:08:19.772Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p42-pool-codex-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-codex.png"
+            },
+            {
+             "name": "p42-pool-codex-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-light-desktop/p42-pool-codex-actual.png"
+            },
+            {
+             "name": "p42-pool-who-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-who.png"
+            },
+            {
+             "name": "p42-pool-who-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-light-desktop/p42-pool-who-actual.png"
+            },
+            {
+             "name": "p42-pool-person-menu-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-person-menu.png"
+            },
+            {
+             "name": "p42-pool-person-menu-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-light-desktop/p42-pool-person-menu-actual.png"
+            },
+            {
+             "name": "p42-pool-just-mine-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-just-mine.png"
+            },
+            {
+             "name": "p42-pool-just-mine-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-light-desktop/p42-pool-just-mine-actual.png"
+            },
+            {
+             "name": "p42-pool-share-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-share.png"
+            },
+            {
+             "name": "p42-pool-share-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-light-desktop/p42-pool-share-actual.png"
+            },
+            {
+             "name": "p42-pool-replace-key-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-replace-key.png"
+            },
+            {
+             "name": "p42-pool-replace-key-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-light-desktop/p42-pool-replace-key-actual.png"
+            },
+            {
+             "name": "p42-pool-signout-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-signout.png"
+            },
+            {
+             "name": "p42-pool-signout-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-light-desktop/p42-pool-signout-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-light-desktop/attachments/computed-styles-and-timings-17f0e938ca012b526784c6be02e7e80d9531f756.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-75e8bd5acb55a21fc121",
+       "file": "p42.browser.mjs",
+       "line": 477,
+       "column": 3
+      },
+      {
+       "title": "a Codex pool of one\u2019s own: who can use it, its menus and questions",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 8814,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:08:44.241Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-light-desktop-repeat1/attachments/computed-styles-and-timings-27ff6a910c258c31a20f2af5ba0f52bb4d1a3188.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-cb11c1ad05c0700c93cb",
+       "file": "p42.browser.mjs",
+       "line": 477,
+       "column": 3
+      },
+      {
+       "title": "a Codex pool of one\u2019s own: who can use it, its menus and questions",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 7687,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:09:03.533Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-light-desktop-repeat2/attachments/computed-styles-and-timings-181997672874201e34487339fb25ef5fbb180011.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-d29bd0c0973bb3349554",
+       "file": "p42.browser.mjs",
+       "line": 477,
+       "column": 3
+      },
+      {
+       "title": "a Codex pool of one\u2019s own: who can use it, its menus and questions",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 3,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 7550,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:09:19.964Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-light-desktop-repeat3/attachments/computed-styles-and-timings-000f699a419d21e802bbb763b36e8aa049b725a6.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-7583c985b4e11aced130",
+       "file": "p42.browser.mjs",
+       "line": 477,
+       "column": 3
+      },
+      {
+       "title": "a Codex pool of one\u2019s own: who can use it, its menus and questions",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 4,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 7499,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:09:36.951Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-light-desktop-repeat4/attachments/computed-styles-and-timings-05fb7c13556fd21dd781d2aee000ed841692ecee.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-b5f0393c66baeda3c453",
+       "file": "p42.browser.mjs",
+       "line": 477,
+       "column": 3
+      },
+      {
+       "title": "a Codex pool of one\u2019s own: who can use it, its menus and questions",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 5,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 8257,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-codex.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-who.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-person-menu.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-just-mine.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-share.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-replace-key.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-signout.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:09:55.785Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p42-pool-codex-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-codex.png"
+            },
+            {
+             "name": "p42-pool-codex-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-dark-desktop/p42-pool-codex-actual.png"
+            },
+            {
+             "name": "p42-pool-who-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-who.png"
+            },
+            {
+             "name": "p42-pool-who-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-dark-desktop/p42-pool-who-actual.png"
+            },
+            {
+             "name": "p42-pool-person-menu-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-person-menu.png"
+            },
+            {
+             "name": "p42-pool-person-menu-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-dark-desktop/p42-pool-person-menu-actual.png"
+            },
+            {
+             "name": "p42-pool-just-mine-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-just-mine.png"
+            },
+            {
+             "name": "p42-pool-just-mine-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-dark-desktop/p42-pool-just-mine-actual.png"
+            },
+            {
+             "name": "p42-pool-share-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-share.png"
+            },
+            {
+             "name": "p42-pool-share-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-dark-desktop/p42-pool-share-actual.png"
+            },
+            {
+             "name": "p42-pool-replace-key-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-replace-key.png"
+            },
+            {
+             "name": "p42-pool-replace-key-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-dark-desktop/p42-pool-replace-key-actual.png"
+            },
+            {
+             "name": "p42-pool-signout-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-signout.png"
+            },
+            {
+             "name": "p42-pool-signout-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-dark-desktop/p42-pool-signout-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-dark-desktop/attachments/computed-styles-and-timings-adadd676bba471ece1eae4f4c040157769af6ed2.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-6ccd909b835584e55337",
+       "file": "p42.browser.mjs",
+       "line": 477,
+       "column": 3
+      },
+      {
+       "title": "a Codex pool of one\u2019s own: who can use it, its menus and questions",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 6,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 7633,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:10:13.796Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-dark-desktop-repeat1/attachments/computed-styles-and-timings-82c7022fea99996ba240253252a30c9783eed0ba.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-07e2f96c83fa23bbf19a",
+       "file": "p42.browser.mjs",
+       "line": 477,
+       "column": 3
+      },
+      {
+       "title": "a Codex pool of one\u2019s own: who can use it, its menus and questions",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 7,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 8140,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:10:32.467Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-dark-desktop-repeat2/attachments/computed-styles-and-timings-a7f29272826c864f1ed46e32e3f51d0ac97cb804.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-7b19540b86a24f24af33",
+       "file": "p42.browser.mjs",
+       "line": 477,
+       "column": 3
+      },
+      {
+       "title": "a Codex pool of one\u2019s own: who can use it, its menus and questions",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 8,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 7862,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:10:50.479Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-dark-desktop-repeat3/attachments/computed-styles-and-timings-66f6c55b4b10861fe36cda05592d2cf4bf94a5d1.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-bef30fe513e324561d95",
+       "file": "p42.browser.mjs",
+       "line": 477,
+       "column": 3
+      },
+      {
+       "title": "a Codex pool of one\u2019s own: who can use it, its menus and questions",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 9,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 7793,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:11:10.415Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-poo-81e7d--it-its-menus-and-questions-webkit-dark-desktop-repeat4/attachments/computed-styles-and-timings-db1b044dc400003e2bf0716efc9273cadcdcb2ad.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-516c49a28d28cb0aee12",
+       "file": "p42.browser.mjs",
+       "line": 477,
+       "column": 3
+      }
+     ]
+    },
+    {
+     "title": "P4.2 a runner\u2019s page",
+     "file": "p42.browser.mjs",
+     "line": 717,
+     "column": 6,
+     "specs": [
+      {
+       "title": "its menus, a workspace\u2019s settings and the discard question",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4766,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-runner-detail.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-runner-actions.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-workspace-menu.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-workspace-edit.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-workspace-advanced.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-workspace-discard.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:08:29.157Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p42-runner-detail-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-runner-detail.png"
+            },
+            {
+             "name": "p42-runner-detail-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-light-desktop/p42-runner-detail-actual.png"
+            },
+            {
+             "name": "p42-runner-actions-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-runner-actions.png"
+            },
+            {
+             "name": "p42-runner-actions-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-light-desktop/p42-runner-actions-actual.png"
+            },
+            {
+             "name": "p42-workspace-menu-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-workspace-menu.png"
+            },
+            {
+             "name": "p42-workspace-menu-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-light-desktop/p42-workspace-menu-actual.png"
+            },
+            {
+             "name": "p42-workspace-edit-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-workspace-edit.png"
+            },
+            {
+             "name": "p42-workspace-edit-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-light-desktop/p42-workspace-edit-actual.png"
+            },
+            {
+             "name": "p42-workspace-advanced-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-workspace-advanced.png"
+            },
+            {
+             "name": "p42-workspace-advanced-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-light-desktop/p42-workspace-advanced-actual.png"
+            },
+            {
+             "name": "p42-workspace-discard-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-workspace-discard.png"
+            },
+            {
+             "name": "p42-workspace-discard-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-light-desktop/p42-workspace-discard-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-light-desktop/attachments/computed-styles-and-timings-c244fb3dcf4fbc64c5a5016525068e57673a0e74.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-7584e42ea6013aac1d20",
+       "file": "p42.browser.mjs",
+       "line": 718,
+       "column": 3
+      },
+      {
+       "title": "its menus, a workspace\u2019s settings and the discard question",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4638,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:08:53.070Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-light-desktop-repeat1/attachments/computed-styles-and-timings-ecc1caa187c9197ead50f2791dbb2c591c2ab4c0.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-fdeab63f4986d6d87bf4",
+       "file": "p42.browser.mjs",
+       "line": 718,
+       "column": 3
+      },
+      {
+       "title": "its menus, a workspace\u2019s settings and the discard question",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 3964,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:09:11.224Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-light-desktop-repeat2/attachments/computed-styles-and-timings-c0f7c4ebf3ad19838948108718dcd008f312db5e.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-740d0367f4ca461b69c1",
+       "file": "p42.browser.mjs",
+       "line": 718,
+       "column": 3
+      },
+      {
+       "title": "its menus, a workspace\u2019s settings and the discard question",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 3,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4354,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:09:27.518Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-light-desktop-repeat3/attachments/computed-styles-and-timings-e7da52cf060d6640790c75d7367c084cfbe2c86b.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-e8515e9b94373a992c3a",
+       "file": "p42.browser.mjs",
+       "line": 718,
+       "column": 3
+      },
+      {
+       "title": "its menus, a workspace\u2019s settings and the discard question",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 4,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4866,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:09:44.455Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-light-desktop-repeat4/attachments/computed-styles-and-timings-9d98efeb7df2701e1a6578878cf62e94a8a7a302.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-3b7a8aa5ee2f1f422ea9",
+       "file": "p42.browser.mjs",
+       "line": 718,
+       "column": 3
+      },
+      {
+       "title": "its menus, a workspace\u2019s settings and the discard question",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 5,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4310,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-runner-detail.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-runner-actions.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-workspace-menu.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-workspace-edit.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-workspace-advanced.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-workspace-discard.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:10:04.051Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p42-runner-detail-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-runner-detail.png"
+            },
+            {
+             "name": "p42-runner-detail-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-dark-desktop/p42-runner-detail-actual.png"
+            },
+            {
+             "name": "p42-runner-actions-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-runner-actions.png"
+            },
+            {
+             "name": "p42-runner-actions-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-dark-desktop/p42-runner-actions-actual.png"
+            },
+            {
+             "name": "p42-workspace-menu-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-workspace-menu.png"
+            },
+            {
+             "name": "p42-workspace-menu-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-dark-desktop/p42-workspace-menu-actual.png"
+            },
+            {
+             "name": "p42-workspace-edit-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-workspace-edit.png"
+            },
+            {
+             "name": "p42-workspace-edit-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-dark-desktop/p42-workspace-edit-actual.png"
+            },
+            {
+             "name": "p42-workspace-advanced-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-workspace-advanced.png"
+            },
+            {
+             "name": "p42-workspace-advanced-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-dark-desktop/p42-workspace-advanced-actual.png"
+            },
+            {
+             "name": "p42-workspace-discard-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-workspace-discard.png"
+            },
+            {
+             "name": "p42-workspace-discard-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-dark-desktop/p42-workspace-discard-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-dark-desktop/attachments/computed-styles-and-timings-37c0945a606477fd913257e9f2e85f94b7731069.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-57b4c784e7ca7e00343c",
+       "file": "p42.browser.mjs",
+       "line": 718,
+       "column": 3
+      },
+      {
+       "title": "its menus, a workspace\u2019s settings and the discard question",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 6,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4242,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:10:21.434Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-dark-desktop-repeat1/attachments/computed-styles-and-timings-665a50e1f176a74a0fa6d2c9259707364bd589d1.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-23d3344863ddf6d8e287",
+       "file": "p42.browser.mjs",
+       "line": 718,
+       "column": 3
+      },
+      {
+       "title": "its menus, a workspace\u2019s settings and the discard question",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 7,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4406,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:10:40.616Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-dark-desktop-repeat2/attachments/computed-styles-and-timings-57b3e09dd347bfcfd211cf982491d2ce5adbbbbc.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-036419da0ee974b117aa",
+       "file": "p42.browser.mjs",
+       "line": 718,
+       "column": 3
+      },
+      {
+       "title": "its menus, a workspace\u2019s settings and the discard question",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 8,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4451,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:10:58.350Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-dark-desktop-repeat3/attachments/computed-styles-and-timings-d73087a9b03a8e9f77b2deb85c7cf1cfb6edbebe.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-d969d09896bef141587d",
+       "file": "p42.browser.mjs",
+       "line": 718,
+       "column": 3
+      },
+      {
+       "title": "its menus, a workspace\u2019s settings and the discard question",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 9,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4376,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-08T12:11:18.215Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out/p42.browser.mjs-P4-2-a-run-d4250-gs-and-the-discard-question-webkit-dark-desktop-repeat4/attachments/computed-styles-and-timings-29de2058453714bc88903a4ba86a014a8327f710.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "ed28240eeca4616de229-d46b487c66b27217967d",
+       "file": "p42.browser.mjs",
+       "line": 718,
+       "column": 3
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-08T12:08:03.968Z",
+  "duration": 198723.401,
+  "expected": 30,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

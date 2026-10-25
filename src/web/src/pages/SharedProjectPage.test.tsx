@@ -421,7 +421,7 @@ describe('a project link’s public page', { timeout: 60_000 }, () => {
     ]) {
       expect(text, owners).not.toContain(owners);
     }
-    expect(container.querySelectorAll('button.ant-btn-primary, .ant-btn-dangerous')).toHaveLength(0);
+    expect(container.querySelectorAll('button.orbit-button-primary, .orbit-button-danger')).toHaveLength(0);
   });
 
   it('draws each block from the link: the header, the overview, the goal, the chain and the tasks in their bands', async () => {

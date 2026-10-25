@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import {
   LANDING_SERVING_WORK_SELECT,
+  readLandingJobsByTask,
   taskHasNothingToLand,
   taskLanding,
   type CriterionLanding,
@@ -161,20 +162,30 @@ export const LANDING_REASON_SERVING_WORK_SELECT = {
   sessions: NEWEST_WORK_SESSION,
 } as const;
 
-/** Every criterion this project states, each with the serving work this reading needs. One call:
- *  the landing lane's read, with the newest work session one relation below each task. */
+/** Every criterion this project states, each with the serving work this reading needs. Two calls:
+ *  the landing lane's read, with the newest work session one relation below each task, and then the
+ *  tasks' integration jobs beside them — a history reference has no relation to nest (0423). */
 export async function readCriterionLandingReasonFacts(
-  prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition'>,
+  prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition' | 'projectIntegrationJob' | 'session'>,
   ownerId: string,
   projectId: string,
 ): Promise<Array<{ id: string; servingTasks: LandingReasonServingTask[] }>> {
-  return prisma.projectAcceptanceCriterionDefinition.findMany({
+  const definitions = await prisma.projectAcceptanceCriterionDefinition.findMany({
     where: { projectId, project: { ownerId } },
     select: {
       id: true,
       servingTasks: { where: { ownerId }, select: LANDING_REASON_SERVING_WORK_SELECT },
     },
   });
+  const jobs = await readLandingJobsByTask(
+    prisma, definitions.flatMap((definition) => definition.servingTasks.map((task) => task.id)),
+  );
+  return definitions.map((definition) => ({
+    ...definition,
+    servingTasks: definition.servingTasks.map((task) => ({
+      ...task, integrationJobs: jobs.get(task.id) ?? [],
+    })),
+  }));
 }
 
 /** The project's landings and merges into the upstream that are queued or running. One statement. */

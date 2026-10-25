@@ -1,0 +1,16 @@
+git version 2.47.3 6.12.107+deb13-amd64 /dev/sdb ext4 rw,noatime,rw on /mnt/data
+  commit 1 file, default                        median      7.26 ms  p90     18.55  min      3.30  max     44.06  n 20
+  commit 1 file, default, then syncfs           median     71.07 ms  p90     98.98  min     47.22  max    104.36  n 20
+  commit 1 file, fsync=all                      median    109.38 ms  p90    147.33  min     68.88  max    159.05  n 20
+  commit 1 file, fsync=all, then syncfs         median    161.20 ms  p90    300.34  min    111.51  max    336.34  n 20
+  commit 1 file, fsync=all,batch                median    227.81 ms  p90    327.72  min    189.74  max    469.59  n 20
+  commit 1 file, fsync=all,batch, then syncfs   median    231.18 ms  p90    430.42  min    115.86  max    452.65  n 20
+  commit 200 files, default                     median     21.64 ms  p90     38.23  min     18.35  max     38.23  n 5
+  commit 200 files, default, then syncfs        median    129.46 ms  p90    140.19  min    112.85  max    140.19  n 5
+  commit 200 files, fsync=all                   median   4706.42 ms  p90   5668.67  min   3973.01  max   5668.67  n 5
+  commit 200 files, fsync=all, then syncfs      median   4931.14 ms  p90   5382.98  min   4773.13  max   5382.98  n 5
+  commit 200 files, fsync=all,batch             median    191.59 ms  p90    247.21  min    164.43  max    247.21  n 5
+  commit 200 files, fsync=all,batch, then syncfs median    372.76 ms  p90    463.49  min    345.17  max    463.49  n 5
+  syncfs, nothing dirty                         median      2.62 ms  p90      2.69  min      2.56  max     11.67  n 20
+  syncfs after 1 MiB written                    median     58.04 ms  p90     74.84  min     45.73  max     74.84  n 10
+  syncfs after 64 MiB written                   median    349.94 ms  p90    366.39  min    343.65  max    366.39  n 5

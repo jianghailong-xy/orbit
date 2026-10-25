@@ -149,7 +149,7 @@ internal fun WatchDetailContent(store: WatchStore, watch: Watch, route: OrbitRou
             }
         },
         dismissButton = {
-            TextButton(onClick = { confirmingStop = false }, modifier = Modifier.testTag("watch-stop-cancel")) { Text("Cancel") }
+            TextButton(onClick = { confirmingStop = false }, modifier = Modifier.testTag("watch-stop-cancel")) { Text("Keep watching") }
         },
         modifier = Modifier.testTag("watch-stop-dialog"),
     )

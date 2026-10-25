@@ -101,6 +101,48 @@ final class NeedsYouLogicTests: XCTestCase {
         XCTAssertEqual(NeedsYouLogic.banner(waiting: [bare])?.text, "A session needs you")
     }
 
+    /// The second line names the conversation a press opens (the owner, 2026-10-21): by its title,
+    /// under the workspace's sentence — and not again when the first line already used that title
+    /// for want of a workspace name.
+    func testTheSecondLineNamesTheConversationAPressOpens() {
+        let named = session("s1", approvals: 1, agentID: "dev", agentName: "orbit-develop",
+                            title: "Rebuild the wiki articles report")
+        let banner = NeedsYouLogic.banner(waiting: [named])
+        XCTAssertEqual(banner?.text, "orbit-develop needs you")
+        XCTAssertEqual(banner?.detail, "Rebuild the wiki articles report")
+        XCTAssertEqual(banner?.glyph, .hand, "a blocked tool call's mark")
+
+        let titleOnly = session("s2", approvals: 1, agentID: "dev", title: "Backfill worktree fences")
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: [titleOnly])?.text, "Backfill worktree fences needs you")
+        XCTAssertNil(NeedsYouLogic.banner(waiting: [titleOnly])?.detail, "the title is said once")
+
+        let blank = session("s3", approvals: 1, agentID: "dev", agentName: "orbit-develop", title: "  ")
+        XCTAssertNil(NeedsYouLogic.banner(waiting: [blank])?.detail, "a blank title is no line")
+    }
+
+    /// Several collapse to a count, and the second line is the one a press opens — the oldest — by
+    /// its title alone (no "Oldest:", the owner's call). The count is the first line, so no "+N".
+    func testSeveralNameTheOldestOnTheSecondLine() {
+        let newer = session("newer", approvals: 1, agentID: "a", agentName: "A", title: "Newer",
+                            lastTurnAt: "2026-08-14T10:00:00.000Z")
+        let older = session("older", approvals: 1, agentID: "b", agentName: "B", title: "Older",
+                            lastTurnAt: "2026-08-14T08:00:00.000Z")
+        let banner = NeedsYouLogic.banner(waiting: [newer, older])
+        XCTAssertEqual(banner?.text, "2 sessions need you")
+        XCTAssertEqual(banner?.detail, "Older")
+        XCTAssertEqual(banner?.more, 0)
+        // Aged from when it stopped to ask: the conversation's last state move.
+        XCTAssertEqual(banner?.since, "2026-08-14T08:00:00.000Z")
+    }
+
+    /// A conversation with no recorded move is aged from its update, then its creation, the same
+    /// fallbacks the recency key orders by.
+    func testABlockedSessionsAgeFallsBackLikeItsRecency() {
+        let row = Session(id: "s1", title: nil, status: .running, agentId: "dev", assignedRunnerId: nil,
+                          pendingApprovals: 1, branch: nil, updatedAt: "2026-08-14T07:00:00.000Z")
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: [row])?.since, "2026-08-14T07:00:00.000Z")
+    }
+
     // MARK: questions in the conversation on screen
 
     /// The bar used to have nothing to say inside the session you were reading, because the only
@@ -174,10 +216,83 @@ final class NeedsYouLogicTests: XCTestCase {
                        "the destination is still the oldest thing waiting, whatever it is")
     }
 
+    /// The bar's mark is the card a press goes to: a question's while that card is a question, an
+    /// exception's while it is one — whatever else is counted behind it.
+    func testTheMarkIsTheCardAPressGoesTo() {
+        XCTAssertEqual(NeedsYouLogic.below(rows: [questionRow("q")], side: .below)?.glyph, .question)
+        XCTAssertEqual(NeedsYouLogic.below(rows: [exceptionRow("e"), questionRow("q")], side: .below)?.glyph,
+                       .warning)
+        XCTAssertEqual(NeedsYouLogic.below(rows: [questionRow("q"), exceptionRow("e")], side: .above)?.glyph,
+                       .question)
+    }
+
     /// Nothing below means no bar at all — absent from the layout rather than present and empty,
     /// the same rule the cross-session bar answers nil for.
     func testNothingBelowIsNoBar() {
         XCTAssertNil(NeedsYouLogic.below(rows: [], side: nil))
+    }
+
+    /// A version waiting for its paused coordinator is not counted (project 34cygPTQe5LPUT7tdUAzG,
+    /// the owner's decision of 2026-10-09): its folded card is in the conversation, but nobody is
+    /// asking the reader anything yet. The bar over this conversation counts the evidence cards the
+    /// console still holds open by `EvidenceDecisions.isOpen` (`ConsoleModel.openBelowRows`), and
+    /// neither a waiting version nor one handed to the coordinator is open — the same version is
+    /// counted the moment it is the reader's question. Nor does the row count it: the server leaves
+    /// it out of `pendingApprovals`, and the console header, the Needs-you grouping, the banner and
+    /// the menu bar read that count and nothing from the queue — so a coordinator paused on its
+    /// weekly limit says "Retrying", never "Waiting for approval".
+    func testAVersionWaitingForTheCoordinatorIsNotCounted() {
+        let project = "34cygPTQe5LPUT7tdUAzG"
+        let coordinatorID = "34cucZFGh0i7pUbWKZlgG"
+        func row(_ taskId: String) -> EvidenceDecisionRow {
+            EvidenceDecisionRow(taskId: taskId, title: "Queue cards for the coordinator", projectId: project,
+                                criterion: EvidenceDecisionCriterion(key: "cards", text: "Decisions match."),
+                                evidenceRevision: "1", submittedAt: "2026-10-09T11:59:30.000Z",
+                                claim: "Revisions wait while the coordinator is paused.", gaps: [],
+                                citations: [], decidability: EvidenceDecisionDecidability(decidable: true),
+                                independence: EvidenceDecisionIndependence(independent: true))
+        }
+        // The bar's rows as the console builds them: one per delivered evidence card still open.
+        func bar(_ queue: EvidenceDecisionQueue, _ tasks: [String]) -> WaitingBelow? {
+            let rows = tasks.compactMap { task -> BelowRow? in
+                let standing = EvidenceDecisions.standing(queue: queue, projectId: project,
+                                                          sessionId: coordinatorID, taskId: task,
+                                                          evidenceRevision: "1")
+                guard EvidenceDecisions.isOpen(standing) else { return nil }
+                let card = DeliveredDecisionCard(kind: .evidenceDecision(taskID: task, evidenceRevision: "1"))
+                return BelowRow(rowID: card.id, isQuestion: true)
+            }
+            return NeedsYouLogic.below(rows: rows, side: .below)
+        }
+        let paused = EvidenceDecisionQueue(
+            decidingSessionId: coordinatorID, count: 0, pending: [],
+            waitingOnCoordinator: [row("queued")],
+            sentToCoordinator: [SentToCoordinatorRow(taskId: "handed", title: "Send waited revisions",
+                                                     projectId: project, evidenceRevision: "1",
+                                                     deliveredAt: "2026-10-09T12:05:00.000Z")])
+        XCTAssertNil(bar(paused, ["queued", "handed"]),
+                     "no \"open question\" bar over a folded card or a Sent line")
+        let asked = EvidenceDecisionQueue(decidingSessionId: coordinatorID, count: 1, pending: [row("queued")])
+        XCTAssertEqual(bar(asked, ["queued"])?.text, "1 open question below",
+                       "the same version, once it is the reader's question, is counted")
+
+        // The coordinator's own row: FAILED on its weekly limit with the reset's retry armed, and
+        // nothing counted, because the server counts only `pending`.
+        let now = ThinkingSummary.date("2026-10-09T12:02:00.000Z")!
+        let coordinator = Session(id: coordinatorID, title: "Evidence waits for the coordinator",
+                                  status: .failed, runState: .failed, agentId: "orbit",
+                                  assignedRunnerId: "runner", pendingApprovals: 0, branch: nil,
+                                  updatedAt: nil, projectId: project, projectTitle: "Evidence waits",
+                                  error: "You've hit your weekly limit · resets Oct 12, 7pm (Asia/Shanghai)",
+                                  lastTurnAt: "2026-10-09T10:08:46.000Z",
+                                  retryAt: "2026-10-12T11:00:00.000Z")
+        XCTAssertEqual(SessionHeader.statusWord(for: coordinator, now: now), "Retrying")
+        XCTAssertEqual(SessionHeader.subtitle(for: coordinator, now: now)?.hasPrefix("Retrying · Open"), true)
+        let groups = SessionGrouping.group([coordinator])
+        XCTAssertTrue(groups.needsYou.isEmpty, "not in Needs you")
+        XCTAssertNil(NeedsYouLogic.banner(waiting: groups.needsYou))
+        XCTAssertEqual(MenuBar.summary(from: [coordinator]).needsYou, 0)
+        XCTAssertTrue(NeedsYouLogic.byAgent([coordinator]).isEmpty)
     }
 
     // MARK: the four owner items (contract §7.6 V13)
@@ -203,16 +318,17 @@ final class NeedsYouLogicTests: XCTestCase {
     }
 
     /// All four are "needs you": they are counted, they are grouped there, and the bar names the
-    /// one that has waited longest — with the project, because that is what decides whether to go
-    /// now. Each kind is asserted on its own, so a wording that drifts fails on its own line.
+    /// one that has waited longest — with the project on its second line, because that is what
+    /// decides whether to go now — in the kind's own mark, aged from the item's own `since`. Each
+    /// kind is asserted on its own, so a wording that drifts fails on its own line.
     func testOwnerItemsCountTowardNeedsYou() {
-        let expected: [(OwnerItemKind, String)] = [
-            (.promotionApproval, "Approve merge to main · Integration line"),
-            (.coordinatorQuestion, "Question from coordinator · Integration line"),
-            (.escalated, "Escalated to you · Integration line"),
-            (.fusePaused, "Paused · Integration line"),
+        let expected: [(OwnerItemKind, String, NeedsYouGlyph)] = [
+            (.promotionApproval, "Approve merge to main", .merge),
+            (.coordinatorQuestion, "Question from coordinator", .question),
+            (.escalated, "Escalated to you", .warning),
+            (.fusePaused, "Paused", .pause),
         ]
-        for (kind, text) in expected {
+        for (kind, text, glyph) in expected {
             let session = coordinator("c1", project: "Integration line",
                                       items: [ownerItem(kind, since: "2026-09-13T10:00:00Z")])
             let groups = SessionGrouping.group([session])
@@ -224,6 +340,10 @@ final class NeedsYouLogicTests: XCTestCase {
 
             let banner = NeedsYouLogic.banner(waiting: groups.needsYou)
             XCTAssertEqual(banner?.text, text)
+            XCTAssertEqual(banner?.detail, "Integration line", "\(kind)'s second line is its project")
+            XCTAssertEqual(banner?.glyph, glyph)
+            XCTAssertEqual(banner?.since, "2026-09-13T10:00:00Z", "aged from the item, not the conversation")
+            XCTAssertEqual(banner?.more, 0)
             XCTAssertEqual(banner?.target.id, "c1", "and a tap lands in the coordinator conversation")
             XCTAssertEqual(banner?.ownerItem?.itemId, "item-1", "on the card the item is")
         }
@@ -258,9 +378,11 @@ final class NeedsYouLogicTests: XCTestCase {
         let banner = NeedsYouLogic.banner(waiting: SessionGrouping.group([newer, older]).needsYou)
         XCTAssertEqual(banner?.ownerItem?.itemId, "old")
         XCTAssertEqual(banner?.target.id, "c2")
-        XCTAssertEqual(banner?.text, "Approve merge to main · Older project")
-        // Two conversations are waiting, and the bar still says so.
+        XCTAssertEqual(banner?.text, "Approve merge to main")
+        XCTAssertEqual(banner?.detail, "Older project")
+        // Two conversations are waiting, and the bar still says so: the one it names, and "+1".
         XCTAssertEqual(banner?.count, 2)
+        XCTAssertEqual(banner?.more, 1)
     }
 
     /// An owner item wins over a blocked tool call: a stopped project is the thing with nowhere
@@ -270,8 +392,10 @@ final class NeedsYouLogicTests: XCTestCase {
         let waiting = coordinator("c1", project: "Integration line",
                                   items: [ownerItem(.fusePaused, since: "2026-09-13T10:00:00Z")])
         let banner = NeedsYouLogic.banner(waiting: [blocked, waiting])
-        XCTAssertEqual(banner?.text, "Paused · Integration line")
+        XCTAssertEqual(banner?.text, "Paused")
+        XCTAssertEqual(banner?.detail, "Integration line")
         XCTAssertEqual(banner?.target.id, "c1")
+        XCTAssertEqual(banner?.more, 1, "the blocked tool call is the one behind it")
     }
 
     /// A kind a later control plane invents is counted (the server counted it) but not named: the
@@ -281,6 +405,8 @@ final class NeedsYouLogicTests: XCTestCase {
                                   items: [ownerItem(.unknown, since: "2026-09-13T10:00:00Z")])
         let banner = NeedsYouLogic.banner(waiting: SessionGrouping.group([unknown]).needsYou)
         XCTAssertEqual(banner?.text, "orbit needs you")
+        XCTAssertEqual(banner?.detail, "Project coordinator")
+        XCTAssertEqual(banner?.glyph, .hand)
         XCTAssertNil(banner?.ownerItem)
     }
 
@@ -300,7 +426,33 @@ final class NeedsYouLogicTests: XCTestCase {
         XCTAssertEqual(row.ownerItems?.first?.title, "Merge 3 tasks into main?")
         // The unknown kind decodes rather than failing the row it arrived on.
         XCTAssertEqual(row.ownerItems?.last?.kind, .unknown)
-        XCTAssertEqual(NeedsYouLogic.banner(waiting: [row])?.text,
-                       "Approve merge to main · Integration line")
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: [row])?.text, "Approve merge to main")
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: [row])?.detail, "Integration line")
+    }
+
+    /// A merge approval names the branch it asks to merge into: the item's project's main branch, as
+    /// `GET /sessions` and `session.updated` carry it (`ownerItems[].mainBranch`) — and main for an
+    /// item that names none (no repository bound, or an older server).
+    func testAMergeApprovalNamesTheProjectsMainBranch() throws {
+        let json = """
+        {"id":"c1","status":"RUNNING","pendingApprovals":1,"projectTitle":"Payments",
+         "ownerItems":[{"itemId":"i1","kind":"PROMOTION_APPROVAL","title":"Merge 3 tasks into master?",
+                        "since":"2026-09-13T10:00:00Z","mainBranch":"master"}]}
+        """
+        let row = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
+        XCTAssertEqual(row.ownerItems?.first?.mainBranch, "master")
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: [row])?.text, "Approve merge to master")
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: [row])?.detail, "Payments")
+        XCTAssertEqual(NeedsYouLogic.oldestItemWord(row.ownerItems), "Approve merge to master")
+
+        let unbound = try JSONDecoder().decode(Session.self, from: Data(
+            json.replacingOccurrences(of: #""mainBranch":"master""#, with: #""mainBranch":null"#).utf8))
+        XCTAssertNil(unbound.ownerItems?.first?.mainBranch)
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: [unbound])?.text, "Approve merge to main")
+        // A branch this build cannot read costs the branch, never the row it arrived on.
+        let garbled = try JSONDecoder().decode(Session.self, from: Data(
+            json.replacingOccurrences(of: #""mainBranch":"master""#, with: #""mainBranch":7"#).utf8))
+        XCTAssertEqual(garbled.ownerItems?.first?.kind, .promotionApproval)
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: [garbled])?.text, "Approve merge to main")
     }
 }

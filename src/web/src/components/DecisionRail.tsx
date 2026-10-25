@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Typography } from 'antd';
 import type { ProjectOpenItemRow } from '@orbit/shared';
 import { ACCEPTANCE_CONFIRMATION_TITLE } from './AcceptanceConfirmationCard';
 import {
@@ -15,6 +14,7 @@ import {
 } from './CriteriaDecisionCard';
 import { pendingCriteriaDecisionsQuery, pendingDecisionsQuery } from '../lib/queries';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
+import './ui/Typography.css';
 
 /**
  * What is TRUE right now about this session's open questions, pinned under the header.
@@ -181,6 +181,9 @@ export interface PendingDecisionRow {
   ownerCard?: PendingDecisionOwnerCard | null;
   criterion: { key: string; text: string } | null;
   evidenceRevision: string;
+  /** When this version was submitted (ISO): the time a version waiting for its coordinator shows.
+   *  Optional because the cards that drew from `ageSeconds` alone never needed it. */
+  submittedAt?: string;
   ageSeconds: number;
   claim: string;
   gaps: string[];
@@ -202,6 +205,27 @@ export interface PendingDecisionQueue {
   /** What THIS session has already decided, oldest first — the receipts its conversation keeps.
    *  Absent from a server older than the receipts. */
   decided?: RecordedDecisionRow[];
+  /** Versions of the project THIS session coordinates that are waiting for it — it is paused, or
+   *  has not been handed them yet — oldest submission first, each shaped as a `pending` row. Not a
+   *  question this reader is asked, so nothing counts them: the conversation draws each as a folded
+   *  card its owner may still open and decide (`EvidenceDecisionCard.tsx`). Absent from a server
+   *  older than the queue, and read as empty. */
+  waitingOnCoordinator?: PendingDecisionRow[];
+  /** Versions that waited and have since been handed to THIS session, which still holds them —
+   *  neither decided nor replaced by a later revision. Earliest delivery first; absent from a
+   *  server older than the queue, and read as empty. */
+  sentToCoordinator?: SentToCoordinatorRow[];
+}
+
+/** One version that waited for its coordinator and was then delivered to it. */
+export interface SentToCoordinatorRow {
+  taskId: string;
+  title: string;
+  projectId: string | null;
+  /** The revision delivered, in the decimal spelling a pending row uses. */
+  evidenceRevision: string;
+  /** When it was delivered: the moment the coordinator's hold runs from. */
+  deliveredAt: string;
 }
 
 /** One decision recorded from the reading session, as `readPendingEvidenceJudgments` returns it. */
@@ -288,9 +312,19 @@ export function revealOwnerConfirmationCard(scope: ParentNode = document): boole
 
 /** One card the owner answers by pressing rather than by replying, as the page draws it. */
 export interface ExceptionCardPointer {
-  row: Pick<ProjectOpenItemRow, 'itemId' | 'title' | 'assigneeReason'>;
+  row: Pick<ProjectOpenItemRow, 'itemId' | 'title' | 'assigneeReason'>
+    & {
+      assignee?: string;
+      kind?: string;
+      requiredAction?: string;
+      escalatedAt?: string | null;
+      waitingSince?: string | null;
+      need?: string | null;
+    };
+  /** The short server-derived need when the host keeps it beside (rather than inside) the row. */
+  need?: string | null;
   /** How long it has been the owner's: since the moment its card is drawn at. */
-  ageSeconds: number | null;
+  ageSeconds?: number | null;
   /** Whether the card sits wholly above what the reader can see, which is the way a press goes. */
   above: boolean;
 }
@@ -300,8 +334,17 @@ export interface ExceptionCardPointer {
  * word its session row and the header use for it (`OWNER_ITEM_ESCALATED`), then which item it is;
  * one the owner had from the start — the pause — says its own title, which is its card's heading.
  */
-export function exceptionPointer(row: Pick<ProjectOpenItemRow, 'title' | 'assigneeReason'>): string {
-  return row.assigneeReason === 'DEFAULT' ? row.title : `Escalated to you: ${row.title}`;
+export const ESCALATED_TO_YOU_LABEL = 'Escalated to you';
+
+export function exceptionPointer(
+  row: Pick<ProjectOpenItemRow, 'title' | 'assigneeReason'> & {
+    need?: string | null;
+    requiredAction?: string;
+  },
+  need?: string | null,
+): string {
+  const label = need ?? row.need ?? row.requiredAction ?? row.title;
+  return row.assigneeReason === 'DEFAULT' ? label : `${ESCALATED_TO_YOU_LABEL} · ${label}`;
 }
 
 /**
@@ -316,6 +359,12 @@ export function revealOpenItemCard(
 ): boolean {
   const card = scope.querySelector<HTMLElement>(`[data-open-item="${itemId}"]`);
   return revealCard(card, 'center', true, behavior);
+}
+
+/** Reveal an owner item, including the fuse pause's intentionally prefixed card id. */
+export function revealOwnerItemCard(itemId: string, scope: ParentNode = document): boolean {
+  const fuse = scope.querySelector<HTMLElement>(`#fuse-${itemId}`);
+  return revealCard(fuse ?? scope.querySelector<HTMLElement>(`[data-open-item="${itemId}"]`));
 }
 
 /** A transcript pauses following its tail before a pinned bar opens one of its previews. */
@@ -503,12 +552,12 @@ function DecisionRows({ group }: { group: PendingDecisionRow[] }) {
             <RowFacts row={row} />
           </div>
           <div className="decision-rail-why">
-            <Typography.Text type="warning">
+            <span className="orbit-typography orbit-typography-warning">
               {row.decidability.refusal
                 ?? 'no decision can be recorded about this evidence'}
-            </Typography.Text>
+            </span>
             <div>
-              <Typography.Text>{WAITING_ON_YOU_ACTION}</Typography.Text>
+              <span className="orbit-typography">{WAITING_ON_YOU_ACTION}</span>
             </div>
           </div>
         </li>
@@ -544,6 +593,37 @@ function oldestFirst<T extends { ageSeconds: number }>(rows: T[]): T[] {
   return [...rows].sort((a, b) => b.ageSeconds - a.ageSeconds);
 }
 
+function orderedOwnerExceptions(rows: ReadonlyArray<ExceptionCardPointer>): ExceptionCardPointer[] {
+  return [...rows].sort((a, b) => {
+    const pauseA = a.row.kind === 'FUSE_PAUSED' ? 0 : 1;
+    const pauseB = b.row.kind === 'FUSE_PAUSED' ? 0 : 1;
+    if (pauseA !== pauseB) return pauseA - pauseB;
+    const at = (row: ExceptionCardPointer['row']) =>
+      Date.parse(row.escalatedAt ?? row.waitingSince ?? '') || Number.MAX_SAFE_INTEGER;
+    return at(a.row) - at(b.row);
+  });
+}
+
+function exceptionAge(row: ExceptionCardPointer, deriveFromAnchor = false): number | null {
+  if (!deriveFromAnchor && row.ageSeconds != null) return row.ageSeconds;
+  const at = Date.parse(row.row.escalatedAt ?? row.row.waitingSince ?? '');
+  return Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : null;
+}
+
+/** The needsYou prop is the open-items read, not the whole owner-items list: questions and merge
+ * approvals have cards of their own, and an item without a placement stamp cannot be reached by
+ * this strip. Keep the filter here as well as in the host so a direct caller cannot promise a
+ * pointer to a card it did not draw. */
+function drawableOwnerExceptions(
+  rows: ReadonlyArray<ExceptionCardPointer>,
+): ExceptionCardPointer[] {
+  return rows.filter(({ row }) => (
+    row.assignee == null || row.assignee === 'OWNER'
+  ) && row.kind !== 'COORDINATOR_QUESTION'
+    && row.kind !== 'PROMOTION_APPROVAL'
+    && Number.isFinite(Date.parse(row.escalatedAt ?? row.waitingSince ?? '')));
+}
+
 /**
  * The strip itself: presentational, pinned, and one line that goes to the cards.
  *
@@ -563,6 +643,7 @@ export function DecisionStrip({
   confirmation = false,
   ownerConfirmation = null,
   exceptions = [],
+  needsYou,
   open,
   phone = false,
   hasCard = () => false,
@@ -591,6 +672,8 @@ export function DecisionStrip({
   exceptions?: ReadonlyArray<ExceptionCardPointer>;
   /** Where the reader goes to press one: its card. */
   onRevealException?: (row: ExceptionCardPointer['row']) => void;
+  /** Owner exceptions under the server's needsYou name. Takes precedence over `exceptions`. */
+  needsYou?: ReadonlyArray<ExceptionCardPointer>;
   /** Whether the WAITING ON YOU rows are unfolded: the one fold left, and a deliberate act. */
   open: boolean;
   /** A phone, which has no line for the WAITING ON YOU sentence (ONE LINE, above). */
@@ -606,9 +689,15 @@ export function DecisionStrip({
   onRevealConfirmation?: () => void;
 }) {
   const [at, setAt] = useState<string | null>(null);
+  const hasNeedsYou = needsYou !== undefined;
+  const ownerExceptions = orderedOwnerExceptions(
+    hasNeedsYou ? drawableOwnerExceptions(needsYou ?? []) : exceptions,
+  );
   // The door's own answer, carried on the row and read here rather than re-derived: a row this
   // session may not answer is not a question put to this session. Nor is one whose card another
   // conversation draws: that coordinator's strip counts it, and this one could clear none of it.
+  // Nor is a version waiting for this conversation's coordinator (`waitingOnCoordinator`), even
+  // once its owner opens it to decide: it is not in `pending`, and nobody is being asked it yet.
   const decisions = queue.pending.filter((row) => pointsAtCard(row, hasCard));
   const yours = phone ? [] : (queue.waitingOnYou ?? []);
   // Every card a press can reach, oldest first within each kind, each named in the words its card
@@ -625,10 +714,10 @@ export function DecisionStrip({
     above?: boolean;
     go: () => void;
   }> = [
-    ...exceptions.map(({ row, ageSeconds, above }) => ({
+    ...ownerExceptions.map(({ row, need, ageSeconds, above }) => ({
       key: `exception:${row.itemId}`,
-      label: exceptionPointer(row),
-      ageSeconds,
+      label: exceptionPointer(row, need),
+      ageSeconds: exceptionAge({ row, ageSeconds, above }, hasNeedsYou),
       above,
       go: () => onRevealException(row),
     })),
@@ -667,8 +756,9 @@ export function DecisionStrip({
   const shown = ways[Math.max(here, 0)];
   // Where the next press goes — the first, until a press has gone anywhere — and so what the caret
   // points at.
-  const next = ways[(here + 1) % ways.length];
+  const next = ways.length > 0 ? ways[(here + 1) % ways.length] : undefined;
   const step = () => {
+    if (!next) return;
     next.go();
     setAt(next.key);
   };
@@ -682,7 +772,7 @@ export function DecisionStrip({
         <button
           className="decision-strip-line"
           type="button"
-          aria-label={`${needsDecisionCount(ways.length)}: ${shown.label}`}
+          aria-label={`${ownerExceptions.length > 0 ? `${ownerExceptions.length} waiting` : needsDecisionCount(ways.length)}: ${shown.label}`}
           title={here < 0 || ways.length < 2 ? GO_TO_CARD_HINT : GO_TO_NEXT_CARD_HINT}
           onClick={step}
         >
@@ -699,7 +789,7 @@ export function DecisionStrip({
               </span>
             </>
           )}
-          <span className="decision-strip-caret" aria-hidden="true">{next.above ? '↑' : '↓'}</span>
+          <span className="decision-strip-caret" aria-hidden="true">{next?.above ? '↑' : '↓'}</span>
         </button>
       )}
 
@@ -749,6 +839,7 @@ export function SessionDecisionStrip({
   confirmation = false,
   ownerConfirmation = null,
   exceptions = [],
+  needsYou,
   onOpenCriteria,
 }: {
   sessionId: string;
@@ -767,6 +858,7 @@ export function SessionDecisionStrip({
   /** The exception cards this conversation draws for the owner to press, as the page placed them
    *  and measured them against the reader's viewport. */
   exceptions?: ReadonlyArray<ExceptionCardPointer>;
+  needsYou?: ReadonlyArray<ExceptionCardPointer>;
   onOpenCriteria?: (row: PendingCriteriaDecisionRow) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -787,17 +879,24 @@ export function SessionDecisionStrip({
   // A read that failed is not "nothing is waiting". Saying so in one muted line is the smallest
   // thing that keeps a reader from mistaking a broken query for an empty queue; the strip is
   // otherwise silent while the first read is in flight, so it never flashes.
-  if (pending.isError) {
+  const ownerExceptions = needsYou ?? exceptions;
+  if (pending.isError && ownerExceptions.length === 0) {
     return (
       <div className="decision-strip decision-strip-unread" role="status">
         {`${STRIP_LABEL}: this queue could not be read.`}
       </div>
     );
   }
-  if (!pending.data) return null;
+  if (!pending.data && ownerExceptions.length === 0) return null;
+  const queue: PendingDecisionQueue = pending.data ?? {
+    decidingSessionId: sessionId,
+    count: 0,
+    oldestAgeSeconds: null,
+    pending: [],
+  };
   return (
     <DecisionStrip
-      queue={pending.data}
+      queue={queue}
       criteria={criteria.data ?? null}
       confirmation={confirmation}
       onOpenCriteria={onOpenCriteria}
@@ -809,8 +908,8 @@ export function SessionDecisionStrip({
       onRevealConfirmation={() => revealSettlementCard()}
       ownerConfirmation={ownerConfirmation}
       onRevealOwnerConfirmation={() => revealOwnerConfirmationCard()}
-      exceptions={exceptions}
-      onRevealException={(row) => revealOpenItemCard(row.itemId)}
+      needsYou={ownerExceptions}
+      onRevealException={(row) => revealOwnerItemCard(row.itemId)}
     />
   );
 }

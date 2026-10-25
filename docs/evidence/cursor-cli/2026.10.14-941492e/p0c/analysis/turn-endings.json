@@ -1,0 +1,355 @@
+{
+ "files": [
+  "api-key-session-management.ndjson",
+  "ask-question.ndjson",
+  "background-shell-and-commit.ndjson",
+  "cancel-mid-tool.ndjson",
+  "crash-continue-and-shell-wrapper.ndjson",
+  "crash-recover-and-move.ndjson",
+  "credential-stores.ndjson",
+  "debug-log-location.ndjson",
+  "directory-variables.ndjson",
+  "failure-shapes-without-prompt.ndjson",
+  "install-and-version.ndjson",
+  "login-link-and-logout.ndjson",
+  "mcp-and-hook-sources-at-startup.ndjson",
+  "multi-turn-tools-default.ndjson",
+  "parameterized-model-picker.ndjson",
+  "permission-auto-review.ndjson",
+  "permission-force.ndjson",
+  "plan-and-ask-modes-concurrent.ndjson",
+  "process-signals.ndjson",
+  "prompt-while-busy.ndjson",
+  "signed-out-handshake.ndjson",
+  "startup-processes-and-network.ndjson",
+  "subagent-and-todos.ndjson",
+  "team-pin.ndjson",
+  "usage-api.ndjson",
+  "api-key-session-management.ndjson",
+  "ask-question.ndjson",
+  "ask-question-plan-mode.ndjson",
+  "background-shell-and-commit.ndjson",
+  "credential-stores.ndjson",
+  "debug-log-location.ndjson",
+  "directory-variables.ndjson",
+  "failure-shapes-without-prompt.ndjson",
+  "install-and-version.ndjson",
+  "login-link-and-logout.ndjson",
+  "mcp-and-hook-sources-at-startup.ndjson",
+  "network-drop-mid-turn.ndjson",
+  "parameterized-model-picker.ndjson",
+  "process-signals.ndjson",
+  "repo-config-baseline.ndjson",
+  "repo-config-with-flags.ndjson",
+  "shell-wrapper-env.ndjson",
+  "signed-out-handshake.ndjson",
+  "startup-processes-and-network.ndjson",
+  "team-pin.ndjson",
+  "usage-api.ndjson",
+  "protocol.ndjson",
+  "explore5-protocol.ndjson"
+ ],
+ "classifier": {
+  "function": "cursorTurnFailure (src/runner-go/cursor_events.go)",
+  "commit": "de5c226d5dbb45dac5ae53947fa995c5673e9f15",
+  "test": "package main\n\n// Scratch only (P0c, never committed): P5b's cursorTurnFailure on the last message chunk of every\n// recorded Cursor turn, read from the analysis file named by P0C_TURNS.\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\t\"testing\"\n)\n\nfunc TestP0cClassifyRecordedTurns(t *testing.T) {\n\tdata, err := os.ReadFile(os.Getenv(\"P0C_TURNS\"))\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\tvar in struct {\n\t\tTurns []struct {\n\t\t\tFile, Proc, StopReason string\n\t\t\tLastChunk               *string\n\t\t}\n\t}\n\tif err := json.Unmarshal(data, &in); err != nil {\n\t\tt.Fatal(err)\n\t}\n\tfor _, turn := range in.Turns {\n\t\tlast := \"\"\n\t\tif turn.LastChunk != nil {\n\t\t\tlast = *turn.LastChunk\n\t\t}\n\t\tfmt.Printf(\"P0C\\t%s\\t%s\\t%s\\t%q\\t=> %q\\n\", turn.File, turn.Proc, turn.StopReason, truncate(last, 60), cursorTurnFailure(last))\n\t}\n}\n\nfunc truncate(s string, n int) string {\n\tif len(s) <= n {\n\t\treturn s\n\t}\n\treturn s[:n] + \"…\"\n}\n"
+ },
+ "turns": [
+  {
+   "file": "api-key-session-management.ndjson",
+   "proc": "acp",
+   "promptSeq": 57,
+   "stopReason": "error",
+   "error": {
+    "code": -32603,
+    "message": "Internal error",
+    "data": {
+     "details": "Session <UUID_4> not found"
+    }
+   },
+   "chunks": 0,
+   "lastChunk": null,
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "ask-question.ndjson",
+   "proc": "ask",
+   "promptSeq": 6,
+   "stopReason": "end_turn",
+   "chunks": 107,
+   "lastChunk": "?",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "background-shell-and-commit.ndjson",
+   "proc": "background",
+   "promptSeq": 6,
+   "stopReason": "end_turn",
+   "chunks": 1,
+   "lastChunk": "\n\nUpgrade your plan to continue",
+   "blankLineChunks": [
+    "\n\nUpgrade your plan to continue"
+   ],
+   "p5bCursorTurnFailure": "You've hit your usage limit on Cursor. Cursor said: \"Upgrade your plan to continue.\""
+  },
+  {
+   "file": "cancel-mid-tool.ndjson",
+   "proc": "cancel",
+   "promptSeq": 6,
+   "stopReason": "cancelled",
+   "chunks": 1,
+   "lastChunk": "Running the sleep command and waiting for it to finish.",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "crash-continue-and-shell-wrapper.ndjson",
+   "proc": "continue",
+   "promptSeq": 9,
+   "stopReason": "end_turn",
+   "chunks": 13,
+   "lastChunk": "`",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "crash-continue-and-shell-wrapper.ndjson",
+   "proc": "continue",
+   "promptSeq": 29,
+   "stopReason": "end_turn",
+   "chunks": 1,
+   "lastChunk": "DONE",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "crash-recover-and-move.ndjson",
+   "proc": "crash",
+   "promptSeq": 6,
+   "stopReason": "unanswered",
+   "chunks": 11,
+   "lastChunk": ".",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "multi-turn-tools-default.ndjson",
+   "proc": "turns",
+   "promptSeq": 6,
+   "stopReason": "end_turn",
+   "chunks": 5,
+   "lastChunk": "TANGERINE; 1 ok, 2 ok, 3 ok, 4 ok, 5 ok, 6 rejected, 7 ok",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "multi-turn-tools-default.ndjson",
+   "proc": "turns",
+   "promptSeq": 123,
+   "stopReason": "end_turn",
+   "chunks": 5,
+   "lastChunk": "TANGERINE; 1 ok, 2 ok, 3 ok",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "permission-auto-review.ndjson",
+   "proc": "auto-review",
+   "promptSeq": 6,
+   "stopReason": "end_turn",
+   "chunks": 68,
+   "lastChunk": " ok",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "permission-force.ndjson",
+   "proc": "force",
+   "promptSeq": 6,
+   "stopReason": "end_turn",
+   "chunks": 70,
+   "lastChunk": ")",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "plan-and-ask-modes-concurrent.ndjson",
+   "proc": "modes",
+   "promptSeq": 15,
+   "stopReason": "end_turn",
+   "chunks": 4,
+   "lastChunk": "ING.md plan next.",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "plan-and-ask-modes-concurrent.ndjson",
+   "proc": "modes",
+   "promptSeq": 16,
+   "stopReason": "end_turn",
+   "chunks": 108,
+   "lastChunk": ".",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "prompt-while-busy.ndjson",
+   "proc": "busy",
+   "promptSeq": 6,
+   "stopReason": "cancelled",
+   "chunks": 1,
+   "lastChunk": "Running the sleep command and waiting for it to finish.",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "prompt-while-busy.ndjson",
+   "proc": "busy",
+   "promptSeq": 19,
+   "stopReason": "end_turn",
+   "chunks": 1,
+   "lastChunk": "BANANA",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "subagent-and-todos.ndjson",
+   "proc": "subagent",
+   "promptSeq": 6,
+   "stopReason": "end_turn",
+   "chunks": 37,
+   "lastChunk": " repo",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "api-key-session-management.ndjson",
+   "proc": "acp",
+   "promptSeq": 58,
+   "stopReason": "error",
+   "error": {
+    "code": -32603,
+    "message": "Internal error",
+    "data": {
+     "details": "Session <UUID_4> not found"
+    }
+   },
+   "chunks": 0,
+   "lastChunk": null,
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "ask-question.ndjson",
+   "proc": "ask",
+   "promptSeq": 6,
+   "stopReason": "end_turn",
+   "chunks": 135,
+   "lastChunk": ".",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "ask-question-plan-mode.ndjson",
+   "proc": "ask",
+   "promptSeq": 9,
+   "stopReason": "end_turn",
+   "chunks": 170,
+   "lastChunk": "`.",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "background-shell-and-commit.ndjson",
+   "proc": "background",
+   "promptSeq": 6,
+   "stopReason": "end_turn",
+   "chunks": 83,
+   "lastChunk": ".",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "network-drop-mid-turn.ndjson",
+   "proc": "netdrop",
+   "promptSeq": 6,
+   "stopReason": "end_turn",
+   "chunks": 24,
+   "lastChunk": "\n\nError: RetriableError: [canceled] http/2 stream closed with error code CANCEL (0x8)",
+   "blankLineChunks": [
+    "\n\nError: RetriableError: [canceled] http/2 stream closed with error code CANCEL (0x8)"
+   ],
+   "p5bCursorTurnFailure": "Cursor CLI failed this turn: Error: RetriableError: [canceled] http/2 stream closed with error code CANCEL (0x8)"
+  },
+  {
+   "file": "repo-config-baseline.ndjson",
+   "proc": "repo",
+   "promptSeq": 6,
+   "stopReason": "end_turn",
+   "chunks": 123,
+   "lastChunk": "AR",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "repo-config-with-flags.ndjson",
+   "proc": "repo",
+   "promptSeq": 6,
+   "stopReason": "end_turn",
+   "chunks": 87,
+   "lastChunk": "ERRY",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "shell-wrapper-env.ndjson",
+   "proc": "wrapper",
+   "promptSeq": 15,
+   "stopReason": "end_turn",
+   "chunks": 15,
+   "lastChunk": "DONE",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "protocol.ndjson",
+   "proc": "crash",
+   "promptSeq": 6,
+   "stopReason": "unanswered",
+   "chunks": 1,
+   "lastChunk": "I'll run that command and wait for it to finish.",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  },
+  {
+   "file": "protocol.ndjson",
+   "proc": "moved",
+   "promptSeq": 29,
+   "stopReason": "end_turn",
+   "chunks": 1,
+   "lastChunk": "\n\nRequest blocked We are unable to complete this request because it was blocked under the model provider's usage guidelines. Try a less sensitive prompt.",
+   "blankLineChunks": [
+    "\n\nRequest blocked We are unable to complete this request because it was blocked under the model provider's usage guidelines. Try a less sensitive prompt."
+   ],
+   "p5bCursorTurnFailure": "Cursor's model provider refused this request: Request blocked We are unable to complete this request because it was blocked under the model provider's usage guidelines. Try a less sensitive prompt."
+  },
+  {
+   "file": "explore5-protocol.ndjson",
+   "proc": "p1",
+   "promptSeq": 6,
+   "stopReason": "end_turn",
+   "chunks": 77,
+   "lastChunk": ").",
+   "blankLineChunks": [],
+   "p5bCursorTurnFailure": ""
+  }
+ ],
+ "outsideAnyTurn": {
+  "available_commands_update": 74,
+  "current_mode_update": 9,
+  "session_info_update": 1
+ },
+ "outsideAnyTurnOtherKinds": []
+}

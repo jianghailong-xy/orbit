@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { USAGE_LIMIT_ERROR_MARKERS } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { MODEL_AT_CAPACITY_ERROR_MARKER } from './model-routing';
 
 export interface ModelRoutingReportGroup {
   policyVersion: number;
@@ -27,17 +28,19 @@ export interface ModelRoutingReportGroup {
 /**
  * Whether a session ran on a runtime that reports no cost or tokens (DeepSeek Harness reports only
  * context occupancy) and nothing was recorded for it anyway. Its `cost_usd` 0 is then a default,
- * not a measurement. The dsh identity is the one queue.service's capability gate uses.
+ * not a measurement. The dsh identity is the one queue.service's capability gate uses: the session's
+ * recorded engine, whatever key it spends, and the old rule for a row without one.
  */
 export function sessionUsageUnreported(session: string): Prisma.Sql {
   const s = Prisma.raw(session);
   return Prisma.sql`(${s}.cost_usd = 0
     AND NOT EXISTS (SELECT 1 FROM usage unreported WHERE unreported.session_id = ${s}.id)
-    AND ((${s}.provider = 'dsh' AND ${s}.provider_builtin) OR EXISTS (
-      SELECT 1 FROM model_provider unreported_mp
-       WHERE NOT ${s}.provider_builtin AND unreported_mp.slug = ${s}.provider
-         AND unreported_mp.runtime = 'dsh'
-         AND (unreported_mp.owner_id IS NULL OR unreported_mp.owner_id = ${s}.owner_id))))`;
+    AND ((${s}.engine IS NOT NULL AND ${s}.engine = 'dsh') OR (${s}.engine IS NULL AND (
+      (${s}.provider = 'dsh' AND ${s}.provider_builtin) OR EXISTS (
+        SELECT 1 FROM model_provider unreported_mp
+         WHERE NOT ${s}.provider_builtin AND unreported_mp.slug = ${s}.provider
+           AND unreported_mp.runtime = 'dsh'
+           AND (unreported_mp.owner_id IS NULL OR unreported_mp.owner_id = ${s}.owner_id))))))`;
 }
 
 @Injectable()
@@ -75,8 +78,9 @@ export class TaskModelRoutingReportService {
       ),
       assessed_runs AS (
         SELECT w.*,
-               NOT (w.status = 'FAILED' AND (${Prisma.join(USAGE_LIMIT_ERROR_MARKERS.map((marker) =>
-                 Prisma.sql`lower(coalesce(w.error, '')) LIKE ${`%${marker}%`}`), ' OR ')}))
+               NOT (w.status = 'FAILED' AND (${Prisma.join(
+                 [...USAGE_LIMIT_ERROR_MARKERS, MODEL_AT_CAPACITY_ERROR_MARKER].map((marker) =>
+                   Prisma.sql`lower(coalesce(w.error, '')) LIKE ${`%${marker}%`}`), ' OR ')}))
                AND (w.status = 'FAILED' OR EXISTS (
                  SELECT 1 FROM task v
                   WHERE v.owner_id = ${ownerId}::uuid AND v.verifies_task_id = w.task_id

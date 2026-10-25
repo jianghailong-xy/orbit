@@ -79,7 +79,7 @@ import { TasksService } from './tasks.service';
  *      no refusal and no blocker. What the coordinator spends retrying is bounded by its fuse
  *      (`projects/coordinator-spend-fuse.pg.spec.ts`), not by refusing the facts that report it.
  *   2. **The same result is ordered merged once.** Case (c). The fact's identity is
- *      `settlementVersion(serving)` and deliberately carries no receipt, so re-observing one
+ *      `deliveryVersion(serving)` and deliberately carries no receipt, so re-observing one
  *      criterion's unchanged finished work is the same fact and stops at 0174's index. That claim
  *      is worth nothing on its own — a delivery point nobody wired satisfies it too — so the same
  *      fixture then files work against a DIFFERENT criterion and both counts move by one.
@@ -107,8 +107,9 @@ import { TasksService } from './tasks.service';
  * §3 — WHAT MOVES THE FACT, AND WHY EVERY ROUND FILES ANOTHER PIECE OF WORK
  * =========================================================================
  * `criterionUnlandedFact`'s version is a digest of `(taskId, status)` over the criterion's serving
- * set, and receipts are deliberately not in it. So observing the same criterion twice with nothing
- * else changed is ONE fact by construction — which is guardrail 2, and is asserted as such in (c).
+ * set — with the lifecycle epoch of a task that was sent back, which none here is — and receipts
+ * are deliberately not in it. So observing the same criterion twice with nothing else changed is
+ * ONE fact by construction — which is guardrail 2, and is asserted as such in (c).
  * It also means a case that wants N consecutive observations has to move the serving set N times,
  * and the honest way to move it is the way a coordinator moves it: file another piece of work
  * against the same criterion and let it finish. Every round below does exactly that, so each round

@@ -1,0 +1,39 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T04:13:26.919",
+    "ingested_at": "2026-10-18T04:13:27.024306+00:00",
+    "ingested_by_runner_id": "01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "seq": 8,
+    "session_id": "4fdb59fb-f5ac-5c97-91d1-3d2d8a4f7886",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-B-AMY-T1",
+  "modelRequests": [],
+  "owner": "amy",
+  "session": {
+    "assigned_runner_id": "01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "created_at": "2026-10-18T04:12:07.837",
+    "engine": "claude",
+    "id": "4fdb59fb-f5ac-5c97-91d1-3d2d8a4f7886",
+    "provider": "deepseek",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": "01a14d35-b4ce-7727-bdd2-348de9a649f3",
+    "title": "Task: T06-B-AMY-T1 a task run, Run Now, while the runner sleeps"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T04:13:27.037",
+      "client_turn_id": "initial-4fdb59fb-f5ac-5c97-91d1-3d2d8a4f7886",
+      "content": "Start the task \u201cT06-B-AMY-T1 a task run, Run Now, while the runner sleeps\u201d.\n\nTask description:\nT06-B-AMY-T1 a task run, Run Now, while the runner sleeps\n\nAccept",
+      "created_at": "2026-10-18T04:13:26.315",
+      "delivered_at": "2026-10-18T04:13:26.686",
+      "id": "01a14d36-e7ab-7209-8d81-532262286200",
+      "kind": "message",
+      "seq": 1,
+      "status": "ANSWERED"
+    }
+  ]
+}

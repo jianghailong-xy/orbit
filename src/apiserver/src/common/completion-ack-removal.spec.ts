@@ -57,6 +57,9 @@ export function sourceFiles(root: string = ROOT): string[] {
   // `--cached` prints one row per index stage, so an unmerged path would arrive three times.
   return [...new Set(listed)]
     .filter((file) => !file.startsWith('src/apiserver/prisma/migrations/'))
+    // Frozen evidence reports record what was run at the time, for the same reason the migration
+    // ledger is excluded above: they are history, not a live caller.
+    .filter((file) => !file.startsWith('docs/evidence/'))
     .filter((file) => existsSync(path.join(root, file)) && statSync(path.join(root, file)).isFile());
 }
 
@@ -422,7 +425,21 @@ test('(l) this is subtraction: no new service, no new resident process, fewer li
   // wiki-worker and its start:wiki-worker are the wiki's server-side executor, which the account owner
   // added on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), not this removal;
   // test/compose-topology.test.mjs (l) pins its whole definition.
-  assert.deepEqual(services, ['apiserver', 'gateway', 'pgbackup', 'postgres', 'web', 'wiki-worker'],
+  // docker-channel is the managed runners' restricted Docker channel, which the account owner allowed on
+  // 2026-10-17 under a Compose profile a fresh install switches on (docs/managed-runner-design.md,
+  // "Implementation record: new deployments"), not this removal; test/compose-topology.test.mjs (m) pins it.
+  // managed-runner-firewall is the managed runners' host firewall, which the account owner decided on
+  // 2026-10-19 under a Compose profile of its own (docs/managed-runner-design.md, "Implementation record: the
+  // managed runners' host firewall"), not this removal; test/compose-topology.test.mjs (n) pins it.
+  // link-gateway is the runner link's WebSocket gateway, which the runner link project added on 2026-10-25 under a Compose
+  // profile of its own that no install switches on (docs/runner-link-design.md §6.1 and D1; project 34bc0CsOzPh9KshG7H3DW,
+  // task A4), not this removal; test/compose-topology.test.mjs (o) pins it.
+  // nats is the runner link's message bus, which the runner link project added on 2026-10-25 beside link-gateway,
+  // under the same Compose profile (docs/runner-link-design.md §6.3; project 34bc0CsOzPh9KshG7H3DW, task B1), not
+  // this removal; test/compose-topology.test.mjs (p) pins it.
+  assert.deepEqual(services,
+    ['apiserver', 'docker-channel', 'gateway', 'link-gateway', 'managed-runner-firewall', 'nats', 'pgbackup', 'postgres',
+      'web', 'wiki-worker'],
     'the removal may not add a Compose service');
   // No new timer, poller or worker entry point: the removal deletes the only worker process the
   // protocol had and introduces none.

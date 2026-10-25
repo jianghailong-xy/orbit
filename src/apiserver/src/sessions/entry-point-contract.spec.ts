@@ -276,8 +276,8 @@ test('SessionsService still carries the DI metadata Nest resolves it from', () =
   const watermark = Reflect.getMetadata('__injectable__', SessionsService);
   assert.equal(watermark, true, '@Injectable() must sit immediately above the service');
   assert.equal(
-    Reflect.getMetadata('design:paramtypes', SessionsService)?.length, 3,
-    'and its three constructor dependencies must still be visible to the injector',
+    Reflect.getMetadata('design:paramtypes', SessionsService)?.length, 4,
+    'and its four constructor dependencies (the managed runner demand hook the fourth) must still be visible to the injector',
   );
   assert.equal(
     Reflect.getMetadata('__injectable__', SessionNotSendable), undefined,

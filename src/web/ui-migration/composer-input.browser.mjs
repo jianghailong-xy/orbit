@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { IMPLS, FIELD, attachJson, open, settle } from './composer-checks.mjs';
+import { FIELD, attachJson, open, settle } from './composer-checks.mjs';
 
 // P3.1 input behavior: the WorkspaceView composer's and TaskDetailPanel comment box's own key,
-// menu, paste and caret logic (copied into the fixture unchanged) running over the AntD field and
-// over the Orbit Textarea. Each step records what a user would see; both runs must record the same.
+// menu, paste and caret logic (copied into the fixture unchanged) running over the Orbit Textarea.
+// Each step records what a user would see.
 
 /** Install a capture-phase log of the events an IME and the keyboard produce on the field. */
 async function logEvents(page) {
@@ -37,20 +37,15 @@ async function snapshot(page, field) {
   }, FIELD);
 }
 
-/** Run one script on both pages and require identical recordings. */
-async function compareInput(page, info, scenario, name, script, query = '') {
-  const runs = {};
-  for (const impl of IMPLS) {
-    const field = await open(page, info, impl, scenario, query);
-    await logEvents(page);
-    const steps = [];
-    const step = async (label) => steps.push({ label, ...(await snapshot(page, field)) });
-    await script({ page, field, step, impl });
-    runs[impl] = steps;
-  }
-  await attachJson(info, name, runs);
-  expect(runs.orbit).toEqual(runs.ant);
-  return runs.orbit;
+/** Run one script and keep every step's recording. */
+async function recordInput(page, info, scenario, name, script, query = '') {
+  const field = await open(page, info, scenario, query);
+  await logEvents(page);
+  const steps = [];
+  const step = async (label) => steps.push({ label, ...(await snapshot(page, field)) });
+  await script({ page, field, step });
+  await attachJson(info, name, { orbit: steps });
+  return steps;
 }
 
 /** Compose `preedit` candidates, confirm with Enter while composing, then commit `commit`. */
@@ -83,7 +78,7 @@ async function compose(page, field, info, preedits, commit) {
 }
 
 test('session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends', async ({ page }, info) => {
-  const steps = await compareInput(page, info, 'session', 'session-keys-and-ime', async ({ page, field, step }) => {
+  const steps = await recordInput(page, info, 'session', 'session-keys-and-ime', async ({ page, field, step }) => {
     await field.click();
     await field.pressSequentially('hello');
     await field.press('Shift+Enter');
@@ -112,7 +107,7 @@ test('session: Enter sends, Shift+Enter breaks the line, Chinese composition nev
 });
 
 test('comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing', async ({ page }, info) => {
-  const steps = await compareInput(page, info, 'comment', 'comment-keys-and-ime', async ({ page, field, step }) => {
+  const steps = await recordInput(page, info, 'comment', 'comment-keys-and-ime', async ({ page, field, step }) => {
     await field.click();
     await field.pressSequentially('First');
     await field.press('Enter');
@@ -131,7 +126,7 @@ test('comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing',
 });
 
 test('session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end', async ({ page }, info) => {
-  const steps = await compareInput(page, info, 'session', 'session-menus', async ({ page, field, step }) => {
+  const steps = await recordInput(page, info, 'session', 'session-menus', async ({ page, field, step }) => {
     await field.click();
     await field.pressSequentially('/re');
     await step('slash-open');
@@ -185,7 +180,7 @@ test('session menus: arrows, Enter, Tab, Escape and pointer keep the field focus
 });
 
 test('comment @-mention restores focus and the caret through the native ref', async ({ page }, info) => {
-  const steps = await compareInput(page, info, 'comment', 'comment-mention-caret', async ({ page, field, step }) => {
+  const steps = await recordInput(page, info, 'comment', 'comment-mention-caret', async ({ page, field, step }) => {
     await field.click();
     await field.pressSequentially('Hello world');
     await field.press('Home');
@@ -215,7 +210,7 @@ test('comment @-mention restores focus and the caret through the native ref', as
 
 test('paste text and files, the 50,000-character cap and history recall', async ({ page, context }, info) => {
   if (info.project.use.browserName === 'chromium') await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-  const steps = await compareInput(page, info, 'session', 'session-paste-history', async ({ page, field, step }) => {
+  const steps = await recordInput(page, info, 'session', 'session-paste-history', async ({ page, field, step }) => {
     await field.click();
     await page.evaluate(() => navigator.clipboard.writeText('pasted line one\npasted line two\npasted line three'));
     await page.keyboard.press('ControlOrMeta+V');

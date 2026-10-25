@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-18T01:49:21.141+00:00",
+  "baseUrl": "http://10.0.2.2:13712/anthropic",
+  "defaultModel": "deepseek-v4-pro",
+  "enabled": true,
+  "id": "34hnbXPQAqNGIazRubLRu",
+  "label": "FAKE model (lab, not a model)",
+  "owner": "ben",
+  "presetSlug": "deepseek",
+  "runtime": "claude",
+  "slug": "deepseek-2"
+}

@@ -1,0 +1,237 @@
+{
+ "cli": {
+  "version": "2026.10.14-941492e",
+  "pinned": true,
+  "tarballSha256": "c6d9e2eaa1b1e24221517e0b4206b1f1593792e6f0d8a52e9b507bbe7ab0cc77",
+  "launcherSha256": "2ccc9a8e167797641448b5e5c936f006ba137a2555f117f38c5eb76a5238a233",
+  "indexJsSha256": "ddadb162e679c03dd467327f9f71900f4d8ddeff7ac5c07a1416cccdd6a9b67c"
+ },
+ "platform": {
+  "os": "darwin",
+  "arch": "arm64",
+  "kernel": "27.0.0",
+  "cpus": 8,
+  "harnessNode": "v25.6.1"
+ },
+ "orbitCommit": "1166acfc785aa010f0ecb496e924c4be255b59e1",
+ "lastRunId": "2026-10-24T23-40-58-845Z",
+ "ledger": "p0bm",
+ "realPromptsSpent": 4,
+ "realPromptCap": 10,
+ "skippedNoKey": [],
+ "realPromptsInTheseResults": 4,
+ "realCursorDirsBefore": {
+  "/Users/long/.cursor": null,
+  "/Users/long/.config/cursor": null,
+  "/Users/long/.local/share/cursor-agent": null
+ },
+ "realCursorDirsAfter": {
+  "/Users/long/.cursor": null,
+  "/Users/long/.config/cursor": null,
+  "/Users/long/.local/share/cursor-agent": null
+ },
+ "scenarios": [
+  {
+   "name": "api-key-session-management",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-24T23-11-13-703Z",
+   "finishedAt": "2026-10-24T23:11:56.334Z",
+   "checks": 32,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "cancel-mid-tool",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-24T23-40-58-845Z",
+   "finishedAt": "2026-10-24T23:43:28.882Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 1
+  },
+  {
+   "name": "credential-stores",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-24T23-11-13-703Z",
+   "finishedAt": "2026-10-24T23:15:41.548Z",
+   "checks": 10,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "debug-log-location",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T08-37-19-553Z",
+   "finishedAt": "2026-10-17T08:40:01.666Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "directory-variables",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-24T23-27-49-229Z",
+   "finishedAt": "2026-10-24T23:30:16.872Z",
+   "checks": 9,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "failure-shapes-without-prompt",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T08-41-58-465Z",
+   "finishedAt": "2026-10-17T08:43:17.334Z",
+   "checks": 18,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "install-and-version",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T08-41-58-465Z",
+   "finishedAt": "2026-10-17T08:42:07.430Z",
+   "checks": 7,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "login-link-and-logout",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T08-37-19-553Z",
+   "finishedAt": "2026-10-17T08:39:15.057Z",
+   "checks": 4,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "macos-keychain-store",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-24T23-36-57-246Z",
+   "finishedAt": "2026-10-24T23:37:50.817Z",
+   "checks": 13,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "macos-launchd-keychain",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T08-37-19-553Z",
+   "finishedAt": "2026-10-17T08:41:24.632Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "macos-quarantine",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T08-37-19-553Z",
+   "finishedAt": "2026-10-17T08:41:04.553Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "mcp-and-hook-sources-at-startup",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-24T23-27-49-229Z",
+   "finishedAt": "2026-10-24T23:32:19.224Z",
+   "checks": 8,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "multi-turn-tools-default",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-24T23-40-58-845Z",
+   "finishedAt": "2026-10-24T23:42:54.729Z",
+   "checks": 24,
+   "failedChecks": [],
+   "realPrompts": 2
+  },
+  {
+   "name": "parameterized-model-picker",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-24T23-11-13-703Z",
+   "finishedAt": "2026-10-24T23:12:26.083Z",
+   "checks": 7,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "process-signals",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T08-37-19-553Z",
+   "finishedAt": "2026-10-17T08:40:59.946Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "shell-wrapper-env",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-24T23-40-58-845Z",
+   "finishedAt": "2026-10-24T23:44:24.483Z",
+   "checks": 11,
+   "failedChecks": [],
+   "realPrompts": 1
+  },
+  {
+   "name": "signed-out-handshake",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T08-37-19-553Z",
+   "finishedAt": "2026-10-17T08:37:48.793Z",
+   "checks": 12,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "startup-processes-and-network",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-24T23-11-13-703Z",
+   "finishedAt": "2026-10-24T23:24:13.376Z",
+   "checks": 12,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "team-pin",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-24T23-11-13-703Z",
+   "finishedAt": "2026-10-24T23:18:15.200Z",
+   "checks": 4,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "usage-api",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-24T23-10-31-791Z",
+   "finishedAt": "2026-10-24T23:10:57.889Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 0
+  }
+ ],
+ "allPassed": true,
+ "allPassedOrExplained": true
+}

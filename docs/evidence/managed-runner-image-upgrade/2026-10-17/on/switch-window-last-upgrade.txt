@@ -1,0 +1,5 @@
+[Nest] 117  - 10/17/2026, 3:17:03 PM     LOG [ManagedRunners] managed runners are enabled in orbit-6742fb0e (Docker instance orbit-6742fb0e)
+[Nest] 117  - 10/17/2026, 3:17:04 PM   ERROR [ManagedRunnerWorker] managed runner pass failed: the channel serves instance orbit-6742fb0e with image sha256:8a3c127f2568918ad62bf5055d41bfbf28078f49e032575d1d07275df8f40ba7; this profile names orbit-6742fb0e with sha256:8284db3f7c4556c9ef0ed302c3ed1a2fac219017e50dfcb8eb9ea7450a2f83c0
+2026-10-17T15:17:06Z orbit-docker-channel: instance orbit-6742fb0e serving on /var/lib/orbit-managed-runners/channel.sock; image sha256:8284db3f7c4556c9ef0ed302c3ed1a2fac219017e50dfcb8eb9ea7450a2f83c0, network orbit-managed-runners
+2026-10-17T15:17:09Z orbit-docker-channel: GET /v1/info -> 200
+2026-10-17T15:17:09Z orbit-docker-channel: GET /v1/volumes/mr-data-01a14a29-e53f-7514-8e18-e57226a66e54 -> 200

@@ -1,0 +1,91 @@
+{
+ "scenario": "repo-config-baseline",
+ "process": "repo",
+ "version": "2026.10.14-941492e",
+ "exit": {
+  "code": null,
+  "signal": "SIGKILL"
+ },
+ "actions": [
+  {
+   "t": 14,
+   "channel": "spawn",
+   "value": {
+    "args": [
+     "-f",
+     "-qq",
+     "-e",
+     "trace=execve",
+     "-o",
+     "<RUN>/turn.strace",
+     "<CLI>/cursor-agent",
+     "acp"
+    ],
+    "cwd": "<RUN>/repo",
+    "envKeys": [
+     "AGENT_CLI_CREDENTIAL_STORE",
+     "CURSOR_API_KEY",
+     "CURSOR_CONFIG_DIR",
+     "CURSOR_DATA_DIR",
+     "HOME",
+     "LANG",
+     "NO_OPEN_BROWSER",
+     "ORBIT_P0_CANARY",
+     "PATH",
+     "TERM",
+     "XDG_CACHE_HOME",
+     "XDG_CONFIG_HOME",
+     "XDG_DATA_HOME"
+    ]
+   }
+  },
+  {
+   "t": 15,
+   "channel": "client->agent",
+   "id": 1,
+   "method": "initialize"
+  },
+  {
+   "t": 694,
+   "channel": "client->agent",
+   "id": 2,
+   "method": "session/new"
+  },
+  {
+   "t": 7825,
+   "channel": "client->agent",
+   "id": 3,
+   "method": "session/prompt"
+  },
+  {
+   "t": 27939,
+   "channel": "client->agent",
+   "id": 0,
+   "method": null
+  },
+  {
+   "t": 33121,
+   "channel": "client->agent",
+   "id": 1,
+   "method": null
+  },
+  {
+   "t": 80888,
+   "channel": "close-stdin",
+   "value": null
+  },
+  {
+   "t": 95889,
+   "channel": "signal",
+   "value": "SIGTERM"
+  },
+  {
+   "t": 105897,
+   "channel": "exit",
+   "value": {
+    "code": null,
+    "signal": "SIGKILL"
+   }
+  }
+ ]
+}

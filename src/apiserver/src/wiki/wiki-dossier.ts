@@ -530,8 +530,14 @@ const UUID_UPPER = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12
 const MEMORY_PATH = /\.claude\/projects\/[^\s'"]*memory|MEMORY\.md|\/memory\/[\w.-]+\.md|\bmemory\/[\w.-]+\.md/;
 /** A sentence that points at the memory library: cut from the text around it. */
 const MEMORY_MENTION = /\.claude\/projects\/|MEMORY\.md|\/memory\/[\w.-]+\.md|\bmemory\/[\w.-]+\.md|记忆(?:文件|库|索引|条目|里|中|：|:)|\[\[[\w-]+\]\]/;
-/** The step list every task's opening prompt ends with: the same for every task, and says nothing of it. */
-const TASK_BOILERPLATE = /\n*请按以下步骤进行：[\s\S]*$/;
+/**
+ * The step list every task's opening prompt ends with: the same for every task, and says nothing of it.
+ * Under the heading the brief has had since it became English (task-execution-prompt.ts), or the Chinese
+ * one older transcripts hold. The last such heading, since the list ends the brief: a description that
+ * says "Follow these steps:" itself keeps what follows it.
+ */
+const TASK_BOILERPLATE =
+  /\n*(?:Follow these steps:|请按以下步骤进行：)(?![\s\S]*(?:Follow these steps:|请按以下步骤进行：))[\s\S]*$/;
 const READLIKE_BASH = /^\s*(?:cd\s+\S+\s*&&\s*)?(?:cat|sed -n|head|tail|ls|grep|rg|find|wc|nl|awk|less|file|stat|tree|git (?:log|show|diff|status|grep|ls-files|blame|rev-parse|branch)|jq|echo)\b/;
 const MEMORY_SENTENCE_SPLIT = /(?<=[。！？!?\n])|(?<=\.\s)/;
 

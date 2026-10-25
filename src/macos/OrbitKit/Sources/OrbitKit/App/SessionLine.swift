@@ -15,6 +15,7 @@ public struct SessionLine: Equatable, Sendable {
         case background  // a process the agent left up — outlives the turn, but isn't work
         case watching    // parked on a watch that will resume it — not a process, not waiting on you
         case review      // its report is with its reviewer — drawn, not counted, never amber
+        case warning     // amber words for a fact that asks nothing: a landing the server judged timed out
     }
     public let text: String
     public let tone: Tone
@@ -27,7 +28,11 @@ public struct SessionLine: Equatable, Sendable {
     /// ended before producing any reply still says what happened, so the row can't shrink to a
     /// bare title (iOS sizes its list row from its content — a missing line visibly shortens it).
     /// `watching` is the session as an observer: parked with a live watch that will resume it.
-    public static func make(for s: Session, live: Bool, watching: WatchSessionSummary? = nil) -> SessionLine {
+    /// `recaps` is the account's Session recaps switch (Settings): on unless turned off, and off
+    /// means the row falls through to the raw reply exactly as it did before the recap existed. It
+    /// gates that one line and nothing else — every live line above it is untouched.
+    public static func make(for s: Session, live: Bool, watching: WatchSessionSummary? = nil,
+                            recaps: Bool = true) -> SessionLine {
         // Somebody is waiting on YOU here, which outranks everything else the row could say: every
         // other line reports what the agent is doing, and this one is the only one you can act on.
         //
@@ -91,6 +96,16 @@ public struct SessionLine: Equatable, Sendable {
         // what the session is left waiting on. The server only keeps it while it stands
         // unanswered, so a non-empty value here always means exactly that.
         if let u = s.lastUserText, !u.isEmpty { return sentLine(u) }
+        // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
+        // the server wrote about the session, not the raw last reply flattened down to one line. Only
+        // here — below every live line above — so a working session still says what it is doing (web
+        // parity). Off with the account's Session recaps switch, the row falls through to the reply
+        // preview below exactly as it did before the recap existed. Unlabelled, as a project row's
+        // always was (the owner, 2026-10-22): the whole line is the sentence, and when it was
+        // written is the Recap card's to say, at the conversation's end (`RecapCard`).
+        if recaps, let r = s.recapText?.trimmingCharacters(in: .whitespacesAndNewlines), !r.isEmpty {
+            return SessionLine(text: r, tone: .preview)
+        }
         if let a = s.lastAssistantText, !a.isEmpty { return SessionLine(text: plainPreview(a), tone: .preview) }
         // Nothing to preview at all (a run that died before even its user turn was recorded, or an
         // older row from before the server kept the pending message). Fall back to the run's own

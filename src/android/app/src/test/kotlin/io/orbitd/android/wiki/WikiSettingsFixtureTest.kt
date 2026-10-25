@@ -35,23 +35,18 @@ class WikiSettingsFixtureTest {
         assertEquals(settings.fobj("floors").fstr("lead"), WikiModeCopy.floorsLead)
         assertEquals(settings.fobj("floors").fstr("note"), WikiModeCopy.floorsNote)
 
+        // The rows once on, the form's fields and the sentence under the card are the server execution fixture's
+        // (`WikiServerExecutionFixtureTest`).
         val maintenance = settings.fobj("maintenance")
-        assertEquals(listOf(maintenance.fstr("name"), maintenance.fstr("note"), maintenance.fstr("off"), maintenance.fstr("on"), maintenance.fstr("setUp")),
-            listOf(WikiModeCopy.maintenanceName, WikiModeCopy.maintenanceNote, WikiModeCopy.off, WikiModeCopy.on, WikiModeCopy.setUp))
+        assertEquals(listOf(maintenance.fstr("name"), maintenance.fstr("off"), maintenance.fstr("on"), maintenance.fstr("setUp")),
+            listOf(WikiModeCopy.maintenanceName, WikiModeCopy.off, WikiModeCopy.on, WikiModeCopy.setUp))
         val form = maintenance.fobj("form")
         assertEquals(form.fstr("title"), WikiModeCopy.setUpTitle)
-        assertEquals(form.farr("fields").map { it.jsonObject.fstr("label") },
-            listOf(WikiModeCopy.workspace, WikiModeCopy.provider, WikiModeCopy.dailyLimit, WikiModeCopy.lookback))
-        assertEquals(form.farr("fields").map { it.jsonObject.fstr("note") },
-            listOf(WikiModeCopy.workspaceNote, WikiModeCopy.providerNote, WikiModeCopy.dailyLimitNote, WikiModeCopy.lookbackNote))
         assertEquals(form.fstr("unit"), WikiModeCopy.runsADayUnit)
         assertEquals(listOf(form.fstr("cancel"), form.fstr("turnOn"), form.fstr("save")), listOf(WikiModeCopy.cancel, WikiModeCopy.turnOn, WikiModeCopy.save))
         val defaults = form.fobj("defaults")
-        assertEquals(defaults.fstr("provider"), WikiMaintenanceSettings.default.provider)
         assertEquals(defaults.fint("dailyRunLimit"), WikiMaintenanceSettings.default.dailyRunLimit)
         assertEquals(defaults.fint("min")..defaults.fint("max"), WikiMaintenanceSettings.dailyRunLimitRange)
-        assertEquals(maintenance.fstrings("rows"),
-            listOf(WikiModeCopy.status, WikiModeCopy.workspace, WikiModeCopy.provider, WikiModeCopy.dailyLimit, WikiModeCopy.lookback))
         assertEquals(listOf(maintenance.fstr("edit"), maintenance.fstr("turnOff")), listOf(WikiModeCopy.maintenanceEdit, WikiModeCopy.turnOff))
         maintenance.farr("runsADay").map { it.jsonObject }.forEach { assertEquals(it.fstr("says"), WikiModeCopy.runsADay(it.fint("runs"))) }
         // The look-back: from now on, some days, all of history — the form opening on the contract's 14 days.
@@ -76,9 +71,6 @@ class WikiSettingsFixtureTest {
             val runner = (workspace["runner"] as? JsonObject)?.let { it["displayName"].text() ?: it["name"].text() }
             assertEquals(row.fstr("says"), WikiModeLogic.workspaceLabel(workspace["name"].text(), runner))
         }
-        maintenance.farr("providerLabels").map { it.jsonObject }.forEach { row ->
-            assertEquals(row.fstr("says"), WikiModeLogic.providerLabel(row.fstr("provider"), row["model"].text()))
-        }
     }
 
     @Test fun theModeFallbackIsSaidWhileTheSpaceIsStillInIt() {
@@ -92,34 +84,30 @@ class WikiSettingsFixtureTest {
     }
 
     /** The workspaces the Set up form lists are the ones the runner reads name, by the runner's display name when it has
-     * one; the providers are the configured ones on the Claude Code runtime, by their default model. */
-    @Test fun theFormsOptionsAreTheAccountsWorkspacesAndClaudeProviders() {
+     * one. */
+    @Test fun theFormsOptionsAreTheAccountsWorkspaces() {
         val reads = WikiMaintenanceReads(
             workspaces = Json.parseToJsonElement("""[{"id":"w1","name":"orbit","runnerId":"r1"},{"id":"w2","name":"docs","runnerId":"r2"},{"id":"w3","name":"loose"}]""").jsonArray,
-            runners = Json.parseToJsonElement("""[{"id":"r1","name":"host-1","displayName":"Mac mini"},{"id":"r2","name":"wikova","displayName":null}]""").jsonArray,
-            providers = Json.parseToJsonElement("""[{"slug":"local-vllm","runtime":"claude","defaultModel":"qwen3.8-27b-fp8","models":[]},
-                {"slug":"anthropic","runtime":"claude","models":[{"value":"claude-sonnet","label":"Sonnet"}]},
-                {"slug":"openai","runtime":"codex","defaultModel":"gpt"}]""").jsonArray)
+            runners = Json.parseToJsonElement("""[{"id":"r1","name":"host-1","displayName":"Mac mini"},{"id":"r2","name":"wikova","displayName":null}]""").jsonArray)
         assertEquals(listOf(WikiPickerOption("w1", "orbit · Mac mini"), WikiPickerOption("w2", "docs · wikova"), WikiPickerOption("w3", "loose")),
             wikiWorkspaceRows(reads, DirectoryData()).map { it.option })
-        assertEquals(listOf(WikiPickerOption("local-vllm", "local-vllm · qwen3.8-27b-fp8"), WikiPickerOption("anthropic", "anthropic · claude-sonnet")),
-            wikiProviderOptions(reads.providers))
         // Before the reads come back (or when they fail), the directory this client already holds names them.
         val data = DirectoryData(workspaces = listOf(DirectoryWorkspace("w1", "orbit", "r1")), runners = listOf(DirectoryRunner("r1", "host-1")))
         assertEquals(listOf(WikiPickerOption("w1", "orbit · host-1")), wikiWorkspaceRows(WikiMaintenanceReads(), data).map { it.option })
     }
 
     /** What the page writes (`PATCH /api/wiki/spaces/:id`): a key left out is left as it was, and all of history is sent
-     * as null — a value — never left out. Changing the look-back later never moves maintenance back: that is the
-     * server's rule (contract `cursor.start`), so the form sends what was picked and the server keeps its cursor. */
+     * as null — a value — never left out; no provider, ever. Changing the look-back later never moves maintenance back:
+     * that is the server's rule (contract `cursor.start`), so the form sends what was picked and the server keeps its
+     * cursor. */
     @Test fun theSetUpFormWritesTheLookBackAsZeroDaysOrNull() {
         fun body(lookback: WikiModeLogic.LookbackChoice, days: Int) =
-            wikiMaintenanceUpdate(WikiMaintenanceChoice("w1", "local-vllm", 8, lookback, days)).toString()
-        assertEquals("""{"maintenance":{"enabled":true,"workspaceId":"w1","provider":"local-vllm","dailyRunLimit":8,"lookbackDays":0}}""",
+            wikiMaintenanceUpdate(WikiMaintenanceChoice("w1", 8, lookback, days)).toString()
+        assertEquals("""{"maintenance":{"enabled":true,"workspaceId":"w1","dailyRunLimit":8,"lookbackDays":0}}""",
             body(WikiModeLogic.LookbackChoice.NOW, 14))
-        assertEquals("""{"maintenance":{"enabled":true,"workspaceId":"w1","provider":"local-vllm","dailyRunLimit":8,"lookbackDays":30}}""",
+        assertEquals("""{"maintenance":{"enabled":true,"workspaceId":"w1","dailyRunLimit":8,"lookbackDays":30}}""",
             body(WikiModeLogic.LookbackChoice.DAYS, 30))
-        assertEquals("""{"maintenance":{"enabled":true,"workspaceId":"w1","provider":"local-vllm","dailyRunLimit":8,"lookbackDays":null}}""",
+        assertEquals("""{"maintenance":{"enabled":true,"workspaceId":"w1","dailyRunLimit":8,"lookbackDays":null}}""",
             body(WikiModeLogic.LookbackChoice.ALL, 14))
         assertEquals("""{"reviewMode":"automatic"}""", wikiReviewModeUpdate("automatic").toString())
         assertEquals("""{"automaticSpotChecks":true}""", wikiSpotChecksUpdate(true).toString())

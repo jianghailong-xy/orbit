@@ -74,8 +74,8 @@ test('a list console gets the conditions appended to its next message', async ()
 
   assert.match(out!, /^这个列表现在什么情况？/);
   assert.ok(out!.includes(`<list-conditions list="${LIST_PUBLIC_ID}"`), out!);
-  assert.match(out!, /配额挡住派发/);
-  assert.match(out!, /累计 47 次/);
+  assert.match(out!, /Dispatch held by quota/);
+  assert.match(out!, /seen 47 time\(s\)/);
 });
 
 test('the id in the tag is the public one, not the uuid the column holds', async () => {
@@ -131,7 +131,7 @@ test('a condition seen again since it was reported is reported again', async () 
 
   const out = await svc().appendFor(tx, CONSOLE_SESSION, '继续');
 
-  assert.match(out!, /配额挡住派发/);
+  assert.match(out!, /Dispatch held by quota/);
 });
 
 test('reporting stamps exactly the rows it reported', async () => {

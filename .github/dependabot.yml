@@ -97,6 +97,14 @@ updates:
       time: "06:30"
       timezone: Europe/Berlin
 
+  - package-ecosystem: gomod
+    directory: /src/link-gateway
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:30"
+      timezone: Europe/Berlin
+
   - package-ecosystem: swift
     directory: /src/macos/OrbitKit
     schedule:

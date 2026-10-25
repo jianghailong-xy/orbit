@@ -88,90 +88,106 @@ struct MergeRecoverySheet: View {
     private func review(_ d: SessionDetail, _ r: MergeRecovery) -> some View {
         let supported = d.mergeRecoverySupported == true
         // The bar's gate: the session's authoritative run status, the stream's until it loads.
-        let turnActive = (app.session(id: console.sessionID)?.effectiveRunStatus ?? console.sessionStatus) == .running
+        let session = app.session(id: console.sessionID)
+        let turnActive = WorktreeBarLogic.turnActive(status: session?.effectiveRunStatus ?? console.sessionStatus,
+                                                     runningSubagents: session?.runningSubagentCount,
+                                                     sending: console.sending || console.awaitingReply)
         // Working = the recovery itself is running; a turn in flight only holds the steps back.
         let working = console.worktree.busy || d.mergeStatus == "pending"
-        let repairRunning = d.mergeRepairSession?.effectiveRunState == .queued
-            || d.mergeRepairSession?.effectiveRunState == .running
-        let blocked = working || turnActive || repairRunning
-        let buttons = r.buttons(supported: supported)
+        let repair = MergeRepairRow(detail: d)
+        let blocked = working || turnActive || repair?.state == .running
+        let buttons = r.buttons(supported: supported, repair: repair)
+        // The server is checking what the repair did: the last check's findings are about to be replaced.
+        let checking = repair?.checking == true
+        let landed = r.code == "ALREADY_LANDED"
         let close = { dismiss() }
         let target = r.targetBranch
         return List {
-            Section { header(r, check: buttons.headerCheck, working: working, blocked: blocked) }
+            Section { header(r, check: buttons.headerCheck, working: working, checking: checking, blocked: blocked) }
                 .listRowBackground(Color.clear)
-            if let repair = d.mergeRepairSession {
+            if let repair {
                 Section { repairStatus(repair, target: r.targetBranch) }
             }
-            if let message = d.mergeError, !r.ready {
-                Section {
-                    NavigationLink("Details") { RecoveryTextPage(title: "Details", text: message, close: close) }
-                }
-            }
-            if let conflicts = r.conflicts, !conflicts.isEmpty {
-                Section("Conflicts") {
-                    ForEach(conflicts, id: \.self) { Text($0).font(.orbitMono).textSelection(.enabled) }
-                }
-            }
-            // The branches in one row: what the review is about, before what it lists.
-            Section {
-                NavigationLink {
-                    RecoveryBranchesPage(recovery: r, branch: d.branch, close: close)
-                } label: {
-                    RecoveryRouteRow(branch: d.branch, target: target, relation: r.targetRelation)
-                }
-            }
-            let candidate = r.candidateSha != nil ? r.patch : nil
-            if let push = r.pushCommits, !push.isEmpty {
-                // What the push adds to origin, exactly — the question the review answers. The diff
-                // is the same push read as content, so it closes the list rather than leading it.
-                let inline = r.inlinePushCommits()
-                Section {
-                    ForEach(inline.shown, id: \.sha) { MergeRecoveryCommitRow(commit: $0, origin: r.origin(of: $0)) }
-                    if inline.hidden > 0 {
-                        NavigationLink {
-                            RecoveryCommitsPage(title: "Pushes to origin/\(target)", commits: push, origin: r.origin(of:),
-                                                close: close)
-                        } label: {
-                            RecoveryLinkRow(title: "All \(push.count) commits",
-                                            subtitle: Text("\(inline.hidden) more from this session"), value: "")
-                        }
-                    }
-                    if let candidate { candidateDiffLink(target: target, patch: candidate, close: close) }
-                } header: {
-                    HStack {
-                        Text("Pushes to origin/\(target)")
-                        Spacer(minLength: 8)
-                        Text("\(push.count) \(push.count == 1 ? "commit" : "commits")")
-                    }
-                    .textCase(nil)
-                } footer: {
-                    Text(r.landingNote)
-                }
+            if landed {
+                landedSections(d, r, close: close)
             } else {
-                // A runner that predates the push list: the local-only commits on their own.
-                if let commits = r.localCommits, !commits.isEmpty {
-                    Section {
-                        ForEach(commits, id: \.sha) { MergeRecoveryCommitRow(commit: $0) }
-                    } header: {
-                        HStack {
-                            Text("Local-only commits — included in the push")
-                            Spacer(minLength: 8)
-                            Text("\(commits.count)")
+                Group {
+                    if let message = d.mergeError, !r.ready {
+                        Section {
+                            NavigationLink("Details") { RecoveryTextPage(title: "Details", text: message, close: close) }
                         }
-                        .textCase(nil)
+                    }
+                    if let conflicts = r.conflicts, !conflicts.isEmpty {
+                        Section {
+                            ForEach(conflicts, id: \.self) { Text($0).font(.orbitMono).textSelection(.enabled) }
+                        } header: {
+                            Text(r.conflictsTitle).textCase(nil)
+                        } footer: {
+                            if let note = r.targetMovedNote { footnote(note) }
+                        }
+                    }
+                    // The branches in one row: what the review is about, before what it lists.
+                    Section {
+                        NavigationLink {
+                            RecoveryBranchesPage(recovery: r, branch: d.branch, close: close)
+                        } label: {
+                            RecoveryRouteRow(branch: d.branch, target: target, relation: r.targetRelation)
+                        }
+                    }
+                    let candidate = r.candidateSha != nil ? r.patch : nil
+                    if let push = r.pushCommits, !push.isEmpty {
+                        // What the push adds to origin, exactly — the question the review answers. The diff
+                        // is the same push read as content, so it closes the list rather than leading it.
+                        let inline = r.inlinePushCommits()
+                        Section {
+                            ForEach(inline.shown, id: \.sha) { MergeRecoveryCommitRow(commit: $0, origin: r.origin(of: $0)) }
+                            if inline.hidden > 0 {
+                                NavigationLink {
+                                    RecoveryCommitsPage(title: "Pushes to origin/\(target)", commits: push,
+                                                        origin: r.origin(of:), close: close)
+                                } label: {
+                                    RecoveryLinkRow(title: "All \(push.count) commits",
+                                                    subtitle: Text("\(inline.hidden) more from this session"), value: "")
+                                }
+                            }
+                            if let candidate { candidateDiffLink(target: target, patch: candidate, close: close) }
+                        } header: {
+                            HStack {
+                                Text("Pushes to origin/\(target)")
+                                Spacer(minLength: 8)
+                                Text("\(push.count) \(push.count == 1 ? "commit" : "commits")")
+                            }
+                            .textCase(nil)
+                        } footer: {
+                            Text(r.landingNote)
+                        }
+                    } else {
+                        // A runner that predates the push list: the local-only commits on their own.
+                        if let commits = r.localCommits, !commits.isEmpty {
+                            Section {
+                                ForEach(commits, id: \.sha) { MergeRecoveryCommitRow(commit: $0) }
+                            } header: {
+                                HStack {
+                                    Text("Local-only commits — included in the push")
+                                    Spacer(minLength: 8)
+                                    Text("\(commits.count)")
+                                }
+                                .textCase(nil)
+                            }
+                        }
+                        if let candidate {
+                            Section { candidateDiffLink(target: target, patch: candidate, close: close) }
+                        }
+                    }
+                    if let check = r.check {
+                        Section {
+                            checkRow(check, close: close)
+                        } footer: {
+                            if let note = r.reviewNote { Text(note) }
+                        }
                     }
                 }
-                if let candidate {
-                    Section { candidateDiffLink(target: target, patch: candidate, close: close) }
-                }
-            }
-            if let check = r.check {
-                Section {
-                    checkRow(check, close: close)
-                } footer: {
-                    if let note = r.reviewNote { Text(note) }
-                }
+                .opacity(checking ? 0.4 : 1)
             }
         }
         #if os(iOS)
@@ -187,11 +203,19 @@ struct MergeRecoverySheet: View {
     // MARK: - header
 
     /// What holds the merge, when it was last checked (with checking again, when that isn't the
-    /// pinned step), and the one sentence the state needs.
-    private func header(_ r: MergeRecovery, check: MergeRecoveryButton?, working: Bool, blocked: Bool) -> some View {
+    /// pinned step) or that the server is checking the repair now, and the one sentence the state needs.
+    private func header(_ r: MergeRecovery, check: MergeRecoveryButton?, working: Bool, checking: Bool,
+                        blocked: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(r.title).font(.title3.weight(.semibold)).accessibilityAddTraits(.isHeader)
-            if working {
+            if checking {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Checking the repair…")
+                }
+                .font(.orbitSubtext)
+                .foregroundStyle(.secondary)
+            } else if working {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
                     Text("Working…")
@@ -211,7 +235,7 @@ struct MergeRecoverySheet: View {
                 .foregroundStyle(.secondary)
             }
             if let sentence = lede(r) {
-                Text(sentence).font(.orbitSubtext).foregroundStyle(.secondary)
+                Text(sentence).font(.orbitSubtext).foregroundStyle(.secondary).opacity(checking ? 0.4 : 1)
             }
         }
         .padding(.vertical, 4)
@@ -230,39 +254,31 @@ struct MergeRecoverySheet: View {
             return "Local \(t) has extra commits that are not on origin/\(t). Review them before continuing this merge."
         case "LOCAL_SYNC_PENDING":
             return "The remote contains the reviewed candidate. Save blocking local edits before syncing; this action only updates this machine."
+        case "REPAIR_IN_PROGRESS": return "Some files in the repair worktree are still unresolved."
+        case "ALREADY_LANDED": return r.landedSummary()
         default: return nil
         }
     }
 
-    @ViewBuilder
-    private func repairStatus(_ repair: MergeRepairSession, target: String) -> some View {
-        let running = repair.effectiveRunState == .queued || repair.effectiveRunState == .running
-        let failed = repair.effectiveRunState == .failed
-        Button {
-            app.openProjectCoordinator(sessionID: repair.id, agentID: console.worktree.detail?.workspace?.id)
-        } label: {
+    /// The repair session in one row — `MergeRepairRow`'s six states: at work, its result being
+    /// checked, ready to merge, conflicts left, waiting for the owner's reply (with what it asked), or
+    /// failed (with why). Tapping it opens that session. None once the session is found on origin.
+    private func repairStatus(_ repair: MergeRepairRow, target: String) -> some View {
+        Button { openRepair(repair.id) } label: {
             HStack(spacing: 10) {
-                if running {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: failed ? "xmark.circle.fill" : "checkmark.circle.fill")
-                        .foregroundStyle(failed ? .red : .green)
-                }
+                repairMark(repair.state).frame(width: 20)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(running ? "Repair session running" : failed ? "Repair session failed" : "Repair session completed")
+                    Text(repair.headline)
                         .font(.orbitLabel.weight(.semibold))
                     Text(repair.title ?? "Resolve merge recovery for \(target)")
                         .font(.orbitMeta)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    if running {
-                        Text("Tap to open the running session")
+                    if let status = repair.status() {
+                        Text(status)
                             .font(.orbitMeta)
-                            .foregroundStyle(.secondary)
-                    } else if !failed {
-                        Text("Ready to check again")
-                            .font(.orbitMeta)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(statusTone(repair.state))
+                            .lineLimit(2)
                     }
                 }
                 Spacer(minLength: 8)
@@ -274,6 +290,73 @@ struct MergeRecoverySheet: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint("Opens the repair session")
+    }
+
+    @ViewBuilder
+    private func repairMark(_ state: MergeRepairRow.State) -> some View {
+        switch state {
+        case .running, .checking:
+            ProgressView().controlSize(.small)
+        case .ready:
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+        case .unchecked, .finished:
+            Color.clear
+        case .conflicts:
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+        case .needsReply:
+            Image(systemName: "ellipsis.bubble.fill").foregroundStyle(.orange)
+        case .failed:
+            Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+        }
+    }
+
+    /// What the check found reads in its own colour; doing and waiting stay quiet.
+    private func statusTone(_ state: MergeRepairRow.State) -> Color {
+        switch state {
+        case .ready: return .green
+        case .conflicts, .needsReply: return .orange
+        case .failed: return .red
+        default: return .secondary
+        }
+    }
+
+    // MARK: - already landed
+
+    /// ALREADY_LANDED: the commits origin/<target> already carries for this session — by content when
+    /// the branch was rewritten after they merged — then the branches, with a word on the local
+    /// target's own commits, which Done leaves alone. Nothing to push, repair or diagnose.
+    @ViewBuilder
+    private func landedSections(_ d: SessionDetail, _ r: MergeRecovery, close: @escaping () -> Void) -> some View {
+        let target = r.targetBranch
+        if let landed = r.landedCommits, !landed.isEmpty {
+            Section {
+                ForEach(landed, id: \.sha) { MergeRecoveryCommitRow(commit: $0, landed: true) }
+            } header: {
+                HStack {
+                    Text("On origin/\(target)")
+                    Spacer(minLength: 8)
+                    Text("\(landed.count) \(landed.count == 1 ? "commit" : "commits")")
+                }
+                .textCase(nil)
+            } footer: {
+                if let note = r.landedByContentNote { footnote(note) }
+            }
+        }
+        Section {
+            NavigationLink {
+                RecoveryBranchesPage(recovery: r, branch: d.branch, close: close)
+            } label: {
+                RecoveryRouteRow(branch: d.branch, target: target, relation: r.targetRelation)
+            }
+        } footer: {
+            if let note = r.landedLocalNote { footnote(note) }
+        }
+    }
+
+    /// A section footer carrying one of the board's sentences, whole: the Mac's list draws a footer on one
+    /// line and cuts the rest unless the text may grow to its height.
+    private func footnote(_ text: String) -> some View {
+        Text(text).lineLimit(nil).fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: - check
@@ -318,15 +401,28 @@ struct MergeRecoverySheet: View {
             VStack(spacing: 4) {
                 if let primary = b.primary {
                     Button { run(primary, r) } label: {
-                        Text(title(primary, working: working)).frame(maxWidth: .infinity)
+                        HStack(spacing: 8) {
+                            if primary.waiting { ProgressView().controlSize(.small) }
+                            Text(title(primary, working: working))
+                        }
+                        .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
+                    // Opening the repair is never held back; the steps wait for whatever is running.
+                    .disabled(primary.waiting || (primary.action != .openRepair && blocked))
                 }
                 ForEach(b.secondary) { step in
                     Button(title(step, working: working)) { run(step, r) }
                         .buttonStyle(.borderless)
                         .frame(minHeight: 36)
+                        .disabled(blocked)
+                }
+                if let note = b.note {
+                    Text(note)
+                        .font(.orbitSubtext)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
                 if !supported {
                     Text("Update the runner to use target synchronization recovery.")
@@ -335,7 +431,6 @@ struct MergeRecoverySheet: View {
                         .multilineTextAlignment(.center)
                 }
             }
-            .disabled(blocked)
             .padding(.horizontal, 16)
             .padding(.top, 10)
             .padding(.bottom, 6)
@@ -350,19 +445,30 @@ struct MergeRecoverySheet: View {
     }
 
     private func run(_ step: MergeRecoveryButton, _ r: MergeRecovery) {
+        if step.action == .openRepair, let id = console.worktree.detail?.mergeRepairSession?.id {
+            openRepair(id)
+            return
+        }
         pressed = step
         Task {
             switch step.action {
             case .preview: await console.worktree.recoverMerge(action: "preview", previewID: r.previewId)
             case .apply: await console.worktree.recoverMerge(action: "apply", previewID: r.previewId)
             case .syncLocal: await console.worktree.recoverMerge(action: "sync-local", previewID: r.previewId)
+            // Done records the session merged and clears the recovery; the sheet closes with it.
+            case .confirmLanded: await console.worktree.recoverMerge(action: "confirm-landed", previewID: r.previewId)
+            case .openRepair: break
             case .repair(let preparePR):
                 guard let id = await console.worktree.repairRecovery(preparePR: preparePR) else { return }
-                // The repair runs in its own session: leave the review, then go there.
-                dismiss()
-                app.openProjectCoordinator(sessionID: id, agentID: console.worktree.detail?.workspace?.id)
+                openRepair(id)
             }
         }
+    }
+
+    /// The repair runs in its own session: leave the review, then go there.
+    private func openRepair(_ id: String) {
+        dismiss()
+        app.openProjectCoordinator(sessionID: id, agentID: console.worktree.detail?.workspace?.id)
     }
 
     private var groupedBackground: Color {
@@ -387,16 +493,20 @@ private struct RecoveryCloseButton: ToolbarContent {
     }
 }
 
-/// One commit: its subject, then where it comes from (in the push's list), who, when and which.
+/// One commit: its subject, then where it comes from (in the push's list), who, when and which. One
+/// already on origin leads with the day it got there.
 private struct MergeRecoveryCommitRow: View {
     let commit: MergeRecoveryCommit
     var origin: MergeRecoveryCommitOrigin? = nil
+    var landed = false
 
     var body: some View {
+        let byWhen = landed ? "\(MergeRecovery.mergedDay(commit)) · \(commit.author)"
+            : "\(commit.author) · \(RelativeTime.format(commit.date) ?? commit.date)"
         VStack(alignment: .leading, spacing: 2) {
             Text(commit.subject).font(.orbitSubtext).lineLimit(2)
             (originLabel
-                + Text("\(commit.author) · \(RelativeTime.format(commit.date) ?? commit.date) · ")
+                + Text("\(byWhen) · ")
                 + Text(String(commit.sha.prefix(8))).font(.orbitMonoFine))
                 .font(.orbitMeta)
                 .foregroundStyle(.secondary)

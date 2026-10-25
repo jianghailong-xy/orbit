@@ -6,9 +6,10 @@
 // 1. every file and index.css entry states the facts the audit has for it;
 // 2. with every record read, no use point is left without an owner;
 // 3. read after the records that sort before it, removing the record's new and changed entries turns
-//    exactly the points they need into gaps, and removing its reassignments changes the standing
-//    (owned / pending / unowned) of exactly the points they cover -- so each entry is needed and none
-//    is missing;
+//    exactly the points they need into gaps, and removing its reassignments changes who exactly the
+//    points they cover belong to (an owner, or pending / unowned; since 2026-10-08b.json, which moves
+//    points between two owners that are both still active, the owner itself counts) -- so each entry is
+//    needed and none is missing;
 // 4. the points it leaves pending are exactly its forCoordinator questions;
 // 5. the P0.1 baseline passes against the P0.1 inventory alone.
 import assert from 'node:assert/strict';
@@ -78,8 +79,45 @@ const grows = (entry) => entry.status !== 'changed' || (entry.added && (entry.ad
 const needed = entries(['new', 'changed']).filter((item) => !record.files[item] || grows(record.files[item]));
 const withoutNew = moved(['new', 'changed']);
 assert.deepEqual(withoutNew, needed, 'points that need the new/changed entries differ from them');
+// Who each point belongs to: its owner, or 'pending' / 'unowned'. A file is judged on its own; an
+// index.css hit by what it adds to the hits of its kind and text before it (ownerGaps hands them their
+// owners in that order), and a line with two kinds is one point carrying both answers.
+const CSS = 'src/web/src/index.css';
+const assignment = (records) => {
+  const judged = (report) => ownerGaps(report, { ...inventory, records });
+  const result = new Map();
+  for (const file of current.files) {
+    if (file.path === CSS) continue;
+    const gaps = judged({ files: [file] });
+    const state = gaps.pending.length ? 'pending' : gaps.unowned.length ? 'unowned' : Object.keys(gaps.owners)[0];
+    if (state) result.set(file.path, state);
+  }
+  const css = files.get(CSS);
+  const byKey = new Map();
+  for (const hit of css.hits.filter((item) => ['antd-reference', 'ant-class'].includes(item.kind))) {
+    byKey.set(`${hit.kind}\0${hit.text}`, [...(byKey.get(`${hit.kind}\0${hit.text}`) ?? []), hit]);
+  }
+  const lines = new Map();
+  for (const hits of byKey.values()) {
+    const tally = (n) => judged({ files: [{ ...css, hits: hits.slice(0, n) }] });
+    for (let n = 1; n <= hits.length; n++) {
+      const [before, after] = [tally(n - 1), tally(n)];
+      const owner = Object.keys(after.owners).find((key) => after.owners[key] > (before.owners[key] ?? 0));
+      const state = owner ?? (after.pending.length > before.pending.length ? 'pending' : 'unowned');
+      lines.set(hits[n - 1].line, [...(lines.get(hits[n - 1].line) ?? []), `${hits[n - 1].kind}:${state}`]);
+    }
+  }
+  for (const [line, states] of lines) result.set(`${CSS}:${line}`, states.sort().join(' '));
+  return result;
+};
+const assigned = assignment([...earlier, record]);
+const reassigned = (() => {
+  const after = assignment([...earlier, strip(['reassigned'])]);
+  return [...new Set([...assigned.keys(), ...after.keys()])].filter((key) => assigned.get(key) !== after.get(key)).sort();
+})();
 const withoutReassigned = moved(['reassigned']);
-assert.deepEqual(withoutReassigned, entries(['reassigned']), 'points that change without the reassignments differ from them');
+assert.deepEqual(withoutReassigned.filter((key) => !reassigned.includes(key)), [], 'a standing changes without the reassignments where no owner does');
+assert.deepEqual(reassigned, entries(['reassigned']), 'points that change without the reassignments differ from them');
 assert.deepEqual(ownerGaps(inventory.baseline, { ...inventory, records: [] }).unowned, [], 'the P0.1 baseline has gaps against P0.1');
 
 const pending = [...base].filter(([, state]) => state === 'pending').map(([key]) => key).sort();
@@ -87,5 +125,5 @@ const asked = [...new Set((record.forCoordinator ?? []).flatMap((item) => [...it
 assert.deepEqual(pending, asked, 'pending points differ from forCoordinator');
 const left = [...final.values()].filter((state) => state === 'pending').length;
 console.log(`Record ${name} verified: ${Object.keys(record.files).length} file entries and ${record.css.length} index.css entries match the audit; `
-  + `read after ${earlier.length} earlier record(s), ${withoutNew.length} points need its new/changed entries and ${withoutReassigned.length} change standing without its reassignments; `
+  + `read after ${earlier.length} earlier record(s), ${withoutNew.length} points need its new/changed entries and ${reassigned.length} change owner without its reassignments; `
   + `it leaves ${pending.length} points pending (${(record.forCoordinator ?? []).length} questions); with all ${inventory.records.length} records: 0 unowned, ${left} pending; P0.1 baseline clean.`);

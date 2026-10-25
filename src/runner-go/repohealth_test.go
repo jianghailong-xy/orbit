@@ -22,7 +22,7 @@ func TestScanRepoHealthGroupsAgentsByRepoRoot(t *testing.T) {
 		{AgentID: "a1", Dir: repo},
 		{AgentID: "a2", Dir: sub},
 		{AgentID: "a3", Dir: notRepo}, // no git → skipped, isolation reports that per session
-		{Dir: repo},                   // the runner's own workDir contributes no agent id
+		{Dir: repo},                   // a dir with no agent contributes no agent id
 	})
 	if len(got) != 1 {
 		t.Fatalf("expected one checkout, got %d: %+v", len(got), got)

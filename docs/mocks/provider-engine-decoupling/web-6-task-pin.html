@@ -1,0 +1,160 @@
+<!doctype html>
+<!-- Design board 6 (web): pinning a task to an engine, then a provider. "现在" is drawn from today's
+     TaskDetailPanel.tsx (Details → Provider / Model); "改后" is the proposal. Hand-drawn on the shipped tokens;
+     not shipped code. Render: render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>6 · Task pin: engine + provider (web) — provider/engine decoupling</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="board.css">
+<script src="glyphs.js"></script>
+<script src="board.js"></script>
+<style>
+  .cols3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .panel { padding: 18px 20px 20px; min-height: 640px; }
+  .panel .tt { font-size: 17px; font-weight: 600; }
+  .panel .st { display: flex; gap: 8px; align-items: center; margin: 6px 0 16px; font-size: 12.5px; color: var(--text-3); }
+  .panel .sec { font-size: 13px; font-weight: 600; color: var(--text-2); margin: 0 0 6px; }
+  .dd { position: relative; }
+  .ghost { height: 330px; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">6 · 任务 pin（Web）：先 pin engine，再 pin 这个 engine 能用的 provider</h1>
+  <p class="m-sub zh">任务详情右栏 → Details。今天只有一个 Provider 下拉：engine 和 key 混在一张平铺列表里（DeepSeek Harness key 注「Harness」，DeepSeek key 注「Claude Code」），没有账号池，空着时写「Assignee's (claude)」这样的原始 id。改后拆成两级：Engine（不 pin 就跟着 assignee 工作区）和 Provider（只列这个 engine 能用的；不 pin 就用这个 engine 的默认凭据）。API / MCP 的 batch-pin 同样是两级（T5）。数据同板 1：任务指派给工作区 orbit（在 hpc 上，上次用 Claude Code + runner 登录）。engine 名和顺序按待定项 A（板 1 ③-2）。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 任务详情 → Details</div>
+    <div class="cols3">
+      <div>
+        <div class="lbl zh"><span class="m-k">现在</span>一个 Provider 下拉，engine 和 key 混在一起</div>
+        <div class="w-app panel" id="now"></div>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>先选 Engine</div>
+        <div class="w-app panel" id="after1"></div>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>Engine = DeepSeek Harness 时的 Provider</div>
+        <div class="w-app panel" id="after2"></div>
+      </div>
+    </div>
+    <div class="gap"></div>
+    <div class="cols3">
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>pin 好之后（收起）</div>
+        <div class="w-app panel" style="min-height:0" id="after3"></div>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>Engine = Claude Code 时的 Provider</div>
+        <div class="w-app panel" style="min-height:0" id="after4"></div>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>迁移来的旧 pin（原来 pin 在 deepseek-harness）</div>
+        <div class="w-app panel" style="min-height:0" id="after5"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+
+<script>
+const head = `<div class="tt">Fix the flaky worktree test</div><div class="st"><span class="w-pill mute">Open</span>· orbit-develop</div><div class="sec">Details</div>`;
+const fd = (l, v, cls = '', id = '') => `<div class="w-fd"${id ? ` id="${id}"` : ''}><span class="l">${l}</span><span class="v ${cls}">${v}<span class="chev">▾</span></span></div>`;
+const val = (brand, text, det) => `${brand ? tile(brand, 16) : ''}<span>${text}</span>${det ? `<span class="det">${det}</span>` : ''}`;
+
+/* 现在: one flat Provider list */
+document.getElementById('now').innerHTML = head + `<div class="w-fields">
+  ${fd('Assignee', 'orbit')}
+  <div class="dd">${mk('A', fd('Provider', "Assignee's (claude)", 'ph open'))}
+    ${mk('B', menu([
+      { label: 'Claude' }, { label: 'Codex' }, { label: 'Kimi', det: 'Not installed →' }, { label: 'OpenCode' },
+      { label: 'Antigravity', det: 'Google account' }, { label: 'Antigravity', det: 'API key' },
+      { label: 'DeepSeek', det: 'Claude Code' }, { label: 'Z.AI (GLM)' }, { label: 'Claude Max' },
+      { label: 'DeepSeek Harness', det: 'Harness' },
+    ]), false, 'position:absolute;left:96px;top:40px;z-index:3;width:300px')}</div>
+  ${fd('Model', 'Provider default', 'ph')}
+  ${fd('List', 'No list', 'ph')}
+</div>`;
+
+const engineMenu = menu([
+  { label: "Assignee's", q: 'Claude Code', ck: true },
+  { sep: true },
+  ...['claude', 'codex', 'kimi', 'antigravity', 'opencode', 'dsh'].map((e) => ({ tile: ENGINES[e].brand, tileSize: 16, label: ENGINES[e].name })),
+]);
+document.getElementById('after1').innerHTML = head + `<div class="w-fields">
+  ${fd('Assignee', 'orbit')}
+  <div class="dd">${mk(1, fd('Engine', "Assignee's · Claude Code", 'ph open'))}
+    <div style="position:absolute;left:96px;top:40px;z-index:3">${engineMenu.replace('class="w-menu "', 'class="w-menu " style="width:300px"')}</div></div>
+  ${fd('Provider', 'Engine default', 'ph')}
+  ${fd('Model', 'Provider default', 'ph')}
+  ${fd('List', 'No list', 'ph')}
+</div>`;
+
+document.getElementById('after2').innerHTML = head + `<div class="w-fields">
+  ${fd('Assignee', 'orbit')}
+  ${fd('Engine', val('deepseek', 'DeepSeek Harness'))}
+  <div class="dd">${mk(2, fd('Provider', 'Engine default · DeepSeek', 'ph open'))}
+    <div style="position:absolute;left:96px;top:40px;z-index:3">${menu([
+      { label: 'Engine default', q: 'first DeepSeek key', ck: true },
+      { group: 'Your DeepSeek keys' },
+      { tile: 'deepseek', tileSize: 16, label: 'DeepSeek' },
+      { tile: 'deepseek', tileSize: 16, label: 'DeepSeek 2' },
+    ]).replace('class="w-menu "', 'class="w-menu " style="width:300px"')}</div></div>
+  ${fd('Model', 'Provider default', 'ph')}
+  ${fd('List', 'No list', 'ph')}
+</div>`;
+
+document.getElementById('after3').innerHTML = head + `<div class="w-fields">
+  ${fd('Assignee', 'orbit')}
+  ${fd('Engine', val('deepseek', 'DeepSeek Harness'))}
+  ${mk(3, fd('Provider', val('deepseek', 'DeepSeek 2')))}
+  ${fd('Model', 'DeepSeek V4 Pro')}
+  ${fd('List', 'No list', 'ph')}
+</div>`;
+
+document.getElementById('after4').innerHTML = head + `<div class="w-fields">
+  ${fd('Assignee', 'orbit')}
+  ${fd('Engine', val('anthropic', 'Claude Code'))}
+  <div class="dd">${mk(4, fd('Provider', 'Engine default · sign-in on hpc', 'ph open'))}
+    <div class="ghost"></div>
+    <div style="position:absolute;left:96px;top:40px;z-index:3">${menu([
+      { label: 'Engine default', q: 'runner sign-in', ck: true },
+      { group: 'Account pools' },
+      { tile: 'anthropic', tileSize: 16, label: 'Claude accounts' },
+      { group: 'Your keys' },
+      { tile: 'deepseek', tileSize: 16, label: 'DeepSeek' },
+      { tile: 'deepseek', tileSize: 16, label: 'DeepSeek 2' },
+      { tile: 'glm', tileSize: 16, label: 'Z.AI (GLM)' },
+      { tile: 'anthropic', tileSize: 16, label: 'Claude Max' },
+    ]).replace('class="w-menu "', 'class="w-menu " style="width:300px"')}</div></div>
+</div>`;
+
+document.getElementById('after5').innerHTML = head + `<div class="w-fields">
+  ${fd('Assignee', 'orbit')}
+  ${mk(5, fd('Engine', val('deepseek', 'DeepSeek Harness')) + fd('Provider', val('deepseek', 'DeepSeek')))}
+  ${fd('Model', 'Provider default', 'ph')}
+  ${fd('List', 'No list', 'ph')}
+</div><p class="w-note" style="margin-top:10px">Before: Provider · DeepSeek Harness <span class="w-muted">(Harness)</span></p>`;
+
+document.getElementById('notes').innerHTML = notes([
+  ['A', '<b>空着时写原始 id</b>：「Assignee\'s (claude)」。'],
+  ['B', '<b>engine 和 key 混在一张表里：</b>Claude、Codex、Kimi、OpenCode 是 engine，DeepSeek、GLM、Claude Max 是 key，DeepSeek 和 DeepSeek Harness 靠小字「Claude Code」「Harness」区分；没有账号池；OpenCode 下没有 key。'],
+  [1, '<b>新增 Engine 一栏</b>，在 Provider 上面：不 pin（Assignee\'s · Claude Code，跟着 assignee 工作区）或六个 engine 之一。'],
+  [2, '<b>Provider 只列这个 engine 能用的</b>，第一项是「Engine default」（runner 登录类 engine 用 runner 上的登录；DeepSeek Harness 用第一把启用的 DeepSeek key；OpenCode 用它自己的登录），之后是账号池和 key，分组同 Provider 菜单（板 4）。'],
+  [3, '<b>改 Engine 时</b>，已 pin 的 Provider 如果新 engine 用不了就清掉（回到 Engine default），模型也清掉，和今天换 Provider 清模型一样；能用就保留。'],
+  [4, '<b>Claude Code 下</b>：Engine default（runner 登录）、账号池、四把能跑 Claude Code 的 key。'],
+  [5, '<b>旧 pin 迁移后</b>（T4）：原来 pin 在 deepseek-harness 的任务显示成 Engine = DeepSeek Harness、Provider = 合并后的那把 DeepSeek key，行为和迁移前一样。'],
+  ['·', '<b>不变的：</b>Assignee、Model（「Provider default」）、List；选到不可用的项仍然跳去修的地方；新建任务界面上没有 pin（任务由 agent 建），API / MCP 的 create / update / batch-pin 收 engine + provider（T3、T5）。'],
+]);
+finish();
+</script>
+</body>
+</html>

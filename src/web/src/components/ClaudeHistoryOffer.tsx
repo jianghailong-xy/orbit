@@ -1,6 +1,6 @@
 import { CheckCircleOutlined, WarningOutlined } from '@ant-design/icons';
-import { Radio } from 'antd';
 import type { ClaudeHistoryResult } from '../api';
+import { Radio, RadioGroup } from './ui/Radio';
 
 /** What to do with the Claude Code conversations already recorded in a directory being taken over. */
 export type ImportMode = 'none' | 'latest' | 'all';
@@ -60,10 +60,11 @@ export function ClaudeHistoryOffer({
             in this directory · last {history.windowDays} days · {fmtTranscriptSize(history.bytes)}
           </span>
         </div>
-        <Radio.Group
+        <RadioGroup<ImportMode>
           className="rd-history-choices"
+          aria-label="Local Claude Code history"
           value={value}
-          onChange={(e) => onChange(e.target.value as ImportMode)}
+          onValueChange={onChange}
         >
           <Radio value="none">
             <span className="rd-history-choice">
@@ -93,7 +94,7 @@ export function ClaudeHistoryOffer({
               </span>
             </span>
           </Radio>
-        </Radio.Group>
+        </RadioGroup>
         <div className="rd-path-hint rd-path-warn">
           <WarningOutlined />
           <span>

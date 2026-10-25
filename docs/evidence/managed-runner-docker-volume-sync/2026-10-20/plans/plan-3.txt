@@ -1,0 +1,14 @@
+# 8 runners only, the mitigated build (d10) and the build before T02c (before) alternating, each with the runner's
+# commit after every turn (1) and without runner commits (0): the second workload makes one pre-report sync per turn
+# instead of two. The deployment is on d10 after plan 2.
+r22-d-n8 d10 8 120 3 400 2000 1
+r23-d-n8c0 d10 8 120 3 400 2000 0
+switch before
+r24-b-n8 before 8 120 3 400 2000 1
+r25-b-n8c0 before 8 120 3 400 2000 0
+switch d10
+r26-d-n8c0 d10 8 120 3 400 2000 0
+r27-d-n8 d10 8 120 3 400 2000 1
+switch before
+r28-b-n8c0 before 8 120 3 400 2000 0
+r29-b-n8 before 8 120 3 400 2000 1

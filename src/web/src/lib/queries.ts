@@ -3,6 +3,7 @@ import type {
   EventSearchResponse,
   LinkPreviewRef,
   LinkPreviewsResponse,
+  ProjectIntegrationLogPage,
   ProjectIntegrationView,
   ProjectManualReady,
   ProjectPromotionView,
@@ -51,8 +52,10 @@ import type {
   WikiPlanState,
   WikiPlanVersion,
   WikiPlanVersionSummary,
+  WikiJobsRead,
   WikiSearchRow,
   WikiSpaceHealth,
+  WikiSystemModelRead,
 } from '@orbit/shared';
 import type {
   WikiChangeset,
@@ -186,6 +189,14 @@ export interface UserPreferences {
   /** Smart model selection for the whole account — the Suggested tiers and the Agent switch that
    *  routes task runs onto them. Absent means OFF; only turning it on has to be written. */
   modelRouting?: boolean;
+  /** Whether Claude sessions offer the next message you would probably type once a turn ends
+   *  (lib/promptSuggestion). Each one is a request on the session's account, read when its engine
+   *  starts. Absent means on; only opting out is ever written. */
+  promptSuggestions?: boolean;
+  /** Whether the session list shows the server's rolling recap (Session.recapText) instead of the
+   *  raw last reply. Read by every client's list row; absent means on, so only opting out is ever
+   *  written. */
+  recaps?: boolean;
 }
 
 /** How an account signs in (docs/google-sign-in-design.md §6): a password, and the Google account linked. */
@@ -299,12 +310,51 @@ export const sessionsQuery = (
  *  session events cannot re-read every project's full member list. */
 export const PROJECT_SESSION_REFRESH_MS = 60_000;
 
-export const projectSessionsQuery = (opts: { projectId: string; view: SessionListView }) =>
+/**
+ * At most this many project reads are out at once, per tab. A workspace list reads every project it
+ * shows (useSessionProjectData), each on an interval of its own, and the intervals all start in the
+ * same render, so the reads fall due together: forty-odd at once on a large account, on a page load,
+ * every PROJECT_SESSION_REFRESH_MS after it, and every 4 s while the stream is down (which is also
+ * what meets a restarting server). Each read is cheap. Forty at once are a queue on the server's
+ * connection pool that every other request then waits in: when one tab was reloaded on 2026-10-25 at
+ * 01:01Z, 52 of the 59 project reads it made that minute took 0.5 s or more.
+ */
+const PROJECT_READS_AT_ONCE = 4;
+let projectReadsOut = 0;
+const projectReadsWaiting: Array<() => void> = [];
+async function projectRead<T>(read: () => Promise<T>): Promise<T> {
+  // A finished read hands its place straight to the next one waiting, so the count never dips
+  // between them and lets a newcomer in ahead of the queue.
+  if (projectReadsOut < PROJECT_READS_AT_ONCE) projectReadsOut += 1;
+  else await new Promise<void>((start) => projectReadsWaiting.push(start));
+  try {
+    return await read();
+  } finally {
+    const next = projectReadsWaiting.shift();
+    if (next) next();
+    else projectReadsOut -= 1;
+  }
+}
+
+/**
+ * A project's members across workspaces.
+ *
+ * `includeLanding` asks the server for the project's LANDING sessions beside the conversations
+ * (contract §2.9 LS6; `GET /sessions?projectId=&includeLanding=1`). Only the project's sessions page
+ * asks: the flat list, its counts and its search never see a landing, and no other read should pay
+ * for one.
+ */
+export const projectSessionsQuery = (opts: {
+  projectId: string;
+  view: SessionListView;
+  includeLanding?: boolean;
+}) =>
   queryOptions({
-    queryKey: ['project-sessions', opts.projectId, opts.view] as const,
+    queryKey: ['project-sessions', opts.projectId, opts.view, opts.includeLanding === true] as const,
     queryFn: () => {
       const qs = new URLSearchParams({ projectId: opts.projectId, view: opts.view });
-      return api<SessionListItem[]>(`/sessions?${qs}`);
+      if (opts.includeLanding) qs.set('includeLanding', '1');
+      return projectRead(() => api<SessionListItem[]>(`/sessions?${qs}`));
     },
     staleTime: 15_000,
   });
@@ -885,6 +935,39 @@ export const projectIntegrationQuery = (projectId: string) =>
     refetchInterval: 30_000,
   });
 
+/** The selectors one page of a landing's check output is read by (contract §2.2 J-T4, §2.9 LS2). */
+export interface LandingLogSelectors {
+  jobId: string;
+  claim?: number;
+  round?: number;
+  check?: number;
+  cursor?: string;
+}
+
+/**
+ * One page of a landing session's check output (`GET /sessions/:id/landing/log`, contract §2.9
+ * LS2). Read only when a log is opened: the page loads the chunk behind the `Log ›` a check's
+ * timeline line carries, and continues the same narrowed read with the cursor it answers.
+ */
+export const landingLogQuery = (sessionId: string, selectors: LandingLogSelectors) =>
+  queryOptions({
+    queryKey: [
+      'session', sessionId, 'landing-log',
+      selectors.jobId, selectors.claim ?? null, selectors.round ?? null,
+      selectors.check ?? null, selectors.cursor ?? null,
+    ] as const,
+    queryFn: () => {
+      const query = new URLSearchParams({ jobId: selectors.jobId });
+      if (selectors.claim != null) query.set('claim', String(selectors.claim));
+      if (selectors.round != null) query.set('round', String(selectors.round));
+      if (selectors.check != null) query.set('check', String(selectors.check));
+      if (selectors.cursor) query.set('cursor', selectors.cursor);
+      return api<ProjectIntegrationLogPage>(
+        `/sessions/${encodeURIComponent(sessionId)}/landing/log?${query.toString()}`,
+      );
+    },
+  });
+
 /**
  * The owner's watches, newest first, as one list. `GET /watches` answers with the 100 newest of any
  * state, so a long history would push a live watch out of it, and a failure nobody has seen yet with
@@ -1028,6 +1111,49 @@ export const wikiHealthQuery = (spaceId: string | null) =>
     queryFn: () => api<WikiSpaceHealth>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/health`),
     enabled: spaceId !== null,
     staleTime: 30_000,
+  });
+
+/**
+ * The deployment's System model and who executes this account's wiki (`GET /api/wiki/system-model`, contracts
+ * `systemModel.read` and `jobs.executor.read`): what the wiki settings page reads to draw the System model. `null` is
+ * a control plane from before the read (a 404 that is not the wiki being off): the page then draws no System model.
+ */
+export const wikiSystemModelQuery = () =>
+  queryOptions({
+    queryKey: ['wiki', 'system-model'] as const,
+    queryFn: async (): Promise<WikiSystemModelRead | null> => {
+      try {
+        return await api<WikiSystemModelRead>('/wiki/system-model');
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404 && !isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
+    staleTime: 15_000,
+  });
+
+/**
+ * A space's server runs and their calls (`GET /api/wiki/spaces/:id/jobs`, contract `jobs.read`): what Activity's
+ * Runs card and its call logs draw. Read again every few seconds while a run is on its way, since the worker moves
+ * it on without a wiki write to announce it. `null` is a control plane from before the read.
+ */
+export const wikiJobsQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'jobs'] as const,
+    queryFn: async (): Promise<WikiJobsRead | null> => {
+      try {
+        return await api<WikiJobsRead>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/jobs`);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404 && !isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
+    enabled: spaceId !== null,
+    staleTime: 5_000,
+    refetchInterval: (query) =>
+      (query.state.data?.jobs ?? []).some((job) => job.state === 'queued' || job.state === 'running' || job.state === 'waiting')
+        ? 5_000
+        : false,
   });
 
 /** A space's newest entries of every kind, newest record first: what Activity and the status line read. */

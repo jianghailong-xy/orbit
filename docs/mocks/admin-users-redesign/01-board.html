@@ -1,0 +1,141 @@
+<!doctype html>
+<!-- Design board: Admin → Users redesign, two directions. Every picture is the real web app (vite dev server,
+     headless Chromium, 1280×1000 desktop at 2x and a 390pt phone at 3x) fed by src/web/ui-migration's fixtures plus
+     nine synthetic accounts shaped like the owner's list (one disabled, one waiting for Google, a long address, a
+     second administrator). Directions A and B are a throwaway prototype on that real shell
+     (kept outside the tree: /var/tmp/admin-users-mock/proto/AdminUsersProto.tsx, routed in place of
+     AdminUsersPage while shooting); kit in /var/tmp/admin-users-mock/capture.mjs and render.mjs. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Admin → Users · redesign directions</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  body.m { font-family: -apple-system, BlinkMacSystemFont, "Inter", "PingFang SC", "Noto Sans SC", sans-serif; }
+  .m-sheet { width: 1500px; }
+  .m-sub { max-width: 1180px; line-height: 1.75; }
+  .m-sub b { color: var(--text-1); }
+  .shot { display: block; width: 100%; border: 1px solid #dde0e6; border-radius: 8px; }
+  .phones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .rec { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 4px; background: var(--brand);
+         color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; }
+  .m-notes code, .grid code { font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; font-size: 11.5px;
+         background: #e6e8ec; border-radius: 4px; padding: 0 4px; color: #30343b; }
+  .en { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  table.grid { width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 1.6; color: #3f4652; }
+  table.grid th, table.grid td { padding: 7px 10px; border-bottom: 1px solid #e6e8ec; text-align: left; vertical-align: top; }
+  table.grid th { color: var(--text-2); font-weight: 600; background: #f5f6f8; }
+  table.grid td:first-child { color: var(--text-1); font-weight: 600; white-space: nowrap; }
+  .ask { margin: 0; padding: 14px 16px; border-radius: 8px; background: #fff8eb; border: 1px solid #ffd591;
+         font-size: 13px; line-height: 1.8; color: #3f4652; }
+  .ask ol { margin: 6px 0 0 18px; padding: 0; }
+  .ask b { color: var(--text-1); }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet zh">
+  <h1 class="m-h1">Admin → Users 重新设计 · 两个方向</h1>
+  <p class="m-sub">
+    <b>已定（2026-10-16）：方案 A，加搜索，加「最近活跃」列</b>，实现见最后一节。从你的截图出发：每行 <b>6 个按钮折成两行</b>，红框的 <span class="en">Disable / Delete</span> 每行都有；
+    <span class="en">Role / Status / Sign-in</span> 三列几乎全是同一个值（<span class="en">MEMBER / Active / Password</span>），
+    真正需要注意的（停用、<span class="en">Google</span> 待关联、管理员）反而不显眼；长邮箱被挤成两行；自己那一行没有标记；没有搜索。
+    下面每张图都是<b>真实页面</b>加测试数据渲染出来的；A、B 是在真实页面上做的原型（未上线）。
+  </p>
+
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k">现状</span>同一组 9 个账号，1280 宽窗口（侧栏占去一块后，按钮竖着堆成 4–5 个）</div>
+    <div class="m-grid2">
+      <img class="shot" src="01-today.png" alt="">
+      <ul class="m-notes" style="margin-top:0">
+        <li><span class="m-n">1</span><span><b>操作按钮是主角</b>：一行最多 6 个（<span class="en">View as、Reset password、Access tokens、Unlink Google、Make admin、Disable、Delete</span>），窗口一窄就折成多行，一行一百多像素高。</span></li>
+        <li><span class="m-n">2</span><span><b>危险操作太近</b>：<span class="en">Disable / Delete</span> 每行一对红框，和常用的 <span class="en">Reset password</span> 挨着，满屏都是红色。</span></li>
+        <li><span class="m-n">3</span><span><b>信息被稀释</b>：三列徽章重复同样的内容；停用的人、只用 <span class="en">Google</span> 还没关联上的人，需要一格一格找。</span></li>
+        <li><span class="m-n">4</span><span><b>身份分在两列</b>：<span class="en">Email</span> 和 <span class="en">Name</span> 各占一列，长邮箱被挤成两行；看不出哪一行是你自己。</span></li>
+        <li><span class="m-n">5</span><span>没有人数、没有搜索；账号一多只能滚动着找。</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k new">方案 A</span>紧凑表格 + ⋮ 菜单<span class="rec">推荐</span></div>
+    <div class="m-grid2">
+      <div><img class="shot" src="02a-table.png" alt=""><p class="m-cap">默认：一人一行，只露出一个最常用的操作。</p></div>
+      <div><img class="shot" src="02b-menu.png" alt=""><p class="m-cap">点 ⋮：其余操作，危险的在分隔线下面。</p></div>
+    </div>
+    <ul class="m-notes">
+      <li><span class="m-n">1</span><span><b>一人一行</b>：头像 + 名字 + 邮箱（灰色、单行，太长就省略）；<span class="en">You</span>、<span class="en">Admin</span> 是名字后的小标签，<span class="en">Member</span> 不再标。</span></li>
+      <li><span class="m-n">2</span><span><b>只露出一个操作</b>：成员是 <span class="en">View as</span>，停用的人是 <span class="en">Enable</span>；管理员和你自己那行没有（本来就不能 <span class="en">View as</span>）。</span></li>
+      <li><span class="m-n">3</span><span><b>其余进 ⋮</b>：<span class="en">Reset password… / Access tokens / Unlink Google…（关联了才有）/ Make admin</span>，分隔线下是红色的 <span class="en">Disable… / Delete…</span>。点了之后的对话框全部沿用现在的。</span></li>
+      <li><span class="m-n">4</span><span><b>状态只在异常时显眼</b>：<span class="en">Active</span> 是小绿点，<span class="en">Disabled</span> 是红点、整行变淡；<span class="en">Google · pending</span> 用黄色字。表头去掉竖线、改成灰色小字。</span></li>
+      <li><span class="m-n">5</span><span><b>顶部</b>：<span class="en">9 accounts · 2 administrators · 1 disabled</span>，加一个按名字或邮箱即时过滤的搜索框（纯前端，不加接口）。</span></li>
+      <li><span class="m-n">6</span><span><b>改动面小</b>：只改 <code>AdminUsersPage.tsx</code> 和样式，接口、对话框、现有测试的行为都不变。</span></li>
+    </ul>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k new">方案 B</span>列表 + 右侧详情抽屉</div>
+    <div class="m-grid2">
+      <div><img class="shot" src="03a-list.png" alt=""><p class="m-cap">列表：行上不放任何按钮，整行可点。</p></div>
+      <div><img class="shot" src="03b-drawer.png" alt=""><p class="m-cap">点一行：右侧打开这个人的详情，所有操作都在这里。</p></div>
+    </div>
+    <ul class="m-notes">
+      <li><span class="m-n">1</span><span><b>抽屉从上到下</b>：<span class="en">View as</span>（主按钮，下面一句只读 30 分钟的说明）→ 角色（<span class="en">Member / Admin</span> 切换）→ 登录方式（重置密码、解绑 <span class="en">Google</span>）→ 访问令牌 → 账号信息 → 危险区（停用、删除，各带一句后果说明）。</span></li>
+      <li><span class="m-n">2</span><span><b>好处</b>：危险操作离列表最远，每个操作旁边都有说明；以后要加「最近活跃」「名下的 runner / 会话」也有地方放。</span></li>
+      <li><span class="m-n">3</span><span><b>代价</b>：任何操作都要先点开一行；改动更大（新的抽屉，令牌数量要在打开时再请求一次 <code>/admin/users/:id/access-tokens</code>）。</span></li>
+    </ul>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k state">手机</span>390pt：A 的列表 · A 点 ⋮ · B 的抽屉</div>
+    <div class="phones">
+      <div><img class="shot" src="04a-phone.png" alt=""><p class="m-cap">A：只剩名字、邮箱和 ⋮（现在手机上这个页面基本没法用）。</p></div>
+      <div><img class="shot" src="04b-phone-menu.png" alt=""><p class="m-cap">A：手机上 <span class="en">View as… / Enable</span> 挪到菜单第一项。</p></div>
+      <div><img class="shot" src="04c-phone-drawer.png" alt=""><p class="m-cap">B：抽屉占满屏幕，内容和桌面一样。</p></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k">对照</span>每个操作现在在哪、改完在哪</div>
+    <table class="grid">
+      <tr><th>操作</th><th>现状</th><th>方案 A</th><th>方案 B</th></tr>
+      <tr><td class="en">View as</td><td>行内按钮</td><td>行内按钮（手机：⋮ 第一项）</td><td>抽屉主按钮</td></tr>
+      <tr><td class="en">Enable</td><td>行内按钮</td><td>行内按钮（手机：⋮ 第一项）</td><td>抽屉主按钮</td></tr>
+      <tr><td class="en">Reset password</td><td>行内按钮</td><td>⋮</td><td>抽屉 · 登录方式</td></tr>
+      <tr><td class="en">Access tokens</td><td>行内按钮 → 对话框</td><td>⋮ → 同一个对话框</td><td>抽屉 · 访问令牌（数量 + <span class="en">Manage</span>）</td></tr>
+      <tr><td class="en">Unlink Google</td><td>行内按钮（关联了才有）</td><td>⋮（关联了才有）</td><td>抽屉 · 登录方式</td></tr>
+      <tr><td class="en">Make admin / member</td><td>行内按钮</td><td>⋮</td><td>抽屉 · 角色切换</td></tr>
+      <tr><td class="en">Disable / Delete</td><td>行内红框按钮</td><td>⋮，分隔线下、红字</td><td>抽屉 · 危险区</td></tr>
+      <tr><td class="en">Add user</td><td>右上角</td><td>右上角，旁边加搜索</td><td>同 A</td></tr>
+    </table>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k new">实现</span>已落地的页面（不是原型），同一组测试数据，固定时间 2026-09-28 12:00</div>
+    <div class="m-grid2">
+      <div><img class="shot" src="05-built-menu.png" alt=""><p class="m-cap">桌面 1280：六列，点 ⋮ 的菜单。</p></div>
+      <div><img class="shot" src="05-built-dark.png" alt=""><p class="m-cap">深色。</p></div>
+      <div><img class="shot" src="05-built-search.png" alt=""><p class="m-cap">搜索 <span class="en">ops</span>：按名字或邮箱即时过滤，没有匹配时说 <span class="en">No users match “…”</span>。</p></div>
+      <div><img class="shot" src="05-built-phones.png" alt=""><p class="m-cap">手机：行内只剩 ⋮，菜单第一项是 <span class="en">View as / Enable</span>。</p></div>
+    </div>
+    <ul class="m-notes">
+      <li><span class="m-n">1</span><span><b>最近活跃</b>：账号最后一次用 Orbit 的时间——各个 App（<span class="en">Web / iOS / Mac / Android</span>）的请求，或它的访问令牌被使用，取最晚的一个；悬停显示精确时间和途径。App 的记录每小时最多写一次，所以正在用的人可能显示为「一小时内」的某个时间。管理员 <span class="en">View as</span> 不算对方的活跃。超过 30 天显示日期，从没用过显示 <span class="en">Never</span>。不新增任何写入：读的是已有的 <code>client_version</code> 和令牌的 <code>last_used_at</code>。</span></li>
+      <li><span class="m-n">2</span><span><b>列随宽度收起</b>：按表格自己的宽度（不看窗口，侧栏可以拖宽），依次收起 <span class="en">Created → Sign-in → Status → Last active</span>；1280 的笔记本窗口六列都在，任何宽度都不出横向滚动。</span></li>
+      <li><span class="m-n">3</span><span><b>和稿子的差别</b>：菜单项不带「…」（和 <span class="en">Runner</span> 的 <span class="en">Actions</span> 菜单一致）；<span class="en">Reset password</span> 和 <span class="en">Delete</span> 原来是小气泡确认，现在和 <span class="en">Disable</span> 一样用对话框问，被拒绝时原因写在对话框里；自己那行的菜单不再有 <span class="en">Delete</span>（服务端本来就拒绝）。</span></li>
+    </ul>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k">已定</span>你的决定（2026-10-16）</div>
+    <div class="ask">
+      <p style="margin:0 0 6px"><b>方案 A；加搜索；加「最近活跃」列。</b>当时的三个问题：</p>
+      <ol>
+        <li><b>方向</b>：A（推荐）还是 B？A 的理由：最常用的 <span class="en">View as</span> 一步到位，危险操作收进菜单，改动小、风险低。B 适合以后每个人要展示更多信息的时候。</li>
+        <li><b>搜索框</b>：要不要？现在 9 个账号用处不大，账号多了才有用。</li>
+        <li><b>「最近活跃」列</b>：要不要加？对管理员很有用（谁很久没来了），但列表接口目前没有这个数据，需要后端补。</li>
+      </ol>
+    </div>
+  </div>
+</section>
+</body>
+</html>

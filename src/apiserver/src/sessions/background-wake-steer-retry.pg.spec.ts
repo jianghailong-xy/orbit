@@ -163,9 +163,21 @@ test('a transient failure of the turn a job\'s exit was steered into re-sends th
   );
   const retries = new AutoRetryService(db, sessions, realtime as never);
 
+  /**
+   * The claim's own write, as the runner's lease routes make it: PENDING -> RUNNING is dropped in
+   * silence for a session that has a recorded engine unless the same transaction declares it reads
+   * that engine (migration 0414, `common/session-scheduling.ts`).
+   */
+  async function claimSession(sessionId: string): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+      await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    });
+  }
+
   /** The claim, then the polls after it until a message comes out (a control turn is answered on the spot). */
   async function deliver(sessionId: string): Promise<{ turnId: string; content: string }> {
-    await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    await claimSession(sessionId);
     for (;;) {
       const handed = await (api as unknown as {
         dequeueTurn: (sessionId: string, runnerId: string, leaseGeneration: string | null) => Promise<Record<string, unknown> | null>;

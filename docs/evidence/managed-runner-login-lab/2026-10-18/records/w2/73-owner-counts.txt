@@ -1,0 +1,9 @@
+t05-admin@lab.invalid|0|0|0
+t05-dora@lab.invalid|1|1|1
+t05-erin@lab.invalid|1|1|1
+t05-hank@lab.invalid|1|1|1
+t05-ivy@lab.invalid|1|1|1
+t05-jack@lab.invalid|1|1|1
+t05-nell@lab.invalid|0|0|0
+t05-nora@lab.invalid|0|0|0
+t05-vera@lab.invalid|1|2|3

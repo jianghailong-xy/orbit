@@ -1,0 +1,22 @@
+== inventory restart-graceful-after at 2026-10-17T18:08:29Z, checkout e51574350d7c215a92d76f0e0859b927527b38c8
+-- managed runner containers
+mr-01a14ade-543d-718b-80fd-c800a75e0c5f	running	Up 36 seconds	generation=7	uid=9a25e957-b239-4b42-9b2f-2c8f3d6ac5d5	,mr-boot-01a14ade-543d-718b-80fd-c800a75e0c5f-g7,mr-data-01a14ade-543d-718b-80fd-c800a75e0c5f
+mr-01a14ade-533c-756b-b2a3-8adb824b1754	running	Up About a minute	generation=5	uid=017ae481-eb10-4dba-825d-0381139847cb	,mr-boot-01a14ade-533c-756b-b2a3-8adb824b1754-g5,mr-data-01a14ade-533c-756b-b2a3-8adb824b1754
+-- managed runner volumes
+mr-boot-01a14ade-533c-756b-b2a3-8adb824b1754-g5	kind=bootstrap	owner=01a14ade-5298-734e-b93e-db40cec1084c	uid=
+mr-boot-01a14ade-543d-718b-80fd-c800a75e0c5f-g7	kind=bootstrap	owner=01a14ade-53ff-7746-8fca-c845ceaa46f5	uid=
+mr-data-01a14ade-533c-756b-b2a3-8adb824b1754	kind=data	owner=01a14ade-5298-734e-b93e-db40cec1084c	uid=0352e340-18a9-40fb-93d2-e182331d3964
+mr-data-01a14ade-543d-718b-80fd-c800a75e0c5f	kind=data	owner=01a14ade-53ff-7746-8fca-c845ceaa46f5	uid=d71b9de8-688d-429c-9750-5b42021b1665
+-- stack
+orbit-docker-channel	running	Up About a minute (healthy)
+orbit-wiki-worker	running	Up About a minute
+orbit-web	running	Up About a minute (healthy)
+orbit-apiserver	running	Up About a minute (healthy)
+orbit-gateway	running	Up About a minute (healthy)
+orbit-pgbackup	running	Up About a minute
+orbit-postgres	running	Up About a minute (healthy)
+-- managed_runner rows
+a@d7-drill.test | READY | RUNNING | 5 | 1 | mr-data-01a14ade-533c-756b-b2a3-8adb824b1754 | 0352e340-18a9-40fb-93d2-e182331d3964 | 017ae481-eb10-4dba-825d-0381139847cb | 
+b@d7-drill.test | READY | RUNNING | 7 | 0 | mr-data-01a14ade-543d-718b-80fd-c800a75e0c5f | d71b9de8-688d-429c-9750-5b42021b1665 | 9a25e957-b239-4b42-9b2f-2c8f3d6ac5d5 | 
+-- capacity pool (reserved)
+18000 | 4000 | 12077248512 | 8589934592 | 2 | 2 | 15276642361552 | 42949672960

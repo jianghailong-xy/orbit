@@ -1,0 +1,18 @@
+== inventory B2-base-waiting at 2026-10-17T17:09:00Z, checkout 1f5bc9cec63f75ae5f76a4e4fb264ed2abed1488
+-- managed runner containers
+-- managed runner volumes
+-- every volume
+16610399d2fc12bb62485316aece5d246359ca99c2503cffe0f6cac83427969c	local	anonymous=
+orbit_pg-socket	local	anonymous=
+-- stack
+orbit-gateway	running	Up 30 seconds (healthy)
+orbit-wiki-worker	running	Up 37 seconds
+orbit-web	running	Up 36 seconds (healthy)
+orbit-pgbackup	running	Up 42 seconds
+orbit-apiserver	running	Up 43 seconds (healthy)
+orbit-docker-channel	running	Up 44 seconds (healthy)
+orbit-postgres	running	Up About a minute (healthy)
+-- managed_runner rows
+a@d8-drill.test | WAITING_CAPACITY | RUNNING | 1 | mr-data-01a14ad6-8147-771c-97e9-70138a14683a |  | MANAGED_RUNNER_CAPACITY_UNAVAILABLE
+-- capacity pool
+pods=2 | pods_reserved=0 | cpu_millis=18000 | memory_bytes=12077248512 | storage_usable_bytes=2558226432 | storage_headroom_bytes=322122548 | durable_bytes_reserved=0

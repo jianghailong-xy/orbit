@@ -9,6 +9,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { orderedIds } from '../common/lock-order';
 import { PrismaService } from '../prisma/prisma.service';
 import { ModuleRef } from '@nestjs/core';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
@@ -23,6 +24,7 @@ export interface LandingDispatcher {
 }
 import {
   MERGE_RECEIPT_MAX_CONFLICTS,
+  MERGE_RECEIPT_RESULTS,
   MergeReceiptRecorder,
   MergeReceiptResult,
   MergeReceiptRow,
@@ -32,6 +34,7 @@ import {
   normalizeSha,
   resultLanded,
 } from './merge-receipt';
+import { assertEngineSession } from './engine-session';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { storeDerivedProjectStatus } from '../projects/project-done-derived';
 import {
@@ -39,6 +42,15 @@ import {
   checkpointLandingGate,
 } from '../projects/task-checkpoint.service';
 import { checkpointMergeReceiptKey } from '../projects/task-checkpoint';
+import { retireCandidatesLandedByReceipt } from '../projects/project-promotion.service';
+import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
+
+/**
+ * The sessions a landing clears the merge recovery of (S3 of the merge-recovery repair loop): it still holds a
+ * recovery or its action, and no merge or check is in flight — that operation's result is what settles it.
+ */
+const HOLDS_LANDED_RECOVERY = Prisma.sql`("merge_recovery" IS NOT NULL OR "merge_recovery_action" IS NOT NULL)
+   AND "merge_status" IS DISTINCT FROM 'pending'`;
 
 export interface RecordMergeReceiptInput {
   result: MergeReceiptResult;
@@ -307,12 +319,19 @@ export class MergeReceiptService {
     recordedBy: MergeReceiptRecorder,
     tx?: Prisma.TransactionClient,
   ): Promise<{ receipt: ReturnType<typeof mergeReceiptRow>; created: boolean }> {
+    // The closed set a door may record, said here as well as by the DTO now that the table admits a
+    // fifth: MATCHED_BY_CONTENT is written by the owner's Done alone, from a check that found it (0432).
+    if (!(MERGE_RECEIPT_RESULTS as readonly string[]).includes(input.result)) {
+      throw new BadRequestException(`result must be one of ${MERGE_RECEIPT_RESULTS.join(', ')}`);
+    }
     const run = async (db: Prisma.TransactionClient) => {
       const session = await db.session.findFirst({
         where: { id: sessionId, ownerId },
-        select: { id: true, branch: true, taskId: true, mergeStatus: true, task: { select: { projectId: true } } },
+        select: { id: true, branch: true, taskId: true, mergeStatus: true, sessionKind: true, task: { select: { projectId: true } } },
       });
       if (!session) throw new NotFoundException('session not found');
+      // A landing session has no branch of its own to record a merge against (§2.9 LS6).
+      assertEngineSession(session);
 
       const sourceBranch = (input.sourceBranch ?? session.branch ?? '').trim();
       const targetBranch = (input.targetBranch ?? '').trim();
@@ -407,6 +426,11 @@ export class MergeReceiptService {
         where: checkpointId ? { checkpointId, idempotencyKey } : { sessionId, idempotencyKey },
       });
       if (existing) {
+        // A replay ends what the first recording would have ended (M-T13), so a candidate left
+        // standing beside this receipt — by a build older than the rule — is retired by recording
+        // the same merge again. Only candidates older than the receipt: a replay never answers a
+        // question asked after the merge.
+        await retireCandidatesLandedByReceipt(db, existing);
         return { receipt: mergeReceiptRow(existing as unknown as MergeReceiptRow), created: false };
       }
 
@@ -444,6 +468,10 @@ export class MergeReceiptService {
       // runner echoes back, and overwriting it here would let a receipt cancel a merge that is
       // still running. The receipt is recorded either way — the durable half never depends on
       // whether the transient half could be updated.
+      //
+      // A landing also ends the merge recovery the session was holding, in this same write: the
+      // work it was recovering is in, and a recovery left behind keeps asking for it (S3 of the
+      // merge-recovery repair loop). The fence above keeps a check in flight its own.
       if (session.mergeStatus !== 'pending') {
         const landed = resultLanded(input.result);
         await db.session.update({
@@ -453,10 +481,16 @@ export class MergeReceiptService {
             mergeTarget: targetBranch,
             mergeError: landed ? null : (MergeReceiptService.errorText(input) ?? null),
             mergedAt: landed ? created.createdAt : null,
-            ...(landed ? { branchMerged: true, mergedSourceSha: sourceSha } : {}),
+            ...(landed ? {
+              branchMerged: true, mergedSourceSha: sourceSha, mergeRecovery: Prisma.DbNull, mergeRecoveryAction: null,
+            } : {}),
           },
         });
       }
+
+      // §3.3 M-T13: a merge made outside the merge card answers the candidate that was offering
+      // this branch, so the card stops asking — in the transaction that recorded it.
+      await retireCandidatesLandedByReceipt(db, created);
 
       return { receipt: mergeReceiptRow(created as unknown as MergeReceiptRow), created: true };
     };
@@ -479,6 +513,15 @@ export class MergeReceiptService {
     // whose response was lost is in, and the first attempt's delivery is the one that may have been
     // lost with it. Re-deriving a fact nothing has moved answers ALREADY_AWAKE and costs a read.
     await this.deliverProjectFactsAfterCommit(recorded.receipt.projectId, recorded.receipt.taskId);
+    // §2.9 LS3 / errata E5: a landed receipt is the task segment's landing fact, whichever door
+    // recorded it — including the replay of one already recorded, which is what retires a candidate
+    // an older build left standing (M-T13). Its own transaction, after the receipt committed.
+    await settleTaskSegmentAfterReceipt(this.prisma, {
+      taskId: recorded.receipt.taskId,
+      projectId: recorded.receipt.projectId,
+      result: recorded.receipt.result,
+    }).catch((error) => this.logger.warn(
+      `landing settlement after receipt ${recorded.receipt.id} failed: ${(error as Error)?.message ?? error}`));
     return recorded;
   }
 
@@ -573,6 +616,21 @@ export class MergeReceiptService {
       ],
       skipDuplicates: true,
     });
+    // §3.3 M-T13, as `record` does it: the Merge button put this branch on its target, so a
+    // candidate offering the same branch there is answered. Only a landed merge of a project's task
+    // can answer one; read back by the key the row was written under, so a redelivered result is
+    // judged by the time of the first one.
+    if (args.projectId && args.taskId && resultLanded(args.result)) {
+      const recorded = await tx.sessionMergeReceipt.findFirst({
+        where: args.checkpointId
+          ? { checkpointId: args.checkpointId, idempotencyKey }
+          : { sessionId: args.sessionId, idempotencyKey },
+        select: {
+          projectId: true, taskId: true, result: true, sourceBranch: true, targetBranch: true, createdAt: true,
+        },
+      });
+      if (recorded) await retireCandidatesLandedByReceipt(tx, recorded);
+    }
   }
 
   /**
@@ -614,6 +672,16 @@ export class MergeReceiptService {
        *  (integration contract §3.3 M-T11). Written into the receipt's `detail` so the ledger itself
        *  says which merges a person made and which the platform made on its own. */
       confirmedAutomatically?: boolean;
+      /**
+       * J12's repair: this receipt is for a landing whose push outcome the platform could not read
+       * at the time (ERROR · PUSH_OUTCOME_UNKNOWN) and which a later job found on the target. It is
+       * written against THAT job — the `jobId` above — whose terminal row is never rewritten (J4),
+       * so the marker is what makes the repair visible in the ledger rather than looking like an
+       * ordinary report.
+       */
+      recoveredUnknownPush?: boolean;
+      /** The sessions `lockLandedRecoveries` took for this result, when it took them: the clear is limited to those. */
+      recoveryHeld?: ReadonlySet<string>;
     },
   ): Promise<string[]> {
     const sourceSha = normalizeSha(args.sourceSha, 'sourceSha');
@@ -624,6 +692,8 @@ export class MergeReceiptService {
     if (result === 'MERGED' && !targetShaAfter) {
       throw new BadRequestException('a landed integration must name where the target ended up');
     }
+    // The landing ends the merge recovery its session was holding, before the receipt that says so.
+    await MergeReceiptService.clearLandedRecoveries(tx, [args.sessionId], args.recoveryHeld);
     const created = await tx.sessionMergeReceipt.createManyAndReturn({
       data: [{
         ownerId: args.ownerId,
@@ -646,6 +716,7 @@ export class MergeReceiptService {
           ...(args.landedTreeSha ? { landedTreeSha: args.landedTreeSha } : {}),
           ...(args.mainSyncSha ? { mainSyncSha: args.mainSyncSha } : {}),
           ...(args.confirmedAutomatically ? { confirmedAutomatically: true } : {}),
+          ...(args.recoveredUnknownPush ? { recoveredUnknownPush: true } : {}),
         } as Prisma.InputJsonValue,
         idempotencyKey: mergeReceiptIdempotencyKey({
           sessionId: args.sessionId,
@@ -658,6 +729,83 @@ export class MergeReceiptService {
       select: { id: true },
     });
     return created.map((row) => row.id);
+  }
+
+  /**
+   * A landing ends the merge recovery each of these sessions was holding (S3 of the merge-recovery repair
+   * loop): the work it was recovering is in, and a recovery left behind keeps asking the owner to sync and
+   * repair a branch that has landed. For the writers that record a landing without writing the session row
+   * — an integration landing's receipts — in their transaction, before those receipts.
+   *
+   * A session with a merge or check in flight keeps its recovery: that operation's result is what settles
+   * it, and clearing its action under it would turn a preview's answer into a receipt. The rows are locked in
+   * id order in one statement before the one write of each (I3), so a promotion that lands several sessions
+   * takes them as every other multi-session writer does; one with no recovery is neither locked nor written.
+   *
+   * With `held`, only the sessions in it are cleared: the ones `lockLandedRecoveries` already took for this
+   * result, so the lock here is one the transaction holds.
+   */
+  static async clearLandedRecoveries(
+    tx: Prisma.TransactionClient,
+    sessionIds: ReadonlyArray<string | null | undefined>,
+    held?: ReadonlySet<string>,
+  ): Promise<void> {
+    const ids = orderedIds(sessionIds).filter((id) => held === undefined || held.has(id));
+    if (ids.length === 0) return;
+    const recovering = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id" FROM "session"
+       WHERE "id" = ANY(${ids}::uuid[])
+         AND ${HOLDS_LANDED_RECOVERY}
+       ORDER BY "id"
+       FOR NO KEY UPDATE`);
+    if (recovering.length === 0) return;
+    await tx.session.updateMany({
+      where: { id: { in: recovering.map((row) => row.id) } },
+      data: { mergeRecovery: Prisma.DbNull, mergeRecoveryAction: null },
+    });
+  }
+
+  /**
+   * The sessions a landing result may clear the merge recovery of, locked before anything else that result needs
+   * of a lower rank than its receipts (`common/lock-order.ts`, rank 30). `applyIntegrationJobResult` takes them for
+   * a stopped LAND_TASK, ahead of the project binding (rank 55), and for a result that writes J12's receipts beside
+   * its own or a promotion's, ahead of the first of them. The `clearLandedRecoveries` beside each receipt then only
+   * takes again a lock this one holds.
+   *
+   * Answers with the sessions taken FOR NO KEY UPDATE, those that match `HOLDS_LANDED_RECOVERY`, and the result's
+   * clears are limited to them. A session that starts to match only after this read — a merge result committing in
+   * between — would otherwise be locked late. It keeps the recovery that merge result wrote, which is where it would
+   * be had the merge result committed after this landing.
+   *
+   * Without `keyShareTheRest`, one statement over the matching sessions, in id order. With it, every session is
+   * taken one at a time in id order, at the mode it ends with: FOR NO KEY UPDATE when it matches, otherwise FOR KEY
+   * SHARE, the mode its receipt's foreign key takes anyway.
+   */
+  static async lockLandedRecoveries(
+    tx: Prisma.TransactionClient,
+    sessionIds: ReadonlyArray<string | null | undefined>,
+    keyShareTheRest = false,
+  ): Promise<Set<string>> {
+    const ids = orderedIds(sessionIds);
+    const held = new Set<string>();
+    if (ids.length === 0) return held;
+    if (!keyShareTheRest) {
+      const recovering = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id" FROM "session"
+         WHERE "id" = ANY(${ids}::uuid[])
+           AND ${HOLDS_LANDED_RECOVERY}
+         ORDER BY "id"
+         FOR NO KEY UPDATE`);
+      for (const row of recovering) held.add(row.id);
+      return held;
+    }
+    for (const id of ids) {
+      const [recovering] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id" FROM "session" WHERE "id" = ${id}::uuid AND ${HOLDS_LANDED_RECOVERY} FOR NO KEY UPDATE`);
+      if (recovering) held.add(id);
+      else await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "session" WHERE "id" = ${id}::uuid FOR KEY SHARE`);
+    }
+    return held;
   }
 
   private static errorText(input: RecordMergeReceiptInput): string | null {

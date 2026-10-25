@@ -1,0 +1,40 @@
+== Scenario 3: a session that has talked on Work moves to Default and goes on ==
+session before: 34cSuuxCqlKDnP5r7pEV8 {"status":"AWAITING_INPUT","kimiAccount":null,"kimiAccountPinned":false,"workspaceKimiAccount":"a70fa033","runtimeSessionId":"session_629d05ad-d1bf-461f-b788-94e261ed9c46"}
+signed in on http://127.0.0.1:4741 as owner@kimi-int.test
+web → POST /api/sessions/34cSuuxCqlKDnP5r7pEV8/turns/current-work-routing {"clientTurnId":"21046cfe-6fe6-44c3-91ba-4dbda9a30fa8","content":"Scenario 3, turn 2: still on Work.","intent":"NEXT_TURN"}
+web ← 201 /api/sessions/34cSuuxCqlKDnP5r7pEV8/turns/current-work-routing {"turnId":"34cSv9zzVi7r8abPu3wiq","seq":2,"kind":"message","placement":"accepted","turnPublicId":"34cSv9zzVi7r8abPu3wiq"}
+shot /var/tmp/kimi-accounts-stack/shots/3-switch-to-default/3a-two-turns-on-work.png
+Provider submenu rows: ["Kimi","Default","Work"]
+shot /var/tmp/kimi-accounts-stack/shots/3-switch-to-default/3b-provider-menu.png
+web → PATCH /api/sessions/34cSuuxCqlKDnP5r7pEV8/account {"account":"default"}
+web ← 200 /api/sessions/34cSuuxCqlKDnP5r7pEV8/account {"ok":true}
+session after the switch: {"status":"AWAITING_INPUT","kimiAccount":"default","kimiAccountPinned":true,"workspaceKimiAccount":"a70fa033","runtimeSessionId":"session_629d05ad-d1bf-461f-b788-94e261ed9c46"}
+web → POST /api/sessions/34cSuuxCqlKDnP5r7pEV8/turns/current-work-routing {"clientTurnId":"01c40526-28d7-4d4d-9eef-fc7c2e916722","content":"Scenario 3, turn 3: now on Default — what have I said so far?","intent":"NEXT_TURN"}
+web ← 201 /api/sessions/34cSuuxCqlKDnP5r7pEV8/turns/current-work-routing {"turnId":"34cSvN97cLKKB0W0NsFg0","seq":4,"kind":"message","placement":"accepted","turnPublicId":"34cSvN97cLKKB0W0NsFg0"}
+shot /var/tmp/kimi-accounts-stack/shots/3-switch-to-default/3c-continued-on-default.png
+last reply as shown:
+[fake kimi 2.1.1] account default — KIMI_CODE_HOME /var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/runs/01a11c82-5a34-763d-a293-e9d8f1d35aba/kimi-home → sessions in /var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code session session_629d05ad-d1bf-461f-b788-94e261ed9c46, turn 3. You said: Scenario 3, turn 3: now on Default — what have I said so far? Earlier turns of this conversation I can read in this account:
+
+Scenario 2: which Kimi account is this session on?
+Scenario 3, turn 2: still on Work.
+fake kimi, this session since the scenario began: [{"at":"2026-10-08T17:14:37.002Z","event":"acp.prompt","account":"a70fa033","accountHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033","sessionsLink":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033/sessions","sessionId":"session_629d05ad-d1bf-461f-b788-94e261ed9c46","turn":2,"earlierTurns":1},{"at":"2026-10-08T17:14:45.503Z","event":"acp.start","account":"default","accountHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code","sessionsLink":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code/sessions"},{"at":"2026-10-08T17:14:45.513Z","event":"acp.session.resume","account":"default","accountHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code","sessionsLink":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code/sessions","sessionId":"session_629d05ad-d1bf-461f-b788-94e261ed9c46","turnsFound":2},{"at":"2026-10-08T17:14:45.611Z","event":"acp.prompt","account":"default","accountHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code","sessionsLink":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code/sessions","sessionId":"session_629d05ad-d1bf-461f-b788-94e261ed9c46","turn":3,"earlierTurns":2}]
+runner log:
+[orbit-runner 2026-10-08T17:14:45.448Z] kimi conversation for session_629d05ad-d1bf-461f-b788-94e261ed9c46 carried from account a70fa033 (/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033) to default (/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code)
+kimi session session_629d05ad-d1bf-461f-b788-94e261ed9c46 in Default's home:
+/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code/sessions/wd_work_9adccb3b6652/session_629d05ad-d1bf-461f-b788-94e261ed9c46
+/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code/sessions/.index-dirty/session_629d05ad-d1bf-461f-b788-94e261ed9c46.1791479685448
+/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code/sessions/.index-dirty/session_629d05ad-d1bf-461f-b788-94e261ed9c46.1791479685611
+in Work's home:
+/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033/sessions/wd_work_9adccb3b6652/session_629d05ad-d1bf-461f-b788-94e261ed9c46
+/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033/sessions/.index-dirty/session_629d05ad-d1bf-461f-b788-94e261ed9c46.1791479667508
+/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033/sessions/.index-dirty/session_629d05ad-d1bf-461f-b788-94e261ed9c46.1791479677002
+/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033/sessions/.index-dirty/session_629d05ad-d1bf-461f-b788-94e261ed9c46.1791479667445
+Default's session_index.jsonl:
+{"sessionId":"session_629d05ad-d1bf-461f-b788-94e261ed9c46","sessionDir":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code/sessions/wd_work_9adccb3b6652/session_629d05ad-d1bf-461f-b788-94e261ed9c46","workDir":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/work"}
+PASS the web switched the session with PATCH /sessions/:id/account {account:"default"}
+PASS the runner carried the conversation from Work to Default
+PASS kimi resumed the same session id on Default with its two turns
+PASS the reply on Default came from account default and read both earlier turns
+PASS the reply shown lists the turns said on Work
+PASS Default's home now holds the conversation (Work keeps its copy)
+SCENARIO 3 PASS

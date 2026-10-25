@@ -18,6 +18,7 @@ import {
   FolderOpenOutlined,
   GlobalOutlined,
   LoadingOutlined,
+  MessageFilled,
   MinusCircleOutlined,
   PaperClipOutlined,
   PartitionOutlined,
@@ -27,14 +28,20 @@ import {
   ToolOutlined,
   WarningFilled,
 } from '@ant-design/icons';
-import { Image } from 'antd';
+import { Image } from './ui/Image';
+import { ImagePreview, type ImagePreviewItem } from './ui/ImagePreview';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { formatThinkingDuration, formatThinkingSize } from '../lib/thinkingDraft';
+import { checkDuration } from '../lib/checkDuration';
+import { quotaWindowKind } from '../lib/quotaWindow';
 import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import {
+  AgentProvider,
   apiErrorRetryAt,
+  askedQuestions,
   CONTINUE_MESSAGE,
+  ENGINE_CLI_NAMES,
   isApiErrorText,
   isAuthErrorText,
   isBenignEngineStderr,
@@ -44,8 +51,15 @@ import {
   parseQuotaResetAt,
   isAsyncAgentLaunchAck,
   progressBadge,
+  QUESTION_RECORD_COPY,
+  questionAnswerLine,
+  questionLead,
+  questionOutcome,
+  questionReplyLine,
   workflowLaunchReceipt,
   workflowTitle,
+  type AskedQuestion,
+  type QuestionOutcome,
   type TaskProgress,
 } from '@orbit/shared';
 import type { LoginEngine } from '@orbit/shared';
@@ -56,9 +70,9 @@ import {
   describeNote,
   splitRecordedNote,
 } from '../lib/deliveredMessage';
-import { steerDeliveryState } from '../lib/steerDelivery';
+import { offersSteerWithdraw, steerDeliveryState, WITHDRAWN_DELIVERY } from '../lib/steerDelivery';
 import { BatchGraph } from './BatchGraph';
-import { buildBatchGraph, describeShape, shouldDraw, type BatchTaskInput } from '../lib/batchGraph';
+import { buildBatchGraph, describeShape, type BatchTaskInput } from '../lib/batchGraph';
 import { RunnerSignIn } from './RunnerSignIn';
 import { AppLink } from './AppLink';
 import { SameOriginLink } from './SameOriginLink';
@@ -77,6 +91,9 @@ import { parseBackgroundWake } from '../lib/backgroundWake';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
 import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
+import { parseOwnerAnswer } from '../lib/ownerAnswer';
+import type { OwnerAnswerCard as OwnerAnswer } from '@orbit/shared';
+import { OwnerAnswerLine } from './OwnerAnswerLine';
 import { parseTaskStartCard } from '../lib/taskStartCard';
 import type { TaskStartCard as TaskStart } from '@orbit/shared';
 import { TaskStartCard } from './TaskStartCard';
@@ -172,17 +189,22 @@ export const EventFullCtx = createContext<((seq: number) => Promise<any>) | null
  * What a sign-in failure card should tell this session's viewer, and how to act on it. The
  * remedy depends on where the credentials live, which the transcript can't know: a built-in
  * provider runs on the runner's own runtime login (fix it on that machine), any
- * other slug is a configured API key (fix it in Providers). WorkspaceView supplies this; the
+ * other slug is a configured API key (fix it in Infrastructure). WorkspaceView supplies this; the
  * shared/public page and the static export leave it null, so the card there degrades to the
  * diagnosis alone — a logged-out viewer can neither sign that runner in nor retry.
  */
 export interface AuthErrorHelp {
-  /** Session's provider slug — a built-in runtime or a configured provider. */
+  /** Session's provider slug — an engine's own sign-in on the runner, or a key or pool. */
   provider: string;
+  /** The session's key as a sentence names it, lowercase — `the DeepSeek key “DeepSeek 2”`: its
+   *  vendor and the name its owner gave it, never its slug or an engine (one key runs on several).
+   *  Absent when the session runs on no key this account still has. */
+  keyName?: string;
   /** Runner display name, so the card names the machine to fix. */
   runnerName?: string;
   /** Runner id, which unlocks signing in from the browser instead of on that machine. */
   runnerId?: string;
+  /** The engine the session runs on — its own, fixed for its life. */
   runtime?: string;
   googleLogin?: 'available' | 'needs_update' | 'unsupported_platform';
   runnerVersion?: string | null;
@@ -201,7 +223,16 @@ export interface AuthErrorHelp {
   retryDisabled?: boolean;
   /** What that re-send would say, so the card can show it rather than make the user trust it. */
   retryText?: string;
-  /** Open Providers — the other way back in, and the only one when the rejected credential is
+  /**
+   * Go and find out what it would say, when what the card holds is not the reader's own to send.
+   * Another session's words are re-sent by the server's own chooser — see `AutoRetryHelp`'s, whose
+   * rule and reason this is a second instance of — and only its answer can promise what the press
+   * carries, or that it carries anything at all.
+   */
+  onNeedRetryText?: () => void;
+  /** Whether the window holds words of the reader's to send, like `AutoRetryHelp`'s. */
+  retryWordsAreTheReaders?: boolean;
+  /** Open Infrastructure — the other way back in, and the only one when the rejected credential is
    *  a configured key rather than a login on the runner. */
   onUseApiKey?: () => void;
 }
@@ -211,8 +242,9 @@ export type AntigravityRepair = 'needsKey' | 'updateRunner' | 'notInstalled';
 
 /**
  * A DeepSeek Harness session that could not run, as the remedy rather than the runner's sentence.
- * Its credential is a configured key, never a sign-in on the runner, so every key problem is fixed
- * on that provider's own page; everything else is about the machine (dshRepair says which).
+ * Its credential is a DeepSeek key — the same key Claude Code and OpenCode run on — never a sign-in on
+ * the runner, so every key problem is fixed on that key's own page; everything else is about the
+ * machine (dshRepair says which).
  */
 export function DshRepairCard({ repair, help, seq }: { repair: DshRepair; help: AuthErrorHelp; seq?: number }) {
   const machine = help.runnerName || 'this runner';
@@ -223,7 +255,7 @@ export function DshRepairCard({ repair, help, seq }: { repair: DshRepair; help: 
         <WarningFilled className="chat-authfix-icon" />
         <div className="chat-authfix-title">
           {repair === 'needsKey'
-            ? 'DeepSeek Harness needs an API key'
+            ? 'DeepSeek Harness needs a DeepSeek key'
             : repair === 'invalidKey'
               ? 'DeepSeek rejected this API key'
               : repair === 'updateRunner'
@@ -235,13 +267,13 @@ export function DshRepairCard({ repair, help, seq }: { repair: DshRepair; help: 
       </div>
       <div className="chat-authfix-desc">
         {repair === 'needsKey'
-          ? 'This session has no DeepSeek Harness key to run on. Add or re-enable the key in Providers, then send your message again.'
+          ? 'This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.'
           : repair === 'invalidKey'
-            ? 'Update the key in Providers, then send your message again. Connecting a key does not check it — the first request does.'
+            ? `Update ${help.keyName ?? 'the DeepSeek key'} in Infrastructure, then send your message again.`
             : repair === 'updateRunner'
               ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}, which predates DeepSeek Harness. The runner updates itself when no session is running on it.`
               : repair === 'notInstalled'
-                ? 'Install it from Providers, then send your message again.'
+                ? 'Install it from Infrastructure, then send your message again.'
                 : 'DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only. Move this work to a runner that can.'}
       </div>
       <div className="chat-authfix-actions">
@@ -290,10 +322,10 @@ export function AntigravityRepairCard({ repair, help, seq }: {
       </div>
       <div className="chat-authfix-desc">
         {repair === 'needsKey'
-          ? 'Sign in with Google on this runner, or connect a Gemini API key in Providers.'
+          ? 'Sign in with Google on this runner, or connect a Gemini API key in Infrastructure.'
           : repair === 'updateRunner'
             ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}; Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then.`
-            : 'Install it from Providers, then send your message again.'}
+            : 'Install it from Infrastructure, then send your message again.'}
       </div>
       {repair === 'needsKey' && help.provider === 'antigravity' && (
         help.googleLogin === 'available' && help.runnerId
@@ -309,7 +341,7 @@ export function AntigravityRepairCard({ repair, help, seq }: {
         ) : (
           <>
             {repair === 'notInstalled' && help.onInstall && <button className="chat-authfix-go" type="button" onClick={help.onInstall} disabled={help.installDisabled}>Install</button>}
-            {help.onOpenProviders && <button className="chat-authfix-retry" type="button" onClick={help.onOpenProviders}>Open in Providers</button>}
+            {help.onOpenProviders && <button className="chat-authfix-retry" type="button" onClick={help.onOpenProviders}>Open in Infrastructure</button>}
           </>
         )}
       </div>
@@ -329,6 +361,22 @@ export function AntigravityRepairCard({ repair, help, seq }: {
 export const UndeliveredCtx = createContext<
   ((text: string, attachments?: readonly TurnAttachmentRef[]) => void) | null
 >(null);
+
+/**
+ * Take back a message sent into the running turn while nothing has read it yet: a steer whose runner
+ * said its engine can drop it unread (`withdrawable` on its user event — claude, whose CLI can take
+ * it out of its queue and says whether it did). The bubble offers it beside its state. `withdrawing`
+ * holds the ones asked for and not yet answered, drawn as "Withdrawing…"; `withdrawn` the ones the
+ * server has confirmed, hidden before the runner's own `withdrawn` delivery reaches this transcript.
+ * WorkspaceView supplies it; a reader who cannot send has nothing to take back, so the shared page
+ * and the static export leave it null.
+ */
+export interface SteerWithdrawHandle {
+  withdraw: (turnId: string, text: string, attachments?: readonly TurnAttachmentRef[]) => void;
+  withdrawing: ReadonlySet<string>;
+  withdrawn: ReadonlySet<string>;
+}
+export const SteerWithdrawCtx = createContext<SteerWithdrawHandle | null>(null);
 
 /**
  * The untrimmed payload of a clipped event, fetched the first time its card is opened (`want`).
@@ -366,23 +414,23 @@ function useFullPayload(seq: number, truncated: boolean | undefined, want: boole
 // slide. When this context is absent (the composer's unsent previews, the static
 // HTML export) ChatImage falls back to its own standalone single-image preview.
 type PreviewRegistry = {
-  register: (key: string, order: number, src: string) => void;
+  register: (key: string, order: number, src: string, alt: string) => void;
   unregister: (key: string) => void;
   open: (key: string) => void;
 };
 const ImagePreviewContext = createContext<PreviewRegistry | null>(null);
 
 function ImagePreviewProvider({ children }: { children: ReactNode }) {
-  const entries = useRef(new Map<string, { order: number; src: string }>());
-  const [state, setState] = useState<{ visible: boolean; current: number; items: string[] }>({
-    visible: false,
+  const entries = useRef(new Map<string, { order: number; item: ImagePreviewItem }>());
+  const [state, setState] = useState<{ open: boolean; current: number; items: ImagePreviewItem[] }>({
+    open: false,
     current: 0,
     items: [],
   });
   const registry = useMemo<PreviewRegistry>(
     () => ({
-      register: (key, order, src) => {
-        entries.current.set(key, { order, src });
+      register: (key, order, src, alt) => {
+        entries.current.set(key, { order, item: { src, alt } });
       },
       unregister: (key) => {
         entries.current.delete(key);
@@ -393,7 +441,7 @@ function ImagePreviewProvider({ children }: { children: ReactNode }) {
         const sorted = [...entries.current.entries()].sort((a, b) => a[1].order - b[1].order);
         const current = sorted.findIndex(([k]) => k === key);
         if (current < 0) return;
-        setState({ visible: true, current, items: sorted.map(([, v]) => v.src) });
+        setState({ open: true, current, items: sorted.map(([, v]) => v.item) });
       },
     }),
     [],
@@ -401,14 +449,13 @@ function ImagePreviewProvider({ children }: { children: ReactNode }) {
   return (
     <ImagePreviewContext.Provider value={registry}>
       {children}
-      <Image.PreviewGroup
+      <ImagePreview
+        group
+        open={state.open}
         items={state.items}
-        preview={{
-          visible: state.visible,
-          current: state.current,
-          onVisibleChange: (v) => setState((s) => ({ ...s, visible: v })),
-          onChange: (current) => setState((s) => ({ ...s, current })),
-        }}
+        current={state.current}
+        onCurrentChange={(current) => setState((s) => ({ ...s, current }))}
+        onClose={() => setState((s) => ({ ...s, open: false }))}
       />
     </ImagePreviewContext.Provider>
   );
@@ -437,8 +484,8 @@ type TextNode = {
   seq: number;
   text: string;
   // Thinking only: how long the stretch took, and how many adjacent blocks were folded into this
-  // one row. Both are known only while it streams (see lib/thinkingDraft) — a reload has neither,
-  // so the row states its size alone.
+  // one row. The duration is the one the runner stored on each block (see lib/thinkingDraft); a
+  // block an older runner stored has none, and its row states its size alone.
   thinkingMs?: number;
   blocks?: number;
   // Wall-clock of the source event — carried for user turns to show a relative
@@ -461,6 +508,11 @@ type TextNode = {
   // got is the only thing that reports it, and the states above are shown for it alone. On
   // the event itself so a reload still knows which bubble that was.
   steer?: boolean;
+  // The runner's word, on a steer's own `user` event, that its engine can drop it unread — so the
+  // bubble may offer to take it back while it waits (lib/steerDelivery `offersSteerWithdraw`).
+  withdrawable?: boolean;
+  // The conversation turn a user message was filed under: what a withdrawal names it by.
+  turnId?: string;
   // A `!cmd` still on the queue (`queuedTurnEvent`): drawn verbatim as the command it will run, since
   // Markdown would mangle its shell syntax. No echo carries it — the runner runs one as a Bash card.
   shell?: boolean;
@@ -472,6 +524,11 @@ type TextNode = {
   // instead of a bubble, and the text below is the paragraph the agent was handed, folded. NOT the
   // `delivery` above, which is how far a message got on its way into the engine.
   itemCard?: OpenItemDelivery;
+  // The owner's answer handed to the coordinator, when the control plane recorded which item and when
+  // this conversation was told beside the echo (`ownerAnswer`, lib/ownerAnswer). Nobody typed it
+  // either: drawn as one line, `Sent to the coordinator · 08:29`, that opens to the words the agent
+  // read.
+  ownerAnswer?: OwnerAnswer;
   // The turn that starts a task's run, when the control plane recorded the task its brief was built
   // from beside the echo (`taskStart`, lib/taskStartCard), or the same snapshot carried onto an
   // exact retry. Drawn as the task instead of a bubble, with `text` — the brief written for the
@@ -491,9 +548,18 @@ type TextNode = {
   // the run (lib/confirmationReviewTurns). Orbit's turns, drawn as their cards.
   reviewRequest?: ConfirmationReviewRequestCard;
   reviewReturn?: ConfirmationReturnCard;
+  // This message opens a turn, so the turn's head row (TurnHead) is drawn under it and over
+  // whatever the turn goes on to write — with the `turn_end` that closed the turn once it has one.
+  // Only a top-level message opens one: a steer joins the turn already running, and a message
+  // inside a sub-workspace is that sub-agent's, which never gets a `turn_end` of its own.
+  turnHead?: { endTs?: string };
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
-type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
+// `runnerRestart`: nobody pressed Stop — the runner cut the turn short while restarting.
+type MarkerNode = { kind: 'interrupt'; seq: number; runnerRestart?: boolean };
+// The end of a finished turn (TurnFoot): when it ended, and the reply its copy button hands back —
+// the turn's last top-level assistant text, absent when it wrote none inside the loaded window.
+type DividerNode = { kind: 'divider'; seq: number; ts?: string; reply?: string };
 // `repeats` counts the identical lines folded into this one (see `engineStderr`); absent or 1
 // means the line was seen once.
 type ErrorNode = { kind: 'error'; seq: number; message: string; repeats?: number };
@@ -536,6 +602,7 @@ type Node =
   | TextNode
   | ResultNode
   | MarkerNode
+  | DividerNode
   | ErrorNode
   | DiagnosticNode
   | AuthErrorNode
@@ -737,7 +804,74 @@ export const TURN_ENDED_WITHOUT_REPLY = 'This turn ended without a reply — sen
 // `completed` (codex/kimi) — and anything else is a turn that did not.
 const TURN_FINISHED_SUBTYPES = new Set(['success', 'completed']);
 
+/**
+ * A message the reader sent into the running turn that the engine has not read yet. It is not part
+ * of the conversation until it is read, so the transcript leaves it out and the tray above the
+ * composer holds it instead (WorkspaceView's PendingTray, which also offers the way to take it
+ * back). Once its delivery settles it is drawn here, where it settled: read into the turn after the
+ * output that came before the reading, or not delivered where that became known.
+ */
+export interface UnreadSteer {
+  turnId: string;
+  seq: number;
+  ts?: string;
+  /** The reader's words: what was typed, without what delivery appended to it. */
+  text: string;
+  /** This tab's local previews of the images it was sent with (composer object URLs). */
+  images?: TurnImage[];
+  attachmentRefs?: TurnAttachmentRef[];
+  /** The latest delivery state (lib/steerDelivery): absent, `enqueued`, `written` or `requeued`. */
+  delivery?: string;
+  withdrawable?: boolean;
+}
+
+// The deliveries a steer waits for: it was read into the turn, or it provably or possibly never was.
+// `withdrawn` ends the wait too, with nothing to draw.
+const SETTLED_STEER_DELIVERY = new Set(['acknowledged', 'failed', 'unconfirmed']);
+
+// Words the reader typed and nothing else's (lib/queuedTurnRestore `returnsToComposer`, read off the
+// echo): not another session's message, not a turn Orbit drew as its card, not a wake. Only these
+// wait in the tray; a steer Orbit filed (a job's exit, a request's outcome) stays where its echo lands.
+const readersOwnWords = (node: TextNode): boolean =>
+  !node.sessionMessage
+  && !node.sessionReplies
+  && !node.itemCard
+  && !node.ownerAnswer
+  && !node.taskStart
+  && !node.startedCard
+  && !node.reviewRequest
+  && !node.reviewReturn
+  && !parseWatchWake(node.text)
+  && !parseBackgroundWake(node.note);
+
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
+  return buildTranscript(events, turnImages).nodes;
+}
+
+// The last build, for the second reader of the same events: the Transcript draws the nodes and the
+// tray reads the unread steers, both from WorkspaceView's one `transcriptEvents`.
+const lastBuild = new WeakMap<
+  RunEvent[],
+  { turnImages?: Record<string, TurnImage[]>; built: { nodes: Node[]; unread: UnreadSteer[] } }
+>();
+
+function transcriptOf(events: RunEvent[], turnImages?: Record<string, TurnImage[]>) {
+  const cached = lastBuild.get(events);
+  if (cached && cached.turnImages === turnImages) return cached.built;
+  const built = buildTranscript(events, turnImages);
+  lastBuild.set(events, { turnImages, built });
+  return built;
+}
+
+/** The reader's steers these events leave unread, in the order they were sent. */
+export function unreadSteersOf(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): UnreadSteer[] {
+  return transcriptOf(events, turnImages).unread;
+}
+
+function buildTranscript(
+  events: RunEvent[],
+  turnImages?: Record<string, TurnImage[]>,
+): { nodes: Node[]; unread: UnreadSteer[] } {
   const roots: Node[] = [];
   const byId = new Map<string, ToolNode>();
   // Stderr failures are emitted without a tool_use id by some runners. Keep the unresolved calls
@@ -936,6 +1070,15 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   // User bubbles by turn, so a delivery report that lands after one can amend it. A
   // message is never re-rendered as sent by a later event — only ever as failed.
   const userByTurn = new Map<string, TextNode>();
+  // The reader's steers not drawn yet, by turn: each waits here, with the parent its echo named,
+  // until its delivery settles and it is drawn at that point (UnreadSteer).
+  const unreadSteers = new Map<string, { node: TextNode; parent: string | undefined }>();
+  const drawSettledSteer = (turnId: string) => {
+    const waiting = unreadSteers.get(turnId);
+    if (!waiting) return;
+    unreadSteers.delete(turnId);
+    into(waiting.parent).push(waiting.node);
+  };
   // Whether this turn has already put a row on screen that accounts for how it went: a reply, the
   // runner's own error (or the sign-in / auto-retry card it earns), or the user's own interrupt.
   // `turn_end` speaks only when none of them did — in the recorded corpus every codex `failed`
@@ -949,6 +1092,13 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   // else, so letting stderr stand as the turn's account would leave this fix doing nothing for the
   // very case that asked for it.
   let turnAccountedFor = false;
+  // The turn's last top-level assistant text so far: what its foot copies once `turn_end` arrives.
+  // Narration between tool calls is overwritten by whatever follows it, so what is left when the
+  // turn ends is the answer the turn ended on.
+  let turnReply: string | undefined;
+  // The `turnHead` the turn now open is drawn from — the message that opened it, until its
+  // `turn_end` closes it. What says how long that turn worked once the end arrives.
+  let turnHead: TextNode['turnHead'];
   for (const ev of events) {
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
@@ -991,6 +1141,8 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // lib/openItemDelivery). Read off the event rather than out of the text, so a delivery that
         // carries no card keeps the reading it has always had.
         const itemCard = parseOpenItemDelivery(p) ?? undefined;
+        // And for the owner's answer handed to the coordinator (lib/ownerAnswer).
+        const ownerAnswer = parseOwnerAnswer(p) ?? undefined;
         // The same for a task run's opening turn (lib/taskStartCard): use the payload, or the
         // opening payload's snapshot for an exact retry, never infer a new card from text alone.
         const text = recorded ? recorded.text : p.text ? String(p.text) : '';
@@ -1005,6 +1157,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
+          priorSteer.withdrawable = undefined;
           priorSteer.delivery = typeof p.delivery === 'string' ? p.delivery : undefined;
           priorSteer.deliveryReason = undefined;
           if (p.text) {
@@ -1012,6 +1165,15 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             priorSteer.note = recorded?.note;
           }
           if (refs && refs.length) priorSteer.attachmentRefs = refs;
+          // Still in the tray — the engine never read it — so it is drawn now, where it arrived as
+          // the message that opens a turn of its own.
+          if (unreadSteers.has(ev.turnId!)) {
+            if (!parent) {
+              priorSteer.turnHead = {};
+              turnHead = priorSteer.turnHead;
+            }
+            drawSettledSteer(ev.turnId!);
+          }
           break;
         }
         if (p.text || (imgs && imgs.length) || (refs && refs.length)) {
@@ -1021,6 +1183,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             text,
             note: recorded?.note,
             itemCard,
+            ownerAnswer,
             taskStart,
             startedCard,
             sessionMessage,
@@ -1032,13 +1195,29 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             attachmentRefs: refs,
             delivery: typeof p.delivery === 'string' ? p.delivery : undefined,
             steer: p.steer === true,
+            withdrawable: p.withdrawable === true ? true : undefined,
+            turnId: ev.turnId ?? undefined,
             shell: p.shell === true,
           };
           if (taskStart) {
             taskStartByParent.set(parentKey(parent), { text, card: taskStart });
           }
           if (ev.turnId) userByTurn.set(ev.turnId, node);
-          into(parent).push(node);
+          if (!parent && !node.steer) {
+            node.turnHead = {};
+            turnHead = node.turnHead;
+          }
+          if (
+            node.steer
+            && ev.turnId
+            && node.delivery !== WITHDRAWN_DELIVERY
+            && !SETTLED_STEER_DELIVERY.has(node.delivery ?? '')
+            && readersOwnWords(node)
+          ) {
+            unreadSteers.set(ev.turnId, { node, parent });
+          } else {
+            into(parent).push(node);
+          }
         }
         break;
       }
@@ -1051,6 +1230,10 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         if (node && typeof p.delivery === 'string') {
           node.delivery = p.delivery;
           node.deliveryReason = typeof p.reason === 'string' ? p.reason : undefined;
+          // A steer waiting in the tray leaves it here: drawn at the point it was read (or found
+          // undelivered), or — dropped unread by the engine — never drawn at all.
+          if (turnId && p.delivery === WITHDRAWN_DELIVERY) unreadSteers.delete(turnId);
+          else if (turnId && SETTLED_STEER_DELIVERY.has(p.delivery)) drawSettledSteer(turnId);
         }
         break;
       }
@@ -1073,7 +1256,11 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           else if (isUsageLimitErrorText(text)) autoRetry(parent, ev.seq, text, 'quota');
           else if (isRetryableApiErrorText(text)) autoRetry(parent, ev.seq, text, 'apiError');
           else if (isApiErrorText(text)) into(parent).push({ kind: 'error', seq: ev.seq, message: text });
-          else into(parent).push({ kind: 'assistant', seq: ev.seq, text });
+          else {
+            const siblings = into(parent);
+            siblings.push({ kind: 'assistant', seq: ev.seq, text });
+            if (siblings === roots) turnReply = text;
+          }
         }
         break;
       case 'thinking': {
@@ -1145,18 +1332,28 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // other way.
         const subtype = typeof p.subtype === 'string' ? p.subtype : '';
         const failed = subtype !== '' && !TURN_FINISHED_SUBTYPES.has(subtype) && !turnAccountedFor;
+        // However the turn went, it was working until now: the head row states that span. A
+        // failure is still an end — the answer above the error line took that long to not arrive.
+        if (turnHead) {
+          turnHead.endTs = ev.ts;
+          turnHead = undefined;
+        }
         if (failed) armTaskStartRetry(parent);
         roots.push(
           failed
             ? { kind: 'error', seq: ev.seq, message: TURN_ENDED_WITHOUT_REPLY }
-            : { kind: 'divider', seq: ev.seq },
+            : { kind: 'divider', seq: ev.seq, ts: ev.ts, reply: turnReply },
         );
         turnAccountedFor = false;
+        turnReply = undefined;
         break;
       }
       case 'interrupt':
         turnAccountedFor = true;
-        into(parent).push({ kind: 'interrupt', seq: ev.seq });
+        // A Stop's interrupt carries its `requestId` (or nothing, from engines without one); the
+        // runner marks a turn it tore down on its way out with `reason: runner_restart`
+        // (runner-go's watchShutdownDrain).
+        into(parent).push({ kind: 'interrupt', seq: ev.seq, runnerRestart: p.reason === 'runner_restart' });
         break;
       case 'error': {
         // The runner reports a signed-out engine as an error event rather than assistant text
@@ -1216,7 +1413,17 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         break;
     }
   }
-  return roots;
+  const unread = [...unreadSteers.values()].map(({ node }): UnreadSteer => ({
+    turnId: node.turnId!,
+    seq: node.seq,
+    ts: node.ts,
+    text: node.text,
+    images: node.images,
+    attachmentRefs: node.attachmentRefs,
+    delivery: node.delivery,
+    withdrawable: node.withdrawable,
+  }));
+  return { nodes: roots, unread };
 }
 
 /**
@@ -1348,7 +1555,7 @@ export const Transcript = memo(function Transcript({
    *  component is memo'd, and a new one on every render rebuilds the whole conversation. */
   inserts?: readonly TranscriptInsert[];
 }) {
-  const nodes = useMemo(() => buildNodes(events, turnImages), [events, turnImages]);
+  const nodes = useMemo(() => transcriptOf(events, turnImages).nodes, [events, turnImages]);
   // Only the Agent and Workflow cards read this (TaskBadgeAndStatus, TaskProgressDetail), so a
   // progress frame re-renders those and nothing else.
   const activity = useContext(TaskActivityCtx);
@@ -1456,12 +1663,18 @@ function NodeList({
     <>
       {items.flatMap((item) => {
         const seqs = item.kind === 'toolGroup' ? item.nodes.map((node) => node.seq) : [item.node.seq];
+        // The row a turn opens with, under its message and over everything the turn writes.
+        const head =
+          item.kind === 'node' && item.node.kind === 'user' && item.node.turnHead ? (
+            <TurnHead key={`head-${item.node.seq}`} startTs={item.node.ts} endTs={item.node.turnHead.endTs} live={live} />
+          ) : null;
         return [
           item.kind === 'toolGroup' ? (
             <ToolGroupView key={item.key} nodes={item.nodes} live={live} />
           ) : (
             <NodeView key={item.node.seq} node={item.node} live={live} />
           ),
+          head,
           ...seqs
             .flatMap((seq) => placed?.get(seq) ?? [])
             .map((insert) => <Fragment key={insert.key}>{insert.element}</Fragment>),
@@ -1565,8 +1778,18 @@ export function QueuedUserTurn({
 function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?: ReactNode }) {
   const exporting = useContext(ExportCtx);
   const authHelp = useContext(AuthErrorCtx);
+  const withdrawal = useContext(SteerWithdrawCtx);
   switch (node.kind) {
     case 'user': {
+      // A message taken back before anything read it: the runner's word that the engine dropped it
+      // (WITHDRAWN_DELIVERY), or the server's, ahead of that word, on the screen that asked. Nothing
+      // of it is drawn — the agent never saw it, and its words went back to the composer.
+      if (
+        node.steer
+        && (node.delivery === WITHDRAWN_DELIVERY || (node.turnId != null && withdrawal?.withdrawn.has(node.turnId)))
+      ) {
+        return null;
+      }
       // A turn still on the queue is no event yet: nothing for ⌘F to land on, so nothing is stamped.
       const seq = queued ? undefined : node.seq;
       // Another Orbit session's message (`session_send` / `project_send`): somebody's words, but not
@@ -1597,7 +1820,17 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
         const words = node.text.trim() !== '';
         return (
           <>
-            {words && <UserBubble node={{ ...node, note: undefined }} queued={queued} />}
+            {/* Outcomes can ride on the owner's answer handed to the coordinator, whose words are
+                still nobody's message: its line, not a bubble. */}
+            {words && (node.ownerAnswer ? (
+              <OwnerAnswerLine
+                card={node.ownerAnswer}
+                text={node.text}
+                seq={seq}
+                undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+                queued={queued}
+              />
+            ) : <UserBubble node={{ ...node, note: undefined }} queued={queued} />)}
             <SessionReplyCards
               cards={node.sessionReplies}
               seq={seq}
@@ -1641,6 +1874,22 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            queued={queued}
+          />
+        );
+      }
+      // The owner's answer handed to the coordinator is the platform's message too: the question
+      // replayed in full and the answer, written for the AGENT — a bubble in the reader's name asking
+      // the question a second time. What the reader needs is that it was sent and when, so it is one
+      // line (lib/ownerAnswer) that opens to those words. With no payload the turn keeps its old reading.
+      if (node.ownerAnswer) {
+        return (
+          <OwnerAnswerLine
+            card={node.ownerAnswer}
+            text={node.text}
+            seq={seq}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
             queued={queued}
           />
         );
@@ -1748,11 +1997,11 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
     case 'result':
       return <StandaloneResult node={node} />;
     case 'divider':
-      return <div className="chat-turn-divider" data-seq={node.seq} />;
+      return <TurnFoot node={node} />;
     case 'interrupt':
       return (
         <div className="chat-note" data-seq={node.seq}>
-          ⊘ interrupted
+          {node.runnerRestart ? '⊘ interrupted — the runner restarted' : '⊘ interrupted'}
         </div>
       );
     case 'diagnostic': {
@@ -1890,7 +2139,7 @@ function ToolFailureCard({
 
 /**
  * The providers whose credentials live on the runner itself (the engines in doctor.go), so the
- * remedy is a sign-in on that machine rather than a key to fix in Providers.
+ * remedy is a sign-in on that machine rather than a key to fix in Infrastructure.
  */
 const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi', 'opencode', 'antigravity']);
 
@@ -1919,6 +2168,15 @@ const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi', 'antigravity']);
  */
 function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
   const help = useContext(AuthErrorCtx);
+  // A press that would be the server's own re-send is a promise only the server makes, and the
+  // window's last bubble can be somebody else's — so this card asks for the answer rather than
+  // quoting the bubble (the same rule, and the same hook, as the quota card's). Above the branches
+  // below, which return early.
+  const retryIsTheServers = !!help?.onNeedRetryText && help?.retryWordsAreTheReaders === false;
+  const onNeedRetryText = help?.onNeedRetryText;
+  useEffect(() => {
+    if (retryIsTheServers) onNeedRetryText?.();
+  }, [retryIsTheServers, onNeedRetryText]);
   const provider = help?.provider;
   const local = !!provider && LOCAL_LOGIN.has(provider);
   const relayable = !!provider && RELAY_LOGIN.has(provider);
@@ -1956,9 +2214,11 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
         )
       ) : help ? (
         <>
+          {/* The key by its vendor and its own name — the same key may run on Claude Code, OpenCode and
+              DeepSeek Harness, so the engine is no way to name it, and its slug is nobody's. */}
           <div className="chat-authfix-desc">
-            The API key for <code>{help.provider}</code> was rejected. Update it in Providers, then
-            send your message again.
+            {help.keyName ? `${help.keyName.charAt(0).toUpperCase()}${help.keyName.slice(1)}` : 'The API key'} was
+            rejected. Update it in Infrastructure, then send your message again.
           </div>
           {help.onUseApiKey && (
             <button className="chat-authfix-go" onClick={help.onUseApiKey} type="button">
@@ -1997,9 +2257,29 @@ export type AutoRetryVariant = 'quota' | 'apiError';
  * how to take it over. WorkspaceView supplies this; the shared/public page leaves it null, so the
  * card there degrades to the diagnosis alone (a logged-out viewer can neither retry nor disarm).
  */
+/**
+ * A Cursor CLI session's quota card, in Orbit's words for the account rather than the engine's slug
+ * (the board's Web 5 ④): Cursor says only "Upgrade your plan to continue" (contract §12), so the card
+ * names whose plan that is and until when, and — since a conversation that has started can't move to
+ * another account yet (D5) — where a new session could go instead.
+ */
+export interface CursorQuotaHelp {
+  /** The account (or key) the session ran on, by its name in Orbit. */
+  account: string;
+  /** Its plan, as Cursor names it, when the runner read one. */
+  plan?: string | null;
+  /** When its included usage comes back, when Cursor said. */
+  resetsAt?: string | null;
+  /** Another of the runner's Cursor CLI accounts with room, by name, and how a new session on it
+   *  starts. Absent when there is none. */
+  elsewhere?: { label: string; start: () => void } | null;
+}
+
 export interface AutoRetryHelp {
   /** Session's provider slug, for naming whose quota ran out / whose API failed. */
   provider: string;
+  /** Set for a session on Cursor CLI (CursorQuotaHelp). */
+  cursor?: CursorQuotaHelp | null;
   /** Runner display name, so the card names the machine whose account this is. */
   runnerName?: string;
   /** When the armed retry fires (ISO), or null when nothing is armed. */
@@ -2023,6 +2303,13 @@ export interface AutoRetryHelp {
    * which chooses with the same code the automatic retry re-sends with.
    */
   onNeedRetryText?: () => void;
+  /**
+   * Whether the window holds words of the reader's to send — the only ones a press may promise
+   * from the window. False when it holds another session's message (whose press is the server's
+   * own re-send, so the card asks for that answer instead) or none at all — the same condition
+   * `onNeedRetryText` exists for.
+   */
+  retryWordsAreTheReaders?: boolean;
   /**
    * Nothing of anybody's waits to go out — not the person's words, and not a reply or confirmation
    * turn the sweep re-sends on its own (`getSessionRetryMessage.nothingToResend`). The card swaps
@@ -2055,25 +2342,30 @@ const MAX_ATTEMPTS: Record<AutoRetryVariant, number> = {
   apiError: MAX_API_ERROR_RETRIES,
 };
 
-/** The window that ran out, in the runtime's own terms. Keyed on the whole phrase the runtime
- *  uses ("hit your weekly limit"), not on "weekly limit" loose in the text: naming the wrong
- *  window tells the user to wait days for a quota that comes back in hours. Codex names no
- *  window at all, and falls through to the generic wording.
+/** The window that ran out, in the runtime's own terms (`quotaWindowKind`, which the evidence
+ *  card's pause line reads too). Codex names no window at all, and falls through to the generic
+ *  wording.
  *
  *  The runtime calls its 5-hour window a "session limit", but here that reads as a limit on the
  *  Orbit session the card is sitting in — the one noun this product uses for something else
  *  entirely. Titled by its length instead; the runtime's own phrasing survives in the body. */
 function quotaWindow(message: string): { title: string; what: string } {
-  const m = message.toLowerCase();
-  if (m.includes('hit your session limit'))
+  const kind = quotaWindowKind(message);
+  if (kind === 'FIVE_HOUR')
     return { title: '5-hour limit reached', what: 'The 5-hour quota' };
-  if (m.includes('hit your weekly limit'))
+  if (kind === 'WEEKLY')
     return { title: 'Weekly limit reached', what: 'The weekly quota' };
   return { title: 'Usage limit reached', what: 'The quota' };
 }
 
+/** "Oct 24": the day a plan's usage comes back. */
+function formatDay(iso: string): string {
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime()) ? iso : at.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
 /** "6:20 PM" today, "Wed, Aug 6, 1:00 PM" beyond it — a bare time on another day misleads. */
-function formatResetAt(at: Date): string {
+function formatClock(at: Date): string {
   const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const sameDay = at.toDateString() === new Date().toDateString();
   return sameDay ? time : `${at.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`;
@@ -2128,9 +2420,12 @@ function AutoRetryCard({
     return () => clearInterval(t);
   }, [retryAt?.getTime()]);
 
-  // Asked once, and only by a card that has a button to offer and no words for it — a stale card
-  // and the share page's contextless one need nothing (see `onNeedRetryText`).
-  const needsRetryText = live && !help?.retryText && !!help?.onNeedRetryText;
+  // Asked once, and only by a card that cannot promise alone: the window has no words of the
+  // reader's — none at all, or another session's. Only the server's chooser says what such a press
+  // carries, and it may say "nothing at all" (which is what the Continue card is for). A stale
+  // card and the share page's contextless one need nothing.
+  const needsRetryText = live && !!help?.onNeedRetryText
+    && help?.retryWordsAreTheReaders === false;
   useEffect(() => {
     if (needsRetryText) help?.onNeedRetryText?.();
   }, [needsRetryText]);
@@ -2149,6 +2444,9 @@ function AutoRetryCard({
   // through the switch. Read once: the body, the countdown and the two controls all branch on it.
   const continues = live && !!help?.nothingToResend;
   const window = quotaWindow(message);
+  // Cursor CLI's card names the account and quotes Cursor; its sentence comes after the runner's lead.
+  const cursor = quota && live ? help?.cursor : null;
+  const cursorSaid = /Cursor said: "(.+?)\.?"/.exec(message)?.[1] ?? 'Upgrade your plan to continue';
   // The instant a re-armed retry would fire, re-derived from the same two things the server used
   // when it armed the first one: the reply's own "resets 8:20pm" (quota) or the next step of the
   // backoff ladder (provider error). Null when the runtime named no time — Codex quota messages
@@ -2181,7 +2479,7 @@ function AutoRetryCard({
             ? `Tried ${help?.attempts} times — the quota still reports as spent. Over to you.`
             : `Tried ${help?.attempts} times — the API is still failing. Over to you.`
           : quota
-            ? `${window.what} for ${help?.provider ?? 'this provider'}${
+            ? `${window.what} for ${cursor ? `${cursor.account} (${ENGINE_CLI_NAMES[AgentProvider.CURSOR]})` : (help?.provider ?? 'this provider')}${
                 help?.runnerName ? ` on “${help.runnerName}”` : ''
               } is used up.${continues
                 ? ` Nothing to re-send — the limit landed on a turn that wasn’t yours.`
@@ -2191,6 +2489,25 @@ function AutoRetryCard({
                  ? ` Nothing to re-send — the failure landed on a turn that wasn’t yours.`
                  : needsYou ? ' Auto-retry is off.' : ''}`}
       </div>
+      {cursor && (
+        <div className="chat-quota-msg">
+          Cursor answered “{cursorSaid}”
+          {cursor.plan || cursor.resetsAt
+            ? `: ${cursor.account}’s ${cursor.plan ? `${cursor.plan} plan` : 'plan'} has no ${
+                cursor.plan === 'Free' ? 'requests' : 'included usage'
+              } left${cursor.resetsAt ? ` until ${formatDay(cursor.resetsAt)}` : ''}.`
+            : '.'}
+          {cursor.elsewhere && (
+            <>
+              {' '}This conversation can’t move to {cursor.elsewhere.label} yet —{' '}
+              <button type="button" className="chat-quota-link" onClick={cursor.elsewhere.start}>
+                start a new session on {cursor.elsewhere.label}
+              </button>
+              .
+            </>
+          )}
+        </div>
+      )}
       {/* The error verbatim. Which one it was is the only actionable detail if it keeps
           recurring, and unlike a quota's sentence it is not restated by anything above. */}
       {!quota && <div className="chat-quota-err">{message}</div>}
@@ -2198,7 +2515,7 @@ function AutoRetryCard({
         <div className="chat-quota-when">
           {quota ? (
             <>
-              {continues ? 'Continues' : 'Resets'} <b>{formatResetAt(retryAt!)}</b>{' '}
+              {continues ? 'Continues' : 'Resets'} <b>{formatClock(retryAt!)}</b>{' '}
               <span className="chat-quota-in">· {formatCountdown(msLeft)}</span>
             </>
           ) : (
@@ -2303,6 +2620,34 @@ function AutoRetryCard({
 // resumed/old sessions can still carry big messages.
 export const USER_BUBBLE_TRUNCATE = 6000;
 
+// A steer's own progress, shown for a steer alone. An ordinary message is answered by the reply that
+// follows it, so narrating its delivery would be noise; a steer joins a turn that answers something
+// else, so without this line the sender has nothing at all to distinguish "on its way into this turn"
+// from "quietly dropped". While nothing has read it, on an engine that can drop it unread, the way to
+// take it back sits beside the state it would undo — the same link "Put back in the composer" is.
+function SteerState({ node, typed }: { node: TextNode; typed: string }) {
+  const withdrawal = useContext(SteerWithdrawCtx);
+  const exporting = useContext(ExportCtx);
+  const turnId = node.turnId;
+  const asking = turnId != null && !!withdrawal?.withdrawing.has(turnId);
+  const offer =
+    !exporting && withdrawal != null && turnId != null && !asking && offersSteerWithdraw(node.delivery, node.withdrawable);
+  return (
+    <div className="chat-steer-state">
+      {asking ? 'Withdrawing…' : steerDeliveryState(node.delivery).label}
+      {offer && (
+        <button
+          type="button"
+          className="chat-undelivered-retry"
+          onClick={() => withdrawal.withdraw(turnId, typed, node.attachmentRefs)}
+        >
+          Withdraw
+        </button>
+      )}
+    </div>
+  );
+}
+
 // User message bubble. The text is Markdown-rendered by the same `MD` renderer as the assistant
 // turn: the messages sent here are mostly long structured prompts (headings, lists, fenced
 // commands), and reading them as raw '#'/'*' source is what this replaces. `breaks` keeps the
@@ -2381,13 +2726,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
           )}
         </div>
       ) : (
-        node.steer && (
-          // A steer's own progress, shown for a steer alone. An ordinary message is answered by
-          // the reply that follows it, so narrating its delivery would be noise; a steer joins a
-          // turn that answers something else, so without this line the sender has nothing at all
-          // to distinguish "on its way into this turn" from "quietly dropped".
-          <div className="chat-steer-state">{steerDeliveryState(node.delivery).label}</div>
-        )
+        node.steer && <SteerState node={node} typed={typed} />
       )}
       {longText && !exp && (
         <button className="chat-more" onClick={() => setExpanded((e) => !e)}>
@@ -2449,6 +2788,67 @@ function TurnAttachments({ node }: { node: TextNode }) {
   );
 }
 
+// The foot of a finished turn, in the reply's own column (where Codex puts its row): a copy button
+// that hands back the turn's reply as written — its Markdown source, like the user bubble's copy —
+// and the time the turn ended. It stands where the blank divider between turns stood and is drawn
+// at rest, since it is also what marks where one turn ends; the user bubble's meta row waits for
+// hover. A turn with nothing to copy keeps its time; one with neither is the old blank divider.
+function TurnFoot({ node }: { node: DividerNode }) {
+  const [copied, setCopied] = useState(false);
+  const { seq, ts, reply } = node;
+  if (!reply && !ts) return <div className="chat-turn-divider" data-seq={seq} />;
+  const copy = () => {
+    if (!reply) return;
+    void copyText(reply).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    });
+  };
+  return (
+    <div className="chat-turn-divider chat-turn-foot" data-seq={seq}>
+      {reply && (
+        <button
+          type="button"
+          className="chat-copy"
+          onClick={copy}
+          title={copied ? 'Copied' : 'Copy reply'}
+          aria-label={copied ? 'Copied' : 'Copy reply'}
+        >
+          {copied ? <CheckOutlined /> : <CopyOutlined />}
+        </button>
+      )}
+      {ts && <span className="chat-time">{formatClock(new Date(ts))}</span>}
+    </div>
+  );
+}
+
+/**
+ * The head of a turn, over the turn's own output: how long it worked, or has been working — the row
+ * Codex draws above a turn's answer (owner, 2026-10-10). The span runs from the turn's `user`
+ * message to its `turn_end`, both of them stored, so a turn read back later says exactly what the
+ * turn on screen said; while the turn is still open it counts up once a second. A turn whose start
+ * the loaded window doesn't reach states no duration rather than a wrong one, and a turn that
+ * neither ended nor is still running states nothing at all.
+ */
+function TurnHead({ startTs, endTs, live }: { startTs?: string; endTs?: string; live?: boolean }) {
+  const start = startTs ? Date.parse(startTs) : NaN;
+  const end = endTs ? Date.parse(endTs) : NaN;
+  const ended = Number.isFinite(start) && Number.isFinite(end) && end >= start;
+  const ticking = !ended && !!live && Number.isFinite(start);
+  const [, tick] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    if (!ticking) return undefined;
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [ticking]);
+  // A turn is never under a second: "Worked for 0s" reads as a bug, not as a measurement.
+  const span = (ms: number) => checkDuration(Math.max(1000, ms));
+  if (ended) return <div className="chat-turn-head">Worked for {span(end - start)}</div>;
+  if (!live) return null;
+  return <div className="chat-turn-head">{ticking ? `Working for ${span(Date.now() - start)}` : 'Working…'}</div>;
+}
+
 // Relative timestamp under a user bubble ("just now", "5m ago", "3h ago", "2d ago",
 // "1w ago"); older than ~4 weeks falls back to a short absolute month/day.
 // Exported for ⌘F's result rows, so a hit is dated the same way the bubble it points at is.
@@ -2476,15 +2876,16 @@ export function AttachmentImage({
   previewKey,
   order,
   // The composer draws the same stored image at chip size when one is handed back out of a
-  // message, so it says which of the two it is asking for rather than restyling a transcript image.
+  // message, and the tray above it as a row's thumbnail, so each says which it is asking for rather
+  // than restyling a transcript image.
   variant = 'transcript',
 }: {
   id: string;
   previewKey?: string;
   order?: number;
-  variant?: 'transcript' | 'chip';
+  variant?: 'transcript' | 'chip' | 'tray';
 }) {
-  const className = variant === 'chip' ? 'composer-attach-thumb' : 'chat-image';
+  const className = variant === 'chip' ? 'composer-attach-thumb' : variant === 'tray' ? 'pending-tray-thumb' : 'chat-image';
   return (
     <ResolvedAttachmentImage
       id={id}
@@ -2641,7 +3042,7 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   );
 }
 
-// A user-sent image: click to open AntD's full-screen preview (zoom/rotate, ESC to close).
+// A user-sent image: click to open the full-screen preview (zoom/rotate, ESC to close).
 // The displayed src is already the full-resolution image (just CSS-constrained to 220px),
 // so the lightbox shows it at native size with no extra fetch. The hover mask is the
 // click affordance — without it a bare <img> gives no hint it's interactive.
@@ -2662,7 +3063,7 @@ export function ChatImage({
 }) {
   const exp = useContext(ExportCtx);
   const registry = useContext(ImagePreviewContext);
-  // Static export: AntD's Image lightbox is JS-driven and inert in a saved file — render a
+  // Static export: the preview is JS-driven and inert in a saved file — render a
   // plain <img> (the src is already the full-resolution data URL).
   if (exp) return <img className={className} src={src} alt={alt} />;
   // In the transcript: join the shared left/right pager (see ImagePreviewProvider).
@@ -2671,19 +3072,17 @@ export function ChatImage({
       <GroupedChatImage registry={registry} previewKey={previewKey} order={order} src={src} className={className} alt={alt} />
     );
   }
-  // Standalone (the composer's unsent previews): AntD's own single-image lightbox.
+  // Standalone (the composer's unsent previews): its own single-image preview.
   return (
     <Image
       className={className}
       src={src}
       alt={alt}
-      preview={{
-        mask: (
-          <span className="chat-image-mask">
-            <EyeOutlined /> Preview
-          </span>
-        ),
-      }}
+      cover={
+        <span className="chat-image-mask">
+          <EyeOutlined /> Preview
+        </span>
+      }
     />
   );
 }
@@ -2707,9 +3106,9 @@ function GroupedChatImage({
   alt: string;
 }) {
   useEffect(() => {
-    registry.register(previewKey, order, src);
+    registry.register(previewKey, order, src, alt);
     return () => registry.unregister(previewKey);
-  }, [registry, previewKey, order, src]);
+  }, [registry, previewKey, order, src, alt]);
   return (
     <button type="button" className="chat-image-btn" onClick={() => registry.open(previewKey)}>
       <img className={className} src={src} alt={alt} />
@@ -3176,8 +3575,9 @@ function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
 /**
  * A settled stretch of reasoning, folded. What the row says while shut is the whole question: a
  * bare "Thinking" told a reader nothing about whether opening it was worth it, and a turn stacks
- * ten of them. The duration comes from having watched it stream (lib/thinkingDraft); a reloaded
- * block has only its size, and states that rather than nothing.
+ * ten of them. The duration is the one the runner stored on the block (lib/thinkingDraft), so a
+ * reload states it too; a block an older runner stored has only its size, and states that rather
+ * than nothing.
  */
 function Thinking({ text, seq, ms, blocks }: { text: string; seq?: number; ms?: number; blocks?: number }) {
   const exp = useContext(ExportCtx);
@@ -3263,10 +3663,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // distinct "Shell" card, not Claude's Bash tool — see describeTool's isShell branch.
   const isShell = node.id.startsWith('shell-');
   const exp = useContext(ExportCtx);
-  // A plan or a question to the user is the point of the turn — open it by
-  // default; a result carrying an image (a screenshot the workspace produced for the
-  // user) opens so the picture shows without a click. A static export opens every card
-  // (nothing can be un-folded after the fact).
+  // A plan is the point of the turn — open it by default; a result carrying an image (a
+  // screenshot the workspace produced for the user) opens so the picture shows without a click.
+  // A static export opens every card (nothing can be un-folded after the fact).
   // A created batch joins them: it is a write to state outside this session, the titles it names
   // appear nowhere else in the transcript, and under auto-approval the panel that would have shown
   // them was never on screen. The folded row carries the shape and the count — which is what the
@@ -3278,40 +3677,59 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // Keyed on the *preview* result, which is why a clipped image keeps its (dataless) block: this
   // decides whether the card opens, and opening the card is what fetches the picture back. Asking
   // `resultImages` here instead would deadlock the two — the refetch below is gated on being open.
-  const defaultOpen =
+  // A question to the user no longer opens: folded, its card is already the record of what was
+  // asked and how it was answered (see `questionUnread` below for the one time it still does).
+  const usuallyOpen =
     !!exp ||
     node.name === 'ExitPlanMode' ||
-    node.name === 'AskUserQuestion' ||
     isShell ||
     isAutoOpenBatch(node) ||
     hasResultImage(node.result?.content);
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
-  const open = manualOpen ?? defaultOpen;
+  const isQuestion = node.name === 'AskUserQuestion';
   // Opening a clipped card pulls its untrimmed call/result back (see useFullPayload); until
-  // then — and for the folded majority, forever — the server's preview is what renders.
-  const fullInput = useFullPayload(node.seq, node.truncated, open);
+  // then — and for the folded majority, forever — the server's preview is what renders. A
+  // question's folded card is its record, read off the call and the result, so it reads both
+  // whole while folded: a clipped one would lose the questions' text, or the answers after the cut.
+  const fullInput = useFullPayload(node.seq, node.truncated, isQuestion || (manualOpen ?? usuallyOpen));
   // The session-created card parses its result as JSON even while folded, so a clipped copy would
-  // fail to parse and render nothing — it needs the whole result regardless of the fold.
-  const needsWholeResult = node.name === 'mcp__orbit__session_create';
+  // fail to parse and render nothing — it needs the whole result regardless of the fold. So does a
+  // question's record.
+  const needsWholeResult = node.name === 'mcp__orbit__session_create' || isQuestion;
   const hideResult = resultRepeatsBody(node);
   const fullResult = useFullPayload(
     node.result?.seq ?? 0,
     node.result?.truncated,
-    (open || needsWholeResult) && !!node.result && !hideResult,
+    ((manualOpen ?? usuallyOpen) || needsWholeResult) && !!node.result && !hideResult,
   );
   const input = fullInput?.input ?? node.input;
   const resultContent = fullResult ? fullResult.content : node.result?.content;
-  // The chosen answer for an AskUserQuestion lives only in the result text
-  // ("The user answered: …"); pass it in so the historical card can highlight
-  // the picked option(s).
+  // How a question ended lives only in the result text ("The user answered: …"), so the card reads
+  // it back (`questionOutcome`, the same reader the native client is held to).
   const answer = node.result ? resultText(resultContent) : '';
+  const questions = useMemo(() => (isQuestion ? askedQuestions(input) : []), [isQuestion, input]);
+  const outcome = useMemo(
+    () => (questions.length ? questionOutcome(questions, answer, !!node.result?.isError) : null),
+    [questions, answer, node.result?.isError],
+  );
+  // A result this client cannot read, once it is whole: its own words are then the only answer
+  // there is, so the card opens on them, as it always did.
+  const questionUnread =
+    questions.length > 0 &&
+    !outcome &&
+    !!node.result &&
+    !node.result.isError &&
+    answer !== '' &&
+    (!node.result.truncated || !!fullResult);
+  const defaultOpen = usuallyOpen || questionUnread;
+  const open = manualOpen ?? defaultOpen;
   // `input` keeps its reference across tree rebuilds (the source event object is reused when
   // events are appended, and a refetched payload is held in state), so this holds the computed
   // body/icon — and the <Diff>/<MD>/<KeyVals> elements inside it — stable instead of rebuilding
   // on each append.
   const { label, summary, summaryMono, body, icon, tone, path, meta } = useMemo(
-    () => describeTool(node.name, input, isShell, answer),
-    [node.name, input, isShell, answer],
+    () => describeTool(node.name, input, isShell, outcome),
+    [node.name, input, isShell, outcome],
   );
   const isSubWorkspace = node.name === 'Task' || node.name === 'Agent';
   const isBackgroundTask = isBackgroundTaskCall(node.name);
@@ -3361,6 +3779,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
         )}
         {isBackgroundTask ? (
           <TaskBadgeAndStatus node={node} live={live} meta={meta} />
+        ) : outcome?.kind === 'replied' ? (
+          // The engine files "Chat about this" as the call's error; it is the person's reply.
+          <MessageFilled className="chat-tool-status replied" />
         ) : (
           <>
             {meta && <span className="chat-tool-meta">{meta}</span>}
@@ -3368,13 +3789,21 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           </>
         )}
       </div>
+      {isBackgroundTask && !(hasDetail && open) && <SubagentLiveLine node={node} live={live} />}
+      {questions.length > 0 && !(hasDetail && open) && (
+        <QuestionFolded
+          questions={questions}
+          outcome={outcome}
+          onOpen={() => setManualOpen((prev) => !(prev ?? defaultOpen))}
+        />
+      )}
       {hasDetail && open && (
         <div className="chat-tool-detail">
           {/* A failed call is opened to find out why, and the input is rarely the answer — a
               heredoc alone clamps to sixteen lines, which is enough to push the reason off the
               bottom of the card. Put the error first when there is one; everywhere else the
               call still reads input-then-output. */}
-          {node.result?.isError && (
+          {node.result?.isError && !outcome && (
             <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
           )}
           {node.name === 'Workflow' && (
@@ -3403,7 +3832,8 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           )}
           {/* A sub-agent's totals close its transcript rather than open it. */}
           {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
-          {node.result && !node.result.isError && !hideResult && !launchReceipt && (
+          {/* A question's result, once read, is only the replay above said again. */}
+          {node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
             <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
           )}
           {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
@@ -3564,6 +3994,27 @@ function TaskBadgeAndStatus({ node, live, meta }: { node: ToolNode; live?: boole
   );
 }
 
+/** A running background task's folded card: what its sub-agent is on right now — the last thing
+    its relayed transcript did. Native parity: ToolCards.swift's `liveActivity`. */
+function SubagentLiveLine({ node, live }: { node: ToolNode; live?: boolean }) {
+  const lookup = useContext(TaskLookupCtx);
+  if (!lookup.running(node.id) && !(live && !node.result)) return null;
+  for (let i = node.children.length - 1; i >= 0; i--) {
+    const child = node.children[i];
+    let text: string | undefined;
+    if (child.kind === 'tool') {
+      const d = describeTool(child.name, child.input);
+      text = d.path ? `${d.label} ${splitPath(d.path).base}` : d.summary ? `${d.label} ${d.summary}` : d.label;
+    } else if (child.kind === 'thinking') {
+      text = 'Thinking…';
+    } else if (child.kind === 'assistant') {
+      text = child.text.split('\n').find((line) => line.trim());
+    }
+    if (text) return <div className="chat-tool-live">{text}</div>;
+  }
+  return null;
+}
+
 /** What a background workflow's (or agent's) card opens to: its agents by phase and the totals. */
 function TaskProgressDetail({ id, fallback }: { id: string; fallback?: ReactNode }) {
   const progress = useContext(TaskLookupCtx).progress(id);
@@ -3651,7 +4102,7 @@ function shellCommandSummary(command: string): string {
 
 // describeTool maps a tool name + input to a folded-row label/summary/icon and an
 // optional expanded body, roughly matching how Claude Code Web renders each tool.
-function describeTool(name: string, input: any, isShell?: boolean, answer?: string): ToolDesc {
+function describeTool(name: string, input: any, isShell?: boolean, outcome?: QuestionOutcome | null): ToolDesc {
   const i = input ?? {};
   // A user-run `!`-shell command (not Claude's Bash tool): show the command inline in the
   // folded row and render as a terminal-flavoured "Shell" card (ToolView auto-opens it).
@@ -3794,16 +4245,16 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
         ) : undefined,
       };
     case 'AskUserQuestion': {
-      // A multiple-choice prompt to the user — render each question as a card
-      // (header · question · options) instead of dumping the nested questions
-      // array as a raw JSON blob via the default branch.
-      const qs: any[] = Array.isArray(i.questions) ? i.questions : [];
+      // A multiple-choice prompt to the user, drawn with how it ended: open, each question as a
+      // card (header · question · options, the pick ticked) instead of the nested questions array
+      // as a raw JSON blob; folded, ToolView draws the record under the row (`QuestionFolded`).
+      const qs = askedQuestions(i);
       return {
         label: 'Question',
         icon: <QuestionCircleOutlined />,
         tone: 'agent',
-        summary: qs.map((q) => q?.header).filter(Boolean).join('  ·  ') || undefined,
-        body: qs.length ? <Questions questions={qs} answer={answer} /> : undefined,
+        summary: qs.map((q) => q.header).filter(Boolean).join('  ·  ') || undefined,
+        body: qs.length ? <QuestionReplay questions={qs} outcome={outcome ?? null} /> : undefined,
       };
     }
     // Orbit's own two writes, rendered as what they did rather than as the JSON they were sent.
@@ -3843,7 +4294,9 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
         summary: shape || undefined,
         body: tasks.length ? (
           <div className="tool-batch">
-            {shouldDraw(graph) ? <BatchGraph tasks={tasks} /> : null}
+            {/* The record lists the titles either way, so the picture stands where it fits and
+                leaves nothing in its place when it does not. */}
+            <BatchGraph tasks={tasks} fallback={null} />
             <ul className="dag-approval-ops">
               {tasks.map((t, n) => (
                 <li key={n} className="dag-op">
@@ -4105,47 +4558,85 @@ function Todos({ todos }: { todos: any[] }) {
   );
 }
 
-// labelPicked reports whether an option was chosen, given the answer result text
-// (… "Q"="A". — multi-select joins the picks as "a,b,c" inside the one quote
-// pair). The text only ever contains the picked labels, each bounded by a quote
-// or a comma, so a label is picked iff it appears delimited that way. The
-// boundary check keeps a label that's merely a substring of the echoed question
-// (or of a longer sibling label) from matching; a typed-in custom answer is no
-// option's label, so it highlights nothing.
-function labelPicked(answer: string, label: string): boolean {
-  if (!answer || !label) return false;
-  const bound = (c: string | undefined) => c === '"' || c === ',';
-  for (let i = answer.indexOf(label); i >= 0; i = answer.indexOf(label, i + 1)) {
-    if (bound(answer[i - 1]) && bound(answer[i + label.length])) return true;
-  }
-  return false;
+// QuestionFolded is an answered question's folded card, under its row: each question's opening,
+// then how it was answered — the option picked, the words typed, or the reply given in the
+// conversation instead. One question keeps two lines of its opening and several keep one each, so
+// the card stays a record rather than the replay; a click opens the replay, as the row's does.
+function QuestionFolded({
+  questions,
+  outcome,
+  onOpen,
+}: {
+  questions: AskedQuestion[];
+  outcome: QuestionOutcome | null;
+  onOpen: () => void;
+}) {
+  const several = questions.length > 1;
+  return (
+    <div className="chat-q-folded" onClick={onOpen}>
+      {questions.map((q, k) => {
+        const line = outcome?.kind === 'answered' ? questionAnswerLine(q, outcome.answers[k] ?? null) : null;
+        return (
+          <Fragment key={k}>
+            <div className={`chat-q-lead${several ? ' is-one-line' : ''}`}>{questionLead(q.question)}</div>
+            {line && (
+              <div className="chat-q-answer">
+                <CheckCircleFilled />
+                <span className="chat-q-answer-words">{line}</span>
+              </div>
+            )}
+          </Fragment>
+        );
+      })}
+      {outcome?.kind === 'replied' && (
+        <div className="chat-q-answer">
+          <MessageFilled />
+          <span>
+            <span className="chat-q-answer-words">{questionReplyLine(outcome.words)}</span>
+            <span className="chat-q-answer-note">{QUESTION_RECORD_COPY.repliedInChat}</span>
+          </span>
+        </div>
+      )}
+    </div>
+  );
 }
 
-// Questions renders an AskUserQuestion input: each question as a card with its
-// header, prompt text, and the options (label + description); once answered, the
-// option(s) the user picked are highlighted (see labelPicked).
-function Questions({ questions, answer }: { questions: any[]; answer?: string }) {
+// QuestionReplay is the open card: each question as it was asked — header, prompt text, and every
+// option with its description — with the option(s) picked highlighted, then the words typed
+// instead of an option, or the reply given in the conversation instead of any.
+function QuestionReplay({ questions, outcome }: { questions: AskedQuestion[]; outcome: QuestionOutcome | null }) {
   return (
     <div className="chat-questions">
-      {questions.map((q: any, k: number) => (
-        <div className="chat-q" key={k}>
-          {q?.header && <div className="chat-q-header">{q.header}</div>}
-          {q?.question && <div className="chat-q-text">{String(q.question)}</div>}
-          <div className="chat-q-opts">
-            {(q?.options ?? []).map((o: any, j: number) => {
-              const label = o?.label ?? '';
-              const picked = !!answer && labelPicked(answer, label);
-              return (
-                <div className={`chat-q-opt${picked ? ' is-picked' : ''}`} key={j}>
-                  <span className="chat-q-opt-label">{label}</span>
-                  {o?.description && <span className="chat-q-opt-desc">{o.description}</span>}
+      {questions.map((q, k) => {
+        const answer = outcome?.kind === 'answered' ? (outcome.answers[k] ?? null) : null;
+        return (
+          <div className="chat-q" key={k}>
+            {q.header && <div className="chat-q-header">{q.header}</div>}
+            {q.question && <div className="chat-q-text">{q.question}</div>}
+            <div className="chat-q-opts">
+              {q.options.map((o, j) => (
+                <div className={`chat-q-opt${answer?.picked.includes(j) ? ' is-picked' : ''}`} key={j}>
+                  <span className="chat-q-opt-label">{o.label}</span>
+                  {o.description && <span className="chat-q-opt-desc">{o.description}</span>}
                 </div>
-              );
-            })}
+              ))}
+            </div>
+            {answer?.typed && (
+              <div className="chat-q-words">
+                <span className="chat-q-words-label">{QUESTION_RECORD_COPY.yourAnswer}</span>
+                {answer.typed}
+              </div>
+            )}
+            {q.multiSelect && <div className="chat-q-multi">{QUESTION_RECORD_COPY.multipleChoice}</div>}
           </div>
-          {q?.multiSelect && <div className="chat-q-multi">multi-select</div>}
+        );
+      })}
+      {outcome?.kind === 'replied' && (
+        <div className="chat-q-words">
+          <span className="chat-q-words-label">{QUESTION_RECORD_COPY.repliedInChat}</span>
+          {outcome.words}
         </div>
-      ))}
+      )}
     </div>
   );
 }

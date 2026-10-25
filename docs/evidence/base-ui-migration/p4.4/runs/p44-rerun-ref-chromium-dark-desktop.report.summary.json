@@ -1,0 +1,381 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/ref/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/p44.config.mjs",
+   "--project",
+   "chromium-dark-desktop",
+   "--grep",
+   "its\\ versions,\\ compare,\\ redraft,\\ the\\ edit\\ drawer\\ and\\ a\\ section\\ form",
+   "--update-snapshots=all"
+  ],
+  "configFile": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/ref/src/web/ui-migration/p44.config.mjs",
+  "rootDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/ref/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/ref/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p44*.browser.mjs"
+    ],
+    "timeout": 180000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p44*.browser.mjs"
+    ],
+    "timeout": 180000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p44*.browser.mjs"
+    ],
+    "timeout": 180000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p44*.browser.mjs"
+    ],
+    "timeout": 180000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p44*.browser.mjs"
+    ],
+    "timeout": 180000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p44*.browser.mjs"
+    ],
+    "timeout": 180000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p44*.browser.mjs"
+    ],
+    "timeout": 180000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p44*.browser.mjs"
+    ],
+    "timeout": 180000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "all",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run preview -- --host 127.0.0.1 --port 4173 --strictPort",
+   "cwd": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/ref/src/web/",
+   "url": "http://127.0.0.1:4173",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "p44.browser.mjs",
+   "file": "p44.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [],
+   "suites": [
+    {
+     "title": "P4.4 the plan",
+     "file": "p44.browser.mjs",
+     "line": 424,
+     "column": 6,
+     "specs": [
+      {
+       "title": "its versions, compare, redraft, the edit drawer and a section form",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 180000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-desktop",
+         "projectName": "chromium-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 23655,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-versions.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-more.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-compared.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-redraft.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-edit.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-edit-kinds.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-edit-changed.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-section.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-09T23:48:42.376Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p44-plan-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan.png"
+            },
+            {
+             "name": "p44-plan-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-actual.png"
+            },
+            {
+             "name": "p44-plan-versions-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-versions.png"
+            },
+            {
+             "name": "p44-plan-versions-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-versions-actual.png"
+            },
+            {
+             "name": "p44-plan-more-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-more.png"
+            },
+            {
+             "name": "p44-plan-more-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-more-actual.png"
+            },
+            {
+             "name": "p44-plan-compared-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-compared.png"
+            },
+            {
+             "name": "p44-plan-compared-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-compared-actual.png"
+            },
+            {
+             "name": "p44-plan-redraft-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-redraft.png"
+            },
+            {
+             "name": "p44-plan-redraft-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-redraft-actual.png"
+            },
+            {
+             "name": "p44-plan-edit-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-edit.png"
+            },
+            {
+             "name": "p44-plan-edit-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-edit-actual.png"
+            },
+            {
+             "name": "p44-plan-edit-kinds-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-edit-kinds.png"
+            },
+            {
+             "name": "p44-plan-edit-kinds-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-edit-kinds-actual.png"
+            },
+            {
+             "name": "p44-plan-edit-changed-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-edit-changed.png"
+            },
+            {
+             "name": "p44-plan-edit-changed-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-edit-changed-actual.png"
+            },
+            {
+             "name": "p44-plan-section-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-section.png"
+            },
+            {
+             "name": "p44-plan-section-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-section-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-ref-chromium-dark-desktop-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/attachments/computed-styles-and-timings-d6ffcbb820db57ce2c46d5bb6b4d199450f30d8c.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "0f675aca645cb720e7c2-843009af593373b4e4c8",
+       "file": "p44.browser.mjs",
+       "line": 425,
+       "column": 3
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-09T23:48:40.816Z",
+  "duration": 25387.993000000002,
+  "expected": 1,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

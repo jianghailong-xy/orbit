@@ -1,0 +1,298 @@
+<!doctype html>
+<!-- Effect board: the session toolbar after a failed GET /runners, iOS / macOS (ConsoleModel.swift is shared).
+     Nothing on screen is redrawn by the change — only WHEN the runner row is read again — so the board
+     follows one session over time. "现在" frames are drawn from today's source; "改后" frames from this
+     session's change (fetchRunners / refreshRunner). The session screen is the iOS kit of
+     ../kimi-accounts/02-ios.html. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Session toolbar heals after a failed runner read · iOS / macOS</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<style>
+  .m-sheet { width: 1900px; }
+  .row4 { display: grid; grid-template-columns: repeat(4, 413px); gap: 34px; align-items: start; }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 6px 4px 0; }
+  .m-cap b { color: var(--text-1); }
+  .m-cap code, .m-notes code, .m-sub code, .tl code { font-size: 11.5px; padding: 0 4px; border-radius: 4px; background: #eef0f3; }
+  .notes2 { display: grid; grid-template-columns: 1fr 1fr; gap: 34px; align-items: start; }
+  .notes2 .m-notes { margin-top: 0; }
+  .notes2 .m-notes + .m-notes { margin-top: 14px; }
+  .m-notes h4 { margin: 0 0 6px; font-size: 13px; color: var(--text-1); }
+  .ask { background: #fff7e6; }
+  .ask .m-n { background: #fa8c16; }
+  .ring.grey { border-color: #5b6270; }
+
+  /* the session screen (ConsoleView + ComposerView), iOS 26 — as ../kimi-accounts/02-ios.html draws it */
+  .ph.chat { background: #fff; }
+  .kx-nav { position: absolute; top: 54px; left: 0; right: 0; height: 60px; display: flex; align-items: center; gap: 10px; padding: 0 16px; z-index: 2; }
+  .kx-nav .kx-tt { flex: 1; min-width: 0; text-align: center; }
+  .kx-nav .kx-tt b { display: block; font-size: 16px; line-height: 21px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kx-nav .kx-tt span { display: block; font-size: 12px; line-height: 15px; color: #8a8a8e; }
+  .kx-body { position: absolute; top: 118px; left: 0; right: 0; bottom: 150px; overflow: hidden; padding: 0 16px;
+             display: flex; flex-direction: column; justify-content: flex-end; gap: 14px; font-size: 16px; line-height: 23px; }
+  .kx-me { align-self: flex-end; max-width: 290px; padding: 9px 14px; border-radius: 20px; background: #f0f0f3; }
+  .kx-ai p { margin: 0; }
+  .kx-ai p + p { margin-top: 8px; }
+  .kx-ai code { font: 13.5px/20px "JetBrains Mono", ui-monospace, monospace; background: #f2f2f5; border-radius: 5px; padding: 0 4px; }
+  .kx-band { position: absolute; left: 0; right: 0; bottom: 34px; padding: 10px 12px 8px; background: #fff; }
+  .kx-card { background: #fff; border-radius: 24px; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .13), 0 4px 18px rgba(0, 0, 0, .07), 0 1px 3px rgba(0, 0, 0, .04); }
+  .kx-field { padding: 15px 16px 8px; font-size: 17px; line-height: 22px; color: rgba(60, 60, 67, .32); }
+  .kx-tools { display: flex; align-items: center; height: 46px; padding: 6px 8px 8px; font-size: 15px; line-height: 20px; }
+  .kx-ic { flex: none; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+  .kx-mode { flex: none; margin-left: 6px; color: #8a8a8e; font-weight: 500; }
+  .kx-sp { flex: 1; }
+  .kx-chip { display: flex; align-items: baseline; gap: 5px; white-space: nowrap; padding: 0 2px; min-width: 0; }
+  .kx-chip b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+  .kx-chip i { font-style: normal; color: #8a8a8e; }
+  .kx-meters { flex: none; display: flex; align-items: center; gap: 8px; margin-left: 12px; }
+  .kx-bar { width: 20px; height: 4px; border-radius: 2px; background: rgba(60, 60, 67, .16); overflow: hidden; }
+  .kx-bar > span { display: block; height: 100%; border-radius: 2px; background: #2e6aff; }
+  .kx-send { flex: none; margin-left: 10px; width: 32px; height: 32px; border-radius: 16px; background: #d1d1d6; display: flex; align-items: center; justify-content: center; }
+  .kx-home { position: absolute; bottom: 8px; left: 50%; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: #000; z-index: 7; }
+
+  /* the toolbar, cut out: the two states every frame below is in */
+  /* tb-*: kit.css already owns .cut (its dark cut-outs, white text) */
+  .tb-cuts { display: flex; flex-direction: column; gap: 18px; margin: 4px 0 0; }
+  .tb-cut-l { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 0 0 6px 4px; display: flex; align-items: center; gap: 8px; }
+  .tb-cut { width: 393px; padding: 6px 0; border-radius: 18px; overflow: hidden; background: #fff; color: #000; box-shadow: 0 0 0 1px #dcdce0;
+            font-family: Inter, "Noto Sans SC", sans-serif; letter-spacing: -.01em; }
+  .tb-cut .kx-band { position: static; padding: 6px 12px; }
+  .cut-ann { font-size: 12px; line-height: 1.7; color: var(--text-2); margin: 6px 4px 0; }
+  .cut-ann code { font-size: 11px; padding: 0 4px; border-radius: 4px; background: #eef0f3; }
+  .tag-bad { color: #c2410c; font-weight: 600; }
+  .tag-ok { color: #15803d; font-weight: 600; }
+
+  /* the timeline: when GET /runners is read, and what the toolbar is meanwhile */
+  .tl { display: grid; grid-template-columns: 170px repeat(4, minmax(0, 1fr)); column-gap: 0; row-gap: 0; font-size: 12.5px; line-height: 1.6; }
+  .tl-h { padding: 0 12px 8px; font-weight: 600; color: var(--text-1); border-bottom: 1px solid #dde0e6; }
+  .tl-h span { display: block; font-weight: 400; color: var(--text-3); font-size: 12px; }
+  .tl-lane { padding: 12px 12px 0; font-weight: 600; color: var(--text-1); display: flex; flex-direction: column; gap: 4px; }
+  .tl-lane span.d { font-weight: 400; color: var(--text-3); font-size: 12px; }
+  .tl-c { padding: 12px 12px 0; color: var(--text-2); min-height: 52px; }
+  .rd { display: inline-flex; align-items: center; gap: 5px; margin: 0 6px 4px 0; padding: 1px 8px; border-radius: 99px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .rd.ok { background: #e7f6ec; color: #15803d; }
+  .rd.bad { background: #fdecec; color: #c2410c; }
+  .rd.none { background: #eef0f3; color: #8a8f99; font-weight: 500; }
+  .st { grid-column: span 1; height: 26px; margin: 6px 0 12px; display: flex; align-items: center; padding: 0 10px; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+  .st.bad { background: #fdecec; color: #c2410c; }
+  .st.ok { background: #e7f6ec; color: #15803d; }
+  .st.first { border-radius: 6px 0 0 6px; }
+  .st.last { border-radius: 0 6px 6px 0; }
+  .st.solo { border-radius: 6px; }
+  .tl-sep { grid-column: 1 / -1; border-bottom: 1px dashed #dde0e6; }
+  .tl-pad { }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">会话工具栏：读不到 runner 时自己恢复 · iOS / macOS</h1>
+  <p class="m-sub zh">工具栏上的模型名、用量条（还有 <code>/</code> 菜单里 runner 的命令和技能）都来自会话打开时那一次 <code>GET /runners</code>（<code>ConsoleModel.loadContext</code>）。这次改动<b>不改任何界面</b>，元素、文案、布局都和现在一样，变的只是<b>什么时候再读一次</b>。所以下面画的是同一个会话随时间的样子：cd-aivps 上的 Claude 会话，配额 7 天窗口 30%。「现在」按现有代码画，「改后」按本会话分支上的改动画（还没发版）。灰色字母标现在的问题，橙色数字标改动；对话内容只是示意。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 现在：打开时读失败一次，就一直降级，直到退出会话再进来</div>
+    <div class="row4">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k">现在</span>14:42 打开会话，GET /runners 失败</div>
+        <div id="p1"></div>
+        <p class="m-cap zh"><b>A</b> 模型名退化成原始 id <code>claude-opus-5-5</code>：友好名「Opus 5.5」只在 runner 上报的模型目录里。<b>B</b> 没有用量条：配额也在同一次读取里。<code>/</code> 菜单也少了 runner 的命令和技能（图里看不到）。失败被 <code>try?</code> 吞掉，不重试，也没有提示。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k">现在</span>锁屏 / 切到别的 App，再回来</div>
+        <div id="p2"></div>
+        <p class="m-cap zh"><b>C</b> 回到前台会重连，并重读审批、排队消息、后台任务、项目的问题和确认卡，<b>唯独不重读 runner</b>，所以还是原始 id、没有条。网络断开又恢复、流断开重连，也都一样。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k">现在</span>退回列表再点进来（或杀掉 App 重开）</div>
+        <div id="p3"></div>
+        <p class="m-cap zh">只有重新打开这个会话，才会再跑一次 <code>loadContext</code>，工具栏这才恢复：<b>Opus 5.5</b>，用量条 30%。这就是之前让你「杀掉重开」验证的原因：其实退回列表再点进来就够了。</p>
+      </div>
+      <div>
+        <div class="ph-l zh" style="margin:0 0 8px 4px"><span class="m-k state">单独看</span>工具栏的两种状态</div>
+        <div class="tb-cuts">
+          <div>
+            <div class="tb-cut-l zh"><span class="tag-bad">降级</span>读失败之后</div>
+            <div class="tb-cut" id="cut-bad"></div>
+            <p class="cut-ann zh">模型名 = <code>session.model</code> 原样；没有用量条；Context 环来自会话事件，照常。</p>
+          </div>
+          <div>
+            <div class="tb-cut-l zh"><span class="tag-ok">正常</span>读到 runner 之后</div>
+            <div class="tb-cut" id="cut-ok"></div>
+            <p class="cut-ann zh">模型名查 runner 的模型目录得到「Opus 5.5」；用量条是 runner 心跳报的配额（7 天窗口 30%）。点开是 Plan usage 详情，和现在一样。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 改后：打开时先重试；还读不到，下一次重连再读，不用退出会话；会话开着时每 60 秒再读一次</div>
+    <div class="row4">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>14:42 打开会话，第一次失败，0.3 秒后重试成功</div>
+        <div id="p4"></div>
+        <p class="m-cap zh"><b>1</b> 打开时的读取最多试 3 次，间隔 0.3 秒、0.6 秒，和对话记录首屏加载（<code>seedTailPage</code>）一样。一次性的网络抖动在 1 秒内就恢复，多数时候根本看不到降级。新建会话的草稿用的是同一个读取，也一样重试。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k state">过程</span>三次都失败（比如打开时正好断网）</div>
+        <div id="p5"></div>
+        <p class="m-cap zh"><b>2</b> 三次都失败时，先和现在一样降级。读失败<b>不清空</b>已有的数据，这条和现在一样，新加的重读也照这个规矩：从列表打开时带过来的模型目录如果在，模型名照常是「Opus 5.5」，只少用量条。Codex 重置额度照旧，读不到 runner 时不可用。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>回到前台 / 网络恢复 / 流断开重连</div>
+        <div id="p6"></div>
+        <p class="m-cap zh"><b>3</b> 每次重连都顺带重读一次 runner，模型名、用量条、<code>/</code> 菜单一起恢复。不用退出会话，更不用杀 App。重连本来就会触发，这里只是在已有的那组重读里多加一项。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>第二天 8:05 打开手机，回到这个会话</div>
+        <div id="p7"></div>
+        <p class="m-cap zh"><b>4</b> 用量条以前停在会话打开那一刻（锁屏一夜回来还是 30%），现在回到前台马上刷新，这里是 41%。会话开在屏幕上时，每 60 秒也刷一次，和 web 一样：跑着的任务用掉多少，条就跟着动。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 时间线：什么时候读 <code style="font-weight:600">GET /runners</code>，期间工具栏是什么样（改后另外：会话开在屏幕上时每 60 秒读一次，图里没画）</div>
+    <div class="tl zh" id="tl">
+      <div class="tl-h"></div>
+      <div class="tl-h">打开会话<span>14:42 · <code>loadContext</code></span></div>
+      <div class="tl-h">锁屏 / 切 App，再回来<span>15:10 · 回到前台的重连</span></div>
+      <div class="tl-h">网络断开又恢复<span>15:30 · 网络恢复的重连</span></div>
+      <div class="tl-h">退回列表再点进来<span>16:05 · 再跑一次 <code>loadContext</code></span></div>
+
+      <div class="tl-lane"><span class="m-k" style="align-self:flex-start">现在</span><span class="d">打开时失败一次</span></div>
+      <div class="tl-c"><span class="rd bad">✗ 读 1 次，失败</span></div>
+      <div class="tl-c"><span class="rd none">不读</span></div>
+      <div class="tl-c"><span class="rd none">不读</span></div>
+      <div class="tl-c"><span class="rd ok">✓ 读到</span></div>
+      <div></div>
+      <div class="st bad first">降级：原始 id、没有用量条</div>
+      <div class="st bad">降级</div>
+      <div class="st bad last">降级</div>
+      <div class="st ok solo">正常</div>
+      <div class="tl-sep"></div>
+
+      <div class="tl-lane"><span class="m-k new" style="align-self:flex-start">改后</span><span class="d">打开时抖了一下</span></div>
+      <div class="tl-c"><span class="rd bad">✗</span><span class="rd ok">0.3 秒后 ✓</span></div>
+      <div class="tl-c"><span class="rd ok">✓ 重读（顺便刷新用量）</span></div>
+      <div class="tl-c"><span class="rd ok">✓ 重读</span></div>
+      <div class="tl-c"><span class="rd ok">✓ 读到</span></div>
+      <div></div>
+      <div class="st ok first">正常（第一秒之后）</div>
+      <div class="st ok">正常</div>
+      <div class="st ok">正常</div>
+      <div class="st ok last">正常</div>
+      <div class="tl-sep"></div>
+
+      <div class="tl-lane"><span class="m-k new" style="align-self:flex-start">改后</span><span class="d">打开时正好断网</span></div>
+      <div class="tl-c"><span class="rd bad">✗</span><span class="rd bad">0.3 秒 ✗</span><span class="rd bad">0.6 秒 ✗</span></div>
+      <div class="tl-c"><span class="rd ok">✓ 重读</span></div>
+      <div class="tl-c"><span class="rd ok">✓ 重读</span></div>
+      <div class="tl-c"><span class="rd ok">✓ 读到</span></div>
+      <div></div>
+      <div class="st bad solo">降级，到下一次重连或下一分钟的刷新</div>
+      <div class="st ok first">正常</div>
+      <div class="st ok">正常</div>
+      <div class="st ok last">正常</div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">说明</div>
+    <div class="notes2">
+      <div>
+        <ul class="m-notes zh">
+          <li><h4>改了什么（一个文件，iOS / macOS 共用）</h4></li>
+          <li><span class="m-n">1</span><span><b><code>ConsoleModel.fetchRunners()</code></b>：打开时的 <code>GET /runners</code> 最多 3 次（间隔 0.3 秒、0.6 秒）。会话的 <code>loadContext</code> 和新会话草稿的 <code>prepareDraft</code> 都走它，模型默认值、努力程度这些跟着 runner 算的东西在同一轮里就算对。</span></li>
+          <li><span class="m-n">2</span><span><b>失败不清空</b>：失败时只把 Codex 重置额度的准入置空（读不到就不让花，和 <code>loadContext</code> 原来一样），屏幕上已有的模型目录、配额都留着。</span></li>
+          <li><span class="m-n">3</span><span><b><code>ConsoleModel.refreshRunner()</code></b>：接进 <code>run()</code> 里重连时已有的那组重读（审批、排队消息、后台任务……）。读到就更新模型目录、配额和 <code>/</code> 菜单；runner 不在列表里就清掉，和打开时的处理一样。</span></li>
+          <li><span class="m-n">4</span><span><b><code>runnerPollTask</code></b>：会话开在屏幕上时每 60 秒调一次 <code>refreshRunner()</code>，和 web 的 60 秒刷新一样。跟着会话的流一起开、一起停：退出会话、切到别的会话就停。新会话草稿没有流，不刷。</span></li>
+          <li><span class="m-n">5</span><span><b>测试</b>：新加 <code>ConsoleRunnerRefreshWiringTests</code> 3 个用例，改前失败、改后通过；OrbitKit 全量 3452 个，失败的 12 个就是 main 上已知的那 12 个 copy-parity。新代码原样抽出来对 OrbitKit 做了 Swift 5 / 6 类型检查；完整的 App 编译要走 CI，还没跑。</span></li>
+        </ul>
+        <ul class="m-notes zh">
+          <li><h4>不变的</h4></li>
+          <li><span class="m-n">·</span><span>工具栏的元素、文案、布局；Context 环（来自会话事件，本来就不受影响）；Plan usage 详情。</span></li>
+          <li><span class="m-n">·</span><span>web、Android 不动：web 本来就每 60 秒重新拉一次，失败重试一次；macOS 用同一个 <code>ConsoleModel</code>，网络恢复、流断开时同样重读。</span></li>
+          <li><span class="m-n">·</span><span>手机上要等发版才生效，客户端只从 <code>v*</code> tag 发布。</span></li>
+        </ul>
+      </div>
+      <div>
+        <ul class="m-notes zh">
+          <li><h4>这次解决不了的</h4></li>
+          <li><span class="m-n">!</span><span><b>确定性的失败。</b>如果你杀掉重开后仍是原始 id、没有用量条，说明不是网络抖动，而是每次都会失败：某个 runner 行解码不了，或者会话的 runner id 对不上。重试多少次都一样，还得按原计划在服务器上抓一次原始响应，和客户端解码逐字段对比。</span></li>
+        </ul>
+        <ul class="m-notes zh ask">
+          <li><h4>已定（10 月 9 日）</h4></li>
+          <li><span class="m-n">①</span><span><b>不加「加载失败」提示。</b>能自己恢复以后，降级通常不到一秒，最多到下一次重连或下一分钟的刷新，提示多半一闪而过。</span></li>
+          <li><span class="m-n">②</span><span><b>会话开着时每 60 秒刷新一次用量。</b>已加，见左边 4。</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="../antigravity-accounts/glyphs.js"></script>
+<script src="../antigravity-accounts/kit.js"></script>
+<script>
+  const PLUS = '<svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 3.2v13.6M3.2 10h13.6" stroke="#000" stroke-width="1.7" stroke-linecap="round"/></svg>';
+  const SEND = '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const RING = '<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="rgba(60,60,67,.16)" stroke-width="2.3"/><circle cx="8" cy="8" r="6" fill="none" stroke="#2e6aff" stroke-width="2.3" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="30.9" transform="rotate(-90 8 8)"/></svg>';
+  const MORE = '<svg width="20" height="5" viewBox="0 0 20 5"><circle cx="2.5" cy="2.5" r="2.2"/><circle cx="10" cy="2.5" r="2.2"/><circle cx="17.5" cy="2.5" r="2.2"/></svg>';
+
+  const talk = `<div class="kx-me">先看下会话列表的代码在哪。</div>
+    <div class="kx-ai"><p>列表在 <code>SessionListView</code>，数据走 <code>SessionListModel</code>，分页和下拉刷新都在 model 里。</p></div>
+    <div class="kx-me">列表下拉刷新偶尔没反应，帮我查一下。</div>
+    <div class="kx-ai"><p>下拉刷新调的是 <code>reload()</code>，上一次请求还没回来时它直接 return，所以「偶尔没反应」。</p></div>
+    <div class="kx-me">改成等上一次结束再刷新。</div>
+    <div class="kx-ai"><p>好：正在进行的那次请求留一个 Task，第二次下拉就 await 它，再按需补一次。</p>
+    <p>改在 <code>SessionListModel.reload()</code>，测试我一起补上。</p></div>`;
+
+  // The composer card. `ok`: the runner row was read (friendly name + plan bar); otherwise today's degraded toolbar.
+  const composer = ({ ok, bar = 30 }) => `<div class="kx-band"><div class="kx-card">
+      <div class="kx-field">Message…</div>
+      <div class="kx-tools" id="tools">
+        <div class="kx-ic">${PLUS}</div><span class="kx-mode">Auto</span><span class="kx-sp"></span>
+        <span class="kx-chip" id="chip"><b>${ok ? 'Opus 5.5' : 'claude-opus-5-5'}</b><i>High</i></span>
+        <span class="kx-meters" id="meters">${ok ? `<span class="kx-bar"><span style="width:${bar}%"></span></span>` : ''}${RING}</span>
+        <div class="kx-send">${SEND}</div>
+      </div></div></div>`;
+  const chat = ({ time, band }) => `<div class="ph chat">
+      <div class="ph-sb"><span class="t">${time} ${ICON.bell}</span><span class="r">${ICON.signal}${ICON.wifi}<span class="ph-batt">48</span></span></div>
+      <div class="kx-nav"><span class="ph-gb">${ICON.back}</span><span class="kx-tt"><b>列表下拉刷新偶尔没反应</b><span>cd-aivps · orbit</span></span><span class="ph-gb">${MORE}</span></div>
+      <div class="kx-body">${talk}</div>
+      ${band}
+      <div class="kx-home"></div>
+    </div>`;
+
+  document.getElementById('p1').outerHTML = chat({ time: '2:42', band: composer({ ok: false }) });
+  document.getElementById('p2').outerHTML = chat({ time: '3:10', band: composer({ ok: false }) });
+  document.getElementById('p3').outerHTML = chat({ time: '4:05', band: composer({ ok: true }) });
+  document.getElementById('p4').outerHTML = chat({ time: '2:42', band: composer({ ok: true }) });
+  document.getElementById('p5').outerHTML = chat({ time: '2:42', band: composer({ ok: false }) });
+  document.getElementById('p6').outerHTML = chat({ time: '3:10', band: composer({ ok: true }) });
+  document.getElementById('p7').outerHTML = chat({ time: '8:05', band: composer({ ok: true, bar: 41 }) });
+  document.getElementById('cut-bad').innerHTML = composer({ ok: false });
+  document.getElementById('cut-ok').innerHTML = composer({ ok: true });
+
+  window.drawMarks = () => {
+    const [q1, q2, q3, q4, q5, q6, q7] = document.querySelectorAll('.ph');
+    const grey = (html) => html.replace(/class="mk-n" style="([^"]*)"/g, 'class="mk-n" style="$1;background:#5b6270"')
+      .replace(/class="ring /g, 'class="ring grey ');
+    const greyMark = (ph, sel, n, pad = 4, dx = 0, dy = 0) => {
+      const r = at(ph, sel);
+      ph.insertAdjacentHTML('beforeend', grey(marks([{ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad, cls: '' },
+        ...(n ? [{ n, x: r.x + r.w + pad - 12 + dx, y: r.y - pad - 12 + dy }] : [])])));
+    };
+    greyMark(q1, '#chip', 'A', 4, -64, -8);
+    greyMark(q1, '#meters', 'B', 4, 12, 0);
+    greyMark(q2, '#tools', 'C', 3, -6, 0);
+    ringMark(q4, '#tools', '1', 3, -6, 0);
+    ringMark(q5, '#tools', '2', 3, -6, 0);
+    ringMark(q6, '#tools', '3', 3, -6, 0);
+    ringMark(q7, '#meters', '4', 4, 12, 0);
+  };
+</script>
+</body>
+</html>

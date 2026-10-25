@@ -1,0 +1,14 @@
+probe: probe-escape-panel.browser.mjs tree: del head: e21fad17277ffe30d40e76097191ca77e5b7f884 projects: chromium-light-desktop webkit-light-desktop chromium-light-phone webkit-dark-phone started: 2026-10-09T14:07:57Z load: 31.26 14.29 8.69 10/4326 4000299
+PROBE del chromium-light-desktop before {"url":"/tasks/2zwQZ2hd93IvLb59t6p5W","panel":1,"maximize":1,"dialogs":0}
+PROBE del chromium-light-desktop full screen open {"url":"/tasks/2zwQZ2hd93IvLb59t6p5W","panel":1,"maximize":0,"dialogs":1}
+PROBE del chromium-light-desktop after Escape {"url":"/tasks/2zwQZ2hd93IvLb59t6p5W","panel":1,"maximize":1,"dialogs":0}
+PROBE del chromium-light-phone before {"url":"/tasks/2zwQZ2hd93IvLb59t6p5W","panel":1,"maximize":1,"dialogs":0}
+PROBE del chromium-light-phone full screen open {"url":"/tasks/2zwQZ2hd93IvLb59t6p5W","panel":1,"maximize":0,"dialogs":1}
+PROBE del chromium-light-phone after Escape {"url":"/tasks/2zwQZ2hd93IvLb59t6p5W","panel":1,"maximize":1,"dialogs":0}
+PROBE del webkit-light-desktop before {"url":"/tasks/2zwQZ2hd93IvLb59t6p5W","panel":1,"maximize":1,"dialogs":0}
+PROBE del webkit-light-desktop full screen open {"url":"/tasks/2zwQZ2hd93IvLb59t6p5W","panel":1,"maximize":0,"dialogs":1}
+PROBE del webkit-light-desktop after Escape {"url":"/tasks/2zwQZ2hd93IvLb59t6p5W","panel":1,"maximize":1,"dialogs":0}
+PROBE del webkit-dark-phone before {"url":"/tasks/2zwQZ2hd93IvLb59t6p5W","panel":1,"maximize":1,"dialogs":0}
+PROBE del webkit-dark-phone full screen open {"url":"/tasks/2zwQZ2hd93IvLb59t6p5W","panel":1,"maximize":0,"dialogs":1}
+PROBE del webkit-dark-phone after Escape {"url":"/tasks/2zwQZ2hd93IvLb59t6p5W","panel":1,"maximize":1,"dialogs":0}
+  4 passed (18.9s)

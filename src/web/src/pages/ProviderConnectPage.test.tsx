@@ -8,8 +8,9 @@ import { ProviderConnectPage } from './ProviderConnectPage';
 const row = (over: Partial<ProviderRow>): ProviderRow => ({
   id: 'p1',
   slug: 'anthropic',
-  label: 'Anthropic (Claude)',
+  label: 'Anthropic',
   runtime: 'claude',
+  engines: ['claude', 'opencode'] as ProviderRow['engines'],
   baseUrl: 'https://api.anthropic.com',
   models: [],
   defaultModel: null,
@@ -47,8 +48,10 @@ describe('naming a provider whose vendor is already connected', () => {
   it('asks for a name up front from the second key on, pre-filled with a free one', () => {
     const html = render('/providers/new/anthropic', [row({})]);
     expect(html).toContain('Name this provider');
-    expect(html).toContain('value="Anthropic (Claude) 2"');
-    expect(html).toContain('You already have one Anthropic (Claude) key');
+    // Named after the vendor, as the gallery and the page's title name it — never after an engine.
+    expect(html).toContain('<h1 class="page-title" style="margin-top:8px">Connect Anthropic</h1>');
+    expect(html).toContain('value="Anthropic 2"');
+    expect(html).toContain('You already have one Anthropic key');
   });
 
   it('counts only the same vendor, and only what the number needs', () => {
@@ -58,22 +61,22 @@ describe('naming a provider whose vendor is already connected', () => {
       row({ id: 'p3', slug: 'deepseek', label: 'DeepSeek', presetSlug: 'deepseek' }),
     ];
     const html = render('/providers/new/anthropic', rows);
-    expect(html).toContain('You already have 2 Anthropic (Claude) keys');
-    // "Anthropic (Claude) 2" is free again once the second row took a name of its own.
-    expect(html).toContain('value="Anthropic (Claude) 2"');
+    expect(html).toContain('You already have 2 Anthropic keys');
+    // "Anthropic 2" is free again once the second row took a name of its own.
+    expect(html).toContain('value="Anthropic 2"');
   });
 
   it('surfaces the name when editing one of several, so the first can be renamed too', () => {
-    const rows = [row({}), row({ id: 'p2', slug: 'anthropic-2', label: 'Anthropic (Claude) 2' })];
+    const rows = [row({}), row({ id: 'p2', slug: 'anthropic-2', label: 'Anthropic 2' })];
     const html = render('/providers/p1', rows);
-    expect(html).toContain('You already have one Anthropic (Claude) key');
-    expect(html).toContain('value="Anthropic (Claude)"');
+    expect(html).toContain('You already have one Anthropic key');
+    expect(html).toContain('value="Anthropic"');
   });
 
   it('still offers the name when editing the only key of its vendor', () => {
     const html = render('/providers/p1', [row({})]);
     // Renaming is what an edit form is for — it must not depend on owning a second key.
-    expect(html).toContain('value="Anthropic (Claude)"');
+    expect(html).toContain('value="Anthropic"');
     // Nothing to tell apart, so nothing is claimed about other keys.
     expect(html).not.toContain('You already have');
   });

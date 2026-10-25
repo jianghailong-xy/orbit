@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370 && git log --oneline -1 && git rev-parse HEAD:src/web && cd src/web && NO_COLOR=1 npx vitest run src/components/ui/keyboardWindow.test.tsx src/components/ui/Menu.test.tsx",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_7a09f71597ae",
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "commit": "069601b67",
+ "webTree": "34ebe07972ab9680cad0775ad5f4169c39b5f98b",
+ "outputLastWritten": "2026-10-07T15:00:18.690393+00:00",
+ "exitCode": 0,
+ "outputSha256": "4368f3d1a157a29ade56d1afe2687543095c3be2f40fb4b649a41e4ef639a93f",
+ "outputBytes": 513,
+ "note": "Fixed tree (069601b67, the three fix commits): keyboardWindow.test.tsx 58/58 (every window case ends as its reference; no submenu window runs a parent item; Enter End Enter, Down End Enter and Up Home Enter run what the reference runs), Menu.test.tsx 18/18 (the previous task's root Arrow/Enter window, unchanged)."
+}

@@ -1,4 +1,5 @@
 import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { WritesNothing } from '../auth/impersonation';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
@@ -18,6 +19,7 @@ export class LinkPreviewsController {
    */
   @Post()
   @HttpCode(HttpStatus.OK)
+  @WritesNothing()
   read(@CurrentUser() user: AuthUser, @Body() dto: LinkPreviewsDto) {
     return this.previews.read(user.userId, dto.refs);
   }

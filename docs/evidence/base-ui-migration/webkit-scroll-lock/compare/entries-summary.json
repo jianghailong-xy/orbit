@@ -1,0 +1,567 @@
+{
+ "p42": {
+  "total": 644,
+  "bytesEqual": 597,
+  "differ": 47,
+  "p0ComparatorFails": 18,
+  "classes": {
+   "chromium noise (p0-drift rule)": [
+    "chromium-dark-desktop/p42-account-pause-custom.png",
+    "chromium-dark-desktop/p42-connect-models.png",
+    "chromium-dark-desktop/p42-deepseek-loading.png",
+    "chromium-dark-desktop/p42-deepseek-read.png",
+    "chromium-dark-desktop/p42-keys.png",
+    "chromium-dark-desktop/p42-new-pool-claude.png",
+    "chromium-dark-desktop/p42-new-pool-people.png",
+    "chromium-dark-desktop/p42-new-pool.png",
+    "chromium-dark-desktop/p42-pool-signout.png",
+    "chromium-dark-phone/p42-account-pause-custom.png",
+    "chromium-dark-phone/p42-connect-probe-error.png",
+    "chromium-dark-phone/p42-new-pool-people.png",
+    "chromium-dark-phone/p42-workspace-menu.png",
+    "chromium-light-desktop/p42-connect-models.png",
+    "chromium-light-desktop/p42-deepseek-low.png",
+    "chromium-light-desktop/p42-deepseek-read.png",
+    "chromium-light-desktop/p42-deepseek-refreshing.png",
+    "chromium-light-phone/p42-connect-probe-error.png",
+    "chromium-light-phone/p42-workspace-history.png"
+   ],
+   "chromium other": [
+    [
+     "chromium-dark-desktop/p42-pool-add-account.png",
+     23567,
+     1
+    ],
+    [
+     "chromium-dark-desktop/p42-pool-replace-key.png",
+     21291,
+     2
+    ],
+    [
+     "chromium-light-desktop/p42-connect-dialect-open.png",
+     35,
+     18
+    ],
+    [
+     "chromium-light-desktop/p42-pool-add-account.png",
+     47387,
+     2
+    ],
+    [
+     "chromium-light-desktop/p42-pool-replace-key.png",
+     42409,
+     3
+    ],
+    [
+     "chromium-light-desktop/p42-runners-loading.png",
+     62,
+     20
+    ],
+    [
+     "chromium-light-desktop/p42-users-loading.png",
+     63,
+     20
+    ],
+    [
+     "chromium-light-phone/p42-account-pause-custom.png",
+     7,
+     9
+    ]
+   ],
+   "webkit scrollbar + shifts/other": [
+    [
+     "webkit-dark-desktop/p42-pool-add-account.png",
+     23427,
+     {
+      "scrollbar": 7201,
+      "shift4": 15606,
+      "shift8": 97,
+      "other": 523
+     },
+     true
+    ],
+    [
+     "webkit-dark-desktop/p42-pool-delete.png",
+     33475,
+     {
+      "scrollbar": 7201,
+      "shift4": 26234,
+      "shift8": 4,
+      "other": 36
+     },
+     true
+    ],
+    [
+     "webkit-dark-desktop/p42-pool-replace-key.png",
+     368338,
+     {
+      "scrollbar": 7201,
+      "shift4": 15713,
+      "shift8": 7381,
+      "other": 338043
+     },
+     true
+    ],
+    [
+     "webkit-dark-desktop/p42-pool-signout.png",
+     482390,
+     {
+      "scrollbar": 7201,
+      "shift4": 15849,
+      "shift8": 7282,
+      "other": 452058
+     },
+     true
+    ],
+    [
+     "webkit-dark-desktop/p42-users-delete.png",
+     185075,
+     {
+      "scrollbar": 7201,
+      "shift4": 9148,
+      "shift8": 8146,
+      "other": 160580
+     },
+     true
+    ],
+    [
+     "webkit-dark-desktop/p42-users-disabled.png",
+     151327,
+     {
+      "scrollbar": 7201,
+      "shift4": 11853,
+      "shift8": 14343,
+      "other": 117930
+     },
+     true
+    ],
+    [
+     "webkit-dark-phone/p42-pool-signout.png",
+     6813,
+     {
+      "scrollbar": 6753,
+      "shift4": 21,
+      "shift8": 0,
+      "other": 39
+     },
+     true
+    ],
+    [
+     "webkit-dark-phone/p42-users-delete.png",
+     12351,
+     {
+      "scrollbar": 6753,
+      "shift4": 2030,
+      "shift8": 1598,
+      "other": 1970
+     },
+     true
+    ],
+    [
+     "webkit-light-desktop/p42-pool-add-account.png",
+     22852,
+     {
+      "scrollbar": 7201,
+      "shift4": 14240,
+      "shift8": 1,
+      "other": 1410
+     },
+     true
+    ],
+    [
+     "webkit-light-desktop/p42-pool-delete.png",
+     40708,
+     {
+      "scrollbar": 7201,
+      "shift4": 33359,
+      "shift8": 13,
+      "other": 135
+     },
+     true
+    ],
+    [
+     "webkit-light-desktop/p42-pool-replace-key.png",
+     328503,
+     {
+      "scrollbar": 7201,
+      "shift4": 13145,
+      "shift8": 7727,
+      "other": 300430
+     },
+     true
+    ],
+    [
+     "webkit-light-desktop/p42-pool-signout.png",
+     439169,
+     {
+      "scrollbar": 7201,
+      "shift4": 12909,
+      "shift8": 7642,
+      "other": 411417
+     },
+     true
+    ],
+    [
+     "webkit-light-desktop/p42-users-delete.png",
+     162769,
+     {
+      "scrollbar": 7201,
+      "shift4": 7491,
+      "shift8": 6420,
+      "other": 141657
+     },
+     true
+    ],
+    [
+     "webkit-light-desktop/p42-users-disabled.png",
+     120484,
+     {
+      "scrollbar": 7201,
+      "shift4": 9869,
+      "shift8": 13260,
+      "other": 90154
+     },
+     true
+    ],
+    [
+     "webkit-light-phone/p42-pool-signout.png",
+     7077,
+     {
+      "scrollbar": 6753,
+      "shift4": 116,
+      "shift8": 3,
+      "other": 205
+     },
+     true
+    ],
+    [
+     "webkit-light-phone/p42-users-delete.png",
+     17357,
+     {
+      "scrollbar": 6753,
+      "shift4": 3753,
+      "shift8": 3167,
+      "other": 3684
+     },
+     true
+    ]
+   ],
+   "webkit scrollbar only": [
+    [
+     "webkit-dark-phone/p42-pool-delete.png",
+     6753,
+     {
+      "scrollbar": 6753,
+      "shift4": 0,
+      "shift8": 0,
+      "other": 0
+     },
+     true
+    ],
+    [
+     "webkit-dark-phone/p42-users-disabled.png",
+     6753,
+     {
+      "scrollbar": 6753,
+      "shift4": 0,
+      "shift8": 0,
+      "other": 0
+     },
+     true
+    ],
+    [
+     "webkit-light-phone/p42-pool-delete.png",
+     6753,
+     {
+      "scrollbar": 6753,
+      "shift4": 0,
+      "shift8": 0,
+      "other": 0
+     },
+     false
+    ],
+    [
+     "webkit-light-phone/p42-users-disabled.png",
+     6753,
+     {
+      "scrollbar": 6753,
+      "shift4": 0,
+      "shift8": 0,
+      "other": 0
+     },
+     false
+    ]
+   ]
+  }
+ },
+ "p41": {
+  "total": 272,
+  "bytesEqual": 238,
+  "differ": 34,
+  "p0ComparatorFails": 12,
+  "classes": {
+   "chromium noise (p0-drift rule)": [
+    "chromium-dark-desktop/p41-cli-denied.png",
+    "chromium-dark-desktop/p41-profile-reset.png",
+    "chromium-dark-desktop/p41-setup-invalid.png",
+    "chromium-dark-desktop/p41-setup-required.png",
+    "chromium-dark-phone/p41-cli-denied.png",
+    "chromium-dark-phone/p41-setup-invalid.png",
+    "chromium-dark-phone/p41-setup-required.png",
+    "chromium-dark-phone/p41-setup-valid.png",
+    "chromium-light-desktop/p41-cli-denied.png",
+    "chromium-light-desktop/p41-profile-reset.png",
+    "chromium-light-desktop/p41-setup-invalid.png",
+    "chromium-light-desktop/p41-setup-required.png",
+    "chromium-light-desktop/p41-setup-valid.png",
+    "chromium-light-phone/p41-cli-denied.png",
+    "chromium-light-phone/p41-profile-photo.png",
+    "chromium-light-phone/p41-setup-invalid.png"
+   ],
+   "chromium other": [
+    [
+     "chromium-dark-desktop/p41-profile-photo.png",
+     66,
+     40
+    ],
+    [
+     "chromium-light-desktop/p41-profile-photo.png",
+     37,
+     39
+    ]
+   ],
+   "webkit scrollbar + shifts/other": [
+    [
+     "webkit-dark-desktop/p41-cli-denied.png",
+     34840,
+     {
+      "scrollbar": 7201,
+      "shift4": 16013,
+      "shift8": 11626,
+      "other": 0
+     },
+     true
+    ],
+    [
+     "webkit-dark-desktop/p41-profile-reset.png",
+     49961,
+     {
+      "scrollbar": 7201,
+      "shift4": 33857,
+      "shift8": 8777,
+      "other": 126
+     },
+     true
+    ],
+    [
+     "webkit-dark-desktop/p41-settings-saving.png",
+     61854,
+     {
+      "scrollbar": 7201,
+      "shift4": 52479,
+      "shift8": 2172,
+      "other": 2
+     },
+     true
+    ],
+    [
+     "webkit-dark-desktop/p41-settings-theme.png",
+     52028,
+     {
+      "scrollbar": 7201,
+      "shift4": 42655,
+      "shift8": 2172,
+      "other": 0
+     },
+     true
+    ],
+    [
+     "webkit-light-desktop/p41-cli-denied.png",
+     33848,
+     {
+      "scrollbar": 7201,
+      "shift4": 13710,
+      "shift8": 12937,
+      "other": 0
+     },
+     true
+    ],
+    [
+     "webkit-light-desktop/p41-profile-reset.png",
+     46230,
+     {
+      "scrollbar": 7201,
+      "shift4": 29135,
+      "shift8": 9805,
+      "other": 89
+     },
+     true
+    ],
+    [
+     "webkit-light-desktop/p41-settings-saving.png",
+     57668,
+     {
+      "scrollbar": 7201,
+      "shift4": 48291,
+      "shift8": 2172,
+      "other": 4
+     },
+     true
+    ],
+    [
+     "webkit-light-desktop/p41-settings-theme.png",
+     47909,
+     {
+      "scrollbar": 7201,
+      "shift4": 38536,
+      "shift8": 2172,
+      "other": 0
+     },
+     true
+    ]
+   ],
+   "webkit scrollbar only": [
+    [
+     "webkit-dark-phone/p41-cli-denied.png",
+     6753,
+     {
+      "scrollbar": 6753,
+      "shift4": 0,
+      "shift8": 0,
+      "other": 0
+     },
+     true
+    ],
+    [
+     "webkit-dark-phone/p41-profile-reset.png",
+     6753,
+     {
+      "scrollbar": 6753,
+      "shift4": 0,
+      "shift8": 0,
+      "other": 0
+     },
+     true
+    ],
+    [
+     "webkit-dark-phone/p41-settings-saving.png",
+     6753,
+     {
+      "scrollbar": 6753,
+      "shift4": 0,
+      "shift8": 0,
+      "other": 0
+     },
+     true
+    ],
+    [
+     "webkit-dark-phone/p41-settings-theme.png",
+     6753,
+     {
+      "scrollbar": 6753,
+      "shift4": 0,
+      "shift8": 0,
+      "other": 0
+     },
+     true
+    ],
+    [
+     "webkit-light-phone/p41-cli-denied.png",
+     6753,
+     {
+      "scrollbar": 6753,
+      "shift4": 0,
+      "shift8": 0,
+      "other": 0
+     },
+     false
+    ],
+    [
+     "webkit-light-phone/p41-profile-reset.png",
+     6753,
+     {
+      "scrollbar": 6753,
+      "shift4": 0,
+      "shift8": 0,
+      "other": 0
+     },
+     false
+    ],
+    [
+     "webkit-light-phone/p41-settings-saving.png",
+     6753,
+     {
+      "scrollbar": 6753,
+      "shift4": 0,
+      "shift8": 0,
+      "other": 0
+     },
+     false
+    ],
+    [
+     "webkit-light-phone/p41-settings-theme.png",
+     6753,
+     {
+      "scrollbar": 6753,
+      "shift4": 0,
+      "shift8": 0,
+      "other": 0
+     },
+     false
+    ]
+   ]
+  }
+ },
+ "pilot": {
+  "total": 256,
+  "bytesEqual": 224,
+  "differ": 32,
+  "p0ComparatorFails": 0,
+  "classes": {
+   "chromium noise (p0-drift rule)": [
+    "chromium-dark-desktop/pilot-account-open.png",
+    "chromium-dark-desktop/pilot-delete-confirm.png",
+    "chromium-dark-desktop/pilot-inputs.png",
+    "chromium-dark-desktop/pilot-p0-share-focused.png",
+    "chromium-dark-desktop/pilot-prerequisite-open.png",
+    "chromium-dark-desktop/pilot-remove-confirm.png",
+    "chromium-dark-desktop/pilot-share-expiry-open.png",
+    "chromium-dark-desktop/pilot-share-turn-off.png",
+    "chromium-dark-phone/pilot-run-hint.png",
+    "chromium-dark-phone/pilot-share-turn-off.png",
+    "chromium-light-desktop/pilot-assignee-open.png",
+    "chromium-light-desktop/pilot-delete-confirm.png",
+    "chromium-light-desktop/pilot-detail.png",
+    "chromium-light-desktop/pilot-field-hover.png",
+    "chromium-light-desktop/pilot-inputs.png",
+    "chromium-light-desktop/pilot-list-open.png",
+    "chromium-light-desktop/pilot-list-search.png",
+    "chromium-light-desktop/pilot-model-open.png",
+    "chromium-light-desktop/pilot-p0-share-focused.png",
+    "chromium-light-desktop/pilot-provider-open.png",
+    "chromium-light-desktop/pilot-reopen-refused.png",
+    "chromium-light-desktop/pilot-run-hint.png",
+    "chromium-light-desktop/pilot-share-expiry-open.png",
+    "chromium-light-desktop/pilot-share-private.png",
+    "chromium-light-desktop/pilot-share-turn-off.png",
+    "chromium-light-desktop/pilot-suggested-open.png",
+    "chromium-light-phone/pilot-remove-confirm.png",
+    "chromium-light-phone/pilot-reopen-refused.png",
+    "chromium-light-phone/pilot-run-hint.png",
+    "chromium-light-phone/pilot-share-turn-off.png"
+   ],
+   "chromium other": [
+    [
+     "chromium-light-desktop/pilot-share-error.png",
+     37545,
+     2
+    ],
+    [
+     "chromium-light-desktop/pilot-share-loading.png",
+     37641,
+     2
+    ]
+   ]
+  }
+ }
+}

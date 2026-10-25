@@ -1,0 +1,529 @@
+{
+ "webkit-dark-phone :: P5.1 Plan usage › the popover by hover and by press, the reset credit and its confirmation": [
+  {
+   "step": "pressed",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5",
+   "theme": "dark",
+   "lit": [
+    "O",
+    "Orbit baseline·Baseline runnerCtrl 3"
+   ],
+   "focus": {
+    "role": "div",
+    "name": "5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset cred"
+   },
+   "dialogs": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+   ],
+   "menus": [],
+   "tips": [],
+   "popovers": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "antd": [
+    "ant-app",
+    "ant-btn",
+    "ant-btn-circle",
+    "ant-btn-color-default",
+    "ant-btn-color-primary",
+    "ant-btn-icon",
+    "ant-btn-icon-only",
+    "ant-btn-primary",
+    "ant-btn-text",
+    "ant-btn-variant-solid",
+    "ant-btn-variant-text",
+    "ant-dropdown-trigger",
+    "ant-input",
+    "ant-input-borderless",
+    "ant-input-css-var",
+    "ant-select",
+    "ant-select-borderless",
+    "ant-select-content",
+    "ant-select-content-has-value",
+    "ant-select-css-var",
+    "ant-select-input",
+    "ant-select-single",
+    "ant-select-sm"
+   ],
+   "requests": []
+  },
+  {
+   "step": "tab",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5",
+   "theme": "dark",
+   "lit": [
+    "O",
+    "Orbit baseline·Baseline runnerCtrl 3"
+   ],
+   "focus": {
+    "role": "button",
+    "name": "Use reset credit"
+   },
+   "dialogs": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+   ],
+   "menus": [],
+   "tips": [],
+   "popovers": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "antd": [
+    "ant-app",
+    "ant-btn",
+    "ant-btn-circle",
+    "ant-btn-color-default",
+    "ant-btn-color-primary",
+    "ant-btn-icon",
+    "ant-btn-icon-only",
+    "ant-btn-primary",
+    "ant-btn-text",
+    "ant-btn-variant-solid",
+    "ant-btn-variant-text",
+    "ant-dropdown-trigger",
+    "ant-input",
+    "ant-input-borderless",
+    "ant-input-css-var",
+    "ant-select",
+    "ant-select-borderless",
+    "ant-select-content",
+    "ant-select-content-has-value",
+    "ant-select-css-var",
+    "ant-select-input",
+    "ant-select-single",
+    "ant-select-sm"
+   ],
+   "requests": []
+  },
+  {
+   "step": "confirmation",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5",
+   "theme": "dark",
+   "lit": [
+    "O",
+    "Orbit baseline·Baseline runnerCtrl 3"
+   ],
+   "focus": {
+    "role": "button",
+    "name": "Cancel"
+   },
+   "dialogs": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit",
+    "Use reset credit?This consumes 1 earned credit and resets eligible Codex usage windows. This action can’t be undone.Current usage92% → reset2 available · Next e"
+   ],
+   "menus": [],
+   "tips": [],
+   "popovers": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "antd": [
+    "ant-app",
+    "ant-btn",
+    "ant-btn-circle",
+    "ant-btn-color-default",
+    "ant-btn-color-primary",
+    "ant-btn-icon",
+    "ant-btn-icon-only",
+    "ant-btn-primary",
+    "ant-btn-text",
+    "ant-btn-variant-solid",
+    "ant-btn-variant-text",
+    "ant-dropdown-trigger",
+    "ant-input",
+    "ant-input-borderless",
+    "ant-input-css-var",
+    "ant-select",
+    "ant-select-borderless",
+    "ant-select-content",
+    "ant-select-content-has-value",
+    "ant-select-css-var",
+    "ant-select-input",
+    "ant-select-single",
+    "ant-select-sm"
+   ],
+   "requests": []
+  },
+  {
+   "step": "cancelled",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5",
+   "theme": "dark",
+   "lit": [
+    "O",
+    "Orbit baseline·Baseline runnerCtrl 3"
+   ],
+   "focus": {
+    "role": "button",
+    "name": "Use reset credit"
+   },
+   "dialogs": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+   ],
+   "menus": [],
+   "tips": [],
+   "popovers": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "antd": [
+    "ant-app",
+    "ant-btn",
+    "ant-btn-circle",
+    "ant-btn-color-default",
+    "ant-btn-color-primary",
+    "ant-btn-icon",
+    "ant-btn-icon-only",
+    "ant-btn-primary",
+    "ant-btn-text",
+    "ant-btn-variant-solid",
+    "ant-btn-variant-text",
+    "ant-dropdown-trigger",
+    "ant-input",
+    "ant-input-borderless",
+    "ant-input-css-var",
+    "ant-select",
+    "ant-select-borderless",
+    "ant-select-content",
+    "ant-select-content-has-value",
+    "ant-select-css-var",
+    "ant-select-input",
+    "ant-select-single",
+    "ant-select-sm"
+   ],
+   "requests": []
+  },
+  {
+   "step": "unanswered",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5",
+   "theme": "dark",
+   "lit": [
+    "O",
+    "Orbit baseline·Baseline runnerCtrl 3"
+   ],
+   "focus": {
+    "role": "status",
+    "name": "Couldn’t confirm the reset requestOrbit didn’t answer. Retry sends the same requ"
+   },
+   "dialogs": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoCouldn’t confirm the r"
+   ],
+   "menus": [],
+   "tips": [],
+   "popovers": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoCouldn’t confirm the reset requestOrbit didn’t answer. Retry sends the same request, so at most 1 credit is used.RetryDismiss"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "antd": [
+    "ant-app",
+    "ant-btn",
+    "ant-btn-circle",
+    "ant-btn-color-default",
+    "ant-btn-color-primary",
+    "ant-btn-icon",
+    "ant-btn-icon-only",
+    "ant-btn-primary",
+    "ant-btn-text",
+    "ant-btn-variant-solid",
+    "ant-btn-variant-text",
+    "ant-dropdown-trigger",
+    "ant-input",
+    "ant-input-borderless",
+    "ant-input-css-var",
+    "ant-select",
+    "ant-select-borderless",
+    "ant-select-content",
+    "ant-select-content-has-value",
+    "ant-select-css-var",
+    "ant-select-input",
+    "ant-select-single",
+    "ant-select-sm"
+   ],
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/runners/2zwQZ2hd93IvLb59t6p28/codex-rate-limit-reset",
+     "body": {
+      "clientRequestId": "7c5c109c-60c0-4e7c-bb75-cb43d06fd5b9",
+      "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+      "workspaceId": "2zwQZ2hd93IvLb59t6p1s"
+     }
+    },
+    {
+     "method": "POST",
+     "path": "/api/runners/2zwQZ2hd93IvLb59t6p28/codex-rate-limit-reset",
+     "body": {
+      "clientRequestId": "7c5c109c-60c0-4e7c-bb75-cb43d06fd5b9",
+      "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+      "workspaceId": "2zwQZ2hd93IvLb59t6p1s"
+     }
+    },
+    {
+     "method": "POST",
+     "path": "/api/runners/2zwQZ2hd93IvLb59t6p28/codex-rate-limit-reset",
+     "body": {
+      "clientRequestId": "7c5c109c-60c0-4e7c-bb75-cb43d06fd5b9",
+      "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+      "workspaceId": "2zwQZ2hd93IvLb59t6p1s"
+     }
+    }
+   ]
+  },
+  {
+   "step": "unanswered dismissed",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5",
+   "theme": "dark",
+   "lit": [
+    "O",
+    "Orbit baseline·Baseline runnerCtrl 3"
+   ],
+   "focus": {
+    "role": "button",
+    "name": "Use reset credit"
+   },
+   "dialogs": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+   ],
+   "menus": [],
+   "tips": [],
+   "popovers": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "antd": [
+    "ant-app",
+    "ant-btn",
+    "ant-btn-circle",
+    "ant-btn-color-default",
+    "ant-btn-color-primary",
+    "ant-btn-icon",
+    "ant-btn-icon-only",
+    "ant-btn-primary",
+    "ant-btn-text",
+    "ant-btn-variant-solid",
+    "ant-btn-variant-text",
+    "ant-dropdown-trigger",
+    "ant-input",
+    "ant-input-borderless",
+    "ant-input-css-var",
+    "ant-select",
+    "ant-select-borderless",
+    "ant-select-content",
+    "ant-select-content-has-value",
+    "ant-select-css-var",
+    "ant-select-input",
+    "ant-select-single",
+    "ant-select-sm"
+   ],
+   "requests": []
+  },
+  {
+   "step": "started",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5",
+   "theme": "dark",
+   "lit": [
+    "O",
+    "Orbit baseline·Baseline runnerCtrl 3"
+   ],
+   "focus": {
+    "role": "status",
+    "name": "Starting reset…Waiting for the runner to pick this up. No credit has been used y"
+   },
+   "dialogs": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoStarting reset…Waiting"
+   ],
+   "menus": [],
+   "tips": [],
+   "popovers": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoStarting reset…Waiting for the runner to pick this up. No credit has been used yet."
+   ],
+   "alerts": [],
+   "notifications": "",
+   "antd": [
+    "ant-app",
+    "ant-btn",
+    "ant-btn-circle",
+    "ant-btn-color-default",
+    "ant-btn-color-primary",
+    "ant-btn-icon",
+    "ant-btn-icon-only",
+    "ant-btn-primary",
+    "ant-btn-text",
+    "ant-btn-variant-solid",
+    "ant-btn-variant-text",
+    "ant-dropdown-trigger",
+    "ant-input",
+    "ant-input-borderless",
+    "ant-input-css-var",
+    "ant-select",
+    "ant-select-borderless",
+    "ant-select-content",
+    "ant-select-content-has-value",
+    "ant-select-css-var",
+    "ant-select-input",
+    "ant-select-single",
+    "ant-select-sm"
+   ],
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/runners/2zwQZ2hd93IvLb59t6p28/codex-rate-limit-reset",
+     "body": {
+      "clientRequestId": "c07c165b-adb7-4f95-87b8-ad7f6101050b",
+      "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+      "workspaceId": "2zwQZ2hd93IvLb59t6p1s"
+     }
+    }
+   ]
+  },
+  {
+   "step": "settled",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5",
+   "theme": "dark",
+   "lit": [
+    "O",
+    "Orbit baseline·Baseline runnerCtrl 3"
+   ],
+   "focus": {
+    "role": "status",
+    "name": "Usage limits reset1 credit used. Plan usage has been refreshed."
+   },
+   "dialogs": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUsage limits reset1 cr"
+   ],
+   "menus": [],
+   "tips": [],
+   "popovers": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUsage limits reset1 credit used. Plan usage has been refreshed.Dismiss"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "antd": [
+    "ant-app",
+    "ant-btn",
+    "ant-btn-circle",
+    "ant-btn-color-default",
+    "ant-btn-color-primary",
+    "ant-btn-icon",
+    "ant-btn-icon-only",
+    "ant-btn-primary",
+    "ant-btn-text",
+    "ant-btn-variant-solid",
+    "ant-btn-variant-text",
+    "ant-dropdown-trigger",
+    "ant-input",
+    "ant-input-borderless",
+    "ant-input-css-var",
+    "ant-select",
+    "ant-select-borderless",
+    "ant-select-content",
+    "ant-select-content-has-value",
+    "ant-select-css-var",
+    "ant-select-input",
+    "ant-select-single",
+    "ant-select-sm"
+   ],
+   "requests": []
+  },
+  {
+   "step": "dismissed",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5",
+   "theme": "dark",
+   "lit": [
+    "O",
+    "Orbit baseline·Baseline runnerCtrl 3"
+   ],
+   "focus": {
+    "role": "button",
+    "name": "Use reset credit"
+   },
+   "dialogs": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+   ],
+   "menus": [],
+   "tips": [],
+   "popovers": [
+    "Plan usage5h limit92%Resets Sep 28, 1:40 PMWeekly limit68%Resets Oct 2, 12:00 PMReset credit2 availableNext expires Oct 4Updated 2 min agoUse reset credit"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "antd": [
+    "ant-app",
+    "ant-btn",
+    "ant-btn-circle",
+    "ant-btn-color-default",
+    "ant-btn-color-primary",
+    "ant-btn-icon",
+    "ant-btn-icon-only",
+    "ant-btn-primary",
+    "ant-btn-text",
+    "ant-btn-variant-solid",
+    "ant-btn-variant-text",
+    "ant-dropdown-trigger",
+    "ant-input",
+    "ant-input-borderless",
+    "ant-input-css-var",
+    "ant-select",
+    "ant-select-borderless",
+    "ant-select-content",
+    "ant-select-content-has-value",
+    "ant-select-css-var",
+    "ant-select-input",
+    "ant-select-single",
+    "ant-select-sm"
+   ],
+   "requests": []
+  },
+  {
+   "step": "escape",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6uQ5",
+   "theme": "dark",
+   "lit": [
+    "O",
+    "Orbit baseline·Baseline runnerCtrl 3"
+   ],
+   "focus": {
+    "role": "button",
+    "name": "Plan usage 92%"
+   },
+   "dialogs": [],
+   "menus": [],
+   "tips": [],
+   "popovers": [],
+   "alerts": [],
+   "notifications": "",
+   "antd": [
+    "ant-app",
+    "ant-btn",
+    "ant-btn-circle",
+    "ant-btn-color-default",
+    "ant-btn-color-primary",
+    "ant-btn-icon",
+    "ant-btn-icon-only",
+    "ant-btn-primary",
+    "ant-btn-text",
+    "ant-btn-variant-solid",
+    "ant-btn-variant-text",
+    "ant-dropdown-trigger",
+    "ant-input",
+    "ant-input-borderless",
+    "ant-input-css-var",
+    "ant-select",
+    "ant-select-borderless",
+    "ant-select-content",
+    "ant-select-content-has-value",
+    "ant-select-css-var",
+    "ant-select-input",
+    "ant-select-single",
+    "ant-select-sm"
+   ],
+   "requests": []
+  }
+ ]
+}

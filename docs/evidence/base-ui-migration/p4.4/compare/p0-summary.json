@@ -1,0 +1,514 @@
+{
+ "beyond": [
+  {
+   "clusters": [
+    [
+     [
+      18,
+      21
+     ],
+     [
+      192,
+      193
+     ],
+     3,
+     2
+    ],
+    [
+     [
+      18,
+      21
+     ],
+     [
+      222,
+      223
+     ],
+     4,
+     4
+    ]
+   ],
+   "max": 4,
+   "pixels": 7,
+   "shot": "chromium-dark-desktop/breakpoint-639-projects.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      18,
+      21
+     ],
+     [
+      192,
+      193
+     ],
+     3,
+     2
+    ],
+    [
+     [
+      18,
+      21
+     ],
+     [
+      222,
+      223
+     ],
+     4,
+     4
+    ]
+   ],
+   "max": 4,
+   "pixels": 7,
+   "shot": "chromium-dark-phone/projects-list.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      18,
+      21
+     ],
+     [
+      149,
+      153
+     ],
+     6,
+     3
+    ],
+    [
+     [
+      18,
+      21
+     ],
+     [
+      192,
+      193
+     ],
+     3,
+     2
+    ],
+    [
+     [
+      18,
+      21
+     ],
+     [
+      222,
+      223
+     ],
+     4,
+     4
+    ]
+   ],
+   "max": 4,
+   "pixels": 13,
+   "shot": "chromium-dark-phone/projects-search-empty.png"
+  }
+ ],
+ "missing": [],
+ "screenshots": {
+  "antialias": 17,
+  "beyond": 3,
+  "identical": 232,
+  "missing": 0
+ },
+ "styleDeltas": {
+  "chromium-dark-desktop/wiki-new-entry": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   },
+   "input": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(59, 59, 59)"
+    ],
+    "height": [
+     22,
+     1
+    ],
+    "width": [
+     350,
+     1
+    ]
+   }
+  },
+  "chromium-dark-phone/wiki-new-entry": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   },
+   "input": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(59, 59, 59)"
+    ],
+    "fontSize": [
+     "16px",
+     "14px"
+    ],
+    "height": [
+     22,
+     1
+    ],
+    "lineHeight": [
+     "25.1429px",
+     "22px"
+    ],
+    "width": [
+     164,
+     1
+    ]
+   }
+  },
+  "chromium-light-desktop/wiki-new-entry": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   },
+   "input": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "height": [
+     22,
+     1
+    ],
+    "width": [
+     350,
+     1
+    ]
+   }
+  },
+  "chromium-light-phone/wiki-new-entry": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   },
+   "input": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "fontSize": [
+     "16px",
+     "14px"
+    ],
+    "height": [
+     22,
+     1
+    ],
+    "lineHeight": [
+     "25.1429px",
+     "22px"
+    ],
+    "width": [
+     164,
+     1
+    ]
+   }
+  },
+  "webkit-dark-desktop/wiki-new-entry": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   },
+   "input": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(30, 30, 30)"
+    ],
+    "height": [
+     22,
+     1
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "width": [
+     350,
+     1
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/wiki-new-entry": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   },
+   "input": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(30, 30, 30)"
+    ],
+    "fontSize": [
+     "16px",
+     "14px"
+    ],
+    "height": [
+     22,
+     1
+    ],
+    "lineHeight": [
+     "25.142857px",
+     "22.000019px"
+    ],
+    "width": [
+     164,
+     1
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/wiki-new-entry": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   },
+   "input": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "height": [
+     22,
+     1
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "width": [
+     350,
+     1
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/wiki-new-entry": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   },
+   "input": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "fontSize": [
+     "16px",
+     "14px"
+    ],
+    "height": [
+     22,
+     1
+    ],
+    "lineHeight": [
+     "25.142857px",
+     "22.000019px"
+    ],
+    "width": [
+     164,
+     1
+    ]
+   },
+   "surface": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  }
+ },
+ "tests": {
+  "notPassedDel": [
+   "chromium-dark-desktop :: P2.3 production notification compatibility",
+   "chromium-dark-desktop :: both sides of existing 600, 640 and 960px rules",
+   "chromium-dark-desktop :: record browser performance baseline",
+   "chromium-dark-desktop :: session",
+   "chromium-dark-phone :: P2.3 production notification compatibility",
+   "chromium-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-dark-phone :: record browser performance baseline",
+   "chromium-dark-phone :: session",
+   "chromium-light-desktop :: P2.3 production notification compatibility",
+   "chromium-light-desktop :: both sides of existing 600, 640 and 960px rules",
+   "chromium-light-desktop :: record browser performance baseline",
+   "chromium-light-desktop :: session",
+   "chromium-light-phone :: P2.3 production notification compatibility",
+   "chromium-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-light-phone :: record browser performance baseline",
+   "chromium-light-phone :: session",
+   "webkit-dark-desktop :: P2.3 production notification compatibility",
+   "webkit-dark-desktop :: both sides of existing 600, 640 and 960px rules",
+   "webkit-dark-desktop :: record browser performance baseline",
+   "webkit-dark-desktop :: session",
+   "webkit-dark-phone :: P2.3 production notification compatibility",
+   "webkit-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-dark-phone :: record browser performance baseline",
+   "webkit-dark-phone :: session",
+   "webkit-light-desktop :: P2.3 production notification compatibility",
+   "webkit-light-desktop :: both sides of existing 600, 640 and 960px rules",
+   "webkit-light-desktop :: record browser performance baseline",
+   "webkit-light-desktop :: session",
+   "webkit-light-phone :: P2.3 production notification compatibility",
+   "webkit-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-light-phone :: record browser performance baseline",
+   "webkit-light-phone :: session"
+  ],
+  "notPassedRef": [
+   "chromium-dark-desktop :: P2.3 production notification compatibility",
+   "chromium-dark-desktop :: both sides of existing 600, 640 and 960px rules",
+   "chromium-dark-desktop :: record browser performance baseline",
+   "chromium-dark-desktop :: session",
+   "chromium-dark-phone :: P2.3 production notification compatibility",
+   "chromium-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-dark-phone :: record browser performance baseline",
+   "chromium-dark-phone :: session",
+   "chromium-light-desktop :: P2.3 production notification compatibility",
+   "chromium-light-desktop :: both sides of existing 600, 640 and 960px rules",
+   "chromium-light-desktop :: record browser performance baseline",
+   "chromium-light-desktop :: session",
+   "chromium-light-phone :: P2.3 production notification compatibility",
+   "chromium-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-light-phone :: record browser performance baseline",
+   "chromium-light-phone :: session",
+   "webkit-dark-desktop :: P2.3 production notification compatibility",
+   "webkit-dark-desktop :: both sides of existing 600, 640 and 960px rules",
+   "webkit-dark-desktop :: record browser performance baseline",
+   "webkit-dark-desktop :: session",
+   "webkit-dark-phone :: P2.3 production notification compatibility",
+   "webkit-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-dark-phone :: record browser performance baseline",
+   "webkit-dark-phone :: session",
+   "webkit-light-desktop :: P2.3 production notification compatibility",
+   "webkit-light-desktop :: both sides of existing 600, 640 and 960px rules",
+   "webkit-light-desktop :: record browser performance baseline",
+   "webkit-light-desktop :: session",
+   "webkit-light-phone :: P2.3 production notification compatibility",
+   "webkit-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-light-phone :: record browser performance baseline",
+   "webkit-light-phone :: session"
+  ],
+  "total": 112
+ },
+ "traces": {
+  "differing": {},
+  "equal": 0,
+  "total": 0
+ }
+}

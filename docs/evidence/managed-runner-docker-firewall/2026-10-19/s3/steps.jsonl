@@ -1,0 +1,4 @@
+{"at": "2026-10-19T08:15:57Z", "body": {"needsSetup": true}, "status": 200, "step": "setup-status"}
+{"at": "2026-10-19T08:15:58Z", "status": 201, "step": "bootstrap: the administrator"}
+{"at": "2026-10-19T08:15:58Z", "step": "the administrator signs in"}
+{"answer": {"baseUrl": "http://10.77.0.2:18080/anthropic", "enabled": true, "id": "34iWR7Lwz2jfwZFdo7lq6", "presetSlug": "deepseek", "runtime": "claude", "slug": "deepseek"}, "at": "2026-10-19T08:16:10Z", "status": 201, "step": "a DeepSeek-preset key whose endpoint is the internal model endpoint"}

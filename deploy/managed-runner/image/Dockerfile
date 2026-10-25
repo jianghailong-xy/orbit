@@ -20,12 +20,21 @@ RUN test "$(node --version)" = v26.10.0 \
  && test -x /opt/codex/bin/codex \
  && test -x /opt/codex/codex-path/rg
 
+FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 AS claude
+# The engine an Anthropic-dialect key (DeepSeek's included) runs on. The wrapper package's
+# postinstall only copies its platform package's native binary over a stub: take that binary
+# directly, so no Node wrapper sits in the signal path either.
+RUN test "$(node --version)" = v26.10.0 \
+ && npm install --global --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.300 \
+ && install -D -m 0755 \
+      "/usr/local/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-$(node -p process.arch)/claude" \
+      /opt/claude/bin/claude
+
 FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1
-ARG ORBIT_SOURCE_SHA
-LABEL org.opencontainers.image.title="Orbit optional managed runner" \
-      org.opencontainers.image.revision="$ORBIT_SOURCE_SHA"
 # Bootstrap HTTPS trust from Node's bundled public roots before installing Debian's
 # ca-certificates. Snapshot expiry is disabled; apt signature checks remain enabled.
+# apt 3 verifies HTTPS with OpenSSL, whose default CA file (/usr/lib/ssl/cert.pem) does not
+# exist in the slim image until the openssl package arrives: name the bootstrap bundle.
 RUN mkdir -p /etc/ssl/certs \
  && node -p "require('tls').rootCertificates.join('\n')" > /etc/ssl/certs/ca-certificates.crt \
  && rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* \
@@ -33,8 +42,8 @@ RUN mkdir -p /etc/ssl/certs \
       'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260928T000000Z/ trixie main' \
       'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260928T000000Z/ trixie-security main' \
       > /etc/apt/sources.list \
- && apt-get update \
- && apt-get install --no-install-recommends -y \
+ && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt update \
+ && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt install --no-install-recommends -y \
       bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --gid 10001 orbit \
@@ -42,9 +51,8 @@ RUN mkdir -p /etc/ssl/certs \
  && install -d -o 10001 -g 10001 -m 0700 /var/lib/orbit /var/lib/orbit/home
 
 COPY --from=orbit-build /usr/local/go/ /usr/local/go/
-COPY --from=orbit-build --chmod=0755 /out/orbit /usr/local/bin/orbit
 COPY --from=codex /opt/codex/ /opt/codex/
-COPY --chmod=0755 deploy/managed-runner/image/entrypoint.py /usr/local/bin/orbit-container
+COPY --from=claude /opt/claude/ /opt/claude/
 COPY --chmod=0644 deploy/managed-runner/image/pins.json /usr/local/share/orbit/pins.json
 ENV PATH="/usr/local/go/bin:${PATH}" \
     HOME=/var/lib/orbit/home \
@@ -53,11 +61,28 @@ ENV PATH="/usr/local/go/bin:${PATH}" \
     CLAUDE_CONFIG_DIR=/var/lib/orbit/home/.claude \
     ORBIT_NO_SELFUPDATE=1 \
     ORBIT_NO_ENGINE_UPDATE=1 \
+    DISABLE_AUTOUPDATER=1 \
     GOTOOLCHAIN=local \
     PYTHONDONTWRITEBYTECODE=1
+# COPY --chmod=0644 gives the directory it creates that mode too: make it traversable again.
+# The runner's commits (the autoInitGit baseline, finalize, checkpoints) need an identity, and
+# a fresh volume has none: give a neutral one at system level, the lowest precedence, so an
+# identity in the repository, the user's global config or the environment still wins.
 RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex \
- && chown -R root:root /opt/codex /usr/local/go /usr/local/share/orbit \
- && chmod -R go-w /opt/codex /usr/local/go /usr/local/share/orbit
+ && ln -s /opt/claude/bin/claude /usr/local/bin/claude \
+ && chown -R root:root /opt/codex /opt/claude /usr/local/go /usr/local/share/orbit \
+ && chmod -R go-w /opt/codex /opt/claude /usr/local/go /usr/local/share/orbit \
+ && chmod 0755 /usr/local/share/orbit \
+ && git config --system user.name 'Orbit Runner' \
+ && git config --system user.email runner@orbit.invalid
+# What changes with every source commit comes after the slow steps above, so a new commit reuses
+# them and rebuilds only the runner binary, the entrypoint and the version record. A build argument
+# reaches every RUN after its ARG, so the source SHA must not be declared any earlier.
+COPY --from=orbit-build --chmod=0755 /out/orbit /usr/local/bin/orbit
+COPY --chmod=0755 deploy/managed-runner/image/entrypoint.py /usr/local/bin/orbit-container
+ARG ORBIT_SOURCE_SHA
+LABEL org.opencontainers.image.title="Orbit optional managed runner" \
+      org.opencontainers.image.revision="$ORBIT_SOURCE_SHA"
 # Record actual build-time versions without a login, registration or model call.
 RUN <<'SH'
 set -eu
@@ -71,7 +96,8 @@ from pathlib import Path
 pins = json.loads(Path('/usr/local/share/orbit/pins.json').read_text())
 env = dict(os.environ, HOME='/tmp/orbit-version-check',
            ORBIT_HOME='/tmp/orbit-version-check/.orbit',
-           CODEX_HOME='/tmp/orbit-version-check/.codex')
+           CODEX_HOME='/tmp/orbit-version-check/.codex',
+           CLAUDE_CONFIG_DIR='/tmp/orbit-version-check/.claude')
 def version(*argv):
     return subprocess.check_output(argv, env=env, text=True).strip()
 
@@ -80,18 +106,39 @@ actual = {
     'node': version('node', '--version'),
     'codex': version('codex', '--version'),
     'codexRipgrep': version('/opt/codex/codex-path/rg', '--version'),
+    'claude': version('claude', '--version'),
     'git': version('git', '--version'),
     'python': version('python3', '--version'),
     'ripgrep': version('rg', '--version'),
     'sqlite': version('sqlite3', '--version'),
     'tini': version('/usr/bin/tini', '--version'),
 }
-for tool, expected in {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.158.0'}.items():
+for tool, expected in {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.158.0',
+                       'claude': '2.1.300 (Claude Code)'}.items():
     if actual[tool] != expected:
         raise SystemExit(f'{tool}: expected {expected}, got {actual[tool]}')
 orbit = json.loads(version('orbit', 'capabilities', '--json'))
 if orbit['sourceSha'] != os.environ['ORBIT_SOURCE_SHA']:
     raise SystemExit('Orbit source SHA did not reach the binary')
+# The runner's autoInitGit baseline (src/runner-go/worktree.go initGitRepo) with no identity
+# configured anywhere but the image, then a repository identity, which must win over it.
+repo = Path('/tmp/orbit-version-check/identity')
+repo.mkdir(parents=True)
+git_env = {key: value for key, value in env.items()
+           if not key.startswith(('GIT_AUTHOR_', 'GIT_COMMITTER_')) and key != 'EMAIL'}
+git_env['GIT_CONFIG_GLOBAL'] = '/dev/null'
+def git(*argv):
+    return subprocess.check_output(['git', '-C', str(repo), *argv], env=git_env, text=True).strip()
+git('init', '-q')
+git('commit', '--no-verify', '--allow-empty', '-q', '-m', 'orbit: baseline')
+actual['gitDefaultIdentity'] = git('log', '-1', '--format=%an <%ae>')
+if actual['gitDefaultIdentity'] != 'Orbit Runner <runner@orbit.invalid>':
+    raise SystemExit(f"baseline commit identity: {actual['gitDefaultIdentity']}")
+git('config', 'user.name', 'Repository User')
+git('config', 'user.email', 'repository@example.invalid')
+git('commit', '--no-verify', '--allow-empty', '-q', '-m', 'repository identity')
+if git('log', '-1', '--format=%an <%ae>') != 'Repository User <repository@example.invalid>':
+    raise SystemExit('a repository identity must override the image default')
 packages = version('dpkg-query', '-W', '-f=${binary:Package}\t${Version}\n')
 manifest = {'schemaVersion': 1, 'sourceSha': orbit['sourceSha'],
             'orbitVersion': orbit['cliVersion'], 'architecture': platform.machine(),

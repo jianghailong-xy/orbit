@@ -1,0 +1,30 @@
+== base f78e93f61
+{"totals": {"antClass": 10, "antdWord": 4, "cssinjs": 6, "antPrefixDefault": 48, "rcComponents": 1, "anticon": 78, "iconsStyleId": 1, "rcUtilDynamicCss": 4}, "bytes": 4669051, "gzip": 1302288, "antClassSample": ["ant-input", "ant-input-affix-wrapper", "ant-select-input", "ant-skeleton-loading", "ant-wave-target"]}
+  assets/TaskDependencyGraph.css: 15413 B, gzip 2530 B
+  assets/TaskDependencyGraph.js: 188640 B, gzip 60243 B
+  assets/Transcript.js: 705332 B, gzip 215379 B
+  assets/app.css: 495526 B, gzip 81135 B
+  assets/index.js: 1964431 B, gzip 592912 B
+  assets/projectDependencyGraph.js: 159803 B, gzip 53155 B
+  assets/sessionExport.js: 894249 B, gzip 212904 B
+  assets/taskDependencyGraph.js: 182603 B, gzip 61201 B
+== ref 76dc63242
+{"totals": {"antClass": 10, "antdWord": 4, "cssinjs": 6, "antPrefixDefault": 48, "rcComponents": 1, "anticon": 78, "iconsStyleId": 1, "rcUtilDynamicCss": 4}, "bytes": 4669039, "gzip": 1302282, "antClassSample": ["ant-input", "ant-input-affix-wrapper", "ant-select-input", "ant-skeleton-loading", "ant-wave-target"]}
+  assets/TaskDependencyGraph.css: 15413 B, gzip 2530 B
+  assets/TaskDependencyGraph.js: 188640 B, gzip 60242 B
+  assets/Transcript.js: 705332 B, gzip 215380 B
+  assets/app.css: 495526 B, gzip 81135 B
+  assets/index.js: 1964431 B, gzip 592911 B
+  assets/projectDependencyGraph.js: 159803 B, gzip 53155 B
+  assets/sessionExport.js: 894237 B, gzip 212896 B
+  assets/taskDependencyGraph.js: 182603 B, gzip 61201 B
+== del 6879542dc
+{"totals": {"antClass": 0, "antdWord": 0, "cssinjs": 0, "antPrefixDefault": 0, "rcComponents": 0, "anticon": 75, "iconsStyleId": 1, "rcUtilDynamicCss": 2}, "bytes": 4417889, "gzip": 1215092, "antClassSample": []}
+  assets/TaskDependencyGraph.js: 188645 B, gzip 60245 B
+  assets/TaskDependencyGraph.css: 15413 B, gzip 2530 B
+  assets/Transcript.js: 705296 B, gzip 214950 B
+  assets/app.css: 496278 B, gzip 81221 B
+  assets/index.js: 1713113 B, gzip 506310 B
+  assets/projectDependencyGraph.js: 159801 B, gzip 53142 B
+  assets/sessionExport.js: 893693 B, gzip 212695 B
+  assets/taskDependencyGraph.js: 182591 B, gzip 61181 B

@@ -1,0 +1,3 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false},"clientInfo":{"name":"orbit-p0","version":"0"}}}
+{"jsonrpc":"2.0","id":2,"method":"session/load","params":{"sessionId":"<UUID_1>","cwd":"<RUN>/work","mcpServers":[]}}
+{"jsonrpc":"2.0","id":3,"method":"session/prompt","params":{"sessionId":"<UUID_1>","prompt":[{"type":"text","text":"Two steps: 1) Run the shell command `env | sort > env-after-move.txt`. 2) Then tell me the exact shell command you ran in the previous turn of this conversation, in backticks."}]}}

@@ -1,0 +1,17 @@
+{
+  "created": true,
+  "owner": "amy",
+  "preferences": {
+    "defaultPermissionMode": "bypassPermissions",
+    "status": 200
+  },
+  "signIn": {
+    "at": "2026-10-18T09:02:39.776+00:00",
+    "ms": 46.7,
+    "status": 201
+  },
+  "user": {
+    "email": "t06-amy@lab.invalid",
+    "id": "34hyEpyir7hPebyT9HALd"
+  }
+}

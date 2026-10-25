@@ -1,0 +1,83 @@
+{
+ "schemaVersion": 1,
+ "kind": "antd-inventory-delta",
+ "date": "2026-10-10",
+ "task": "34Za39Mm04q5p66pqUTtj",
+ "decision": {
+  "by": "coordinator",
+  "session": "34b245G3NiwgVVUj2JFJw",
+  "date": "2026-10-10",
+  "questions": [
+   "index.css: .ant-dropdown-menu-item.composer-provider-gone .scope-menu-row {"
+  ]
+ },
+ "scan": {
+  "commit": "378b7033eb8f470b0c74089bce748cb158b5aacf",
+  "scopeHash": "b444bed5ef1beb033fed68e0f4d58e32cb305ccaef29fd36602fa922d72de5d0",
+  "command": "node src/web/scripts/audit-antd.mjs --json",
+  "counts": {
+   "scannedFiles": 781,
+   "productionFiles": 388,
+   "testFiles": 391,
+   "antdProductionFiles": 18,
+   "antdTestFiles": 46,
+   "antSelectorTestFiles": 13,
+   "antClassTestFiles": 13,
+   "iconProductionFiles": 114,
+   "iconTestFiles": 0,
+   "relevantSourceFiles": 216,
+   "hitLines": {
+    "ant-class": 138,
+    "ant-design-support": 19,
+    "ant-selector": 133,
+    "antd-reference": 171,
+    "icon-class": 84,
+    "icon-reference": 125,
+    "imperative-confirm": 10,
+    "imperative-feedback": 220,
+    "internal-ref": 4,
+    "provider": 58,
+    "rc-support": 239,
+    "ref-focus": 29,
+    "theme": 2,
+    "use-app": 4,
+    "use-token": 1
+   },
+   "retirementBlockingFiles": 92
+  }
+ },
+ "files": {},
+ "css": [
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".ant-dropdown-menu-item.composer-provider-gone .scope-menu-row {",
+   "count": 1,
+   "lines": [
+    17836
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "3a3c58c1f808527309daaedfbb4bd83e54503ca5",
+     "short": "3a3c58c1f",
+     "date": "2026-10-10",
+     "subject": "feat(web): sessions, tasks and workspaces pick the engine, then a provider it runs (T7)",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P5.3",
+   "reason": "输入框 Provider 菜单（composer）里已停用或已删除的会话自身 key 一行的覆盖样式；菜单在 WorkspaceView，随会话工作区的输入框归 P5.3，与已归 P5.3 的兄弟规则 `.composer-provider-fix` 一起在迁移菜单时改写。",
+   "basis": "协调者 2026-10-10 判定（P5.2 在交证据前合并 origin/main ab47a1c11（378b7033e）后 --check-owners 报出：T7 3a3c58c1f 带进 main 的 index.css 一行，status 记 new，记入 2026-10-10b.json；2026-10-10.json 已被本批占用）。随 P5.3 迁移输入框菜单而消失。"
+  }
+ ],
+ "summary": {
+  "files": 0,
+  "cssLines": 1,
+  "owners": {
+   "P5.3": 1
+  }
+ }
+}

@@ -117,8 +117,10 @@ export class RunnersController {
 
   // Removing one account of `engine` from a runner: the slot's own directory and the record beside
   // it. Owner-scoped in the service like the relay above, because it deletes credentials on that
-  // machine. The account is a slot id or 'default'; the service refuses anything else, and refuses
-  // Default itself — that is the login the CLI in a terminal shares.
+  // machine. The account is a slot id or 'default'; the service refuses anything else. Default is
+  // the login the CLI in a terminal shares, so it is removed from Orbit only: nothing on the machine
+  // changes and the runner is not asked, and it is refused while no other account of `engine` is
+  // reported there.
   @PatForbidden('RUNNER_CONTROL')
   @Delete(':id/accounts/:engine/:account')
   removeAccount(
@@ -129,6 +131,19 @@ export class RunnersController {
   ) {
     if (!isLoginEngine(engine)) throw new BadRequestException('Unknown engine');
     return this.runners.removeAccount(user.userId, id, engine, account);
+  }
+
+  // Bringing back a Default the removal above took out of Orbit. Orbit's own record again, so the
+  // runner need not be online; owner-scoped in the service like the removal.
+  @PatForbidden('RUNNER_CONTROL')
+  @Post(':id/accounts/:engine/default/restore')
+  restoreDefault(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('engine') engine: string,
+  ) {
+    if (!isLoginEngine(engine)) throw new BadRequestException('Unknown engine');
+    return this.runners.restoreDefault(user.userId, id, engine);
   }
 
   // Renaming one account of `engine` on a runner — Default included. Only a label, and Orbit's own:

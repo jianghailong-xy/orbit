@@ -139,6 +139,7 @@ function controllerHarness(runnerRow: Record<string, unknown>) {
   const updates: Record<string, unknown>[] = [];
   let current: Record<string, unknown> = { maxConcurrent: 4, ...runnerRow };
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: {
       findUnique: async () => current,
       update: async ({ data }: { data: Record<string, unknown> }) => {

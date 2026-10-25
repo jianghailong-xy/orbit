@@ -1,0 +1,127 @@
+argv: bash -c cd ../.. && npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop
+tree: /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del
+head: a0e84233f4c532a810ca7bbd17214e34b0793344
+uncommitted:
+load: 17.66 21.83 24.44 10/3030 1632298
+mem: 7910M available
+disk: / 8378M available, TMPDIR /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/tmp
+started: 2026-10-10T06:08:30Z
+
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop
+
+P0 expected screenshots: 44 P0.2 originals, 183 main drift references, 25 accepted migration differences.
+
+Running 97 tests using 1 worker
+
+  ✓   1 [chromium-light-desktop] › ui-migration/choices-first-frame.browser.mjs:177:3 › menu is drawn where it settles from its first frame, at the replaced popup's place (15.1s)
+  ✓   2 [chromium-light-desktop] › ui-migration/choices-first-frame.browser.mjs:210:3 › menu keeps its place through the normal entrance motion (3.6s)
+  ✓   3 [chromium-light-desktop] › ui-migration/choices-first-frame.browser.mjs:177:3 › submenu is drawn where it settles from its first frame, at the replaced popup's place (16.1s)
+  ✓   4 [chromium-light-desktop] › ui-migration/choices-first-frame.browser.mjs:210:3 › submenu keeps its place through the normal entrance motion (3.7s)
+  ✓   5 [chromium-light-desktop] › ui-migration/choices-first-frame.browser.mjs:177:3 › select is drawn where it settles from its first frame, at the replaced popup's place (10.9s)
+  ✓   6 [chromium-light-desktop] › ui-migration/choices-first-frame.browser.mjs:210:3 › select keeps its place through the normal entrance motion (2.1s)
+  ✓   7 [chromium-light-desktop] › ui-migration/choices-first-frame.browser.mjs:177:3 › combobox is drawn where it settles from its first frame, at the replaced popup's place (10.9s)
+  ✓   8 [chromium-light-desktop] › ui-migration/choices-first-frame.browser.mjs:210:3 › combobox keeps its place through the normal entrance motion (2.0s)
+  ✓   9 [chromium-light-desktop] › ui-migration/choices-first-frame.browser.mjs:177:3 › multiselect is drawn where it settles from its first frame, at the replaced popup's place (11.1s)
+  ✓  10 [chromium-light-desktop] › ui-migration/choices-first-frame.browser.mjs:210:3 › multiselect keeps its place through the normal entrance motion (2.0s)
+  ✓  11 [chromium-light-desktop] › ui-migration/choices-first-frame.browser.mjs:177:3 › popover is drawn where it settles from its first frame, at the replaced popup's place (10.7s)
+  ✓  12 [chromium-light-desktop] › ui-migration/choices-first-frame.browser.mjs:210:3 › popover keeps its place through the normal entrance motion (2.0s)
+  ✓  13 [chromium-light-desktop] › ui-migration/choices-first-frame.browser.mjs:177:3 › tooltip is drawn where it settles from its first frame, at the replaced popup's place (11.8s)
+  ✓  14 [chromium-light-desktop] › ui-migration/choices-first-frame.browser.mjs:210:3 › tooltip keeps its place through the normal entrance motion (2.4s)
+  ✓  15 [chromium-light-desktop] › ui-migration/choices-first-frame.browser.mjs:177:3 › popconfirm is drawn where it settles from its first frame, at the replaced popup's place (10.8s)
+  ✓  16 [chromium-light-desktop] › ui-migration/choices-first-frame.browser.mjs:210:3 › popconfirm keeps its place through the normal entrance motion (2.7s)
+  ✓  17 [chromium-light-desktop] › ui-migration/choices-submenu-geometry.browser.mjs:84:29 › submenu at the left of the page settles where the replaced submenu does (11.1s)
+  ✓  18 [chromium-light-desktop] › ui-migration/choices-submenu-geometry.browser.mjs:84:29 › submenu at the middle of the page settles where the replaced submenu does (9.5s)
+  ✓  19 [chromium-light-desktop] › ui-migration/choices-submenu-geometry.browser.mjs:84:29 › submenu at the right edge settles where the replaced submenu does (9.3s)
+  ✓  20 [chromium-light-desktop] › ui-migration/choices-submenu-geometry.browser.mjs:84:29 › submenu at the right edge of a dialog settles where the replaced submenu does (11.7s)
+  ✓  21 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it (2.3s)
+  ✓  22 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it (2.0s)
+  ✓  23 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value, the list is on the option the old select was on and Enter picks it (2.1s)
+  ✓  24 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value, the list is on the option the old select was on and Enter picks it (2.1s)
+  ✓  25 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with a value, the list is on the option the old select was on and Enter picks it (2.1s)
+  ✓  26 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it (1.9s)
+  ✓  27 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with a value, the list is on the option the old select was on and Enter picks it (2.0s)
+  ✓  28 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with a value, the list is on the option the old select was on and Enter picks it (2.3s)
+  ✓  29 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (2.4s)
+  ✓  30 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (2.3s)
+  ✓  31 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (2.4s)
+  ✓  32 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (2.3s)
+  ✓  33 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.9s)
+  ✓  34 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.6s)
+  ✓  35 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion attachment has no transition and dismisses cleanly (802ms)
+  ✓  36 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion expiry has no transition and dismisses cleanly (848ms)
+  ✓  37 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion search has no transition and dismisses cleanly (1.0s)
+  ✓  38 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion multiple has no transition and dismisses cleanly (999ms)
+  ✓  39 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion popover has no transition and dismisses cleanly (956ms)
+  ✓  40 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion tooltip has no transition and dismisses cleanly (956ms)
+  ✓  41 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:132:67 › normal attachment can reopen during exit without stale unmount (1.7s)
+  ✓  42 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:132:67 › normal expiry can reopen during exit without stale unmount (1.8s)
+  ✓  43 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:132:67 › normal search can reopen during exit without stale unmount (1.7s)
+  ✓  44 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:132:67 › normal popover can reopen during exit without stale unmount (1.7s)
+  ✓  45 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches attachment (2.8s)
+  ✓  46 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches attachment (2.8s)
+  ✓  47 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment (2.8s)
+  ✓  48 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches expiry (2.6s)
+  ✓  49 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches expiry (2.8s)
+  ✓  50 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches expiry (2.8s)
+  ✓  51 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches search (2.6s)
+  ✓  52 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches search (2.8s)
+  ✓  53 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches search (3.0s)
+  ✓  54 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches multiple (3.1s)
+  ✓  55 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches multiple (2.7s)
+  ✓  56 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches multiple (2.8s)
+  ✓  57 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches popover (2.6s)
+  ✓  58 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches popover (2.7s)
+  ✓  59 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches popover (2.7s)
+  ✓  60 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches tooltip (2.8s)
+  ✓  61 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches tooltip (2.8s)
+  ✓  62 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches tooltip (2.6s)
+  ✓  63 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › popover center zoom origin matches (2.7s)
+  ✓  64 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › popover end zoom origin matches (2.8s)
+  ✓  65 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › tooltip center zoom origin matches (2.7s)
+  ✓  66 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › tooltip end zoom origin matches (2.6s)
+  ✓  67 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:160:41 › submenu left edge zoom matches and stays in view (3.6s)
+  ✓  68 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:160:41 › submenu right edge zoom matches and stays in view (3.8s)
+  ✓  69 [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:31:53 › expiry dims the current value while open and restores it on Escape (2.8s)
+  ✓  70 [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:31:53 › account dims the current value while open and restores it on Escape (2.7s)
+  ✓  71 [chromium-light-desktop] › ui-migration/choices-open-value.browser.mjs:31:53 › search dims the current value while open and restores it on Escape (2.8s)
+  ✓  72 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (3.8s)
+  ✓  73 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › access matches the current surface, density and option states (3.6s)
+  ✓  74 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › expiry matches the current surface, density and option states (3.7s)
+  ✓  75 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states (5.3s)
+  ✓  76 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states (5.3s)
+  ✓  77 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › popover matches the current surface, density and option states (4.2s)
+  ✓  78 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states (4.3s)
+  ✓  79 [chromium-light-desktop] › ui-migration/choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states (17.0s)
+  ✓  80 [chromium-light-desktop] › ui-migration/choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.5s)
+  ✓  81 [chromium-light-desktop] › ui-migration/choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.9s)
+  ✓  82 [chromium-light-desktop] › ui-migration/choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.5s)
+  ✓  83 [chromium-light-desktop] › ui-migration/choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (1.8s)
+  ✓  84 [chromium-light-desktop] › ui-migration/choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering (1.2s)
+  ✓  85 [chromium-light-desktop] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.2s)
+  ✓  86 [chromium-light-desktop] › ui-migration/choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (2.3s)
+  ✓  87 [chromium-light-desktop] › ui-migration/choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary (3.8s)
+  ✓  88 [chromium-light-desktop] › ui-migration/choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.8s)
+  ✓  89 [chromium-light-desktop] › ui-migration/choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection (1.3s)
+  ✓  90 [chromium-light-desktop] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.7s)
+  ✓  91 [chromium-light-desktop] › ui-migration/choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields (5.1s)
+  ✓  92 [chromium-light-desktop] › ui-migration/choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields (4.5s)
+  ✓  93 [chromium-light-desktop] › ui-migration/choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.5s)
+  ✓  94 [chromium-light-desktop] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.4s)
+  ✓  95 [chromium-light-desktop] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.6s)
+  ✓  96 [chromium-light-desktop] › ui-migration/choices.browser.mjs:631:1 › search option touch selects once and preserves input focus (1.1s)
+  ✓  97 [chromium-light-desktop] › ui-migration/choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.5s)
+
+  97 passed (6.2m)
+exit=0
+load: 21.36 19.05 21.94 12/3176 1739217
+ended: 2026-10-10T06:14:42Z

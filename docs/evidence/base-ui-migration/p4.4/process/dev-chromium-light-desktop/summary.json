@@ -1,0 +1,3797 @@
+{
+ "beyond": [
+  {
+   "clusters": [
+    [
+     [
+      811,
+      1250
+     ],
+     [
+      663,
+      689
+     ],
+     3235,
+     211
+    ],
+    [
+     [
+      811,
+      1250
+     ],
+     [
+      778,
+      779
+     ],
+     880,
+     19
+    ],
+    [
+     [
+      892,
+      1025
+     ],
+     [
+      790,
+      804
+     ],
+     772,
+     224
+    ],
+    [
+     [
+      940,
+      1016
+     ],
+     [
+      790,
+      795
+     ],
+     253,
+     224
+    ],
+    [
+     [
+      959,
+      989
+     ],
+     [
+      790,
+      790
+     ],
+     18,
+     224
+    ],
+    [
+     [
+      996,
+      1000
+     ],
+     [
+      790,
+      792
+     ],
+     12,
+     155
+    ]
+   ],
+   "max": 224,
+   "pixels": 6592,
+   "shot": "chromium-light-desktop/p44-doc-footnote-44.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      1092,
+      1094
+     ],
+     [
+      56,
+      58
+     ],
+     3,
+     1
+    ],
+    [
+     [
+      1226,
+      1227
+     ],
+     [
+      56,
+      58
+     ],
+     2,
+     1
+    ],
+    [
+     [
+      1167,
+      1181
+     ],
+     [
+      71,
+      78
+     ],
+     81,
+     55
+    ],
+    [
+     [
+      1169,
+      1179
+     ],
+     [
+      109,
+      110
+     ],
+     14,
+     48
+    ],
+    [
+     [
+      1092,
+      1093
+     ],
+     [
+      162,
+      164
+     ],
+     2,
+     1
+    ],
+    [
+     [
+      1226,
+      1227
+     ],
+     [
+      162,
+      164
+     ],
+     2,
+     1
+    ]
+   ],
+   "max": 55,
+   "pixels": 104,
+   "shot": "chromium-light-desktop/p44-entry-more.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      1018,
+      1020
+     ],
+     [
+      24,
+      25
+     ],
+     5,
+     1
+    ],
+    [
+     [
+      1034,
+      1037
+     ],
+     [
+      24,
+      25
+     ],
+     5,
+     1
+    ],
+    [
+     [
+      1117,
+      1119
+     ],
+     [
+      24,
+      25
+     ],
+     5,
+     1
+    ],
+    [
+     [
+      1245,
+      1247
+     ],
+     [
+      100,
+      103
+     ],
+     7,
+     1
+    ],
+    [
+     [
+      1246,
+      1247
+     ],
+     [
+      124,
+      127
+     ],
+     7,
+     1
+    ],
+    [
+     [
+      1246,
+      1246
+     ],
+     [
+      154,
+      155
+     ],
+     2,
+     1
+    ]
+   ],
+   "max": 6,
+   "pixels": 12969,
+   "shot": "chromium-light-desktop/p44-new-entry-kinds.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      744,
+      746
+     ],
+     [
+      209,
+      212
+     ],
+     7,
+     2
+    ],
+    [
+     [
+      744,
+      746
+     ],
+     [
+      249,
+      252
+     ],
+     7,
+     1
+    ],
+    [
+     [
+      744,
+      746
+     ],
+     [
+      273,
+      276
+     ],
+     7,
+     2
+    ],
+    [
+     [
+      744,
+      746
+     ],
+     [
+      313,
+      316
+     ],
+     7,
+     1
+    ],
+    [
+     [
+      744,
+      746
+     ],
+     [
+      359,
+      362
+     ],
+     7,
+     2
+    ],
+    [
+     [
+      744,
+      746
+     ],
+     [
+      399,
+      402
+     ],
+     7,
+     1
+    ]
+   ],
+   "max": 128,
+   "pixels": 12139,
+   "shot": "chromium-light-desktop/p44-plan-edit-kinds.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      557,
+      562
+     ],
+     [
+      340,
+      345
+     ],
+     13,
+     2
+    ],
+    [
+     [
+      536,
+      544
+     ],
+     [
+      354,
+      359
+     ],
+     8,
+     3
+    ],
+    [
+     [
+      557,
+      562
+     ],
+     [
+      369,
+      374
+     ],
+     15,
+     2
+    ],
+    [
+     [
+      312,
+      313
+     ],
+     [
+      376,
+      379
+     ],
+     3,
+     1
+    ],
+    [
+     [
+      312,
+      313
+     ],
+     [
+      409,
+      411
+     ],
+     4,
+     1
+    ]
+   ],
+   "max": 3,
+   "pixels": 43,
+   "shot": "chromium-light-desktop/p44-review-reject.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      391,
+      888
+     ],
+     [
+      268,
+      333
+     ],
+     28152,
+     10
+    ],
+    [
+     [
+      411,
+      411
+     ],
+     [
+      269,
+      269
+     ],
+     1,
+     1
+    ],
+    [
+     [
+      377,
+      379
+     ],
+     [
+      287,
+      320
+     ],
+     74,
+     1
+    ],
+    [
+     [
+      900,
+      902
+     ],
+     [
+      287,
+      320
+     ],
+     74,
+     1
+    ],
+    [
+     [
+      1078,
+      1079
+     ],
+     [
+      649,
+      650
+     ],
+     3,
+     1
+    ],
+    [
+     [
+      1078,
+      1078
+     ],
+     [
+      678,
+      678
+     ],
+     1,
+     1
+    ]
+   ],
+   "max": 10,
+   "pixels": 28307,
+   "shot": "chromium-light-desktop/p44-settings-workspaces.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      404,
+      405
+     ],
+     [
+      257,
+      261
+     ],
+     9,
+     1
+    ],
+    [
+     [
+      418,
+      419
+     ],
+     [
+      257,
+      262
+     ],
+     9,
+     1
+    ],
+    [
+     [
+      404,
+      407
+     ],
+     [
+      304,
+      312
+     ],
+     6,
+     8
+    ],
+    [
+     [
+      418,
+      419
+     ],
+     [
+      304,
+      306
+     ],
+     4,
+     9
+    ],
+    [
+     [
+      404,
+      407
+     ],
+     [
+      460,
+      468
+     ],
+     6,
+     8
+    ],
+    [
+     [
+      418,
+      419
+     ],
+     [
+      460,
+      462
+     ],
+     4,
+     9
+    ]
+   ],
+   "max": 9,
+   "pixels": 97,
+   "shot": "chromium-light-desktop/p44-watch-editor-filled.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      404,
+      405
+     ],
+     [
+      257,
+      261
+     ],
+     9,
+     1
+    ],
+    [
+     [
+      418,
+      419
+     ],
+     [
+      257,
+      262
+     ],
+     9,
+     1
+    ],
+    [
+     [
+      404,
+      407
+     ],
+     [
+      304,
+      312
+     ],
+     6,
+     8
+    ],
+    [
+     [
+      418,
+      419
+     ],
+     [
+      304,
+      306
+     ],
+     4,
+     9
+    ],
+    [
+     [
+      404,
+      407
+     ],
+     [
+      460,
+      468
+     ],
+     6,
+     8
+    ],
+    [
+     [
+      418,
+      419
+     ],
+     [
+      460,
+      462
+     ],
+     4,
+     9
+    ]
+   ],
+   "max": 9,
+   "pixels": 83,
+   "shot": "chromium-light-desktop/p44-watch-editor-sessions.png"
+  }
+ ],
+ "missing": [],
+ "screenshots": {
+  "antialias": 22,
+  "beyond": 8,
+  "identical": 32,
+  "missing": 0
+ },
+ "styleDeltas": {
+  "chromium-light-desktop/p44-doc-mark": {
+   "tip": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgba(0, 0, 0, 0.85)"
+    ],
+    "border": [
+     "0px none rgb(31, 35, 41)",
+     "0px none rgb(255, 255, 255)"
+    ],
+    "color": [
+     "rgb(31, 35, 41)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "6px"
+    ]
+   }
+  },
+  "chromium-light-desktop/p44-plan-edit": {
+   "drawer": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ]
+   }
+  },
+  "chromium-light-desktop/p44-plan-edit-changed": {
+   "drawer": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ]
+   }
+  },
+  "chromium-light-desktop/p44-session-waiting-on": {
+   "popover": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "8px"
+    ]
+   }
+  },
+  "chromium-light-desktop/p44-settings-workspaces": {
+   "option": {
+    "background": [
+     "rgba(0, 0, 0, 0.04)",
+     "rgba(0, 0, 0, 0)"
+    ]
+   }
+  }
+ },
+ "tests": {
+  "notPassedDel": [],
+  "notPassedRef": [],
+  "total": 14
+ },
+ "traces": {
+  "differing": {
+   "chromium-light-desktop :: P4.4 Activity and a run › the pressed Activity button, the revert question and the run drawer": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "activity",
+      "url": "/wiki/orbit/activity"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "activity",
+      "url": "/wiki/orbit/activity"
+     },
+     "step": "activity"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "Revert this run?The 4 changes it applied are undone: 3 added entries are withdrawn and 1 amended one goes back to its pr"
+      ],
+      "focus": {
+       "name": "Cancel",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "revert question",
+      "url": "/wiki/orbit/activity"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-modal",
+       "ant-modal-body",
+       "ant-modal-confirm",
+       "ant-modal-confirm-body",
+       "ant-modal-confirm-body-has-title",
+       "ant-modal-confirm-body-wrapper",
+       "ant-modal-confirm-btns",
+       "ant-modal-confirm-confirm",
+       "ant-modal-confirm-content",
+       "ant-modal-confirm-paragraph",
+       "ant-modal-confirm-title",
+       "ant-modal-container",
+       "ant-modal-mask",
+       "ant-modal-wrap"
+      ],
+      "dialogs": [
+       "Revert this run?Revert this run?The 4 changes it applied are undone: 3 added entries are withdrawn and 1 amended one goe"
+      ],
+      "focus": {
+       "name": "Revert run",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "revert question",
+      "url": "/wiki/orbit/activity"
+     },
+     "step": "revert question"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "run",
+      "url": "/wiki/orbit/run/2zrfUWaI6JGLTYVA0HvsH"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "run",
+      "url": "/wiki/orbit/run/2zrfUWaI6JGLTYVA0HvsH"
+     },
+     "step": "run"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Reject",
+       "role": "menu"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "Not true"
+        },
+        {
+         "disabled": false,
+         "text": "Not useful"
+        },
+        {
+         "disabled": false,
+         "text": "Duplicate"
+        },
+        {
+         "disabled": false,
+         "text": "Too specific"
+        },
+        {
+         "disabled": true,
+         "text": "The reason goes on the record."
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "row reject",
+      "url": "/wiki/orbit/run/2zrfUWaI6JGLTYVA0HvsH"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown",
+       "ant-dropdown-css-var",
+       "ant-dropdown-menu",
+       "ant-dropdown-menu-css-var",
+       "ant-dropdown-menu-item",
+       "ant-dropdown-menu-item-disabled",
+       "ant-dropdown-menu-item-divider",
+       "ant-dropdown-menu-item-only-child",
+       "ant-dropdown-menu-light",
+       "ant-dropdown-menu-root",
+       "ant-dropdown-menu-title-content",
+       "ant-dropdown-menu-vertical",
+       "ant-dropdown-open",
+       "ant-dropdown-placement-bottomRight",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Reject",
+       "role": "button"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "Not true"
+        },
+        {
+         "disabled": false,
+         "text": "Not useful"
+        },
+        {
+         "disabled": false,
+         "text": "Duplicate"
+        },
+        {
+         "disabled": false,
+         "text": "Too specific"
+        },
+        {
+         "disabled": true,
+         "text": "The reason goes on the record."
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "row reject",
+      "url": "/wiki/orbit/run/2zrfUWaI6JGLTYVA0HvsH"
+     },
+     "step": "row reject"
+    }
+   ],
+   "chromium-light-desktop :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "cards": 5,
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "active",
+      "url": "/following"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid"
+      ],
+      "cards": 5,
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "active",
+      "url": "/following"
+     },
+     "step": "active"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "Stop this watch?You won't be notified when the condition holds.Keep watchingStop watching"
+      ],
+      "focus": {
+       "name": "Stop this watch?",
+       "role": "dialog"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "stop question",
+      "url": "/following"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-popover-open",
+       "ant-wave"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Stop",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "stop question",
+      "url": "/following"
+     },
+     "step": "stop question"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Resume",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/watches/2zwQZ2hd93IvLb59t6tZx/pause"
+       }
+      ],
+      "step": "paused",
+      "url": "/following"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Resume",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/watches/2zwQZ2hd93IvLb59t6tZx/pause"
+       }
+      ],
+      "step": "paused",
+      "url": "/following"
+     },
+     "step": "paused"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "failed read",
+      "url": "/following?tab=history"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-default",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "failed read",
+      "url": "/following?tab=history"
+     },
+     "step": "failed read"
+    }
+   ],
+   "chromium-light-desktop :: P4.4 Review › its answers, the edit form and its refusal, a challenge and the phone pager": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "review",
+      "url": "/wiki/review"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "review",
+      "url": "/wiki/review"
+     },
+     "step": "review"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Reject",
+       "role": "menu"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "Not true"
+        },
+        {
+         "disabled": false,
+         "text": "Not useful"
+        },
+        {
+         "disabled": false,
+         "text": "Duplicate"
+        },
+        {
+         "disabled": false,
+         "text": "Too specific"
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "reject reasons",
+      "url": "/wiki/review"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-dropdown",
+       "ant-dropdown-css-var",
+       "ant-dropdown-menu",
+       "ant-dropdown-menu-css-var",
+       "ant-dropdown-menu-item",
+       "ant-dropdown-menu-item-only-child",
+       "ant-dropdown-menu-light",
+       "ant-dropdown-menu-root",
+       "ant-dropdown-menu-title-content",
+       "ant-dropdown-menu-vertical",
+       "ant-dropdown-open",
+       "ant-dropdown-placement-bottomLeft",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Reject",
+       "role": "button"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "Not true"
+        },
+        {
+         "disabled": false,
+         "text": "Not useful"
+        },
+        {
+         "disabled": false,
+         "text": "Duplicate"
+        },
+        {
+         "disabled": false,
+         "text": "Too specific"
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "reject reasons",
+      "url": "/wiki/review"
+     },
+     "step": "reject reasons"
+    },
+    {
+     "del": {
+      "alerts": [
+       "The proposal changed while you were editing it; read Review again."
+      ],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "EditAccepting makes it ConfirmedA watch delivery stores the value unredacted.The proposal changed while you were editing"
+      ],
+      "focus": {
+       "name": "Accept",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [
+       {
+        "body": {
+         "decisions": [
+          {
+           "action": "edit",
+           "edited": {
+            "title": "Secret redaction misses keys joined by an underscore"
+           },
+           "opId": "2zwQZ2hd93IvLb59t6tYg"
+          }
+         ]
+        },
+        "method": "POST",
+        "path": "/api/wiki/changesets/2zwQZ2hd93IvLb59t6tYf/decide"
+       }
+      ],
+      "step": "edit refused",
+      "url": "/wiki/review"
+     },
+     "ref": {
+      "alerts": [
+       "The proposal changed while you were editing it; read Review again."
+      ],
+      "antd": [
+       "ant-alert",
+       "ant-alert-error",
+       "ant-alert-icon",
+       "ant-alert-outlined",
+       "ant-alert-section",
+       "ant-alert-title",
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-css-var",
+       "ant-input-outlined",
+       "ant-modal",
+       "ant-modal-body",
+       "ant-modal-close",
+       "ant-modal-close-icon",
+       "ant-modal-close-x",
+       "ant-modal-container",
+       "ant-modal-footer",
+       "ant-modal-header",
+       "ant-modal-mask",
+       "ant-modal-title",
+       "ant-modal-wrap"
+      ],
+      "dialogs": [
+       "EditAccepting makes it ConfirmedA watch delivery stores the value unredacted.The proposal changed while you were editing"
+      ],
+      "focus": {
+       "name": "Accept",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [
+       {
+        "body": {
+         "decisions": [
+          {
+           "action": "edit",
+           "edited": {
+            "title": "Secret redaction misses keys joined by an underscore"
+           },
+           "opId": "2zwQZ2hd93IvLb59t6tYg"
+          }
+         ]
+        },
+        "method": "POST",
+        "path": "/api/wiki/changesets/2zwQZ2hd93IvLb59t6tYf/decide"
+       }
+      ],
+      "step": "edit refused",
+      "url": "/wiki/review"
+     },
+     "step": "edit refused"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "AmendYour version replaces the entry, and its anchors are checked again.A verified anchor shows the ref it was checked a"
+      ],
+      "focus": {
+       "name": "Amend",
+       "role": "dialog"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "amend",
+      "url": "/wiki/review"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-css-var",
+       "ant-input-outlined",
+       "ant-modal",
+       "ant-modal-body",
+       "ant-modal-close",
+       "ant-modal-close-icon",
+       "ant-modal-close-x",
+       "ant-modal-container",
+       "ant-modal-footer",
+       "ant-modal-header",
+       "ant-modal-mask",
+       "ant-modal-title",
+       "ant-modal-wrap"
+      ],
+      "dialogs": [
+       "AmendYour version replaces the entry, and its anchors are checked again.A verified anchor shows the ref it was checked a"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "amend",
+      "url": "/wiki/review"
+     },
+     "step": "amend"
+    }
+   ],
+   "chromium-light-desktop :: P4.4 Settings → Shared links › tabs, the turn-off questions, share again, loading and a failed read": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "loading",
+      "url": "/settings/shared-links"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-spin",
+       "ant-spin-dot",
+       "ant-spin-dot-holder",
+       "ant-spin-dot-item",
+       "ant-spin-dot-spin",
+       "ant-spin-section",
+       "ant-spin-spinning"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "loading",
+      "url": "/settings/shared-links"
+     },
+     "step": "loading"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "rows": [
+       "Can the web tags match iOS",
+       "iOS send failures do not retry",
+       "Shared agent memory across platforms",
+       "Sub-agent models are set on the server",
+       "Summarize the latest commits",
+       "Security boundary: cross-owner regression checks",
+       "Orbit knowledge",
+       "Orbit UI migration"
+      ],
+      "step": "active",
+      "url": "/settings/shared-links"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-sm",
+       "ant-btn-text",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-text"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "rows": [
+       "Can the web tags match iOS",
+       "iOS send failures do not retry",
+       "Shared agent memory across platforms",
+       "Sub-agent models are set on the server",
+       "Summarize the latest commits",
+       "Security boundary: cross-owner regression checks",
+       "Orbit knowledge",
+       "Orbit UI migration"
+      ],
+      "step": "active",
+      "url": "/settings/shared-links"
+     },
+     "step": "active"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "Turn off these 3 links?Anyone who has them loses access right away.CancelTurn off"
+      ],
+      "focus": {
+       "name": "Turn off these 3 links?",
+       "role": "dialog"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "turn off three",
+      "url": "/settings/shared-links"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-text",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-popconfirm",
+       "ant-popconfirm-buttons",
+       "ant-popconfirm-description",
+       "ant-popconfirm-inner-content",
+       "ant-popconfirm-message",
+       "ant-popconfirm-message-icon",
+       "ant-popconfirm-message-text",
+       "ant-popconfirm-title",
+       "ant-popover",
+       "ant-popover-arrow",
+       "ant-popover-container",
+       "ant-popover-content",
+       "ant-popover-css-var",
+       "ant-popover-open",
+       "ant-popover-placement-top"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Turn off these 3",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "turn off three",
+      "url": "/settings/shared-links"
+     },
+     "step": "turn off three"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [
+       {
+        "body": {
+         "shareLinkIds": [
+          "2zwQZ2hd93IvLb59t6tZR",
+          "2zwQZ2hd93IvLb59t6tZS",
+          "2zwQZ2hd93IvLb59t6tZT"
+         ]
+        },
+        "method": "POST",
+        "path": "/api/share-links/turn-off"
+       }
+      ],
+      "step": "three turned off",
+      "url": "/settings/shared-links"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-sm",
+       "ant-btn-text",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-text"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [
+       {
+        "body": {
+         "shareLinkIds": [
+          "2zwQZ2hd93IvLb59t6tZR",
+          "2zwQZ2hd93IvLb59t6tZS",
+          "2zwQZ2hd93IvLb59t6tZT"
+         ]
+        },
+        "method": "POST",
+        "path": "/api/share-links/turn-off"
+       }
+      ],
+      "step": "three turned off",
+      "url": "/settings/shared-links"
+     },
+     "step": "three turned off"
+    }
+   ],
+   "chromium-light-desktop :: P4.4 Wiki settings › review modes, spot checks, setting maintenance up and maintenance on": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tiereddefault",
+       "Tiereddefault"
+      ],
+      "requests": [],
+      "step": "settings",
+      "url": "/wiki/orbit/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-default",
+       "ant-btn-variant-outlined",
+       "ant-card",
+       "ant-card-body",
+       "ant-card-bordered",
+       "ant-card-extra",
+       "ant-card-head",
+       "ant-card-head-title",
+       "ant-card-head-wrapper",
+       "ant-radio",
+       "ant-radio-checked",
+       "ant-radio-css-var",
+       "ant-radio-group",
+       "ant-radio-group-outline",
+       "ant-radio-label",
+       "ant-radio-wrapper",
+       "ant-radio-wrapper-checked",
+       "ant-switch",
+       "ant-switch-disabled",
+       "ant-switch-handle",
+       "ant-switch-inner",
+       "ant-switch-inner-checked",
+       "ant-switch-inner-unchecked",
+       "ant-wave-target"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Tiereddefault"
+      ],
+      "requests": [],
+      "step": "settings",
+      "url": "/wiki/orbit/settings"
+     },
+     "step": "settings"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Automatic",
+       "role": "radio"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Automatic",
+       "Automatic"
+      ],
+      "requests": [
+       {
+        "body": {
+         "reviewMode": "automatic"
+        },
+        "method": "PATCH",
+        "path": "/api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl"
+       }
+      ],
+      "step": "automatic",
+      "url": "/wiki/orbit/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-default",
+       "ant-btn-variant-outlined",
+       "ant-card",
+       "ant-card-body",
+       "ant-card-bordered",
+       "ant-card-extra",
+       "ant-card-head",
+       "ant-card-head-title",
+       "ant-card-head-wrapper",
+       "ant-radio",
+       "ant-radio-checked",
+       "ant-radio-css-var",
+       "ant-radio-group",
+       "ant-radio-group-outline",
+       "ant-radio-label",
+       "ant-radio-wrapper",
+       "ant-radio-wrapper-checked",
+       "ant-switch",
+       "ant-switch-handle",
+       "ant-switch-inner",
+       "ant-switch-inner-checked",
+       "ant-switch-inner-unchecked",
+       "ant-wave-target"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Automatic"
+      ],
+      "requests": [
+       {
+        "body": {
+         "reviewMode": "automatic"
+        },
+        "method": "PATCH",
+        "path": "/api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl"
+       }
+      ],
+      "step": "automatic",
+      "url": "/wiki/orbit/settings"
+     },
+     "step": "automatic"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Automatic",
+       "Automatic",
+       "Spot-check Automatic",
+       ""
+      ],
+      "requests": [
+       {
+        "body": {
+         "automaticSpotChecks": true
+        },
+        "method": "PATCH",
+        "path": "/api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl"
+       }
+      ],
+      "step": "spot checks on",
+      "url": "/wiki/orbit/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-default",
+       "ant-btn-variant-outlined",
+       "ant-card",
+       "ant-card-body",
+       "ant-card-bordered",
+       "ant-card-extra",
+       "ant-card-head",
+       "ant-card-head-title",
+       "ant-card-head-wrapper",
+       "ant-radio",
+       "ant-radio-checked",
+       "ant-radio-css-var",
+       "ant-radio-group",
+       "ant-radio-group-outline",
+       "ant-radio-label",
+       "ant-radio-wrapper",
+       "ant-radio-wrapper-checked",
+       "ant-switch",
+       "ant-switch-checked",
+       "ant-switch-handle",
+       "ant-switch-inner",
+       "ant-switch-inner-checked",
+       "ant-switch-inner-unchecked",
+       "ant-wave-target"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Spot-check Automatic",
+       "role": "switch"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Automatic",
+       "Spot-check Automatic"
+      ],
+      "requests": [
+       {
+        "body": {
+         "automaticSpotChecks": true
+        },
+        "method": "PATCH",
+        "path": "/api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl"
+       }
+      ],
+      "step": "spot checks on",
+      "url": "/wiki/orbit/settings"
+     },
+     "step": "spot checks on"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "Set up maintenanceKeeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the workspace you "
+      ],
+      "focus": {
+       "name": "Set up maintenance",
+       "role": "dialog"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Automatic",
+       "Automatic",
+       "Spot-check Automatic",
+       ""
+      ],
+      "requests": [],
+      "step": "set up",
+      "url": "/wiki/orbit/settings"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-card",
+       "ant-card-body",
+       "ant-card-bordered",
+       "ant-card-extra",
+       "ant-card-head",
+       "ant-card-head-title",
+       "ant-card-head-wrapper",
+       "ant-input-number",
+       "ant-input-number-action",
+       "ant-input-number-action-down",
+       "ant-input-number-action-up",
+       "ant-input-number-css-var",
+       "ant-input-number-input",
+       "ant-input-number-mode-input",
+       "ant-input-number-outlined",
+       "ant-modal",
+       "ant-modal-body",
+       "ant-modal-close",
+       "ant-modal-close-icon",
+       "ant-modal-close-x",
+       "ant-modal-container",
+       "ant-modal-footer",
+       "ant-modal-header",
+       "ant-modal-mask",
+       "ant-modal-title",
+       "ant-modal-wrap",
+       "ant-radio",
+       "ant-radio-checked",
+       "ant-radio-css-var",
+       "ant-radio-group",
+       "ant-radio-group-outline",
+       "ant-radio-label"
+      ],
+      "dialogs": [
+       "Set up maintenanceKeeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the workspace you "
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "Automatic",
+       "Spot-check Automatic"
+      ],
+      "requests": [],
+      "step": "set up",
+      "url": "/wiki/orbit/settings"
+     },
+     "step": "set up"
+    }
+   ],
+   "chromium-light-desktop :: P4.4 a topic article › its footnote cards and the way to an entry": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "article",
+      "url": "/wiki/orbit/t/ui-design/1"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "article",
+      "url": "/wiki/orbit/t/ui-design/1"
+     },
+     "step": "article"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "card": "[2]RecipeAutoRender the mock HTML to PNG with headless ChromiumOn Linux, write the mock as an HTML file, then screenshot it.2 sources · 1 session1588c3bOpen entry ›",
+      "dialogs": [
+       "[2]RecipeAutoRender the mock HTML to PNG with headless ChromiumOn Linux, write the mock as an HTML file, then screenshot"
+      ],
+      "focus": {
+       "name": "[2]RecipeAutoRender the mock HTML to PNG with headless ChromiumOn Linux, write t",
+       "role": "dialog"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "footnote 2",
+      "url": "/wiki/orbit/t/ui-design/1"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-popover",
+       "ant-popover-arrow",
+       "ant-popover-container",
+       "ant-popover-content",
+       "ant-popover-css-var",
+       "ant-popover-open",
+       "ant-popover-placement-bottomLeft"
+      ],
+      "card": "[2]RecipeAutoRender the mock HTML to PNG with headless ChromiumOn Linux, write the mock as an HTML file, then screenshot it.2 sources · 1 session1588c3bOpen entry ›",
+      "dialogs": [],
+      "focus": {
+       "name": "Footnote 2",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "footnote 2",
+      "url": "/wiki/orbit/t/ui-design/1"
+     },
+     "step": "footnote 2"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "opened the entry",
+      "url": "/wiki/orbit/e/2zwQZ2hd93IvLb59t6tYG"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "opened the entry",
+      "url": "/wiki/orbit/e/2zwQZ2hd93IvLb59t6tYG"
+     },
+     "step": "opened the entry"
+    }
+   ],
+   "chromium-light-desktop :: P4.4 a written document › its marks, footnote cards and the phone sheet": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "document",
+      "url": "/wiki/orbit/d/session-runtime"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "document",
+      "url": "/wiki/orbit/d/session-runtime"
+     },
+     "step": "document"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "mark explained",
+      "tip": "Not verified. Its footnote cites code without quoting it, so the sentence couldn’t be checked. See footnote [10]",
+      "url": "/wiki/orbit/d/session-runtime"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-tooltip",
+       "ant-tooltip-arrow",
+       "ant-tooltip-container",
+       "ant-tooltip-css-var",
+       "ant-tooltip-open",
+       "ant-tooltip-placement-bottomLeft"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "mark explained",
+      "tip": "Not verified. Its footnote cites code without quoting it, so the sentence couldn’t be checked. See footnote [10]",
+      "url": "/wiki/orbit/d/session-runtime"
+     },
+     "step": "mark explained"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "card": "[10]Code✗ no quote given",
+      "dialogs": [
+       "[10]Code✗ no quote givenThe sentence cites this code without quoting it, so it couldn’t be checked.src/runner-go/runloop"
+      ],
+      "focus": {
+       "name": "[10]Code✗ no quote givenThe sentence cites this code without quoting it, so it c",
+       "role": "dialog"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "footnote from the mark",
+      "url": "/wiki/orbit/d/session-runtime"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-popover",
+       "ant-popover-arrow",
+       "ant-popover-container",
+       "ant-popover-content",
+       "ant-popover-css-var",
+       "ant-popover-open",
+       "ant-popover-placement-bottomLeft"
+      ],
+      "card": "[10]Code✗ no quote given",
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "footnote from the mark",
+      "url": "/wiki/orbit/d/session-runtime"
+     },
+     "step": "footnote from the mark"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "card": "[44]Session· User messagequote verified ✓",
+      "dialogs": [
+       "[44]Session· User messagequote verified ✓“runner — drain 就会把作业杀掉，唤醒不一定送到，你这次就是这么停了六小时”执行任务：例外待办：模型、FAILED 全路径来源 · 项目推进可靠"
+      ],
+      "focus": {
+       "name": "[44]Session· User messagequote verified ✓“runner — drain 就会把作业杀掉，唤醒不一定送到，你这次就是这么",
+       "role": "dialog"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "open": [
+       "Open at this turn ›"
+      ],
+      "requests": [],
+      "step": "footnote 44",
+      "url": "/wiki/orbit/d/session-runtime"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-popover",
+       "ant-popover-arrow",
+       "ant-popover-container",
+       "ant-popover-content",
+       "ant-popover-css-var",
+       "ant-popover-open",
+       "ant-popover-placement-topLeft"
+      ],
+      "card": "[44]Session· User messagequote verified ✓",
+      "dialogs": [],
+      "focus": {
+       "name": "Footnote 44",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "open": [
+       "Open at this turn ›"
+      ],
+      "requests": [],
+      "step": "footnote 44",
+      "url": "/wiki/orbit/d/session-runtime"
+     },
+     "step": "footnote 44"
+    }
+   ],
+   "chromium-light-desktop :: P4.4 an entry › its answers, menus and forms": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "entry",
+      "url": "/wiki/orbit/e/2zwQZ2hd93IvLb59t6tY9"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "entry",
+      "url": "/wiki/orbit/e/2zwQZ2hd93IvLb59t6tY9"
+     },
+     "step": "entry"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Reject",
+       "role": "menu"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "Not true"
+        },
+        {
+         "disabled": false,
+         "text": "Not useful"
+        },
+        {
+         "disabled": false,
+         "text": "Duplicate"
+        },
+        {
+         "disabled": false,
+         "text": "Too specific"
+        },
+        {
+         "disabled": true,
+         "text": "The reason goes on the record."
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "reject reasons",
+      "url": "/wiki/orbit/e/2zwQZ2hd93IvLb59t6tY9"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown",
+       "ant-dropdown-css-var",
+       "ant-dropdown-menu",
+       "ant-dropdown-menu-css-var",
+       "ant-dropdown-menu-item",
+       "ant-dropdown-menu-item-disabled",
+       "ant-dropdown-menu-item-divider",
+       "ant-dropdown-menu-item-only-child",
+       "ant-dropdown-menu-light",
+       "ant-dropdown-menu-root",
+       "ant-dropdown-menu-title-content",
+       "ant-dropdown-menu-vertical",
+       "ant-dropdown-open",
+       "ant-dropdown-placement-bottomLeft",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Reject",
+       "role": "button"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "Not true"
+        },
+        {
+         "disabled": false,
+         "text": "Not useful"
+        },
+        {
+         "disabled": false,
+         "text": "Duplicate"
+        },
+        {
+         "disabled": false,
+         "text": "Too specific"
+        },
+        {
+         "disabled": true,
+         "text": "The reason goes on the record."
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "reject reasons",
+      "url": "/wiki/orbit/e/2zwQZ2hd93IvLb59t6tY9"
+     },
+     "step": "reject reasons"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Supersede…Retire…Copy link",
+       "role": "menu"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "Supersede…"
+        },
+        {
+         "disabled": false,
+         "text": "Retire…"
+        },
+        {
+         "disabled": false,
+         "text": "Copy link"
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "more",
+      "url": "/wiki/orbit/e/2zwQZ2hd93IvLb59t6tY9"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown",
+       "ant-dropdown-css-var",
+       "ant-dropdown-menu",
+       "ant-dropdown-menu-css-var",
+       "ant-dropdown-menu-item",
+       "ant-dropdown-menu-item-danger",
+       "ant-dropdown-menu-item-divider",
+       "ant-dropdown-menu-item-icon",
+       "ant-dropdown-menu-light",
+       "ant-dropdown-menu-root",
+       "ant-dropdown-menu-title-content",
+       "ant-dropdown-menu-vertical",
+       "ant-dropdown-open",
+       "ant-dropdown-placement-bottomRight",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "More actions",
+       "role": "button"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "Supersede…"
+        },
+        {
+         "disabled": false,
+         "text": "Retire…"
+        },
+        {
+         "disabled": false,
+         "text": "Copy link"
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "more",
+      "url": "/wiki/orbit/e/2zwQZ2hd93IvLb59t6tY9"
+     },
+     "step": "more"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "More actions",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "copied",
+      "url": "/wiki/orbit/e/2zwQZ2hd93IvLb59t6tY9"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-dangerous",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-dangerous",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "copied",
+      "url": "/wiki/orbit/e/2zwQZ2hd93IvLb59t6tY9"
+     },
+     "step": "copied"
+    }
+   ],
+   "chromium-light-desktop :: P4.4 public pages › a shared project and a shared wiki": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "rows": [
+       "Port the dialog primitives IN_PROGRESSRunningblocks 10 subtasks",
+       "Migrate settings forms OPENBlockedwaits 12 subtasks",
+       "Inventory components DONEOn the project branchblocks 10 subtasks"
+      ],
+      "step": "shared project",
+      "url": "/s/uiMigrationP43aProject20260928"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-list",
+       "ant-list-container",
+       "ant-list-item",
+       "ant-list-item-meta",
+       "ant-list-item-meta-content",
+       "ant-list-item-meta-title",
+       "ant-list-items",
+       "ant-list-split",
+       "ant-spin",
+       "ant-spin-container",
+       "ant-tag",
+       "ant-tag-blue",
+       "ant-tag-default",
+       "ant-tag-filled",
+       "ant-tag-gold",
+       "ant-tag-green",
+       "ant-tag-processing",
+       "ant-typography"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "rows": [
+       "Port the dialog primitives IN_PROGRESSRunningblocks 10 subtasks",
+       "Migrate settings forms OPENBlockedwaits 12 subtasks",
+       "Inventory components DONEOn the project branchblocks 10 subtasks"
+      ],
+      "step": "shared project",
+      "url": "/s/uiMigrationP43aProject20260928"
+     },
+     "step": "shared project"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "card": "[1]Codequote verified ✓",
+      "dialogs": [
+       "[1]Codequote verified ✓10function claim() {11 claimTurn(next);12}src/runner/loop.ts · RunLoop.claim · L10–12"
+      ],
+      "focus": {
+       "name": "[1]Codequote verified ✓10function claim() {11 claimTurn(next);12}src/runner/loop",
+       "role": "dialog"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "shared footnote",
+      "url": "/s/uiMigrationP44Wiki20260928/d/session-runtime"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-popover",
+       "ant-popover-arrow",
+       "ant-popover-container",
+       "ant-popover-content",
+       "ant-popover-css-var",
+       "ant-popover-open",
+       "ant-popover-placement-bottomLeft"
+      ],
+      "card": "[1]Codequote verified ✓",
+      "dialogs": [],
+      "focus": {
+       "name": "Footnote 1",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "shared footnote",
+      "url": "/s/uiMigrationP44Wiki20260928/d/session-runtime"
+     },
+     "step": "shared footnote"
+    }
+   ],
+   "chromium-light-desktop :: P4.4 the Wiki home › its head, the new entry form and the share dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "home",
+      "url": "/wiki/orbit"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "home",
+      "url": "/wiki/orbit"
+     },
+     "step": "home"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "New entryKindPrincipleTitleOne lineStatementRationaleRecorded as yours (principle), live at once. A decision, a pitfall "
+      ],
+      "focus": {
+       "name": "New entry",
+       "role": "dialog"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "new entry",
+      "url": "/wiki/orbit"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-input",
+       "ant-input-css-var",
+       "ant-input-outlined",
+       "ant-modal",
+       "ant-modal-body",
+       "ant-modal-close",
+       "ant-modal-close-icon",
+       "ant-modal-close-x",
+       "ant-modal-container",
+       "ant-modal-footer",
+       "ant-modal-header",
+       "ant-modal-mask",
+       "ant-modal-title",
+       "ant-modal-wrap",
+       "ant-select",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-outlined",
+       "ant-select-show-arrow",
+       "ant-select-single",
+       "ant-select-suffix"
+      ],
+      "dialogs": [
+       "New entryKindPrincipleTitleOne lineStatementRationaleRecorded as yours (principle), live at once. A decision, a pitfall "
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "new entry",
+      "url": "/wiki/orbit"
+     },
+     "step": "new entry"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "New entryKindPrincipleTitleOne lineStatementRationaleRecorded as yours (principle), live at once. A decision, a pitfall "
+      ],
+      "focus": {
+       "name": "Principle",
+       "role": "option"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "options": [
+       "Principle",
+       "Convention",
+       "Concept"
+      ],
+      "requests": [],
+      "step": "kind list",
+      "url": "/wiki/orbit"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-input",
+       "ant-input-css-var",
+       "ant-input-outlined",
+       "ant-modal",
+       "ant-modal-body",
+       "ant-modal-close",
+       "ant-modal-close-icon",
+       "ant-modal-close-x",
+       "ant-modal-container",
+       "ant-modal-footer",
+       "ant-modal-header",
+       "ant-modal-mask",
+       "ant-modal-title",
+       "ant-modal-wrap",
+       "ant-select",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-dropdown",
+       "ant-select-dropdown-list",
+       "ant-select-dropdown-list-holder",
+       "ant-select-dropdown-list-holder-inner",
+       "ant-select-dropdown-placement-bottomLeft",
+       "ant-select-focused",
+       "ant-select-input",
+       "ant-select-item",
+       "ant-select-item-option",
+       "ant-select-item-option-active",
+       "ant-select-item-option-content",
+       "ant-select-item-option-selected",
+       "ant-select-open"
+      ],
+      "dialogs": [
+       "New entryKindPrincipleTitleOne lineStatementRationaleRecorded as yours (principle), live at once. A decision, a pitfall "
+      ],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "options": [
+       "Principle",
+       "Convention",
+       "Concept"
+      ],
+      "requests": [],
+      "step": "kind list",
+      "url": "/wiki/orbit"
+     },
+     "step": "kind list"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "New entryKindConventionTitleOne lineA second toast replaces the first.RuleScopeExceptions (optional)Recorded as yours (c"
+      ],
+      "focus": {
+       "name": "A second toast replaces the first.",
+       "role": "textarea"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "new entry filled",
+      "url": "/wiki/orbit"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-input",
+       "ant-input-css-var",
+       "ant-input-outlined",
+       "ant-modal",
+       "ant-modal-body",
+       "ant-modal-close",
+       "ant-modal-close-icon",
+       "ant-modal-close-x",
+       "ant-modal-container",
+       "ant-modal-footer",
+       "ant-modal-header",
+       "ant-modal-mask",
+       "ant-modal-title",
+       "ant-modal-wrap",
+       "ant-select",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-outlined",
+       "ant-select-show-arrow",
+       "ant-select-single",
+       "ant-select-suffix"
+      ],
+      "dialogs": [
+       "New entryKindConventionTitleOne lineA second toast replaces the first.RuleScopeExceptions (optional)Recorded as yours (c"
+      ],
+      "focus": {
+       "name": "A second toast replaces the first.",
+       "role": "textarea"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "new entry filled",
+      "url": "/wiki/orbit"
+     },
+     "step": "new entry filled"
+    }
+   ],
+   "chromium-light-desktop :: P4.4 the default landing › its spinner while the workspaces read": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "landing",
+      "url": "/"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-spin",
+       "ant-spin-dot",
+       "ant-spin-dot-holder",
+       "ant-spin-dot-item",
+       "ant-spin-dot-spin",
+       "ant-spin-section",
+       "ant-spin-spinning"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "landing",
+      "url": "/"
+     },
+     "step": "landing"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-circle",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-text",
+       "ant-btn-variant-solid",
+       "ant-btn-variant-text",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-borderless",
+       "ant-input-css-var",
+       "ant-select",
+       "ant-select-borderless",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-single",
+       "ant-select-sm",
+       "ant-spin",
+       "ant-spin-dot",
+       "ant-spin-dot-holder",
+       "ant-spin-dot-item",
+       "ant-spin-dot-spin",
+       "ant-spin-section",
+       "ant-spin-sm",
+       "ant-spin-spinning"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "landed",
+      "url": "/workspaces/2zwQZ2hd93IvLb59t6p1s"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "landed",
+      "url": "/workspaces/2zwQZ2hd93IvLb59t6p1s"
+     },
+     "step": "landed"
+    }
+   ],
+   "chromium-light-desktop :: P4.4 the plan › before one exists": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "no plan",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "no plan",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "no plan"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Draft plan",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [
+       {
+        "body": {},
+        "method": "POST",
+        "path": "/api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan/redraft"
+       }
+      ],
+      "step": "drafting",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Draft plan",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [
+       {
+        "body": {},
+        "method": "POST",
+        "path": "/api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan/redraft"
+       }
+      ],
+      "step": "drafting",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "drafting"
+    }
+   ],
+   "chromium-light-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "plan",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "plan",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "plan"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "v2Draft",
+       "role": "menu"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "v2Redraft · Sep 28, 12:43 · waiting for youDraft"
+        },
+        {
+         "disabled": false,
+         "text": "v1Sep 28, 09:12 · confirmed by youConfirmed"
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "versions",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-dropdown",
+       "ant-dropdown-css-var",
+       "ant-dropdown-menu",
+       "ant-dropdown-menu-css-var",
+       "ant-dropdown-menu-item",
+       "ant-dropdown-menu-item-only-child",
+       "ant-dropdown-menu-item-selected",
+       "ant-dropdown-menu-light",
+       "ant-dropdown-menu-root",
+       "ant-dropdown-menu-title-content",
+       "ant-dropdown-menu-vertical",
+       "ant-dropdown-open",
+       "ant-dropdown-placement-bottomLeft",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "v2Draft",
+       "role": "button"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "v2Redraft · Sep 28, 12:43 · waiting for youDraft"
+        },
+        {
+         "disabled": false,
+         "text": "v1Sep 28, 09:12 · confirmed by youConfirmed"
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "versions",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "versions"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Compare with v1",
+       "role": "menu"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "Compare with v1"
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "more",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-dropdown",
+       "ant-dropdown-css-var",
+       "ant-dropdown-menu",
+       "ant-dropdown-menu-css-var",
+       "ant-dropdown-menu-item",
+       "ant-dropdown-menu-item-only-child",
+       "ant-dropdown-menu-light",
+       "ant-dropdown-menu-root",
+       "ant-dropdown-menu-title-content",
+       "ant-dropdown-menu-vertical",
+       "ant-dropdown-open",
+       "ant-dropdown-placement-bottomRight",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "More",
+       "role": "button"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "Compare with v1"
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "more",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "more"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "More",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "compared",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "compared",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "compared"
+    }
+   ],
+   "chromium-light-desktop :: P4.4 watches › the editor on a task and a conversation’s chips": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "All1",
+       ""
+      ],
+      "requests": [],
+      "step": "task",
+      "url": "/tasks/2zwQZ2hd93IvLb59t6p5V"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "All1",
+       ""
+      ],
+      "requests": [],
+      "step": "task",
+      "url": "/tasks/2zwQZ2hd93IvLb59t6p5V"
+     },
+     "step": "task"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "Follow taskWatchingTaskReview the visual baselineWait until the task…FinishesDone, failed or cancelled.Is doneIts comple"
+      ],
+      "focus": {
+       "name": "Follow task",
+       "role": "dialog"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "All1",
+       "",
+       "FinishesDone, failed or cancelled.",
+       "FinishesDone, failed or cancelled.",
+       "Notify me",
+       "Notify me",
+       "24 hours",
+       "24 hours"
+      ],
+      "requests": [],
+      "step": "editor",
+      "url": "/tasks/2zwQZ2hd93IvLb59t6p5V"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-modal",
+       "ant-modal-body",
+       "ant-modal-close",
+       "ant-modal-close-icon",
+       "ant-modal-close-x",
+       "ant-modal-container",
+       "ant-modal-footer",
+       "ant-modal-header",
+       "ant-modal-mask",
+       "ant-modal-title",
+       "ant-modal-wrap",
+       "ant-radio",
+       "ant-radio-button",
+       "ant-radio-button-checked",
+       "ant-radio-button-label",
+       "ant-radio-button-wrapper",
+       "ant-radio-button-wrapper-checked",
+       "ant-radio-checked",
+       "ant-radio-css-var",
+       "ant-radio-group",
+       "ant-radio-group-outline",
+       "ant-radio-group-small",
+       "ant-radio-label",
+       "ant-radio-wrapper",
+       "ant-radio-wrapper-checked",
+       "ant-wave-target"
+      ],
+      "dialogs": [
+       "Follow taskWatchingTaskReview the visual baselineWait until the task…FinishesDone, failed or cancelled.Is doneIts comple"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "All1",
+       "",
+       "FinishesDone, failed or cancelled.",
+       "Notify me",
+       "24 hours"
+      ],
+      "requests": [],
+      "step": "editor",
+      "url": "/tasks/2zwQZ2hd93IvLb59t6p5V"
+     },
+     "step": "editor"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "Follow taskWatchingTaskReview the visual baselineWait until the task…FinishesDone, failed or cancelled.Is doneIts comple"
+      ],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "All1",
+       "",
+       "Is doneIts completion criterion was satisfied. A failure or ",
+       "Is doneIts completion criterion was satisfied. A failure or ",
+       "Resume a sessionQueues one turn in that session, behind any ",
+       "Resume a sessionQueues one turn in that session, behind any ",
+       "24 hours",
+       "24 hours"
+      ],
+      "options": [
+       "Review the component migration",
+       "Coordinator · orbit"
+      ],
+      "requests": [],
+      "step": "session picker",
+      "url": "/tasks/2zwQZ2hd93IvLb59t6p5V"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-modal",
+       "ant-modal-body",
+       "ant-modal-close",
+       "ant-modal-close-icon",
+       "ant-modal-close-x",
+       "ant-modal-container",
+       "ant-modal-footer",
+       "ant-modal-header",
+       "ant-modal-mask",
+       "ant-modal-title",
+       "ant-modal-wrap",
+       "ant-radio",
+       "ant-radio-button",
+       "ant-radio-button-checked",
+       "ant-radio-button-label",
+       "ant-radio-button-wrapper",
+       "ant-radio-button-wrapper-checked",
+       "ant-radio-checked",
+       "ant-radio-css-var",
+       "ant-radio-group",
+       "ant-radio-group-outline",
+       "ant-radio-group-small",
+       "ant-radio-label",
+       "ant-radio-wrapper",
+       "ant-radio-wrapper-checked",
+       "ant-select",
+       "ant-select-content",
+       "ant-select-css-var",
+       "ant-select-dropdown",
+       "ant-select-dropdown-list"
+      ],
+      "dialogs": [
+       "Follow taskWatchingTaskReview the visual baselineWait until the task…FinishesDone, failed or cancelled.Is doneIts comple"
+      ],
+      "focus": {
+       "name": "input",
+       "role": "combobox"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "All1",
+       "",
+       "Is doneIts completion criterion was satisfied. A failure or ",
+       "Resume a sessionQueues one turn in that session, behind any ",
+       "24 hours"
+      ],
+      "options": [
+       "Review the component migration",
+       "Coordinator · orbit"
+      ],
+      "requests": [],
+      "step": "session picker",
+      "url": "/tasks/2zwQZ2hd93IvLb59t6p5V"
+     },
+     "step": "session picker"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "Follow taskWatchingTaskReview the visual baselineWait until the task…FinishesDone, failed or cancelled.Is doneIts comple"
+      ],
+      "focus": {
+       "name": "7 days",
+       "role": "radio"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "All1",
+       "",
+       "Is doneIts completion criterion was satisfied. A failure or ",
+       "Is doneIts completion criterion was satisfied. A failure or ",
+       "Resume a sessionQueues one turn in that session, behind any ",
+       "Resume a sessionQueues one turn in that session, behind any ",
+       "7 days",
+       "7 days"
+      ],
+      "requests": [],
+      "step": "editor filled",
+      "url": "/tasks/2zwQZ2hd93IvLb59t6p5V"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-modal",
+       "ant-modal-body",
+       "ant-modal-close",
+       "ant-modal-close-icon",
+       "ant-modal-close-x",
+       "ant-modal-container",
+       "ant-modal-footer",
+       "ant-modal-header",
+       "ant-modal-mask",
+       "ant-modal-title",
+       "ant-modal-wrap",
+       "ant-radio",
+       "ant-radio-button",
+       "ant-radio-button-checked",
+       "ant-radio-button-label",
+       "ant-radio-button-wrapper",
+       "ant-radio-button-wrapper-checked",
+       "ant-radio-checked",
+       "ant-radio-css-var",
+       "ant-radio-group",
+       "ant-radio-group-outline",
+       "ant-radio-group-small",
+       "ant-radio-label",
+       "ant-radio-wrapper",
+       "ant-radio-wrapper-checked",
+       "ant-select",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input"
+      ],
+      "dialogs": [
+       "Follow taskWatchingTaskReview the visual baselineWait until the task…FinishesDone, failed or cancelled.Is doneIts comple"
+      ],
+      "focus": {
+       "name": "7 days",
+       "role": "input"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "All1",
+       "",
+       "Is doneIts completion criterion was satisfied. A failure or ",
+       "Resume a sessionQueues one turn in that session, behind any ",
+       "7 days"
+      ],
+      "requests": [],
+      "step": "editor filled",
+      "url": "/tasks/2zwQZ2hd93IvLb59t6p5V"
+     },
+     "step": "editor filled"
+    }
+   ]
+  },
+  "equal": 0,
+  "total": 14
+ }
+}

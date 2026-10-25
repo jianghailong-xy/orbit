@@ -1,0 +1,417 @@
+argv: env P51_SNAPSHOTS=/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots P51_OUTPUT=/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-out npx playwright test --config ui-migration/p51.config.mjs --update-snapshots=all
+tree: /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/ref
+head: 72fc42d85175a97095e3cc88347cbd009719e2ce
+uncommitted:
+load: 17.44 27.63 27.62 11/3787 1033203
+mem: 4595M available
+disk: / 8293M available, TMPDIR /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/tmp
+started: 2026-10-10T05:12:02Z
+
+
+Running 64 tests using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-sidebar.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-account-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-appearance.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-sidebar-photo.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-account-menu-photo.png, writing actual.
+  ✓   1 [chromium-light-desktop] › ui-migration/p51.browser.mjs:136:3 › P5.1 the sidebar › its rows, the account menu, Appearance and the photo (7.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-row-offline-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-rail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-rail-offline-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-rail-running-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-rail-jobs-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-rail-account-menu.png, writing actual.
+  ✓   2 [chromium-light-desktop] › ui-migration/p51.browser.mjs:228:3 › P5.1 the sidebar › the collapsed rail and its tips (6.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-search-recents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-search-results.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-search-arrows.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-search-short.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-search-loading.png, writing actual.
+  ✓   3 [chromium-light-desktop] › ui-migration/p51.browser.mjs:283:3 › P5.1 ⌘K › recents, results, keys, loading and the empty answer (6.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-wt-bar.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-merge-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-merge-menu-filtered.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-merge-menu-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-merge-menu-short.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-merge-conflict-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-merge-error-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-diverged-tip.png, writing actual.
+  ✓   4 [chromium-light-desktop] › ui-migration/p51.browser.mjs:365:3 › P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips (9.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-diff-max.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-diff-unified.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-diff-panel.png, writing actual.
+  ✓   5 [chromium-light-desktop] › ui-migration/p51.browser.mjs:447:3 › P5.1 the worktree bar › the diff drawer: full screen, side panel and the two views (4.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-move.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-move-naming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-move-step.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-move-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-move-progress.png, writing actual.
+  ✓   6 [chromium-light-desktop] › ui-migration/p51.browser.mjs:492:3 › P5.1 Move › the panel, a new folder, another workspace and the confirmation (8.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-usage-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-usage.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-reset-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-reset-unanswered.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-reset-started.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-reset-done.png, writing actual.
+  ✓   7 [chromium-light-desktop] › ui-migration/p51.browser.mjs:560:3 › P5.1 Plan usage › the popover by hover and by press, the reset credit and its confirmation (21.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-new-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-desktop/p51-engines.png, writing actual.
+  ✓   8 [chromium-light-desktop] › ui-migration/p51.browser.mjs:651:3 › P5.1 New Session › the engine picker (3.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-sidebar.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-account-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-appearance.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-sidebar-photo.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-account-menu-photo.png, writing actual.
+  ✓   9 [chromium-light-phone] › ui-migration/p51.browser.mjs:136:3 › P5.1 the sidebar › its rows, the account menu, Appearance and the photo (7.9s)
+  -  10 [chromium-light-phone] › ui-migration/p51.browser.mjs:228:3 › P5.1 the sidebar › the collapsed rail and its tips
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-search-recents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-search-results.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-search-arrows.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-search-short.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-search-loading.png, writing actual.
+  ✓  11 [chromium-light-phone] › ui-migration/p51.browser.mjs:283:3 › P5.1 ⌘K › recents, results, keys, loading and the empty answer (6.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-wt-bar.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-merge-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-merge-menu-filtered.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-merge-menu-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-merge-menu-short.png, writing actual.
+  ✓  12 [chromium-light-phone] › ui-migration/p51.browser.mjs:365:3 › P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips (7.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-diff-max.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-diff-unified.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-diff-panel.png, writing actual.
+  ✓  13 [chromium-light-phone] › ui-migration/p51.browser.mjs:447:3 › P5.1 the worktree bar › the diff drawer: full screen, side panel and the two views (4.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-move.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-move-naming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-move-step.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-move-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-move-progress.png, writing actual.
+  ✓  14 [chromium-light-phone] › ui-migration/p51.browser.mjs:492:3 › P5.1 Move › the panel, a new folder, another workspace and the confirmation (8.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-usage.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-reset-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-reset-unanswered.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-reset-started.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-reset-done.png, writing actual.
+  ✓  15 [chromium-light-phone] › ui-migration/p51.browser.mjs:560:3 › P5.1 Plan usage › the popover by hover and by press, the reset credit and its confirmation (19.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-new-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-light-phone/p51-engines.png, writing actual.
+  ✓  16 [chromium-light-phone] › ui-migration/p51.browser.mjs:651:3 › P5.1 New Session › the engine picker (2.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-sidebar.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-account-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-appearance.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-sidebar-photo.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-account-menu-photo.png, writing actual.
+  ✓  17 [chromium-dark-desktop] › ui-migration/p51.browser.mjs:136:3 › P5.1 the sidebar › its rows, the account menu, Appearance and the photo (8.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-row-offline-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-rail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-rail-offline-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-rail-running-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-rail-jobs-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-rail-account-menu.png, writing actual.
+  ✓  18 [chromium-dark-desktop] › ui-migration/p51.browser.mjs:228:3 › P5.1 the sidebar › the collapsed rail and its tips (6.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-search-recents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-search-results.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-search-arrows.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-search-short.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-search-loading.png, writing actual.
+  ✓  19 [chromium-dark-desktop] › ui-migration/p51.browser.mjs:283:3 › P5.1 ⌘K › recents, results, keys, loading and the empty answer (6.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-wt-bar.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-merge-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-merge-menu-filtered.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-merge-menu-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-merge-menu-short.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-merge-conflict-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-merge-error-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-diverged-tip.png, writing actual.
+  ✓  20 [chromium-dark-desktop] › ui-migration/p51.browser.mjs:365:3 › P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips (9.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-diff-max.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-diff-unified.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-diff-panel.png, writing actual.
+  ✓  21 [chromium-dark-desktop] › ui-migration/p51.browser.mjs:447:3 › P5.1 the worktree bar › the diff drawer: full screen, side panel and the two views (6.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-move.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-move-naming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-move-step.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-move-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-move-progress.png, writing actual.
+  ✓  22 [chromium-dark-desktop] › ui-migration/p51.browser.mjs:492:3 › P5.1 Move › the panel, a new folder, another workspace and the confirmation (8.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-usage-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-usage.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-reset-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-reset-unanswered.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-reset-started.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-reset-done.png, writing actual.
+  ✓  23 [chromium-dark-desktop] › ui-migration/p51.browser.mjs:560:3 › P5.1 Plan usage › the popover by hover and by press, the reset credit and its confirmation (22.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-new-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-desktop/p51-engines.png, writing actual.
+  ✓  24 [chromium-dark-desktop] › ui-migration/p51.browser.mjs:651:3 › P5.1 New Session › the engine picker (4.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-sidebar.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-account-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-appearance.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-sidebar-photo.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-account-menu-photo.png, writing actual.
+  ✓  25 [chromium-dark-phone] › ui-migration/p51.browser.mjs:136:3 › P5.1 the sidebar › its rows, the account menu, Appearance and the photo (8.8s)
+  -  26 [chromium-dark-phone] › ui-migration/p51.browser.mjs:228:3 › P5.1 the sidebar › the collapsed rail and its tips
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-search-recents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-search-results.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-search-arrows.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-search-short.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-search-loading.png, writing actual.
+  ✓  27 [chromium-dark-phone] › ui-migration/p51.browser.mjs:283:3 › P5.1 ⌘K › recents, results, keys, loading and the empty answer (7.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-wt-bar.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-merge-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-merge-menu-filtered.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-merge-menu-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-merge-menu-short.png, writing actual.
+  ✓  28 [chromium-dark-phone] › ui-migration/p51.browser.mjs:365:3 › P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips (12.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-diff-max.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-diff-unified.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-diff-panel.png, writing actual.
+  ✓  29 [chromium-dark-phone] › ui-migration/p51.browser.mjs:447:3 › P5.1 the worktree bar › the diff drawer: full screen, side panel and the two views (5.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-move.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-move-naming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-move-step.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-move-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-move-progress.png, writing actual.
+  ✓  30 [chromium-dark-phone] › ui-migration/p51.browser.mjs:492:3 › P5.1 Move › the panel, a new folder, another workspace and the confirmation (10.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-usage.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-reset-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-reset-unanswered.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-reset-started.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-reset-done.png, writing actual.
+  ✓  31 [chromium-dark-phone] › ui-migration/p51.browser.mjs:560:3 › P5.1 Plan usage › the popover by hover and by press, the reset credit and its confirmation (21.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-new-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/chromium-dark-phone/p51-engines.png, writing actual.
+  ✓  32 [chromium-dark-phone] › ui-migration/p51.browser.mjs:651:3 › P5.1 New Session › the engine picker (3.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-sidebar.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-account-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-appearance.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-sidebar-photo.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-account-menu-photo.png, writing actual.
+  ✓  33 [webkit-light-desktop] › ui-migration/p51.browser.mjs:136:3 › P5.1 the sidebar › its rows, the account menu, Appearance and the photo (10.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-row-offline-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-rail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-rail-offline-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-rail-running-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-rail-jobs-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-rail-account-menu.png, writing actual.
+  ✓  34 [webkit-light-desktop] › ui-migration/p51.browser.mjs:228:3 › P5.1 the sidebar › the collapsed rail and its tips (11.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-search-recents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-search-results.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-search-arrows.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-search-short.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-search-loading.png, writing actual.
+  ✓  35 [webkit-light-desktop] › ui-migration/p51.browser.mjs:283:3 › P5.1 ⌘K › recents, results, keys, loading and the empty answer (10.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-wt-bar.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-merge-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-merge-menu-filtered.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-merge-menu-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-merge-menu-short.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-merge-conflict-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-merge-error-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-diverged-tip.png, writing actual.
+  ✓  36 [webkit-light-desktop] › ui-migration/p51.browser.mjs:365:3 › P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips (15.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-diff-max.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-diff-unified.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-diff-panel.png, writing actual.
+  ✓  37 [webkit-light-desktop] › ui-migration/p51.browser.mjs:447:3 › P5.1 the worktree bar › the diff drawer: full screen, side panel and the two views (6.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-move.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-move-naming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-move-step.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-move-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-move-progress.png, writing actual.
+  ✓  38 [webkit-light-desktop] › ui-migration/p51.browser.mjs:492:3 › P5.1 Move › the panel, a new folder, another workspace and the confirmation (11.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-usage-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-usage.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-reset-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-reset-unanswered.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-reset-started.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-reset-done.png, writing actual.
+  ✓  39 [webkit-light-desktop] › ui-migration/p51.browser.mjs:560:3 › P5.1 Plan usage › the popover by hover and by press, the reset credit and its confirmation (25.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-new-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-desktop/p51-engines.png, writing actual.
+  ✓  40 [webkit-light-desktop] › ui-migration/p51.browser.mjs:651:3 › P5.1 New Session › the engine picker (3.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-sidebar.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-account-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-appearance.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-sidebar-photo.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-account-menu-photo.png, writing actual.
+  ✓  41 [webkit-light-phone] › ui-migration/p51.browser.mjs:136:3 › P5.1 the sidebar › its rows, the account menu, Appearance and the photo (8.3s)
+  -  42 [webkit-light-phone] › ui-migration/p51.browser.mjs:228:3 › P5.1 the sidebar › the collapsed rail and its tips
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-search-recents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-search-results.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-search-arrows.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-search-short.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-search-loading.png, writing actual.
+  ✓  43 [webkit-light-phone] › ui-migration/p51.browser.mjs:283:3 › P5.1 ⌘K › recents, results, keys, loading and the empty answer (6.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-wt-bar.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-merge-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-merge-menu-filtered.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-merge-menu-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-merge-menu-short.png, writing actual.
+  ✓  44 [webkit-light-phone] › ui-migration/p51.browser.mjs:365:3 › P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips (8.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-diff-max.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-diff-unified.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-diff-panel.png, writing actual.
+  ✓  45 [webkit-light-phone] › ui-migration/p51.browser.mjs:447:3 › P5.1 the worktree bar › the diff drawer: full screen, side panel and the two views (4.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-move.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-move-naming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-move-step.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-move-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-move-progress.png, writing actual.
+  ✓  46 [webkit-light-phone] › ui-migration/p51.browser.mjs:492:3 › P5.1 Move › the panel, a new folder, another workspace and the confirmation (9.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-usage.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-reset-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-reset-unanswered.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-reset-started.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-reset-done.png, writing actual.
+  ✓  47 [webkit-light-phone] › ui-migration/p51.browser.mjs:560:3 › P5.1 Plan usage › the popover by hover and by press, the reset credit and its confirmation (21.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-new-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-light-phone/p51-engines.png, writing actual.
+  ✓  48 [webkit-light-phone] › ui-migration/p51.browser.mjs:651:3 › P5.1 New Session › the engine picker (4.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-sidebar.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-account-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-appearance.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-sidebar-photo.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-account-menu-photo.png, writing actual.
+  ✓  49 [webkit-dark-desktop] › ui-migration/p51.browser.mjs:136:3 › P5.1 the sidebar › its rows, the account menu, Appearance and the photo (8.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-row-offline-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-rail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-rail-offline-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-rail-running-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-rail-jobs-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-rail-account-menu.png, writing actual.
+  ✓  50 [webkit-dark-desktop] › ui-migration/p51.browser.mjs:228:3 › P5.1 the sidebar › the collapsed rail and its tips (7.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-search-recents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-search-results.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-search-arrows.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-search-short.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-search-loading.png, writing actual.
+  ✓  51 [webkit-dark-desktop] › ui-migration/p51.browser.mjs:283:3 › P5.1 ⌘K › recents, results, keys, loading and the empty answer (7.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-wt-bar.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-merge-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-merge-menu-filtered.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-merge-menu-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-merge-menu-short.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-merge-conflict-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-merge-error-tip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-diverged-tip.png, writing actual.
+  ✓  52 [webkit-dark-desktop] › ui-migration/p51.browser.mjs:365:3 › P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips (11.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-diff-max.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-diff-unified.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-diff-panel.png, writing actual.
+  ✓  53 [webkit-dark-desktop] › ui-migration/p51.browser.mjs:447:3 › P5.1 the worktree bar › the diff drawer: full screen, side panel and the two views (5.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-move.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-move-naming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-move-step.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-move-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-move-progress.png, writing actual.
+  ✓  54 [webkit-dark-desktop] › ui-migration/p51.browser.mjs:492:3 › P5.1 Move › the panel, a new folder, another workspace and the confirmation (9.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-usage-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-usage.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-reset-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-reset-unanswered.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-reset-started.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-reset-done.png, writing actual.
+  ✓  55 [webkit-dark-desktop] › ui-migration/p51.browser.mjs:560:3 › P5.1 Plan usage › the popover by hover and by press, the reset credit and its confirmation (24.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-new-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-desktop/p51-engines.png, writing actual.
+  ✓  56 [webkit-dark-desktop] › ui-migration/p51.browser.mjs:651:3 › P5.1 New Session › the engine picker (4.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-sidebar.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-account-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-appearance.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-sidebar-photo.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-account-menu-photo.png, writing actual.
+  ✓  57 [webkit-dark-phone] › ui-migration/p51.browser.mjs:136:3 › P5.1 the sidebar › its rows, the account menu, Appearance and the photo (8.5s)
+  -  58 [webkit-dark-phone] › ui-migration/p51.browser.mjs:228:3 › P5.1 the sidebar › the collapsed rail and its tips
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-search-recents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-search-results.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-search-arrows.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-search-short.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-search-loading.png, writing actual.
+  ✓  59 [webkit-dark-phone] › ui-migration/p51.browser.mjs:283:3 › P5.1 ⌘K › recents, results, keys, loading and the empty answer (6.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-wt-bar.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-merge-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-merge-menu-filtered.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-merge-menu-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-merge-menu-short.png, writing actual.
+  ✓  60 [webkit-dark-phone] › ui-migration/p51.browser.mjs:365:3 › P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips (7.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-diff-max.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-diff-unified.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-diff-panel.png, writing actual.
+  ✓  61 [webkit-dark-phone] › ui-migration/p51.browser.mjs:447:3 › P5.1 the worktree bar › the diff drawer: full screen, side panel and the two views (4.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-move.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-move-naming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-move-step.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-move-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-move-progress.png, writing actual.
+  ✓  62 [webkit-dark-phone] › ui-migration/p51.browser.mjs:492:3 › P5.1 Move › the panel, a new folder, another workspace and the confirmation (9.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-usage.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-reset-confirm.png, writing actual.
+  ✘  63 [webkit-dark-phone] › ui-migration/p51.browser.mjs:560:3 › P5.1 Plan usage › the popover by hover and by press, the reset credit and its confirmation (36.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-new-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-ref-shots/webkit-dark-phone/p51-engines.png, writing actual.
+  ✓  64 [webkit-dark-phone] › ui-migration/p51.browser.mjs:651:3 › P5.1 New Session › the engine picker (3.7s)
+
+
+  1) [webkit-dark-phone] › ui-migration/p51.browser.mjs:560:3 › P5.1 Plan usage › the popover by hover and by press, the reset credit and its confirmation 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Couldn’t confirm the reset request', { exact: true })
+    Expected: visible
+    Timeout: 30000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByText('Couldn’t confirm the reset request', { exact: true }) with timeout 30000ms
+      - waiting for getByText('Couldn’t confirm the reset request', { exact: true })
+
+
+      609 |     await page.getByRole('button', { name: 'Use reset credit', exact: true }).click();
+      610 |     await dialog(page, 'Use reset credit?').getByRole('button', { name: 'Use reset', exact: true }).click();
+    > 611 |     await expect(page.getByText('Couldn’t confirm the reset request', { exact: true })).toBeVisible({ timeout: 30_000 });
+          |                                                                                         ^
+      612 |     await settled(page);
+      613 |     trace.push(await observe(page, [fixtures], 'unanswered'));
+      614 |     await capture('p51-reset-unanswered', { popover: visible(page, POPOVER), retry: page.getByRole('button', { name: 'Retry', exact: true }) });
+        at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/ref/src/web/ui-migration/p51.browser.mjs:611:89
+
+    attachment #1: p51-usage (image/png) ───────────────────────────────────────────────────────────
+    Expected: ../../../r2/p51-ref-shots/webkit-dark-phone/p51-usage.png
+    Received: ../../../r2/p51-ref-out/p51.browser.mjs-P5-1-Plan--e5381-credit-and-its-confirmation-webkit-dark-phone/p51-usage-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: p51-reset-confirm (image/png) ───────────────────────────────────────────────────
+    Expected: ../../../r2/p51-ref-shots/webkit-dark-phone/p51-reset-confirm.png
+    Received: ../../../r2/p51-ref-out/p51.browser.mjs-P5-1-Plan--e5381-credit-and-its-confirmation-webkit-dark-phone/p51-reset-confirm-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../r2/p51-ref-out/p51.browser.mjs-P5-1-Plan--e5381-credit-and-its-confirmation-webkit-dark-phone/attachments/computed-styles-and-timings-66d6d8ad4aacb788e11ffd2d27f2b10f85182237.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../r2/p51-ref-out/p51.browser.mjs-P5-1-Plan--e5381-credit-and-its-confirmation-webkit-dark-phone/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../r2/p51-ref-out/p51.browser.mjs-P5-1-Plan--e5381-credit-and-its-confirmation-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../r2/p51-ref-out/p51.browser.mjs-P5-1-Plan--e5381-credit-and-its-confirmation-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [webkit-dark-phone] › ui-migration/p51.browser.mjs:560:3 › P5.1 Plan usage › the popover by hover and by press, the reset credit and its confirmation 
+  4 skipped
+  59 passed (9.8m)
+exit=1
+load: 21.28 27.84 28.23 17/3892 1167554
+ended: 2026-10-10T05:21:56Z

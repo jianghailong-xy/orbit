@@ -88,45 +88,31 @@ async function open(page, kind) {
   else await region.getByRole('button').click();
 }
 
-function compare(samples) {
-  for (const phase of ['enter', 'exit']) {
-    expect(samples.orbit[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })))
-      .toEqual(samples.antd[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })));
-  }
-}
-
 const directions = [
   { name: 'bottom', query: '', side: 'bottom' },
   { name: 'top', query: '&side=top&anchor=bottom', side: 'top' },
   { name: 'flipped', query: '&anchor=bottom', side: 'top' },
 ];
 for (const kind of ['attachment', 'expiry', 'search', 'multiple', 'popover', 'tooltip']) for (const direction of directions) {
-  test(`normal ${direction.name} entrance and exit motion matches ${kind}`, async ({ page }, info) => {
+  test(`normal ${direction.name} entrance and exit motion of ${kind} stays in view`, async ({ page }, info) => {
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     const samples = {};
-    for (const system of ['antd', 'orbit']) {
-      await page.goto(`${fixture}?sample=${kind}&system=${system}${direction.query}`);
-      await page.evaluate(() => document.fonts.ready);
-      await arm(page, surface, direction.name === 'bottom');
-      await open(page, kind);
-      await expect(page.locator(`${surface}:visible`)).toBeVisible();
-      if (direction.name === 'bottom') await resumeAfterShot(page, info, `${system}-enter-midpoint`);
-      samples[system] = { enter: await capture(page) };
-      await expect(page.locator(`${surface}:visible`)).toBeVisible();
-      if (system === 'orbit') await expect(page.locator(surface)).toHaveAttribute('data-side', direction.side);
-      await arm(page, surface, direction.name === 'bottom');
-      if (kind === 'tooltip') await page.mouse.move(0, 0);
-      else await page.mouse.click(3, 60);
-      if (direction.name === 'bottom') await resumeAfterShot(page, info, `${system}-exit-midpoint`);
-      samples[system].exit = await capture(page);
-      await expect(page.locator(`${surface}:visible`)).toHaveCount(0);
-    }
+    await page.goto(`${fixture}?sample=${kind}${direction.query}`);
+    await page.evaluate(() => document.fonts.ready);
+    await arm(page, surface, direction.name === 'bottom');
+    await open(page, kind);
+    await expect(page.locator(`${surface}:visible`)).toBeVisible();
+    if (direction.name === 'bottom') await resumeAfterShot(page, info, 'orbit-enter-midpoint');
+    samples.orbit = { enter: await capture(page) };
+    await expect(page.locator(`${surface}:visible`)).toBeVisible();
+    await expect(page.locator(surface)).toHaveAttribute('data-side', direction.side);
+    await arm(page, surface, direction.name === 'bottom');
+    if (kind === 'tooltip') await page.mouse.move(0, 0);
+    else await page.mouse.click(3, 60);
+    if (direction.name === 'bottom') await resumeAfterShot(page, info, 'orbit-exit-midpoint');
+    samples.orbit.exit = await capture(page);
+    await expect(page.locator(`${surface}:visible`)).toHaveCount(0);
     await info.attach('motion', { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });
-    compare(samples);
-    if (direction.name === 'bottom') for (const phase of ['enter', 'exit']) {
-      const midpoint = ({ time, opacity, box }) => ({ time, opacity, box });
-      expect(midpoint(samples.orbit[phase][0].samples[0])).toEqual(midpoint(samples.antd[phase][0].samples[0]));
-    }
     const viewport = page.viewportSize();
     for (const phase of ['enter', 'exit']) for (const record of samples.orbit[phase]) for (const frame of record.samples) {
       expect(frame.connected).toBe(true);
@@ -138,50 +124,42 @@ for (const kind of ['attachment', 'expiry', 'search', 'multiple', 'popover', 'to
   });
 }
 
-for (const kind of ['popover', 'tooltip']) for (const align of ['center', 'end']) test(`${kind} ${align} zoom origin matches`, async ({ page }, info) => {
+for (const kind of ['popover', 'tooltip']) for (const align of ['center', 'end']) test(`${kind} ${align} zoom runs its entrance and exit`, async ({ page }, info) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   const samples = {};
-  for (const system of ['antd', 'orbit']) {
-    await page.goto(`${fixture}?sample=${kind}&system=${system}&align=${align}&anchor=${align === 'end' ? 'right' : 'center'}`);
-    await page.evaluate(() => document.fonts.ready);
-    await arm(page);
-    await open(page, kind);
-    samples[system] = { enter: await capture(page) };
-    await arm(page);
-    if (kind === 'tooltip') await page.mouse.move(0, 0);
-    else await page.mouse.click(3, 60);
-    samples[system].exit = await capture(page);
-    await expect(page.locator(`${surface}:visible`)).toHaveCount(0);
-  }
+  await page.goto(`${fixture}?sample=${kind}&align=${align}&anchor=${align === 'end' ? 'right' : 'center'}`);
+  await page.evaluate(() => document.fonts.ready);
+  await arm(page);
+  await open(page, kind);
+  samples.orbit = { enter: await capture(page) };
+  await arm(page);
+  if (kind === 'tooltip') await page.mouse.move(0, 0);
+  else await page.mouse.click(3, 60);
+  samples.orbit.exit = await capture(page);
+  await expect(page.locator(`${surface}:visible`)).toHaveCount(0);
   await info.attach('motion', { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });
-  compare(samples);
 });
 
-for (const anchor of ['left', 'right']) test(`submenu ${anchor} edge zoom matches and stays in view`, async ({ page }, info) => {
+for (const anchor of ['left', 'right']) test(`submenu ${anchor} edge zoom stays in view`, async ({ page }, info) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   const samples = {};
-  for (const system of ['antd', 'orbit']) {
-    await page.goto(`${fixture}?sample=submenu&system=${system}&anchor=${anchor}`);
-    await page.evaluate(() => document.fonts.ready);
-    await arm(page);
-    await open(page, 'submenu');
-    await capture(page);
-    const selector = system === 'antd' ? '.sample-submenu' : '.orbit-menu[data-nested]';
-    await arm(page, selector);
-    await page.getByRole('menuitem', { name: 'Provider' }).hover();
-    await expect(page.getByRole('menuitem', { name: 'Codex' })).toBeVisible();
-    samples[system] = { enter: await capture(page) };
-    if (system === 'orbit') {
-      const box = await page.locator(selector).boundingBox();
-      expect(box.x).toBeGreaterThanOrEqual(0);
-      expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize().width);
-      await expect(page.locator(selector)).toHaveAttribute('data-side', anchor === 'right' ? 'left' : 'right');
-    }
-    await arm(page, selector);
-    await page.mouse.click(3, 60);
-    samples[system].exit = await capture(page);
-    await expect(page.getByRole('menuitem', { name: 'Codex' })).toHaveCount(0);
-  }
+  await page.goto(`${fixture}?sample=submenu&anchor=${anchor}`);
+  await page.evaluate(() => document.fonts.ready);
+  await arm(page);
+  await open(page, 'submenu');
+  await capture(page);
+  const selector = '.orbit-menu[data-nested]';
+  await arm(page, selector);
+  await page.getByRole('menuitem', { name: 'Provider' }).hover();
+  await expect(page.getByRole('menuitem', { name: 'Codex' })).toBeVisible();
+  samples.orbit = { enter: await capture(page) };
+  const box = await page.locator(selector).boundingBox();
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize().width);
+  await expect(page.locator(selector)).toHaveAttribute('data-side', anchor === 'right' ? 'left' : 'right');
+  await arm(page, selector);
+  await page.mouse.click(3, 60);
+  samples.orbit.exit = await capture(page);
+  await expect(page.getByRole('menuitem', { name: 'Codex' })).toHaveCount(0);
   await info.attach('motion', { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });
-  compare(samples);
 });

@@ -40,7 +40,7 @@ import {
 vi.mock('../api', () => ({ api: vi.fn(() => new Promise(() => {})) }));
 
 /** Static renders take the desktop branch. Mounted phone tests override this per test; answering
- * false for every other query also keeps antd's own breakpoint subscriptions deterministic. */
+ * false for every other query also keeps every other breakpoint subscription deterministic. */
 function stubViewport(phone: boolean): void {
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: phone && query === ACCEPTANCE_PHONE_QUERY,
@@ -248,8 +248,7 @@ async function click(element: HTMLElement): Promise<void> {
   await act(async () => element.click());
 }
 
-// The first antd render initializes its jsdom style registry before anything can be asserted, which
-// is why these cases are slower than their bodies; every assertion here is synchronous and bounded.
+// Every assertion here is synchronous and bounded.
 describe('ProjectAcceptanceCard', () => {
   it('heads the card with what it is, and says where a row\'s answer comes from', () => {
     const qc = client();
@@ -321,7 +320,11 @@ describe('ProjectAcceptanceCard', () => {
   it('renders while the read is in flight', () => {
     const qc = client();
 
-    expect(paint(qc)).toContain('ant-skeleton');
+    // The placeholder lines, and none of the states a read would have answered.
+    const html = paint(qc);
+    expect(html).toContain('orbit-skeleton-paragraph');
+    expect(html).not.toContain('could not be loaded');
+    expect(html).not.toContain('No criteria are stated');
   });
 
   it('renders the failure of the read as a failure', () => {
@@ -810,7 +813,7 @@ describe('ProjectAcceptanceCard on what the work has done', () => {
     // has done — a pill anywhere in here is the verdict rail 0229 deleted, coming back.
     const list = criteriaList(html);
     for (const shape of [
-      'ant-tag', 'ant-badge', 'ant-ribbon', 'ant-progress', 'role="progressbar"',
+      'orbit-badge', 'role="progressbar"',
       '<progress', '<meter', 'acceptance-row-badge', 'acceptance-row-verdict',
       'acceptance-meter', 'Unjudged',
     ]) {
@@ -911,5 +914,40 @@ describe('criteriaPreview', () => {
     expect(criteriaPreview(many, false, MOBILE_CRITERIA_PREVIEW))
       .toHaveLength(MOBILE_CRITERIA_PREVIEW);
     expect(criteriaPreview(many, false)).toHaveLength(CRITERIA_PREVIEW);
+  });
+});
+
+describe('ProjectAcceptanceCard on where met work landed, by the project’s main branch', () => {
+  const ON_BRANCH: AcceptanceCriterionItem = {
+    ...criterion(5, 'Met on the project branch first'),
+    satisfied: true,
+    unmet: [],
+    landing: 'ON_INTEGRATION_LINE',
+  };
+  const landings = (integration: Record<string, unknown>) => {
+    const qc = client();
+    seed(qc, [MET_CRITERION, ON_BRANCH], { integration });
+    const html = criteriaList(paint(qc));
+    return {
+      landed: accessibleText(rowFor(html, MET_CRITERION.text)),
+      onBranch: accessibleText(rowFor(html, ON_BRANCH.text)),
+    };
+  };
+
+  it('says on main and not on main yet word for word as before for a project on main', () => {
+    const rows = landings({ ref: 'project/p', upstreamRef: 'main' });
+    expect(rows.landed).toContain('on main');
+    expect(rows.onBranch).toContain('on project/p');
+    expect(rows.onBranch).toContain('not on main yet');
+    // A document that predates the main branch says main too.
+    expect(landings({ ref: 'project/p' }).onBranch).toContain('not on main yet');
+  });
+
+  it('names master for a project on master, off the document the page holds', () => {
+    const rows = landings({ ref: 'project/p', upstreamRef: 'master' });
+    expect(rows.landed).toContain('on master');
+    expect(rows.landed).not.toContain('on main');
+    expect(rows.onBranch).toContain('not on master yet');
+    expect(rows.onBranch).not.toContain('main');
   });
 });

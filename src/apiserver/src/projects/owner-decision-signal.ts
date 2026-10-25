@@ -8,6 +8,7 @@ import {
 import { readWaitingOwnerConfirmations } from '../tasks/owner-confirmation-read';
 import { CRITERIA_WEAKENING_EFFECT_CLASS } from './criteria-weakening-intent';
 import { stillUnanswered } from './criteria-pending-decisions';
+import { mainBranchOf } from './project-criterion-landing';
 import { openItemsNoLongerOwed, ownerItemKind, ownerItemNeed } from './project-open-item';
 import { projectsToRecordAsDone } from './project-looks-finished';
 import { projectsReadyToClose } from './project-done-request';
@@ -358,7 +359,13 @@ async function readOwnerItemSignals(
       title: true,
       waitingSince: true,
       projectId: true,
-      project: { select: { coordinatorSessionId: true } },
+      project: {
+        select: {
+          coordinatorSessionId: true,
+          // The main branch a merge approval names (`mainBranch`).
+          codebases: { where: { slot: 'primary' }, select: { upstreamRef: true } },
+        },
+      },
     },
   });
   const settled = await openItemsNoLongerOwed(tx, rows.map((row) => row.id));
@@ -384,6 +391,7 @@ async function readOwnerItemSignals(
       // `row.kind` is already in this read; do not issue a second item/facts query just to name
       // the short reason beside an escalated item in the session list.
       need: ownerItemNeed(row.kind),
+      mainBranch: mainBranchOf(row.project.codebases[0]),
     });
     bySession.set(sessionId, signal);
   }
@@ -461,6 +469,7 @@ export function ownerItemsForRow(
     title: item.title,
     since: item.since.toISOString(),
     ...(item.need == null ? {} : { need: item.need }),
+    mainBranch: item.mainBranch ?? null,
   }));
 }
 

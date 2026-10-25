@@ -198,9 +198,10 @@ final class CreatedTasksWiringTests: XCTestCase {
         XCTAssertTrue(code(try source("Views/OrbitLinkCardView.swift"))
             .contains("app.open(cards.destination(for: ref), overConsole: overConsole)"))
 
-        // A project's page — from a project link, or a coordinator conversation's title — goes over
+        // A project's page — from a project link, or a coordinator conversation's ⋯ menu — goes over
         // the conversation on a phone and to the Projects section on the wide shells (the owner,
-        // 2026-09-26: there was no way from a coordinator conversation to its project's page).
+        // 2026-09-26: there was no way from a coordinator conversation to its project's page; the
+        // title that opened it too left the nav bar on 2026-10-15).
         let project = try slice(app, from: "func openProjectFromConversation(_ id: String, overConsole: Bool) {",
                                 to: "\n    }")
         XCTAssertTrue(project.contains("guard overConsole else { return openProject(id) }"),
@@ -209,12 +210,12 @@ final class CreatedTasksWiringTests: XCTestCase {
                       "on a phone, on top of the conversation it was opened from")
         let console = code(try source("Views/Console/ConsoleView.swift"))
         XCTAssertTrue(console.contains("@Environment(\\.opensPagesOverConsole) private var opensPagesOverConsole"))
-        XCTAssertTrue(console.contains("if let session, let projectID = session.projectId {"),
-                      "a coordinator conversation's title is a door to its project…")
-        XCTAssertTrue(console.contains("appModel.openProjectFromConversation(projectID, overConsole: opensPagesOverConsole)"),
+        let menu = try slice(console, from: "private func sessionMenu(",
+                             to: "Label(\"Open Project\", systemImage: \"arrow.up.right\")")
+        XCTAssertTrue(menu.contains("} else if let projectID = session.projectId {"),
+                      "a coordinator conversation's menu is a door to its project…")
+        XCTAssertTrue(menu.contains("appModel.openProjectFromConversation(projectID, overConsole: opensPagesOverConsole)"),
                       "…through the same door a project link takes")
-        XCTAssertTrue(console.contains("Image(systemName: \"chevron.right\")"),
-                      "and the title says it can be opened")
 
         let watching = code(try source("Views/WatchingCard.swift"))
         XCTAssertTrue(watching.contains("model.openFromConversation(destination, overConsole: overConsole)"),

@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -194,6 +193,11 @@ function action(label: string): HTMLElement | null {
     .find((a) => a.textContent === label) ?? null;
 }
 
+/** The Withdraw of the reader's message waiting in the tray above the composer. */
+function trayWithdraw(): HTMLElement | null {
+  return mounted().querySelector<HTMLElement>('.pending-tray-row [aria-label="Withdraw"]');
+}
+
 const composerText = (): string | undefined =>
   mounted().querySelector<HTMLTextAreaElement>('.workspace-composer textarea')?.value;
 
@@ -275,9 +279,7 @@ async function mount(): Promise<void> {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
-          <AntApp>
-            <WorkspaceView runner={RUNNER} />
-          </AntApp>
+          <WorkspaceView runner={RUNNER} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -430,11 +432,11 @@ describe('taking an undelivered message back into the composer', () => {
       expect(sent).toHaveLength(1);
     });
 
-    // Its queued row offers Cancel, and withdrawing brings both files back with the words.
+    // Its row in the tray offers Withdraw, and withdrawing brings both files back with the words.
     await waitForUi(() => {
-      expect(action('Cancel')).not.toBeNull();
+      expect(trayWithdraw()).not.toBeNull();
     });
-    await click(action('Cancel')!);
+    await click(trayWithdraw()!);
 
     await waitForUi(() => {
       expect(composerText()).toBe(ASKED);
@@ -477,7 +479,7 @@ describe('stopping the turn folds the queue back', () => {
     await mount();
 
     await waitForUi(() => {
-      expect(action('Cancel')).not.toBeNull();
+      expect(trayWithdraw()).not.toBeNull();
     });
     await click(one('[aria-label="Stop"]'));
 

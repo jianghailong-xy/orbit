@@ -1,0 +1,17 @@
+{
+ "label": "fix-404c-merge-check-nvme",
+ "step": "merge-check",
+ "tree": "/root/.orbit/worktrees/99d0ce19-f5db-5601-9902-ce52eaa1f17a",
+ "disk": "root NVMe (/dev/nvme0n1p3)",
+ "command": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+ "commit": "aa162207c1bd1353224d62e38634dc21f9707e78",
+ "webChanges": [],
+ "webDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "startedAt": "2026-10-08T16:48:55Z",
+ "endedAt": "2026-10-08T16:53:26+00:00",
+ "loadAverage": {
+  "start": "12.78 14.78 20.51",
+  "end": "20.82 16.08 19.37"
+ },
+ "exitCode": 0
+}

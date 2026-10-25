@@ -1,0 +1,26 @@
+tree: /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del
+head: 6879542dc23a10a74417002810331a7e73778842
+load: 9.93 10.66 11.02 9/3337 2515339
+started: 2026-10-10T18:12:08Z
+
+P0 expected screenshots: 44 P0.2 originals, 165 main drift references, 43 accepted migration differences.
+
+Running 12 tests using 1 worker
+
+  -   1 [chromium-light-desktop] › ui-migration/reviews.check.mjs:55:1 › question traps focus, preserves choices and drafts, and suspends background shortcuts
+  -   2 [chromium-light-desktop] › ui-migration/reviews.check.mjs:106:1 › long plan scrolls above visible actions and owns the foreground shortcut
+  ✓   3 [chromium-light-desktop] › ui-migration/reviews.check.mjs:130:1 › wide screens show full questions and actions without opening a preview (819ms)
+  ✓   4 [chromium-light-phone] › ui-migration/reviews.check.mjs:55:1 › question traps focus, preserves choices and drafts, and suspends background shortcuts (1.4s)
+  ✓   5 [chromium-light-phone] › ui-migration/reviews.check.mjs:106:1 › long plan scrolls above visible actions and owns the foreground shortcut (1.4s)
+  -   6 [chromium-light-phone] › ui-migration/reviews.check.mjs:130:1 › wide screens show full questions and actions without opening a preview
+  -   7 [chromium-dark-desktop] › ui-migration/reviews.check.mjs:55:1 › question traps focus, preserves choices and drafts, and suspends background shortcuts
+  -   8 [chromium-dark-desktop] › ui-migration/reviews.check.mjs:106:1 › long plan scrolls above visible actions and owns the foreground shortcut
+  ✓   9 [chromium-dark-desktop] › ui-migration/reviews.check.mjs:130:1 › wide screens show full questions and actions without opening a preview (818ms)
+  ✓  10 [chromium-dark-phone] › ui-migration/reviews.check.mjs:55:1 › question traps focus, preserves choices and drafts, and suspends background shortcuts (1.5s)
+  ✓  11 [chromium-dark-phone] › ui-migration/reviews.check.mjs:106:1 › long plan scrolls above visible actions and owns the foreground shortcut (1.4s)
+  -  12 [chromium-dark-phone] › ui-migration/reviews.check.mjs:130:1 › wide screens show full questions and actions without opening a preview
+
+  6 skipped
+  6 passed (15.2s)
+exit=0
+ended: 2026-10-10T18:12:24Z

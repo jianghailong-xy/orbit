@@ -1,0 +1,70 @@
+[
+  {
+    "file": "/mnt/data/tmp/34hxIkHX/lab/records/7-fixed-kill-starting.jsonl",
+    "from": "2026-10-18T09:22:08.160+00:00",
+    "runs": [
+      {
+        "attempt": 0,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "It went to sleep while idle. Send a message to wake it; its workspace and files are kept.",
+          "kind": "sleeping",
+          "retry": false,
+          "title": "Managed runner asleep"
+        },
+        "from": "2026-10-18T09:22:08.160+00:00",
+        "generations": [
+          8
+        ],
+        "reason": null,
+        "samples": 5,
+        "seconds": 2.0,
+        "state": "SLEEPING",
+        "until": "2026-10-18T09:22:10.161+00:00"
+      },
+      {
+        "attempt": 0,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "It is starting again. Messages sent meanwhile wait for it and run once it is up.",
+          "kind": "waking",
+          "retry": false,
+          "title": "Waking your managed runner"
+        },
+        "from": "2026-10-18T09:22:10.661+00:00",
+        "generations": [
+          8
+        ],
+        "reason": null,
+        "samples": 20,
+        "seconds": 9.5,
+        "state": "STARTING",
+        "until": "2026-10-18T09:22:20.163+00:00"
+      },
+      {
+        "attempt": 0,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "Sessions here run on the runner Orbit manages for you.",
+          "kind": "available",
+          "retry": false,
+          "title": "Managed runner ready"
+        },
+        "from": "2026-10-18T09:22:20.663+00:00",
+        "generations": [
+          8
+        ],
+        "reason": null,
+        "samples": 1,
+        "seconds": 0.0,
+        "state": "READY",
+        "until": "2026-10-18T09:22:20.663+00:00"
+      }
+    ],
+    "samples": 26,
+    "until": "2026-10-18T09:22:20.663+00:00"
+  }
+]

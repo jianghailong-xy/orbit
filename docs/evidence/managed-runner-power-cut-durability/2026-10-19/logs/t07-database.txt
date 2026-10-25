@@ -1,0 +1,11 @@
+# T07 test server database (a copy of /mnt/data/managed-runner-lab/test-server-t07/pgdata, read in a temporary postgres:16-alpine container with no network), 2026-10-19T16:08:53Z
+              runner_id               |     name      | status |    last_heartbeat_at    |     owner_email      
+--------------------------------------+---------------+--------+-------------------------+----------------------
+ 01a14db1-e2b6-7199-8613-d95d4616d6a7 | orbit-managed | ONLINE | 2026-10-18 06:29:06.024 | t06-root@lab.invalid
+(1 row)
+
+              runner_id               | management_state | desired_state | generation |                pod_name                 |               pod_uid                |  node_name   |                   pvc_name                   |         updated_at         
+--------------------------------------+------------------+---------------+------------+-----------------------------------------+--------------------------------------+--------------+----------------------------------------------+----------------------------
+ 01a14db1-e2b6-7199-8613-d95d4616d6a7 | STARTING         | RUNNING       |          1 | mr-01a14db1-e2b6-7199-8613-d95d4616d6a7 | 52ed1c8a-1ba8-43b5-a563-347bb26f9038 | orbit-mr-lab | mr-data-01a14db1-e2b6-7199-8613-d95d4616d6a7 | 2026-10-18 06:29:23.215+00
+(1 row)
+

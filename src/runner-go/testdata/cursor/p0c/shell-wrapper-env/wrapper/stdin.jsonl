@@ -1,0 +1,5 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false},"clientInfo":{"name":"orbit-p0","version":"0"}}}
+{"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"<RUN>/work","mcpServers":[]}}
+{"jsonrpc":"2.0","id":3,"method":"session/prompt","params":{"sessionId":"<UUID_1>","prompt":[{"type":"text","text":"Run these two shell commands exactly as written, one tool call each, then reply DONE: `printf '%s\\n' \"HOME=$HOME\" \"SHELL=$SHELL\" \"PROFILE=$ORBIT_P0_PROFILE_HOME\" \"CANARY=$ORBIT_P0_CANARY\" \"PATH=$PATH\" > probe.txt` and `env | cut -d= -f1 | sort > env-names.txt`."}]}}
+{"jsonrpc":"2.0","id":0,"result":{"outcome":{"outcome":"selected","optionId":"allow-once"}}}
+{"jsonrpc":"2.0","id":1,"result":{"outcome":{"outcome":"selected","optionId":"allow-once"}}}

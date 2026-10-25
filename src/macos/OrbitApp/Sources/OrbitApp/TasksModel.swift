@@ -961,14 +961,19 @@ final class TasksModel {
         }
     }
 
-    /// Pin (nil = clear) the provider this task's runs use instead of the assignee agent's.
-    /// The model is cleared along with it: a model id only means something inside one provider's
-    /// model space, so carrying it across a provider change would pin a stale id.
-    func setProvider(_ id: String, _ provider: String?) async {
-        let field: FieldUpdate<String> = provider.map { .set($0) } ?? .clear
+    /// Pin the engine and provider this task's runs use instead of the assignee workspace's — the write
+    /// the task's Engine or Provider field makes (`TaskRunPin`), which clears the model with it: a model
+    /// id only means something inside one engine and provider's model space.
+    func pinRun(_ id: String, _ request: UpdateTaskRequest) async {
         _ = await mutate(id) {
-            _ = try await self.api.updateTask(id, UpdateTaskRequest(provider: field, model: .clear))
+            _ = try await self.api.updateTask(id, request)
         }
+    }
+
+    /// Take the task's run pins back — engine, provider and model — so its runs follow the assignee
+    /// workspace again: the second way out of a refusal over the pinned credential.
+    func clearRunPin(_ id: String) async {
+        await pinRun(id, UpdateTaskRequest(engine: .clear, provider: .clear, model: .clear))
     }
 
     /// Pin (nil = clear) the model this task's runs use, within its effective provider.

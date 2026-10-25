@@ -13,8 +13,13 @@ export const PROVIDER_GLYPHS: Record<string, string> = {
   antigravity: `<path d="M21.751 22.607c1.34 1.005 3.35.335 1.508-1.508C17.73 15.74 18.904 1 12.037 1 5.17 1 6.342 15.74.815 21.1c-2.01 2.009.167 2.511 1.507 1.506 5.192-3.517 4.857-9.714 9.715-9.714 4.857 0 4.522 6.197 9.714 9.715z"></path>`,
 };
 
+// Cursor's cube (LobeHub icons, src/Cursor/components/Mono.tsx, MIT): the mark of Cursor CLI, the
+// engine, and of a Cursor key, whose preset is `cursor-api` (the owner's choice D3, 2026-10-17).
+PROVIDER_GLYPHS.cursor = `<path fill-rule="evenodd" d="M22.106 5.68L12.5.135a.998.998 0 00-.998 0L1.893 5.68a.84.84 0 00-.419.726v11.186c0 .3.16.577.42.727l9.607 5.547a.999.999 0 00.998 0l9.608-5.547a.84.84 0 00.42-.727V6.407a.84.84 0 00-.42-.726zm-.603 1.176L12.228 22.92c-.063.108-.228.064-.228-.061V12.34a.59.59 0 00-.295-.51l-9.11-5.26c-.107-.062-.063-.228.062-.228h18.55c.264 0 .428.286.296.514z"></path>`;
+PROVIDER_GLYPHS['cursor-api'] = PROVIDER_GLYPHS.cursor;
+
 // The configured Moonshot provider uses the vendor slug while the native runtime is named Kimi.
 // Both surfaces share the same official mark.
 PROVIDER_GLYPHS.moonshot = PROVIDER_GLYPHS.kimi;
-// DeepSeek Harness is DeepSeek's own agent: the same mark as the Claude-borrowing DeepSeek preset.
+// DeepSeek Harness is DeepSeek's own agent, and wears DeepSeek's mark wherever the engine is drawn.
 PROVIDER_GLYPHS['deepseek-harness'] = PROVIDER_GLYPHS.deepseek;

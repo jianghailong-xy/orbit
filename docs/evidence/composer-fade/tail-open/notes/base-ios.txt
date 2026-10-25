@@ -1,0 +1,13 @@
+## test1Console
+console-light: header 9 label="Jump to your last question" value="" frame=(0.0, 116.0, 402.0, 32.0) hittable=true
+rest-light: last line bottom 743.9075520833334, list bottom 738.9999999999999, fade from 718.9999999999999: BELOW the list's edge
+bottom-light: last line bottom 711.57421875, list bottom 739.0, fade from 719.0: above the fade
+jump-light: 9 label="Scroll to latest" value="" frame=(179.0, 669.0, 44.0, 44.0) hittable=true
+console-dark: header 9 label="Jump to your last question" value="" frame=(0.0, 116.0, 402.0, 32.0) hittable=true
+rest-dark: last line bottom 743.57421875, list bottom 739.0, fade from 719.0: BELOW the list's edge
+bottom-dark: last line bottom 711.57421875, list bottom 739.0, fade from 719.0: above the fade
+jump-dark: 9 label="Scroll to latest" value="" frame=(179.0, 669.0, 44.0, 44.0) hittable=true
+## test3ReaderStaysUp
+reader-light: header 9 label="Jump to your last question" value="" frame=(0.0, 116.0, 402.0, 32.0) hittable=true
+reader-up-more-light: last line not in the tree
+question-light: header 9 label="Jump to your last question" value="" frame=(0.0, 116.0, 402.0, 32.0) hittable=true

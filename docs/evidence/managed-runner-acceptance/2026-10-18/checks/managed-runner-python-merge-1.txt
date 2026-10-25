@@ -1,0 +1,8 @@
+................................................................................................./usr/lib/python3.13/asyncio/events.py:89: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/tmpu96mzfci/api-gate.jsonl' mode='a' encoding='UTF-8'>
+  self._context.run(self._callback, *self._args)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.........................................................
+----------------------------------------------------------------------
+Ran 154 tests in 5.203s
+
+OK

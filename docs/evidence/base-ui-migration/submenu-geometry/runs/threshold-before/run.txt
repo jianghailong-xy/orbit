@@ -1,0 +1,2 @@
+tree=/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/before head=426e8e52468aa4e58f90f912cbae3edbe4907998 dirty=0 probe=threshold.browser.mjs args=--project chromium-light-desktop --project chromium-light-phone --project webkit-light-desktop --project webkit-light-phone start=2026-10-08T23:48:19Z load=42.80 33.58 25.65
+exit=0 end=2026-10-08T23:51:00Z

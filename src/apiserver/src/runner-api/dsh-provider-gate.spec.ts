@@ -54,7 +54,8 @@ test('P1b dsh reclaim withholds unsupported Harness while retaining legacy check
       runner: { findUnique: async () => ({ capabilities: [], capabilitiesReportedAt: new Date() }) },
       session: { findMany: async () => [row('dsh', 'dsh'), row('claude', 'claude')] },
       modelProvider: { findMany: async () => [] }, user: { findUnique: async () => null },
-      runEvent: { aggregate: async () => ({ _max: { seq: 0 } }) },
+      // run_event max(seq) for the reclaim snapshot — raw SQL, never `aggregate`.
+      $queryRaw: async () => [{ max: 0 }],
     };
     const response = await controller(prisma, {}).reclaim(runner, SESSION_SOURCE_PIN_V1, request);
     assert.deepEqual(response.sessions.map((session) => session.sessionId), ['claude']);
@@ -64,7 +65,8 @@ test('P1b dsh reclaim withholds unsupported Harness while retaining legacy check
 test('P1b dsh provider notices distinguish native and legacy colliding identities', async () => {
   const marked: Array<{ where: unknown; data: { error: string } }> = [];
   const prisma = {
-    runner: { findUnique: async () => null },
+    // A heartbeat declaring Cursor CLI and not Harness, so the only notice is Harness's.
+    runner: { findUnique: async () => ({ capabilities: ['provider:cursor'], capabilitiesReportedAt: new Date() }) },
     // An admin, for whom the configured rows on a runtime include the shared ones (usableProviderScope).
     user: { findUnique: async () => ({ role: 'ADMIN' }) },
     modelProvider: { findMany: async ({ where }: { where: { runtime: string } }) =>
@@ -74,12 +76,21 @@ test('P1b dsh provider notices distinguish native and legacy colliding identitie
       updateMany: async (args: { where: unknown; data: { error: string } }) => { marked.push(args); return { count: 1 }; },
     },
   };
-  await controller(prisma, { claimSessionForRunner: async () => null }).claim(runner, SESSION_SOURCE_PIN_V1, 'claude,codex,opencode,antigravity');
+  await controller(prisma, { claimSessionForRunner: async () => null }).claim(runner, SESSION_SOURCE_PIN_V1, 'claude,codex,opencode,antigravity,cursor');
   assert.equal(marked.length, 1);
   assert.equal(marked[0].data.error, DSH_RUNNER_UPGRADE_ERROR);
+  // A session recorded on Harness is noticed whatever key it spends; one without an engine by the old
+  // identities, where a configured `dsh` keyword collision stays configured (migration 0414).
   assert.deepEqual(marked[0].where, {
     id: { in: ['native'] }, assignedRunnerId: runner.id, status: 'PENDING',
-    OR: [{ provider: 'dsh', providerBuiltin: true }, { provider: { in: ['harness-key'] }, providerBuiltin: false }],
+    sessionKind: 'CONVERSATION',
+    OR: [
+      { engine: 'dsh' },
+      { AND: [
+        { engine: null },
+        { OR: [{ provider: 'dsh', providerBuiltin: true }, { provider: { in: ['harness-key'] }, providerBuiltin: false }] },
+      ] },
+    ],
     cancelRequestedAt: null,
   });
 });

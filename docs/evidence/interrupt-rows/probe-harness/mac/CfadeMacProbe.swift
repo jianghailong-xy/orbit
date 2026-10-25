@@ -1,0 +1,32 @@
+import SwiftUI
+import OrbitKit
+
+// TEMPORARY evidence probe (see ../README.md): the Mac app's own MainView (three-column split),
+// pointed at stub.py with `-orbit.instance`, opened at one place per launch, like the iOS probe.
+@main
+struct CfadeMacProbeApp: App {
+    @State private var model: AppModel
+
+    init() {
+        ProbeArgs.wipeIfFresh()
+        _model = State(initialValue: AppModel())
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            MainView()
+                .environment(model)
+                .preferredColorScheme(ProbeArgs.dark ? .dark : .light)
+                .frame(minWidth: 960, minHeight: 600)
+                .task { await ProbeArgs.land(model) }
+        }
+        // Tall enough that both interrupt rows and the composer share the console column.
+        .defaultSize(width: 1100, height: 760)
+        .defaultPosition(.topLeading)
+    }
+}
+
+/// MenuBarContent opens the runner window by this id (OrbitApp.swift, which the probe replaces).
+enum OrbitApp {
+    static let runnerWindowID = "runner-manager"
+}

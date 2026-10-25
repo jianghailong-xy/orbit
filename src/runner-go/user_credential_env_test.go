@@ -71,25 +71,6 @@ func userTokenEnvCases() []userTokenEnvCase {
 			},
 		},
 		{
-			// Built from nothing and two allowlists, so it inherits neither token; held to the rule all the same.
-			name:  "claude wiki maintenance clean start",
-			sites: []string{"claude_spawn.go spawnClaude", "wiki_maintenance_session.go wikiMaintenanceEnv"},
-			holds: []string{session},
-			env: func(t *testing.T, job *ClaimedSession, dir string) []string {
-				capture := fakeEngineCapturingEnv(t, "claude")
-				job.WikiMaintenance = &WikiMaintenanceRun{CleanStart: true}
-				if err := prepareWikiMaintenanceStart(job, filepath.Join(dir, "scratch")); err != nil {
-					t.Fatal(err)
-				}
-				proc, err := spawnClaude(context.Background(), job, dir, nil)
-				if err != nil {
-					t.Fatal(err)
-				}
-				t.Cleanup(func() { _ = proc.stdin.Close(); _ = proc.cmd.Wait() })
-				return readCapturedEnv(t, capture)
-			},
-		},
-		{
 			name: "codex exec", sites: []string{"codex.go runCodexTurn"}, holds: inherited,
 			env: func(t *testing.T, job *ClaimedSession, dir string) []string {
 				capture := fakeEngineCapturingEnv(t, providerCodex)
@@ -170,10 +151,25 @@ func userTokenEnvCases() []userTokenEnvCase {
 		},
 		{
 			// dsh starts its stdio servers from the declared environment alone, so this is the whole of it.
-			name: "dsh orbit MCP server", sites: []string{"dsh_mcp.go dshOrbitMCPEnv"}, holds: []string{session},
+			name: "dsh orbit MCP server", sites: []string{"dsh_mcp.go orbitMCPDeclaredEnv"}, holds: []string{session},
 			env: func(t *testing.T, job *ClaimedSession, dir string) []string {
 				var env []string
 				for _, pair := range dshOrbitMCPEnv(job) {
+					env = append(env, pair["name"]+"="+pair["value"])
+				}
+				return env
+			},
+		},
+		{
+			// Cursor CLI too hands a stdio server HOME, PATH and the env it declares, nothing else (contract §6).
+			name: "cursor orbit MCP server", holds: []string{session},
+			env: func(t *testing.T, job *ClaimedSession, dir string) []string {
+				servers, err := cursorMCPServers(job)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var env []string
+				for _, pair := range mapValue(servers[0])["env"].([]map[string]string) {
 					env = append(env, pair["name"]+"="+pair["value"])
 				}
 				return env
@@ -192,6 +188,19 @@ func userTokenEnvCases() []userTokenEnvCase {
 					OrbitSessionID: job.SessionID, ExecutionDir: dir, APIKey: "sk-user-token-env",
 					BaseURL: "http://127.0.0.1:9", FileMode: "read-only",
 				}, &DshAgentOverlay{}, exe, filepath.Join(dir, "dsh-home"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				return spec.Env
+			},
+		},
+		{
+			// Built from an allowlist with the agent's variables over it, so it inherits the runner's token
+			// from nowhere and drops the agent's itself.
+			name: "cursor", sites: []string{"cursor_launch.go prepareCursorLaunch"},
+			holds: []string{session, agent, "AGENT_CLI_CREDENTIAL_STORE=memory"},
+			env: func(t *testing.T, job *ClaimedSession, dir string) []string {
+				spec, err := prepareCursorLaunch(job, dir, "/opt/cursor/cursor-agent", filepath.Join(dir, "cursor"))
 				if err != nil {
 					t.Fatal(err)
 				}

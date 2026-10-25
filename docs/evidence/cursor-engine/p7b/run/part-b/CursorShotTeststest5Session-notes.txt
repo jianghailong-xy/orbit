@@ -1,0 +1,24 @@
+auto-menu-light: chip 9 label="Model Auto" value="" frame=(280.3333333333333, 797.0, 33.666666666666686, 18.0) hittable=true
+auto-menu-light: menu open after 1 press(es)
+opus-menu-light: chip 9 label="Model Claude Opus 5.5, effort High, 1M, Fast" value="" frame=(176.33333333333334, 797.0, 137.66666666666666, 18.0) hittable=true
+opus-menu-light: menu open after 1 press(es)
+opus-menu-light: Speed 9 label="Speed, Fast" value="" frame=(64.0, 902.0, 250.0, 60.0) hittable=false
+opus-scroll-light: Speed after the drag 9 label="Speed, Fast" value="" frame=(64.0, 902.0, 250.0, 60.0) hittable=false
+opus-scroll-light: the menu did not scroll
+opus-short-menu-light: chip 9 label="Model Claude Opus 5.5, effort High, 1M, Fast" value="" frame=(176.33333333333334, 797.0, 137.66666666666666, 18.0) hittable=true
+opus-short-menu-light: menu open after 1 press(es)
+auto-short-menu-light: chip 9 label="Model Auto" value="" frame=(280.3333333333333, 797.0, 33.666666666666686, 18.0) hittable=true
+auto-short-menu-light: menu open after 1 press(es)
+context-light: ring 9 label="Context window unavailable" value="" frame=(322.0, 798.0, 16.0, 16.0) hittable=true
+auto-menu-dark: chip 9 label="Model Auto" value="" frame=(280.3333333333333, 797.0, 33.666666666666686, 18.0) hittable=true
+auto-menu-dark: menu open after 1 press(es)
+opus-menu-dark: chip 9 label="Model Claude Opus 5.5, effort High, 1M, Fast" value="" frame=(176.33333333333334, 797.0, 137.66666666666666, 18.0) hittable=true
+opus-menu-dark: menu open after 1 press(es)
+opus-menu-dark: Speed 9 label="Speed, Fast" value="" frame=(64.0, 902.0, 250.0, 60.0) hittable=false
+opus-scroll-dark: Speed after the drag 9 label="Speed, Fast" value="" frame=(64.0, 902.0, 250.0, 60.0) hittable=false
+opus-scroll-dark: the menu did not scroll
+opus-short-menu-dark: chip 9 label="Model Claude Opus 5.5, effort High, 1M, Fast" value="" frame=(176.33333333333334, 797.0, 137.66666666666666, 18.0) hittable=true
+opus-short-menu-dark: menu open after 1 press(es)
+auto-short-menu-dark: chip 9 label="Model Auto" value="" frame=(280.3333333333333, 797.0, 33.666666666666686, 18.0) hittable=true
+auto-short-menu-dark: menu open after 1 press(es)
+context-dark: ring 9 label="Context window unavailable" value="" frame=(322.0, 798.0, 16.0, 16.0) hittable=true

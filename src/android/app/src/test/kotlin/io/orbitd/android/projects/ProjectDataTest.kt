@@ -27,6 +27,41 @@ class ProjectDataTest {
         assertEquals(ProjectLane.WAITING, ProjectAttention.lane(obj("""{"status":"OPEN","_count":{"tasks":1},"buckets":{"failed":1}}"""), now))
     }
 
+    /** The coordinator's request to record an OPEN project done (iOS 84d546a21, ProjectAttentionTests): "Needs you · Ready to close ·
+     * 4m", in the start request's tier, lane and order — and a settled project nobody asked about keeps its quieter chip. */
+    @Test fun aDoneRequestIsNeedsYouReadyToCloseWithHowLongItHasWaited() {
+        fun at(secondsAgo: Long) = now.minusSeconds(secondsAgo).toString()
+        fun project(attention: String, status: String = "OPEN", buckets: String = """{"done":6,"cancelled":1}""", title: String = "P", activity: String = at(3600)) =
+            obj("""{"id":"$title","title":"$title","status":"$status","_count":{"tasks":7},"buckets":$buckets,"lastActivityAt":"$activity","attention":$attention}""")
+        fun closing(waited: Long, owner: String = "[]", start: Long? = null) =
+            """{"ownerItems":$owner,"startRequest":${start?.let { "{\"waitingSince\":\"${at(it)}\"}" } ?: "null"},"doneRequest":{"waitingSince":"${at(waited)}"}}"""
+        val asked = project(closing(4 * 60))
+        assertEquals("Needs you · Ready to close", ProjectAttention.readyToCloseSays)
+        assertEquals(AttentionReason.DONE_REQUEST, ProjectAttention.reason(asked, now))
+        assertEquals(ProjectLane.ATTENTION, ProjectAttention.lane(asked, now))
+        assertEquals(AttentionChip(true, "Needs you · Ready to close · 4m"), ProjectAttention.chip(asked, now))
+        assertTrue(AttentionReason.DONE_REQUEST.needsYou); assertFalse("nothing escalated, and nothing pushes", AttentionReason.DONE_REQUEST.ownerItem)
+        val unasked = project("""{"ownerItems":[]}""")
+        assertEquals(AttentionReason.READY_TO_CLOSE, ProjectAttention.reason(unasked, now))
+        assertEquals("7/7 tasks settled · project still open", ProjectAttention.chip(unasked, now)?.text)
+        assertNull("a closed project is asked nothing", ProjectAttention.reason(project(closing(3600), status = "DONE"), now))
+        // Named over the four, or a start, only when it has waited longer.
+        val question = """[{"kind":"COORDINATOR_QUESTION","count":1,"oldestWaitingSince":"${at(35 * 60)}"}]"""
+        assertEquals("Needs you · Ready to close · 3h", ProjectAttention.chip(project(closing(3 * 3600, question)), now)?.text)
+        assertEquals("Needs you · 1 question from coordinator · 35m", ProjectAttention.chip(project(closing(10 * 60, question)), now)?.text)
+        assertEquals("on a tie the four come first", "Needs you · 1 question from coordinator · 35m", ProjectAttention.chip(project(closing(35 * 60, question)), now)?.text)
+        assertEquals(AttentionReason.READY_TO_START, ProjectAttention.reason(project(closing(3600, start = 7200)), now))
+        assertEquals(AttentionReason.DONE_REQUEST, ProjectAttention.reason(project(closing(7200, start = 3600)), now))
+        assertEquals("and on a tie with a start, the start", AttentionReason.READY_TO_START, ProjectAttention.reason(project(closing(3600, start = 3600)), now))
+        // In the owner tier by its wait, and ahead of fresh work.
+        val merge = project("""{"ownerItems":[{"kind":"PROMOTION_APPROVAL","count":1,"oldestWaitingSince":"${at(7200)}"}]}""", title = "Merge")
+        val close = project(closing(35 * 60), title = "Close")
+        val start = project("""{"ownerItems":[],"startRequest":{"waitingSince":"${at(20 * 60)}"}}""", title = "Start")
+        val blocker = project("""{"ownerItems":[],"userBlockers":1,"maxSeverity":"CRITICAL","attentionSinceAt":"${at(9 * 86_400)}"}""", title = "Blocker")
+        assertEquals(listOf("Merge", "Close", "Start", "Blocker"), ProjectAttention.ordered(listOf(blocker, start, close, merge), ProjectLane.ATTENTION, now).map { it.text("title") })
+        assertEquals(ProjectLane.ATTENTION, ProjectAttention.lane(project(closing(5 * 60), buckets = """{"running":2}""", activity = at(60)), now))
+    }
+
     @Test fun everyProjectCallHitsItsRoute() = runTest {
         val fixture = Fixture { request ->
             val path = request.api.path
@@ -34,6 +69,7 @@ class ProjectDataTest {
                 path == listOf("projects") -> ok("""[{"id":"p1","title":"T","status":"OPEN"}]""")
                 path.lastOrNull() == "coordinator" -> ok("""{"sessionId":"s1","created":true,"workspaceId":"w1"}""")
                 path.lastOrNull() == "replace" -> ok("""{"sessionId":"s2","created":true}""")
+                path.lastOrNull() == "handoffs" -> ok("[]")
                 else -> ok("{}")
             }
         }
@@ -52,6 +88,12 @@ class ProjectDataTest {
         api.resumeFuse("p1", "f1"); api.resolveBlocker("p1", "b1", "agent added")
         api.run("t1", "press-1", "t1:OPEN:READY"); api.resumeList("l1")
         assertEquals("s2", api.replaceCoordinator("p1", "replace:s1")?.text("sessionId"))
+        // A11c: the crossings and their answer, Retry on a landing job, and the owner's done door and its Not yet….
+        assertEquals(emptyList<JsonObject>(), api.crossings("p1"))
+        api.decideCrossing("p1", obj("""{"id":"h1","publicId":"34bH1","crossingKey":"k1"}"""), approve = true)
+        api.retryJob("p1", "j1")
+        api.done("p1", buildJsonObject { put("requestId", "d1"); put("criteriaDigest", "c"); put("acceptedGaps", JsonArray(emptyList())) })
+        api.declineDone("p1", "d1", "the deploy is not verified")
         api.delete("p1")
         val log = fixture.calls.drop(1).map { call ->
             listOfNotNull("${call.api.method} /${call.api.path.joinToString("/")}" + call.api.query.takeIf { it.isNotEmpty() }
@@ -73,7 +115,12 @@ class ProjectDataTest {
             "POST /projects/p1/fuse/f1/resume", """POST /projects/p1/blockers/b1/resolve {"reason":"agent added"}""",
             """POST /tasks/t1/execute {"triggerId":"press-1"}""",
             """PATCH /task-lists/l1 {"paused":false,"note":"Resumed from the project Run queue"}""",
-            "POST /projects/p1/coordinator/replace", "DELETE /projects/p1",
+            "POST /projects/p1/coordinator/replace",
+            "GET /projects/p1/handoffs", """POST /projects/p1/handoffs/34bH1/decision {"decision":"APPROVE","acknowledgedCrossingKey":"k1"}""",
+            "POST /projects/p1/integration/jobs/j1/retry",
+            """POST /projects/p1/done {"requestId":"d1","criteriaDigest":"c","acceptedGaps":[]}""",
+            """POST /projects/p1/done-requests/d1/decline {"note":"the deploy is not verified"}""",
+            "DELETE /projects/p1",
         ), log)
         assertTrue(fixture.calls.drop(1).all { it.accessToken == "fixture-access" })
     }

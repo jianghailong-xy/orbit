@@ -1,0 +1,13 @@
+ios: Recap on the session list row is up; the rows' second lines follow
+ios: S1 carries the label and the recap text on one row yes
+ios: S1 does NOT show its raw reply beside the label confirmed
+ios: S1's recap sentence shown
+ios: S2 shows its raw reply shown
+ios: S2 carries no label confirmed
+ios: S3 shows Running Bash… shown
+ios: S3 is NOT drawn as its recap confirmed
+ios: S4's older-day recap carries the label too yes
+ios-settings-session-recaps: in view after 4 move(s) at (16.0, 260.6666666666667, 370.0, 150.33333333333331)
+ios: the switch itself shown
+ios: the switch's hint shown
+ios-settings-session-recaps: in view after 0 move(s) at (16.0, 260.6666666666667, 370.0, 150.33333333333331)

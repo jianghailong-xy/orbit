@@ -9,8 +9,8 @@
  *
  *  (1) Every door that takes a provider slug refuses a member who names a shared one, with the sentence that
  *      says who can use it, and writes nothing: a new session (named, inherited from the agent's last session,
- *      or an OpenCode model on the key), a provider switch, a revive, a task (create, update, batch), an
- *      agent's mention, a Wiki space's maintenance pin.
+ *      or an OpenCode model on the key), a provider switch, a revive, a task (create, update, batch), and an
+ *      agent's mention.
  *  (2) No door that builds an engine hands a member's session the key: the claim, which leaves the session
  *      PENDING and says why; a restarted runner's reclaim; a provider-switch reload; an OpenCode model naming
  *      the key. A member's own provider still runs, on their own key.
@@ -52,8 +52,8 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { ADMIN_ONLY_PROVIDER_ERROR } from '../runner-api/runner-provider-support';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
-import { wikiMaintenanceProviderProblem } from '../wiki/wiki-maintenance-settings';
-import { openCodeKeyRows, providerSlugsOn, sessionExecRuntime } from './custom-provider';
+import { openCodeKeyRows, providerSlugsOn } from './custom-provider';
+import { sessionEngine } from './session-engine';
 import { ProviderPlanUsageService } from './plan-usage.service';
 import { ProvidersService } from './providers.service';
 import { SharedPoolsService } from './shared-pools.service';
@@ -196,13 +196,14 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
     handed.push(claimed);
     return claimed;
   }
+  /** One poll of the runner's inbox. */
+  const dequeue = (runnerApi as unknown as {
+    dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: string | null): Promise<
+      { kind: string; env?: Record<string, string> } | null
+    >;
+  }).dequeueTurn.bind(runnerApi);
   /** The runner's inbox poll, until it is handed the reload a provider switch queued. */
   async function dequeueReload(sessionId: string, runnerId: string) {
-    const dequeue = (runnerApi as unknown as {
-      dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: string | null): Promise<
-        { kind: string; env?: Record<string, string> } | null
-      >;
-    }).dequeueTurn.bind(runnerApi);
     for (let polls = 0; polls < 4; polls += 1) {
       const turn = await dequeue(sessionId, runnerId, null);
       assert.ok(turn, 'the inbox handed out nothing');
@@ -258,7 +259,9 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
     const theirs = await sessions.create(admin.id, { prompt: 'hello', title: 'on shared', workspaceId: adminAt.workspaceId, provider: sharedClaude.slug });
     assert.equal((await recorded(theirs.id)).provider, sharedClaude.slug);
     const onKey = await sessions.create(admin.id, { prompt: 'hello', title: 'on shared key', workspaceId: adminAt.workspaceId, provider: 'opencode', model: openCodeModel });
-    assert.equal((await recorded(onKey.id)).provider, 'opencode');
+    // Written in the new form (docs/provider-engine-contract.md §3.3): the key is the provider, on OpenCode.
+    const written = await db.session.findUniqueOrThrow({ where: { id: onKey.id }, select: { provider: true, engine: true } });
+    assert.deepEqual(written, { provider: sharedCodex.slug, engine: 'opencode' });
   });
 
   await t.test("(1) a new session that inherits a shared provider from the agent's last one is refused for a member, and opens for an admin", async () => {
@@ -381,14 +384,6 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
     assert.equal((await recorded(answered.targetSessionId!)).provider, sharedClaude.slug);
   });
 
-  await t.test('(1) a Wiki space pins a shared provider for its maintenance for an admin, and not for a member', async () => {
-    assert.deepEqual(
-      await wikiMaintenanceProviderProblem(prisma, member.id, sharedClaude.slug),
-      { why: adminOnly(sharedClaude.slug), unavailable: false },
-    );
-    assert.equal(await wikiMaintenanceProviderProblem(prisma, admin.id, sharedClaude.slug), null);
-  });
-
   await t.test("(2) the claim hands a member's session on a shared provider nothing and holds it, saying why; the admin's runs on the key, the member's own on theirs", async () => {
     for (const [label, provider, model] of [
       ['claude', sharedClaude.slug, 'deepseek-v4-pro'],
@@ -446,17 +441,21 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
         content: JSON.stringify({ provider: sharedClaude.slug }), status: 'PENDING',
       },
     });
-    await assert.rejects(
-      dequeueReload(session, at.runnerId).then((turn) => handedToMember.push(turn)),
-      (e: unknown) => e instanceof BadRequestException,
-    );
+    // Answered without being handed out, and the session says why in the words the claim holds it with.
+    const handed = await dequeue(session, at.runnerId, null);
+    handedToMember.push(handed);
+    assert.equal(handed, null, "the member's runner was handed the reload");
     assert.deepEqual(
       await db.conversationTurn.findUniqueOrThrow({ where: { id: reload.id }, select: { status: true, deliveredAt: true } }),
-      { status: 'PENDING', deliveredAt: null },
+      { status: 'ANSWERED', deliveredAt: null },
+    );
+    assert.deepEqual(
+      await recorded(session),
+      { provider: sharedClaude.slug, status: RunStatus.AWAITING_INPUT, error: ADMIN_ONLY_PROVIDER_ERROR },
     );
   });
 
-  await t.test('(3) the picker, the slugs an agent may pass, a runtime gate and the runtime a session runs on name a shared provider for an admin only', async () => {
+  await t.test("(3) the picker, the slugs an agent may pass and a runtime gate name a shared provider for an admin only, while a session's engine is its key's for anyone", async () => {
     const slugs = (rows: Array<{ slug: string }>) => rows.map((row) => row.slug);
     const shared = [sharedClaude.slug, sharedCodex.slug];
     const named = (list: string[]) => shared.filter((slug) => list.includes(slug));
@@ -475,11 +474,13 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
     assert.deepEqual(named(slugs(await openCodeKeyRows(db as never, member.id))), []);
     assert.deepEqual(named(slugs(await openCodeKeyRows(db as never, admin.id))), shared);
 
-    // The runtime a session on the shared Codex provider runs on: Codex for an admin's; for a member's, the row
-    // resolves to nothing, as a slug nothing holds — the very slug the claim never hands out.
-    const onCodex = (ownerId: string) => sessionExecRuntime(db as never, { provider: sharedCodex.slug, providerBuiltin: false, ownerId });
+    // The engine a session on the shared Codex provider runs on, for a row without one recorded: Codex, the
+    // row's runtime, for an admin's and for a member's alike. Out of a member's reach is not Claude — what
+    // keeps a member's session off the key is the claim, which never hands that slug out (below), not a
+    // guess at another engine (docs/provider-engine-contract.md §5.4).
+    const onCodex = (ownerId: string) => sessionEngine(db as never, { provider: sharedCodex.slug, providerBuiltin: false, ownerId });
     assert.equal(await onCodex(admin.id), AgentProvider.CODEX);
-    assert.equal(await onCodex(member.id), AgentProvider.CLAUDE);
+    assert.equal(await onCodex(member.id), AgentProvider.CODEX);
   });
 
   await t.test('(4) the role is read at every claim: promoted, a member runs on the shared provider; demoted again, they do not', async () => {

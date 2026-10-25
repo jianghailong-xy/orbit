@@ -287,6 +287,8 @@ type DerivationClient = Pick<
   | 'task'
   // The landings and merges into the upstream in flight, which a criterion's landing reason reads.
   | 'projectIntegrationJob'
+  // The sessions those landings were queued for, read by id beside them (0424).
+  | 'session'
 >;
 
 export interface StoreDerivedProjectStatusOptions {

@@ -26,30 +26,46 @@ import io.orbitd.android.R
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.OrbitRoute
 
-/** The top bar's title and actions for the Wiki and Watch pages: iOS puts them in the navigation bar, which on
- * Android is the shell's TopAppBar. A page binds what its bar says while it is the route on screen. */
+/** The top bar's title (or a page's own middle), actions and whether it shows at all, for the Wiki and Watch pages and
+ * the session reader: iOS puts them in the navigation bar, which on Android is the shell's TopAppBar. A page binds what
+ * its bar says while it is the route on screen. */
 object PageBar {
     private var owner by mutableStateOf<OrbitRoute?>(null)
     private var title by mutableStateOf<String?>(null)
     private var subtitle by mutableStateOf<String?>(null)
+    private var center by mutableStateOf<(@Composable () -> Unit)?>(null)
     private var actions by mutableStateOf<(@Composable RowScope.() -> Unit)?>(null)
+    private var folded by mutableStateOf(false)
 
-    /** [subtitle] is the second line iOS draws under a page's title in the bar (a `.principal` title block). */
+    /** [subtitle] is the second line iOS draws under a page's title in the bar (a `.principal` title block).
+     *  [center] is a page's own content in the bar's middle in place of any title (iOS's `.principal` item), between back and
+     *  the page's buttons: what it draws, or nothing — never the shell's route name.
+     *  [folds] takes the bar away altogether while the page itself gives the screen to its composer
+     *  (iOS `ConsoleView.foldsChrome`): back, title and the page's button come back with the keyboard. */
     @Composable
-    internal fun Bind(route: OrbitRoute, title: String?, subtitle: String? = null, actions: (@Composable RowScope.() -> Unit)? = null) {
+    internal fun Bind(route: OrbitRoute, title: String?, subtitle: String? = null, folds: Boolean = false,
+        center: (@Composable () -> Unit)? = null, actions: (@Composable RowScope.() -> Unit)? = null) {
         DisposableEffect(route) {
             owner = route
-            onDispose { if (owner == route) { owner = null; this@PageBar.title = null; this@PageBar.subtitle = null; this@PageBar.actions = null } }
+            // Identity, not equality: a page pushed again with the same values (Back, then the same link) is a new bind,
+            // and the old page's disposal must not clear the bar the new one has already set.
+            onDispose { if (owner === route) { owner = null; this@PageBar.title = null; this@PageBar.subtitle = null
+                this@PageBar.center = null; this@PageBar.actions = null; this@PageBar.folded = false } }
         }
-        SideEffect { if (owner == route) { this.title = title; this.subtitle = subtitle; this.actions = actions } }
+        SideEffect { if (owner == route) { this.title = title; this.subtitle = subtitle; this.center = center; this.actions = actions; this.folded = folds } }
     }
 
     /** The bar's title for a Wiki/Watch route, or null to keep the shell's own. */
     fun title(route: OrbitRoute): String? = if (owner == route) title else null
 
-    /** The bar's title as the page bound it — with its second line when it has one — else [fallback]. */
+    /** Whether the page on screen has folded the bar away — a phone's composer holding the keyboard
+     *  (iOS `ConsoleView.foldsChrome`). */
+    fun folds(route: OrbitRoute): Boolean = owner == route && folded
+
+    /** The bar's middle as the page bound it — its own content, or its title with the second line when it has one — else [fallback]. */
     @Composable
     fun Title(route: OrbitRoute, fallback: @Composable () -> Unit) {
+        if (owner == route) center?.let { return it() }
         val text = title(route) ?: return fallback()
         val second = subtitle
         // One line, cut with an ellipsis when the bar's buttons leave too little, as iOS's navigation title is.
@@ -229,43 +245,10 @@ private fun ContentsRow(title: String, icon: Int, lit: Boolean, tag: String, bad
     }
 }
 
-/** iOS's app toast (`model.showToast`): one short line that leaves by itself. Posted by a page, drawn by the
- * Wiki/Watch host, so it survives the page that posted it being popped. */
-object WikiToast {
-    private const val SHOWN_MS = 2_500L
-    internal var text by mutableStateOf<String?>(null)
-    private var subtitle by mutableStateOf<String?>(null)
-    private var serial by mutableStateOf(0)
-    private var postedAt = 0L
-    /** [subtitle]: the second line under it — the entry an answer was about (iOS `showToast(_:subtitle:)`). */
-    fun show(message: String, subtitle: String? = null) {
-        text = message; this.subtitle = subtitle; postedAt = android.os.SystemClock.elapsedRealtime(); serial++
-    }
-
-    @Composable
-    internal fun Host(modifier: Modifier = Modifier) {
-        val shown = text ?: return
-        // Its time runs whether or not a page is up to draw it: a toast never comes back with the next Wiki page.
-        val left = SHOWN_MS - (android.os.SystemClock.elapsedRealtime() - postedAt)
-        LaunchedEffect(serial) { if (left > 0) kotlinx.coroutines.delay(left); text = null }
-        if (left <= 0) return
-        Box(modifier.fillMaxSize().padding(bottom = 24.dp), contentAlignment = Alignment.BottomCenter) {
-            Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.inverseSurface, tonalElevation = 4.dp,
-                modifier = Modifier.testTag("wiki-toast").semantics { liveRegion = LiveRegionMode.Polite }) {
-                Column(Modifier.padding(horizontal = 18.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(shown, color = MaterialTheme.colorScheme.inverseOnSurface, style = WikiType.subtext)
-                    subtitle?.let { Text(it, color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.75f), style = WikiType.label,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                }
-            }
-        }
-    }
-}
-
-/** iOS's `.alert(WikiCopy.refused)`: what the server said when it refused a write, and OK. */
+/** iOS's `.alert(noticeTitle)` (d625d9809): what failed — "Couldn't save the entry" — over what the server said, and OK. */
 @Composable
-internal fun WikiRefusalAlert(notice: String?, dismiss: () -> Unit) {
+internal fun WikiRefusalAlert(title: String, notice: String?, dismiss: () -> Unit) {
     if (notice == null) return
-    AlertDialog(onDismissRequest = dismiss, title = { Text(WikiCopy.refused) }, text = { Text(notice) },
+    AlertDialog(onDismissRequest = dismiss, title = { Text(title) }, text = { Text(notice) },
         confirmButton = { TextButton(onClick = dismiss, modifier = Modifier.testTag("wiki-refusal-ok")) { Text("OK") } })
 }

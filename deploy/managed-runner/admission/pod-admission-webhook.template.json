@@ -1,0 +1,39 @@
+{
+  "apiVersion": "admissionregistration.k8s.io/v1",
+  "kind": "ValidatingWebhookConfiguration",
+  "metadata": {
+    "name": "orbit-managed-runner-pods",
+    "labels": {
+      "app.kubernetes.io/name": "orbit-managed-runner",
+      "orbit-test-environment": "__TEST_ENVIRONMENT_ID__"
+    }
+  },
+  "webhooks": [
+    {
+      "name": "pods.managed-runner.orbit.dev",
+      "admissionReviewVersions": ["v1"],
+      "sideEffects": "None",
+      "failurePolicy": "Fail",
+      "matchPolicy": "Equivalent",
+      "timeoutSeconds": 10,
+      "namespaceSelector": {
+        "matchLabels": {
+          "kubernetes.io/metadata.name": "__AUTHORIZED_TEST_NAMESPACE__"
+        }
+      },
+      "rules": [
+        {
+          "apiGroups": [""],
+          "apiVersions": ["v1"],
+          "operations": ["CREATE", "UPDATE"],
+          "resources": ["pods", "pods/ephemeralcontainers"],
+          "scope": "Namespaced"
+        }
+      ],
+      "clientConfig": {
+        "url": "https://__AUTHORIZED_TEST_ORBIT_HOST__/api/managed-runner/admission",
+        "caBundle": "__BASE64_PEM_CA_BUNDLE_OF_THAT_HOST__"
+      }
+    }
+  ]
+}

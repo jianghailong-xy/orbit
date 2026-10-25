@@ -1,0 +1,51 @@
+[
+ {
+  "group": "task panel and settings",
+  "change": [
+   "A11"
+  ],
+  "screenshots": [
+   "chromium-dark-desktop/settings-saved.png",
+   "chromium-dark-desktop/settings.png",
+   "chromium-dark-phone/settings-saved.png",
+   "chromium-dark-phone/settings.png",
+   "chromium-light-desktop/settings-saved.png",
+   "chromium-light-desktop/settings.png",
+   "chromium-light-phone/settings-saved.png",
+   "chromium-light-phone/settings.png",
+   "webkit-dark-phone/settings-saved.png",
+   "webkit-light-phone/settings-saved.png"
+  ],
+  "mainCommits": [
+   "def134095"
+  ],
+  "projectLine": [
+   "4d77d69b7"
+  ],
+  "generatedFrom": "full-fix-def134095"
+ },
+ {
+  "group": "task panel and settings",
+  "change": [
+   "A6",
+   "A11"
+  ],
+  "screenshots": [
+   "webkit-dark-desktop/settings-saved.png",
+   "webkit-dark-desktop/settings.png",
+   "webkit-dark-phone/settings.png",
+   "webkit-light-desktop/settings-saved.png",
+   "webkit-light-desktop/settings.png",
+   "webkit-light-phone/settings.png"
+  ],
+  "mainCommits": [
+   "d233a6cd0",
+   "def134095"
+  ],
+  "projectLine": [
+   "dd1d197ef",
+   "4d77d69b7"
+  ],
+  "generatedFrom": "full-fix-def134095"
+ }
+]

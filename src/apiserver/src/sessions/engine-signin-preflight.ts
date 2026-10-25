@@ -1,28 +1,34 @@
 import { ConflictException } from '@nestjs/common';
 import {
+  AgentProvider,
+  ENGINE_CLI_NAMES,
   ENGINE_SIGNED_OUT,
   type EngineSignedOutRefusal,
   type LoginEngine,
+  type RunnerEngineAccount,
   type RunnerEngineHealth,
 } from '@orbit/shared';
-import { isLoginEngine, namedRunnerEngines } from '../common/runner-engines';
+import { isLoginEngine, usedRunnerEngines } from '../common/runner-engines';
 import { accountDir, isAccountEngine } from '@orbit/shared';
-import { ACCOUNT_CHOICE, DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner } from '../providers/account';
+import { ACCOUNT_CHOICE, DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner, type AccountRunner } from '../providers/account';
 import type { WorkspaceAccountChoices } from '../providers/plan-usage-accounts';
-import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
+import { runnerIsOnline, type RunnerBeats } from '../runners/runner-presence';
 import { antigravityGoogleLogin } from '../common/antigravity-readiness';
 
 /** Engine names as the user sees them elsewhere in Orbit (matches the web's RunnerSignIn). */
-const ENGINE_LABELS: Record<LoginEngine, string> = {
+export const ENGINE_LABELS: Record<LoginEngine, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
   kimi: 'Kimi Code',
   antigravity: 'Antigravity',
+  cursor: ENGINE_CLI_NAMES[AgentProvider.CURSOR],
 };
 
 /** What each CLI's own sign-in costs, for a machine whose owner has a terminal on it. Antigravity
- *  has none: `agy` signed in at a terminal keeps that login where Orbit's sessions never look. */
-const LOGIN_COMMANDS: Record<Exclude<LoginEngine, 'antigravity'>, string> = {
+ *  has none: `agy` signed in at a terminal keeps that login where Orbit's sessions never look. Nor has
+ *  Cursor CLI yet: where its sessions read a login is still to be decided (contract §8.4, D4), and its
+ *  sign-in is not judged here (LOGIN_ENGINES). */
+const LOGIN_COMMANDS: Record<Exclude<LoginEngine, 'antigravity' | 'cursor'>, string> = {
   claude: 'claude auth login',
   codex: 'codex login --device-auth',
   kimi: 'kimi login',
@@ -43,14 +49,16 @@ const CREDENTIAL_ENV_KEYS: Record<LoginEngine, { any: string[] } | { all: string
   codex: { any: ['OPENAI_API_KEY', 'OPENAI_BASE_URL'] },
   kimi: { all: ['KIMI_MODEL_NAME', 'KIMI_MODEL_API_KEY'] },
   antigravity: { any: ['GEMINI_API_KEY'] },
+  // Either starts a session without any stored login (docs/cursor-runtime-contract.md §2.3).
+  cursor: { any: ['CURSOR_API_KEY', 'CURSOR_AUTH_TOKEN'] },
 };
 
-/** The runner fields this reads — a subset of the Prisma row. */
-export interface EnginePreflightRunner {
+/** The runner fields this reads — a subset of the Prisma row. Its accounts are judged as Orbit uses them
+ *  (AccountRunner): a Default its owner removed from Orbit is never the one judged. */
+export interface EnginePreflightRunner extends AccountRunner, RunnerBeats {
   name?: string | null;
   displayName?: string | null;
   status: string;
-  lastHeartbeatAt: Date | null;
   /** Heartbeat-reported per-engine health, stored as sent (RunnerEngineHealth[]). */
   engines: unknown;
   /** The names its accounts were given in Orbit (Runner.accountNames), which a refusal names them by. */
@@ -86,7 +94,8 @@ interface SessionLogin {
  * this runner reports runs the session in that account's own directory, and is found with the same
  * lookup (accountOnRunner); anything else runs in the session's own environment. That is Default,
  * whose sign-in is the engine's own answer: the runner probes the engine in its own environment,
- * which is what selects Default.
+ * which is what selects Default. While the owner has removed Default from Orbit, dispatch runs the
+ * session on Automatic's pick among the accounts that remain instead, and that pick is what is judged.
  *
  * Not judged:
  *   - a picked account this runner does not report (the workspace moved machines, the slot was
@@ -101,21 +110,28 @@ function sessionAccountLogin(
   health: RunnerEngineHealth,
   account: string | null | undefined,
   workspaceEnv: unknown,
+  runner: EnginePreflightRunner,
   runnerEngines: RunnerEngineHealth[],
+  now: Date,
 ): SessionLogin | null {
+  const slot = accountOnRunner(engine, account, runner, workspaceEnv, now);
+  // Named the way Infrastructure names its row, which is never who the account is: its
+  // email and id stay on the machine, and the runner reports neither.
+  if (slot) return { auth: slot.auth, name: accountName(engine, slot, runnerEngines), dir: accountDir(slot) };
   const pick = account?.trim();
-  if (pick && pick !== DEFAULT_ACCOUNT) {
-    const slot = accountOnRunner(engine, pick, runnerEngines);
-    if (!slot) return null;
-    // Named the way the Providers page names its row, which is never who the account is: its
-    // email and id stay on the machine, and the runner reports neither.
-    return { auth: slot.auth, name: slot.name ? `"${slot.name}"` : slot.id, dir: accountDir(slot) };
-  }
+  if (pick && pick !== DEFAULT_ACCOUNT) return null;
   const env = (workspaceEnv && typeof workspaceEnv === 'object' ? workspaceEnv : {}) as Record<string, unknown>;
   const varName = accountEnvVar(engine);
   if (varName && typeof env[varName] === 'string' && (env[varName] as string).trim() !== '') return null;
   const own = health.accounts?.find((entry) => entry.id === DEFAULT_ACCOUNT)?.name || 'Default';
   return { auth: health.auth, ...((health.accounts?.length ?? 0) > 1 ? { name: `"${own}"` } : {}) };
+}
+
+/** How a refusal names one of the runner's accounts: what it was called in Orbit, quoted, else its id. */
+function accountName(engine: LoginEngine, slot: RunnerEngineAccount, runnerEngines: RunnerEngineHealth[]): string {
+  const name = runnerEngines.find((entry) => entry.engine === engine)?.accounts?.find((entry) => entry.id === slot.id)?.name
+    ?? slot.name;
+  return name ? `"${name}"` : slot.id;
 }
 
 /**
@@ -125,7 +141,7 @@ function sessionAccountLogin(
  * A runtime that is signed out fails EVERY session started against it, a second or two after
  * creation, until a human signs it back in. That is a state the control plane already knows: the
  * runner probes each engine's own auth command every five minutes (and immediately after anything
- * changes it) and reports the result on its heartbeat — the same fact the Runners page draws and
+ * changes it) and reports the result on its heartbeat — the same fact Infrastructure draws and
  * the sign-out push announces. Answering at create time turns hours of identically-dead sessions,
  * each holding a git checkout, into one refusal the caller can act on: an overnight OAuth
  * expiry produced 50 of them here before anyone noticed.
@@ -193,38 +209,40 @@ export function signedOutEngineRefusal(args: {
   /** The workspace's custom environment, which the runner layers onto the engine process. */
   workspaceEnv?: unknown;
   /** The accounts this session's workspace pins it to, one per engine that keeps accounts
-   *  (Workspace.codexAccount / claudeAccount / antigravityAccount). Absent or null is Default. */
+   *  (Workspace.codexAccount / claudeAccount / antigravityAccount / kimiAccount / cursorAccount).
+   *  Absent or null is Default — or, while its owner removed Default from Orbit, Automatic's pick
+   *  among the accounts that remain, which dispatch runs the session on (accountOnRunner). */
   accounts?: WorkspaceAccountChoices | null;
   runner: EnginePreflightRunner;
   nowMs?: number;
 }): string | null {
   if (args.bringsOwnCredentials) return null;
   const runtime = args.runtime;
-  if (!isLoginEngine(runtime)) return null;
+  // Cursor CLI's sign-in is not one a runner reports yet, so nothing here can judge it.
+  if (!isLoginEngine(runtime) || runtime === 'cursor') return null;
   if (bringsOwnEnvCredential(runtime, args.workspaceEnv)) return null;
 
-  const heartbeatMs = args.runner.lastHeartbeatAt?.getTime() ?? NaN;
-  const online =
-    args.runner.status !== 'OFFLINE' &&
-    Number.isFinite(heartbeatMs) &&
-    heartbeatMs >= (args.nowMs ?? Date.now()) - SESSION_RUNNER_OFFLINE_AFTER_MS;
-  if (!online) return null;
+  const now = new Date(args.nowMs ?? Date.now());
+  if (!runnerIsOnline(args.runner, now.getTime())) return null;
 
-  // Named as the Providers page names them: with what each account was called in Orbit.
-  const engines = namedRunnerEngines({ engines: args.runner.engines, accountNames: args.runner.accountNames });
+  // Named as Infrastructure names them: with what each account was called in Orbit, and as Orbit uses
+  // them — without a Default its owner removed from Orbit.
+  const engines = usedRunnerEngines({
+    engines: args.runner.engines, accountNames: args.runner.accountNames, defaultRemoved: args.runner.defaultRemoved,
+  });
   const health = engines?.find((e) => e.engine === runtime);
   if (!engines || !health) return null;
   const machine = args.runner.displayName || args.runner.name || 'this runner';
   if (runtime === 'antigravity') {
     // A session on an added Google account runs on that account's sign-in or not at all (the runner
     // never falls back to a key for it). Default is judged as the engine always was: its own sign-in,
-    // else the runner's GEMINI_API_KEY.
-    const pick = args.accounts?.antigravityAccount?.trim();
-    const slot = pick && pick !== DEFAULT_ACCOUNT ? accountOnRunner(runtime, pick, engines) : null;
+    // else the runner's GEMINI_API_KEY. A session on a Default its owner removed from Orbit runs on the
+    // account Automatic picks among those that remain, and is judged on that.
+    const slot = accountOnRunner(runtime, args.accounts?.antigravityAccount, args.runner, args.workspaceEnv, now);
     if (slot) {
       return slot.auth === 'no'
-        ? `Antigravity account ${slot.name ? `"${slot.name}"` : slot.id} is signed out on runner "${machine}" — every session run on that account fails immediately. ` +
-          'Sign it in from the Providers page, then start this session again.'
+        ? `Antigravity account ${accountName(runtime, slot, engines)} is signed out on runner "${machine}" — every session run on that account fails immediately. ` +
+          'Sign it in from Infrastructure, then start this session again.'
         : null;
     }
     return health.auth === 'no' ? antigravityRefusal(health, args.runner, machine) : null;
@@ -234,7 +252,7 @@ export function signedOutEngineRefusal(args: {
   // one that keeps a single login is judged on that.
   const account = isAccountEngine(runtime) ? args.accounts?.[ACCOUNT_CHOICE[runtime]] : undefined;
   const login: SessionLogin | null = accountEnvVar(runtime)
-    ? sessionAccountLogin(runtime, health, account, args.workspaceEnv, engines)
+    ? sessionAccountLogin(runtime, health, account, args.workspaceEnv, args.runner, engines, now)
     : { auth: health.auth };
   if (login?.auth !== 'no') return null;
 
@@ -248,18 +266,18 @@ export function signedOutEngineRefusal(args: {
         : LOGIN_COMMANDS[runtime];
     return (
       `${label} account ${login.name} is signed out on runner "${machine}" — every session run on that account fails immediately. ` +
-      `Sign it in from the Providers page, or run \`${command}\` on that machine, then start this session again.`
+      `Sign it in from Infrastructure, or run \`${command}\` on that machine, then start this session again.`
     );
   }
   return (
     `${label} is signed out on runner "${machine}" — every session started there fails immediately. ` +
-    `Sign in from the Runners page, or run \`${LOGIN_COMMANDS[runtime]}\` on that machine, then start this session again.`
+    `Sign in from Infrastructure, or run \`${LOGIN_COMMANDS[runtime]}\` on that machine, then start this session again.`
   );
 }
 
 /** The Gemini key, the way out of an Antigravity refusal on any runner. */
 const GEMINI_KEY_WAY_OUT =
-  'connect Gemini in Providers (/providers/new/gemini) — Orbit stores the key encrypted — and start this session on Gemini';
+  'connect Gemini under API keys on Infrastructure (/providers/new/gemini) — Orbit stores the key encrypted — and start this session on Gemini';
 
 /**
  * Built-in Antigravity has no credential of its own on that runner: no Google sign-in that answers,
@@ -274,7 +292,7 @@ function antigravityRefusal(health: RunnerEngineHealth, runner: EnginePreflightR
       : `Antigravity has no Google sign-in or Gemini API key on runner "${machine}".`;
   switch (antigravityGoogleLogin(runner)) {
     case 'available':
-      return `${head} Sign in with Google from the Providers page, or ${GEMINI_KEY_WAY_OUT}.`;
+      return `${head} Sign in with Google from Infrastructure, or ${GEMINI_KEY_WAY_OUT}.`;
     case 'unsupported_platform':
       return `${head} Signing in with Google works on Linux runners only for now, so ${GEMINI_KEY_WAY_OUT}.`;
     default:
@@ -285,7 +303,7 @@ function antigravityRefusal(health: RunnerEngineHealth, runner: EnginePreflightR
 /**
  * The sign-in that clears a refusal of `runtime` on this runner, when Orbit can start it from the
  * browser: Antigravity's Google sign-in, on a runner that relays it. The other engines' refusals
- * name their Runners-page sign-in in words, as they always have.
+ * name their sign-in on Infrastructure in words, as they always have.
  */
 export function engineSignInAction(
   runtime: string,

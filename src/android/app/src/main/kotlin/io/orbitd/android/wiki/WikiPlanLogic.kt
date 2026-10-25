@@ -86,14 +86,18 @@ internal object WikiPlanCopy {
 
     private fun plural(n: Int, one: String, many: String) = "${WikiArticleCopy.count(n)} ${if (n == 1) one else many}"
     fun versionLabel(version: Int) = "v$version"
-    fun emptyText(provider: String?) =
-        "A plan lays out this wiki’s documents: the categories, the documents in each, who each one is for and what it covers, " +
-            "and where each section’s material comes from. ${provider ?: WikiCopy.historyMaintenance} drafts it; nothing is written until you confirm it."
-    fun emptyNote(place: String?, provider: String?): String {
-        val on = place?.let { ", on $it" } ?: ""
-        val with = provider?.let { " with $it" } ?: ""
-        return "Runs as a task in the Wiki maintenance list$on$with — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles."
-    }
+
+    /** Who drafts the plan (`WIKI_PLAN_DRAFTER_SERVER`): the wiki-worker's System model, never the account's provider.
+     * Every sentence that names the drafter takes this name. */
+    const val drafterServer = "System model"
+
+    const val emptyText = "A plan lays out this wiki’s documents: the categories, the documents in each, who each one is for and what it covers, " +
+        "and where each section’s material comes from. The $drafterServer drafts it; nothing is written until you confirm it."
+
+    /** Where a draft runs and how long it takes, under Draft plan (`WIKI_PLAN_EMPTY_NOTE_SERVER`): the wiki-worker drafts
+     * it with the System model. */
+    const val noteServer = "System model · about 1–2 hours"
+    const val emptyNoteServer = "Runs on the server with the System model — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles."
     fun failedHint(inForce: Int?) = "Confirm needs a passing check. Redraft with what to change — " +
         (inForce?.let { "v$it stays in force until you confirm" } ?: "until you confirm a plan, the Wiki shows its topic articles") + "."
     fun chars(length: WikiPlanRange) = if (length.min == length.max) "${WikiArticleCopy.count(length.min)} chars"
@@ -113,9 +117,9 @@ internal object WikiPlanCopy {
     const val moveDown = "Move down"
     fun protectedKept(numbers: List<String>) = "Protected, kept as they are: ${numbers.joinToString(" · ")}"
     fun time(since: String?, until: String?) = if (since == null && until == null) "any time" else "${since ?: "the start"} → ${until ?: "now"}"
-    fun redraftNote(provider: String?, from: Pair<Int, Boolean>?): String {
+    fun redraftNote(from: Pair<Int, Boolean>?): String {
         val base = from?.let { if (it.second) " from v${it.first}, the plan in force," else " from draft v${it.first}," } ?: ""
-        return "${provider ?: WikiCopy.historyMaintenance} drafts it again$base with what you write here. A draft that doesn’t pass the plan check is " +
+        return "The $drafterServer drafts it again$base with what you write here. A draft that doesn’t pass the plan check is " +
             "redrafted with its errors, up to 3 times."
     }
     fun lostLabel(base: Int, number: Int, title: String) = "v$base §$number $title"
@@ -223,7 +227,7 @@ internal object WikiPlanLogic {
         val (shownCategories, docs) = numbered(categories, rows)
         val repo = report?.repo?.let { WikiPlanRepoCheck(it.sha, it.checked, emptyList()) }
         return Shown(number, ShownStatus.FAILED, "maintenance", baseVersion, null, shownCategories, docs, report?.target ?: WikiPlanRange(20, 35),
-            null, repo, report?.model ?: job.provider, job.endedAt, null, job.errors.orEmpty())
+            null, repo, report?.model, job.endedAt, null, job.errors.orEmpty())
     }
 
     fun newest(state: WikiPlanState) = state.draft ?: state.confirmed
@@ -344,11 +348,10 @@ internal object WikiPlanLogic {
             return JobCard(JobLook.HELD, WikiPlanCopy.held, heldText(going, why), link, null)
         }
         if (going != null && going.state == "queued") {
-            val started = going.waitingFor?.startedAt?.let { " (started ${WikiHealthLogic.ago(it, now)})" } ?: ""
-            return JobCard(JobLook.QUEUED, WikiPlanCopy.queued, "${WikiPlanCopy.queuedText}$started", runLink(going.waitingFor?.sessionId), null)
+            return JobCard(JobLook.QUEUED, WikiPlanCopy.queued, WikiPlanCopy.queuedText, null, null)
         }
         if (draft != null && draft.state == "running") {
-            val who = draft.provider ?: WikiCopy.historyMaintenance
+            val who = WikiPlanCopy.drafterServer
             val text = draft.startedAt?.let { "$who · attempt ${draft.attempt ?: 1} of ${draft.attemptsMax ?: 3} · started ${WikiHealthLogic.ago(it, now)}" }
                 ?: "$who · waiting for its run to start"
             return JobCard(JobLook.DRAFTING, WikiPlanCopy.drafting, text, runLink(draft.sessionId), null)
@@ -511,7 +514,7 @@ internal object WikiPlanLogic {
         }
         val order = kinds.withIndex().sortedWith(compareByDescending<IndexedValue<Triple<String, String, Int>>> { it.value.third }.thenBy { it.index })
         return Gate(false, WikiPlanCopy.failed, "${failedChecks(shown.errors)} of 4 checks failed$at",
-            job?.let { "${shown.model ?: it.provider ?: WikiCopy.historyMaintenance} tried ${plural(attempts(it), "time", "times")}" }, rows,
+            job?.let { "${shown.model ?: WikiCopy.historyMaintenance} tried ${plural(attempts(it), "time", "times")}" }, rows,
             order.map { "${WikiArticleCopy.count(it.value.third)} ${if (it.value.third == 1) singular(it.value.first) else it.value.first}" }, refs)
     }
 
@@ -697,6 +700,20 @@ internal object WikiPlanLogic {
     fun pending(state: WikiPlanState, runnerOnline: Boolean?) = (if (held(openJob(state) ?: buildJob(state), runnerOnline) != null) 1 else 0) +
         (if (failedJob(state) != null) 1 else 0) + (if (state.draft != null) 1 else 0) + state.proposals.orEmpty().size
     data class Banner(val text: String, val amber: Boolean, val toSettings: Boolean)
+
+    /** One of Activity's amber plan banners: the banner for one kind of thing that waits, and how many of [pending] it is. */
+    data class WaitingBanner(val banner: Banner, val look: Look, val count: Int)
+
+    /** Activity's amber plan banners (`wikiPlanWaitingBanners`, design §12.3.3): the banner for each kind of thing of the plan
+     * that waits on the owner, in the order the looks win — held, the draft that failed, the draft to confirm, the changes
+     * — each with how many of [pending] it is, so a page's amber banners add up to the number on the bar's Activity badge.
+     * Empty when nothing waits. */
+    fun waitingBanners(state: WikiPlanState, now: Instant, docs: Pair<Int, Int>?, runnerOnline: Boolean?): List<WaitingBanner> =
+        listOf(Look.HELD to (if (held(openJob(state) ?: buildJob(state), runnerOnline) != null) 1 else 0),
+            Look.DRAFT_FAILED to (if (failedJob(state) != null) 1 else 0), Look.DRAFT_READY to (if (state.draft != null) 1 else 0),
+            Look.CHANGES to state.proposals.orEmpty().size)
+            .filter { (_, count) -> count > 0 }
+            .map { (look, count) -> WaitingBanner(banner(look, state, now, docs, runnerOnline), look, count) }
     fun banner(look: Look, state: WikiPlanState, now: Instant, docs: Pair<Int, Int>?, runnerOnline: Boolean?): Banner {
         val job = openJob(state)
         return when (look) {

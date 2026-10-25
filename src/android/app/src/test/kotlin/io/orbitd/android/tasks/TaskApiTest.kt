@@ -39,6 +39,20 @@ class TaskApiTest {
         try { api.reopen("task", "task:2"); fail("A logged-out epoch must not write") } catch (_: SessionChanged) { }
     }
 
+    /** A task pin is one authenticated PATCH naming the engine beside the credential (board 6): a DeepSeek key pinned under
+     * DeepSeek Harness, the engine alone, then every pin taken back — each with the model pin cleared. */
+    @Test fun aPinNamesTheEngineBesideTheProviderInOnePatch() = runTest {
+        val fixture = Fixture()
+        val api = fixture.api()
+        api.pin("task", TaskPin(TaskPin.Pin("dsh"), TaskPin.Pin("deepseek-2")), "task:1")
+        api.pin("task", TaskPin(TaskPin.Pin("claude")), "task:2")
+        api.pin("task", TaskPin(TaskPin.Pin(null), TaskPin.Pin(null)), "task:3")
+        val pins = fixture.calls.filter { it.api.method == HttpMethod.PATCH }
+        assertTrue(pins.all { it.api.path == listOf("tasks", "task") && it.accessToken == "fixture-access" })
+        assertEquals(listOf(json("""{"engine":"dsh","provider":"deepseek-2","model":null}"""), json("""{"engine":"claude","model":null}"""),
+            json("""{"engine":null,"provider":null,"model":null}""")), pins.map { it.body() })
+    }
+
     @Test fun panelConfirmReadsFirstAndNeverAnswersARunThatStartedWaiting() = runTest {
         var view = """{"taskId":"task","completionCriterion":"OWNER_CONFIRMED","status":"OPEN","waiting":null}"""
         val fixture = Fixture { request -> if (request.api.method == HttpMethod.GET) ApiResponse(200, view.encodeToByteArray()) else ApiResponse(200, "{}".encodeToByteArray()) }

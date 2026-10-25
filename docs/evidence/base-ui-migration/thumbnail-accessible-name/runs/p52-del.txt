@@ -1,0 +1,313 @@
+argv: env P52_SNAPSHOTS=/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots P52_OUTPUT=/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-out npx playwright test --config ui-migration/p52.config.mjs --update-snapshots=all
+tree: /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/del
+head: 01713ca80794e84e570378824d1632c5076ee314
+uncommitted:
+load: 20.76 26.94 25.25 12/3725 3739915
+mem: 4843M available
+disk: / 64956M available, TMPDIR /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/tmp
+started: 2026-10-10T12:24:05Z
+
+
+Running 56 tests using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-result-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-turn-1.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-reply-pictures.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-result.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-turn-2.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-result-whole.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-diagram-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-thumbnail-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-diagram-focus.png, writing actual.
+  ✓   1 [chromium-light-desktop] › ui-migration/p52.browser.mjs:188:3 › P5.2 the transcript’s pictures › load through the authorized route, hold their place while they do, and fail in place (6.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-viewer.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-viewer-next.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-viewer-first.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-viewer-last.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-viewer-zoomed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-viewer-double-click.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-viewer-dragged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-viewer-turned.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-viewer-hover-zoom-in.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-viewer-hover-close.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-viewer-focus.png, writing actual.
+  ✓   2 [chromium-light-desktop] › ui-migration/p52.browser.mjs:252:3 › P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes (19.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-single.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-single-mock.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-composer-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-composer-chip-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-composer-chip-viewer.png, writing actual.
+  ✓   3 [chromium-light-desktop] › ui-migration/p52.browser.mjs:413:3 › P5.2 the transcript’s pictures › open on their own: a reply’s Markdown picture, the session’s mock and a picture put back in the composer (6.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-tail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-streaming.png, writing actual.
+  ✓   4 [chromium-light-desktop] › ui-migration/p52.browser.mjs:475:3 › P5.2 the transcript’s pictures › keep the conversation on its tail while they land, and in order while a turn streams in (3.1s)
+  ✓   5 [chromium-light-desktop] › ui-migration/p52.browser.mjs:517:3 › P5.2 the transcript’s pictures › give their object URLs back with the conversation, Back with the viewer open included (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-motion-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-motion-zoomed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-motion-turned.png, writing actual.
+  ✓   6 [chromium-light-desktop] › ui-migration/p52.browser.mjs:546:3 › P5.2 the transcript’s pictures › open, zoom and close with the replaced viewer’s motion when motion is allowed (5.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-shared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-desktop/p52-shared-viewer.png, writing actual.
+  ✓   7 [chromium-light-desktop] › ui-migration/p52.browser.mjs:602:3 › P5.2 the transcript’s pictures › are drawn and open the same on the shared conversation, through the public routes (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-result-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-turn-1.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-reply-pictures.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-result.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-turn-2.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-result-whole.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-diagram-focus.png, writing actual.
+  ✓   8 [chromium-light-phone] › ui-migration/p52.browser.mjs:188:3 › P5.2 the transcript’s pictures › load through the authorized route, hold their place while they do, and fail in place (4.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-viewer.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-viewer-next.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-viewer-first.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-viewer-last.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-viewer-zoomed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-viewer-pinched.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-viewer-turned.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-viewer-focus.png, writing actual.
+  ✓   9 [chromium-light-phone] › ui-migration/p52.browser.mjs:252:3 › P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes (17.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-single.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-single-mock.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-composer-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-composer-chip-viewer.png, writing actual.
+  ✓  10 [chromium-light-phone] › ui-migration/p52.browser.mjs:413:3 › P5.2 the transcript’s pictures › open on their own: a reply’s Markdown picture, the session’s mock and a picture put back in the composer (6.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-tail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-streaming.png, writing actual.
+  ✓  11 [chromium-light-phone] › ui-migration/p52.browser.mjs:475:3 › P5.2 the transcript’s pictures › keep the conversation on its tail while they land, and in order while a turn streams in (4.1s)
+  ✓  12 [chromium-light-phone] › ui-migration/p52.browser.mjs:517:3 › P5.2 the transcript’s pictures › give their object URLs back with the conversation, Back with the viewer open included (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-motion-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-motion-zoomed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-motion-turned.png, writing actual.
+  ✓  13 [chromium-light-phone] › ui-migration/p52.browser.mjs:546:3 › P5.2 the transcript’s pictures › open, zoom and close with the replaced viewer’s motion when motion is allowed (4.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-shared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-light-phone/p52-shared-viewer.png, writing actual.
+  ✓  14 [chromium-light-phone] › ui-migration/p52.browser.mjs:602:3 › P5.2 the transcript’s pictures › are drawn and open the same on the shared conversation, through the public routes (3.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-result-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-turn-1.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-reply-pictures.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-result.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-turn-2.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-result-whole.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-diagram-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-thumbnail-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-diagram-focus.png, writing actual.
+  ✓  15 [chromium-dark-desktop] › ui-migration/p52.browser.mjs:188:3 › P5.2 the transcript’s pictures › load through the authorized route, hold their place while they do, and fail in place (6.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-viewer.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-viewer-next.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-viewer-first.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-viewer-last.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-viewer-zoomed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-viewer-double-click.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-viewer-dragged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-viewer-turned.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-viewer-hover-zoom-in.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-viewer-hover-close.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-viewer-focus.png, writing actual.
+  ✓  16 [chromium-dark-desktop] › ui-migration/p52.browser.mjs:252:3 › P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes (18.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-single.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-single-mock.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-composer-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-composer-chip-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-composer-chip-viewer.png, writing actual.
+  ✓  17 [chromium-dark-desktop] › ui-migration/p52.browser.mjs:413:3 › P5.2 the transcript’s pictures › open on their own: a reply’s Markdown picture, the session’s mock and a picture put back in the composer (6.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-tail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-streaming.png, writing actual.
+  ✓  18 [chromium-dark-desktop] › ui-migration/p52.browser.mjs:475:3 › P5.2 the transcript’s pictures › keep the conversation on its tail while they land, and in order while a turn streams in (2.9s)
+  ✓  19 [chromium-dark-desktop] › ui-migration/p52.browser.mjs:517:3 › P5.2 the transcript’s pictures › give their object URLs back with the conversation, Back with the viewer open included (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-motion-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-motion-zoomed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-motion-turned.png, writing actual.
+  ✓  20 [chromium-dark-desktop] › ui-migration/p52.browser.mjs:546:3 › P5.2 the transcript’s pictures › open, zoom and close with the replaced viewer’s motion when motion is allowed (5.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-shared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-desktop/p52-shared-viewer.png, writing actual.
+  ✓  21 [chromium-dark-desktop] › ui-migration/p52.browser.mjs:602:3 › P5.2 the transcript’s pictures › are drawn and open the same on the shared conversation, through the public routes (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-result-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-turn-1.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-reply-pictures.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-result.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-turn-2.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-result-whole.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-diagram-focus.png, writing actual.
+  ✓  22 [chromium-dark-phone] › ui-migration/p52.browser.mjs:188:3 › P5.2 the transcript’s pictures › load through the authorized route, hold their place while they do, and fail in place (4.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-viewer.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-viewer-next.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-viewer-first.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-viewer-last.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-viewer-zoomed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-viewer-pinched.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-viewer-turned.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-viewer-focus.png, writing actual.
+  ✓  23 [chromium-dark-phone] › ui-migration/p52.browser.mjs:252:3 › P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes (17.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-single.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-single-mock.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-composer-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-composer-chip-viewer.png, writing actual.
+  ✓  24 [chromium-dark-phone] › ui-migration/p52.browser.mjs:413:3 › P5.2 the transcript’s pictures › open on their own: a reply’s Markdown picture, the session’s mock and a picture put back in the composer (5.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-tail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-streaming.png, writing actual.
+  ✓  25 [chromium-dark-phone] › ui-migration/p52.browser.mjs:475:3 › P5.2 the transcript’s pictures › keep the conversation on its tail while they land, and in order while a turn streams in (3.5s)
+  ✓  26 [chromium-dark-phone] › ui-migration/p52.browser.mjs:517:3 › P5.2 the transcript’s pictures › give their object URLs back with the conversation, Back with the viewer open included (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-motion-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-motion-zoomed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-motion-turned.png, writing actual.
+  ✓  27 [chromium-dark-phone] › ui-migration/p52.browser.mjs:546:3 › P5.2 the transcript’s pictures › open, zoom and close with the replaced viewer’s motion when motion is allowed (4.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-shared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/chromium-dark-phone/p52-shared-viewer.png, writing actual.
+  ✓  28 [chromium-dark-phone] › ui-migration/p52.browser.mjs:602:3 › P5.2 the transcript’s pictures › are drawn and open the same on the shared conversation, through the public routes (3.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-result-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-turn-1.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-reply-pictures.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-result.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-turn-2.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-result-whole.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-diagram-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-thumbnail-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-diagram-focus.png, writing actual.
+  ✓  29 [webkit-light-desktop] › ui-migration/p52.browser.mjs:188:3 › P5.2 the transcript’s pictures › load through the authorized route, hold their place while they do, and fail in place (7.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-viewer.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-viewer-next.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-viewer-first.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-viewer-last.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-viewer-zoomed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-viewer-double-click.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-viewer-dragged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-viewer-turned.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-viewer-hover-zoom-in.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-viewer-hover-close.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-viewer-focus.png, writing actual.
+  ✓  30 [webkit-light-desktop] › ui-migration/p52.browser.mjs:252:3 › P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes (21.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-single.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-single-mock.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-composer-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-composer-chip-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-composer-chip-viewer.png, writing actual.
+  ✓  31 [webkit-light-desktop] › ui-migration/p52.browser.mjs:413:3 › P5.2 the transcript’s pictures › open on their own: a reply’s Markdown picture, the session’s mock and a picture put back in the composer (7.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-tail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-streaming.png, writing actual.
+  ✓  32 [webkit-light-desktop] › ui-migration/p52.browser.mjs:475:3 › P5.2 the transcript’s pictures › keep the conversation on its tail while they land, and in order while a turn streams in (3.9s)
+  ✓  33 [webkit-light-desktop] › ui-migration/p52.browser.mjs:517:3 › P5.2 the transcript’s pictures › give their object URLs back with the conversation, Back with the viewer open included (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-motion-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-motion-zoomed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-motion-turned.png, writing actual.
+  ✓  34 [webkit-light-desktop] › ui-migration/p52.browser.mjs:546:3 › P5.2 the transcript’s pictures › open, zoom and close with the replaced viewer’s motion when motion is allowed (5.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-shared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-desktop/p52-shared-viewer.png, writing actual.
+  ✓  35 [webkit-light-desktop] › ui-migration/p52.browser.mjs:602:3 › P5.2 the transcript’s pictures › are drawn and open the same on the shared conversation, through the public routes (3.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-result-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-turn-1.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-reply-pictures.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-result.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-turn-2.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-result-whole.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-diagram-focus.png, writing actual.
+  ✓  36 [webkit-light-phone] › ui-migration/p52.browser.mjs:188:3 › P5.2 the transcript’s pictures › load through the authorized route, hold their place while they do, and fail in place (5.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-viewer.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-viewer-next.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-viewer-first.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-viewer-last.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-viewer-zoomed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-viewer-pinched.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-viewer-turned.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-viewer-focus.png, writing actual.
+  ✓  37 [webkit-light-phone] › ui-migration/p52.browser.mjs:252:3 › P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes (17.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-single.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-single-mock.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-composer-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-composer-chip-viewer.png, writing actual.
+  ✓  38 [webkit-light-phone] › ui-migration/p52.browser.mjs:413:3 › P5.2 the transcript’s pictures › open on their own: a reply’s Markdown picture, the session’s mock and a picture put back in the composer (5.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-tail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-streaming.png, writing actual.
+  ✓  39 [webkit-light-phone] › ui-migration/p52.browser.mjs:475:3 › P5.2 the transcript’s pictures › keep the conversation on its tail while they land, and in order while a turn streams in (3.3s)
+  ✓  40 [webkit-light-phone] › ui-migration/p52.browser.mjs:517:3 › P5.2 the transcript’s pictures › give their object URLs back with the conversation, Back with the viewer open included (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-motion-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-motion-zoomed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-motion-turned.png, writing actual.
+  ✓  41 [webkit-light-phone] › ui-migration/p52.browser.mjs:546:3 › P5.2 the transcript’s pictures › open, zoom and close with the replaced viewer’s motion when motion is allowed (5.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-shared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-light-phone/p52-shared-viewer.png, writing actual.
+  ✓  42 [webkit-light-phone] › ui-migration/p52.browser.mjs:602:3 › P5.2 the transcript’s pictures › are drawn and open the same on the shared conversation, through the public routes (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-result-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-turn-1.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-reply-pictures.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-result.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-turn-2.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-result-whole.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-diagram-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-thumbnail-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-diagram-focus.png, writing actual.
+  ✓  43 [webkit-dark-desktop] › ui-migration/p52.browser.mjs:188:3 › P5.2 the transcript’s pictures › load through the authorized route, hold their place while they do, and fail in place (7.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-viewer.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-viewer-next.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-viewer-first.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-viewer-last.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-viewer-zoomed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-viewer-double-click.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-viewer-dragged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-viewer-turned.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-viewer-hover-zoom-in.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-viewer-hover-close.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-viewer-focus.png, writing actual.
+  ✓  44 [webkit-dark-desktop] › ui-migration/p52.browser.mjs:252:3 › P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes (20.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-single.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-single-mock.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-composer-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-composer-chip-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-composer-chip-viewer.png, writing actual.
+  ✓  45 [webkit-dark-desktop] › ui-migration/p52.browser.mjs:413:3 › P5.2 the transcript’s pictures › open on their own: a reply’s Markdown picture, the session’s mock and a picture put back in the composer (7.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-tail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-streaming.png, writing actual.
+  ✓  46 [webkit-dark-desktop] › ui-migration/p52.browser.mjs:475:3 › P5.2 the transcript’s pictures › keep the conversation on its tail while they land, and in order while a turn streams in (3.8s)
+  ✓  47 [webkit-dark-desktop] › ui-migration/p52.browser.mjs:517:3 › P5.2 the transcript’s pictures › give their object URLs back with the conversation, Back with the viewer open included (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-motion-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-motion-zoomed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-motion-turned.png, writing actual.
+  ✓  48 [webkit-dark-desktop] › ui-migration/p52.browser.mjs:546:3 › P5.2 the transcript’s pictures › open, zoom and close with the replaced viewer’s motion when motion is allowed (5.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-shared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-desktop/p52-shared-viewer.png, writing actual.
+  ✓  49 [webkit-dark-desktop] › ui-migration/p52.browser.mjs:602:3 › P5.2 the transcript’s pictures › are drawn and open the same on the shared conversation, through the public routes (3.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-result-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-turn-1.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-reply-pictures.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-result.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-turn-2.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-result-whole.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-diagram-focus.png, writing actual.
+  ✓  50 [webkit-dark-phone] › ui-migration/p52.browser.mjs:188:3 › P5.2 the transcript’s pictures › load through the authorized route, hold their place while they do, and fail in place (5.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-viewer.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-viewer-next.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-viewer-first.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-viewer-last.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-viewer-zoomed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-viewer-pinched.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-viewer-turned.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-viewer-focus.png, writing actual.
+  ✓  51 [webkit-dark-phone] › ui-migration/p52.browser.mjs:252:3 › P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes (17.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-single.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-single-mock.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-composer-chip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-composer-chip-viewer.png, writing actual.
+  ✓  52 [webkit-dark-phone] › ui-migration/p52.browser.mjs:413:3 › P5.2 the transcript’s pictures › open on their own: a reply’s Markdown picture, the session’s mock and a picture put back in the composer (5.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-tail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-streaming.png, writing actual.
+  ✓  53 [webkit-dark-phone] › ui-migration/p52.browser.mjs:475:3 › P5.2 the transcript’s pictures › keep the conversation on its tail while they land, and in order while a turn streams in (3.1s)
+  ✓  54 [webkit-dark-phone] › ui-migration/p52.browser.mjs:517:3 › P5.2 the transcript’s pictures › give their object URLs back with the conversation, Back with the viewer open included (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-motion-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-motion-zoomed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-motion-turned.png, writing actual.
+  ✓  55 [webkit-dark-phone] › ui-migration/p52.browser.mjs:546:3 › P5.2 the transcript’s pictures › open, zoom and close with the replaced viewer’s motion when motion is allowed (5.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-shared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p52-del-shots/webkit-dark-phone/p52-shared-viewer.png, writing actual.
+  ✓  56 [webkit-dark-phone] › ui-migration/p52.browser.mjs:602:3 › P5.2 the transcript’s pictures › are drawn and open the same on the shared conversation, through the public routes (2.6s)
+
+  56 passed (6.0m)
+exit=0
+load: 16.83 21.63 23.55 40/3402 3808497
+ended: 2026-10-10T12:30:11Z

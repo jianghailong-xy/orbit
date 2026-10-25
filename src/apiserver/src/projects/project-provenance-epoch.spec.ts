@@ -152,6 +152,14 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'types completion-evidence source provenance; does not read task project provenance',
   'src/apiserver/src/tasks/task-completion-evidence.service.ts':
     'validates and records completion-evidence source provenance; grants no project authority',
+  // §2.9 LS6's landing view reuses the same `sourceSessionId` spelling for a different fact: the
+  // work session a landing attempt is about (`project_integration_job.session_id`, a history
+  // reference). The view copies it into the attempt for a reader to display and answers NULL when
+  // that session is gone; no branch compares it, and it grants or refuses nothing.
+  'src/apiserver/src/projects/landing-view.ts':
+    'renders the landing attempt source session as evidence; decides nothing',
+  'src/shared/src/project-progress.ts':
+    'types the landing attempt source session for the wire; reads no task provenance',
   // The decision door reads the same N10 column, and reads it to REFUSE: a session that submitted
   // evidence for a task may not decide it. That is the opposite direction from the one SC7 forbids
   // — "evidence grants nothing" is about provenance becoming authority, and this takes authority
@@ -172,6 +180,11 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
   // decides is still the decision door's, and no project provenance is read.
   'src/apiserver/src/tasks/evidence-review.ts':
     'names the run that submitted a completion-evidence revision; reads no task project provenance',
+  // The same unit's delivery half: a recorded SEND_BACK's note is handed to the run named on the
+  // revision — the one session that must act on it. It addresses a message with the value, decides
+  // nothing by it, and reads no task project provenance.
+  'src/apiserver/src/tasks/evidence-review.service.ts':
+    'delivers a send-back note to the run named on the revision; reads no task project provenance',
   'src/apiserver/src/tasks/pending-evidence-judgments.ts':
     'places an evidence card in the run that submitted it; reads no task project provenance',
   'src/apiserver/src/tasks/task-signoff-migration.cli.ts':
@@ -210,6 +223,16 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'types completion-evidence source provenance for the human review face; decides nothing',
   'src/web/src/pages/JudgmentReviewPage.test.tsx':
     'asserts completion-evidence source provenance is rendered for human review',
+  // §2.9 LS6's landing page reads the same `sourceSessionId` spelling for the landing attempt's
+  // work session — a read face (the menu's "Open Source Session"), never a gate.
+  'src/web/src/components/LandingSessionView.tsx':
+    'opens the landing attempt’s source session from the view; decides nothing',
+  'src/web/src/lib/landingSession.ts':
+    'lists the landing attempt’s source session as a menu row; decides nothing',
+  'src/web/src/components/LandingSessionView.test.tsx':
+    'asserts the landing menu draws the source-session row',
+  'src/web/src/lib/landingSession.test.ts':
+    'asserts the landing menu lists the source-session row',
 };
 
 /**

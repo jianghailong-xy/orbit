@@ -1,0 +1,21 @@
+argv: env P32_SNAPSHOTS=/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-pilot-share-1-shots P32_OUTPUT=/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-pilot-share-1-out P32_PORT=4321 npx playwright test --config ui-migration/pilot.config.mjs --update-snapshots=all --project webkit-light-desktop -g share dialog pilot
+head: a794459b14424e0fbc239a6947d589fa4852e946
+started: 2026-10-08T13:28:35Z
+
+P0 expected screenshots: 88 P0.2 originals, 150 main drift references, 14 accepted migration differences.
+
+Running 2 tests using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-pilot-share-1-shots/webkit-light-desktop/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-pilot-share-1-shots/webkit-light-desktop/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-pilot-share-1-shots/webkit-light-desktop/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-pilot-share-1-shots/webkit-light-desktop/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-pilot-share-1-shots/webkit-light-desktop/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-pilot-share-1-shots/webkit-light-desktop/pilot-share-turn-off.png, writing actual.
+  ✓  1 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (5.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-pilot-share-1-shots/webkit-light-desktop/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs-final/rerun-pilot-share-1-shots/webkit-light-desktop/pilot-share-error.png, writing actual.
+  ✓  2 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (3.7s)
+
+  2 passed (12.9s)
+exit=0

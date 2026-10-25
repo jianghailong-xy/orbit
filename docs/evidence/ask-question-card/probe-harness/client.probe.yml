@@ -1,0 +1,204 @@
+# TEMPORARY (probe branch, never merged). Photographs an agent's answered question (AskUserQuestion) in
+# the iPhone and Mac apps against .aqc-probe/stub.py — on the tree before the change (base, 539cca126:
+# the card opens on its bold question, bullets and OUTPUT) and on the change (this commit's parent: the
+# card folds to what was asked and how it was answered, a tap replays every option) — and runs
+# client.yml's two compile gates on the change. The report job pushes the pictures, notes, request logs
+# and build log tails to probe/ask-question-card-results.
+name: Client CI (macOS + iOS)
+
+on:
+  push:
+    branches: ["probe/ask-question-card"]
+
+concurrency:
+  group: client-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BASE_SHA: 539cca126210a3ae8b22a3f30d9f50334bd0efa5
+
+jobs:
+  # client.yml's macOS gate, its two steps kept apart so a red test can't hide whether OrbitApp builds.
+  macos:
+    name: macOS (build + test)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Toolchain
+        run: swift --version && xcodebuild -version
+      - name: Test OrbitKit (macOS)
+        id: kit
+        continue-on-error: true
+        working-directory: src/macos/OrbitKit
+        run: |
+          swift test 2>&1 | tee "$GITHUB_WORKSPACE/orbitkit-test.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Build OrbitApp
+        id: build
+        continue-on-error: true
+        working-directory: src/macos/OrbitApp
+        run: |
+          swift build 2>&1 | tee "$GITHUB_WORKSPACE/orbitapp-build.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Summaries
+        if: always()
+        run: |
+          mkdir -p out/macos
+          grep -E "error:|Executed [0-9]+ tests|with [0-9]+ failures|failed \(" orbitkit-test.log | head -300 > out/macos/orbitkit-test-summary.txt || true
+          tail -60 orbitkit-test.log > out/macos/orbitkit-test-tail.txt || true
+          grep -E "error:" orbitapp-build.log | head -300 > out/macos/orbitapp-build-errors.txt || true
+          tail -80 orbitapp-build.log > out/macos/orbitapp-build-tail.txt || true
+          echo "kit=${{ steps.kit.outcome }} build=${{ steps.build.outcome }}" > out/macos/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-out
+          path: out
+      - name: Fail as the gate would
+        if: steps.kit.outcome != 'success' || steps.build.outcome != 'success'
+        run: exit 1
+
+  # client.yml's iOS gate, as it stands.
+  ios:
+    name: iOS (generate + build)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version
+      - name: Generate Xcode project
+        working-directory: src/ios
+        run: xcodegen generate
+      - name: Build for iOS Simulator
+        id: build
+        continue-on-error: true
+        working-directory: src/ios
+        run: |
+          xcodebuild \
+            -project Orbit.xcodeproj \
+            -scheme Orbit \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee "$GITHUB_WORKSPACE/ios-build.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Summaries
+        if: always()
+        run: |
+          mkdir -p out/ios
+          grep -E "error:|\*\* BUILD" ios-build.log | head -300 > out/ios/ios-build-summary.txt || true
+          tail -60 ios-build.log > out/ios/ios-build-tail.txt || true
+          echo "build=${{ steps.build.outcome }}" > out/ios/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-out
+          path: out
+      - name: Fail as the gate would
+        if: steps.build.outcome != 'success'
+        run: exit 1
+
+  shots:
+    name: Question card (iPhone + Mac, ${{ matrix.tree }})
+    runs-on: macos-26
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        tree: [base, fix]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      # The fix is this commit's tree (the probe's files change no app source); the base is the commit
+      # the change was made on, with the same probe copied in.
+      - name: The tree under test
+        run: |
+          if [ "${{ matrix.tree }}" = base ]; then
+            git fetch --depth=1 origin "$BASE_SHA"
+            git worktree add "$RUNNER_TEMP/tree" FETCH_HEAD
+            cp -R .aqc-probe "$RUNNER_TEMP/tree/"
+            echo "TREE=$RUNNER_TEMP/tree" >> "$GITHUB_ENV"
+          else
+            echo "TREE=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+          fi
+      - name: Which question card is under test
+        run: |
+          grep -n "QuestionFoldedLines\|questionDisplay\|autoOpen: true)" "$TREE/src/macos/OrbitKit/Sources/OrbitKit/Transcript/ToolDisplay.swift" "$TREE/src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ToolCards.swift" | head -12
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        run: |
+          bash "$TREE/.aqc-probe/run.sh" 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          P="$TREE/.aqc-probe"
+          mkdir -p "$P/shots"
+          cp run-output.log "$P/shots/run-output.log" 2>/dev/null || true
+          for log in "$P"/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD|XCTAssert|failed" "$log" | head -400 > "$P/shots/summary-$base.txt" || true
+            tail -300 "$log" > "$P/shots/tail-$base.txt" || true
+          done
+          find "$P/shots" -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          rm -rf "$P/shots/ios/attachments" "$P/shots/mac/attachments"
+          echo "tree=${{ matrix.tree }} capture=${{ steps.capture.outcome }}" > "$P/shots/outcomes.txt"
+          mkdir -p "out/${{ matrix.tree }}"
+          cp -R "$P/shots/." "out/${{ matrix.tree }}/"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots-${{ matrix.tree }}
+          path: out
+
+  report:
+    name: Push the results where a clone can read them
+    needs: [macos, ios, shots]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/ask-question-card-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "macos: ${{ needs.macos.result }}"
+            echo "ios: ${{ needs.ios.result }}"
+            echo "shots: ${{ needs.shots.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/ask-question-card-results

@@ -1,0 +1,464 @@
+<!doctype html>
+<!-- Design mock: several Kimi Code accounts on one runner, iOS / macOS — the native half of 01-web. The
+     runner pages (RunnerEnginePage.swift, RunnerSignInView.swift, RunnerPageParts.swift) and the composer's
+     model menu (ComposerView.swift) are one set of SwiftUI views for both. "现在" frames are drawn from
+     today's source; "改后" frames are the proposal. Drawn with the iOS kit of ../antigravity-accounts.
+     Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kimi Code accounts · iOS / macOS</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<style>
+  .m-sheet { width: 1900px; }
+  .row4 { display: grid; grid-template-columns: repeat(4, 413px); gap: 34px; align-items: start; }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 6px 4px 0; }
+  .m-cap b { color: var(--text-1); }
+  .m-cap code, .m-notes code, .m-sub code { font-size: 11.5px; padding: 0 4px; border-radius: 4px; background: #eef0f3; }
+  .notes2 { display: grid; grid-template-columns: 1fr 1fr; gap: 34px; align-items: start; }
+  .notes2 .m-notes { margin-top: 0; }
+  .notes2 .m-notes + .m-notes { margin-top: 14px; }
+  .m-notes h4 { margin: 0 0 6px; font-size: 13px; color: var(--text-1); }
+  .ask { background: #fff7e6; }
+  .ask .m-n { background: #fa8c16; }
+  .ring.grey { border-color: #5b6270; }
+
+  /* RunnerSignInView's Kimi pieces, as ../kimi-login-region/02-ios.html draws them */
+  .sv { display: flex; flex-direction: column; gap: 8px; }
+  .kq { font-size: 13px; line-height: 18px; }
+  .ksites { display: flex; flex-direction: column; gap: 8px; }
+  .ksite { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 14px; background: rgba(120, 120, 128, .12); }
+  .ksite .c { display: flex; flex-direction: column; }
+  .ksite b { font-size: 17px; line-height: 22px; font-weight: 600; color: #000; }
+  .ksite span.w { font-size: 13px; line-height: 17px; color: #8a8a8e; }
+  .ksite .cur { margin-left: auto; padding: 2px 9px; border-radius: 99px; background: rgba(62, 105, 246, .14); color: #3e69f6; font-size: 13px; font-weight: 600; }
+  .khint { font-size: 13px; line-height: 18px; color: #8a8a8e; }
+  .kcode { font: 600 20px/25px "JetBrains Mono", SFMono-Regular, ui-monospace, monospace; letter-spacing: .5px; }
+  .pbtn { align-self: flex-start; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 16px; border-radius: 99px;
+          background: #3e69f6; color: #fff; font-size: 16px; font-weight: 500; white-space: nowrap; }
+  .pbtn svg { width: 15px; height: 15px; }
+  .klinks { display: flex; gap: 16px; }
+
+  /* the runner page's several-accounts row (RunnerEngineRow): whose window it shows */
+  .nx { font-size: 13px; line-height: 17px; color: #8a8a8e; padding-top: 8px; }
+  .nx + .ws { padding-top: 4px; }
+  .cuts { display: flex; flex-direction: column; gap: 14px; margin: 10px; }
+  .cut-l { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 0 0 6px 4px; }
+  .cut.light { background: #f2f2f6; color: #000; box-shadow: 0 0 0 1px #dcdce0; }
+  .cut.light .s-card { background: #fff; }
+
+  /* the session screen (ConsoleView + ComposerView), iOS 26 */
+  .ph.chat { background: #fff; }
+  .kx-nav { position: absolute; top: 54px; left: 0; right: 0; height: 60px; display: flex; align-items: center; gap: 10px; padding: 0 16px; z-index: 2; }
+  .kx-nav .kx-tt { flex: 1; min-width: 0; text-align: center; }
+  .kx-nav .kx-tt b { display: block; font-size: 16px; line-height: 21px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kx-nav .kx-tt span { display: block; font-size: 12px; line-height: 15px; color: #8a8a8e; }
+  .kx-body { position: absolute; top: 118px; left: 0; right: 0; bottom: 150px; overflow: hidden; padding: 0 16px;
+             display: flex; flex-direction: column; justify-content: flex-end; gap: 14px; font-size: 16px; line-height: 23px; }
+  .kx-me { align-self: flex-end; max-width: 290px; padding: 9px 14px; border-radius: 20px; background: #f0f0f3; }
+  .kx-ai p { margin: 0; }
+  .kx-ai p + p { margin-top: 8px; }
+  .kx-ai code { font: 13.5px/20px "JetBrains Mono", ui-monospace, monospace; background: #f2f2f5; border-radius: 5px; padding: 0 4px; }
+  .kx-band { position: absolute; left: 0; right: 0; bottom: 34px; padding: 10px 12px 8px; background: #fff; }
+  .kx-card { background: #fff; border-radius: 24px; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .13), 0 4px 18px rgba(0, 0, 0, .07), 0 1px 3px rgba(0, 0, 0, .04); }
+  .kx-field { padding: 15px 16px 8px; font-size: 17px; line-height: 22px; color: rgba(60, 60, 67, .32); }
+  .kx-tools { display: flex; align-items: center; height: 46px; padding: 6px 8px 8px; font-size: 15px; line-height: 20px; }
+  .kx-ic { flex: none; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+  .kx-mode { flex: none; margin-left: 6px; color: #8a8a8e; font-weight: 500; }
+  .kx-sp { flex: 1; }
+  .kx-chip { display: flex; align-items: baseline; gap: 5px; white-space: nowrap; padding: 0 2px; }
+  .kx-chip b { font-weight: 600; }
+  .kx-chip i { font-style: normal; color: #8a8a8e; }
+  .kx-chip.on { background: rgba(120, 120, 128, .14); border-radius: 12px; padding: 4px 8px; margin: -4px -6px; }
+  .kx-meters { flex: none; display: flex; align-items: center; gap: 8px; margin-left: 12px; }
+  .kx-bar { width: 20px; height: 4px; border-radius: 2px; background: rgba(60, 60, 67, .16); overflow: hidden; }
+  .kx-bar > span { display: block; height: 100%; border-radius: 2px; background: #2e6aff; }
+  .kx-bar.warn > span { background: #ff8c27; }
+  .kx-send { flex: none; margin-left: 10px; width: 32px; height: 32px; border-radius: 16px; background: #d1d1d6; display: flex; align-items: center; justify-content: center; }
+  .kx-home { position: absolute; bottom: 8px; left: 50%; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: #000; z-index: 7; }
+  /* an iOS 26 menu: no row carries a check — the chosen one says Current underneath (ComposerView.menuItemLabel) */
+  .kx-dim { position: absolute; inset: 0; z-index: 5; background: rgba(0, 0, 0, .05); }
+  .kx-menu { position: absolute; z-index: 6; width: 268px; padding: 8px 0; border-radius: 26px; background: #f9f9fb;
+             box-shadow: 0 0 0 .5px rgba(0, 0, 0, .08), 0 12px 40px rgba(0, 0, 0, .2); font-size: 17px; line-height: 22px; }
+  .kx-menu.back { transform: scale(.93); transform-origin: 70% 100%; background: #ececef; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .06); }
+  .kx-menu.back, .kx-menu.back .kx-sub { color: #b4b4b9; }
+  .kx-menu.back .mk { opacity: .35; }
+  .kx-mi { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 5px 20px; }
+  .kx-mi .kx-t { flex: 1; min-width: 0; }
+  .kx-mi .kx-sub { display: block; font-size: 15px; line-height: 20px; color: #8a8a8e; }
+  .kx-mi.head { font-weight: 600; }
+  .kx-mt { display: flex; align-items: center; gap: 9px; padding: 8px 20px 10px; font-weight: 600; }
+  .kx-mh { padding: 8px 20px 2px; font-size: 13px; line-height: 18px; color: #8a8a8e; }
+  .kx-ms { height: .5px; margin: 5px 20px; background: rgba(60, 60, 67, .2); }
+  /* the Plan usage sheet (PlanUsageDetailPresentation on a phone), cut out */
+  .kx-sheet { position: relative; width: 393px; box-sizing: border-box; padding: 24px 20px 22px; border-radius: 30px; background: #fff;
+              box-shadow: 0 0 0 1px #dcdce0; font-family: Inter, "Noto Sans SC", sans-serif; color: #000; letter-spacing: -.01em; }
+  .kx-grab { position: absolute; top: 7px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: #c9c9ce; }
+  .kx-sh { display: flex; align-items: baseline; margin-bottom: 16px; }
+  .kx-sh b { font-size: 20px; line-height: 25px; font-weight: 600; }
+  .kx-sh span { margin-left: auto; font-size: 17px; color: #3e69f6; }
+  .kx-acc { display: flex; font-size: 15px; line-height: 20px; padding-bottom: 10px; border-bottom: .5px solid rgba(60, 60, 67, .29); margin-bottom: 18px; }
+  .kx-acc span { margin-left: auto; color: #8a8a8e; }
+  .kx-win + .kx-win { margin-top: 18px; }
+  .kx-wh { display: flex; font-size: 15px; line-height: 20px; }
+  .kx-wh span { margin-left: auto; color: #8a8a8e; }
+  .kx-wb { height: 8px; margin-top: 4px; border-radius: 4px; background: rgba(120, 120, 128, .16); overflow: hidden; }
+  .kx-wb i { display: block; height: 100%; border-radius: 4px; background: #3e69f6; }
+  .kx-wr { margin-top: 4px; font-size: 12px; line-height: 16px; color: rgba(60, 60, 67, .45); }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Kimi Code 多账号 · iOS / macOS：引擎页 Add Account、加账号先选 kimi.com / kimi.ai、每个账号自己的站点和额度、会话换账号</h1>
+  <p class="m-sub zh">iOS 和 macOS 是同一批 SwiftUI 页面（引擎页 <code>RunnerEnginePage.swift</code>、登录卡 <code>RunnerSignInView.swift</code>、运行器页 <code>RunnerPageParts.swift</code>、输入框 <code>ComposerView.swift</code>），这里只画 iPhone，规则和文案照 web 那张（01-web）。「现在」按现有代码画：HPC 上只有一个 Kimi 登录，在 kimi.ai。「改后」是提案：runner 声明了 <code>kimi-account-login/v1</code>（加账号）和 <code>kimi-account-move/v1</code>（会话换账号），新加的 Work 在 kimi.com。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 运行器的引擎页：只有一个 Kimi 账号时也出现 Add Account　·　② 加账号：先起名，再选站点</div>
+    <div class="row4">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k">现在</span>引擎页：机器上只有一个 Kimi 登录</div>
+        <div id="p1"></div>
+        <p class="m-cap zh"><b>A</b> 区名是 Sign-In，只容得下一个登录：想换号只能长按 → Sign In Again 把它顶掉，换到另一个站点也是顶掉。<b>B</b> Orbit 现在不读 Kimi 的额度。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>一个账号，也有 Add Account</div>
+        <div id="p2"></div>
+        <p class="m-cap zh"><b>1</b> 区名改成 Accounts，和 Claude Code / Codex / Antigravity 的引擎页同一个区。<b>2</b> 副标题先写站点、再写目录；Default 就是原来的 <code>~/.kimi-code</code>，升级后不用重新登录。<b>3</b> 这个账号自己的三条额度：5 小时、每周、每月。<b>4</b> runner 声明了 <code>kimi-account-login/v1</code> 才出现；没声明的旧 runner 还是左边的样子（旧 runner 会把加账号当成重新登录，顶掉 Default）。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k state">过程</span>点 Add Account</div>
+        <div id="p3"></div>
+        <p class="m-cap zh"><b>5</b> 名字先填好 Account 2，随时可改；名字清空时下面两个按钮变灰。<b>6</b> 和别的引擎唯一不同：按下 Add Account 不马上登录，先问站点——kimi.com 和 kimi.ai 是两套账号。不预选、不标 Current，按哪个就在哪个站点登录（<code>kimi login --region …</code>）。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k state">过程</span>选了 kimi.com：设备码</div>
+        <div id="p4"></div>
+        <p class="m-cap zh"><b>7</b> 设备码这一步写明站点：「Sign in with the kimi.com account you are adding」（单账号登录现在写的是 with your kimi.com account there），按钮复制代码并打开 kimi.com。<b>8</b> 选错了一键换：同一个名字到 kimi.ai 重新开始。等待时名字照样能改（这里改成 Work）；登录成功、名字存好后卡片自己收起，多出一行（图 ③）。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 两个账号：Default 在 kimi.ai，新加的 Work 在 kimi.com</div>
+    <div class="row4">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>引擎页（整页长截图）</div>
+        <div id="p5"></div>
+        <p class="m-cap zh"><b>9</b> 每行先写站点、再写目录：Work 在 kimi.com，登录放在自己的目录 <code>~/.orbit/kimi-accounts/5c2e91a0</code>，和 Default（kimi.ai）互不影响；一行放不下就从中间省略。<b>10</b> 每个账号各算各的额度：Work 的 5 小时窗口用到 91%，条变橙——和别的引擎快到上限时一样。改名、暂停、移除（Default 不能移除）照旧在长按菜单和左滑里。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>运行器页：Kimi 行写 NEXT</div>
+        <div id="p6"></div>
+        <p class="m-cap zh"><b>11</b> 多账号的行和 Claude Code 一样写「2 accounts signed in」，站点不再写在行上（两个账号可以不同）；「Next: Default」就是 NEXT——新会话没指定账号时用哪个，下面挂它最接近上限的一条。这里是 Default：Work 的 5 小时已用到 91%（过了 80%），排到后面。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k state">过程</span>长按 Work → Sign In Again</div>
+        <div id="p7"></div>
+        <p class="m-cap zh"><b>12</b> 重新登录还是那两个站点，Current 标的是<b>这个账号自己</b>的站点（Work 是 kimi.com），不是 Default 的。点 kimi.ai 就把 Work 换到 kimi.ai 重新登录；Default 照常跑。</p>
+      </div>
+      <div>
+        <div class="ph-l zh" style="margin:0 0 8px 10px"><span class="m-k state">边界</span>运行器页的 Kimi 行</div>
+        <div class="cuts" id="cuts"></div>
+        <p class="m-cap zh" style="margin-left:14px; width:395px"><b>a</b> 现在：站点写在版本后面，没有额度。<b>b</b> 改后、只有一个账号：照旧写站点，再挂一条额度。<b>c</b> Work 掉线：行上写 Signed out 和 Sign In，Next 从还登录着的账号里选；Work 那行在引擎页出 Sign In，Default 上的会话照常跑。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">④ 会话换 Kimi 账号：输入框点模型 → Provider（Work 的 5 小时快用完，换到 Default 接着聊）</div>
+    <div class="row4">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k">现在</span>Kimi 会话点模型</div>
+        <div id="p8"></div>
+        <p class="m-cap zh"><b>C</b> 模型菜单里没有 Provider 这一行：同一个 CLI 上只有 Kimi 自己，没有别处可换（配了 Moonshot key 时才有，也只列 key）。<b>D</b> 没有额度条：Kimi 不报额度。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>菜单多出 Provider</div>
+        <div id="p9"></div>
+        <p class="m-cap zh"><b>13</b> runner 有两个 Kimi 账号、并声明 <code>kimi-account-move/v1</code> 时出现 Provider 一行，和 Claude Code / Codex 有多个账号时一样。<b>14</b> 额度条是这个会话正在用的账号的：Work 的 5 小时 91%，橙色。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>Provider → Kimi 的账号</div>
+        <div id="p10"></div>
+        <p class="m-cap zh"><b>15</b> Kimi 一节：Automatic、Default、Work，各带自己最紧的那条额度，正在用的写 Current。点 Default，会话换过去——runner 把对话（<code>sessions/</code> 里这段和 <code>session_index.jsonl</code> 那条）带到 Default 的目录。还没说过话的新会话不用搬，直接选。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">结果</span>换到 Default，接着聊</div>
+        <div id="p11"></div>
+        <p class="m-cap zh"><b>16</b> 还是同一段对话，接着往下说。<b>17</b> 额度条换成 Default 的（每周 34%）；点开 Plan usage，第一行写明 Account：Default，下面是它的三条：</p>
+        <div id="usage" style="margin:10px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">说明</div>
+    <div class="notes2">
+      <div>
+        <ul class="m-notes zh">
+          <li><h4>规则（和 web 01-web 一致）</h4></li>
+          <li><span class="m-n">a</span><span><b>名单。</b>Kimi 进账号引擎名单（<code>keepsAccounts</code> / <code>canAddAccount</code>），Add Account 只看 runner 有没有声明 <code>kimi-account-login/v1</code>。没声明的 runner 一切照旧：区名 Sign-In、一个登录、没有 Add Account；旧版 App 也不受影响。</span></li>
+          <li><span class="m-n">b</span><span><b>站点。</b>加账号不预选、不默认；Current 只在 Sign In Again 时出现，标这个账号自己的站点；引擎页每个账号的副标题、运行器页单账号的行都写站点。</span></li>
+          <li><span class="m-n">c</span><span><b>额度。</b>每个账号三条：<code>5h limit</code> / <code>Weekly limit</code> / <code>Monthly limit</code>，名字照 Kimi 自己 <code>/usage</code> 的叫法（Codex 的行也是照 Codex 的叫法）。运行器页的行只挂 Next 那个账号的一条；读不到时照旧写 No quota reported。</span></li>
+          <li><span class="m-n">d</span><span><b>NEXT / Automatic。</b>和其他引擎同一个规则（<code>CodexAccounts.toStartOn</code>）：掉线的不选；5 小时用到 80%、长窗口用到 90% 的排后面；其余先用最长那个窗口（Kimi 是月度）最早过期的。</span></li>
+          <li><span class="m-n">e</span><span><b>换账号。</b>说过话的会话只有在 runner 声明 <code>kimi-account-move/v1</code> 时才列账号；没声明时照旧，服务端也会拒。还没说过话的随便选。输入框里不写站点：名字就是区分，站点在引擎页上。</span></li>
+        </ul>
+        <ul class="m-notes zh">
+          <li><h4>要改的地方（iOS / macOS 同一批视图；不在这次图里动代码）</h4></li>
+          <li><span class="m-n">1</span><span><b>RunnerPageFormat</b>：<code>keepsAccounts</code> / <code>canAddAccount</code> 加 kimi（看 <code>kimi-account-login/v1</code>）；Kimi 的 <code>AccountLine.subtitle</code> 写「站点 · 目录」，站点取账号自己的 <code>kimiRegion</code>（Default 取引擎级的）；手机上一行放不下时从中间省略（<code>.truncationMode(.middle)</code>），站点和目录末尾的 id 都留着。</span></li>
+          <li><span class="m-n">2</span><span><b>RunnerSignInModel.currentSite</b>：加账号时为空；给某个账号重新登录时取那个账号的站点。<code>KimiSite</code> 加「…account you are adding…」一句，进 <code>KimiSiteCopyParityTests</code> 和 web 逐字比。</span></li>
+          <li><span class="m-n">3</span><span><b>CodexAccounts</b>：<code>moveCapability</code> 加 kimi → <code>kimi-account-move/v1</code>；工作区 / 会话 / 草稿的账号和 pinned 加 <code>kimiAccount</code>；Kimi 自己的 deciding env keys（<code>KIMI_CODE_HOME</code> 和 Kimi 的 key）。这几处 switch 现在遇到 kimi 都落到 Codex。</span></li>
+          <li><span class="m-n">4</span><span><b>DTOs</b>：<code>RunnerEngineAccount.kimiRegion</code>；Session / Agent 的 <code>kimiAccount</code>、<code>kimiAccountPinned</code>；Kimi 快照的月度窗口（字段名照 shared 任务定的）。</span></li>
+          <li><span class="m-n">5</span><span><b>macOS 不另画</b>：账号行上直接有 Sign In Again / Pause… 按钮，菜单里打 ✓ 而不是写 Current，Provider 子菜单里账号缩进在 Kimi 那一行下面——都是 Mac 现成的画法。</span></li>
+        </ul>
+      </div>
+      <div>
+        <ul class="m-notes zh">
+          <li><h4>Android 按同一套规则做时的差异</h4></li>
+          <li><span class="m-n">a</span><span><b>站点要先补上。</b>Android 现在没有 Kimi 站点：登录卡对 Kimi 只有一个「Sign in to Kimi Code」（runner 跑不带参数的 <code>kimi login</code>，站点由 CLI 定），也不读 <code>kimiRegion</code>。加账号要先选站点，所以要把 iOS 的 <code>KimiSite</code> 那一套搬过去：两个站点按钮、设备码写站点、Use … instead、Current、副标题和运行器页写站点。单账号登录、加账号、Sign In Again 是同一张卡（<code>RunnerSignInCard</code>），一起改。</span></li>
+          <li><span class="m-n">b</span><span><b>账号的操作在 ⋯ 菜单。</b>Android 每个账号行右边一个 ⋯（Rename… / Sign In Again / Pause… / Remove…），没有左滑和长按；Add Account 是 Accounts 区底部的文字按钮，表单同样先起名（Account 2）再选站点。</span></li>
+          <li><span class="m-n">c</span><span><b>副标题。</b>Android 的 <code>AccountLine.subtitle</code> 现在只写目录，改成和 iOS 一样「站点 · 目录」。</span></li>
+          <li><span class="m-n">d</span><span><b>换账号是对话框，不是菜单。</b>Android 输入框点模型打开「Model and account」对话框，账号在 Account 一组（Automatic + 每个账号 · 额度），点了就换。<code>ComposerData.accounts</code> 加 kimi；<code>EngineAccounts.moveCapability</code> 现在把 kimi 当成 Codex（落到 <code>codex-account-move/v1</code>），要改成 <code>kimi-account-move/v1</code>。</span></li>
+          <li><span class="m-n">e</span><span><b>运行器页不用另做。</b>「N accounts signed in」+「Next: 账号」+ 一条额度 Android 已经有（<code>RunnerPage.engineNextAccount</code> / <code>engineWindows</code>），Kimi 进名单就跟着出现；额度窗口用同一套名字。</span></li>
+        </ul>
+        <ul class="m-notes zh ask">
+          <li><h4>待你定</h4></li>
+          <li><span class="m-n">①</span><span><b>月度画一条还是两段。</b>Kimi 自己的 <code>/usage</code> 把 Monthly limit 画成一条分两段（Kimi / Code，<code>limit_month_code</code> 是月度里 Kimi Code 用掉的那段）。建议 Orbit 只画总的一条：拦住账号的是它。还是两段都画？</span></li>
+          <li><span class="m-n">②</span><span><b>引擎页要不要像 web 那样在账号名旁标 NEXT。</b>iOS 现在四个引擎都只在运行器页那一行写「Next: 账号」（标 11），引擎页不标。建议 Kimi 照这个，不单独加；要加就四个引擎一起加。</span></li>
+          <li><span class="m-n">③</span><span><b>Android 补 Kimi 站点（上面 a）算进 Android 任务一起做？</b>建议算进去：不补就没法「加账号先选站点」，单账号登录也顺带有了站点选择。</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="../antigravity-accounts/glyphs.js"></script>
+<script src="../antigravity-accounts/kit.js"></script>
+<script>
+  const OK = { text: 'Signed in', tone: 'ok' };
+  const COPY = '<svg viewBox="0 0 16 16"><rect x="5.2" y="1.2" width="9.6" height="10.2" rx="2.2" fill="none" stroke="#fff" stroke-width="1.5"/><rect x="1.2" y="4.6" width="9.6" height="10.2" rx="2.2" fill="#3e69f6" stroke="#fff" stroke-width="1.5"/></svg>';
+  const head = `<div class="hd">${mark('kimi', 30)}<div><div class="n">Kimi Code</div><div class="s">2.1.1 · checked 29m ago</div></div></div>`;
+  const FOOTER = '<p>Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.</p>';
+  const update = section({ rows: [btnRow('Update Engines Now')], footer: FOOTER });
+  const button = (text, id) => `<div class="r btn" id="${id}">${text}</div>`;
+
+  // Each account's own windows, named as Kimi's /usage names them.
+  const DEF_WINS = [
+    { label: '5h limit', pct: 12, resets: 'Resets 7:40 PM' },
+    { label: 'Weekly limit', pct: 34, resets: 'Resets Tue, Oct 13 at 9:00 AM' },
+    { label: 'Monthly limit', pct: 8, resets: 'Resets Sun, Nov 1 at 8:00 AM' },
+  ];
+  const WORK_WINS = [
+    { label: '5h limit', pct: 91, resets: 'Resets 6:15 PM', warn: true },
+    { label: 'Weekly limit', pct: 61, resets: 'Resets Sat, Oct 10 at 2:00 PM' },
+    { label: 'Monthly limit', pct: 22, resets: 'Resets Thu, Oct 29 at 3:12 PM' },
+  ];
+  // The line under an account's name: its site, then where its login lives. One line on a phone — what doesn't fit
+  // is left out in the middle (`.truncationMode(.middle)`, `fitMiddle` below), so the site and the id both stay.
+  const subLine = (text) => `<span class="sx" data-full="${text}">${text}</span>`;
+  const DEF_SUB = subLine('kimi.ai · ~/.kimi-code');
+  const WORK_SUB = subLine('kimi.com · ~/.orbit/kimi-accounts/5c2e91a0');
+  const defRow = (id) => accountRow({ id, name: 'Default', sub: DEF_SUB, status: OK, windows: DEF_WINS });
+  const workRow = (id, body) => accountRow({ id, name: 'Work', sub: WORK_SUB, status: OK, windows: WORK_WINS, body });
+
+  // RunnerSignInView.kimiSites: the press that starts a Kimi sign-in picks the site; Current only on a sign-in again.
+  const sites = (current, id) => `<div class="kq">Which Kimi account are you signing in with?</div>
+    <div class="ksites" id="${id}">
+      <div class="ksite"><div class="c"><b>kimi.com</b><span class="w">Mainland China</span></div>${current === 'com' ? '<span class="cur">Current</span>' : ''}</div>
+      <div class="ksite"><div class="c"><b>kimi.ai</b><span class="w">International</span></div>${current === 'ai' ? '<span class="cur">Current</span>' : ''}</div>
+    </div>
+    <div class="khint">The two sites keep separate accounts — pick the one you signed up on.</div>
+    <span class="bl">Close</span>`;
+
+  // ① today: one login, a Sign-In section, no quota (RunnerEnginePage.accountsSection, keepsAccounts false).
+  const p1 = head + section({ header: '<span id="t-h">Sign-In</span>', rows: [
+    accountRow({ id: 't-def', name: 'Default', sub: 'kimi.ai', status: OK, none: '<span id="t-nq">No quota reported</span>' }),
+  ] }) + update;
+
+  // ① proposal: the Accounts section, Default's site and directory, its windows, Add Account.
+  const p2 = head + section({ header: '<span id="a-h">Accounts</span>', rows: [defRow('a-def'), button('Add Account', 'a-add')] }) + update;
+
+  // ② Add Account pressed: the name it picked, then the choice of site — nothing picked, no Current.
+  const p3 = head + section({ header: 'Accounts', rows: [defRow('b-def'), `<div class="r" id="card3"><div class="sv" style="gap:10px">
+      <div class="fld" id="name3">Account 2</div>
+      <div class="sv">${sites(null, 's3')}</div>
+    </div></div>`] }) + update;
+
+  // ② kimi.com picked: the device code names the site of the account being added; the name changed meanwhile.
+  const p4 = head + section({ header: 'Accounts', rows: [defRow('c-def'), `<div class="r" id="card4"><div class="sv" style="gap:10px">
+      <div class="fld" id="name4">Work<span class="caret"></span></div>
+      <div class="sv">
+        <div class="sv" id="d4">
+          <div class="khint">Sign in with the kimi.com account you are adding, then enter this one-time code:</div>
+          <div class="kcode">7K06-QP86</div>
+          <span class="pbtn">${COPY}Copy Code &amp; Open kimi.com</span>
+        </div>
+        <div class="sig-row">${ICON.spin}Waiting for you to approve it…</div>
+        <div class="klinks"><span class="bl">Cancel</span><span class="bl" id="u4">Use kimi.ai instead</span></div>
+      </div>
+    </div></div>`] }) + update;
+
+  // ③ two accounts on the engine page, each with its site, its directory and its own windows.
+  const p5 = head + section({ header: 'Accounts', rows: [defRow('e-def'), workRow('e-work'), button('Add Account', 'e-add')] }) + update;
+
+  // ③ the runner page: the several-accounts row names the account a new session starts on (RunnerEngineRow).
+  const nx = (name) => `<div class="nx">Next: ${name}</div>`;
+  const KIMI_NEXT = [{ label: 'Weekly limit', pct: 34, resets: 'Resets Tue, Oct 13 at 9:00 AM' }];
+  const p6 = section({ header: 'Engines', trailing: 'Checked 4m ago', rows: [
+    engineRow({ engine: 'claude', name: 'Claude Code', version: '2.1.294', status: { text: '3 accounts signed in', tone: 'ok' },
+      extra: nx('jianghailong.rd@gmail.com'), windows: [{ label: 'Weekly · all models', pct: 34, resets: 'Resets Mon, Oct 12 at 6:56 PM' }] }),
+    engineRow({ engine: 'codex', name: 'Codex', version: '0.161.0', status: OK }),
+    engineRow({ id: 'k-row', engine: 'kimi', name: 'Kimi Code', version: '2.1.1', status: { text: '2 accounts signed in', tone: 'ok' },
+      extra: nx('Default'), windows: KIMI_NEXT }),
+    engineRow({ engine: 'opencode', name: 'OpenCode', version: '1.14.2' }),
+    engineRow({ engine: 'antigravity', name: 'Antigravity', version: '1.3.1', status: OK,
+      windows: [{ group: '3p-weekly', label: 'Weekly', pct: 98, remaining: true, resets: 'Resets Sun, Oct 11 at 4:56 PM' }] }),
+    btnRow('Update Engines Now'), btnRow('Refresh Model Lists'),
+  ], footer: FOOTER });
+
+  // ③ Work's Sign In Again (its long-press menu): the same choice, Current on Work's own site.
+  const p7 = head + section({ header: 'Accounts', rows: [defRow('f-def'), workRow('f-work', `<div class="sv">${sites('com', 's7')}</div>`)] }) + update;
+
+  document.getElementById('p1').outerHTML = phone({ title: 'Kimi Code', body: p1 });
+  document.getElementById('p2').outerHTML = phone({ title: 'Kimi Code', body: p2 });
+  document.getElementById('p3').outerHTML = phone({ title: 'Kimi Code', body: p3 });
+  document.getElementById('p4').outerHTML = phone({ title: 'Kimi Code', body: p4 });
+  document.getElementById('p5').outerHTML = phone({ title: 'Kimi Code', body: p5, height: 905, cls: 'tall' });
+  document.getElementById('p6').outerHTML = phone({ title: 'HPC', body: p6 });
+  document.getElementById('p7').outerHTML = phone({ title: 'Kimi Code', body: p7 });
+
+  // The runner page's Kimi row, cut out: today, one account after, and an account signed out.
+  const cut = (label, row) => `<div><div class="cut-l zh">${label}</div><div class="cut light">${section({ rows: [row] }).replace('<div class="s-gap"></div>', '')}</div></div>`;
+  document.getElementById('cuts').innerHTML = [
+    cut('a 现在', engineRow({ engine: 'kimi', name: 'Kimi Code', version: '2.1.1 · kimi.ai', status: OK })),
+    cut('b 改后 · 只有一个账号', engineRow({ engine: 'kimi', name: 'Kimi Code', version: '2.1.1 · kimi.ai', status: OK, windows: KIMI_NEXT })),
+    cut('c 改后 · Work 掉线', engineRow({ engine: 'kimi', name: 'Kimi Code', version: '2.1.1', status: { text: 'Signed out', tone: 'warn' },
+      capsule: 'Sign In', extra: nx('Default'), windows: KIMI_NEXT })),
+  ].join('');
+
+  // ④ the session screen: the conversation, the composer card, its model menu.
+  const PLUS = '<svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 3.2v13.6M3.2 10h13.6" stroke="#000" stroke-width="1.7" stroke-linecap="round"/></svg>';
+  const SEND = '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const RING = '<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="rgba(60,60,67,.16)" stroke-width="2.3"/><circle cx="8" cy="8" r="6" fill="none" stroke="#2e6aff" stroke-width="2.3" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="30.9" transform="rotate(-90 8 8)"/></svg>';
+  const MORE = '<svg width="20" height="5" viewBox="0 0 20 5"><circle cx="2.5" cy="2.5" r="2.2"/><circle cx="10" cy="2.5" r="2.2"/><circle cx="17.5" cy="2.5" r="2.2"/></svg>';
+  const CHEV = '<svg width="8" height="13" viewBox="0 0 8 13"><path d="M1.5 1.5 6.5 6.5l-5 5" fill="none" stroke="#8a8a8e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const DOWN = '<svg width="13" height="8" viewBox="0 0 13 8"><path d="M1.5 1.5 6.5 6.5l5-5" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  const talk = `<div class="kx-me">Kimi 的额度从哪儿读？</div>
+    <div class="kx-ai"><p>账号目录 config.toml 里 <code>managed:kimi-code</code> 的 base_url 加 <code>/usages</code>，带上这个账号的 access token 就行。</p></div>
+    <div class="kx-me">把 /usages 的返回整理成表，再接着写解析。</div>
+    <div class="kx-ai"><p>四个窗口都是 <code>{used_ratio, reset_time}</code>：<code>limit_5h</code>、<code>limit_7d</code>、<code>limit_month_total</code>，还有 <code>limit_month_code</code>——月度里 Kimi Code 用掉的那段。</p>
+    <p>表写在 notes/usages.md，下一步写 parseUsages()。</p></div>`;
+  const later = `<div class="kx-me" id="me11">换到 Default 了，接着写 parseUsages()。</div>
+    <div class="kx-ai" id="ai11"><p>好，接着上面那张表：先把 <code>used_ratio</code> × 100 换成百分比，<code>reset_time</code> 原样留作 resetsAt……</p></div>`;
+  const composer = ({ bar, warn, open }) => `<div class="kx-band"><div class="kx-card">
+      <div class="kx-field">Message…</div>
+      <div class="kx-tools">
+        <div class="kx-ic">${PLUS}</div><span class="kx-mode">Auto</span><span class="kx-sp"></span>
+        <span class="kx-chip${open ? ' on' : ''}"><b>K3</b><i>High</i></span>
+        <span class="kx-meters" id="meters">${bar == null ? '' : `<span class="kx-bar${warn ? ' warn' : ''}"><span style="width:${bar}%"></span></span>`}${RING}</span>
+        <div class="kx-send">${SEND}</div>
+      </div></div></div>`;
+  const chat = ({ body, band, overlay = '' }) => `<div class="ph chat">
+      <div class="ph-sb"><span class="t">5:30 ${ICON.bell}</span><span class="r">${ICON.signal}${ICON.wifi}<span class="ph-batt">48</span></span></div>
+      <div class="kx-nav"><span class="ph-gb">${ICON.back}</span><span class="kx-tt"><b>Kimi 额度：按账号读取与上报</b><span>HPC · orbit-develop</span></span><span class="ph-gb">${MORE}</span></div>
+      <div class="kx-body">${body}</div>
+      ${band}${overlay}
+      <div class="kx-home"></div>
+    </div>`;
+  const title = `<div class="kx-mt">${mark('kimi', 22)}Kimi Code</div><div class="kx-ms"></div>`;
+  const models = `<div class="kx-mi"><span class="kx-t">K2.7 Coding</span></div>
+    <div class="kx-mi"><span class="kx-t">K3<span class="kx-sub">Current</span></span></div>
+    <div class="kx-ms"></div>
+    <div class="kx-mi"><span class="kx-t">Effort<span class="kx-sub">High</span></span>${CHEV}</div>`;
+  const provider = `<div class="kx-mi" id="prov"><span class="kx-t">Provider<span class="kx-sub">Kimi</span></span>${CHEV}</div><div class="kx-ms"></div>`;
+
+  // ④ today: one provider on the Kimi CLI, so no Provider row; Kimi reports no quota, so no plan bar.
+  document.getElementById('p8').outerHTML = chat({ body: talk, band: composer({ open: true }),
+    overlay: `<div class="kx-dim"></div><div class="kx-menu" id="m8" style="right:14px; bottom:146px">${title}${models}</div>` });
+  // ④ proposal: two Kimi accounts and a runner that carries a conversation between them — the Provider row.
+  document.getElementById('p9').outerHTML = chat({ body: talk, band: composer({ bar: 91, warn: true, open: true }),
+    overlay: `<div class="kx-dim"></div><div class="kx-menu" id="m9" style="right:14px; bottom:146px">${title}${provider}${models}</div>` });
+  // ④ the Provider submenu: Kimi's accounts under its name, each with its tightest window (accountsUnderHeader).
+  document.getElementById('p10').outerHTML = chat({ body: talk, band: composer({ bar: 91, warn: true, open: true }),
+    overlay: `<div class="kx-dim"></div><div class="kx-menu back" style="right:14px; bottom:146px">${title}${provider}${models}</div>
+      <div class="kx-menu" id="m10" style="right:24px; bottom:214px">
+        <div class="kx-mi head"><span class="kx-t">Provider</span>${DOWN}</div>
+        <div class="kx-ms"></div>
+        <div class="kx-mh">Kimi</div>
+        <div id="acc10">
+          <div class="kx-mi"><span class="kx-t">Automatic<span class="kx-sub">Switches to soonest reset</span></span></div>
+          <div class="kx-mi" id="def10"><span class="kx-t">Default<span class="kx-sub">Weekly 34%</span></span></div>
+          <div class="kx-mi"><span class="kx-t">Work<span class="kx-sub">Current · 5h 91%</span></span></div>
+        </div>
+      </div>` });
+  // ④ moved: the same conversation goes on, and the gauge is Default's now.
+  document.getElementById('p11').outerHTML = chat({ body: talk + later, band: composer({ bar: 34 }) });
+
+  // The gauge's Plan usage sheet on a phone, cut out: whose quota, then its windows.
+  const sheetWin = (label, pct, resets) => `<div class="kx-win"><div class="kx-wh">${label}<span>${pct}%</span></div>
+    <div class="kx-wb"><i style="width:${pct}%"></i></div><div class="kx-wr">${resets}</div></div>`;
+  document.getElementById('usage').innerHTML = `<div class="kx-sheet" id="sheet"><div class="kx-grab"></div>
+    <div class="kx-sh"><b>Plan usage</b><span>Done</span></div>
+    <div class="kx-acc" id="acc">Account<span>Default</span></div>
+    ${sheetWin('5h limit', 12, 'Resets 7:40 PM')}${sheetWin('Weekly limit', 34, 'Resets Tue, Oct 13 at 9:00 AM')}${sheetWin('Monthly limit', 8, 'Resets Sun, Nov 1 at 8:00 AM')}
+  </div>`;
+
+  // `.truncationMode(.middle)`: as much of the start and of the end as fits, the middle left out.
+  const fitMiddle = (span) => {
+    const line = span.parentElement, full = span.dataset.full;
+    span.textContent = full;
+    for (let keep = full.length - 1; line.scrollWidth > line.clientWidth && keep > 8; keep--) {
+      span.textContent = full.slice(0, Math.ceil(keep / 2)) + '…' + full.slice(full.length - Math.floor(keep / 2));
+    }
+  };
+
+  window.drawMarks = () => {
+    document.querySelectorAll('.sx').forEach(fitMiddle);
+    const [q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11] = document.querySelectorAll('.ph');
+    const grey = (html) => html.replace(/class="mk-n" style="([^"]*)"/g, 'class="mk-n" style="$1;background:#5b6270"')
+      .replace(/class="ring /g, 'class="ring grey ');
+    const greyMark = (ph, sel, n, pad = 4, dx = 0, dy = 0) => {
+      const r = at(ph, sel);
+      ph.insertAdjacentHTML('beforeend', grey(marks([{ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad, cls: '' },
+        ...(n ? [{ n, x: r.x + r.w + pad - 12 + dx, y: r.y - pad - 12 + dy }] : [])])));
+    };
+    scrollTo(q7, '#f-work', 96);
+
+    greyMark(q1, '#t-h', 'A', 4, 14, 4);
+    greyMark(q1, '#t-nq', 'B', 4, 14, 4);
+    ringMark(q2, '#a-h', '1', 4, 14, 4);
+    ringMark(q2, '#a-def .sx', '2', 4, 18, 14);
+    ringMark(q2, '#a-def .ws', '3', 5);
+    ringMark(q2, '#a-add', '4', 0, -6, 6);
+    ringMark(q3, '#name3', '5', 4);
+    ringMark(q3, '#s3', '6', 5);
+    ringMark(q4, '#d4', '7', 3);
+    ringMark(q4, '#u4', '8', 4, 18, 14);
+    ringMark(q4, '#name4', null, 1);
+
+    ringMark(q5, '#e-work .sx', '9', 4, 18, 14);
+    ringMark(q5, '#e-def .sx', null, 4);
+    ringMark(q5, '#e-work .w:first-child', '10', 5);
+    const a = at(q6, '#k-row .e-s'), b = at(q6, '#k-row .ws');
+    q6.insertAdjacentHTML('beforeend', marks([{ x: a.x - 6, y: a.y - 4, w: Math.max(a.w, b.w) + 12, h: b.y + b.h - a.y + 10 },
+      { n: '11', x: a.x + Math.max(a.w, b.w) - 6, y: a.y - 16 }]));
+    ringMark(q7, '#s7', '12', 5);
+
+    greyMark(q8, '#m8', 'C', 3, -4, 6);
+    greyMark(q8, '#meters', 'D', 4, 12, 0);
+    ringMark(q9, '#prov', '13', 0, -10, 8);
+    ringMark(q9, '#meters', '14', 4, 12, 0);
+    ringMark(q10, '#acc10', '15', 2, -10, -4);
+    ringMark(q11, '#me11', '16', 4, -40, 0);
+    ringMark(q11, '#ai11', null, 4);
+    ringMark(q11, '#meters', '17', 4, 12, 0);
+    const sheet = document.getElementById('sheet'), acc = document.getElementById('acc');
+    const sr = sheet.getBoundingClientRect(), ar = acc.getBoundingClientRect();
+    sheet.insertAdjacentHTML('beforeend', marks([{ x: ar.left - sr.left - 6, y: ar.top - sr.top - 5, w: ar.width + 12, h: ar.height + 2 }]));
+  };
+</script>
+</body>
+</html>

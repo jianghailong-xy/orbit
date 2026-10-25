@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-18T09:13:21.808+00:00",
+  "attachment": {
+    "attached": true,
+    "deletionTimestamp": null,
+    "finalizers": [
+      "external-attacher/rbd-csi-ceph-com",
+      "orbit.dev/t07b-detach-held"
+    ],
+    "name": "csi-a2f5d12f5e74b9ea0f272b4214dffc55a5ebc9b3281fa1c4cc415e269b5066ad",
+    "node": "orbit-mr-lab"
+  },
+  "generation": 4,
+  "owner": "amy",
+  "pod": "9fcc3fce-a7ae-4943-b0e0-c5c056330798",
+  "pv": "pvc-3d7239dd-281f-4a10-8720-e270c96cf7ec"
+}

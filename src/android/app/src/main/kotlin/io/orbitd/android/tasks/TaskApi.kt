@@ -58,6 +58,8 @@ class TaskApi(private val api: AuthSession, private val handle: SessionHandle, w
     suspend fun share(id: String) = readObject(listOf("tasks", id, "share"))
 
     suspend fun update(id: String, fields: JsonObject, revision: String) = write(listOf("tasks", id), HttpMethod.PATCH, fields, revision)
+    /** Pin the engine and the credential this task's runs use, as one PATCH: each left out stays, null takes it back (TaskPin). */
+    suspend fun pin(id: String, pin: TaskPin, revision: String) = update(id, pin.request(), revision)
     /** One press, one name: the same `triggerId` rides every resend of it. */
     suspend fun execute(id: String, triggerId: String, revision: String) =
         write(listOf("tasks", id, "execute"), body = buildJsonObject { put("triggerId", triggerId) }, revision = revision, resends = 3)

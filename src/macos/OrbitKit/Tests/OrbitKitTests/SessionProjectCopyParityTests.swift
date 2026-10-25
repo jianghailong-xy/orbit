@@ -96,13 +96,40 @@ final class SessionProjectCopyParityTests: XCTestCase {
         XCTAssertTrue(web.contains("pageNotStarted: (tasks: number) => `Not started · ${tasks} ${tasks === 1 ? 'task' : 'tasks'}`,"))
         XCTAssertEqual(SessionProjectCopy.pageNotStarted(tasks: 1), "Not started · 1 task")
         XCTAssertEqual(SessionProjectCopy.pageNotStarted(tasks: 5), "Not started · 5 tasks")
-        XCTAssertTrue(web.contains("`${settings.line === 'MAIN' ? 'Directly into main' : 'Project branch'} · Automatic ${settings.automatic ? 'on' : 'off'} · ${settings.maxConcurrentTasks} at a time`,"))
+        // Directly into the main branch the start names (`runLineMain`, `Directly into ${main}`): main, on a
+        // project on main.
+        XCTAssertTrue(web.contains("`${settings.line === 'MAIN' ? runLineMain(main) : 'Project branch'} · Automatic ${settings.automatic ? 'on' : 'off'} · ${settings.maxConcurrentTasks} at a time`,"))
+        XCTAssertTrue(web.contains("main: string = mainBranchName(settings.upstreamRef),"))
+        let words = try String(contentsOf: try repoRoot().appendingPathComponent("src/web/src/lib/projectStart.ts"),
+                               encoding: .utf8)
+        XCTAssertTrue(words.contains("return `Directly into ${main}`;"),
+                      "the web no longer says Directly into the project's main branch")
         XCTAssertEqual(SessionProjectCopy.startSuggestion(
             ProjectStartSettings(line: .projectBranch, automatic: true, maxConcurrentTasks: 2)),
             "Project branch · Automatic on · 2 at a time")
         XCTAssertEqual(SessionProjectCopy.startSuggestion(
             ProjectStartSettings(line: .main, automatic: false, maxConcurrentTasks: 1)),
             "Directly into main · Automatic off · 1 at a time")
+    }
+
+    /// The compact landing line's own scale for a runner that has gone quiet — one step shorter than
+    /// the project page's `No report`, and the same fact.
+    func testTheSilentWordIsTheWebsOwn() throws {
+        let web = try web()
+        XCTAssertTrue(web.contains("return minutes === null ? 'no report yet' : `no report for ${minutes}m`;"),
+                      "the compact no-report words drifted")
+        XCTAssertEqual(SessionProjectCopy.landingSilentWord(minutes: nil), "no report yet")
+        XCTAssertEqual(SessionProjectCopy.landingSilentWord(minutes: 11), "no report for 11m")
+    }
+
+    /// §7.2 V6's two words on this row: the server's timeout and its SILENT claim, held to the
+    /// web's own constants.
+    func testTheLivenessWordsAreTheWebsOwn() throws {
+        let web = try web()
+        XCTAssertTrue(web.contains("export const SESSION_PROJECT_TIMED_OUT = '\(SessionProjectCopy.landingTimedOut)';"),
+                      "the row's timeout word drifted")
+        XCTAssertTrue(web.contains("export const SESSION_PROJECT_NO_WORD = '\(SessionProjectCopy.landingNoWordFromRunner)';"),
+                      "the row's silent word drifted")
     }
 
     func testAllFiveCoordinatorLeadPhrasesAreTheWebsOwn() throws {

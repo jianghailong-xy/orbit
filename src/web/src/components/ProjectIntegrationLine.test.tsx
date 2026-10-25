@@ -4,6 +4,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { ProjectIntegrationLine } from './ProjectIntegrationLine';
+import { encodeId } from '../lib/idCodec';
+import { projectTaskPath } from '../lib/projectTaskRoute';
 
 const PROJECT = 'project19';
 const QUEUED = '2026-10-04T01:00:00.000Z';
@@ -156,5 +158,88 @@ describe('the project integration view’s current LAND_TASKs (§2.7a)', () => {
       expect(html).not.toContain('Current landings');
       expect(html).not.toContain('class="project-land-task"');
     }
+  });
+});
+
+describe('the line names the project’s main branch (board ⑪)', () => {
+  const SYNCED = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  /** The row's own text, tags dropped and React's comment separators with them. */
+  const words = (html: string) => html.replace(/<!-- -->/gu, '').replace(/<[^>]+>/gu, '');
+
+  it('says how far ahead of main it is and when main came in, word for word as before, for a project on main', () => {
+    const text = words(render(view({ commitsAheadOfUpstream: 3, lastUpstreamSyncAt: SYNCED })));
+    expect(text).toContain('3 commits ahead of main at last measurement');
+    expect(text).toContain('synced with main 5m ago');
+  });
+
+  it('says them of master for a project on master', () => {
+    const text = words(render(view({ upstreamRef: 'master', commitsAheadOfUpstream: 1, lastUpstreamSyncAt: SYNCED })));
+    expect(text).toContain('1 commit ahead of master at last measurement');
+    expect(text).toContain('synced with master 5m ago');
+    expect(text).not.toContain('main');
+  });
+
+  it('says where a current landing’s receipt put its work on the project’s main branch', () => {
+    const integration = current('QUEUED');
+    integration.state = 'ON_UPSTREAM';
+    const landTasks = [{ taskId: 'task19', taskTitle: 'Landing visibility', integration }];
+    expect(words(render(view({ landTasks })))).toContain('Its work is on main by an existing receipt.');
+    const text = words(render(view({ upstreamRef: 'master', landTasks })));
+    expect(text).toContain('Its work is on master by an existing receipt.');
+    expect(text).not.toContain('main');
+  });
+
+  it('says the coordinator’s suggestion goes directly into the main branch the start opens with', () => {
+    const undecided = view({ line: null, lineAbsentReason: 'NOT_DECIDED', ref: null, upstreamRef: null, locked: false });
+    const suggesting = (upstreamRef?: string) => ({
+      needsYou: [], withCoordinator: [],
+      startRequest: { startRequest: { settings: { line: 'MAIN', automatic: true, maxConcurrentTasks: 1, mergeCheckCommand: null,
+        ...(upstreamRef ? { upstreamRef } : {}) } } },
+    });
+    const html = (data: ProjectIntegrationView, items: unknown) => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false } } });
+      qc.setQueryData(['project', PROJECT, 'integration'], data);
+      qc.setQueryData(['project', PROJECT, 'open-items'], items);
+      return words(renderToStaticMarkup(
+        <QueryClientProvider client={qc}>
+          <MemoryRouter><ProjectIntegrationLine projectId={PROJECT} started={false} /></MemoryRouter>
+        </QueryClientProvider>,
+      ));
+    };
+    expect(html(undecided, suggesting())).toBe(
+      'Tasks land on: decided when you start — the coordinator suggests directly into main');
+    expect(html(undecided, suggesting('refs/heads/master'))).toBe(
+      'Tasks land on: decided when you start — the coordinator suggests directly into master');
+    // The owner's last choice for the repository outranks the suggestion, as on the card.
+    expect(html({ ...undecided, lastMainBranch: { branch: 'develop', repository: 'acme/payments-api', chosenAt: SYNCED } },
+      suggesting('refs/heads/master'))).toContain('directly into develop');
+  });
+});
+
+/**
+ * The title of a current landing opens the landing session it belongs to (§2.9 LS6, board v4 04's
+ * entry table), and the task's own page where the server names no session — one row, one press,
+ * whichever the read allows.
+ */
+describe('a current landing’s title', () => {
+  const LANDING = '0195c0de-0000-7000-8000-00000000e001';
+  const landings = (landingSessionId: string | null) => {
+    const integration = current('CHECK_FAILED');
+    return [{
+      taskId: 'task19',
+      taskTitle: 'Landing visibility',
+      integration: { ...integration, landTask: { ...integration.landTask!, landingSessionId } },
+    }];
+  };
+
+  it('opens the landing session when the generation names one', () => {
+    const html = render(view({ landTasks: landings(LANDING) }));
+    expect(html).toContain(`class="project-land-task-title" href="/sessions/${encodeId(LANDING)}"`);
+  });
+
+  it('opens the task when it names none', () => {
+    const html = render(view({ landTasks: landings(null) }));
+    expect(html).toContain(`class="project-land-task-title" href="${projectTaskPath(PROJECT, 'task19')}"`);
+    expect(html).not.toContain('/sessions/');
   });
 });

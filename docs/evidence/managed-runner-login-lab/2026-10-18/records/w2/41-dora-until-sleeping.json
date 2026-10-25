@@ -1,0 +1,78 @@
+{
+  "at": "2026-10-17T23:40:20.207+00:00",
+  "changes": [
+    [
+      "2026-10-17T23:39:58.213+00:00",
+      {
+        "attempt": 1,
+        "desired_state": "SLEEPING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 2,
+        "initial_provider": "deepseek",
+        "last_heartbeat_at": "2026-10-17T23:39:37.349",
+        "management_state": "DRAINING",
+        "pod": "c8cce10c",
+        "reason": null,
+        "revision": 28,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-17T23:40:07.666+00:00",
+      {
+        "attempt": 1,
+        "desired_state": "SLEEPING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 2,
+        "initial_provider": "deepseek",
+        "last_heartbeat_at": "2026-10-17T23:40:07.43",
+        "management_state": "DRAINING",
+        "pod": "c8cce10c",
+        "reason": null,
+        "revision": 28,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-17T23:40:13.934+00:00",
+      {
+        "attempt": 1,
+        "desired_state": "SLEEPING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 2,
+        "initial_provider": "deepseek",
+        "last_heartbeat_at": "2026-10-17T23:40:07.43",
+        "management_state": "DRAINING",
+        "pod": "c8cce10c",
+        "reason": null,
+        "revision": 31,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-17T23:40:20.207+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "SLEEPING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 3,
+        "initial_provider": "deepseek",
+        "last_heartbeat_at": "2026-10-17T23:40:07.43",
+        "management_state": "SLEEPING",
+        "pod": null,
+        "reason": null,
+        "revision": 32,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ]
+  ],
+  "owner": "dora",
+  "reached": {
+    "reason": null,
+    "state": "SLEEPING"
+  }
+}

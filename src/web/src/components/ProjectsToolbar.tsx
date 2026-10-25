@@ -1,7 +1,9 @@
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
-import { Button, Input, Segmented } from 'antd';
 import { useId } from 'react';
 import { useMediaQuery } from '../lib/useMediaQuery';
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
+import { Segmented } from './ui/Segmented';
 
 /**
  * Where a projects row's three columns stop fitting on one line.
@@ -76,7 +78,7 @@ export function ProjectsToolbar({
         <h1 className="page-title">Projects</h1>
         <div className="projects-title-actions">
           <Button
-            type="text"
+            variant="text"
             className="projects-scope-action"
             onClick={() => onFilterChange(open ? 'DONE' : 'OPEN')}
           >
@@ -85,7 +87,7 @@ export function ProjectsToolbar({
           {/* The label goes on a phone, the accessible name does not. */}
           <Button
             className="projects-new-button"
-            type="primary"
+            variant="primary"
             icon={<PlusOutlined />}
             onClick={onNewProject}
             aria-label={phone ? 'New project' : undefined}
@@ -104,6 +106,7 @@ export function ProjectsToolbar({
           aria-label="Search projects"
           prefix={<SearchOutlined style={{ color: 'var(--text-4)' }} />}
           allowClear
+          onClear={() => onSearchChange('')}
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
         />
@@ -117,7 +120,7 @@ export function ProjectsToolbar({
               className="projects-toolbar-filter"
               aria-labelledby={scopeHeadingId}
               value={openView}
-              onChange={onOpenViewChange}
+              onValueChange={onOpenViewChange}
               options={openOptions}
             />
           ) : (
@@ -125,7 +128,7 @@ export function ProjectsToolbar({
               className="projects-toolbar-filter"
               aria-labelledby={scopeHeadingId}
               value={filter}
-              onChange={(value) => onFilterChange(value)}
+              onValueChange={(value) => onFilterChange(value)}
               options={HISTORY_OPTIONS}
             />
           )}

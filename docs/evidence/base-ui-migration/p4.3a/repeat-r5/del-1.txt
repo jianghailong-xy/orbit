@@ -1,0 +1,61 @@
+tree: del de2426d9cca647553565b3bfbe09d9f2dbe5d5e2
+load: 31.20 28.62 30.65 26/5602 2498869
+started: 2026-10-09T03:34:13Z
+
+Running 8 tests using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-desktop/p43a-header.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-desktop/p43a-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-desktop/p43a-status-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-desktop/p43a-status-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-desktop/p43a-status-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-desktop/p43a-status-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-desktop/p43a-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-desktop/p43a-delete-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-desktop/p43a-header-live.png, writing actual.
+  ✓  1 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:251:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question (18.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-desktop/p43a-tasks-keys-space.png, writing actual.
+  ✓  2 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:907:3 › P4.3a the Tasks page › keys with a task open: Space checks it whichever checkbox has focus, and the title passes the arrows on (2.4s)
+[WebServer] 11:34:38 AM [vite] http proxy error: /api/tasks/2zwQZ2hd93IvLb59t6tWL
+[WebServer] AggregateError [ECONNREFUSED]: 
+[WebServer]     at internalConnectMultiple (node:net:1492:18)
+[WebServer]     at afterConnectMultiple (node:net:2161:7)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-phone/p43a-header.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-phone/p43a-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-phone/p43a-status-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-phone/p43a-status-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-phone/p43a-status-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-phone/p43a-status-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-phone/p43a-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-phone/p43a-delete-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-phone/p43a-header-live.png, writing actual.
+  ✓  3 [webkit-light-phone] › ui-migration/p43a.browser.mjs:251:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question (18.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-light-phone/p43a-tasks-keys-space.png, writing actual.
+  ✓  4 [webkit-light-phone] › ui-migration/p43a.browser.mjs:907:3 › P4.3a the Tasks page › keys with a task open: Space checks it whichever checkbox has focus, and the title passes the arrows on (2.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-desktop/p43a-header.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-desktop/p43a-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-desktop/p43a-status-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-desktop/p43a-status-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-desktop/p43a-status-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-desktop/p43a-status-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-desktop/p43a-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-desktop/p43a-delete-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-desktop/p43a-header-live.png, writing actual.
+  ✓  5 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:251:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question (28.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-desktop/p43a-tasks-keys-space.png, writing actual.
+  ✓  6 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:907:3 › P4.3a the Tasks page › keys with a task open: Space checks it whichever checkbox has focus, and the title passes the arrows on (7.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-phone/p43a-header.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-phone/p43a-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-phone/p43a-status-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-phone/p43a-status-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-phone/p43a-status-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-phone/p43a-status-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-phone/p43a-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-phone/p43a-delete-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-phone/p43a-header-live.png, writing actual.
+  ✓  7 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:251:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question (16.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/repeat/del-1/shots/webkit-dark-phone/p43a-tasks-keys-space.png, writing actual.
+  ✓  8 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:907:3 › P4.3a the Tasks page › keys with a task open: Space checks it whichever checkbox has focus, and the title passes the arrows on (2.2s)
+
+  8 passed (1.8m)
+exit=0

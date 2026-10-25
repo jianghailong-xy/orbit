@@ -1,0 +1,5 @@
+# docker run --rm --memory=4g --memory-swap=6g --oom-score-adj=1000 -v $PWD:/repo -w /repo/src/macos/OrbitKit swift:6.1 swift test -j 4
+# on the task worktree at 211949ed8, after round f7. The suite's summary line:
+
+	 Executed 3631 tests, with 5 tests skipped and 0 failures (0 unexpected) in 49.445 (49.445) seconds
+error or failed lines: 0

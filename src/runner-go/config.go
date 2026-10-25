@@ -59,12 +59,25 @@ type RunnerConfig struct {
 	MaxConcurrent int      `json:"maxConcurrent"`
 	// Fallback project directory for sessions whose agent carries no workDir. The
 	// server normally drives claude's cwd per session from the session's agent.
+	// Nothing the runner does in the background reads it: `orbit register` records
+	// whatever directory it ran in — on a Mac, often ~/Desktop or ~/Downloads, where
+	// every read by the runner or a child it starts has macOS ask the user, in the
+	// runner's name, for access.
 	WorkDir string `json:"workDir,omitempty"`
 	// AutoInstallEngines is the consent `orbit register` asks for once: may this runner
 	// install a missing coding CLI itself, the first time a session needs one? Absent in
 	// an older config reads as "no" — a background service must not start installing
 	// software on someone's machine unasked.
 	AutoInstallEngines bool `json:"autoInstallEngines,omitempty"`
+	// LinkShadow is whether this runner mirrors the heartbeats and event batches it delivers
+	// over HTTPS to the runner link gateway, during the link's shadow period (link_shadow.go).
+	// Absent reads as on; false turns it off, as ORBIT_LINK_SHADOW=0 does.
+	LinkShadow *bool `json:"linkShadow,omitempty"`
+	// LinkMode is whether this runner's daemon work may move to the runner link when the control plane
+	// asks for it (link_mode.go). Absent, it follows the control plane: HTTPS until an UPGRADE_REQUIRED,
+	// or a Welcome or HeartbeatAck saying MODE_LINK, moves it. "off" keeps it on HTTPS, as
+	// ORBIT_LINK_MODE=off does.
+	LinkMode string `json:"linkMode,omitempty"`
 }
 
 // machineHome is where the runner stores its config + run scratch. One runner per
@@ -82,6 +95,10 @@ func machineHome() string {
 func configPath() string { return filepath.Join(machineHome(), "config.json") }
 func runsDir() string    { return filepath.Join(machineHome(), "runs") }
 
+// integrationResultsDir holds the reports of finished integration jobs this machine could not hand
+// over; see integration_result_spool.go.
+func integrationResultsDir() string { return filepath.Join(machineHome(), "integration-results") }
+
 // runDir is one session's scratch dir under runsDir. The id is normalized (see uploadsDir) so the
 // directory a session writes to does not move when the server changes which id spelling it sends.
 func runDir(sessionID string) string { return filepath.Join(runsDir(), decodeSessionID(sessionID)) }
@@ -89,6 +106,45 @@ func runDir(sessionID string) string { return filepath.Join(runsDir(), decodeSes
 // codexStateRoot contains runner-wide Codex SQLite partitions. The effective
 // CODEX_HOME selects the partition; see resolveCodexStateDir.
 func codexStateRoot() string { return filepath.Join(machineHome(), "codex-state") }
+
+// privateProbeDir is an empty working directory beneath the runner's private home, for a CLI the
+// runner starts for itself — a model-catalog read, a token refresh — rather than for a session.
+// Such a process has no workspace, and the directory it would otherwise inherit is the runner's own:
+// `/` under launchd. No coding CLI should start there. Claude Code lists the whole tree below its
+// working directory as it starts: 2.1.294 read 24,832 directories from `/` for one `/model` lookup,
+// and on a Mac every protected folder that walk reached (Downloads, Photos, network volumes…) had
+// macOS ask the user, in the runner's name, for access — every hour, from the model-catalog
+// refresh. OpenCode merges project config walking up from it, so nothing above it may be writable
+// by another account either.
+func privateProbeDir(name string) (string, error) {
+	home := machineHome()
+	if runtime.GOOS != "windows" {
+		info, err := os.Lstat(home)
+		if err != nil {
+			return "", fmt.Errorf("inspect runner home: %w", err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() || info.Mode().Perm()&0o077 != 0 {
+			return "", fmt.Errorf("runner home %s is not a private directory", home)
+		}
+	}
+	dir := filepath.Join(home, name)
+	if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
+		return "", fmt.Errorf("create private probe directory: %w", err)
+	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return "", fmt.Errorf("inspect private probe directory: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return "", fmt.Errorf("probe directory %s is not a private directory", dir)
+	}
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(dir, 0o700); err != nil {
+			return "", fmt.Errorf("secure private probe directory: %w", err)
+		}
+	}
+	return dir, nil
+}
 
 func loadConfig() *RunnerConfig {
 	// This is intentionally read-only. ORBIT_HOME is inherited by agent shells,

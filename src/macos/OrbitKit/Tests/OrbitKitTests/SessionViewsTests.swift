@@ -136,6 +136,18 @@ final class SessionViewsTests: XCTestCase {
         XCTAssertEqual(SessionFilter.removing("gone", from: once), once)
     }
 
+    /// The rows on their way to Trash leave a read wherever they sit in it, the rest keep their
+    /// order, and with none on the way the read is what the list gets.
+    func testRemovingTheSessionsOnTheirWayToTrashKeepsTheRestInOrder() throws {
+        let sessions = try JSONDecoder().decode(
+            [Session].self,
+            from: Data(#"[{"id":"a","status":"RUNNING"},{"id":"b","status":"AWAITING_INPUT"},{"id":"c","status":"FAILED"},{"id":"d","status":"SUCCEEDED"}]"#.utf8)
+        )
+
+        XCTAssertEqual(SessionFilter.removing(Set(["b", "d", "elsewhere"]), from: sessions).map(\.id), ["a", "c"])
+        XCTAssertEqual(SessionFilter.removing(Set<String>(), from: sessions), sessions)
+    }
+
     /// The removed System list must not strand rows from an older server/cache. Legacy
     /// `source=system` rows remain visible in Active alongside every other active session.
     func testForAgentViewKeepsLegacySystemSessionsOnActive() throws {

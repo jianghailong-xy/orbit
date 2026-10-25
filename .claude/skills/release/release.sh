@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Cut a release of the Orbit clients. A release is one git tag — `vX.Y.Z` — and pushing it runs both
-# jobs of .github/workflows/release.yml from that same tag:
-#   • dmg        → signed + notarized DMG + GitHub Release + Sparkle appcast
-#   • testflight → signed .ipa uploaded to TestFlight (marketing version = X.Y.Z with any -beta.N
-#                  suffix stripped; build number = commit count)
+# Cut a release of the Orbit clients. A release is one git tag — `vX.Y.Z` — and pushing it runs every
+# job of .github/workflows/release.yml from that same tag:
+#   • dmg             → signed + notarized DMG + GitHub Release + Sparkle appcast
+#   • testflight      → signed .ipa uploaded to TestFlight (marketing version = X.Y.Z with any -beta.N
+#                       suffix stripped; build number = commit count)
+#   • android-build   → signed release APK (versionName = X.Y.Z[-beta.N]; versionCode = commit count)
+#   • android-publish → the APK, its .sha256 and android-update.json attached to dmg's GitHub Release
 # Run from anywhere; it resolves the repo root itself.
 #
 #   .claude/skills/release/release.sh 0.2.0          # or: v0.2.0
@@ -74,7 +76,7 @@ branch="$(git branch --show-current)"
 echo "▶ tagging $tag at $(git rev-parse --short HEAD) (branch: ${branch:-detached})"
 git tag -a "$tag" -m "Release $tag"
 git push origin "$tag"
-echo "✓ pushed $tag — release.yml is building the macOS DMG and the iOS TestFlight build from this one tag"
+echo "✓ pushed $tag — release.yml is building the macOS DMG, the iOS TestFlight build and the Android APK from this one tag"
 
 if command -v gh >/dev/null 2>&1; then
   url="$(gh repo view --json url -q .url 2>/dev/null || true)"

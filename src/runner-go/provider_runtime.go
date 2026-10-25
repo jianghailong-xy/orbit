@@ -51,6 +51,7 @@ type sessionProcessArgs struct {
 	waitTurnPermit    turnPermitWaiter
 	onLeaseLost       leaseLossHandler
 	dshLaunchSpec     *DshLaunchSpec
+	cursorLaunchSpec  *CursorLaunchSpec
 }
 
 type providerRuntime struct {
@@ -124,6 +125,13 @@ var providerRuntimes = map[string]providerRuntime{
 				p.execDir, p.scratchDir, p.emit, p.emitFor, p.setTurn, p.firstSpawn, p.bg,
 				p.completeTurn, p.waitTurnPermit, p.onLeaseLost)
 		},
+	},
+	providerCursor: {
+		// One resident `agent acp` per session (cursor_acp.go). It steers nothing: a session/prompt
+		// written mid-turn cancels the running turn rather than joining it, so a mid-turn message waits
+		// for the next turn (docs/cursor-runtime-contract.md §3.2).
+		transport: transportJSONRPC,
+		run:       runCursorSessionProcess,
 	},
 }
 

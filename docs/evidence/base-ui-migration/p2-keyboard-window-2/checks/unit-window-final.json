@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370 && git log --oneline -1 && git rev-parse HEAD:src/web && cd src/web && NO_COLOR=1 npx vitest run src/components/ui/keyboardWindow.test.tsx src/components/ui/Menu.test.tsx",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_63e835ce0278",
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "commit": "aed0a7bab6e39a50edaeea4cf16cecdae212b6d5",
+ "webTree": "d0a53fc0735666a86981095e9efa200b8a80d62c",
+ "outputLastWritten": "2026-10-07T16:35:15.149030+00:00",
+ "exitCode": 0,
+ "outputSha256": "c1f1c8b92e5d80554edd6e3387d9fff0b3af5687a6fb6fc1a9a7bd33c1035c02",
+ "outputBytes": 477,
+ "note": "Final tree (aed0a7bab, the submenu fix moving focus to the item before Enter or Space): keyboardWindow.test.tsx 58/58 and Menu.test.tsx 18/18, as on 069601b67."
+}

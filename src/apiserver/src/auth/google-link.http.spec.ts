@@ -159,6 +159,9 @@ function memoryPrisma(db: Tables, beforeInsert?: () => void) {
           .map((identity) => pick(identity, wanted.select));
       } else if (key === 'avatar') {
         answer.avatar = null;
+      } else if (key === 'clientVersions' || key === 'personalAccessTokens') {
+        // The Users list's last activity: no app and no access token of these accounts has been used.
+        answer[key] = [];
       } else if (wanted === true) {
         answer[key] = user[key];
       } else {
@@ -793,7 +796,8 @@ test('GET /users/me and GET /admin/users answer signInMethods with only §6\'s f
   assert.equal(list.status, 200, list.text);
   assert.deepEqual(list.json.map((row: Row) => toUuid(row.id)), [root.id, ada.id, gina.id, nora.id], 'oldest first, as before');
   for (const row of list.json) {
-    assert.deepEqual(Object.keys(row).sort(), ['createdAt', 'email', 'id', 'name', 'publicId', 'role', 'signInMethods'], row.email);
+    assert.deepEqual(Object.keys(row).sort(), ['avatarUpdatedAt', 'createdAt', 'email', 'id', 'lastActive', 'name', 'publicId', 'role', 'signInMethods'], row.email);
+    assert.equal(row.lastActive, null, row.email);
     assert.deepEqual(row.signInMethods, expected.get(toUuid(row.id)), row.email);
     if (row.signInMethods.google) assert.deepEqual(Object.keys(row.signInMethods.google), ['email']);
   }

@@ -2,6 +2,7 @@ package io.orbitd.android.core.realtime
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 private fun JsonObject.toolId() = text("toolUseId") ?: text("tool_use_id") ?: text("id")
 
@@ -21,6 +22,18 @@ data class Transcript(
     val maxSeq: Long get() = maxOf(resumeSeq, events.lastOrNull()?.seq ?: 0)
     val oldestSeq: Long? get() = events.firstOrNull()?.seq
 
+    /** The engine's guess at the next message (docs/prompt-suggestions-design.md §3.4), while it is
+     * still the newest of user / turn_end / prompt_suggestion. It always arrives after its own turn's
+     * turn_end, so a later turn_end is a newer turn ending and a later user event is a message from
+     * any device. Never drawn as a row: the composer offers it. */
+    val promptSuggestion: String? get() {
+        for (event in events.asReversed()) when (event.type) {
+            "prompt_suggestion" -> return event.fields.text("text")?.trim()?.takeIf { it.isNotEmpty() }
+            "user", "turn_end" -> return null
+        }
+        return null
+    }
+
     /** The server sends the whole current prefix again on each connect. Never persist animation
      * or append that prefix to a draft from a spent connection. */
     fun withoutLive() = copy(textDrafts = emptyMap(), thinkingDrafts = emptyMap(),
@@ -32,19 +45,28 @@ data class Transcript(
      * so persisting its maximum could skip a reordered event after a process dies. Keep a
      * conservative REST frontier alongside the UI high-water and replay the overlap on reconnect. */
     fun page(page: EventPage): Transcript {
-        val rows = (events + page.events.filter { it.durable }).associateBy { it.seq }.values.sortedBy { it.seq }
+        // A thinking block this device filled in (see [apply]) keeps its words over the server's empty copy of it.
+        val local = events.associateBy { it.seq }
+        val incoming = page.events.filter { it.durable }.map { e -> if (e.type == "thinking") e.keepingStreamed(local[e.seq]?.fields?.text("text")) else e }
+        val rows = (events + incoming).associateBy { it.seq }.values.sortedBy { it.seq }
         val frontier = page.events.filter { it.seq in 1 until SENTINEL_SEQ }.maxOfOrNull { it.seq } ?: resumeSeq
         return copy(events = rows.takeLast(WINDOW_SIZE), resumeSeq = maxOf(resumeSeq, frontier),
             hasMore = hasMore || rows.size > WINDOW_SIZE, seeded = true)
     }
 
-    fun apply(event: RunEvent): Transcript {
-        if (event.type == "resync" || event.type == "ping") return this
-        if (event.durable && events.any { it.seq == event.seq }) return this
+    fun apply(arrived: RunEvent): Transcript {
+        if (arrived.type == "resync" || arrived.type == "ping") return this
+        if (arrived.durable && events.any { it.seq == arrived.seq }) return this
         // A late event older than the trimmed window is available through history pagination.
-        if (event.durable && hasMore && event.seq < (oldestSeq ?: 0)) return this
+        if (arrived.durable && hasMore && arrived.seq < (oldestSeq ?: 0)) return this
+        val parent = arrived.fields.text("parentToolUseId") ?: ""
+        // A06-11 (iOS 471b2afbb, web `settleThinking`): the block that closes the stretch streaming now keeps what was streamed
+        // into it when the provider closed it with no text of its own — claude always does — on this LOCAL copy only. Cleared
+        // with its draft just below, the reasoning would otherwise vanish the moment it finished. The server's copy is never
+        // changed, so a transcript read cold still reads the block empty and draws no row for it. A late, reordered block is not
+        // the one streaming now, and takes nothing.
+        val event = if (arrived.type == "thinking" && arrived.durable && arrived.seq >= maxSeq) arrived.keepingStreamed(thinkingDrafts[parent]) else arrived
         val fields = event.fields
-        val parent = fields.text("parentToolUseId") ?: ""
         val text = fields.text("delta") ?: fields.text("text") ?: ""
         val rows = if (event.durable) (events + event).sortedBy { it.seq } else events
         // Live deltas must keep the durable list's identity. Readers project that list once,
@@ -88,6 +110,12 @@ data class Transcript(
 
     private fun finishLive() = withoutLive().copy(settledToolIds = settledToolIds + toolOutputs.keys +
         events.filter { it.type == "tool_use" }.mapNotNull { it.fields.toolId() })
+
+    /** This block with [streamed] as its words when it has none of its own; a provider that reported its reasoning is the
+     * authority on it, and a draft may already hold the next block's first chunks. */
+    private fun RunEvent.keepingStreamed(streamed: String?): RunEvent =
+        if (streamed.isNullOrEmpty() || !fields.text("text").isNullOrEmpty()) this
+        else copy(payload = JsonObject(fields + ("text" to JsonPrimitive(streamed))))
 
     companion object {
         const val WINDOW_SIZE = 2_000

@@ -1,13 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ProjectIntegrationView } from '@orbit/shared';
 import { Link } from 'react-router-dom';
+import { LandingLink } from './LandingLink';
 import { LandTaskStatus } from './LandTaskStatus';
 import { projectTaskPath } from '../lib/projectTaskRoute';
 import {
   RUN_LINE_DECIDED_AT_START,
   RUN_LINE_SUGGESTED,
   RUN_TASKS_LAND_ON,
+  mainBranchName,
   runLineInSentence,
+  startMainBranch,
 } from '../lib/projectStart';
 import { projectIntegrationQuery, projectOpenItemsQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
@@ -103,7 +106,8 @@ export function ProjectIntegrationLine({
   const view = integration.data;
   if (!view.line) {
     if (started !== false) return null;
-    const suggested = items.data?.startRequest?.startRequest?.settings.line ?? null;
+    const suggestion = items.data?.startRequest?.startRequest?.settings ?? null;
+    const suggested = suggestion?.line ?? null;
     return (
       <div className="project-integration">
         <div className="project-integration-row">
@@ -115,7 +119,8 @@ export function ProjectIntegrationLine({
               {suggested ? (
                 <>
                   {` — ${RUN_LINE_SUGGESTED} `}
-                  <b>{runLineInSentence(suggested)}</b>
+                  {/* Directly into the main branch the start card opens with. */}
+                  <b>{runLineInSentence(suggested, startMainBranch(suggestion?.upstreamRef, view))}</b>
                 </>
               ) : null}
             </span>
@@ -128,6 +133,7 @@ export function ProjectIntegrationLine({
   const branchLine = view.line === 'PROJECT_BRANCH';
   const tip = TIP_STATE[view.mergeCheckOnTip] ?? TIP_STATE.UNKNOWN;
   const ahead = view.commitsAheadOfUpstream;
+  const main = mainBranchName(view.upstreamRef);
 
   return (
     <div className="project-integration">
@@ -149,14 +155,14 @@ export function ProjectIntegrationLine({
             <>
               <Separator />
               <span>
-                <b>{ahead}</b> commit{ahead === 1 ? '' : 's'} ahead of main at last measurement
+                <b>{ahead}</b> commit{ahead === 1 ? '' : 's'} ahead of {main} at last measurement
               </span>
             </>
           ) : null}
           {branchLine && view.lastUpstreamSyncAt ? (
             <>
               <Separator />
-              <span>synced with main {ago(view.lastUpstreamSyncAt, Date.now())}</span>
+              <span>synced with {main} {ago(view.lastUpstreamSyncAt, Date.now())}</span>
             </>
           ) : null}
 
@@ -176,14 +182,27 @@ export function ProjectIntegrationLine({
           fails. Read-only; the doors that act on a stop are its exception card's. */}
       {view.landTasks && view.landTasks.length > 0 ? (
         <div className="project-land-tasks" aria-label="Current landings">
-          {view.landTasks.map((task) => (
-            <div className="project-land-task" key={task.taskId}>
-              <Link className="project-land-task-title" to={projectTaskPath(projectId, task.taskId)}>
-                {task.taskTitle}
-              </Link>
-              <LandTaskStatus integration={task.integration} />
-            </div>
-          ))}
+          {view.landTasks.map((task) => {
+            // The title opens the segment's landing session where the server names one (§2.9 LS6,
+            // board v4 04's entry table): the same landing the task page's own link opens. A
+            // generation written before the field, or a task landing that has not opened a subject,
+            // keeps the task as its target.
+            const landingSessionId = task.integration?.landTask?.landingSessionId ?? null;
+            return (
+              <div className="project-land-task" key={task.taskId}>
+                {landingSessionId ? (
+                  <LandingLink className="project-land-task-title" sessionId={landingSessionId}>
+                    {task.taskTitle}
+                  </LandingLink>
+                ) : (
+                  <Link className="project-land-task-title" to={projectTaskPath(projectId, task.taskId)}>
+                    {task.taskTitle}
+                  </Link>
+                )}
+                <LandTaskStatus integration={task.integration} main={main} />
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </div>

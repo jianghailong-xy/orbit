@@ -1,0 +1,15 @@
+{
+ "checks": [],
+ "endedAt": "2026-10-19T16:44:58.425+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "facts",
+ "result": {
+  "exists": false,
+  "file": "/mnt/data/managed-runner-lab/secrets/deepseek-api-key",
+  "sessionsRunOn": "fake-model.py as a DeepSeek-preset key (not a model); the real session is pending"
+ },
+ "seconds": 0.0,
+ "startedAt": "2026-10-19T16:44:58.425+00:00",
+ "step": "model"
+}

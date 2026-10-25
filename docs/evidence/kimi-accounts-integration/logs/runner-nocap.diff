@@ -1,0 +1,12 @@
+--- /root/.orbit/worktrees/d7dec327-328c-5e56-b824-35fa98f0e2ed/src/runner-go/transport.go	2026-10-09 00:01:38.044177155 +0800
++++ /var/tmp/kimi-accounts-stack/runner-nocap-src/transport.go	2026-10-09 01:12:50.520984774 +0800
+@@ -89,9 +89,6 @@
+ 		antigravityAccountLoginCapabilityV1,
+ 		antigravityAccountRemoveCapabilityV1,
+ 		kimiLoginRegionCapabilityV1,
+-		kimiAccountLoginCapabilityV1,
+-		kimiAccountRemoveCapabilityV1,
+-		kimiAccountMoveCapabilityV1,
+ 		sessionMoveCapabilityV1,
+ 		wikiMaintenanceRunV1,
+ 		wikiRepoOpCapabilityV1,

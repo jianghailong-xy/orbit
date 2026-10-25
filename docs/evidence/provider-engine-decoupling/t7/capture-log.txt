@@ -1,0 +1,163 @@
+tree under capture: 38cae80c3dbc2c3e11e4d718e9578f1f6a7bfb35 Merge the project tip (25d342c32: main, T3 follow-up) into T7
+new light: lands on "Claude Code\n▾"
+new light: engines ["Claude Code\nDeepSeek V4 Pro","Codex\ngpt-5.6-sol","Kimi Code\nNot installed","Antigravity CLI\nGemini 3.8 Flash","O\nOpenCode\nManaged by OpenCode","DeepSeek Harness\nDeepSeek V4 Pro","+\nConnect a provider…"]
+shot new-hero-light.png
+new light dsh menu: ["DeepSeek Harness","Provider","DeepSeek","DeepSeek V4 Pro","DeepSeek V4 Flash","Effort","Default"]
+new light dsh providers: ["API keys","DeepSeek","DeepSeek 2"]
+shot new-dsh-provider-light.png
+new light claude menu: ["Claude Code","Provider","Default","Opus 5.5","Sonnet 5.5","Haiku 4.5","Effort","Default","Speed","Standard"]
+new light claude providers: ["Signed in on hpc","Automatic","Switches to soonest reset","Default","5h 23%","Work","5h 57%","Account pools","Claude accounts","API keys","DeepSeek","DeepSeek 2","Z.AI (GLM)","Claude Max"]
+shot new-claude-provider-light.png
+new light opencode menu: ["O","OpenCode","Provider","Own sign-in","Managed by OpenCode","Effort","Default"]
+new light opencode providers: ["On hpc","OpenCode's own sign-in","opencode auth","API keys","DeepSeek","DeepSeek 2","Gemini","Kimi (Moonshot)","Z.AI (GLM)","Claude Max isn’t here: a subscription token runs on Claude Code only."]
+shot new-opencode-provider-light.png
+new light: page errors [] unanswered []
+nokey light: engines ["Claude Code\nOpus 5.5","Codex\ngpt-5.6-sol","Kimi Code\nNot installed","Antigravity CLI\nGemini 3.8 Flash","O\nOpenCode\nManaged by OpenCode","DeepSeek Harness\nConnect a DeepSeek key","+\nConnect a provider…"]
+nokey light: DeepSeek Harness links "/providers/new/deepseek"
+shot new-nokey-light.png
+nokey light: page errors [] unanswered []
+switch light dsh menu: ["DeepSeek Harness","Provider","DeepSeek","DeepSeek V4 Pro","DeepSeek V4 Flash","Effort","Default"]
+switch light dsh providers: ["API keys","DeepSeek","DeepSeek 2"]
+shot switch-dsh-provider-light.png
+switch light note: "The turn in flight finishes on DeepSeek. Your next one uses DeepSeek 2."
+shot switch-note-light.png
+switch light dsh: page errors [] unanswered ["GET /api/tasks/2zwQZ2hd93IvLb59t6pdr/owner-confirmation"]
+switch light claude menu: ["Claude Code","Provider","Default","Opus 5.5","Sonnet 5.5","Haiku 4.5","Effort","Default","Speed","Standard"]
+shot switch-title-light.png
+switch light claude: page errors [] unanswered []
+switch light deleted menu: ["DeepSeek Harness","Provider","Key deleted","DeepSeek V4 Pro","DeepSeek V4 Flash","Effort","Default"]
+switch light deleted providers: ["This session's key","D","deepseek-harness","Deleted","API keys","DeepSeek","DeepSeek 2"]
+shot switch-deleted-light.png
+switch light deleted: page errors [] unanswered []
+pin light engines: ["Assignee's","Claude Code","Claude Code","Codex","Kimi Code","Antigravity CLI","O","OpenCode","DeepSeek Harness"]
+shot pin-engine-light.png
+pin light dsh providers: ["Engine default","first DeepSeek key","Your DeepSeek keys","DeepSeek","DeepSeek 2"]
+shot pin-dsh-provider-light.png
+pin light pinned: ["Details","Assignee","orbit","Engine","DeepSeek Harness","Provider","DeepSeek 2","Model","DeepSeek V4 Pro","List","No list","Start at","Save schedule","Optional, in your own time zone. The task starts once, at that time.","Created by","—","Created","Sep 27, 8:00 PM"]
+shot pin-collapsed-light.png
+pin light after Claude Code: ["Details","Assignee","orbit","Engine","Claude Code","Provider","DeepSeek 2","Model","Provider default","List","No list","Start at","Save schedule","Optional, in your own time zone. The task starts once, at that time.","Created by","—","Created","Sep 27, 8:00 PM"]
+pin light claude providers: ["Engine default","runner sign-in","Account pools","Claude accounts","Your keys","DeepSeek","DeepSeek 2","Z.AI (GLM)","Claude Max"]
+shot pin-claude-provider-light.png
+pin light writes: ["PATCH /api/tasks/2zwQZ2hd93IvLb59t6p5V {\"engine\":\"dsh\",\"model\":null}","PATCH /api/tasks/2zwQZ2hd93IvLb59t6p5V {\"engine\":\"dsh\",\"provider\":\"deepseek-2\",\"model\":null}","PATCH /api/tasks/2zwQZ2hd93IvLb59t6p5V {\"model\":\"[\\\"deepseek\\\", \\\"deepseek-v4-pro\\\"]\"}","PATCH /api/tasks/2zwQZ2hd93IvLb59t6p5V {\"engine\":\"claude\",\"model\":null}","PATCH /api/tasks/2zwQZ2hd93IvLb59t6p5V {\"provider\":null,\"model\":null}"]
+pin light: page errors [] unanswered []
+pin light migrated: ["Details","Assignee","orbit","Engine","DeepSeek Harness","Provider","DeepSeek","Model","Provider default","List","No list","Start at","Save schedule","Optional, in your own time zone. The task starts once, at that time.","Created by","—","Created","Sep 27, 8:00 PM"]
+shot pin-migrated-light.png
+pin light migrated: page errors [] unanswered []
+workspace light rows: ["Claude Code via DeepSeek · DeepSeek V4 Pro · /root/orbit · isolated","DeepSeek Harness via DeepSeek 2 · DeepSeek V4 Pro · /root/builds · isolated"]
+workspace light orbit: ["Smart model selection for tasks","Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected.","Engines it may use","Claude Code","this agent's engine","Codex","Only this agent's own engine is ticked by default, so a task never moves to another engine unless you tick it here."] | "Model DeepSeek V4 Pro · Claude Code via DeepSeek on this runner. Pick a different one from the session composer."
+shot ws-orbit-light.png
+workspace light builds: ["Smart model selection for tasks","Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected.","Engines it may use","DeepSeek Harness","this agent's engine","Claude Code","Codex","Only this agent's own engine is ticked by default, so a task never moves to another engine unless you tick it here."] | "Model DeepSeek V4 Pro · DeepSeek Harness via DeepSeek 2 on this runner. Pick a different one from the session composer."
+shot ws-builds-light.png
+workspace light: page errors [] unanswered []
+cards light card-dsh-nokey: ["DeepSeek Harness needs a DeepSeek key","This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.","Update the API key","Retry — re-send my last message"]
+shot card-dsh-nokey-light.png
+cards light card-dsh-nokey: page errors [] unanswered []
+cards light card-dsh-invalid: ["DeepSeek rejected this API key","Update the DeepSeek key “DeepSeek 2” in Infrastructure, then send your message again.","Update the API key","Retry — re-send my last message"]
+shot card-dsh-invalid-light.png
+cards light card-dsh-invalid: page errors [] unanswered []
+cards light card-claude-rejected: ["Provider authentication failed","Failed to authenticate. API Error: 401 {\"error\":{\"message\":\"Authentication Fails, Your api key: ****0000 is invalid\",\"type\":\"authentication_error\"}}","The DeepSeek key “DeepSeek” was rejected. Update it in Infrastructure, then send your message again.","Update the API key","Why is CI red?","Retry — re-send my last message"]
+shot card-claude-rejected-light.png
+cards light card-claude-rejected: page errors [] unanswered []
+cards light card-never-started: ["This run never started","FROM ORBIT","DeepSeek Harness needs a DeepSeek key","This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.","Open Infrastructure","No engine ran · your message is still here"]
+shot card-never-started-light.png
+cards light card-never-started: page errors [] unanswered []
+shot board-new-hero-light.png
+shot board-new-dsh-provider-light.png
+shot board-new-claude-provider-light.png
+shot board-new-opencode-provider-light.png
+shot board-new-nokey-light.png
+shot board-switch-dsh-provider-light.png
+shot board-switch-note-light.png
+shot board-switch-title-light.png
+shot board-switch-deleted-light.png
+shot board-pin-engine-light.png
+shot board-pin-dsh-provider-light.png
+shot board-pin-collapsed-light.png
+shot board-pin-claude-provider-light.png
+shot board-pin-migrated-light.png
+shot board-ws-orbit-light.png
+shot board-ws-builds-light.png
+shot board-card-dsh-nokey-light.png
+shot board-card-dsh-invalid-light.png
+shot board-card-claude-rejected-light.png
+new dark: lands on "Claude Code\n▾"
+new dark: engines ["Claude Code\nDeepSeek V4 Pro","Codex\ngpt-5.6-sol","Kimi Code\nNot installed","Antigravity CLI\nGemini 3.8 Flash","O\nOpenCode\nManaged by OpenCode","DeepSeek Harness\nDeepSeek V4 Pro","+\nConnect a provider…"]
+shot new-hero-dark.png
+new dark dsh menu: ["DeepSeek Harness","Provider","DeepSeek","DeepSeek V4 Pro","DeepSeek V4 Flash","Effort","Default"]
+new dark dsh providers: ["API keys","DeepSeek","DeepSeek 2"]
+shot new-dsh-provider-dark.png
+new dark claude menu: ["Claude Code","Provider","Default","Opus 5.5","Sonnet 5.5","Haiku 4.5","Effort","Default","Speed","Standard"]
+new dark claude providers: ["Signed in on hpc","Automatic","Switches to soonest reset","Default","5h 23%","Work","5h 57%","Account pools","Claude accounts","API keys","DeepSeek","DeepSeek 2","Z.AI (GLM)","Claude Max"]
+shot new-claude-provider-dark.png
+new dark opencode menu: ["O","OpenCode","Provider","Own sign-in","Managed by OpenCode","Effort","Default"]
+new dark opencode providers: ["On hpc","OpenCode's own sign-in","opencode auth","API keys","DeepSeek","DeepSeek 2","Gemini","Kimi (Moonshot)","Z.AI (GLM)","Claude Max isn’t here: a subscription token runs on Claude Code only."]
+shot new-opencode-provider-dark.png
+new dark: page errors [] unanswered []
+nokey dark: engines ["Claude Code\nOpus 5.5","Codex\ngpt-5.6-sol","Kimi Code\nNot installed","Antigravity CLI\nGemini 3.8 Flash","O\nOpenCode\nManaged by OpenCode","DeepSeek Harness\nConnect a DeepSeek key","+\nConnect a provider…"]
+nokey dark: DeepSeek Harness links "/providers/new/deepseek"
+shot new-nokey-dark.png
+nokey dark: page errors [] unanswered []
+switch dark dsh menu: ["DeepSeek Harness","Provider","DeepSeek","DeepSeek V4 Pro","DeepSeek V4 Flash","Effort","Default"]
+switch dark dsh providers: ["API keys","DeepSeek","DeepSeek 2"]
+shot switch-dsh-provider-dark.png
+switch dark note: "The turn in flight finishes on DeepSeek. Your next one uses DeepSeek 2."
+shot switch-note-dark.png
+switch dark dsh: page errors [] unanswered ["GET /api/tasks/2zwQZ2hd93IvLb59t6pdr/owner-confirmation"]
+switch dark claude menu: ["Claude Code","Provider","Default","Opus 5.5","Sonnet 5.5","Haiku 4.5","Effort","Default","Speed","Standard"]
+shot switch-title-dark.png
+switch dark claude: page errors [] unanswered []
+switch dark deleted menu: ["DeepSeek Harness","Provider","Key deleted","DeepSeek V4 Pro","DeepSeek V4 Flash","Effort","Default"]
+switch dark deleted providers: ["This session's key","D","deepseek-harness","Deleted","API keys","DeepSeek","DeepSeek 2"]
+shot switch-deleted-dark.png
+switch dark deleted: page errors [] unanswered []
+pin dark engines: ["Assignee's","Claude Code","Claude Code","Codex","Kimi Code","Antigravity CLI","O","OpenCode","DeepSeek Harness"]
+shot pin-engine-dark.png
+pin dark dsh providers: ["Engine default","first DeepSeek key","Your DeepSeek keys","DeepSeek","DeepSeek 2"]
+shot pin-dsh-provider-dark.png
+pin dark pinned: ["Details","Assignee","orbit","Engine","DeepSeek Harness","Provider","DeepSeek 2","Model","DeepSeek V4 Pro","List","No list","Start at","Save schedule","Optional, in your own time zone. The task starts once, at that time.","Created by","—","Created","Sep 27, 8:00 PM"]
+shot pin-collapsed-dark.png
+pin dark after Claude Code: ["Details","Assignee","orbit","Engine","Claude Code","Provider","DeepSeek 2","Model","Provider default","List","No list","Start at","Save schedule","Optional, in your own time zone. The task starts once, at that time.","Created by","—","Created","Sep 27, 8:00 PM"]
+pin dark claude providers: ["Engine default","runner sign-in","Account pools","Claude accounts","Your keys","DeepSeek","DeepSeek 2","Z.AI (GLM)","Claude Max"]
+shot pin-claude-provider-dark.png
+pin dark writes: ["PATCH /api/tasks/2zwQZ2hd93IvLb59t6p5V {\"engine\":\"dsh\",\"model\":null}","PATCH /api/tasks/2zwQZ2hd93IvLb59t6p5V {\"engine\":\"dsh\",\"provider\":\"deepseek-2\",\"model\":null}","PATCH /api/tasks/2zwQZ2hd93IvLb59t6p5V {\"model\":\"[\\\"deepseek\\\", \\\"deepseek-v4-pro\\\"]\"}","PATCH /api/tasks/2zwQZ2hd93IvLb59t6p5V {\"engine\":\"claude\",\"model\":null}","PATCH /api/tasks/2zwQZ2hd93IvLb59t6p5V {\"provider\":null,\"model\":null}"]
+pin dark: page errors [] unanswered []
+pin dark migrated: ["Details","Assignee","orbit","Engine","DeepSeek Harness","Provider","DeepSeek","Model","Provider default","List","No list","Start at","Save schedule","Optional, in your own time zone. The task starts once, at that time.","Created by","—","Created","Sep 27, 8:00 PM"]
+shot pin-migrated-dark.png
+pin dark migrated: page errors [] unanswered []
+workspace dark rows: ["Claude Code via DeepSeek · DeepSeek V4 Pro · /root/orbit · isolated","DeepSeek Harness via DeepSeek 2 · DeepSeek V4 Pro · /root/builds · isolated"]
+workspace dark orbit: ["Smart model selection for tasks","Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected.","Engines it may use","Claude Code","this agent's engine","Codex","Only this agent's own engine is ticked by default, so a task never moves to another engine unless you tick it here."] | "Model DeepSeek V4 Pro · Claude Code via DeepSeek on this runner. Pick a different one from the session composer."
+shot ws-orbit-dark.png
+workspace dark builds: ["Smart model selection for tasks","Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected.","Engines it may use","DeepSeek Harness","this agent's engine","Claude Code","Codex","Only this agent's own engine is ticked by default, so a task never moves to another engine unless you tick it here."] | "Model DeepSeek V4 Pro · DeepSeek Harness via DeepSeek 2 on this runner. Pick a different one from the session composer."
+shot ws-builds-dark.png
+workspace dark: page errors [] unanswered []
+cards dark card-dsh-nokey: ["DeepSeek Harness needs a DeepSeek key","This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.","Update the API key","Retry — re-send my last message"]
+shot card-dsh-nokey-dark.png
+cards dark card-dsh-nokey: page errors [] unanswered []
+cards dark card-dsh-invalid: ["DeepSeek rejected this API key","Update the DeepSeek key “DeepSeek 2” in Infrastructure, then send your message again.","Update the API key","Retry — re-send my last message"]
+shot card-dsh-invalid-dark.png
+cards dark card-dsh-invalid: page errors [] unanswered []
+cards dark card-claude-rejected: ["Provider authentication failed","Failed to authenticate. API Error: 401 {\"error\":{\"message\":\"Authentication Fails, Your api key: ****0000 is invalid\",\"type\":\"authentication_error\"}}","The DeepSeek key “DeepSeek” was rejected. Update it in Infrastructure, then send your message again.","Update the API key","Why is CI red?","Retry — re-send my last message"]
+shot card-claude-rejected-dark.png
+cards dark card-claude-rejected: page errors [] unanswered []
+cards dark card-never-started: ["This run never started","FROM ORBIT","DeepSeek Harness needs a DeepSeek key","This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.","Open Infrastructure","No engine ran · your message is still here"]
+shot card-never-started-dark.png
+cards dark card-never-started: page errors [] unanswered []
+shot board-new-hero-dark.png
+shot board-new-dsh-provider-dark.png
+shot board-new-claude-provider-dark.png
+shot board-new-opencode-provider-dark.png
+shot board-new-nokey-dark.png
+shot board-switch-dsh-provider-dark.png
+shot board-switch-note-dark.png
+shot board-switch-title-dark.png
+shot board-switch-deleted-dark.png
+shot board-pin-engine-dark.png
+shot board-pin-dsh-provider-dark.png
+shot board-pin-collapsed-dark.png
+shot board-pin-claude-provider-dark.png
+shot board-pin-migrated-dark.png
+shot board-ws-orbit-dark.png
+shot board-ws-builds-dark.png
+shot board-card-dsh-nokey-dark.png
+shot board-card-dsh-invalid-dark.png
+shot board-card-claude-rejected-dark.png

@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -13,6 +12,7 @@ vi.mock('../api', async (importOriginal) => ({
   api: vi.fn(), getSession: vi.fn(), getSessionEventPage: vi.fn(),
   completeSession: vi.fn(), restoreSession: vi.fn(), deleteSession: vi.fn(),
   purgeSession: vi.fn(), pinSession: vi.fn(), unpinSession: vi.fn(), getShareLink: vi.fn(),
+  renameSession: vi.fn(),
 }));
 vi.mock('../lib/transcriptStore', () => ({
   loadTranscript: async () => null, saveTranscript: async () => {},
@@ -71,12 +71,15 @@ function row(id: string): HTMLElement {
   return found;
 }
 const menu = (): HTMLElement | null =>
-  document.querySelector('.session-row-menu:not(.ant-dropdown-hidden) .ant-dropdown-menu');
+  document.querySelector('.session-row-menu[role="menu"]:not([data-closed])');
 function item(label: string): HTMLElement | undefined {
-  return [...(menu()?.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item') ?? [])].find(
+  return [...(menu()?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])].find(
     (el) => el.textContent?.trim().startsWith(label),
   );
 }
+/** The menu that is open, whichever trigger opened it. */
+const openMenuItems = (): HTMLElement[] =>
+  [...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-closed]) [role="menuitem"]')];
 async function openMenu(id = TARGET_ID): Promise<void> {
   await click(row(id).querySelector('button[aria-label="More actions"]'));
   await until(() => expect(menu()).not.toBeNull());
@@ -96,7 +99,8 @@ async function mount(scope: Scope = 'open'): Promise<void> {
     root!.render(
       <QueryClientProvider client={client!}>
         <MemoryRouter initialEntries={[`/sessions/${OPEN_ID}`]}>
-          <AntApp><WorkspaceView runner={RUNNER} /><LocationProbe /></AntApp>
+          <WorkspaceView runner={RUNNER} />
+          <LocationProbe />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -105,8 +109,7 @@ async function mount(scope: Scope = 'open'): Promise<void> {
   if (scope !== 'open') {
     await click(container.querySelector('.session-scope-menu'));
     const label = scope === 'trash' ? 'Trash' : 'Completed';
-    const scopeItem = () => [...document.querySelectorAll<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')]
-      .find((el) => el.textContent?.trim() === label);
+    const scopeItem = () => openMenuItems().find((el) => el.textContent?.trim() === label);
     await until(() => expect(scopeItem()).toBeTruthy());
     await click(scopeItem());
   }
@@ -126,12 +129,16 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value() {} });
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value() {} });
-  for (const name of ['completeSession', 'restoreSession', 'deleteSession', 'purgeSession', 'pinSession', 'unpinSession'] as const) {
+  for (const name of ['completeSession', 'restoreSession', 'deleteSession', 'purgeSession', 'pinSession', 'unpinSession', 'renameSession'] as const) {
     vi.mocked(apiModule[name]).mockReset();
     vi.mocked(apiModule[name]).mockResolvedValue({});
   }
   vi.mocked(apiModule.completeSession).mockImplementation(async (id) => {
     rows = rows.filter((s) => s.id !== id);
+    return {};
+  });
+  vi.mocked(apiModule.renameSession).mockImplementation(async (id, title) => {
+    rows = rows.map((s) => (s.id === id ? { ...s, title } : s));
     return {};
   });
   vi.mocked(apiModule.getSession).mockReset();
@@ -177,14 +184,14 @@ afterEach(async () => {
 
 describe('the session row More actions menu', () => {
   it.each([
-    ['open', ['Complete', 'Pin', 'Share…', 'Move…', 'Delete']],
-    ['completed', ['Move to Open', 'Pin', 'Share…', 'Move…', 'Delete']],
+    ['open', ['Complete', 'Pin', 'Rename…', 'Share…', 'Move…', 'Delete']],
+    ['completed', ['Move to Open', 'Pin', 'Rename…', 'Share…', 'Move…', 'Delete']],
     ['trash', ['Move to Open', 'Delete Permanently…']],
   ] as const)('contains the iOS swipe actions for %s', async (scope, expected) => {
     await mount(scope);
     expect(row(TARGET_ID).querySelectorAll('.session-actions button')).toHaveLength(1);
     await openMenu();
-    const labels = [...menu()!.querySelectorAll('.ant-dropdown-menu-item')].map((el) => {
+    const labels = [...menu()!.querySelectorAll('[role="menuitem"]')].map((el) => {
       const copy = el.cloneNode(true) as HTMLElement;
       copy.querySelector('kbd')?.remove();
       return copy.textContent!.trim();
@@ -239,10 +246,6 @@ describe('the session row More actions menu', () => {
   it('arrow keys move within the menu without switching the open conversation', async () => {
     await mount();
     await openMenu();
-    // rc-menu excludes zero-size nodes from arrow navigation; jsdom has no layout engine.
-    for (const el of menu()!.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item')) {
-      Object.defineProperty(el, 'getBoundingClientRect', { value: () => new DOMRect(0, 0, 200, 32) });
-    }
     await until(() => expect(document.activeElement).toBe(item('Complete')));
     for (const [key, keyCode, label] of [['ArrowDown', 40, 'Pin'], ['ArrowUp', 38, 'Complete']] as const) {
       await act(async () => {
@@ -310,9 +313,102 @@ describe('the session row More actions menu', () => {
     await mount('trash');
     await openMenu();
     await click(item('Delete Permanently'));
-    await until(() => expect(document.querySelector('.ant-modal-confirm')).not.toBeNull());
+    const confirmation = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
+    await until(() => expect(confirmation()).not.toBeNull());
     expect(apiModule.purgeSession).not.toHaveBeenCalled();
-    await click(document.querySelector('.ant-modal-confirm .ant-btn-primary'));
+    await click([...confirmation()!.querySelectorAll('button')].find((b) => b.textContent === 'Delete permanently'));
     await until(() => expect(apiModule.purgeSession).toHaveBeenCalledExactlyOnceWith(TARGET_ID));
+  });
+});
+
+describe('Rename… on a session row', () => {
+  const field = (): HTMLInputElement | null =>
+    container!.querySelector<HTMLInputElement>('.session-row.renaming input');
+  const titles = (): string[] =>
+    [...container!.querySelectorAll('.session-row .session-title')].map((el) => el.textContent ?? '');
+  async function type(input: HTMLInputElement, value: string): Promise<void> {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+  async function press(el: Element, key: 'Enter' | 'Escape'): Promise<void> {
+    await act(async () => {
+      el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    });
+  }
+  async function startRename(): Promise<HTMLInputElement> {
+    await openMenu();
+    // As a person picks it: once the menu has taken focus (it moves in a frame after the menu opens).
+    // Picked sooner, that late focus would land on the menu after the field opened, and close it.
+    await until(() => expect(menu()!.contains(document.activeElement)).toBe(true));
+    await click(item('Rename…'));
+    await until(() => expect(field()).not.toBeNull());
+    return field()!;
+  }
+
+  it('puts the whole title, selected, in a field in the row; Return saves it trimmed, once', async () => {
+    await mount();
+    const input = await startRename();
+    expect(input.value).toBe('Menu target');
+    expect(document.activeElement).toBe(input);
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, 'Menu target'.length]);
+    expect(input.maxLength).toBe(200);
+    expect(row(OPEN_ID)).toBeTruthy();
+    await type(input, '  Release checklist  ');
+    await press(input, 'Enter');
+    await until(() => expect(apiModule.renameSession).toHaveBeenCalledExactlyOnceWith(TARGET_ID, 'Release checklist'));
+    await until(() => expect(field()).toBeNull());
+    expect(titles()).toContain('Release checklist');
+    expect(location).toBe(`/sessions/${OPEN_ID}`);
+  });
+
+  it('saves an unchanged title too, as the header editor does', async () => {
+    await mount();
+    await press(await startRename(), 'Enter');
+    await until(() => expect(apiModule.renameSession).toHaveBeenCalledExactlyOnceWith(TARGET_ID, 'Menu target'));
+  });
+
+  it('Escape, or an emptied field, keeps the title and sends nothing', async () => {
+    await mount();
+    let input = await startRename();
+    await type(input, 'Something else');
+    await press(input, 'Escape');
+    await until(() => expect(field()).toBeNull());
+    expect(titles()).toContain('Menu target');
+    input = await startRename();
+    await type(input, '   ');
+    await press(input, 'Enter');
+    await until(() => expect(field()).toBeNull());
+    expect(titles()).toContain('Menu target');
+    expect(apiModule.renameSession).not.toHaveBeenCalled();
+  });
+
+  it('a press on the row around the field keeps the field and does not open the row', async () => {
+    await mount();
+    const input = await startRename();
+    const renamed = container!.querySelector<HTMLElement>('.session-row.renaming')!;
+    const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    await act(async () => { renamed.dispatchEvent(down); });
+    expect(down.defaultPrevented).toBe(true);
+    await click(renamed);
+    expect(field()).toBe(input);
+    expect(location).toBe(`/sessions/${OPEN_ID}`);
+    expect(apiModule.renameSession).not.toHaveBeenCalled();
+  });
+
+  it("the open conversation's More actions offers Rename…, which opens the title editor", async () => {
+    await mount();
+    await click(container!.querySelector('.workspace-header button[title="More actions"]'));
+    const rename = () => openMenuItems().find((el) => el.textContent?.trim() === 'Rename…');
+    await until(() => expect(rename()).toBeTruthy());
+    await click(rename());
+    await until(() => expect(container!.querySelector('.workspace-name-input')).not.toBeNull());
+    const input = container!.querySelector<HTMLInputElement>('.workspace-name-input')!;
+    expect(input.value).toBe('Open conversation');
+    expect(document.activeElement).toBe(input);
+    await type(input, 'Renamed in the header');
+    await press(input, 'Enter');
+    await until(() => expect(apiModule.renameSession).toHaveBeenCalledExactlyOnceWith(OPEN_ID, 'Renamed in the header'));
   });
 });

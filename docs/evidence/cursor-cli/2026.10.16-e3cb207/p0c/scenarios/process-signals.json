@@ -1,0 +1,69 @@
+{
+ "name": "process-signals",
+ "runId": "2026-10-17T02-34-10-602Z",
+ "startedAt": "2026-10-17T02:51:22.406Z",
+ "finishedAt": "2026-10-17T02:53:04.923Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/process-signals.ndjson",
+ "protocolLines": 42,
+ "fixtures": [],
+ "checks": [
+  {
+   "name": "stdin EOF: still running 30 s later",
+   "ok": true
+  },
+  {
+   "name": "SIGINT exits 130",
+   "ok": true,
+   "detail": {
+    "code": 130,
+    "signal": null,
+    "ms": 16
+   }
+  },
+  {
+   "name": "SIGTERM exits 143",
+   "ok": true,
+   "detail": {
+    "code": 143,
+    "signal": null,
+    "ms": 18
+   }
+  },
+  {
+   "name": "SIGKILL ends it by signal",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "exit per signal (idle process with one session)": {
+   "EOF": "still running",
+   "SIGINT": {
+    "code": 130,
+    "signal": null,
+    "ms": 16
+   },
+   "SIGTERM": {
+    "code": 143,
+    "signal": null,
+    "ms": 18
+   },
+   "SIGHUP": {
+    "code": null,
+    "signal": "SIGHUP",
+    "ms": 17
+   },
+   "SIGKILL": {
+    "code": null,
+    "signal": "SIGKILL",
+    "ms": 14
+   }
+  }
+ }
+}

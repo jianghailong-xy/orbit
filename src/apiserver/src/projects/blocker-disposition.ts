@@ -23,8 +23,10 @@ import { COORDINATOR_AUTHORITY, type CoordinatorAction } from './coordinator-aut
  * facts can be replayed and argued with. These four are facts about the world too — every one of
  * them is a row, and §2 says which — but what they are facts ABOUT is the ruler and the request:
  * whether an exemption is fair, whether an unasked-for change is welcome, whether the exam should
- * have said something else. Nobody can compute those, and a coordinator that decided them anyway
- * would be deciding what it is judged by.
+ * have said something else. Nobody can compute those. Who weighs each one is `blockerRoute` below:
+ * only a moved standard is about the ruler itself, and a coordinator that decided it would be
+ * deciding what it is judged by; the other three are about one delivery, and its coordinator
+ * decides them.
  *
  * §1 — SO THIS FOLD DETECTS, AND NEVER EVALUATES
  * ==============================================
@@ -78,7 +80,7 @@ import { COORDINATOR_AUTHORITY, type CoordinatorAction } from './coordinator-aut
 
 /** Which of the four this is. The reason a person is being asked, in one word. */
 export const BLOCKER_REASONS = [
-  /** The work argues in writing that a criterion does not apply to it. */
+  /** The work argues in writing that Orbit's question about its completion criterion does not apply. */
   'CRITERION_EXEMPTION_ARGUED',
   /** The exam moved after this work was declared against it. */
   'ACCEPTANCE_STANDARD_MOVED',
@@ -113,7 +115,12 @@ export const BLOCKER_KIND_FOR: Readonly<Record<BlockerReason, string>> = {
 
 /** The action a blocker asks for, used to route it without consulting the project switch. */
 export const BLOCKER_DECISION: Readonly<Record<BlockerReason, CoordinatorAction>> = {
-  CRITERION_EXEMPTION_ARGUED: 'EDIT_ACCEPTANCE_CRITERIA',
+  // Not EDIT_ACCEPTANCE_CRITERIA, which it was until 2026-10-14. The prose is a task's answer to
+  // Orbit's question about the shape of its completion criterion (`task-criterion-shape-advice.ts`):
+  // why it keeps the one it declared. That is how one task is checked — chosen when the task was
+  // opened — and it moves nothing in the project's acceptance criteria. None of the 31 the account
+  // owner ruled on before this was sent back for rework.
+  CRITERION_EXEMPTION_ARGUED: 'DECIDE_TASK_LANDING',
   ACCEPTANCE_STANDARD_MOVED: 'CONFIRM_ACCEPTANCE_CRITERIA',
   OUTSIDE_DECLARED_SCOPE: 'DECIDE_TASK_LANDING',
   MERGE_REFUSED_BY_GIT: 'DECIDE_TASK_LANDING',
@@ -131,8 +138,8 @@ export function blockerRoute(reason: BlockerReason): BlockerRoute {
 /** Everything the fold may look at. Every field is an observation; none is a setting. */
 export interface DeliveryObservations {
   /**
-   * Whether the work carries written prose arguing a criterion does not apply to it. A record that
-   * its criterion was changed is not that prose (§2).
+   * Whether the work carries written prose arguing that Orbit's question about its completion
+   * criterion does not apply to it. A record that its criterion was changed is not that prose (§2).
    */
   criterionExemptionArgued: boolean;
   /** Whether the stated criterion's wording moved after this work was declared against it. */

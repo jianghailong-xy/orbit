@@ -399,3 +399,27 @@ func TestClaudeCommandArgsLeaveFastModeUnsaidWhenItIsOff(t *testing.T) {
 		t.Errorf("settings %v mention fastMode, want the key absent when the session is not in it", settings)
 	}
 }
+
+// The account signed in on this runner is quota, not capability: whatever it has enabled at
+// claude.ai — connectors, synced plugins, synced skills — is switched off in every spawn's
+// settings file, so the same session offers the same tools on the next account, and an
+// unauthorized connector never sends the agent to ask a human for an OAuth flow a headless
+// session cannot run.
+func TestClaudeCommandArgsTurnOffAccountSuppliedCapability(t *testing.T) {
+	settings := settingsFileFrom(t, claudeCommandArgs(claudeSpawnJob(t), t.TempDir(), true))
+	if settings == nil {
+		t.Fatalf("a spawn passed no --settings, so nothing switched the account's own servers off")
+	}
+	for _, want := range []struct {
+		key  string
+		want interface{}
+	}{
+		{"disableClaudeAiConnectors", true},
+		{"syncClaudeAiPlugins", false},
+		{"syncClaudeAiSkills", false},
+	} {
+		if got := settings[want.key]; got != want.want {
+			t.Errorf("settings %v carry %s = %v, want %v", settings, want.key, got, want.want)
+		}
+	}
+}

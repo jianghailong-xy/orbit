@@ -1,0 +1,15 @@
+aed0a7bab fix(web): move focus to a submenu item before handing it Enter or Space
+3aa26fb97644f24551dc9c70149021f7f7f9453f
+
+ RUN  v5.0.2 /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/src/web
+
+ ✓ src/components/ui/Select.test.tsx (26 tests) 1417ms
+ ✓ src/components/ui/keyboardWindow.test.tsx (58 tests) 2450ms
+   ✓ a submenu opened from the keyboard (18)
+     ✓ ["ArrowRight","Enter"] with focus in the submenu (the reference) 353ms
+
+ Test Files  2 passed (2)
+      Tests  84 passed (84)
+   Start at  00:37:01
+   Duration  6.89s (import 40%, tests 32%, environment 21%, transform 7%)
+

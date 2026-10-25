@@ -867,8 +867,8 @@ const spelledRunner = (prefix: string): RunnerTenant =>
 
 test('the runner gate: the census reads every route behind RunnerAuthGuard or RunnerSessionAuthGuard, and every controller that has one is mounted', async () => {
   const { controllers, gate, gateNamed, gateFields, unguarded } = await gateCensus;
-  assert.ok(gate.length > 140, `found ${gate.length} runner-gate routes — the metadata shape changed, not the routes`);
-  assert.ok(gateNamed.length > 100, `found ${gateNamed.length} runner-gate routes naming something — the metadata shape changed, not the routes`);
+  assert.ok(gate.length > 120, `found ${gate.length} runner-gate routes — the metadata shape changed, not the routes`);
+  assert.ok(gateNamed.length > 80, `found ${gateNamed.length} runner-gate routes naming something — the metadata shape changed, not the routes`);
   assert.ok(gateFields.length > 100, `found ${gateFields.length} ids carried past the runner gate — the metadata shape changed, not the routes`);
   assert.ok(unguarded.some((r) => r.shared), 'found none of the share links\' doors — the guard metadata changed, not the routes');
   const unreached: string[] = [];

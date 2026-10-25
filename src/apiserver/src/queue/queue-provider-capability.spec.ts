@@ -77,9 +77,11 @@ async function capturedClaimCapability(supportedProviders: AgentProvider[]): Pro
     assert.ok(index >= 0 && index < settingValues.length, `nothing sets ${guc}`);
     return settingValues[index];
   };
+  // The runtime a row is gated as is its recorded engine, and — for a row an older replica wrote, with
+  // none — the slug it names, as before (docs/provider-engine-contract.md §5.6).
   return {
-    capability: boundBefore("COALESCE(s.provider, 'claude') <> 'opencode'"),
-    antigravityCapability: boundBefore("COALESCE(s.provider, 'claude') <> 'antigravity'"),
+    capability: boundBefore(`COALESCE(s."engine", s.provider, 'claude') <> 'opencode'`),
+    antigravityCapability: boundBefore(`COALESCE(s."engine", s.provider, 'claude') <> 'antigravity'`),
     borrowedAntigravityCapability: boundBefore('OR NOT EXISTS ('),
     claimSetting: settingFor('orbit.runner_supports_opencode'),
     antigravitySetting: settingFor('orbit.runner_supports_antigravity'),
@@ -95,7 +97,9 @@ test('the atomic claim selection receives a false OpenCode capability for legacy
   assert.equal(captured.capability, false);
   assert.equal(captured.claimSetting, '0');
   assert.match(captured.settingSql, /set_config\('orbit\.runner_supports_opencode'/);
-  assert.match(captured.sql, /COALESCE\(s\.provider, 'claude'\) <> 'opencode'/);
+  // Every claim, whatever the runner, declares it reads the session's recorded engine (migration 0414).
+  assert.match(captured.settingSql, /set_config\('orbit\.claim_reads_session_engine', '1', true\)/);
+  assert.match(captured.sql, /COALESCE\(s\."engine", s\.provider, 'claude'\) <> 'opencode'/);
   assert.match(captured.sql, /SELECT s\.id FROM "session" s/);
 });
 
@@ -122,7 +126,7 @@ test('a runner that advertises OpenCode but not Antigravity is withheld Antigrav
   assert.equal(captured.antigravityCapability, false);
   assert.equal(captured.antigravitySetting, '0');
   assert.match(captured.settingSql, /set_config\('orbit\.runner_supports_antigravity'/);
-  assert.match(captured.sql, /COALESCE\(s\.provider, 'claude'\) <> 'antigravity'/);
+  assert.match(captured.sql, /COALESCE\(s\."engine", s\.provider, 'claude'\) <> 'antigravity'/);
   // The two gates are independent: OpenCode still passes for this runner.
   assert.equal(captured.capability, true);
 });
@@ -131,8 +135,11 @@ test('a runner that does not name Antigravity is withheld a Gemini key\'s rows t
   // The slug is the configured row's own, so the built-in slug's predicate cannot see it; the job
   // is an `antigravity` one all the same. Held to the same capability, on the rows dispatch resolves:
   // the owner's own, and a shared one only for an admin (usableProviderSql).
+  // A Gemini key's session with a recorded engine is gated by it (the COALESCE above); one without
+  // keeps the row lookup, which asks the key's runtime.
   const legacy = await capturedClaimCapability([AgentProvider.CLAUDE, AgentProvider.CODEX, AgentProvider.OPENCODE]);
   assert.equal(legacy.borrowedAntigravityCapability, false);
+  assert.match(legacy.sql, /OR s\."engine" IS NOT NULL\s+OR NOT EXISTS \(/);
   assert.match(
     legacy.sql,
     /OR NOT EXISTS \(\s*SELECT 1 FROM "model_provider" mp\s+WHERE mp\."slug" = s\.provider\s+AND mp\."runtime" = 'antigravity'\s+AND NOT \(s.provider = 'dsh' AND s\."provider_builtin"\)\s+AND mp\."enabled"\s+AND \(mp\."owner_id" = s\."owner_id" OR \(mp\."owner_id" IS NULL AND EXISTS \(\s*SELECT 1 FROM "user" u WHERE u\."id" = s\."owner_id" AND u\."role" = 'ADMIN'\)\)\)/,
@@ -173,6 +180,8 @@ test('P1b dsh queue negotiates transaction gate and clears upgrade notices', asy
   assert.equal(current.dshSetting, '1');
   assert.match(current.sql, /'provider:dsh' = ANY\(r.capabilities\)/);
   assert.match(current.sql, /r\."capabilities_reported_at" IS NOT NULL/);
+  // Harness by its recorded engine, whatever key it spends; by the old identity for a row without one.
+  assert.match(current.sql, /\(s\."engine" IS NOT NULL AND s\."engine" = 'dsh'\)/);
   assert.match(current.sql, /s.provider = 'dsh' AND s\."provider_builtin"/);
   assert.ok(current.values.includes(DSH_RUNNER_UPGRADE_ERROR));
 });

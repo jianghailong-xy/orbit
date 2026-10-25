@@ -1,0 +1,88 @@
+{
+ "name": "prompt-while-busy",
+ "runId": "2026-10-16T17-30-18-093Z",
+ "startedAt": "2026-10-16T17:30:54.990Z",
+ "finishedAt": "2026-10-16T17:31:31.596Z",
+ "passed": true,
+ "realPromptsDeclared": 2,
+ "realPrompts": [
+  {
+   "n": 7,
+   "at": "2026-10-16T17:31:04.599Z",
+   "note": "prompt A, interrupted by prompt B"
+  },
+  {
+   "n": 8,
+   "at": "2026-10-16T17:31:12.650Z",
+   "note": "prompt B sent while A runs"
+  }
+ ],
+ "protocol": "protocol/prompt-while-busy.ndjson",
+ "protocolLines": 29,
+ "fixtures": [
+  "prompt-while-busy/busy"
+ ],
+ "checks": [
+  {
+   "name": "a second session/prompt while one runs cancels the first: A answers stopReason cancelled",
+   "ok": true,
+   "detail": {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "result": {
+     "stopReason": "cancelled"
+    }
+   }
+  },
+  {
+   "name": "…promptly (A answers within 5 s of B being sent)",
+   "ok": true
+  },
+  {
+   "name": "B runs to end_turn and is answered",
+   "ok": true,
+   "detail": {
+    "rb": {
+     "jsonrpc": "2.0",
+     "id": 4,
+     "result": {
+      "stopReason": "end_turn"
+     }
+    },
+    "bText": "BANANA"
+   }
+  },
+  {
+   "name": "A's shell command was killed (no sleep 43 left, a.txt absent)",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "prompt while busy": {
+   "started": true,
+   "responseA": {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "result": {
+     "stopReason": "cancelled"
+    }
+   },
+   "responseB": {
+    "jsonrpc": "2.0",
+    "id": 4,
+    "result": {
+     "stopReason": "end_turn"
+    }
+   },
+   "aAnsweredMsAfterB": 6,
+   "bAnsweredMsAfterB": 1914,
+   "sleepBefore": 1,
+   "sleepAfter": 0,
+   "bText": "BANANA"
+  }
+ }
+}

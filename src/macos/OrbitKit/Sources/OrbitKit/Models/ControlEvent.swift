@@ -133,6 +133,12 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     public let awaitingReplyFrom: [SessionRequestPeer]??
     public let owesReplyTo: [SessionRequestPeer]??
     public let lastTurnAt: String?
+    /// The rolling recap and when it was written. Doubly optional like `retryAt`: `nil` is an older
+    /// control plane that never sends the key (keep the row's), `.some(nil)` is this server saying
+    /// the session has none — how a manual refresh that dropped the recap reaches the other clients
+    /// — and `.some(value)` is the one just written, which the row's line then prefers.
+    public let recapText: String??
+    public let recapAt: String??
     /// When the server will re-send the message this run's failure killed — part of the summary
     /// because it is part of what `runState == .failed` means (see `Session.retryPending`).
     ///
@@ -204,6 +210,14 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
             ? .some((try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .owesReplyTo)) ?? [])
             : nil
         lastTurnAt = try values.decodeIfPresent(String.self, forKey: .lastTurnAt)
+        // `contains` rather than `decodeIfPresent` alone, for `retryAt`'s reason: null is this
+        // server saying the session has no recap, a missing key is an older one saying nothing.
+        recapText = values.contains(.recapText)
+            ? .some(try values.decodeIfPresent(String.self, forKey: .recapText))
+            : nil
+        recapAt = values.contains(.recapAt)
+            ? .some(try values.decodeIfPresent(String.self, forKey: .recapAt))
+            : nil
         retryAt = values.contains(.retryAt)
             ? .some(try values.decodeIfPresent(String.self, forKey: .retryAt))
             : nil

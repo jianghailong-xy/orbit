@@ -108,6 +108,12 @@ final class RunnersModel {
         await press { _ = try await self.api.installDsh(id) }
     }
 
+    /// Install one engine's CLI on the machine — the same relay, for an engine it doesn't have.
+    @discardableResult
+    func installEngine(_ id: String, engine: String) async -> String? {
+        await press { _ = try await self.api.installEngine(id, engine: engine) }
+    }
+
     /// The machine re-reads its CLIs' model lists; the new ones arrive on a later check-in.
     @discardableResult
     func refreshModels(_ id: String) async -> String? {
@@ -141,8 +147,10 @@ final class RunnersModel {
         }
     }
 
-    /// One account off the machine. A refusal the machine makes itself (a session is running on it)
-    /// comes back as its own words.
+    /// One account off the machine — or Default off Orbit's list alone, which asks nothing of the
+    /// machine and so works with the runner offline. A refusal the machine makes itself (a session is
+    /// running on it) comes back as its own words, and the control plane's (Default with no other account
+    /// beside it) as its own.
     @discardableResult
     func removeAccount(_ id: String, engine: LoginEngine, account: String) async -> String? {
         do {
@@ -152,6 +160,13 @@ final class RunnersModel {
         } catch {
             return APIClient.failureReason(error)
         }
+    }
+
+    /// Use again: the Default removed from Orbit back in its use. Orbit's own record, as the removal is,
+    /// so it works with the runner offline too.
+    @discardableResult
+    func restoreDefault(_ id: String, engine: LoginEngine) async -> String? {
+        await press { try await self.api.restoreRunnerDefault(id, engine: engine) }
     }
 
     /// The list in a new order: the rows move at once, and the server's answer — every runner, in the

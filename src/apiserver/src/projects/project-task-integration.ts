@@ -1,16 +1,16 @@
 import { Prisma } from '@prisma/client';
 import type {
+  IntegrationJobBlockingReason,
   IntegrationJobPhase,
   IntegrationJobState,
-  LandTaskBlockingReason,
   LandTaskBlockingReasonCode,
   LandTaskIntegrationView,
   ProjectLandTask,
   TaskIntegrationView,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { SESSION_RUNNER_OFFLINE_AFTER_MS } from '../sessions/session-state';
-import { isCodeTaskSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
+import { runnerOfflineSql } from '../runners/runner-presence';
+import { branchNameSql, isCodeTaskSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
 import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
 
 /**
@@ -45,7 +45,24 @@ import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
 const INTEGRATION_ITEM_KINDS = ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR'];
 
 /** Why the runner a queued landing needs is not claiming it, as the read below decides it. */
-type RunnerWait = 'NO_RUNNER' | 'OFFLINE' | 'DRAINING' | 'OUTDATED';
+export type RunnerWait = 'NO_RUNNER' | 'OFFLINE' | 'DRAINING' | 'OUTDATED';
+
+/** The facts a queued job's sentence is built from. The task row and the job list both read them,
+ *  so one reason code is one sentence wherever it is printed. */
+export interface QueueBlockingFacts {
+  runnerName: string | null;
+  runnerWait: RunnerWait | null;
+  mainBranch: string | null;
+  blockingTaskTitle: string | null;
+  blockingJobKind: string | null;
+  syncHandlingGeneration: number | null;
+}
+
+/** The reason codes a QUEUED job can read, and the one a claimed job waiting on this runner's own
+ *  lock reads (§2.7a, §7.2 V6). */
+export type QueueBlockingCode =
+  | 'CANCELLING' | 'WAITING_TASK_WORK' | 'WAITING_MAIN_SYNC' | 'WAITING_RUNNER'
+  | 'WAITING_AUTOMATIC_RUNNER' | 'WAITING_SERIAL_SLOT' | 'WAITING_DISPATCH' | 'WAITING_LOCAL_LOCK';
 
 interface TaskIntegrationRow {
   taskId: string;
@@ -65,6 +82,8 @@ interface TaskIntegrationRow {
   jobFinishedAt: Date | null;
   jobErrorCode: string | null;
   jobConflictCount: number | null;
+  /** The landing session of the newest attempt's subject (§2.9), or null for a job written before 0436. */
+  jobLandingSessionId: string | null;
   /** The first check that did not pass, for a CHECK_FAILED attempt. */
   jobFailedCheck: { name?: unknown; exitCode?: unknown; expectedExitCode?: unknown; timedOut?: unknown } | null;
   /** For a QUEUED attempt only: the first claim condition (§2.3 J-T2) that holds it back. */
@@ -75,12 +94,16 @@ interface TaskIntegrationRow {
   blockingJobKind: string | null;
   blockingTaskTitle: string | null;
   blockingOpenItemId: string | null;
+  /** The generation an OPEN MAIN_SYNC conflict's item is being handled by (H1), while it runs. */
+  syncHandlingGeneration: number | null;
   itemId: string | null;
   itemKind: string | null;
   itemAssignee: string | null;
   itemCreatedAt: Date | null;
   itemHandlingJobId: string | null;
   landedAt: Date | null;
+  /** The project's main branch by name, which ON_UPSTREAM is on; null with no repository bound. */
+  mainBranch: string | null;
 }
 
 const NOT_APPLICABLE: TaskIntegrationView<Date> = {
@@ -91,6 +114,7 @@ const NOT_APPLICABLE: TaskIntegrationView<Date> = {
   jobId: null,
   checksRunningForMs: null,
   landTask: null,
+  mainBranch: null,
 };
 
 const CHECK_NAMES: Record<string, string> = {
@@ -98,39 +122,82 @@ const CHECK_NAMES: Record<string, string> = {
   MERGE_CHECK: 'the merge check',
 };
 
-const RUNNING_ELSEWHERE: Record<string, string> = {
-  LAND_TASK: 'another landing',
-  CHECK_PROMOTION: 'a check of the merge into main',
-  LAND_PROMOTION: 'the merge into main',
-};
+/** The job running on the branch first, by its kind. A merge into main is into the project's main
+ *  branch by name, which is main with no repository bound. */
+function runningElsewhere(main: string): Record<string, string> {
+  return {
+    LAND_TASK: 'another landing',
+    CHECK_PROMOTION: `a check of the merge into ${main}`,
+    LAND_PROMOTION: `the merge into ${main}`,
+  };
+}
 
-/** The sentence a page prints for a reason, built from the facts the row read. */
-function reasonSummary(code: LandTaskBlockingReasonCode, row: TaskIntegrationRow): string {
-  const runner = row.runnerName ? `runner ${row.runnerName}` : 'the runner';
+/**
+ * The sentence a waiting job prints, from the facts the read decided.
+ *
+ * One derivation for the task row's landing and for the job list (§2.7a, §7.2 V6), because the
+ * two describe the same row: a reason whose words differed between them would be a second story
+ * about one wait.
+ */
+export function queueBlockingSummary(code: QueueBlockingCode, facts: QueueBlockingFacts): string {
+  const runner = facts.runnerName ? `runner ${facts.runnerName}` : 'the runner';
   switch (code) {
     case 'CANCELLING':
-      return 'Not started: a cancel was asked for, so the queue will not run it';
+      return 'Waiting to land: it was cancelled and will not start';
     case 'WAITING_TASK_WORK':
       return 'Waiting to land: the task’s work session is still running, and its branch can still move';
-    case 'WAITING_MAIN_SYNC':
-      return row.blockingTaskTitle
-        ? `Waiting for the project line to sync: the landing of “${row.blockingTaskTitle}” could not merge upstream into this branch, and its conflict is still open`
-        : 'Waiting for the project line to sync: an earlier landing could not merge upstream into this branch, and its conflict is still open';
+    case 'WAITING_MAIN_SYNC': {
+      // A conflict the task's own new generation is landing again is still a hold — the claim reads
+      // the item, not that generation (§3.1 M2) — so the reason says so and names the generation
+      // that is resolving it, which is the question this row raises.
+      const resolving = facts.syncHandlingGeneration == null
+        ? ''
+        : ` — a new landing (generation ${facts.syncHandlingGeneration}) is resolving it`;
+      return (facts.blockingTaskTitle
+        ? `Waiting for the project line to sync: the landing of “${facts.blockingTaskTitle}” could not merge upstream into this branch, and its conflict is still open`
+        : 'Waiting for the project line to sync: an earlier landing could not merge upstream into this branch, and its conflict is still open') + resolving;
+    }
     case 'WAITING_SERIAL_SLOT': {
-      const what = row.blockingTaskTitle
-        ? `the landing of “${row.blockingTaskTitle}”`
-        : RUNNING_ELSEWHERE[row.blockingJobKind ?? ''] ?? 'another integration job';
+      const what = facts.blockingTaskTitle
+        ? `the landing of “${facts.blockingTaskTitle}”`
+        : runningElsewhere(facts.mainBranch ?? 'main')[facts.blockingJobKind ?? ''] ?? 'another integration job';
       return `Waiting to land: ${what} is running on this branch first`;
     }
     case 'WAITING_RUNNER':
-      switch (row.runnerWait) {
+      switch (facts.runnerWait) {
         case 'NO_RUNNER': return 'Waiting for a runner: the work’s workspace has no runner to land it';
         case 'DRAINING': return `Waiting for ${runner}: it is draining and takes no new jobs`;
         case 'OUTDATED': return `Waiting for ${runner}: its version does not take integration jobs`;
         default: return `Waiting for ${runner}: it is offline`;
       }
+    case 'WAITING_AUTOMATIC_RUNNER':
+      return `Waiting for ${runner}: it cannot land a merge the Automatic setting approved, which needs promotion-automatic-land/v1`;
     case 'WAITING_DISPATCH':
       return `Waiting to land: next for ${runner}, which claims it on its next heartbeat`;
+    case 'WAITING_LOCAL_LOCK':
+      return 'Waiting for another job on this runner: it is using this repository and target branch';
+  }
+}
+
+/** The sentence a page prints for a reason, built from the facts the row read. */
+function reasonSummary(code: LandTaskBlockingReasonCode, row: TaskIntegrationRow): string {
+  switch (code) {
+    case 'CANCELLING':
+    case 'WAITING_TASK_WORK':
+    case 'WAITING_MAIN_SYNC':
+    case 'WAITING_SERIAL_SLOT':
+    case 'WAITING_RUNNER':
+    case 'WAITING_AUTOMATIC_RUNNER':
+    case 'WAITING_DISPATCH':
+    case 'WAITING_LOCAL_LOCK':
+      return queueBlockingSummary(code, {
+        runnerName: row.runnerName,
+        runnerWait: row.runnerWait,
+        mainBranch: row.mainBranch,
+        blockingTaskTitle: row.blockingTaskTitle,
+        blockingJobKind: row.blockingJobKind,
+        syncHandlingGeneration: row.syncHandlingGeneration,
+      });
     case 'CONFLICT': {
       const files = row.jobConflictCount
         ? ` (${row.jobConflictCount} conflicting file${row.jobConflictCount === 1 ? '' : 's'})`
@@ -162,7 +229,7 @@ function landTaskOf(row: TaskIntegrationRow, now: Date): LandTaskIntegrationView
   const code: LandTaskBlockingReasonCode | null = row.jobState === 'QUEUED'
     ? row.queueBlockCode ?? 'WAITING_DISPATCH'
     : stopped ? row.jobState as LandTaskBlockingReasonCode : null;
-  let blockingReason: LandTaskBlockingReason | null = null;
+  let blockingReason: IntegrationJobBlockingReason | null = null;
   if (code) {
     blockingReason = { code, summary: reasonSummary(code, row) };
     if ((code === 'WAITING_MAIN_SYNC' || code === 'WAITING_SERIAL_SLOT') && row.blockingJobId) {
@@ -179,7 +246,9 @@ function landTaskOf(row: TaskIntegrationRow, now: Date): LandTaskIntegrationView
   return {
     jobId: row.jobId,
     state: row.jobState as IntegrationJobState,
+    landingSessionId: row.jobLandingSessionId ?? null,
     phase: row.jobPhase as IntegrationJobPhase | null,
+    errorCode: row.jobErrorCode,
     generation: String(row.jobGeneration),
     queuedAt: row.jobCreatedAt,
     startedAt: row.jobStartedAt,
@@ -221,7 +290,7 @@ function stateForJob(state: string): TaskIntegrationView['state'] | null {
 
 /** One row folded into the view, in the precedence the module comment states. */
 export function taskIntegrationOf(row: TaskIntegrationRow, now: Date): TaskIntegrationView<Date> {
-  const none = { ...NOT_APPLICABLE, landTask: landTaskOf(row, now) };
+  const none = { ...NOT_APPLICABLE, landTask: landTaskOf(row, now), mainBranch: row.mainBranch };
   if (row.landing === 'ON_UPSTREAM') {
     return { ...none, state: 'ON_UPSTREAM', since: row.landedAt, jobId: row.jobId };
   }
@@ -283,6 +352,7 @@ export async function readTaskIntegrationViews(
   const landing = Prisma.raw(taskLandingSql('t'));
   const isCode = Prisma.raw(isCodeTaskSql('t'));
   const lineStarted = Prisma.raw(lineStartedSql('t'));
+  const mainBranch = Prisma.raw(branchNameSql('pc."upstream_ref"'));
   const ids = Prisma.join(taskIds.map((id) => Prisma.sql`${id}::uuid`));
   const rows = await prisma.$queryRaw<TaskIntegrationRow[]>(Prisma.sql`
     WITH scoped AS (
@@ -301,7 +371,7 @@ export async function readTaskIntegrationViews(
     newest_job AS (
       SELECT DISTINCT ON (j."task_id")
              j."task_id", j."id", j."state", j."phase", j."generation", j."target_ref",
-             j."serial_key", j."session_id", j."cancel_requested_at", j."error_code",
+             j."serial_key", j."session_id", j."landing_id", j."error_code", j."cancel_requested_at",
              cardinality(j."conflicts") AS "conflict_count", j."checks",
              j."created_at", j."started_at", j."claimed_at", j."heartbeat_at", j."finished_at"
         FROM "project_integration_job" j
@@ -339,9 +409,16 @@ export async function readTaskIntegrationViews(
            newest_job."heartbeat_at" AS "jobHeartbeatAt", newest_job."created_at" AS "jobCreatedAt",
            newest_job."finished_at" AS "jobFinishedAt",
            newest_job."error_code" AS "jobErrorCode", newest_job."conflict_count" AS "jobConflictCount",
+           -- §2.9: the LANDING session of this attempt's subject. Its id is pre-generated when the
+           -- subject opens, so it is here before the session row is inserted; the job's own
+           -- session_id is the source work session and is a history reference (0424), so nothing
+           -- about a deleted source can remove this address.
+           landing."session_id" AS "jobLandingSessionId",
            failed_check."check" AS "jobFailedCheck",
-           -- The claim's own conditions (integration-job-relay.ts claimOne), in its order, for the
-           -- one state they decide: why a QUEUED attempt has not been claimed yet.
+           -- The claim's own conditions (integration-job-relay.ts claimOne), in the table's order,
+           -- for the one state they decide: why a QUEUED attempt has not been claimed yet. Since
+           -- J-T8 a QUEUED row never carries a stop request (the transaction that asks ends it
+           -- CANCELLED), so CANCELLING only describes a row written before that rule.
            CASE WHEN newest_job."state" = 'QUEUED' THEN
              CASE
                WHEN newest_job."cancel_requested_at" IS NOT NULL THEN 'CANCELLING'
@@ -371,12 +448,17 @@ export async function readTaskIntegrationViews(
                 WHEN running_block."ownerId" = ${ownerId}::uuid THEN running_block."taskTitle"
            END AS "blockingTaskTitle",
            CASE WHEN sync_block."ownerId" = ${ownerId}::uuid THEN sync_block."openItemId" END AS "blockingOpenItemId",
+           CASE WHEN sync_block."ownerId" = ${ownerId}::uuid THEN sync_block."handlingGeneration" END AS "syncHandlingGeneration",
            open_item."id" AS "itemId", open_item."kind" AS "itemKind",
            open_item."assignee" AS "itemAssignee", open_item."created_at" AS "itemCreatedAt",
            open_item."handling_job_id" AS "itemHandlingJobId",
-           landed_at."at" AS "landedAt"
+           landed_at."at" AS "landedAt",
+           -- The project's main branch by name, the same for every row: read once, as an InitPlan.
+           (SELECT ${mainBranch} FROM "project_codebase" pc
+             WHERE pc."project_id" = ${projectId}::uuid AND pc."slot" = 'primary') AS "mainBranch"
       FROM scoped
       LEFT JOIN newest_job ON newest_job."task_id" = scoped."taskId"
+      LEFT JOIN "project_landing" landing ON landing."id" = newest_job."landing_id"
       LEFT JOIN open_item ON open_item."task_id" = scoped."taskId"
       LEFT JOIN landed_at ON landed_at."task_id" = scoped."taskId"
       LEFT JOIN LATERAL (
@@ -395,10 +477,7 @@ export async function readTaskIntegrationViews(
       LEFT JOIN LATERAL (
         SELECT CASE
                  WHEN runner."id" IS NULL THEN 'NO_RUNNER'
-                 WHEN runner."status" = 'OFFLINE' OR runner."last_heartbeat_at" IS NULL
-                   OR runner."last_heartbeat_at"
-                      < now() - (${SESSION_RUNNER_OFFLINE_AFTER_MS} * interval '1 millisecond')
-                   THEN 'OFFLINE'
+                 WHEN ${runnerOfflineSql('runner')} THEN 'OFFLINE'
                  WHEN runner."status" = 'DRAINING' OR runner."heartbeat_draining" = true THEN 'DRAINING'
                  WHEN runner."heartbeat_lease_owner" IS NULL
                    OR NOT (${INTEGRATION_JOB_CLAIM} = ANY(runner."capabilities")) THEN 'OUTDATED'
@@ -413,25 +492,23 @@ export async function readTaskIntegrationViews(
       -- M2: an OPEN item about another task's failed absorb of upstream into the same target holds
       -- every later landing on it; the conflicted task's own later generations are exempt (§3.1 M3).
       -- Read through the item rather than the failed job, so closing it is what lets the queue move.
+      -- H1 does NOT exempt an item a new generation is handling: claimOne reads this same condition
+      -- and holds those landings too, so the reader says what the claim does with the row
+      -- (WAITING_MAIN_SYNC) and names the generation that is resolving it, rather than reporting a
+      -- queue that would take it on the next heartbeat and will not.
       LEFT JOIN LATERAL (
         SELECT f."id" AS "jobId", i."id" AS "openItemId", i."owner_id" AS "ownerId",
-               ft."title" AS "taskTitle"
+               ft."title" AS "taskTitle",
+               CASE WHEN handling."id" IS NOT NULL AND handling."state" IN ('QUEUED', 'RUNNING')
+                    THEN handling."generation" END AS "handlingGeneration"
           FROM "project_open_item" i
           JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
           LEFT JOIN "task" ft ON ft."id" = f."task_id"
+          LEFT JOIN "project_integration_job" handling ON handling."id" = i."handling_job_id"
          WHERE newest_job."state" = 'QUEUED'
            AND f."serial_key" = newest_job."serial_key" AND f."phase" = 'MAIN_SYNC'
            AND i."kind" = 'INTEGRATION_CONFLICT' AND i."state" = 'OPEN'
            AND f."task_id" IS DISTINCT FROM newest_job."task_id"
-           -- H1 hands an older conflict to the task's new generation. While that generation is
-           -- queued/running, the old card is being worked and must not hold unrelated landings;
-           -- if it stops again, H3 opens a fresh item and this exemption disappears with it.
-           AND NOT EXISTS (
-             SELECT 1
-               FROM "project_integration_job" handling
-              WHERE handling."id" = i."handling_job_id"
-                AND handling."state" IN ('QUEUED', 'RUNNING')
-           )
          ORDER BY i."created_at", i."id" LIMIT 1
       ) sync_block ON true
       -- J1: one RUNNING job per repository and target ref.

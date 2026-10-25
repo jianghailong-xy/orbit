@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProjectOpenItemRow, ProjectPromotionView } from '@orbit/shared';
+import type { ProjectLandTask, ProjectOpenItemRow, ProjectPromotionView } from '@orbit/shared';
 import {
   BLOCKERS_DECIDED_TOO,
   CANCEL_MERGE,
@@ -20,10 +20,20 @@ import {
   ProjectPromotion,
   ProjectPromotionCard,
   ProjectPromotionReceipt,
+  MERGED_HEADING,
   UNDER_AUTOMATIC,
+  mergeTo,
+  mergedAutomaticallyHeading,
+  mergedHeading,
+  promotionItem,
+  resolvingPress,
   type PromotionProjectView,
 } from './ProjectPromotionCard';
+import { ProjectMergeStrip } from './ProjectMergeStrip';
+import { encodeId } from '../lib/idCodec';
 import { SHORTCUT_HINT } from './CardHotkey';
+import { CHAT_ABOUT_THIS } from '../lib/coordinatorChat';
+import { ON_PASS_ASKS, ON_PASS_MERGES } from '../lib/projectMerge';
 import { CriteriaDecisionCard, type PendingCriteriaDecisionRow } from './CriteriaDecisionCard';
 import { FROM_ORBIT } from './ProjectProgressStatus';
 
@@ -167,14 +177,21 @@ function markup(ui: JSX.Element): string {
 
 function card(
   view: ProjectPromotionView,
-  over: { item?: ProjectOpenItemRow | null; project?: PromotionProjectView | null } = {},
+  over: {
+    /** Undefined: the project's items have not been read. Null: they have, and none holds it. */
+    item?: ProjectOpenItemRow | null;
+    project?: PromotionProjectView | null;
+    /** The project's current landings, for state D's "who is in front of it" row. */
+    landings?: ProjectLandTask[] | null;
+  } = {},
 ): string {
   return markup(
     <ProjectPromotionCard
       projectId={PROJECT_ID}
       promotion={view}
-      item={over.item ?? null}
+      item={'item' in over ? over.item : null}
       project={over.project === undefined ? project() : over.project}
+      landings={over.landings ?? null}
       now={NOW}
     />,
   );
@@ -554,6 +571,19 @@ describe('the record a merge leaves', () => {
     expect(html).not.toContain('<button');
   });
 
+  it('opens the round’s landing at its bottom, and draws nothing there without one', () => {
+    const LANDING = '0195c0de-0000-7000-8000-00000000c001';
+    const withLanding = markup(
+      <ProjectPromotionReceipt promotion={{ ...merged, landingSessionId: LANDING }} now={NOW} />,
+    );
+    // The row that opens the receipt is unchanged; this is the round's own way in, at the end.
+    expect(withLanding).toContain('project-promotion-landing');
+    expect(withLanding).toContain('Open landing ›');
+    expect(withLanding).toContain(`/sessions/${encodeId(LANDING)}`);
+    expect(markup(<ProjectPromotionReceipt promotion={merged} now={NOW} />))
+      .not.toContain('project-promotion-landing');
+  });
+
   it('is drawn for nothing that has not merged', () => {
     for (const state of ['READY', 'CONFIRMED', 'RECHECKING', 'BLOCKED'] as const) {
       expect(
@@ -576,6 +606,43 @@ describe('state D — it cannot merge yet, and somebody is on it', () => {
     expect(html).toContain('2 files conflict');
     expect(html).toContain('src/runner-go/session_pool.go');
     expect(html).toContain('src/apiserver/prisma/schema.prisma');
+  });
+
+  /**
+   * The owner's report of 2026-10-08, on the project page: the orange card said "2 files conflict"
+   * and "Coordinator is resolving it" and nothing about what the merge was actually behind — a
+   * landing on the project branch, itself queued behind another task's landing. Both links are in
+   * the reads the page already holds, so the card names them.
+   */
+  it('names the landing in front of it, and what that landing is itself waiting for', () => {
+    const html = card(blocked, {
+      item: blockedItem(),
+      landings: [{
+        taskId: '34c2uuNTzRnCT03HWdCgq',
+        taskTitle: '同步项目线与 main：解开迁移台账冲突（0393/0394）',
+        integration: {
+          state: 'QUEUED', since: null, handler: null, openItemId: null, jobId: 'job-9',
+          checksRunningForMs: null,
+          landTask: {
+            jobId: 'job-9', state: 'QUEUED', phase: null, generation: '2',
+            queuedAt: at(3 * MINUTE), startedAt: null, heartbeatAt: null, finishedAt: null,
+            targetRef: 'project/bg-jobs', waitMs: 60_000,
+            blockingReason: { code: 'WAITING_SERIAL_SLOT', jobId: 'job-8',
+              summary: 'Waiting to land: the landing of “修合并树上的 11 个 Swift 失败” is running on this branch first' },
+          },
+        },
+      }],
+    });
+    expect(html).toContain('Blocked by');
+    expect(html).toContain('“同步项目线与 main：解开迁移台账冲突（0393/0394）” is landing on the project line');
+    expect(html).toContain('the landing of “修合并树上的 11 个 Swift 失败” is running on this branch first');
+    // The reason the reader was given before is still there, unchanged.
+    expect(html).toContain('2 files conflict');
+  });
+
+  it('says nothing about who is in front of it when the line is doing nothing here', () => {
+    expect(card(blocked, { item: blockedItem(), landings: [] })).not.toContain('Blocked by');
+    expect(card(blocked, { item: blockedItem() })).not.toContain('Blocked by');
   });
 
   it('carries who has it and how long on the press, and does not say it twice', () => {
@@ -632,14 +699,47 @@ describe('state D — it cannot merge yet, and somebody is on it', () => {
     expect(html).not.toContain('files conflict');
   });
 
-  it('still says who is on it when no item has been filed for it yet, and names no wait', () => {
-    const html = card(blocked, { item: null });
+  it('still says who is on it while the project’s items have not been read, and names no wait', () => {
+    const html = card(blocked, { item: undefined });
     expect(html).toContain('project/bg-jobs can’t merge into main yet');
     expect(html).toMatch(
       /<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*Coordinator is resolving it/,
     );
     // How long it has waited is the item's to know: without one the press does not invent a clock.
     expect(html).not.toContain(`${RESOLVING} · `);
+  });
+
+  /**
+   * 2026-10-09: the coordinator closed the exception — the work was already on main — and the card
+   * went on saying "Coordinator is resolving it", mark turning. Once the items are read and none
+   * holds the candidate, nobody is resolving it, and the card names nobody.
+   */
+  it('names nobody, and turns nothing, once the items are read and none holds it', () => {
+    const html = card(blocked, { item: null });
+    expect(html).toContain('project/bg-jobs can’t merge into main yet');
+    expect(html).not.toContain(RESOLVING);
+    expect(html).not.toContain(IT_IS_YOURS);
+    expect(html).not.toContain('promotion-spin');
+    // The conversation about it is still there to be had.
+    expect(html).toContain(CHAT_ABOUT_THIS);
+    // The same three answers the strip on the sessions view reads.
+    expect(resolvingPress(null, NOW)).toBeNull();
+    expect(resolvingPress(undefined, NOW)).toEqual({ label: RESOLVING, spinning: true });
+    expect(promotionItem(undefined, blocked.promotionId)).toBeUndefined();
+    expect(promotionItem({ needsYou: [], withCoordinator: [] }, blocked.promotionId)).toBeNull();
+    const held = blockedItem();
+    expect(promotionItem({ needsYou: [], withCoordinator: [held] }, held.promotionId!)).toBe(held);
+  });
+
+  it('says there is nothing to merge, or that it stopped on an error — never that a check failed', () => {
+    const landed = card(promotion({ state: 'BLOCKED', conflicts: [], checks: [], blockedReason: 'ALREADY_LANDED' }),
+      { item: blockedItem() });
+    expect(landed).toContain('Nothing to merge — project/bg-jobs is already on main');
+    expect(landed).not.toContain('could not be built');
+    const errored = card(promotion({ state: 'BLOCKED', conflicts: [], checks: [], blockedReason: 'ERROR' }),
+      { item: blockedItem() });
+    expect(errored).toContain('The merge stopped on an error — no check failed');
+    expect(errored).not.toContain('could not be built');
   });
 });
 
@@ -956,6 +1056,113 @@ describe('the presses', () => {
       'the card',
     );
     expect(host.textContent).toContain('project/bg-jobs');
+  });
+});
+
+/**
+ * The branch a candidate merges into is the project's main branch (`promotion.upstreamRef`), and the
+ * card names it the one way the project page does: the press, both receipts' headings and every row.
+ */
+describe('the merge, by the project’s main branch', () => {
+  const merged = (upstreamRef: string, automatic: boolean) => promotion({
+    upstreamRef,
+    state: 'MERGED',
+    merged: {
+      sha: '324cf003a7b8c9d0e1f2a3b4c5d6e7f809a1b2c3',
+      byUserId: automatic ? null : '2p7QMFOwEGtL5oaTxZHihm',
+      at: at(2 * MINUTE),
+      automatic,
+      revert: 'git revert -m 1 324cf003a7b8c9d0e1f2a3b4c5d6e7f809a1b2c3',
+    },
+  });
+  const pressLabels = (html: string) => [...new DOMParser().parseFromString(html, 'text/html')
+    .querySelectorAll('button')].map((button) => button.textContent);
+  function strip(view: ProjectPromotionView): string {
+    const qc = client();
+    qc.setQueryData(['project', PROJECT_ID, 'promotion'], view);
+    return renderToStaticMarkup(
+      <MemoryRouter>
+        <QueryClientProvider client={qc}>
+          <ProjectMergeStrip projectId={PROJECT_ID} onOpenCoordinator={null} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it('says Merge to main and Merged into main word for word as before for a project on main', () => {
+    expect([mergeTo(), mergeTo('main')]).toEqual(['Merge to main', MERGE_TO_MAIN]);
+    expect([mergedHeading(), mergedHeading('main')]).toEqual(['✓ Merged into main', MERGED_HEADING]);
+    expect([mergedAutomaticallyHeading(), mergedAutomaticallyHeading('main')])
+      .toEqual(['✓ Merged into main automatically', MERGED_AUTOMATICALLY_HEADING]);
+    expect(pressLabels(card(promotion()))[0]).toBe('Merge to main');
+    expect(pressLabels(strip(promotion()))).toContain('Merge to main');
+    expect(card(merged('main', false))).toContain('✓ Merged into main</span>');
+    expect(card(merged('main', true))).toContain('✓ Merged into main automatically</span>');
+  });
+
+  it('names master on the press, both receipts and the rows, for a project on master', () => {
+    const asking = card(promotion({ upstreamRef: 'refs/heads/master' }));
+    expect(pressLabels(asking)[0]).toBe('Merge to master');
+    expect(asking).toContain('Merge project/bg-jobs into master?');
+    expect(asking).toContain('7 commits ahead of master');
+    expect(asking).not.toContain('Merge to main');
+    expect(pressLabels(strip(promotion({ upstreamRef: 'master' })))).toContain('Merge to master');
+    const pressed = card(merged('master', false), { project: project({ acceptanceCriteriaItems: [
+      { ordinal: 3, satisfied: true, landing: 'LANDED' },
+    ] }) });
+    expect(pressed).toContain('✓ Merged into master</span>');
+    expect(pressed).toContain('Now on master');
+    expect(pressed).toContain('criterion 3 show “on master”');
+    expect(card(merged('master', true))).toContain('✓ Merged into master automatically</span>');
+    expect(markup(<ProjectPromotionReceipt promotion={merged('master', true)} now={NOW} />))
+      .toContain('✓ Merged into master automatically');
+  });
+});
+
+/**
+ * The merge check on the sessions view, and the line under it that says what a pass leads to (owner
+ * decision 2026-10-15): the Automatic setting's merge, or the asking card — the server's answer.
+ */
+describe('the merge check says what a pass leads to', () => {
+  const checking = (onPass: ProjectPromotionView['onPass']) =>
+    promotion({ state: 'CHECKING', askedAt: null, onPass });
+  function strip(view: ProjectPromotionView): string {
+    const qc = client();
+    qc.setQueryData(['project', PROJECT_ID, 'promotion'], view);
+    qc.setQueryData(['project', PROJECT_ID, 'integration'], {
+      upstreamRef: 'main',
+      integratingCount: 1,
+      queuedCount: 0,
+      inFlight: {
+        taskTitle: null, state: 'RUNNING', kind: 'CHECK_PROMOTION', phase: 'CHECK',
+        startedAt: at(2 * MINUTE), heartbeatAt: at(MINUTE),
+      },
+    });
+    return renderToStaticMarkup(
+      <MemoryRouter>
+        <QueryClientProvider client={qc}>
+          <ProjectMergeStrip projectId={PROJECT_ID} onOpenCoordinator={null} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it('merges on its own when Automatic will, and asks the reader when it will not', () => {
+    const merges = strip(checking('MERGE'));
+    expect(merges).toContain('data-shape="checking"');
+    expect(merges).toContain('Merge check');
+    expect(merges).toContain(ON_PASS_MERGES);
+    expect(merges).not.toContain(ON_PASS_ASKS);
+    const asks = strip(checking('ASK'));
+    expect(asks).toContain(ON_PASS_ASKS);
+    expect(asks).not.toContain(ON_PASS_MERGES);
+  });
+
+  it('draws the check alone for a server that does not say', () => {
+    const silent = strip(checking(undefined));
+    expect(silent).toContain('Merge check');
+    expect(silent).not.toContain(ON_PASS_MERGES);
+    expect(silent).not.toContain(ON_PASS_ASKS);
   });
 });
 

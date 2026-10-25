@@ -1,0 +1,118 @@
+<!doctype html>
+<!-- Design board iOS 5: switching provider inside a session (ComposerView's model menu). 393 × 852 pt. "现在" is
+     drawn from today's ComposerView.swift and SessionProviderChoices.swift (engineTitle, sameRuntime,
+     executingRuntime); "改后" is the proposal. macOS uses the same SwiftUI; Android follows this structure.
+     Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>iOS 5 · Switching provider in a session — provider/engine decoupling</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<link rel="stylesheet" href="board.css">
+<script src="glyphs.js"></script>
+<script src="board.js"></script>
+<style>
+  .i-menu .i-mi { min-height: 40px; padding-top: 4px; padding-bottom: 4px; }
+  .i-chat .ai { color: inherit; }
+  .orange { color: #c56a00 !important; }
+  .ph.dark .orange { color: #ff9f0a !important; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">iOS 5 · 会话里切换 Provider：只列会话 engine 能用的凭据；菜单标题来自会话自己的 engine</h1>
+  <p class="m-sub zh">会话页点 composer 里的模型打开的菜单，和新会话（iOS 4）是同一个菜单。今天的标题和可选 provider 都从当前 key 推出 runtime（<code>executingRuntime</code>）：Harness key 只能换 Harness key；key 被删时推不出来就当成 Claude；已结束的会话挑了别的 runtime 的 provider，标题会写「Claude Code → Codex」。改后标题读会话的 engine，Provider 只列这个 engine 兼容的凭据，engine 换不了。数据同 Web 板 5。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 模型菜单 → Provider</div>
+    <div class="phones">
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k">现在</span>DeepSeek Harness 会话</div><div id="p1"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>DeepSeek Harness 会话</div><div id="p2"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k">现在</span>会话的 key 被删了</div><div id="p3"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>会话的 key 被删了</div><div id="p4"></div></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+
+<script>
+const chat = `<div class="i-chat"><div class="me">看看 CI 为什么红</div>
+  <p>The flake is in <b>worktree_test.go</b>: two cases share one temp dir, so the second sees the first one's lock file.</p>
+  <p>I'll give each case its own <b>t.TempDir()</b> and rerun it 20 times.</p></div>`;
+const comp = iComposer({ chip: '<b>DeepSeek V4 Pro</b><i>Default</i>', on: true, ph: 'Reply…', mode: 'Default' });
+const sess = (id, overlay) => chatPhone({ id, title: 'Fix the flaky worktree test', sub: 'Running · Open · 2m ago', body: chat + comp, overlay: '<div class="i-dimbg"></div>' + overlay });
+const mainMenu = (title, provider, models, style, cls = '') => iMenu([
+  { title },
+  ...(provider ? [{ t: 'Provider', sub: provider, chev: '›', id: 'prov' }, { sep: true }] : []),
+  ...models,
+  { sep: true },
+  { t: 'Effort', sub: 'Default', chev: '›' },
+], style, cls);
+const dsModels = [{ t: 'DeepSeek V4 Pro', sub: 'Current' }, { t: 'DeepSeek V4 Flash' }];
+const front = 'left:60px;bottom:130px';
+const behind = 'left:60px;bottom:118px';
+const withId = (html, id) => html.replace('class="i-menu "', `class="i-menu " id="${id}"`);
+
+document.getElementById('p1').innerHTML = sess('ph1', withId(mainMenu('DeepSeek Harness', null, dsModels, front), 'm1'));
+document.getElementById('p2').innerHTML = sess('ph2', mainMenu('DeepSeek Harness', 'DeepSeek', dsModels, behind, 'back') + withId(iMenu([
+  { t: 'Provider', sub: 'DeepSeek', chev: '⌄', bold: true },
+  { sep: true },
+  { head: 'API keys' },
+  { t: 'DeepSeek', sub: 'Current' },
+  { t: 'DeepSeek 2' },
+], front), 'm2'));
+document.getElementById('p3').innerHTML = sess('ph3', mainMenu('Claude Code', 'deepseek-harness', dsModels, behind, 'back') + withId(iMenu([
+  { t: 'Provider', sub: 'deepseek-harness', chev: '⌄', bold: true },
+  { sep: true },
+  { t: 'deepseek-harness', sub: 'Current' },
+  { head: 'Claude' },
+  { t: 'Automatic', sub: 'Switches to soonest reset' },
+  { t: 'Default', sub: '5h 23%' },
+  { t: 'Claude accounts' },
+  { t: 'DeepSeek · Claude Code' },
+  { t: 'Z.AI (GLM)' },
+  { t: 'Claude Max' },
+], front), 'm3'));
+document.getElementById('p4').innerHTML = sess('ph4', mainMenu('DeepSeek Harness', '<span class="orange">Key deleted</span>', dsModels, behind, 'back') + withId(iMenu([
+  { t: 'Provider', sub: '<span class="orange">Key deleted</span>', chev: '⌄', bold: true },
+  { sep: true },
+  { head: "This session's key" },
+  { t: '<span style="opacity:.45">DeepSeek Harness</span>', sub: '<span class="orange">Deleted</span>' },
+  { head: 'API keys' },
+  { t: 'DeepSeek' },
+  { t: 'DeepSeek 2' },
+], front), 'm4'));
+
+finish();
+requestAnimationFrame(() => {
+  const ph = (id) => document.getElementById(id);
+  peek(ph('ph2'));
+  peek(ph('ph3'));
+  peek(ph('ph4'));
+  ring(ph('ph1'), '#m1', 'A', 3);
+  ring(ph('ph2'), '#m2', 1, 3);
+  ring(ph('ph3'), '#m3 .i-mi', 'B', 1);
+  ring(ph('ph3'), '.i-menu.back .i-mt', 'C', 2);
+  ring(ph('ph4'), '#m4', 2, 3);
+  ring(ph('ph4'), '.i-menu.back .i-mt', 3, 2);
+  document.querySelectorAll('.mk-n').forEach((m) => { if (/^[A-Z]$/.test(m.textContent)) m.style.background = '#6b7280'; });
+});
+
+document.getElementById('notes').innerHTML = notes([
+  ['A', '<b>Harness 会话只认 Harness key：</b>只有一把时 Provider 行不出现；另一把 DeepSeek key（Claude Code 那份）在这里用不了。'],
+  ['B', '<b>key 被删后，当前项显示原始 slug</b>「deepseek-harness」，下面列的全是 Claude 的登录、账号池和 key——会话被当成了 Claude（<code>executingRuntime</code> 找不到 key 就落到 claude）。'],
+  ['C', '<b>标题也跟着变成「Claude Code」</b>；已结束的会话挑了别的 runtime 的 provider 时还会写「Claude Code → Codex」。'],
+  [1, '<b>Provider 列会话 engine 能用的全部凭据：</b>DeepSeek Harness 会话是两把 DeepSeek key。Claude Code、OpenCode 会话的分组和 iOS 4 一样。行文不再带「· Claude Code」「· Harness」这种 engine 后缀。'],
+  [2, '<b>key 被删或停用：</b>Provider 写「Key deleted」/「Turned off」（橙色），子菜单先列这把 key（灰），再列能换过去的同 engine 凭据，选一把就修好。'],
+  [3, '<b>标题读会话的 engine</b>（DeepSeek Harness），不会因为 key 没了或挑了别的凭据而改变，也不再出现「A → B」。'],
+  ['·', '<b>不变的：</b>菜单的样子（iOS 26 菜单，子菜单叠在前面）、Provider 行只在有得选时出现、模型「Current」、Effort / Speed；切换后 composer 下那句提示同 Web 板 5（「Your next one uses DeepSeek 2.」）。'],
+]);
+</script>
+</body>
+</html>

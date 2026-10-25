@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.config.mjs --project webkit-dark-desktop'",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "f162a2f9de3cb4bdea8e9a6120dd28a8e2184328",
+ "webTree": "d8ae59f026644577041afea38b5994da1eef0f9f",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-08T03:36:55.505203+00:00",
+ "endedAt": "2026-10-08T03:38:25.132530+00:00",
+ "loadAverage": {
+  "start": [
+   32.591796875,
+   36.96630859375,
+   31.42626953125
+  ],
+  "end": [
+   18.95458984375,
+   31.6630859375,
+   30.07763671875
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "38e3656eb3303953dbae842f997d20c48a1103e6b3e1c1cb8eb7203ef319d764",
+ "outputBytes": 8834,
+ "raw": "/var/tmp/kw2-246921c8/runs/held-frames-rebased-webkit-dark-desktop",
+ "stats": {
+  "expected": 49,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 89281.086,
+  "samples": 49
+ }
+}

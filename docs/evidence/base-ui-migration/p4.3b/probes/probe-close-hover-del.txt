@@ -1,0 +1,10 @@
+probe: probe-close-hover.browser.mjs tree: del head: e21fad17277ffe30d40e76097191ca77e5b7f884 projects: chromium-light-desktop chromium-dark-desktop webkit-light-desktop webkit-dark-desktop started: 2026-10-09T14:06:59Z load: 10.52 9.10 6.83 12/4193 3992550
+PROBE del chromium-light-desktop rest {"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","rect":{"x":1212,"y":36,"width":32,"height":32,"top":36,"right":1244,"bottom":68,"left":1212}}
+PROBE del chromium-light-desktop hover {"background":"rgba(0, 0, 0, 0.04)","color":"rgb(31, 35, 41)","rect":{"x":1212,"y":36,"width":32,"height":32,"top":36,"right":1244,"bottom":68,"left":1212}}
+PROBE del chromium-dark-desktop rest {"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","rect":{"x":1212,"y":36,"width":32,"height":32,"top":36,"right":1244,"bottom":68,"left":1212}}
+PROBE del chromium-dark-desktop hover {"background":"rgba(255, 255, 255, 0.08)","color":"rgb(201, 206, 213)","rect":{"x":1212,"y":36,"width":32,"height":32,"top":36,"right":1244,"bottom":68,"left":1212}}
+PROBE del webkit-light-desktop rest {"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","rect":{"x":1212,"y":36,"width":32,"height":32,"top":36,"right":1244,"bottom":68,"left":1212}}
+PROBE del webkit-light-desktop hover {"background":"rgba(0, 0, 0, 0.04)","color":"rgb(31, 35, 41)","rect":{"x":1212,"y":36,"width":32,"height":32,"top":36,"right":1244,"bottom":68,"left":1212}}
+PROBE del webkit-dark-desktop rest {"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","rect":{"x":1212,"y":36,"width":32,"height":32,"top":36,"right":1244,"bottom":68,"left":1212}}
+PROBE del webkit-dark-desktop hover {"background":"rgba(255, 255, 255, 0.08)","color":"rgb(201, 206, 213)","rect":{"x":1212,"y":36,"width":32,"height":32,"top":36,"right":1244,"bottom":68,"left":1212}}
+  4 passed (11.4s)

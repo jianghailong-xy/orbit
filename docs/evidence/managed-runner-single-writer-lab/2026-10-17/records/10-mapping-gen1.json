@@ -1,0 +1,177 @@
+{
+  "at": "2026-10-17T19:53:00.224+00:00",
+  "mapping": {
+    "attempt": 0,
+    "backend": "kubernetes",
+    "cluster_key": "orbit-mr-lab",
+    "default_workspace_id": "01a14b6a-bbb5-75eb-be89-178b7aee0397",
+    "desired_state": "RUNNING",
+    "fencing_receipt": null,
+    "generation": 1,
+    "id": "01a14b6a-bbb7-74fc-84d5-24498c3e64a6",
+    "initial_provider": null,
+    "last_error": {
+      "code": "MODEL_UNAVAILABLE",
+      "message": "The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+      "retryable": true
+    },
+    "management_state": "STARTING",
+    "namespace": "orbit-mr-test",
+    "next_attempt_at": null,
+    "node_name": "orbit-mr-lab",
+    "owner_id": "01a14b6a-bba2-7260-801a-354b0a0e6f8b",
+    "pod_name": "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+    "pod_uid": "38693fcf-9066-4dfa-9c27-c39b2124f3c9",
+    "pv_uid": "26476233-644b-47a5-b62d-b8a0848ef9f3",
+    "pvc_name": "mr-data-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+    "pvc_uid": "d5299c21-8be0-4e61-91dd-33636ccda9ab",
+    "reservation": {
+      "compute": {
+        "activeUsers": 1,
+        "attachments": 1,
+        "cpuMillis": 500,
+        "ephemeralBytes": 1073741824,
+        "generation": 1,
+        "memoryBytes": 805306368,
+        "pods": 1,
+        "reservedAt": "2026-10-17T19:51:59.653Z"
+      },
+      "pool": "5a227748-b16c-43d1-a557-77cce09e5b12",
+      "storage": {
+        "durableBytes": 2147483648,
+        "reservedAt": "2026-10-17T19:50:48.521Z"
+      },
+      "version": 1
+    },
+    "resource_operation_kind": "CREATE_POD",
+    "resource_operation_state": "COMPLETED",
+    "revision": 16,
+    "runner_id": "01a14b6a-bbb3-703c-9da2-52e164ebf799",
+    "startup_deadline_at": "2026-10-18T07:51:59.653+00:00",
+    "state_entered_at": "2026-10-17T19:51:59.672+00:00",
+    "updated_at": "2026-10-17T19:52:55.385+00:00",
+    "volume_handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-73e7db32-b44a-49cb-a146-f42de6fe5c27"
+  },
+  "objects": {
+    "bootstrapSecret": {
+      "createdAt": "2026-10-17T19:50:53Z",
+      "generation": "1",
+      "name": "mr-boot-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "uid": "ce308eb6-a896-429e-b7b1-950bfc10d89e"
+    },
+    "pod": {
+      "containers": [
+        {
+          "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+          "name": "private-volume-directories",
+          "restartCount": 0,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://d6c7ca811dd63f97fd84abb36fe1b74a29b83245f71ee3b6317caf941f72dea8",
+              "exitCode": 0,
+              "finishedAt": "2026-10-17T19:52:09Z",
+              "reason": "Completed",
+              "startedAt": "2026-10-17T19:52:08Z"
+            }
+          }
+        },
+        {
+          "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+          "name": "runner",
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-10-17T19:52:10Z"
+            }
+          }
+        }
+      ],
+      "deletionTimestamp": null,
+      "generation": "1",
+      "images": [
+        "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d"
+      ],
+      "name": "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "node": "orbit-mr-lab",
+      "phase": "Running",
+      "uid": "38693fcf-9066-4dfa-9c27-c39b2124f3c9"
+    },
+    "podsUsingTheClaim": [
+      "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799"
+    ],
+    "pv": {
+      "claimUid": "d5299c21-8be0-4e61-91dd-33636ccda9ab",
+      "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+      "fsType": "ext4",
+      "image": "csi-vol-73e7db32-b44a-49cb-a146-f42de6fe5c27",
+      "name": "pvc-d5299c21-8be0-4e61-91dd-33636ccda9ab",
+      "pool": "orbit-mr-rbd",
+      "reclaimPolicy": "Retain",
+      "uid": "26476233-644b-47a5-b62d-b8a0848ef9f3",
+      "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-73e7db32-b44a-49cb-a146-f42de6fe5c27"
+    },
+    "pvc": {
+      "accessModes": [
+        "ReadWriteOnce"
+      ],
+      "annotations": {
+        "orbit.dev/owner-id": "01a14b6a-bba2-7260-801a-354b0a0e6f8b",
+        "orbit.dev/runner-id": "01a14b6a-bbb3-703c-9da2-52e164ebf799",
+        "pv.kubernetes.io/bind-completed": "yes",
+        "pv.kubernetes.io/bound-by-controller": "yes",
+        "volume.beta.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com",
+        "volume.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com"
+      },
+      "name": "mr-data-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "phase": "Bound",
+      "storageClassName": "runner-data",
+      "uid": "d5299c21-8be0-4e61-91dd-33636ccda9ab",
+      "volumeName": "pvc-d5299c21-8be0-4e61-91dd-33636ccda9ab"
+    },
+    "volumeAttachments": [
+      {
+        "attached": true,
+        "deletionTimestamp": null,
+        "name": "csi-415eea4c5576a6142d81bffd518127b5eedd687b459f98f75cd3cf2ac47e0746",
+        "node": "orbit-mr-lab"
+      }
+    ]
+  },
+  "ownerStatus": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34henzw58bMujstITsz03",
+    "contractVersion": 1,
+    "desiredState": "RUNNING",
+    "enabled": true,
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": null,
+    "lastHeartbeatAt": "2026-10-17T19:52:40.737Z",
+    "managementState": "STARTING",
+    "reason": {
+      "code": "MODEL_UNAVAILABLE",
+      "message": "The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+      "retryable": true
+    },
+    "retryAfter": null,
+    "revision": 16,
+    "runnerId": "34henzvsur3N7nKIMcXRR",
+    "runnerPublicId": "34henzvsur3N7nKIMcXRR",
+    "usable": false,
+    "workspaceId": "34henzw58bMujstITsz03",
+    "workspacePublicId": "34henzw58bMujstITsz03"
+  },
+  "runner": {
+    "id": "01a14b6a-bbb3-703c-9da2-52e164ebf799",
+    "labels": [],
+    "last_heartbeat_at": "2026-10-17T19:52:40.737",
+    "name": "orbit-managed",
+    "status": "ONLINE",
+    "version": "managed-292b2eb4308b622b5f7b7d40f7c542d55c1091c9"
+  }
+}

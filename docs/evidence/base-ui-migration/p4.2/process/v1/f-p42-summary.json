@@ -1,0 +1,334 @@
+{
+ "screenshots": {
+  "antialias": 225,
+  "beyond": 61,
+  "identical": 334,
+  "missing": 0
+ },
+ "tests": {
+  "notPassedDel": [
+   "chromium-dark-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "chromium-light-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "webkit-dark-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "webkit-light-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed"
+  ],
+  "notPassedRef": [
+   "chromium-dark-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "chromium-light-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "webkit-dark-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "webkit-light-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed"
+  ],
+  "total": 176
+ },
+ "traces": {
+  "equal": 47,
+  "total": 172
+ },
+ "beyond": [
+  {
+   "shot": "chromium-dark-desktop/p42-engine-menu.png",
+   "pixels": 75,
+   "max": 4
+  },
+  {
+   "shot": "chromium-dark-desktop/p42-engine-remove.png",
+   "pixels": 26,
+   "max": 3
+  },
+  {
+   "shot": "chromium-dark-desktop/p42-new-pool-people.png",
+   "pixels": 23,
+   "max": 43
+  },
+  {
+   "shot": "chromium-dark-desktop/p42-pool-just-mine.png",
+   "pixels": 44,
+   "max": 14
+  },
+  {
+   "shot": "chromium-dark-desktop/p42-pool-tooltip.png",
+   "pixels": 1976,
+   "max": 164
+  },
+  {
+   "shot": "chromium-dark-desktop/p42-users-loading.png",
+   "pixels": 65,
+   "max": 20
+  },
+  {
+   "shot": "chromium-dark-desktop/p42-workspace-history.png",
+   "pixels": 187,
+   "max": 4
+  },
+  {
+   "shot": "chromium-dark-phone/p42-account-pause-custom.png",
+   "pixels": 16160,
+   "max": 4
+  },
+  {
+   "shot": "chromium-dark-phone/p42-connect-edit-shown.png",
+   "pixels": 22,
+   "max": 3
+  },
+  {
+   "shot": "chromium-dark-phone/p42-engine-menu.png",
+   "pixels": 81,
+   "max": 4
+  },
+  {
+   "shot": "chromium-dark-phone/p42-new-pool-claude.png",
+   "pixels": 19446,
+   "max": 14
+  },
+  {
+   "shot": "chromium-dark-phone/p42-new-pool-people.png",
+   "pixels": 18282,
+   "max": 11
+  },
+  {
+   "shot": "chromium-dark-phone/p42-pool-replace-key.png",
+   "pixels": 55,
+   "max": 17
+  },
+  {
+   "shot": "chromium-dark-phone/p42-runners-loading.png",
+   "pixels": 65,
+   "max": 20
+  },
+  {
+   "shot": "chromium-dark-phone/p42-workspace-edit.png",
+   "pixels": 132,
+   "max": 4
+  },
+  {
+   "shot": "chromium-dark-phone/p42-workspace-menu.png",
+   "pixels": 30,
+   "max": 3
+  },
+  {
+   "shot": "chromium-light-desktop/p42-connect-dialect-open.png",
+   "pixels": 35,
+   "max": 18
+  },
+  {
+   "shot": "chromium-light-desktop/p42-engine-menu.png",
+   "pixels": 47,
+   "max": 3
+  },
+  {
+   "shot": "chromium-light-desktop/p42-engine-remove.png",
+   "pixels": 62,
+   "max": 4
+  },
+  {
+   "shot": "chromium-light-desktop/p42-keys-loading.png",
+   "pixels": 62,
+   "max": 20
+  },
+  {
+   "shot": "chromium-light-desktop/p42-new-pool-people.png",
+   "pixels": 51,
+   "max": 50
+  },
+  {
+   "shot": "chromium-light-desktop/p42-pool-just-mine.png",
+   "pixels": 40,
+   "max": 6
+  },
+  {
+   "shot": "chromium-light-desktop/p42-pool-tooltip.png",
+   "pixels": 6963,
+   "max": 226
+  },
+  {
+   "shot": "chromium-light-desktop/p42-runners-loading.png",
+   "pixels": 62,
+   "max": 20
+  },
+  {
+   "shot": "chromium-light-desktop/p42-workspace-history.png",
+   "pixels": 205,
+   "max": 7
+  },
+  {
+   "shot": "chromium-light-phone/p42-account-pause-custom.png",
+   "pixels": 26504,
+   "max": 9
+  },
+  {
+   "shot": "chromium-light-phone/p42-engine-menu.png",
+   "pixels": 64,
+   "max": 3
+  },
+  {
+   "shot": "chromium-light-phone/p42-new-pool-claude.png",
+   "pixels": 29860,
+   "max": 18
+  },
+  {
+   "shot": "chromium-light-phone/p42-new-pool-people.png",
+   "pixels": 27483,
+   "max": 14
+  },
+  {
+   "shot": "chromium-light-phone/p42-new-pool.png",
+   "pixels": 26785,
+   "max": 3
+  },
+  {
+   "shot": "chromium-light-phone/p42-pool-add-account.png",
+   "pixels": 2,
+   "max": 4
+  },
+  {
+   "shot": "chromium-light-phone/p42-pool-replace-key.png",
+   "pixels": 28,
+   "max": 18
+  },
+  {
+   "shot": "chromium-light-phone/p42-runner-delete.png",
+   "pixels": 23278,
+   "max": 3
+  },
+  {
+   "shot": "chromium-light-phone/p42-runner-rename.png",
+   "pixels": 23640,
+   "max": 3
+  },
+  {
+   "shot": "chromium-light-phone/p42-runner-rotate.png",
+   "pixels": 23739,
+   "max": 3
+  },
+  {
+   "shot": "chromium-light-phone/p42-runner-token.png",
+   "pixels": 25491,
+   "max": 3
+  },
+  {
+   "shot": "chromium-light-phone/p42-runners-loading.png",
+   "pixels": 62,
+   "max": 20
+  },
+  {
+   "shot": "chromium-light-phone/p42-users-loading.png",
+   "pixels": 62,
+   "max": 20
+  },
+  {
+   "shot": "chromium-light-phone/p42-workspace-discard.png",
+   "pixels": 22986,
+   "max": 3
+  },
+  {
+   "shot": "chromium-light-phone/p42-workspace-edit.png",
+   "pixels": 145,
+   "max": 7
+  },
+  {
+   "shot": "webkit-dark-desktop/p42-engine-menu.png",
+   "pixels": 96,
+   "max": 4
+  },
+  {
+   "shot": "webkit-dark-desktop/p42-new-pool-people.png",
+   "pixels": 12,
+   "max": 40
+  },
+  {
+   "shot": "webkit-dark-desktop/p42-pool-add-account.png",
+   "pixels": 23444,
+   "max": 255
+  },
+  {
+   "shot": "webkit-dark-desktop/p42-pool-replace-key.png",
+   "pixels": 368345,
+   "max": 255
+  },
+  {
+   "shot": "webkit-dark-desktop/p42-pool-signout.png",
+   "pixels": 465754,
+   "max": 233
+  },
+  {
+   "shot": "webkit-dark-desktop/p42-pool-tooltip.png",
+   "pixels": 3261,
+   "max": 164
+  },
+  {
+   "shot": "webkit-dark-phone/p42-engine-menu.png",
+   "pixels": 97,
+   "max": 4
+  },
+  {
+   "shot": "webkit-dark-phone/p42-new-pool-people.png",
+   "pixels": 19,
+   "max": 11
+  },
+  {
+   "shot": "webkit-dark-phone/p42-pool-signout.png",
+   "pixels": 2178,
+   "max": 167
+  },
+  {
+   "shot": "webkit-dark-phone/p42-users-delete.png",
+   "pixels": 5586,
+   "max": 209
+  },
+  {
+   "shot": "webkit-light-desktop/p42-engine-menu.png",
+   "pixels": 71,
+   "max": 4
+  },
+  {
+   "shot": "webkit-light-desktop/p42-new-pool-people.png",
+   "pixels": 12,
+   "max": 54
+  },
+  {
+   "shot": "webkit-light-desktop/p42-pool-add-account.png",
+   "pixels": 22860,
+   "max": 255
+  },
+  {
+   "shot": "webkit-light-desktop/p42-pool-replace-key.png",
+   "pixels": 328504,
+   "max": 255
+  },
+  {
+   "shot": "webkit-light-desktop/p42-pool-signout.png",
+   "pixels": 425763,
+   "max": 255
+  },
+  {
+   "shot": "webkit-light-desktop/p42-pool-tooltip.png",
+   "pixels": 8387,
+   "max": 228
+  },
+  {
+   "shot": "webkit-light-phone/p42-deepseek-refreshing.png",
+   "pixels": 1,
+   "max": 3
+  },
+  {
+   "shot": "webkit-light-phone/p42-engine-menu.png",
+   "pixels": 73,
+   "max": 4
+  },
+  {
+   "shot": "webkit-light-phone/p42-new-pool-people.png",
+   "pixels": 10,
+   "max": 14
+  },
+  {
+   "shot": "webkit-light-phone/p42-pool-signout.png",
+   "pixels": 3043,
+   "max": 224
+  },
+  {
+   "shot": "webkit-light-phone/p42-users-delete.png",
+   "pixels": 10411,
+   "max": 255
+  }
+ ]
+}

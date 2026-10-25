@@ -159,7 +159,7 @@ final class CodexAccountsTests: XCTestCase {
         XCTAssertEqual(CodexAccounts.label("c0ffee42", accounts: accounts), "Account c0ffee42", "an empty name is none")
         // The picker reads the same rule.
         let engines = [RunnerEngineHealth(engine: "claude", installed: true, auth: "yes", accounts: accounts)]
-        XCTAssertEqual(SessionProviderChoices.choices(configured: [], engines: engines)
+        XCTAssertEqual(SessionProviderChoices.providers(for: "claude", sources: ChoiceSources(configured: [], engines: engines))
                         .first { $0.slug == "claude" }?.accounts?.map(\.label),
                        ["jianghailong.main", "Research", "Account c0ffee42"])
     }
@@ -168,6 +168,78 @@ final class CodexAccountsTests: XCTestCase {
         XCTAssertEqual(CodexAccounts.onRunner(pro, accounts: both), pro)
         XCTAssertEqual(CodexAccounts.onRunner("c0ffee42", accounts: both), "default")
         XCTAssertEqual(CodexAccounts.onRunner(nil, accounts: both), "default")
+    }
+
+    /// Shared `accountToStartOn(…, { defaultRemoved: true })` (planUsage.spec.ts, "with Default removed
+    /// from Orbit, chooses among the accounts that remain — the only one too").
+    func testWithDefaultRemovedFromOrbitItChoosesAmongTheAccountsThatRemainTheOnlyOneToo() {
+        // Default has room and Pro has none: Pro all the same, as the only account left.
+        XCTAssertEqual(CodexAccounts.toStartOn([account(pro)], usage: usage(5, 18, 100), now: now, defaultRemoved: true), pro)
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(5, 18, 100), now: now, defaultRemoved: true), pro)
+        // Pro signed out: still Pro, whose sign-in the session waits on.
+        XCTAssertEqual(CodexAccounts.toStartOn([account("default"), account(pro, "no")], usage: usage(5, 18, 0), now: now,
+                                               defaultRemoved: true), pro)
+        // Two remaining, both spent: the one that frees up first.
+        let team = "7b02d9e1"
+        let spent = PlanUsageSnapshot(provider: "codex", primary: win(5, 300, earlier), accounts: [
+            pro: PlanUsageSnapshot(provider: "codex", primary: win(100, 10080, later)),
+            team: PlanUsageSnapshot(provider: "codex", primary: win(100, 10080, "2026-08-03T14:00:00Z")),
+        ])
+        XCTAssertEqual(CodexAccounts.toStartOn(both + [account(team)], usage: spent, now: now, defaultRemoved: true), team)
+        // Nothing remains: nothing to choose.
+        XCTAssertNil(CodexAccounts.toStartOn([account("default")], usage: usage(5, 18, nil), now: now, defaultRemoved: true))
+        // Not removed, the answers are the ones above.
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(5, 18, 100), now: now, defaultRemoved: false), "default")
+        XCTAssertNil(CodexAccounts.toStartOn([account(pro)], usage: usage(5, 18, 100), now: now))
+    }
+
+    /// The server's `accountOnRunner` with Default removed: no pick, a pick of Default and a slot the
+    /// runner no longer reports land on Automatic's pick among the accounts that remain, unless the
+    /// workspace's env decides; an account the runner reports is where the session runs.
+    func testWithDefaultRemovedNothingFallsBackOnDefault() {
+        let team = "7b02d9e1"
+        // As the control plane serves them: Default left out.
+        let remaining = [account(pro), account(team)]
+        let roomOnTeam = PlanUsageSnapshot(provider: "codex", accounts: [
+            pro: PlanUsageSnapshot(provider: "codex", primary: win(100, 10080, later)),
+            team: PlanUsageSnapshot(provider: "codex", primary: win(20, 10080, later)),
+        ])
+        for wanted in [nil, "", "default", "c0ffee42"] {
+            XCTAssertEqual(CodexAccounts.onRunner(wanted, accounts: remaining, usage: roomOnTeam, defaultRemoved: true, now: now),
+                           team, "\(wanted ?? "nil") lands on Automatic's pick")
+        }
+        XCTAssertEqual(CodexAccounts.onRunner(pro, accounts: remaining, usage: roomOnTeam, defaultRemoved: true, now: now), pro,
+                       "an account the runner reports is the session's own")
+        // One remaining: that one.
+        XCTAssertEqual(CodexAccounts.onRunner("default", accounts: [account(pro)], defaultRemoved: true, now: now), pro)
+        // A config directory or a key of the workspace's own stays the user's.
+        XCTAssertEqual(CodexAccounts.onRunner(nil, accounts: remaining, env: ["CODEX_HOME": "/srv/codex"], usage: roomOnTeam,
+                                              defaultRemoved: true, now: now), "default")
+        XCTAssertEqual(CodexAccounts.onRunner(nil, accounts: remaining, engine: "claude", env: ["CODEX_HOME": "/srv/codex"],
+                                              usage: roomOnTeam, defaultRemoved: true, now: now), team,
+                       "another engine's variable decides nothing")
+        // With Default in use, every answer is the one above.
+        XCTAssertEqual(CodexAccounts.onRunner("c0ffee42", accounts: remaining, usage: roomOnTeam, now: now), "default")
+    }
+
+    /// The server's `workspaceLeavesAccountToOrbit` and `automaticAccount` with Default removed: a
+    /// workspace set to it is on Automatic, which picks even when one account remains.
+    func testWithDefaultRemovedAWorkspaceSetToItIsOnAutomatic() throws {
+        func agent(_ json: String) throws -> Agent {
+            try decoder.decode(Agent.self, from: Data(#"{"id":"w","name":"orbit"\#(json)}"#.utf8))
+        }
+        let remaining = [account(pro), account("7b02d9e1")]
+        XCTAssertTrue(CodexAccounts.automaticOffered(agent: try agent(#","codexAccount":"default""#), accounts: remaining,
+                                                     defaultRemoved: true))
+        XCTAssertTrue(CodexAccounts.automaticOffered(agent: try agent(""), accounts: [account(pro)], defaultRemoved: true),
+                      "one account left is still Automatic's pick")
+        XCTAssertFalse(CodexAccounts.automaticOffered(agent: try agent(#","codexAccount":"1fda3f43""#), accounts: remaining,
+                                                      defaultRemoved: true), "a remaining account picked by hand decides")
+        XCTAssertFalse(CodexAccounts.automaticOffered(agent: try agent(#","env":{"CODEX_HOME":"/srv/codex"}"#),
+                                                      accounts: remaining, defaultRemoved: true))
+        XCTAssertFalse(CodexAccounts.automaticOffered(agent: try agent(""), accounts: [], defaultRemoved: true))
+        XCTAssertFalse(CodexAccounts.automaticOffered(engine: "claude", pick: "default", env: nil, accounts: remaining,
+                                                      defaultRemoved: false), "with Default in use, Default is a pick")
     }
 
     func testAutomaticIsOnOfferOnlyWhereNothingElseDecidesTheAccount() throws {
@@ -237,18 +309,20 @@ final class CodexAccountsTests: XCTestCase {
                    "accounts": {"\(pro)": {"provider": "codex", "primary": {"utilization": 0, "windowDurationMins": 10080}}}}}
         """.utf8))
         XCTAssertNotNil(planUsage)
-        let choices = SessionProviderChoices.choices(configured: [], engines: engines, planUsage: planUsage)
-        XCTAssertEqual(choices.first { $0.slug == "codex" }?.accounts, [
+        let sources = ChoiceSources(configured: [], engines: engines, planUsage: planUsage)
+        XCTAssertEqual(SessionProviderChoices.providers(for: "codex", sources: sources).first { $0.slug == "codex" }?.accounts, [
             AccountChoice(id: "default", label: "Default", quota: "5h 100%", nearLimit: true),
             AccountChoice(id: pro, label: "kxugfvukxczwl@mail.com", quota: "Weekly 0%"),
             AccountChoice(id: "c0ffee42", label: "Account c0ffee42", unavailable: "Not signed in"),
         ])
-        XCTAssertNil(choices.first { $0.slug == "claude" }?.accounts)
+        XCTAssertNil(SessionProviderChoices.providers(for: "claude", sources: sources).first { $0.slug == "claude" }?.accounts)
         // One account, or an engine that cannot run, lists none.
         let single = [RunnerEngineHealth(engine: "codex", installed: true, auth: "yes", accounts: [account("default")])]
-        XCTAssertNil(SessionProviderChoices.choices(configured: [], engines: single).first { $0.slug == "codex" }?.accounts)
+        XCTAssertNil(SessionProviderChoices.providers(for: "codex", sources: ChoiceSources(configured: [], engines: single))
+                        .first { $0.slug == "codex" }?.accounts)
         let signedOut = [RunnerEngineHealth(engine: "codex", installed: true, auth: "no", accounts: both)]
-        XCTAssertNil(SessionProviderChoices.choices(configured: [], engines: signedOut).first { $0.slug == "codex" }?.accounts)
+        XCTAssertNil(SessionProviderChoices.providers(for: "codex", sources: ChoiceSources(configured: [], engines: signedOut))
+                        .first { $0.slug == "codex" }?.accounts)
     }
 
     // MARK: Claude accounts, the same way
@@ -298,7 +372,8 @@ final class CodexAccountsTests: XCTestCase {
                     "accounts": {"\(pro)": {"provider": "claude", "fiveHour": {"utilization": 19}, "sevenDay": {"utilization": 28}}}}}
         """.utf8))
         XCTAssertNotNil(planUsage)
-        let choices = SessionProviderChoices.choices(configured: [], engines: engines, planUsage: planUsage)
+        let choices = SessionProviderChoices.providers(
+            for: "claude", sources: ChoiceSources(configured: [], engines: engines, planUsage: planUsage))
         XCTAssertEqual(choices.first { $0.slug == "claude" }?.accounts, [
             AccountChoice(id: "default", label: "Default", quota: "Weekly 100%", nearLimit: true),
             AccountChoice(id: pro, label: "jianghailong.rd", quota: "Weekly 28%"),

@@ -13,7 +13,10 @@ and [runner troubleshooting](runner-troubleshooting.md) when enrollment or execu
 - Docker Engine with the Compose plugin
 - Enough CPU, memory, and disk to build the images and retain Postgres data
 - A Linux host for the server deployment
-- One or more runner machines with a supported runtime installed and authenticated
+- One or more runner machines with a supported runtime installed and authenticated, or room on this host for
+  [managed runners](#managed-runners): by default 2 CPUs, 4 GiB of memory and a 20 GiB volume for each runner awake.
+  Their [firewall](#isolation-and-its-limits) needs Docker run as root with its iptables firewall backend (the
+  default), not rootless
 
 The server does not need the runtime credentials. Claude Code, Codex, Kimi, and OpenCode logins stay on the
 runner machines.
@@ -31,6 +34,22 @@ SIGKILL that ends an abandoned sign-in.
 ```bash
 git clone https://github.com/jianghailong-xy/orbit.git
 cd orbit
+```
+
+For a new deployment, `scripts/install-server.sh` does the rest of this section and the next: it writes `.env`
+with two independently generated secrets, prepares [managed runners](#managed-runners), firewalls their network on
+this host, and starts the stack. Give it the external origin when you serve Orbit on a domain:
+
+```bash
+scripts/install-server.sh --public-origin https://orbit.example.com
+```
+
+It stops without changing anything where a `.env` or `data/postgres` already exists: that checkout holds a
+deployment, which is [upgraded](#upgrading), never installed over. What follows is what it does, for configuring a
+deployment by hand. A `.env` written by hand leaves managed runners off until it switches them on
+([Turn them off or on](#turn-them-off-or-on)).
+
+```bash
 cp .env.example .env
 ```
 
@@ -64,6 +83,8 @@ rebuild the web image whenever it changes.
 
 ## 2. Start the stack
 
+The install script has started it already. By hand:
+
 ```bash
 docker compose up -d --build
 docker compose ps
@@ -78,6 +99,12 @@ By default, the gateway listens on <http://localhost:2086>. A fresh deployment r
 `/setup`; that account becomes the initial administrator. Additional users are provisioned by an administrator.
 There is no public self-service signup unless an administrator opens sign-up through
 [Google sign-in](#google-sign-in).
+
+To see Orbit as one of those users while helping them, an administrator opens **Admin → Users → View as**: Orbit as
+that user sees it, read-only, for 30 minutes, under a band that says whose Orbit it is and offers **Exit**. The
+reason asked for first is recorded with the account. Nothing can be changed while viewing, and administration and
+stored keys stay out of reach. Your own account, another administrator's and a disabled one cannot be viewed, and
+disabling either account ends the view.
 
 Useful diagnostics:
 
@@ -103,6 +130,9 @@ Orbit can execute code with the runner account's privileges. Do not expose an in
 attach a runner with broader credentials than its users should be able to exercise.
 
 ## 4. Register a runner
+
+With managed runners on, every account is given a runner at sign-in, and this step is optional: register a machine
+when the work needs that machine's repositories, network or credentials.
 
 Open **Add a runner** in the web UI and use the generated command. It points at this deployment and enrolls
 the machine through browser approval. A generic example is:
@@ -237,7 +267,9 @@ open it:
   personal access tokens and runners work as before. You cannot disable your own account or the last
   administrator. Disable rather than delete: deleting an account still fails while it owns runners, workspaces or
   tasks.
-- **Admin → Users** shows how each account signs in and when it was created, so unexpected sign-ups stand out.
+- **Admin → Users** shows how each account signs in, when it was created and when it last used Orbit (in one of
+  the apps or with an access token), so unexpected sign-ups and accounts nobody uses any more stand out. Search
+  finds an account by name or email.
 
 ### Testing and publishing the Google app
 
@@ -319,8 +351,407 @@ The address must be reachable from inside the container, whose `127.0.0.1` is th
 the Docker host, use the host's LAN or tunnel address. The worker probes `{base}/health` every 10 seconds (200 or 404
 counts as up) and records the result. The wiki settings and health line show the model's name and its state, never
 its address or key; if the endpoint refuses the key, correct it and recreate the worker. See the
-[configuration reference](configuration.md#wiki-worker-and-system-model) for every variable. Until the wiki's jobs
-move to the server, the worker only probes the model and reports its state.
+[configuration reference](configuration.md#wiki-worker-and-system-model) for every variable. The worker runs every
+account's wiki jobs with this model. To pause them, stop it with `docker compose stop wiki-worker`: the jobs wait in
+the queue until it is started again.
+
+## Runner link
+
+Runners reach the control plane over HTTPS. The runner link is the connection that is to replace those requests: one
+WebSocket per runner, to a link gateway that serves the runners of its cell. The gateway is part of this stack, as the
+`link-gateway` service under the `runner-link` Compose profile, with the `nats` service beside it under the same
+profile. Both run only where `.env` turns that profile on.
+
+For now the link runs in shadow. Runners keep working over HTTPS. The gateway authenticates their connections, keeps
+them alive, and compares the heartbeats and event batches runners mirror to it with what the HTTPS side received. It
+forwards nothing to the control plane, so turning it off changes no runner's work. Once the link is switched over, the
+gateway forwards each runner's requests, heartbeats and events to the apiserver's
+[internal listener](#runner-link-calls), and its live stream to NATS while someone watches the session.
+
+Whenever work waits for a runner (a queued session, a message in its inbox, or a sign-in, merge or update that its
+heartbeat delivers), the apiserver also publishes a hint on NATS, on the subject of that runner alone. The gateway
+subscribes for the runners it holds connections of and relays each hint to that runner. While the link runs in shadow,
+hints are counted and not sent. NATS keeps nothing: no JetStream, no volume. It has no port on the host, and a hint lost
+while it is down costs a runner one heartbeat interval. The apiserver publishes only while the connection tokens below
+are configured, to `nats://nats:4222` unless `RUNNER_LINK_NATS_URL` names another server. With NATS unreachable, it
+logs the hints it dropped once a minute and goes on. Session content crosses NATS too (the live stream, and the text a
+turn has streamed so far), so NATS admits only the apiserver and the gateway, each by its own
+[nkey](#nats-credentials).
+[src/link-gateway/README.md](../src/link-gateway/README.md) describes the gateway in full.
+
+### Connection tokens
+
+Before it connects, a runner trades its runner token for a connection token, and the gateway refuses the tokens of
+revoked credentials. Both come from the apiserver, which offers them only when all three of these are set in `.env`.
+While they are not, those routes answer 404 and runners keep working over HTTP. A value that cannot be used leaves the
+link off too, and the apiserver logs why when it starts:
+
+```dotenv
+RUNNER_LINK_SIGNING_KEY="base64 of an Ed25519 private key in PEM"
+RUNNER_LINK_URL="wss://link.orbit.example.com"
+RUNNER_LINK_GATEWAY_TOKEN="a secret only the gateway is given"
+```
+
+Generate the key and the secret. The gateway is given the public key and the secret, never the private key:
+
+```bash
+openssl genpkey -algorithm ed25519 -out runner-link.pem
+base64 -w0 runner-link.pem                          # RUNNER_LINK_SIGNING_KEY
+openssl pkey -in runner-link.pem -pubout | base64 -w0  # RUNNER_LINK_PUBLIC_KEY, for the gateway
+openssl rand -base64 32                             # RUNNER_LINK_GATEWAY_TOKEN, at least 32 characters
+```
+
+Keep `runner-link.pem` with the deployment's other protected secrets, then recreate the apiserver and check its log:
+
+```bash
+docker compose up -d apiserver
+docker compose logs --tail=50 apiserver | grep RunnerLink
+```
+
+How the tokens work:
+
+- A runner calls `POST /api/runner/link-token` with its runner token and the process identity it heartbeats with.
+  The token it gets back lasts one hour and names the runner, its account, its cell (`cell-1`, the only cell) and
+  the address in `RUNNER_LINK_URL`, which the response repeats.
+- Tokens are signed EdDSA over Ed25519 and name their key (`kid`, the public key's RFC 7638 thumbprint), so the
+  gateway verifies them with the public key alone and can accept an old and a new key while the signing key is
+  replaced. Tokens signed with the old key stop working within the hour.
+- Deleting a runner, `orbit unregister`, rotating a runner's token and registering a runner again under the same
+  name revoke every token minted with its old credential. The gateway reads `GET /api/runner/link-token/revocations`
+  with `Authorization: Bearer <RUNNER_LINK_GATEWAY_TOKEN>` and refuses those tokens; one it has not yet heard of
+  stops working when it expires.
+
+### Runner link calls
+
+Once the link carries the runners' work, the gateway calls the runner routes on the apiserver's behalf, through a
+listener of their own that serves the gateway alone: every call must present `RUNNER_LINK_GATEWAY_TOKEN`, and only the
+runner routes answer there. Compose sets it up:
+
+```dotenv
+RUNNER_LINK_INTERNAL_PORT=3001       # the listener's port; Compose's default
+RUNNER_LINK_INTERNAL_HOST=0.0.0.0    # every interface of the apiserver's container; Compose's default
+```
+
+The listener opens only while the connection tokens above are configured; without them the apiserver logs
+`runner link calls are not served: the runner link is off` and opens nothing. Inside its container, `0.0.0.0` means this
+project's network: the gateway reaches it as `apiserver:3001` (its `LINK_INTERNAL_API_URLS`). **Never publish this
+port** on the host or put it behind the web gateway. Outside Compose, the apiserver binds `127.0.0.1` unless
+`RUNNER_LINK_INTERNAL_HOST` says otherwise; give it an address only the gateway's network reaches.
+
+### NATS credentials
+
+NATS admits two users, each by an nkey, an Ed25519 key pair: the apiserver, which publishes hints and reads live
+streams, and the gateway, which reads hints and publishes live streams. `src/link-gateway/nats.conf`, which the `nats`
+service reads, allows each nothing else, and a client without a key cannot connect. Make two pairs:
+
+```bash
+docker compose --profile runner-link build link-gateway
+docker compose --profile runner-link run --rm --no-deps link-gateway nkey   # the apiserver's pair
+docker compose --profile runner-link run --rm --no-deps link-gateway nkey   # the gateway's pair
+```
+
+Each run prints a new pair once, `seed=SU…` and `public=U…`, and keeps no copy. Put the four values in `.env`:
+
+```dotenv
+RUNNER_LINK_NATS_APISERVER_SEED=SU...   # the apiserver's seed: given to the apiserver alone
+RUNNER_LINK_NATS_APISERVER_KEY=U...     # its public key: given to nats alone
+RUNNER_LINK_NATS_GATEWAY_SEED=SU...     # the gateway's seed: given to the link gateway alone
+RUNNER_LINK_NATS_GATEWAY_KEY=U...       # its public key: given to nats alone
+```
+
+A seed is a credential: keep it with the deployment's other secrets. To replace a pair, make a new one, set both its
+values and recreate `apiserver` (or `link-gateway`) and `nats`.
+
+What missing values look like:
+
+- Either public key empty or unset: `nats` refuses to start, and `docker compose logs nats` says
+  `User entry requires a user` (empty) or `variable reference for 'RUNNER_LINK_NATS_…_KEY' … can not be found`
+  (unset). Hints, and the live stream once the link is switched over, stop; runners on HTTPS are not affected.
+- The apiserver's seed unset: its log warns `RUNNER_LINK_NATS_SEED is not set` and then that NATS is unreachable
+  (`Authorization Violation`); it drops hints and counts them.
+- The gateway's seed unset: its log warns `LINK_NATS_SEED is not set`, `link_nats_connected` stays `0`, and no hint is
+  relayed.
+
+> **Upgrading a deployment that already runs the `runner-link` profile:** add the four values above to `.env` before
+> you upgrade. From this release on, `nats` reads `src/link-gateway/nats.conf` and refuses to start without the two
+> public keys, and the apiserver and the gateway connect only with their seeds.
+
+### Deploy the link gateway
+
+Runners connect to the gateway directly, on a host name and a port of its own. A proxying CDN or the web gateway
+never stands between them: a CDN would terminate and inspect the connection, and its outages and limits would become
+the link's. Set it up in this order.
+
+1. **DNS.** Give the link a host name of its own, such as `link.orbit.example.com`, with an A or AAAA record for this
+   host. Make the record **DNS only**: on Cloudflare, a grey cloud, not proxied. The web origin's own record stays as
+   it is.
+2. **Certificates.** Choose one way:
+   - **ACME.** The gateway obtains a Let's Encrypt certificate on its first connection and renews it on its own. Set
+     `RUNNER_LINK_ACME_DOMAINS` to the link's host name and `RUNNER_LINK_ACME_EMAIL` to a contact address. Its
+     TLS-ALPN-01 challenge reaches the gateway on port 443, so set `RUNNER_LINK_PORT=443`. Certificates are kept in
+     `RUNNER_LINK_GATEWAY_DIR/acme`.
+   - **Files.** Put the certificate chain and its key in `RUNNER_LINK_GATEWAY_DIR/tls/fullchain.pem` and
+     `RUNNER_LINK_GATEWAY_DIR/tls/privkey.pem`, from certbot, another ACME client or your own CA. Any port works.
+     When the files change, the gateway loads them within 30 seconds without a restart, and open connections stay
+     up. A certbot deploy hook that copies the renewed files there is enough. To load them at once, run
+     `docker compose kill -s HUP link-gateway`.
+3. **Firewall.**
+   - Open TCP `RUNNER_LINK_PORT` to the internet: runners connect from wherever they are.
+   - Leave the gateway's metrics port closed. Compose binds it to `127.0.0.1:RUNNER_LINK_METRICS_PORT` (9464).
+   - Keep the web origin's rules: where it sits behind Cloudflare, it accepts only Cloudflare's address ranges. The
+     link's port is a separate entrance and does not change them.
+   - In ACME mode, the gateway needs outbound HTTPS to Let's Encrypt.
+4. **Configure.** Add to `.env`, keeping any profiles `COMPOSE_PROFILES` already lists:
+
+   ```dotenv
+   COMPOSE_PROFILES=runner-link
+   RUNNER_LINK_URL="wss://link.orbit.example.com"
+   RUNNER_LINK_PUBLIC_KEY="base64 of the public key in PEM"
+   RUNNER_LINK_GATEWAY_DIR=/srv/orbit/link-gateway
+   RUNNER_LINK_PORT=443
+   RUNNER_LINK_ACME_DOMAINS=link.orbit.example.com
+   RUNNER_LINK_ACME_EMAIL=ops@example.com
+   ```
+
+   and the four [NATS credentials](#nats-credentials).
+
+   `RUNNER_LINK_URL` carries the port when it is not 443, as in `wss://link.orbit.example.com:8443`. Create
+   `RUNNER_LINK_GATEWAY_DIR` before starting, with `tls/` inside it when certificates come from files. The gateway
+   runs as root in its container, with every capability dropped, so root-owned certificate files are readable.
+5. **Start and check.**
+
+   ```bash
+   docker compose up -d --build apiserver link-gateway nats
+   docker compose ps link-gateway nats
+   docker compose logs --tail=50 link-gateway
+   docker compose logs apiserver | grep RunnerHints
+   curl -s http://127.0.0.1:9464/metrics | grep -E '^link_(connections|handshakes_total|revocation_fetches_total|nats_connected)'
+   curl -sI https://link.orbit.example.com   # 426: the gateway speaks WebSocket only
+   ```
+
+   `link_revocation_fetches_total{result="ok"}` rising every 30 seconds shows that the gateway reads the apiserver
+   with the right secret. `link_nats_connected 1`, and `connected to NATS` in the apiserver's log, show that hints flow,
+   both clients signed in with their seeds. `runner link calls are served on 0.0.0.0:3001` in the apiserver's log shows
+   the listener the gateway forwards to once the link is switched over.
+
+### Operate the link gateway
+
+- **Releases.** An upgrade, or `docker compose up -d --force-recreate link-gateway`, stops the gateway gracefully.
+  It drains first:
+  1. It refuses new connections.
+  2. It tells its runners, in batches, to reconnect after a delay drawn at random within 30 seconds.
+  3. It closes what is left within 80 seconds.
+
+  Compose waits up to 90 seconds before it stops the container. Runners come back to the new gateway once it is up.
+- **Certificate rotation.** In ACME mode it is automatic. With files, replace them. Either way,
+  `link_tls_certificate_not_after_timestamp_seconds` shows the expiry of the certificate in use (files mode).
+- **Replacing the signing key.**
+  1. Give the gateway both public keys, comma-separated (`RUNNER_LINK_PUBLIC_KEY="<old>,<new>"`), and recreate it.
+  2. Switch the apiserver to the new `RUNNER_LINK_SIGNING_KEY`.
+  3. After an hour, when every old token has expired, drop the old public key.
+- **Monitoring.** `/metrics` on the metrics port counts connections, handshakes by result and their duration,
+  disconnects by reason, ping round trips, token refusals by reason, revocation reads, the shadow comparison, and
+  hints by kind and by what became of them. Once the link is switched over it also counts forwarded calls by result and
+  their latency, retries across apiserver instances, events stored and their acknowledgement latency, the ingest queue
+  and the credit it grants, the live stream by what became of it, and frames dropped or connections closed for slow
+  reading.
+  [The gateway's README](../src/link-gateway/README.md#metrics) lists them all.
+- **Logs.** `docker compose logs link-gateway` shows one line per connection event. Set `LINK_FRAME_LOG=all` in the
+  service's environment to log a summary of every frame, too. The gateway decodes frames that it or a runner logged:
+  `docker compose logs link-gateway | docker compose exec -T link-gateway /link-gateway dump`.
+- **Turning it off.** Remove `runner-link` from `COMPOSE_PROFILES`, then run
+  `docker compose stop link-gateway nats && docker compose rm -f link-gateway nats`. Runners keep working over HTTPS.
+
+## Managed runners
+
+A new deployment gives every account a runner of its own, so nobody has to register a machine before a first
+session. It is a container on this host's Docker, given when the account signs in, with a data volume that keeps
+its checkouts, sessions and engine sign-ins. After an hour with nothing to do it sleeps: the container stops and
+the volume stays. A new message, a task that can run or a scheduled wakeup starts it again, on the same volume.
+Runners that people register themselves keep working beside it.
+
+### What the install sets up
+
+`scripts/install-server.sh` prepares managed runners, then writes three lines into `.env`:
+
+```dotenv
+ORBIT_MANAGED_RUNNERS_ENABLED=true
+ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners
+COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall
+```
+
+- **The switch.** `ORBIT_MANAGED_RUNNERS_ENABLED=true` turns managed runners on in the apiserver. Absent, empty or
+  `false` is off, and so is any other value, with a warning in the apiserver's log.
+- **The Docker backend.** The `managed-runners-docker` Compose profile starts `docker-channel`, the
+  [restricted Docker channel](../deploy/managed-runner/docker-channel/README.md): the only process given the Docker
+  socket. It makes each runner's container and volume from its own template and touches nothing it did not make.
+  The apiserver reaches it through a socket in `data/managed-runners` and is never given the Docker socket.
+- **Their files.** `data/managed-runners` (mode 0700) holds the channel's token, its configuration
+  (`channel.json`) and the apiserver's managed runner profile (`profile.json`, `"backend": "docker"`). The profile
+  gives each runner 2 CPUs, 4 GiB of memory with its `/tmp` counted in it, 4096 processes and a 20 GiB volume, and
+  the channel refuses anything above its own ceilings. The pool is what this host has, less a quarter of its CPU
+  and memory and a tenth of the disk Docker's volumes live on, whichever filesystem the checkout is on; a runner
+  that does not fit waits until another one sleeps. The channel also makes no more containers than one per CPU and
+  per GiB of this host's memory, whichever is fewer, and deletes no volume unless an operator turns that on. To
+  change these, edit both files and run `docker compose up -d --force-recreate docker-channel apiserver`
+  ([where each setting lives](managed-runner-docker-operations.md#where-each-setting-lives)).
+- **The image.** The script builds the managed runner image from
+  [deploy/managed-runner/image](../deploy/managed-runner/image/Dockerfile) on this host, as
+  `orbit-managed-runner:local`, and pushes it nowhere. Both files name it by its local image ID. To use an image
+  built elsewhere from a commit you reviewed, load it with `docker load` and pass `--managed-runner-image <image>`.
+- **Their network.** `orbit-managed-runners`, an IPv4-only bridge network on which containers cannot reach one
+  another. A runner reaches the internet (its model's endpoint, Git hosts) and reaches this deployment the way a
+  runner on another machine does: through the gateway's published port 2086, at the host's address on that network.
+  It reaches neither another runner nor the stack's own containers.
+- **Their firewall.** The `managed-runner-firewall` Compose profile starts `managed-runner-firewall`, which keeps rules
+  on this host's iptables for that network: a runner reaches the gateway's port, DNS and public addresses, and nothing
+  else of this host or the private networks behind it ([Isolation and its limits](#isolation-and-its-limits)). Before
+  writing anything the install checks that this host can carry the rules; then it applies them once and checks from
+  the network that this host and a private address are refused and that DNS still resolves, and once the stack is up
+  that the gateway's port is reached. Where any of that fails it stops and says why.
+- **Their server address.** `profile.json` gives each runner `http://<gateway of orbit-managed-runners>:2086`. A
+  runner sends its credential with every request, and a managed runner accepts plain HTTP to any private address,
+  so keep `runner.serverUrl` on this host's own address on that network, or make it `https://`. Never point it at
+  another machine over plain HTTP, a LAN address included.
+
+The first account, the administrator created at `/setup`, is given its runner when it signs in. The runner takes
+sessions once a runtime is signed in on it; until then it reports that none is installed and signed in.
+`--no-managed-runners` installs with `ORBIT_MANAGED_RUNNERS_ENABLED=false` and prepares none of the above.
+`--no-managed-runner-firewall` installs managed runners without their firewall and leaves this host's firewall alone:
+`COMPOSE_PROFILES` then names `managed-runners-docker` alone, `.env` carries a note that the firewall is off, and the
+install says so as it starts and as it ends. Read [Isolation and its limits](#isolation-and-its-limits) before
+choosing it.
+
+### Who gets one
+
+Every account, including the ones open sign-up creates ("Anyone with a Google account" under
+[Who can sign in with Google](#who-can-sign-in-with-google)), except a disabled one. Disabling an account
+(**Admin → Users → Disable**) stops its runner from being given, started or woken, and puts a running one to sleep
+with its volume kept.
+
+### Isolation and its limits
+
+Read this before opening sign-up on a deployment with managed runners. A managed runner is a container, and every
+container shares this host's kernel: with every other managed runner and with the Orbit stack itself. The channel
+makes each one from the same template: an unprivileged user, every capability dropped, no privilege escalation, a
+read-only root filesystem, limits on CPU, memory, processes and disk, no host directory and no Docker socket. Its
+`/tmp` is executable, as builds and `go test` need, and `nosuid` and `nodev`; on Docker older than 27 it stays
+`noexec`.
+Managed runners cannot reach one another on their network. That keeps honest users apart and contains their
+mistakes. It is not a strong boundary against a malicious user: a flaw in the kernel or the container runtime lets
+code in one container reach the host, other people's runners and data, and this deployment's secrets. Where anyone
+can sign up, that risk comes with the deployment, and accepting it is the deployer's decision. Where it is not
+acceptable, switch managed runners off or keep sign-up to people you trust.
+
+Without a firewall, a runner can also reach every service this host listens to on an address other than loopback
+(sshd and rpcbind, on the host task D5 measured), and through the host the private network it sits on. So the install
+firewalls the managed runners' network on this host: from it a runner reaches the gateway's published port at the
+network's gateway address (how it reaches this deployment), DNS, and public addresses. Every other port of this host,
+on any of its addresses, is refused, and so are private (10/8, 172.16/12, 192.168/16), shared (100.64/10), link-local
+(169.254/16, the cloud metadata address among them), loopback and reserved addresses behind it, and anything IPv6.
+The rules match only traffic from that network's bridge: no other container and no service of this host is affected.
+`managed-runner-firewall` keeps them: it checks them every 10 seconds, writes again what changed, and writes them anew
+after this host restarts; Docker's own restarts leave them in place. The Docker channel starts no runner container
+while the firewall does not report them in force, so a runner never starts unprotected. What a runner reaches, how to
+check the rules, let runners reach an internal model endpoint, turn the firewall off and remove its rules:
+[the managed runners' firewall](managed-runner-docker-operations.md#the-managed-runners-firewall).
+
+The firewall needs Docker's iptables (or iptables with firewalld) firewall backend, nft or legacy iptables underneath,
+and Docker run as root. With rootless Docker, Docker's nftables backend, or `"iptables": false`, the install stops
+before it writes anything. A cloud provider's firewall or security groups are neither changed nor needed. The firewall
+decides where a runner's packets may go; it is not a boundary against a flaw in the kernel or the container runtime,
+which the paragraph above is about.
+
+Installing with `--no-managed-runner-firewall`, or turning the firewall off later, gives every account's runner this
+host's services and the private networks behind it again: anyone who can sign in can probe and reach them from code
+in their runner. Choose it only where those are firewalled otherwise, or where every account is trusted with them.
+
+### Turn them off or on
+
+Managed runners are switched in `.env`, and only there. An upgrade never writes these lines.
+
+- **Off:** set `ORBIT_MANAGED_RUNNERS_ENABLED=false` and recreate the apiserver with `docker compose up -d apiserver`.
+  From then on no account is given a runner, and none is started or woken. Nothing is stopped or deleted: a runner
+  that is running keeps running, every volume stays, and switching them on again carries on from where they were.
+- **On again:** set `ORBIT_MANAGED_RUNNERS_ENABLED=true` and run `docker compose up -d apiserver`.
+- **On, for a deployment installed without them:** every deployment installed before managed runners existed, and
+  one installed with `--no-managed-runners`. Upgrade it first, then, from its checkout:
+
+  ```bash
+  scripts/install-server.sh --enable-managed-runners
+  ```
+
+  This prepares managed runners as a fresh install does, their firewall included, writes the three lines into `.env`
+  (replacing an `ORBIT_MANAGED_RUNNERS_ENABLED=false` line and leaving every other line as it was), starts
+  `managed-runner-firewall` and `docker-channel`, and recreates the apiserver from the image it already runs. Add
+  `--no-managed-runner-firewall` to leave this host's firewall alone.
+- **Their firewall, for a deployment that has managed runners without it:** one installed before the firewall
+  existed, or with `--no-managed-runner-firewall`. Upgrade it first, then run
+  `scripts/install-server.sh --enable-managed-runner-firewall`. Turning the firewall off and removing its rules are in
+  [the runbook](managed-runner-docker-operations.md#turn-it-off).
+
+### What an upgrade does
+
+An upgrade (the `/upgrade` skill's script, or the steps under [Upgrading](#upgrading)) never writes `.env`, so
+managed runners stay as they were: off on a deployment whose `.env` does not switch them on, which is every
+deployment installed before them. There `/upgrade` builds and recreates exactly what it did before managed runners
+existed, and writes nothing under `data/`.
+
+`/upgrade` never builds, starts or recreates `managed-runner-firewall`, and changes no rule on this host's firewall:
+a deployment without the firewall gets none, and one with it keeps its service and rules as they were. Add it to a
+deployment with `scripts/install-server.sh --enable-managed-runner-firewall`.
+
+Where `.env` turns on the `managed-runners-docker` profile, `/upgrade` also keeps the managed runners current. The
+runner in their image never updates itself, so each upgrade:
+
+1. stops before building anything unless `channel.json` and `profile.json` are in the managed runners' directory,
+   as Compose binds it into `docker-channel`;
+2. rebuilds `docker-channel` with the other images, then the managed runner image from this checkout, as
+   `orbit-managed-runner:local`, on this host and pushed nowhere;
+3. when the image ID is new, writes it into both files (the channel's `image`, the profile's `runner.image`), each
+   file replaced whole by a rename;
+4. recreates the other services, then the apiserver if that did not recreate it, then `docker-channel`, last.
+   Both read their file only as they start. Until the channel serves the image the apiserver's profile names, the
+   apiserver starts no runner and only waits; in the other order, a channel already on the new image would refuse
+   the previous apiserver and fail a runner it was starting.
+
+Nothing a managed runner is doing is interrupted. A container keeps the image it was made from: the upgrade does not
+stop, drain or restart it, and the channel still reads, stops and removes containers of the previous image. Each
+runner moves to the new image with its next container, the one the wake after its next sleep makes, on the same
+volume and with the same runner. A sleep comes after an hour with nothing to do, or sooner when its owner asks for
+one through the API (`POST /api/managed-runner/sleep`), and only while nothing runs on it; one container per volume
+and the stop proof are as for any sleep. A container of the previous image that was made and never started is never started: the
+channel removes it and makes a new one from the current image.
+
+`/upgrade` deletes no image, and Docker keeps whatever a container still runs. What happens to the previous image
+then depends on Docker's image store:
+
+- In the containerd image store, which a fresh Docker 29 uses (`docker info` lists `io.containerd.snapshotter.v1`),
+  the previous image loses its name as soon as the new one takes the tag: `docker image ls` no longer shows it and
+  nothing new can be made from it, but containers made from it keep running on it, and its storage goes when the
+  last of them is removed. Nothing is left to delete.
+- In the classic store it stays as an untagged image. Docker refuses to remove it while any container, running or
+  stopped, was made from it, and `/upgrade --prune` (`docker image prune -f`) removes it once none is.
+
+Either way it is gone once every runner has slept once. To see which runners still run a previous image, list the
+managed runner containers with their images:
+
+```bash
+docker ps -a --filter label=orbit.managed-runner.instance --format '{{.Names}} {{.Image}}'
+```
+
+The layers of every image an upgrade rebuilds also stay in Docker's build cache until `docker builder prune`.
+
+If an upgrade stops between writing the files and starting both services on them, `data/managed-runners/.image-switch`
+names the image, and the next `/upgrade` starts the apiserver and the channel again whatever it builds.
+
+Every new commit gives a new image, since the image is stamped with the commit it was built from, and so a few
+minutes of building on each upgrade: the build's package step runs again, which needs the network.
+
+Each runner's data is on a Docker volume, `mr-data-<runner id>`, on this host's disk alone. The Postgres backups
+above do not include it, and neither switching managed runners off nor disabling an account deletes it. Back the
+volumes up, restore them, and handle a full disk, a memory limit, a channel or apiserver outage and a host restart as
+[Managed runners on Docker: backup, restore and failure handling](managed-runner-docker-operations.md) describes.
 
 ## Upgrading
 
@@ -335,11 +766,29 @@ docker compose up -d --build
 
 The control plane applies pending Prisma migrations on startup, and `wiki-worker`, which runs the same image,
 starts once it is healthy. Keep Postgres running unless the release notes explicitly require a database change
-outside the normal migration path.
+outside the normal migration path. An upgrade leaves `.env`, and with it [managed runners](#what-an-upgrade-does),
+as it was.
+
+These steps leave the managed runner image as it was. On a deployment with managed runners, upgrade with
+`/upgrade`'s script (`.claude/skills/upgrade/upgrade.sh`), which also rebuilds that image and switches to it, or do
+its steps after the ones above:
+
+```bash
+docker build -f deploy/managed-runner/image/Dockerfile --build-arg "ORBIT_SOURCE_SHA=$(git rev-parse HEAD)" \
+  -t orbit-managed-runner:local .
+docker image inspect -f '{{.Id}}' orbit-managed-runner:local
+# Write that ID as "image" in data/managed-runners/channel.json and as runner.image in profile.json, then:
+docker compose up -d --wait --no-deps --force-recreate apiserver
+docker compose up -d --wait --no-deps --force-recreate docker-channel
+```
 
 ## Production checklist
 
 - [ ] `JWT_SECRET` and `PROVIDER_SECRET_KEY` are unique, protected, and backed up.
+- [ ] The runner link is off, or `RUNNER_LINK_SIGNING_KEY` and `RUNNER_LINK_GATEWAY_TOKEN` are unique and protected,
+      and the gateway holds the public key, not the private one.
+- [ ] Where the link gateway runs, its DNS record is DNS only (not proxied), its port is the only other one open to
+      the internet, and its metrics port stays on loopback.
 - [ ] The public endpoint uses HTTPS and the configured origin matches it.
 - [ ] Only the gateway is publicly reachable.
 - [ ] The first administrator uses a strong password and user access is reviewed.
@@ -348,6 +797,10 @@ outside the normal migration path.
       scripts with one under a runner service's OS account.
 - [ ] If Google sign-in is on, the Google app is published and who can sign in with Google is a deliberate
       choice.
+- [ ] Managed runners are on or off by a deliberate choice in `.env`, and where they are on and anyone can sign up,
+      the shared-kernel risk under [Isolation and its limits](#isolation-and-its-limits) is accepted.
+- [ ] Where managed runners are on, `managed-runner-firewall` is healthy (`docker compose ps`), or it is off by a
+      deliberate choice and this host's services and private networks are firewalled otherwise.
 - [ ] Backups are copied off-host and a restore has been tested.
 - [ ] Container health, disk space, backup failures, and runner availability are monitored.
 - [ ] The deployment is pinned to a known release or commit and has a documented upgrade cadence.

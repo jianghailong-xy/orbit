@@ -1,0 +1,16 @@
+host kernel modules rbd/nbd/ceph/libceph loaded: none
+VM 1: running, qemu pid 1696874, cgroup /system.slice/orbit-mr-lab.service
+VM 1 qemu listens on: 127.0.0.1:16222 127.0.0.1:16230 127.0.0.1:16443
+VM 2: stopped (orbit-mr-lab-2.service inactive)
+link 127.0.0.1:16230: no second VM connected
+unit orbit-mr-lab: memory.current 3272 MiB, memory.peak 4704 MiB, swap 779 MiB, memory.max 6979321856
+host: MemAvailable 4495 MiB, SwapFree 34694 MiB
+guest 1 (virtio-balloon): {"guestMiB": {"stat-available-memory": 4048, "stat-free-memory": 2489, "stat-total-memory": 5920, "stat-disk-caches": 1733}, "lastUpdate": 1792535988}
+guest 1: {"cephHealth":"HEALTH_OK","osdsUp":3,"osdsIn":3,"pgStates":[{"state_name":"active+clean","count":33}],"cephListens":"10.77.0.1","problems":[]}
+k3s v1.36.5+k3s1
+node orbit-mr-lab Ready: True, internal IP 10.77.0.1
+node orbit-mr-lab-2 (its VM is off): Ready Unknown, cordoned
+deployment/ceph-csi-operator-controller-manager: 1/1 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 1/1 available
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab: ready
+healthy: k3s, Ceph (3 OSDs, HEALTH_OK), Ceph-CSI, StorageClass runner-data, namespace orbit-mr-test

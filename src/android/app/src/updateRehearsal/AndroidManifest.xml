@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Merged into release builds made with -PorbitUpdateApi=http://127.0.0.1:<port> only (a disposable
+     *.upgradetest package): the updater's stand-in for GitHub listens on the device loopback. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:networkSecurityConfig="@xml/update_rehearsal_network_security" />
+</manifest>

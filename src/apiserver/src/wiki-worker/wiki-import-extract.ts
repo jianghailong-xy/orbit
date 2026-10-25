@@ -3,14 +3,14 @@ import { WIKI_IMPORT_JOB, WIKI_IMPORT_RULES, WIKI_LIMITS } from '@orbit/shared';
 /**
  * What the import makes of a note (contracts/wiki.contract.json `import.server`, design §8, P5): the prompt,
  * the reading of the model's answer, and the checks every entry is held to before it becomes an op — ported
- * from `src/runner-go/wiki_import.go`, which does the same on the runner until P10 removes it.
+ * from `src/runner-go/wiki_import.go`, which did the same on the runner until P11 removed that half of it.
  *
- * ONE RULE, TWO IMPLEMENTATIONS, NO DRIFT. The two paths run side by side until P10, and what is deterministic
- * here — the prompt, the parse, the repair, the field checks, the quote, the verify command, a path's reading —
- * answers exactly what the Go code answers for the same input (`wiki-import.golden.json` holds both to the same
- * outputs). The one thing that is not a port is where the anchors are checked: the runner held them to the
- * checkout it ran in, and the server holds them to the space's snapshot of origin/main (contract `repoOps`) —
- * a path the tree has, a commit origin/main reaches.
+ * ONE RULE, NO DRIFT. The two paths ran side by side until P11, and what is deterministic here — the prompt,
+ * the parse, the repair, the field checks, the quote, the verify command, a path's reading — answers exactly
+ * what the Go code answered for the same input (`src/shared/src/wiki-import.fixture.json`, frozen since P11,
+ * holds the server to its outputs). The one thing that is not a port is where the anchors are checked: the
+ * runner held them to the checkout it ran in, and the server holds them to the space's snapshot of origin/main
+ * (contract `repoOps`) — a path the tree has, a commit origin/main reaches.
  *
  * Nothing in this file touches the database or the model: the job (wiki-import-job.ts) asks, and this reads.
  */
@@ -36,7 +36,7 @@ export interface WikiImportOp {
   body: Record<string, unknown>;
 }
 
-// ── Go's own readings of text, where the port has to answer exactly what the runner answers ──────────────
+// ── Go's own readings of text, where the port has to answer exactly what the runner answered ─────────────
 
 /** Go's unicode.IsSpace, which strings.TrimSpace and strings.Fields read by. */
 const GO_SPACE = '\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000';
@@ -51,6 +51,64 @@ export function goTrimSpace(text: string): string {
 /** strings.Join(strings.Fields(text), " "): every run of white space one space, none at either end. */
 export function collapseWhitespace(text: string): string {
   return text.split(GO_FIELDS).filter((field) => field !== '').join(' ');
+}
+
+/**
+ * One field of a JSON object as Go's encoding/json reads a struct field: the exact key first, then any
+ * case of it — `{"Verdict": …}` names Verdict exactly as `{"verdict": …}` does. undefined when no case
+ * of the key is there.
+ */
+export function answerField(value: Record<string, unknown>, name: string): unknown {
+  const keys = Object.keys(value);
+  const found = keys.find((key) => key === name) ?? keys.find((key) => key.toLowerCase() === name.toLowerCase());
+  return found === undefined ? undefined : value[found];
+}
+
+/** U+FFFD, what Go's encoding/json writes for a lone surrogate (`\uD800` with no `\uDC00` after it). */
+const REPLACEMENT_CHAR = '�';
+
+/**
+ * Go's json.Unmarshal of a model's answer, where JSON.parse alone answers differently: a number past
+ * float64's range is an error there (a map or slice decode is a float64 decode), not Infinity, and a
+ * lone surrogate in any string or key comes out U+FFFD. Both are put right, so the decoded answer is
+ * the value Go handed the runner's checks.
+ */
+export function parseAnswerJson(body: string): unknown {
+  const value: unknown = JSON.parse(body, (_key: string, item: unknown) => {
+    if (typeof item === 'number' && !Number.isFinite(item)) throw new SyntaxError('number out of float64 range');
+    return item;
+  });
+  return fixAnswerStrings(value);
+}
+
+/** A decoded value with every string's — and key's — lone surrogates U+FFFD, as Go's decoder writes them. */
+export function fixAnswerStrings(value: unknown): unknown {
+  if (typeof value === 'string') return fixLoneSurrogates(value);
+  if (Array.isArray(value)) return value.map(fixAnswerStrings);
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [fixLoneSurrogates(key), fixAnswerStrings(item)]),
+    );
+  }
+  return value;
+}
+
+function fixLoneSurrogates(text: string): string {
+  if (!/[\uD800-\uDFFF]/.test(text)) return text;
+  let out = '';
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
+      const next = text.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        out += text.slice(i, i + 2);
+        i += 1;
+        continue;
+      }
+    }
+    out += code >= 0xd800 && code <= 0xdfff ? REPLACEMENT_CHAR : text[i];
+  }
+  return out;
 }
 
 /** The first `max` characters (code points), as Go's cutRunes cuts. */
@@ -99,7 +157,7 @@ function goQuote(text: string): string {
 /**
  * Go's json.Marshal of a value decoded from JSON: object keys sorted by their bytes, and `<`, `>`, `&`,
  * U+2028 and U+2029 escaped. The retry names the rejected entries in this form and the idempotency key is
- * the sha256 of it, so both are the bytes the runner writes for the same value.
+ * the sha256 of it, so both are the bytes the runner wrote for the same value.
  */
 export function goJson(value: unknown): string {
   if (value === null || value === undefined) return 'null';
@@ -278,8 +336,7 @@ export function parseWikiImportAnswer(text: string): WikiImportAnswerEntry[] | n
 }
 
 /** The two mistakes a model makes most: an unescaped double quote inside a quote's value, and a trailing comma. */
-export function wikiImportRepair(text: string): string {
-  const quoted = text.replace(QUOTE_VALUE, (_match, open: string, inner: string, close: string) => {
+export function wikiImportRepair(text: string): string {  const quoted = text.replace(QUOTE_VALUE, (_match, open: string, inner: string, close: string) => {
     let escaped = inner.replace(BARE_QUOTE, '$1\\"');
     if (escaped.startsWith('"')) escaped = `\\${escaped}`;
     return open + escaped + close;
@@ -291,7 +348,7 @@ export function wikiImportRepair(text: string): string {
 function wikiImportEntries(body: string): WikiImportAnswerEntry[] | null {
   let value: unknown;
   try {
-    value = JSON.parse(body);
+    value = parseAnswerJson(body);
   } catch {
     return null;
   }
@@ -344,7 +401,7 @@ function decodeArrayAt(body: string, start: number): { value: WikiImportAnswerEn
       if (depth === 0) {
         const text = body.slice(start, i + 1);
         try {
-          const value: unknown = JSON.parse(text);
+          const value: unknown = parseAnswerJson(text);
           if (!Array.isArray(value)) return null;
           const list = asEntryList(value);
           return list ? { value: list, span: Buffer.byteLength(text, 'utf8') } : null;
@@ -664,7 +721,7 @@ export class WikiImportRepo {
 
   /**
    * @param root the checkout the command ran in, when it named one: a note's absolute path under it is read
-   *   relative to it, as the runner reads one under its own checkout.
+   *   relative to it, as the runner read one under its own checkout.
    * @param name the repository's name (…/orbit.git reads orbit): a note that names a file by an absolute path
    *   names it inside some checkout called that.
    */
@@ -745,3 +802,45 @@ function parentOf(path: string): string {
 
 /** The system prompt every read carries (contract `import.server.systemPrompt`). */
 export const WIKI_IMPORT_SYSTEM_PROMPT = WIKI_IMPORT_JOB.systemPrompt;
+
+// ── The same checks, read by the maintenance run (P8) ───────────────────────────────────────────
+//
+// An extraction's entries are held to the same field checks the import's are (`wikiImportField`), with the
+// dossier's date where a note's date was: the maintenance port reuses them rather than answering them twice.
+
+/** The fields a kind requires, and the ones it may carry (the runner's `wikiImportRequired`/`wikiImportOptional`). */
+export function wikiImportRequiredFields(kind: string): readonly string[] {
+  return REQUIRED[kind] ?? [];
+}
+
+export function wikiImportOptionalFields(kind: string): readonly string[] {
+  return OPTIONAL[kind] ?? [];
+}
+
+/** One required field in the shape the kind's schema gives it, or what is wrong (the runner's `wikiImportField`). */
+export function wikiImportFieldValue(name: string, value: unknown, note: WikiImportNote): { value?: unknown; problem: string } {
+  return wikiImportField(name, value, note);
+}
+
+/** A text field trimmed and cut to what the contract lets it hold; "" when it is not text or is blank. */
+export function wikiImportText(value: unknown, max: number): string {
+  return text(value, max);
+}
+
+/** A list of texts, blanks left out and cut to the contract's list size; a lone text is a list of one. */
+export function wikiImportTextList(value: unknown): string[] {
+  return textList(value);
+}
+
+/** The last `max` characters of an answer, for a retry's suffix. */
+export function wikiImportLastRunes(value: string, max: number): string {
+  return lastRunes(value, max);
+}
+
+/** Whether a value is a JSON object (not null, not an array). */
+export function wikiImportIsObject(value: unknown): value is Record<string, unknown> {
+  return isObject(value);
+}
+
+/** The code fence a model wraps its answer in; the maintenance run reads `{"offTopic": true}` out of one too. */
+export const WIKI_IMPORT_FENCE = FENCE;

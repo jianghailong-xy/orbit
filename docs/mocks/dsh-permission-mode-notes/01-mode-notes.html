@@ -1,0 +1,150 @@
+<!doctype html>
+<!-- Design mock: say on the composer's Mode picker what each permission mode does on DeepSeek
+     Harness. Hand-drawn with the app's tokens (src/web/src/index.css); the picker today is the antd
+     Select in WorkspaceView.tsx. Copy comes from src/shared/src/permissionSemantics.ts. Not shipped
+     code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DeepSeek Harness · what each permission mode does</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  @font-face { font-family: "Inter"; src: url("file:///tmp/mockfonts/Inter.ttf"); font-weight: 100 900; }
+  @font-face { font-family: "Noto Sans SC"; src: url("file:///tmp/mockfonts/NotoSansSC.ttf"); font-weight: 100 900; }
+  body.m { font-family: -apple-system, "Inter", "Noto Sans SC", sans-serif; }
+  .zh { font-family: "PingFang SC", "Noto Sans SC", sans-serif; }
+  .m-sheet { width: 1640px; }
+  .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; align-items: start; }
+  .frame { position: relative; height: 520px; padding: 18px; border-radius: 12px; background: var(--bg-base);
+           border: 1px solid var(--border-subtle); overflow: hidden; }
+  .composer { position: absolute; left: 18px; right: 18px; bottom: 18px; border: 1px solid var(--border);
+              border-radius: 14px; background: var(--bg-raised); padding: 12px 12px 8px; }
+  .composer .ph { color: var(--text-3); font-size: 14px; height: 40px; }
+  .foot { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
+  .pill { padding: 3px 8px; border-radius: 6px; }
+  .pill.on { background: var(--bg-hover); color: var(--text-1); font-weight: 500; }
+  .plus { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--border); display: inline-flex;
+          align-items: center; justify-content: center; color: var(--text-2); }
+  .spacer { flex: 1; }
+  .model { color: var(--text-1); }
+  .model span { color: var(--text-3); margin-left: 4px; }
+  .send { width: 30px; height: 30px; border-radius: 50%; background: var(--brand); }
+  .menu { position: absolute; left: 30px; bottom: 112px; width: 420px; background: #fff; border-radius: 8px; padding: 4px;
+          box-shadow: 0 6px 16px rgba(0,0,0,.08), 0 3px 6px -4px rgba(0,0,0,.12), 0 9px 28px 8px rgba(0,0,0,.05); }
+  .opt { padding: 5px 12px; border-radius: 4px; font-size: 14px; line-height: 22px; color: rgba(0,0,0,.88); }
+  .opt.sel { background: #e6f4ff; font-weight: 600; }
+  .opt.dis { color: rgba(0,0,0,.25); }
+  .opt .d { display: block; font-weight: 400; font-size: 12px; line-height: 18px; color: var(--text-3); margin-top: 1px; }
+  .opt.sel .d { color: #3d5a80; }
+  .menu .foot-note { margin: 4px 8px 2px; padding: 6px 22px 2px 4px; border-top: 1px solid var(--border-subtle);
+                     font-size: 12px; line-height: 18px; color: var(--text-3); }
+  .tip { position: absolute; left: 24px; top: -262px; width: 400px; z-index: 3; box-shadow: 0 6px 16px rgba(0,0,0,.18); background: rgba(0,0,0,.85); color: #fff; font-size: 12px;
+         line-height: 18px; padding: 8px 10px; border-radius: 6px; }
+  .m-cap { font-size: 12.5px; line-height: 1.75; color: var(--text-2); margin: 10px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .m-cap .n, .menu .n { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px;
+         margin: 0 3px 0 1px; border-radius: 50%; background: var(--warning-solid); color: #fff;
+         font: 700 10.5px/1 -apple-system, sans-serif; vertical-align: 1px; }
+  .menu .n { position: absolute; right: -9px; }
+  .grid-bottom { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 26px; align-items: start; margin-top: 22px; }
+  .rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.65; width: 100%; background: var(--bg-base); }
+  .rules th, .rules td { border: 1px solid #dde0e6; padding: 8px 11px; text-align: left; vertical-align: top; }
+  .rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules td:first-child { white-space: nowrap; font-weight: 600; color: var(--text-1); }
+  .files { margin: 0; padding: 12px 16px; list-style: none; background: #f5f6f8; border-radius: 8px;
+           font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .files li + li { margin-top: 6px; }
+  .files b, .ask b { color: var(--text-1); }
+  .files code, .rules code { font-size: 11.5px; }
+  .ask { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e;
+         font-size: 12.5px; line-height: 1.75; color: #5c4210; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet">
+  <h1 class="m-h1 zh">DeepSeek Harness · 在 Mode 选择器里写明每个权限模式管什么</h1>
+  <p class="m-sub zh">DSH 会话的 Mode 选择器现在只写 Default / Auto / Don't Ask。服务端给每个模式都写了说明（<code>permissionSemantics</code> 的 note），但没有任何客户端显示它。用户看到的 "Auto" 和 Claude、Codex 上是同一个词，背后却差很多：DSH 的沙箱只管写文件。Orbit 在沙箱之外补了两条：工作区外的日常写入（隔离 worktree 里的 git、构建缓存）自动放行；push、远程 shell、HTTP 写入、第三方 MCP 这类对外动作先问人。其余联网命令仍不经审批。这张图把这些写进选择器。</p>
+
+  <div class="m-stage">
+    <div class="row3">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">现在</span>只有模式名</div>
+        <div class="frame">
+          <div class="menu">
+            <div class="opt">Default</div>
+            <div class="opt dis">Plan — unsupported on DeepSeek Harness; session configuration is rejected</div>
+            <div class="opt dis">Accept Edits — unsupported on DeepSeek Harness; session configuration is rejected</div>
+            <div class="opt sel">Auto</div>
+            <div class="opt">Don't Ask</div>
+            <div class="opt dis">Bypass — unsupported on DeepSeek Harness; session configuration is rejected</div>
+          </div>
+          <div class="composer"><div class="ph">Ask DeepSeek Harness…</div>
+            <div class="foot"><span class="plus">+</span><span class="pill on">Auto</span><span class="spacer"></span>
+              <span class="model">DeepSeek V4 Flash<span>High</span></span><span class="send"></span></div></div>
+        </div>
+        <p class="m-cap zh">不支持的三个模式已经灰掉并写了原因；支持的三个只有名字。"Auto" 下什么会问、什么不会问，界面上没有任何地方说。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">方案 A</span>选项下面各一行（推荐）</div>
+        <div class="frame">
+          <div class="menu">
+            <div class="opt">Default<span class="d">Every file write asks you first.</span></div>
+            <div class="opt dis">Plan — unsupported on DeepSeek Harness; session configuration is rejected</div>
+            <div class="opt dis">Accept Edits — unsupported on DeepSeek Harness; session configuration is rejected</div>
+            <div class="opt sel" style="position:relative">Auto<span class="n" style="top:8px">1</span><span class="d">Writes in the workspace run. Routine git and build caches run too; a push, an install or a third-party MCP tool asks you.</span></div>
+            <div class="opt">Don't Ask<span class="d">Every file write is refused, as is a push or an HTTP write.</span></div>
+            <div class="opt dis">Bypass — unsupported on DeepSeek Harness; session configuration is rejected</div>
+            <div class="foot-note" style="position:relative"><span class="n" style="top:4px">2</span>In every mode, other network commands, web tools and Orbit’s MCP tools run without asking.</div>
+          </div>
+          <div class="composer"><div class="ph">Ask DeepSeek Harness…</div>
+            <div class="foot"><span class="plus">+</span><span class="pill on">Auto</span><span class="spacer"></span>
+              <span class="model">DeepSeek V4 Flash<span>High</span></span><span class="send"></span></div></div>
+        </div>
+        <p class="m-cap zh"><span class="n">1</span>三个支持的模式下面各加一行灰字，说明这个模式下什么会问你。<span class="n">2</span>菜单底部一行说三个模式都一样的部分：其余联网命令、web 工具、Orbit 自己的 MCP 工具从不问。手机上一样显示，不靠悬停。底部选择器本身不变，不占额外空间。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">方案 B</span>悬停时显示整段说明</div>
+        <div class="frame">
+          <div class="menu">
+            <div class="opt">Default</div>
+            <div class="opt dis">Plan — unsupported on DeepSeek Harness; session configuration is rejected</div>
+            <div class="opt dis">Accept Edits — unsupported on DeepSeek Harness; session configuration is rejected</div>
+            <div class="opt sel" style="position:relative">Auto
+              <div class="tip">Edits and commands inside the workspace and temporary directories run without asking. A command that must write elsewhere runs outside the file sandbox: Orbit allows a routine one itself (a commit in an isolated worktree, a build cache) and asks you about the rest, such as a push or an install. Third-party MCP tools ask you first. Reading files, web tools and Orbit’s MCP tools run without asking, and so do commands that write no files, network ones included — except a push, a remote shell, an HTTP write, a GitHub, cluster, cloud or service change, a privilege change or a publish, which ask you first; subagents are not available.</div></div>
+            <div class="opt">Don't Ask</div>
+            <div class="opt dis">Bypass — unsupported on DeepSeek Harness; session configuration is rejected</div>
+          </div>
+          <div class="composer"><div class="ph">Ask DeepSeek Harness…</div>
+            <div class="foot"><span class="plus">+</span><span class="pill on">Auto</span><span class="spacer"></span>
+              <span class="model">DeepSeek V4 Flash<span>High</span></span><span class="send"></span></div></div>
+        </div>
+        <p class="m-cap zh">菜单不变，鼠标停在选项上才显示服务端那整段 note。好处是零改版；坏处是手机上没有悬停，看不到，而且这段话太长，扫一眼读不完。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-bottom">
+    <table class="rules zh">
+      <tr><th>情况</th><th>方案 A 的显示</th></tr>
+      <tr><td>新会话选了 DeepSeek Harness，或打开已有的 DSH 会话</td><td>Default、Auto、Don't Ask 下面各一行灰字；菜单底部一行说哪些始终不问</td></tr>
+      <tr><td>Plan、Accept Edits、Bypass</td><td>照旧：灰掉，后面写 "— unsupported on DeepSeek Harness…"</td></tr>
+      <tr><td>其他引擎</td><td>不变（现在都只显示模式名）</td></tr>
+      <tr><td>文案从哪来</td><td>和现在的 note 放在同一处：<code>src/shared/src/permissionSemantics.ts</code> 给 DSH 每个模式加一行短说明。网页和 Mac/iPhone 读同一份，不各写各的</td></tr>
+      <tr><td>会话运行中改模式</td><td>和现在一样随时可改；切到另一个模式时，说明跟着选中项走</td></tr>
+    </table>
+    <div>
+      <ul class="files zh">
+        <li><b>shared</b> · <code>src/shared/src/permissionSemantics.ts</code>：DSH 三个模式各加一行短说明，外加底部那句</li>
+        <li><b>web</b> · <code>src/web/src/components/WorkspaceView.tsx</code>：Mode 选项渲染成两行；<code>src/web/src/index.css</code>：第二行和底部说明的样式</li>
+        <li><b>Mac / iPhone</b> · OrbitKit 的模式菜单：同样的两行（如果要三端一致）</li>
+      </ul>
+      <div class="ask zh"><b>待你定</b><br>
+        1. 用方案 A（选项下面一行，手机也看得到）还是方案 B（悬停才看到）？我建议 A。<br>
+        2. 只给 DeepSeek Harness 加，还是 Codex、Kimi 这类"部分支持审批"的引擎也一起加？<br>
+        3. 方案 A 的三行文案和底部那句可以吗？</div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

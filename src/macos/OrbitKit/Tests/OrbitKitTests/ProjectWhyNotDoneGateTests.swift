@@ -12,9 +12,10 @@ import XCTest
 /// project nobody has asked about — however finished it looks, however unmet its criteria are, and
 /// whether or not anything is running — which is what this file pins, state by state.
 ///
-/// The three other drawings stay as they were: the owner's card while a DONE_REQUEST or a press
-/// here stands, the owner's DONE as its receipt, and — the one survivor of the old card — Orbit's
-/// own DONE as its TERMINAL state, "This project is done · recorded by Orbit".
+/// Two other drawings stay as they were: the owner's card while a DONE_REQUEST or a press here
+/// stands, and the owner's DONE as its receipt. The old card's one survivor — Orbit's own DONE as
+/// its TERMINAL state, "This project is done · recorded by Orbit" — left the conversation on
+/// 2026-10-25 (the owner's ruling): the project page draws the ending, and the slot draws nothing.
 ///
 /// And the card's tally still adds up: each met criterion is counted where its work is, each unmet
 /// one as "not met" and never by its landing lane. The browser holds the same rule and words in
@@ -88,7 +89,7 @@ final class ProjectWhyNotDoneGateTests: XCTestCase {
         XCTAssertEqual(slot(older), .none, "a server without counts draws no card")
     }
 
-    // MARK: the three drawings that do not change
+    // MARK: the two drawings that do not change, and the one that went
 
     func testARequestOrAPressHereDrawsTheOwnersCardWhateverTheProjectLooksLike() {
         let running = project(criteria: antdMigration().derivedDone?.criteria)
@@ -103,10 +104,12 @@ final class ProjectWhyNotDoneGateTests: XCTestCase {
                        "You recorded this project done · Oct 6, 09:40")
     }
 
-    func testOrbitsDoneIsTheOldCardsTerminalStateAndTheOwnersDoneIsTheReceipt() {
+    func testOrbitsDoneDrawsNothingAndTheOwnersDoneIsTheReceipt() {
         for doneBy in [ProjectDoneBy.derived, nil] {
             let orbitDone = project(status: "DONE", done: true, doneBy: doneBy)
-            XCTAssertEqual(slot(orbitDone), .notDone, "Orbit's DONE: This project is done · recorded by Orbit")
+            XCTAssertEqual(slot(orbitDone), .none,
+                           "Orbit's DONE draws nothing in a conversation since 2026-10-25: the page draws the ending")
+            // The page's card for it, whose words are still the old card's settled state.
             XCTAssertTrue(ProjectDone.WhyNotDone(subject: orbitDone, withCoordinator: 0, requested: false)
                             .settled(orbitDone))
             XCTAssertEqual(ProjectDone.settledBadge(orbitDone.doneBy), ProjectDone.recordedByOrbit)
@@ -194,8 +197,8 @@ final class ProjectWhyNotDoneGateTests: XCTestCase {
         """#.utf8)
         let conversation = try JSONDecoder().decode(ProjectCriteriaDocument.self, from: data)
         XCTAssertEqual(ProjectDone.slot(subject: conversation.doneSubject, request: nil, waitingKind: nil,
-                                        record: nil), .notDone,
-                       "Orbit's DONE, read off the conversation's own document")
+                                        record: nil), .none,
+                       "Orbit's DONE, read off the conversation's own document, draws nothing there (2026-10-25)")
         let page = try JSONDecoder().decode(ProjectDocument.self, from: data)
         XCTAssertEqual(page.doneSubject, conversation.doneSubject,
                        "the page and the conversation read the same facts off the same document")

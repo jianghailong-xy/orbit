@@ -35,6 +35,7 @@ import { IsPublicId } from '../common/public-id';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterion-shape-advice';
 import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolution';
 import { MAX_OPEN_ITEM_RESOLUTION_NOTE, MAX_QUESTION_CHARS } from './project-open-item';
+import { MAX_INTEGRATION_ABANDON_REASON } from './project-integration-abandon';
 import { MAX_INTEGRATION_RETRY_REASON } from './project-integration-retry';
 import { MAX_INTEGRATION_SKIP_REASON } from './project-integration-skip-check';
 import { MAX_START_REQUEST_WHY } from './project-start-request';
@@ -494,6 +495,11 @@ export class DeclineDoneRequestDto implements ProjectDoneRequestDeclineBody {
  * `POST /projects/:id/start` (`@orbit/shared` `StartProjectRequestBody`): the version of the
  * criteria the owner read, and every setting the project is to run with — each one required,
  * because a start writes the whole set and a field left out would be a setting nobody chose.
+ *
+ * `mergeCheckTimeoutSeconds` is the exception, and deliberately: a client that predates it sends
+ * no such field, and reading that as "no budget" would clear a setting its owner never saw. Left
+ * out it is not named and the binding keeps the budget it has; `null` is the naming that says the
+ * check runs on its default.
  */
 export class StartProjectDto implements StartProjectRequestBody {
   @Matches(SHA256_DIGEST_PATTERN, {
@@ -509,11 +515,21 @@ export class StartProjectDto implements StartProjectRequestBody {
     message: 'CODEBASE_AUTHORITY_INVALID: projectBranchName must be a full branch ref such as refs/heads/project/next',
   })
   projectBranchName?: string;
+  /** The project's main branch as a full ref, recorded as the owner's choice (L6). Left out, the
+   *  project keeps the one it stands on: for a new binding, the owner's last for its repository. */
+  @IsOptional()
+  @Matches(BRANCH_REF, {
+    message: 'CODEBASE_AUTHORITY_INVALID: upstreamRef must be a full branch ref such as refs/heads/main',
+  })
+  upstreamRef?: string;
   /** Automatic: whether the coordinator runs the project for the owner. */
   @IsBoolean() automatic!: boolean;
   @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks!: number;
   /** The check run on the combined tree before anything lands; null for none. Sent either way. */
   @ValidateIf((_object, value) => value !== null) @IsString() mergeCheckCommand!: string | null;
+  /** That check's budget in seconds; null runs it on the one-hour default. Left out, the setting is
+   *  not named and the binding keeps the budget it has. */
+  @IsOptional() @IsInt() @Min(1) mergeCheckTimeoutSeconds?: number | null;
   /** The coordinator's start request this start answers, when the card was drawn from one. */
   @IsOptional() @IsPublicId() requestId?: string | null;
 }
@@ -531,11 +547,21 @@ export class RequestProjectStartDto implements ProjectStartRequestBody {
     message: 'CODEBASE_AUTHORITY_INVALID: projectBranchName must be a full branch ref such as refs/heads/project/next',
   })
   projectBranchName?: string;
+  /** The main branch the coordinator suggests, as a full ref — read from the repository when this
+   *  account has no last choice for it (`integration.lastMainBranch`). Left out suggests none. */
+  @IsOptional()
+  @Matches(BRANCH_REF, {
+    message: 'CODEBASE_AUTHORITY_INVALID: upstreamRef must be a full branch ref such as refs/heads/main',
+  })
+  upstreamRef?: string;
   /** Left out is on: the owner's card opens with Automatic on whatever is suggested. */
   @IsOptional() @IsBoolean() automatic?: boolean;
   @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks!: number;
   @IsOptional() @ValidateIf((_object, value) => value !== null) @IsString()
   mergeCheckCommand?: string | null;
+  /** That check's budget in seconds, suggested; null suggests the one-hour default. Left out it is
+   *  not named, and the owner's card opens on an empty box — which is that same default. */
+  @IsOptional() @IsInt() @Min(1) mergeCheckTimeoutSeconds?: number | null;
   /** Shown to the owner on the card, as written. */
   @IsString() @MinLength(1) @MaxLength(MAX_START_REQUEST_WHY) why!: string;
 }
@@ -737,6 +763,16 @@ export class RetryIntegrationDto {
  * landing. The account owner's own door needs no card (they are the person it would ask) and reads
  * none.
  */
+/**
+ * A coordinator abandoning one of its project's running jobs (`integration_abandon`, contract §2.2
+ * J-T10). The reason is required: the job ends as an error nobody will report, and the sentence is
+ * the record of why it was safe to end. The owner's own door carries none — the account owner's
+ * press is the decision.
+ */
+export class AbandonIntegrationJobDto {
+  @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_ABANDON_REASON) reason!: string;
+}
+
 export class SkipMergeCheckDto {
   @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_SKIP_REASON) reason!: string;
   /** The card's own id, in either spelling: the runner hands back the uuid its own create answered

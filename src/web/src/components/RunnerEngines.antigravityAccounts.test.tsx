@@ -6,8 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsageBucket, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
-import { RunnerEngines, summaryOf } from './RunnerEngines';
-import { RunnerEnginesSection } from './RunnerEnginesSection';
+import { MachineEngines, RunnerEngines, accountsGroup, machineChipsOf, summaryOf } from './RunnerEngines';
 import { openRunnerMenu, clickRunnerMenuItem, openRunnerCards } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
@@ -16,8 +15,7 @@ import type { Runner } from './TasksSidePanel';
  * (docs/mocks/antigravity-accounts/04-web-providers.png): Default and every account added, each its
  * own row with its own sign-in and its own quota — agy's buckets, read as what is left — NEXT on the
  * one Automatic starts, and "Add account" only where the runner can add a Google account at all. The
- * runner page says the same in its own words (01-ios-runner-row.png): "Signed in", "N accounts signed
- * in", "Signed out", or "env key" for a machine that runs agy on its Gemini key.
+ * runner's own page draws the same rows.
  *
  * Built here rather than in the clients' shared fixtures, which describe a runner before accounts.
  */
@@ -161,7 +159,8 @@ function mount(r: Runner) {
 const all = (el: ParentNode, selector: string) => [...el.querySelectorAll<HTMLElement>(selector)];
 const engineRow = (page: ParentNode) => page.querySelector<HTMLElement>('[data-engine="antigravity"]')!;
 const accountRows = (page: ParentNode) => all(page, '.re-acct');
-const tags = (row: Element) => all(row, '.ant-tag').map((tag) => tag.textContent?.trim());
+/** What a row says of its state: the words in its status slot (a status label is text, with no role). */
+const tags = (row: Element) => all(row, '.re-status').map((status) => status.textContent?.trim()).filter(Boolean);
 const labelOf = (b: Element) => b.textContent?.trim() || b.getAttribute('aria-label');
 const buttons = (row: Element) => all(row, ':scope > .re-act button').map(labelOf);
 const button = (el: ParentNode, label: string) => {
@@ -264,20 +263,20 @@ describe('two Google accounts on one runner', () => {
     open.mockRestore();
   });
 
-  it('re-signs in, renames, pauses and removes from each account’s menu — never removing Default', async () => {
+  it('re-signs in, renames, pauses and removes from each account’s menu — Default from Orbit alone', async () => {
     const page = mount(runner());
     const [defaultRow, workRow] = accountRows(page);
     expect(buttons(defaultRow)).toEqual(['More actions']);
     const items = async (row: HTMLElement) =>
       all(await openRunnerMenu(row), '[role="menuitem"]').map((item) => item.textContent?.trim());
-    expect(await items(defaultRow)).toEqual(['Rename', 'Re-sign in', 'Pause account…']);
+    expect(await items(defaultRow)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Remove account']);
     expect(await items(workRow)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Remove account']);
 
     await clickRunnerMenuItem(workRow, 'Remove account');
     let ok: HTMLButtonElement | undefined;
     await act(async () => {
       await vi.waitFor(() => {
-        ok = all(document, '.ant-popconfirm button').find((b) => b.textContent?.trim() === 'Remove') as HTMLButtonElement;
+        ok = all(document, '[role="dialog"] button').find((b) => b.textContent?.trim() === 'Remove') as HTMLButtonElement;
         expect(ok).toBeDefined();
       }, { timeout: 20_000, interval: 20 });
     });
@@ -288,8 +287,15 @@ describe('two Google accounts on one runner', () => {
   });
 
   it('counts a signed-out account against the folded card', () => {
-    expect(summaryOf(runner())).toBe('All signed in');
-    expect(summaryOf(runner(antigravity({ accounts: [DEFAULT, { ...WORK, auth: 'no' }] })))).toBe('3 of 4 signed in');
+    const chip = (box: Runner) => machineChipsOf(box).find((each) => each.engine === 'antigravity');
+    expect(chip(runner())).toEqual({ engine: 'antigravity', logins: 2, accounts: 2, signedOut: false });
+    expect(chip(runner(antigravity({ accounts: [DEFAULT, { ...WORK, auth: 'no' }] })))).toEqual({
+      engine: 'antigravity',
+      logins: 1,
+      accounts: 2,
+      signedOut: false,
+    });
+    expect(summaryOf(runner(antigravity({ accounts: [DEFAULT, { ...WORK, auth: 'no' }] })))).toBeNull();
   });
 });
 
@@ -347,12 +353,17 @@ describe('a runner that runs agy on its Gemini key', () => {
     const [defaultRow, workRow] = accountRows(page);
     expect(tags(defaultRow)).toEqual(['Signed in']);
     expect(defaultRow.querySelector('.re-quota')?.textContent).toBe('env key · runs on your Gemini key');
-    // Nothing to sign in or pause: it is no Google sign-in at all.
+    // Nothing to sign in or pause: it is no Google sign-in at all. Removing it from Orbit is still there.
     expect(buttons(defaultRow)).toEqual(['More actions']);
-    expect(all(await openRunnerMenu(defaultRow), '[role="menuitem"]').map((item) => item.textContent?.trim())).toEqual(['Rename']);
+    expect(all(await openRunnerMenu(defaultRow), '[role="menuitem"]').map((item) => item.textContent?.trim())).toEqual(['Rename', 'Remove account']);
     // Automatic starts on a Google account, the only one with a quota to spend first.
     expect([defaultRow, workRow].map((row) => row.querySelector('.re-name')?.textContent)).toEqual(['Default', 'WorkNEXT']);
-    expect(summaryOf(box)).toBe('All signed in');
+    expect(machineChipsOf(box).find((chip) => chip.engine === 'antigravity')).toEqual({
+      engine: 'antigravity',
+      logins: 2,
+      accounts: 2,
+      signedOut: false,
+    });
   });
 
   it('keeps its one row as it was: env key, with no pause to offer', () => {
@@ -363,53 +374,36 @@ describe('a runner that runs agy on its Gemini key', () => {
   });
 });
 
-describe('the runner page’s Antigravity row', () => {
-  const render = (r: Runner) =>
-    renderToStaticMarkup(
+describe('the runner page’s Antigravity rows', () => {
+  /** What the runner's own page draws: the card's rows, as MachineEngines lays them out there — its
+   *  Antigravity accounts open, as the card's are (openRunnerCards). */
+  const machinePage = (r: Runner) => {
+    const box = document.createElement('div');
+    box.innerHTML = renderToStaticMarkup(
       <QueryClientProvider client={new QueryClient()}>
         <MemoryRouter>
-          <RunnerEnginesSection runner={r} />
+          <MachineEngines
+            runner={r}
+            signIn={null}
+            onSignIn={() => {}}
+            openAccounts={[accountsGroup(r.id, 'antigravity')]}
+            onFoldAccounts={() => {}}
+            machinePage
+          />
         </MemoryRouter>
       </QueryClientProvider>,
     );
-  /** The Antigravity row: its sign-in column, the account its quota is Next for, and its window. */
-  const row = (r: Runner) => {
-    const html = render(r);
-    const own = html.slice(html.indexOf('>Antigravity CLI<'));
-    return {
-      signIn: /class="rd-engine-auth (\w+)">([^<]*)</.exec(own)?.slice(1, 3),
-      next: /class="rd-quota-next">(Next: [^<]*)</.exec(own)?.[1] ?? null,
-      quota: [...own.matchAll(/class="rd-quota-pct">([^<]*)</g)].map(([, pct]) => pct),
-    };
+    return box;
   };
+  /** Antigravity's head and each account under it, as each row reads. */
+  const rows = (page: ParentNode) => [engineRow(page), ...accountRows(page)].map((row) => row.textContent);
 
-  it('says Signed in for one Google account, with the bucket closest to its limit', () => {
-    // Of its four buckets the row carries 3p-weekly, the least left; the engine page has all four.
-    expect(row(runner(antigravity({ accounts: [DEFAULT] })))).toEqual({
-      signIn: ['ok', 'Signed in'],
-      next: null,
-      quota: ['98% remaining'],
-    });
-  });
-
-  it('counts several, with the quota of the one a new session starts on, named', () => {
-    expect(row(runner())).toEqual({
-      signIn: ['ok', '2 accounts signed in'],
-      next: 'Next: Default',
-      quota: ['98% remaining'],
-    });
-  });
-
-  it('says Signed out when any account is', () => {
-    expect(row(runner(antigravity({ accounts: [DEFAULT, { ...WORK, auth: 'no' }] }))).signIn).toEqual(['warn', 'Signed out']);
-  });
-
-  it('keeps saying env key for a machine on its Gemini key, and never counts that Default out', () => {
-    expect(row(runner(envKey([{ ...DEFAULT, auth: 'no' }]))).signIn).toEqual(['ok', 'env key']);
-    expect(row(runner(envKey([{ ...DEFAULT, auth: 'no' }, WORK])))).toEqual({
-      signIn: ['ok', '2 accounts signed in'],
-      next: 'Next: Work',
-      quota: ['4% remaining'],
-    });
+  it.each([
+    ['one Google account', runner(antigravity({ accounts: [DEFAULT] }))],
+    ['two, Default the next', runner()],
+    ['one of them signed out', runner(antigravity({ accounts: [DEFAULT, { ...WORK, auth: 'no' }] }))],
+    ['a machine on its Gemini key', runner(envKey([{ ...DEFAULT, auth: 'no' }, WORK]))],
+  ])('are the card’s own: %s', (_, r) => {
+    expect(rows(machinePage(r))).toEqual(rows(mount(r)));
   });
 });

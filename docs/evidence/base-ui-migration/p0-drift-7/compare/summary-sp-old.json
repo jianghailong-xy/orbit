@@ -1,0 +1,41 @@
+{
+ "sp-old-db69d833b__sp-old-33e0e2e09": {
+  "total": 32,
+  "missing": 0,
+  "same": 14,
+  "noise": 2,
+  "changed": 16,
+  "p0ComparatorFails": 16,
+  "maxNoise": {
+   "pixels": 10,
+   "channel": 1
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "profile-validation.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "profile.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings-saved.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ]
+  }
+ }
+}

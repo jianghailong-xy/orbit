@@ -1,0 +1,164 @@
+{
+  "at": "2026-10-17T22:05:19.089+00:00",
+  "foreign": [
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "mr-data-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "resourceVersion": "8484",
+      "uid": "d5299c21-8be0-4e61-91dd-33636ccda9ab"
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "mr-data-01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+      "resourceVersion": "9855",
+      "uid": "f00e77e6-337a-464f-9a54-0c6fb3bfcc1f"
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "mr-data-13282595-dbc7-4ac3-b7ef-0999794197d4",
+      "resourceVersion": "809",
+      "uid": "8780660e-7455-4612-8b16-3f1fddaf9ded"
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "mr-data-640deaf2-edcb-4c42-aedd-716f4bcbccf3",
+      "resourceVersion": "650",
+      "uid": "e2daf0db-ed65-4a62-9841-ced57d71ed3b"
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "mr-data-83283361-0bc1-4cdf-a05d-647fc0b120cf",
+      "resourceVersion": "2549",
+      "uid": "dd745a38-f385-4596-b359-8bc9f27828c6"
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "mr-data-b3c54306-e474-4fce-a316-228ce37a5266",
+      "resourceVersion": "2424",
+      "uid": "c869968e-0f44-4365-800c-0448f74f8892"
+    },
+    {
+      "kind": "Secret",
+      "name": "mr-boot-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "resourceVersion": "9344",
+      "uid": "ce22d189-59cc-4845-830b-65e5cf65aabb"
+    },
+    {
+      "kind": "Secret",
+      "name": "mr-boot-01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+      "resourceVersion": "9865",
+      "uid": "100d1f69-60ba-4e95-822b-c64d328d64e5"
+    }
+  ],
+  "mappings": [
+    {
+      "attachments": [
+        "csi-33ca91f24c3bdea1e8f05b85853c42a68afc1a162d8591cdbc00bee5395aa10c"
+      ],
+      "attempt": 1,
+      "desired": "RUNNING",
+      "generation": 4,
+      "notes": [],
+      "owner": "alice",
+      "pod": {
+        "deleting": false,
+        "finalizers": [
+          "orbit.dev/managed-runner-stop-report"
+        ],
+        "generation": "4",
+        "phase": "Running",
+        "recorded": "adbcaf12-b458-47ef-94a3-39c7e01601db",
+        "uid": "adbcaf12-b458-47ef-94a3-39c7e01601db"
+      },
+      "podsUsingTheVolume": [
+        "mr-01a14bc6-f4de-7328-9a3f-0d025ff3a21b"
+      ],
+      "pv": {
+        "handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-56323e4a-eccc-4500-a775-7f1da5fcc614",
+        "recorded": [
+          "17c19778-040b-4984-b8bd-40e12c2a34d5",
+          "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-56323e4a-eccc-4500-a775-7f1da5fcc614"
+        ],
+        "uid": "17c19778-040b-4984-b8bd-40e12c2a34d5"
+      },
+      "pvc": {
+        "phase": "Bound",
+        "recorded": "e8aa1f8c-ce3f-4bba-8674-89fbdb37615f",
+        "uid": "e8aa1f8c-ce3f-4bba-8674-89fbdb37615f"
+      },
+      "reason": null,
+      "runnerId": "01a14bc6-f4de-7328-9a3f-0d025ff3a21b",
+      "secretGeneration": "4",
+      "state": "READY"
+    },
+    {
+      "attachments": [],
+      "attempt": 0,
+      "desired": "SLEEPING",
+      "generation": 5,
+      "notes": [],
+      "owner": "bob",
+      "pod": null,
+      "podsUsingTheVolume": [],
+      "pv": {
+        "handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-e54d641e-ac18-4b29-8f07-fd97b6101ba2",
+        "recorded": [
+          "853a22e9-87df-4aff-80ab-90da0a68f6b9",
+          "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-e54d641e-ac18-4b29-8f07-fd97b6101ba2"
+        ],
+        "uid": "853a22e9-87df-4aff-80ab-90da0a68f6b9"
+      },
+      "pvc": {
+        "phase": "Bound",
+        "recorded": "d2dd3096-1e5f-44f0-9fc2-0a44e9fb1250",
+        "uid": "d2dd3096-1e5f-44f0-9fc2-0a44e9fb1250"
+      },
+      "reason": null,
+      "runnerId": "01a14bc6-f4dc-7456-913d-bc14f2f3bcd4",
+      "secretGeneration": "4",
+      "state": "SLEEPING"
+    },
+    {
+      "attachments": [
+        "csi-63a8adfa4d8468ea4088b25468469d13ec83591e88eddc0b18d3a7ceb1ba3c52"
+      ],
+      "attempt": 0,
+      "desired": "RUNNING",
+      "generation": 1,
+      "notes": [],
+      "owner": "carol",
+      "pod": {
+        "deleting": false,
+        "finalizers": [
+          "orbit.dev/managed-runner-stop-report"
+        ],
+        "generation": "1",
+        "phase": "Running",
+        "recorded": "e341e973-ae8a-4b5c-a31c-5c923485710d",
+        "uid": "e341e973-ae8a-4b5c-a31c-5c923485710d"
+      },
+      "podsUsingTheVolume": [
+        "mr-01a14bdc-ead8-73ba-9322-286ff7b293dd"
+      ],
+      "pv": {
+        "handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-130690dd-994a-48fa-b7b2-8553b2ce7f8c",
+        "recorded": [
+          "ed9860c9-c759-477a-bb7a-d67da219ac7a",
+          "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-130690dd-994a-48fa-b7b2-8553b2ce7f8c"
+        ],
+        "uid": "ed9860c9-c759-477a-bb7a-d67da219ac7a"
+      },
+      "pvc": {
+        "phase": "Bound",
+        "recorded": "8278f180-68bf-4eea-ae49-c79d896e3c15",
+        "uid": "8278f180-68bf-4eea-ae49-c79d896e3c15"
+      },
+      "reason": "MODEL_UNAVAILABLE",
+      "runnerId": "01a14bdc-ead8-73ba-9322-286ff7b293dd",
+      "secretGeneration": "1",
+      "state": "STARTING"
+    }
+  ],
+  "problems": [],
+  "via": "host"
+}

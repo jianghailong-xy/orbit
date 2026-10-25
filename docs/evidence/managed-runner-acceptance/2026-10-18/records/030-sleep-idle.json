@@ -1,0 +1,415 @@
+{
+ "checks": [
+  {
+   "check": "ann: asleep, its Pod gone and its volume detached",
+   "ok": true,
+   "value": {
+    "podsUsingTheClaim": [],
+    "volumeAttachments": []
+   }
+  },
+  {
+   "check": "ann: the PVC is kept, bound to the same PV",
+   "ok": true,
+   "value": "4caa2267-5150-455d-9fc8-e9efd7e63154"
+  },
+  {
+   "check": "ann: no compute held while asleep",
+   "ok": true
+  },
+  {
+   "check": "ann: no RBD client holds the image while asleep",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "bob: asleep, its Pod gone and its volume detached",
+   "ok": true,
+   "value": {
+    "podsUsingTheClaim": [],
+    "volumeAttachments": []
+   }
+  },
+  {
+   "check": "bob: the PVC is kept, bound to the same PV",
+   "ok": true,
+   "value": "f5cccf9b-6093-453e-b5de-f05993a2a483"
+  },
+  {
+   "check": "bob: no compute held while asleep",
+   "ok": true
+  },
+  {
+   "check": "bob: no RBD client holds the image while asleep",
+   "ok": true,
+   "value": []
+  }
+ ],
+ "endedAt": "2026-10-18T12:44:15.945+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "sleep",
+ "result": {
+  "ann": {
+   "sleptAt": "2026-10-18T12:44:08.201+00:00",
+   "stopRequestedAt": null,
+   "storage": {
+    "at": "2026-10-18T12:44:14.264+00:00",
+    "ceph": {
+     "blocklist": "10.0.2.15:6825/253666604 2026-10-19T10:02:55.470772+0000\n10.0.2.15:0/2192275973 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6824/3840669940 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/3935614439 2026-10-18T23:04:42.393240+0000\n10.0.2.15:0/1734439907 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/3454451936 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/2395484111 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/1452041557 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6824/253666604 2026-10-19T10:02:55.470772+0000\n10.0.2.15:0/4039567310 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/3015615161 2026-10-18T23:04:42.393240+0000\n10.0.2.15:6825/1848105137 2026-10-18T20:01:51.062380+0000\n10.0.2.15:6824/1848105137 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/3738769582 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/1235428334 2026-10-19T03:49:50.908611+0000\n10.0.2.15:6825/3998907050 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/143010893 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/260511182 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/2241673006 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6825/950501931 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6824/1664890398 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6824/950501931 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6825/3840669940 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/3078658604 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/2147079381 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/2798022552 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/1584311584 2026-10-19T05:50:23.855464+0000\n10.0.2.15:0/1785994816 2026-10-18T19:46:35.556850+0000\n10.0.2.15:6825/1664890398 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6824/3998907050 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/217504789 2026-10-18T21:24:31.410237+0000\n10.0.2.15:0/918684945 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/3517004605 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/862953885 2026-10-19T05:50:23.855464+0000\n10.0.2.15:0/3385750799 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6825/4228077307 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/818406480 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/2083735106 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6825/2600747625 2026-10-18T23:34:31.804906+0000\n10.0.2.15:6824/2917292929 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6825/2917292929 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6824/4228077307 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/1533044841 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/2768098679 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/1304950385 2026-10-18T21:24:31.410237+0000\n10.0.2.15:0/3155633547 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/929215377 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6824/309297135 2026-10-19T03:49:50.908611+0000\n10.0.2.15:6824/2600747625 2026-10-18T23:34:31.804906+0000\n10.0.2.15:6825/2495859622 2026-10-18T23:04:42.393240+0000\n10.0.2.15:6825/309297135 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/236988318 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/3985671070 2026-10-18T23:04:42.393240+0000\n10.0.2.15:0/3319805666 2026-10-18T20:01:51.062380+0000\n10.0.2.15:6824/2495859622 2026-10-18T23:04:42.393240+0000\nlisted 55 entries",
+     "fsid": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+     "health": "HEALTH_OK",
+     "healthDetail": "HEALTH_OK",
+     "osdmap": {
+      "epoch": 188,
+      "num_in_osds": 3,
+      "num_osds": 3,
+      "num_remapped_pgs": 0,
+      "num_up_osds": 3,
+      "osd_in_since": 1792215315,
+      "osd_up_since": 1792317777
+     },
+     "pgs": [
+      {
+       "count": 33,
+       "state_name": "active+clean"
+      }
+     ],
+     "rbdInfo": {
+      "access_timestamp": "Sun Oct 18 12:36:59 2026",
+      "block_name_prefix": "rbd_data.2f67fd3d8d0a2",
+      "create_timestamp": "Sun Oct 18 12:36:59 2026",
+      "features": [
+       "layering"
+      ],
+      "flags": [],
+      "format": 2,
+      "id": "2f67fd3d8d0a2",
+      "modify_timestamp": "Sun Oct 18 12:36:59 2026",
+      "name": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+      "object_size": 4194304,
+      "objects": 512,
+      "op_features": [],
+      "order": 22,
+      "size": 2147483648,
+      "snapshot_count": 0
+     },
+     "rbdStatus": {
+      "watchers": []
+     }
+    },
+    "guest": [
+     "== kernel 7.0.0-34-generic, boot f728e937-6023-44ca-a548-b190a5821993, up 9721.75 s",
+     "== rbd devices",
+     "rbd0 orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd client client194119 addr 10.0.2.15:0/4215951233",
+     "== RBD filesystems mounted",
+     "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd /dev/rbd0 ext4 rw,relatime,stripe=1024",
+     "/var/lib/kubelet/pods/b1a4fd21-2843-4aa3-96b0-84897f626678/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount /dev/rbd0 ext4 rw,relatime,stripe=1024"
+    ],
+    "mapping": {
+     "attachments": 0,
+     "attempt": 0,
+     "desired": "SLEEPING",
+     "generation": 2,
+     "operation": "DELETE_POD:COMPLETED",
+     "pod": null,
+     "podUid": null,
+     "proof": "OBSERVED_STOP",
+     "proofRetired": true,
+     "reason": null,
+     "secretGeneration": "1",
+     "state": "SLEEPING"
+    },
+    "objects": {
+     "bootstrapSecret": {
+      "createdAt": "2026-10-18T12:37:04Z",
+      "generation": "1",
+      "name": "mr-boot-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+      "uid": "273045e7-92fa-4254-99c0-f6021b42014e"
+     },
+     "pod": null,
+     "podsUsingTheClaim": [],
+     "pv": {
+      "claimUid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+      "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+      "fsType": "ext4",
+      "image": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+      "name": "pvc-4caa2267-5150-455d-9fc8-e9efd7e63154",
+      "pool": "orbit-mr-rbd",
+      "reclaimPolicy": "Retain",
+      "uid": "db2d8021-0ab2-45ec-a5f4-f6a5fe9452bc",
+      "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-803a7868-15d8-4471-80c9-6a33de2d9834"
+     },
+     "pvc": {
+      "accessModes": [
+       "ReadWriteOnce"
+      ],
+      "annotations": {
+       "orbit.dev/owner-id": "01a14eff-3644-71dc-bd3a-169457b10c34",
+       "orbit.dev/runner-id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+       "pv.kubernetes.io/bind-completed": "yes",
+       "pv.kubernetes.io/bound-by-controller": "yes",
+       "volume.beta.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com",
+       "volume.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com"
+      },
+      "name": "mr-data-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+      "phase": "Bound",
+      "storageClassName": "runner-data",
+      "uid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+      "volumeName": "pvc-4caa2267-5150-455d-9fc8-e9efd7e63154"
+     },
+     "volumeAttachments": []
+    }
+   },
+   "until": {
+    "at": "2026-10-18T12:44:08.513+00:00",
+    "changes": [
+     {
+      "at": "2026-10-18T12:41:51.790+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 1,
+       "management_state": "READY",
+       "pod": "1ca70f34",
+       "reason": null,
+       "revision": 17
+      }
+     },
+     {
+      "at": "2026-10-18T12:43:27.791+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": "asked",
+       "generation": 1,
+       "management_state": "DRAINING",
+       "pod": "1ca70f34",
+       "reason": null,
+       "revision": 18
+      }
+     },
+     {
+      "at": "2026-10-18T12:43:57.135+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": "accepted",
+       "generation": 1,
+       "management_state": "DRAINING",
+       "pod": "1ca70f34",
+       "reason": null,
+       "revision": 18
+      }
+     },
+     {
+      "at": "2026-10-18T12:44:03.628+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": "accepted",
+       "generation": 1,
+       "management_state": "DRAINING",
+       "pod": "1ca70f34",
+       "reason": null,
+       "revision": 21
+      }
+     },
+     {
+      "at": "2026-10-18T12:44:08.513+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 2,
+       "management_state": "SLEEPING",
+       "pod": null,
+       "reason": null,
+       "revision": 22
+      }
+     }
+    ],
+    "reached": "SLEEPING",
+    "seconds": 136.8
+   }
+  },
+  "bob": {
+   "sleptAt": "2026-10-18T12:44:08.232+00:00",
+   "stopRequestedAt": null,
+   "storage": {
+    "at": "2026-10-18T12:44:15.945+00:00",
+    "ceph": {
+     "blocklist": "10.0.2.15:6825/253666604 2026-10-19T10:02:55.470772+0000\n10.0.2.15:0/2192275973 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6824/3840669940 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/3935614439 2026-10-18T23:04:42.393240+0000\n10.0.2.15:0/1734439907 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/3454451936 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/2395484111 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/1452041557 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6824/253666604 2026-10-19T10:02:55.470772+0000\n10.0.2.15:0/4039567310 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/3015615161 2026-10-18T23:04:42.393240+0000\n10.0.2.15:6825/1848105137 2026-10-18T20:01:51.062380+0000\n10.0.2.15:6824/1848105137 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/3738769582 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/1235428334 2026-10-19T03:49:50.908611+0000\n10.0.2.15:6825/3998907050 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/143010893 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/260511182 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/2241673006 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6825/950501931 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6824/1664890398 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6824/950501931 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6825/3840669940 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/3078658604 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/2147079381 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/2798022552 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/1584311584 2026-10-19T05:50:23.855464+0000\n10.0.2.15:0/1785994816 2026-10-18T19:46:35.556850+0000\n10.0.2.15:6825/1664890398 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6824/3998907050 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/217504789 2026-10-18T21:24:31.410237+0000\n10.0.2.15:0/918684945 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/3517004605 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/862953885 2026-10-19T05:50:23.855464+0000\n10.0.2.15:0/3385750799 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6825/4228077307 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/818406480 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/2083735106 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6825/2600747625 2026-10-18T23:34:31.804906+0000\n10.0.2.15:6824/2917292929 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6825/2917292929 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6824/4228077307 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/1533044841 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/2768098679 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/1304950385 2026-10-18T21:24:31.410237+0000\n10.0.2.15:0/3155633547 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/929215377 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6824/309297135 2026-10-19T03:49:50.908611+0000\n10.0.2.15:6824/2600747625 2026-10-18T23:34:31.804906+0000\n10.0.2.15:6825/2495859622 2026-10-18T23:04:42.393240+0000\n10.0.2.15:6825/309297135 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/236988318 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/3985671070 2026-10-18T23:04:42.393240+0000\n10.0.2.15:0/3319805666 2026-10-18T20:01:51.062380+0000\n10.0.2.15:6824/2495859622 2026-10-18T23:04:42.393240+0000\nlisted 55 entries",
+     "fsid": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+     "health": "HEALTH_OK",
+     "healthDetail": "HEALTH_OK",
+     "osdmap": {
+      "epoch": 188,
+      "num_in_osds": 3,
+      "num_osds": 3,
+      "num_remapped_pgs": 0,
+      "num_up_osds": 3,
+      "osd_in_since": 1792215315,
+      "osd_up_since": 1792317777
+     },
+     "pgs": [
+      {
+       "count": 33,
+       "state_name": "active+clean"
+      }
+     ],
+     "rbdInfo": {
+      "access_timestamp": "Sun Oct 18 12:36:59 2026",
+      "block_name_prefix": "rbd_data.2f67f956e7039",
+      "create_timestamp": "Sun Oct 18 12:36:59 2026",
+      "features": [
+       "layering"
+      ],
+      "flags": [],
+      "format": 2,
+      "id": "2f67f956e7039",
+      "modify_timestamp": "Sun Oct 18 12:36:59 2026",
+      "name": "csi-vol-89d3b261-afdc-45cd-b89a-0fe94e3f46b8",
+      "object_size": 4194304,
+      "objects": 512,
+      "op_features": [],
+      "order": 22,
+      "size": 2147483648,
+      "snapshot_count": 0
+     },
+     "rbdStatus": {
+      "watchers": []
+     }
+    },
+    "guest": [
+     "== kernel 7.0.0-34-generic, boot f728e937-6023-44ca-a548-b190a5821993, up 9725.63 s",
+     "== rbd devices",
+     "rbd0 orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd client client194119 addr 10.0.2.15:0/4215951233",
+     "== RBD filesystems mounted",
+     "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd /dev/rbd0 ext4 rw,relatime,stripe=1024",
+     "/var/lib/kubelet/pods/b1a4fd21-2843-4aa3-96b0-84897f626678/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount /dev/rbd0 ext4 rw,relatime,stripe=1024"
+    ],
+    "mapping": {
+     "attachments": 0,
+     "attempt": 0,
+     "desired": "SLEEPING",
+     "generation": 2,
+     "operation": "DELETE_POD:COMPLETED",
+     "pod": null,
+     "podUid": null,
+     "proof": "OBSERVED_STOP",
+     "proofRetired": true,
+     "reason": null,
+     "secretGeneration": "1",
+     "state": "SLEEPING"
+    },
+    "objects": {
+     "bootstrapSecret": {
+      "createdAt": "2026-10-18T12:37:04Z",
+      "generation": "1",
+      "name": "mr-boot-01a14f03-ec5a-749b-9877-e882a1a198eb",
+      "uid": "88667c65-ddca-4130-8342-88f5505046e0"
+     },
+     "pod": null,
+     "podsUsingTheClaim": [],
+     "pv": {
+      "claimUid": "f5cccf9b-6093-453e-b5de-f05993a2a483",
+      "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+      "fsType": "ext4",
+      "image": "csi-vol-89d3b261-afdc-45cd-b89a-0fe94e3f46b8",
+      "name": "pvc-f5cccf9b-6093-453e-b5de-f05993a2a483",
+      "pool": "orbit-mr-rbd",
+      "reclaimPolicy": "Retain",
+      "uid": "c700b627-4ede-49b3-838b-2d34f0a720e4",
+      "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-89d3b261-afdc-45cd-b89a-0fe94e3f46b8"
+     },
+     "pvc": {
+      "accessModes": [
+       "ReadWriteOnce"
+      ],
+      "annotations": {
+       "orbit.dev/owner-id": "01a14eff-3688-71c7-b029-3e80a8f18065",
+       "orbit.dev/runner-id": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+       "pv.kubernetes.io/bind-completed": "yes",
+       "pv.kubernetes.io/bound-by-controller": "yes",
+       "volume.beta.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com",
+       "volume.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com"
+      },
+      "name": "mr-data-01a14f03-ec5a-749b-9877-e882a1a198eb",
+      "phase": "Bound",
+      "storageClassName": "runner-data",
+      "uid": "f5cccf9b-6093-453e-b5de-f05993a2a483",
+      "volumeName": "pvc-f5cccf9b-6093-453e-b5de-f05993a2a483"
+     },
+     "volumeAttachments": []
+    }
+   },
+   "until": {
+    "at": "2026-10-18T12:44:08.513+00:00",
+    "changes": [
+     {
+      "at": "2026-10-18T12:41:51.790+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 1,
+       "management_state": "READY",
+       "pod": "a0c62ecc",
+       "reason": null,
+       "revision": 17
+      }
+     },
+     {
+      "at": "2026-10-18T12:43:27.791+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": "asked",
+       "generation": 1,
+       "management_state": "DRAINING",
+       "pod": "a0c62ecc",
+       "reason": null,
+       "revision": 18
+      }
+     },
+     {
+      "at": "2026-10-18T12:43:57.135+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": "accepted",
+       "generation": 1,
+       "management_state": "DRAINING",
+       "pod": "a0c62ecc",
+       "reason": null,
+       "revision": 18
+      }
+     },
+     {
+      "at": "2026-10-18T12:44:03.617+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": "accepted",
+       "generation": 1,
+       "management_state": "DRAINING",
+       "pod": "a0c62ecc",
+       "reason": null,
+       "revision": 21
+      }
+     },
+     {
+      "at": "2026-10-18T12:44:08.513+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 2,
+       "management_state": "SLEEPING",
+       "pod": null,
+       "reason": null,
+       "revision": 22
+      }
+     }
+    ],
+    "reached": "SLEEPING",
+    "seconds": 136.8
+   }
+  }
+ },
+ "seconds": 144.2,
+ "startedAt": "2026-10-18T12:41:51.749+00:00",
+ "step": "idle"
+}

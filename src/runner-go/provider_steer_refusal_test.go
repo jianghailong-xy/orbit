@@ -100,6 +100,7 @@ func TestEverySessionLoopThatCannotSteerRefusesOne(t *testing.T) {
 		providerDsh:         {"dsh_acp.go"},
 		providerOpenCode:    {"opencode.go"},
 		providerAntigravity: {"antigravity.go"},
+		providerCursor:      {"cursor_acp.go"},
 	}
 
 	checked := 0

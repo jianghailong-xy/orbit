@@ -30,14 +30,20 @@ data class EvidenceDecision(val decidingSessionId: String, val evidenceRevision:
 data class CriteriaDecision(val commitToken: String, val decision: String, val baseSeal: String)
 @Serializable
 data class OwnerAnswer(val key: String, val option: Int? = null, val text: String? = null)
+/** `upstreamRef` is the project's main branch as a full `refs/heads/…` ref: the owner's choice on a press, a suggestion on a
+ * coordinator's request, and absent when the card offered none (the project keeps the one it stands on). */
 @Serializable
 data class ProjectStartSettings(val line: String, val automatic: Boolean, val maxConcurrentTasks: Int,
-    val mergeCheckCommand: String?, val projectBranchName: String? = null)
+    val mergeCheckCommand: String?, val projectBranchName: String? = null, val upstreamRef: String? = null)
 
 enum class CardFamily {
     TOOL, QUESTION, PLAN, CREATE, BATCH, DAG, BLOCKER, PROVIDER,
     EVIDENCE, OWNER_CONFIRMATION, REVIEW, CRITERIA_CHANGE, ACCEPTANCE, START,
     OWNER_QUESTION, EXCEPTION, PROMOTION, WIKI, SESSION_REQUEST, BACKGROUND,
+    /** A revision waiting for its project's paused coordinator, or sent to it once back (`CoordinatorQueue`). */
+    COORDINATOR_QUEUE,
+    /** A coordinator's question that has ended, drawn as the record it became (`CoordinatorQuestions`). */
+    QUESTION_RECORD,
 }
 
 enum class CardVerb(val label: String) {
@@ -48,12 +54,15 @@ enum class CardVerb(val label: String) {
     SEND_BACK("Send back"), CONFIRM_OWNER("Confirm done"), APPROVE_CRITERIA("Approve changes"),
     REJECT_CRITERIA("Keep current criteria"), CONFIRM_CRITERIA("Confirm criteria"), START("Start project"),
     OWNER_ANSWER("Send answer"), RETURN_COORDINATOR("Ask the coordinator again"), RESUME("Resume"),
-    MARK_HANDLED("Mark as handled"), RETRY_TASK("Retry task"), CANCEL_TASK("Cancel task"),
+    MARK_HANDLED("Mark as handled"), RETRY_TASK("Retry task"), CANCEL_TASK("Cancel task"), ABANDON("Abandon"),
+    /** RETRY on an integration item (A08-17): its task's landing queued again, or the merge candidate's check run again. */
+    RETRY_INTEGRATION("Retry"), RERUN_CHECK("Re-run the check"),
     CONFIRM_MERGE("Merge"), DECLINE_MERGE("Not now"), CANCEL_MERGE("Cancel merge"),
     WIKI_ACCEPT("Accept"), WIKI_EDIT("Save edit"), WIKI_REJECT("Reject"), WIKI_CONFIRM("Confirm entry"),
     WIKI_REVERT("Revert run"), WIKI_REJECT_ENTRY("Reject entry"), PLAN_CONFIRM("Confirm plan"), PLAN_ACCEPT("Accept proposal"), PLAN_REJECT("Reject proposal"),
     WIKI_RECONFIRM("Re-confirm entry"), WIKI_AMEND("Amend entry"), WIKI_RETIRE("Retire entry"),
     WATCH_PAUSE("Pause watch"), WATCH_RESUME("Resume watch"), WATCH_CANCEL("Cancel watch"),
+    REOPEN_TASK("Reopen"), DECIDE_MYSELF("Decide it myself"),
 }
 
 /** The server address and the exact version drawn. No action is inferred from an event's prose. */
@@ -87,7 +96,11 @@ fun approvalQuestions(input: JsonObject): List<CardQuestion> = input.objects("qu
 
 /** A source read, not a UI flag, grants each door. Unknown states/actions stay read-only. */
 object CardCatalog {
-    fun session(id: String, snapshot: SessionSnapshot, now: java.time.Instant = java.time.Instant.now()): List<InteractionCard> = buildList {
+    /** [engine] is the CLI running the session: the server says it (`engine`); a reader that knows better from the account's keys,
+     * on a server that doesn't, says it here. [answered] holds the records of answers pressed in this window, by item, which stand
+     * in for their questions until the read carries them (`CoordinatorQuestions.answeredHere`). */
+    fun session(id: String, snapshot: SessionSnapshot, now: java.time.Instant = java.time.Instant.now(),
+        engine: String? = snapshot.detail.text("engine"), answered: Map<String, JsonObject> = emptyMap()): List<InteractionCard> = buildList {
         val detail = snapshot.detail
         val wireId = detail.text("id") ?: id
         val projectId = detail.text("projectId") ?: detail.obj("project")?.text("id")
@@ -103,8 +116,11 @@ object CardCatalog {
                 CardFamily.BATCH -> listOf(CardVerb.CREATE_BATCH, CardVerb.CHAT)
                 CardFamily.DAG -> listOf(CardVerb.CHANGE_DAG, CardVerb.CHAT)
                 CardFamily.BLOCKER -> listOf(CardVerb.RESOLVE_BLOCKER, CardVerb.CHAT)
-                else -> listOf(CardVerb.ALLOW, CardVerb.DENY) +
-                    if (ApprovalRules.remember(approval.toolName, approval.input).isEmpty()) emptyList() else listOf(CardVerb.REMEMBER)
+                // One of Orbit's own asks (iOS `Approvals.isOrbitAsk`): saying no is a conversation, and there is no standing yes.
+                // DeepSeek Harness answers each ask once and keeps no rule (iOS cef6c8e0d): there, a card is Allow and Deny alone.
+                else -> if (approval.toolName == ApprovalRules.mergeCheckChange) listOf(CardVerb.ALLOW, CardVerb.CHAT) else listOf(CardVerb.ALLOW, CardVerb.DENY) +
+                    if (!DshRuntime.rememberOffered(engine) || ApprovalRules.remember(approval.toolName, approval.input).isEmpty()) emptyList()
+                    else listOf(CardVerb.REMEMBER)
             }
             val title = when (family) {
                 CardFamily.QUESTION -> "Your input is needed"
@@ -132,34 +148,74 @@ object CardCatalog {
                     projectId, task, "$revision:$deciding", if (allowed) listOf(CardVerb.CONFIRM_EVIDENCE, CardVerb.SEND_BACK) else emptyList(),
                     context = buildJsonObject { put("decidingSessionId", deciding) }))
             }
+            // A revision waiting for this project's paused coordinator, then the line it becomes once sent to it: drawn where its
+            // evidence card would be, under that card's address, so one turns into the next in place (`CoordinatorQueue`).
+            queue.objects("waitingOnCoordinator").forEach { row ->
+                val task = row.text("taskId") ?: return@forEach
+                val revision = row.text("evidenceRevision") ?: return@forEach
+                if (projectId == null || row.text("projectId") != projectId) return@forEach
+                val deciding = queue.text("decidingSessionId") ?: return@forEach
+                val allowed = row.obj("decidability")?.flag("decidable") == true && row.obj("independence")?.flag("independent") == true
+                add(InteractionCard("evidence:$task:$revision", CardFamily.COORDINATOR_QUEUE, CoordinatorQueue.title, row, id,
+                    projectId, task, "$revision:$deciding", if (allowed) listOf(CardVerb.DECIDE_MYSELF) else emptyList(),
+                    context = buildJsonObject {
+                        put("decidingSessionId", deciding); put("coordinatorQueue", "waiting")
+                        put("coordinator", JsonObject(detail.filterKeys { it in CoordinatorQueue.coordinatorFields }))
+                    }))
+            }
+            queue.objects("sentToCoordinator").forEach { row ->
+                val task = row.text("taskId") ?: return@forEach
+                val revision = row.text("evidenceRevision") ?: return@forEach
+                if (projectId == null || row.text("projectId") != projectId) return@forEach
+                add(InteractionCard("evidence:$task:$revision", CardFamily.COORDINATOR_QUEUE, CoordinatorQueue.sent, row, id, projectId,
+                    task, "sent:${row.text("deliveredAt")}", context = buildJsonObject { put("coordinatorQueue", "sent") }))
+            }
             queue.objects("decided").forEach { receipt ->
                 add(receipt(CardFamily.EVIDENCE, "Evidence decision recorded", receipt, id, receipt.text("taskId") ?: "", receipt.text("evidenceRevision") ?: ""))
             }
         }
         (standing["ownerConfirmation"] as? JsonObject)?.let { view ->
             val task = view.text("taskId") ?: return@let
-            view.obj("waiting")?.takeIf { it.text("sessionId") == wireId }?.let { waiting ->
+            // Where a request stands (OrbitKit `OwnerConfirmations.standing`): answered, then returned by its reviewer, then
+            // waiting. An answer and a return are drawn where the card was — under its address — as the record it became.
+            val decisions = view.objects("decisions").filter { it.text("sessionId") == wireId }
+            val returns = OwnerReview.returnsIn(view, wireId)
+            val settled = (decisions + returns).mapNotNull { it.text("requestId") }.toSet()
+            view.obj("waiting")?.takeIf { it.text("sessionId") == wireId && it.text("requestId") !in settled }?.let { waiting ->
                 val requestId = waiting.text("requestId") ?: return@let
                 val review = waiting.obj("review")
                 val binding = "$requestId:${review?.text("state")}:${review?.obj("review")?.text("recordId")}"
                 val allowed = view.text("completionCriterion") == "OWNER_CONFIRMED" && view.text("status") in setOf("OPEN", "IN_PROGRESS", "FAILED")
-                add(InteractionCard("owner:$task:$requestId", CardFamily.OWNER_CONFIRMATION, "Confirm done?", view, id, projectId, task,
-                    binding, if (allowed) listOf(CardVerb.CONFIRM_OWNER, CardVerb.SEND_BACK) else emptyList()))
+                add(InteractionCard("owner:$task:$requestId", CardFamily.OWNER_CONFIRMATION, OwnerReview.heading, view, id, projectId, task,
+                    binding, if (allowed) listOf(CardVerb.CONFIRM_OWNER, CardVerb.SEND_BACK) else emptyList(), context = ownerContext("question", view)))
             }
-            view.objects("decisions").filter { it.text("sessionId") == wireId }.forEach {
-                add(receipt(CardFamily.OWNER_CONFIRMATION, "Owner decision recorded", it, id, task, it.text("id") ?: ""))
+            decisions.forEach { decided ->
+                val decisionId = decided.text("id") ?: return@forEach
+                // Reopen task, once the review found problems after the confirmation and the task has settled (§9 L4).
+                val reopen = OwnerReview.readable(decided["review"])?.obj("problems") != null && OwnerReview.reopenOffered(view.text("status"))
+                add(InteractionCard("owner:$task:${decided.text("requestId") ?: decisionId}", CardFamily.OWNER_CONFIRMATION,
+                    if (decided.text("decision") == "CONFIRM") OwnerReview.confirmedHeading else OwnerReview.sentBackHeading, decided, id, projectId, task,
+                    "$decisionId:${decided.obj("review")?.obj("problems")?.text("recordId")}:${view.text("status")}",
+                    if (reopen) listOf(CardVerb.REOPEN_TASK) else emptyList(), "Recorded", ownerContext("receipt", view)))
             }
-            view.objects("reviewerReturns").filter { it.text("sessionId") == wireId }.forEach {
-                add(receipt(CardFamily.REVIEW, "Returned by reviewer", it, id, task, it.text("requestId") ?: ""))
+            returns.forEach { returned ->
+                val requestId = returned.text("requestId") ?: return@forEach
+                add(InteractionCard("owner:$task:$requestId", CardFamily.OWNER_CONFIRMATION, OwnerReview.heading, returned, id, projectId, task,
+                    "$requestId:returned", status = "Recorded", context = ownerContext("returned", view)))
             }
         }
-        if (projectId != null) addAll(project(id, projectId, standing))
+        if (projectId != null) addAll(project(id, projectId, standing, answered))
     }
 
     private fun receipt(family: CardFamily, title: String, source: JsonObject, session: String, id: String, revision: String) =
         InteractionCard("receipt:$family:$id:$revision", family, title, source, session, objectId = id, binding = revision, status = "Recorded")
 
-    fun project(session: String, project: String, standing: Map<String, JsonElement>): List<InteractionCard> = buildList {
+    /** Which of the owner card's three shapes this is — the question, the receipt a decision left, the record a reviewer's return
+     * left — beside the confirmation read it was drawn from (`OwnerReview`). */
+    private fun ownerContext(kind: String, view: JsonObject) = buildJsonObject { put("ownerCard", kind); put("view", view) }
+
+    fun project(session: String, project: String, standing: Map<String, JsonElement>,
+        answered: Map<String, JsonObject> = emptyMap()): List<InteractionCard> = buildList {
         val document = standing["project"] as? JsonObject
         if (document == null || document.text("id") != project) return@buildList
         (standing["criteriaDecisions"] as? JsonObject)?.let { queue ->
@@ -193,10 +249,20 @@ object CardCatalog {
                 "${request.text("criteriaDigest")}:${request.text("planDigest")}", if (allowed) listOf(CardVerb.START) else emptyList(),
                 context = document))
         }
+        // A08-13: each question that has ended is the record it became, under its question card's address, the earliest-ended
+        // first. A record asks nothing, and it stands for its question: a read that left before an answer here still lists it open.
+        val records = CoordinatorQuestions.receipts(openItems, answered)
+        records.forEach { record ->
+            val itemId = record.text("itemId") ?: return@forEach
+            add(InteractionCard("item:$itemId", CardFamily.QUESTION_RECORD, CoordinatorQuestions.recordHeading(record), record, session, project,
+                itemId, "record:${record.text("resolvedAt")}:${record["delivery"]}", status = "Recorded"))
+        }
+        val recorded = records.mapNotNull { it.text("itemId") }.toSet()
         openItems?.objects("needsYou")?.forEach { row ->
             val itemId = row.text("itemId") ?: return@forEach
             val kind = row.text("kind")
             if (kind in setOf("PROMOTION_APPROVAL", "START_REQUEST")) return@forEach
+            if (kind == "COORDINATOR_QUESTION" && itemId in recorded) return@forEach
             val verbs = row.strings("actions")
             val owned = row.text("assignee") == "OWNER"
             val actions = buildList {
@@ -204,24 +270,82 @@ object CardCatalog {
                 if (kind == "COORDINATOR_QUESTION" && "ANSWER" in verbs && row.obj("question") != null) add(CardVerb.OWNER_ANSWER)
                 if ("ASK_COORDINATOR_AGAIN" in verbs) add(CardVerb.RETURN_COORDINATOR)
                 if ("RESUME" in verbs && row.text("fuseEpisodeId") != null) add(CardVerb.RESUME)
-                if ("RETRY" in verbs && row.text("taskId") != null) add(CardVerb.RETRY_TASK)
+                // RETRY is three doors under one name, chosen by the item (`ExceptionCards.retryVerb`).
+                if ("RETRY" in verbs) ExceptionCards.retryVerb(row)?.let(::add)
                 if ("CANCEL_TASK" in verbs && row.text("taskId") != null) add(CardVerb.CANCEL_TASK)
-                if (kind in setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED")) add(CardVerb.MARK_HANDLED)
+                // §2.9 LS6's reading door opens a session, so it carries no verb; J-T10's Abandon ends the one job the item names.
+                if ("ABANDON" in verbs && !row.text("integrationJobId").isNullOrEmpty()) add(CardVerb.ABANDON)
+                if (kind in setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED", "DELIVERY_REVIEW",
+                        "LANDING_LEASE_EXPIRED")) add(CardVerb.MARK_HANDLED)
             }
             add(InteractionCard("item:$itemId", if (kind == "COORDINATOR_QUESTION") CardFamily.OWNER_QUESTION else CardFamily.EXCEPTION,
                 if (kind == "FUSE_PAUSED") "Project paused" else row.text("title") ?: "Project item", row, session, project, itemId,
                 // Returning an OPEN item resets this public timestamp; later escalation reuses its itemId.
-                "${row["question"]}:${row["actions"]}:${row["assignee"]}:${row["taskId"]}:${row["fuseEpisodeId"]}:${row["waitingSince"]}", actions))
+                "${row["question"]}:${row["actions"]}:${row["assignee"]}:${row["taskId"]}:${row["promotionId"]}:${row["fuseEpisodeId"]}:" +
+                    "${row["waitingSince"]}:${row["landingSessionId"]}:${row["integrationJobId"]}", actions))
         }
         (standing["promotion"] as? JsonObject)?.let { row ->
             val promotion = row.text("promotionId") ?: return@let
+            // One line per moment (iOS 6b4bef713): a candidate is a card while it asks, merges or is blocked. A merge that happened is
+            // the record the merged read draws, and one still being checked or already answered asks nothing.
+            if (PromotionCards.stage(row) !in setOf(PromotionStage.ASKING_YOU, PromotionStage.MERGING, PromotionStage.BLOCKED)) return@let
             val actions = when (row.text("state")) {
                 "READY" -> if (row.text("sourceSha") != null) listOf(CardVerb.CONFIRM_MERGE, CardVerb.DECLINE_MERGE) else emptyList()
                 "CONFIRMED", "RECHECKING" -> listOf(CardVerb.CANCEL_MERGE)
                 else -> emptyList()
             }
-            add(InteractionCard("promotion:$promotion", CardFamily.PROMOTION, "Merge to ${row.text("upstreamRef") ?: "main"}", row,
-                session, project, promotion, "${row.text("sourceSha")}:${row.text("state")}", actions, row.text("state")))
+            // While it merges, the card says where the merge's own job stands (`PromotionCards`).
+            val merging = PromotionCards.isMerging(row)
+            add(InteractionCard("promotion:$promotion", CardFamily.PROMOTION, if (merging) PromotionCards.mergingTitle(row) else PromotionCards.mergeTo(PromotionCards.mainBranch(row)), row,
+                session, project, promotion, "${row.text("sourceSha")}:${row.text("state")}", actions, if (merging) PromotionCards.mergingStatusLine(row) else row.text("state")))
         }
     }
+}
+
+/**
+ * An Automatic project's completion evidence while its coordinator is paused — a usage limit, a 429, an expired sign-in, a runner
+ * that went away, a retry it is parked on — or not yet handed it (project 34cygPTQe5LPUT7tdUAzG; the pending read's
+ * `waitingOnCoordinator` and `sentToCoordinator`, read for the coordinator's own conversation). Such a revision waits for the
+ * coordinator, not for the owner: it is drawn where its evidence card would be and asks nothing — no needs-you count reads this
+ * family — until Decide it myself opens the evidence card it still is. Once handed over it is one line saying when. The words are
+ * the project's, the same on every client.
+ */
+object CoordinatorQueue {
+    const val title = "Waiting for the coordinator"
+    const val explanation = "It goes to the coordinator when it’s back. You can still decide now."
+    const val decideHere = "It gets this when it’s back. Decide here only if you don’t want to wait."
+    const val back = "Coordinator is back · it gets this when its current turn ends"
+    const val sent = "Sent to the coordinator"
+    private const val paused = "Coordinator paused"
+
+    /** What the waiting card reads of the coordinator's own session to say why it waits: its run, what it failed with or last
+     * said, and the retry it is parked on. */
+    val coordinatorFields = setOf("status", "runState", "error", "lastAssistantText", "retryAt")
+
+    /** "Coordinator paused · weekly limit · resets 19:00" for the quota [window] that ran out, else "Coordinator paused · retries
+     * 19:00"; without a [time] it names none. */
+    fun pausedLine(window: String?, time: String?): String = when {
+        window != null -> listOfNotNull(paused, window, time?.let { "resets $it" }).joinToString(" · ")
+        time != null -> "$paused · retries $time"
+        else -> paused
+    }
+
+    /** "Sent to the coordinator · 20:05". */
+    fun sentLine(time: String?): String = listOfNotNull(sent, time).joinToString(" · ")
+
+    /** Whether the coordinator is still paused, as the server reads it (`conversationIsPaused`): its run failed, or it waits on a
+     * retry it armed. A revision still waiting for one that is neither goes to it when its current turn ends. */
+    fun isPaused(coordinator: JsonObject): Boolean =
+        coordinator.text("retryAt") != null || (coordinator.text("runState") ?: coordinator.text("status")) == "FAILED"
+
+    fun isSent(card: InteractionCard) = card.family == CardFamily.COORDINATOR_QUEUE && card.context.text("coordinatorQueue") == "sent"
+
+    /** Whether [card] is a waiting revision that Decide it myself opened (`decideMyself`). */
+    fun isDecidingMyself(card: InteractionCard) = card.context.flag("decidingMyself")
+
+    /** What Decide it myself opens: the evidence card the revision still is — Confirm done and Chat about this, the same request
+     * as the same deciding session — still saying what it waits for. Null for a card that offers no such press. */
+    fun decideMyself(card: InteractionCard): InteractionCard? = if (CardVerb.DECIDE_MYSELF !in card.actions) null
+        else card.copy(family = CardFamily.EVIDENCE, actions = listOf(CardVerb.CONFIRM_EVIDENCE, CardVerb.SEND_BACK),
+            context = JsonObject(card.context + ("decidingMyself" to JsonPrimitive(true))))
 }

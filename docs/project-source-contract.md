@@ -353,7 +353,7 @@ apiserver 没有 checkout，runner 有。因此 ref→SHA 的解析必须在 run
 
 ### 7.2 freshness
 
-**SR38（先取再解析，同一序列）**：ref→SHA 的解析必须是"**先从权威取，紧接着解析**"的一次序列（`REMOTE`：`git fetch <remote> <ref>` 后 `rev-parse FETCH_HEAD`；`RUNNER_LOCAL`：本机 `rev-parse <ref>`）。**不得**读一个来历不明的本地缓存 ref。两步之间 ref 又动了是可接受的 —— 那时冻结的仍是一个**真实存在过**的 tip；读缓存不可接受 —— 那可能是一个从未在权威上存在过的组合。
+**SR38（先取再解析，同一序列）**：ref→SHA 的解析必须是"**先从权威取，紧接着解析**"的一次序列（`REMOTE`：`git fetch <remote> +<ref>:refs/orbit-source-pin/<session>` 后 `rev-parse` 这个本会话独有、刚由这次 fetch 写入的 ref，用完即删；不读 FETCH_HEAD —— 它是整个检出共用的一个文件，同一检出里并发的 fetch 会把它清空或换成别的 ref 的结果；`RUNNER_LOCAL`：本机 `rev-parse <ref>`）。**不得**读一个来历不明的本地缓存 ref。两步之间 ref 又动了是可接受的 —— 那时冻结的仍是一个**真实存在过**的 tip；读缓存不可接受 —— 那可能是一个从未在权威上存在过的组合。
 
 **SR39（freshness 不是时间窗）**：本契约**不定义**"多久之前 fetch 过算新鲜"。一个时间窗会让"窗内"变成一个可以跳过 fetch 的借口，而 fetch 才是唯一能证明新鲜的动作。新鲜 = 这次解析自己 fetch 过。
 

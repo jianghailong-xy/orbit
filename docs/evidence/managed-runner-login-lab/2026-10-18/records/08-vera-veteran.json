@@ -1,0 +1,32 @@
+{
+  "at": "2026-10-17T23:08:35.358+00:00",
+  "heartbeat": 201,
+  "owner": "vera",
+  "reorder": 201,
+  "runner": {
+    "id": "34hjevasZMWeC7cxU1Th1",
+    "name": "vera-laptop",
+    "online": true,
+    "status": "ONLINE"
+  },
+  "session": {
+    "id": "34hjevhVS63Lhg6SCyKsE",
+    "provider": "claude",
+    "status": "PENDING",
+    "title": "t05 existing work"
+  },
+  "workspaces": [
+    {
+      "id": "34hjeveO1EZrLVBRhVBxq",
+      "name": "api",
+      "position": null,
+      "workDir": "/srv/api"
+    },
+    {
+      "id": "34hjevf4P8kRBrKxRBbr8",
+      "name": "web",
+      "position": null,
+      "workDir": "/srv/web"
+    }
+  ]
+}

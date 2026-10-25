@@ -11,7 +11,7 @@
  * as `Date`, everything downstream of JSON holds them as ISO strings. Parameterising it is what
  * lets both sides name the same interface instead of keeping two that drift.
  */
-import type { IntegrationCheckResult, IntegrationJobKind, IntegrationJobPhase, IntegrationJobState } from './dto';
+import type { IntegrationCheckResult, IntegrationJobKind, IntegrationJobOutputCheck, IntegrationJobPhase, IntegrationJobState } from './dto';
 import type { ProjectStartRequest, ProjectStartSettingKey, ProjectStartSettings } from './project-start';
 import type { DoneRequest } from './project-done';
 
@@ -39,7 +39,20 @@ export interface ProjectIntegrationSettings<Instant = string> {
   lineAbsentReason: 'NOT_DECIDED' | null;
   /** The integration line's branch, spelled as a merge receipt spells it (no `refs/heads/`). */
   ref: string | null;
+  /** The project's main branch, short (no `refs/heads/`); null while it has no binding. */
   upstreamRef: string | null;
+  /**
+   * When the account owner chose this project's main branch (§1.2 L6) — null while it is still
+   * the default, or the choice a new binding carried over from this account's last one for the
+   * same repository, and for a project with no binding. Absent on servers that predate it.
+   */
+  upstreamChosenAt?: Instant | null;
+  /**
+   * The main branch this account chose last for this project's repository (§1.2 L6), which is what
+   * a new binding of that repository starts from — null when it has never chosen one there, or the
+   * project has no repository. Absent on servers that predate it.
+   */
+  lastMainBranch?: ProjectLastMainBranch<Instant> | null;
   source: IntegrationRefSource | null;
   /** Integration started, so the line can no longer change (§1.2 L4). */
   locked: boolean;
@@ -51,6 +64,28 @@ export interface ProjectIntegrationSettings<Instant = string> {
   escalationSeconds: number;
 }
 
+/** An account's last choice of main branch for one repository (§1.2 L6). */
+export interface ProjectLastMainBranch<Instant = string> {
+  /** The branch, short (no `refs/heads/`). */
+  branch: string;
+  /** The repository, short: the last two segments of its canonical URL, as `repository` gives it. */
+  repository: string;
+  chosenAt: Instant;
+}
+
+/**
+ * The branches a project's main branch can be chosen from (§1.6): the local branches the runner
+ * last reported for a session of the project's coordination workspace (`session.merge_targets`),
+ * without Orbit's own `orbit/*` session branches and without the account's project branches (the
+ * branch each of its projects on a project branch integrates into).
+ */
+export interface ProjectBranchCandidates<Instant = string> {
+  names: string[];
+  /** The coordination workspace they were reported for. */
+  workspaceName: string;
+  reportedAt: Instant;
+}
+
 /**
  * The settings plus what the integration queue has done with them (§1.6): the five facts the
  * project page's line row is drawn from.
@@ -60,6 +95,16 @@ export interface ProjectIntegrationSettings<Instant = string> {
  * that synced at the epoch.
  */
 export interface ProjectIntegrationView<Instant = string> extends ProjectIntegrationSettings<Instant> {
+  /**
+   * The project's repository, short — the last two segments of its canonical URL, as
+   * `acme/payments-api`: its binding's, or before it has one, its coordination workspace's. Null
+   * when neither names one, and then the project has no main branch to choose. Absent on servers
+   * that predate it.
+   */
+  repository?: string | null;
+  /** What its main branch can be chosen from; null when nothing has been reported. Absent on
+   *  servers that predate it. */
+  branches?: ProjectBranchCandidates<Instant> | null;
   /** Distance measured by the last successful `LAND_TASK` that reported it; a historical snapshot. */
   commitsAheadOfUpstream: number | null;
   commitsAheadOfUpstreamAbsentReason: 'NO_LANDING_YET' | null;
@@ -128,7 +173,68 @@ export interface ProjectIntegrationInFlight<Instant = string> {
   startedAt: Instant;
   /** Last report from the runner; absent on older servers and null before a claim. */
   heartbeatAt?: Instant | null;
+  /**
+   * How long the job waited its turn before the claim, in ms — the same measurement the task row's
+   * landing carries (`LandTaskIntegrationView.waitMs`).
+   *
+   * The clock counts from the claim, so the minutes a reader watches are the minutes of WORK, and a
+   * job that sat in the queue for two and a half of them having run for four is a different story
+   * from one that has been running for six and a half. Absent on older servers and on a job still
+   * queued, whose whole elapsed time IS the wait.
+   */
+  waitMs?: number | null;
+  /** The job this line describes. Absent on older servers. */
+  jobId?: string;
+  /** The landing session this job belongs to (§2.9). Absent until a server fills the slot. */
+  landingSessionId?: string | null;
+  /** The task it lands; null for a promotion or a merge check, which land no single task. */
+  taskId?: string | null;
+  /** The candidate a promotion job checks or lands; null for a task landing. */
+  promotionId?: string | null;
+  /** The runner holding the claim, by name; null while queued. Absent on older servers. */
+  runner?: string | null;
+  /** The claim generation the job is on: 0 before its first claim, one more per takeover. */
+  claim?: number;
+  /** The round inside the current claim, from 1, as the v2 reports name it; null before one. */
+  round?: number | null;
+  /** The check in flight under a v2 claim; null between checks and for a legacy claim. */
+  check?: ProjectIntegrationCheck<Instant> | null;
+  /** When the current step began (§7.2 V6's main clock); null on a client that never reported one. */
+  stepStartedAt?: Instant | null;
+  /** When the current step's output last moved; null when no report measured it. */
+  outputMovedAt?: Instant | null;
+  /** The protocol this job's current claim was written with: `'v2'`, or null for legacy. */
+  progressProtocol?: string | null;
+  /** How long this project's successful runs of the current MERGE_CHECK usually take; null for
+   *  every other check, and while none of the project's newest finished jobs passed it. */
+  typicalMs?: number | null;
+  /** §7.2 V6's read-time liveness; null for a job waiting its turn, which has no claim to judge. */
+  liveness?: IntegrationJobLiveness | null;
+  /** Why a queued job is not claimed, or why a claimed one waits on this runner's local lock. */
+  blockingReason?: IntegrationJobBlockingReason | null;
 }
+
+/** §7.2 V6's read-time liveness of an integration claim, derived from the row and never stored. */
+export type IntegrationJobLiveness = 'LIVE' | 'QUIET' | 'SILENT' | 'LEASE_EXPIRED' | 'LEGACY';
+
+/** The check a v2 claim is running, as its progress reports name it (§2.2 J-T4). The job row's
+ *  `checks` holds finished results in a different shape. */
+export interface ProjectIntegrationCheck<Instant = string> {
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  /** Position of this check in the run, from 1, and how many the run has in all. */
+  index: number;
+  count: number;
+  budgetSeconds: number;
+  startedAt: Instant;
+}
+
+/**
+ * The most rounds one claim of a `LAND_TASK` can run: the M of "round N of M" (§7.2 V6). The first
+ * round plus up to two refetches when the push loses a race (contract J5, appendix A-Q5; runner-go
+ * `integrate.go` `integrationRefetchRounds + 1`). `LAND_PROMOTION` and `CHECK_PROMOTION` have one
+ * round and write no M. A check's `count` is how many checks the run has, never this number.
+ */
+export const LAND_TASK_ROUNDS_PER_CLAIM = 3;
 
 /**
  * One RUNNING or QUEUED job on the project's integration view (`inFlightJobs`, §1.6).
@@ -148,6 +254,9 @@ export interface ProjectIntegrationJob<Instant = string> {
   /** The task it lands; null for a promotion or a merge check, which land no single task. */
   taskId: string | null;
   taskTitle: string | null;
+  /** The candidate a promotion job checks or lands; null for a task landing. Absent on servers
+   *  that predate the field. */
+  promotionId?: string | null;
   /** Which landing of its subject this is, counting from 1. */
   generation: number;
   /** What "for how long" counts from, as on `inFlight`: the claim, or the enqueue. */
@@ -163,10 +272,432 @@ export interface ProjectIntegrationJob<Instant = string> {
   timedOut: boolean;
   /** How long the current step may go without a report; null while queued. */
   limitSeconds: number | null;
+  /** The protocol this job's current claim was written with (§2.2 J-T4): `'v2'` for a runner that
+   *  reports periodically, null for a legacy claim that only reports at step boundaries. Absent
+   *  from a server older than the field. */
+  progressProtocol?: string | null;
+  /** The claim generation the job is on: 0 before its first claim, one more per takeover. Absent
+   *  from a server older than the field. */
+  claim?: number;
+  /** The round inside the current claim, from 1, as the v2 reports name it; null before one. */
+  round?: number | null;
+  /** The check in flight under a v2 claim; null between checks and for a legacy claim. */
+  check?: ProjectIntegrationCheck<Instant> | null;
+  /** When the current step began (§7.2 V6's main clock); null on a legacy claim, which reports
+   *  only that a step started, and on a server that predates the column. */
+  stepStartedAt?: Instant | null;
+  /** When the current step's output last moved; null when no report measured it. */
+  outputMovedAt?: Instant | null;
+  /** How long this project's successful runs of the current MERGE_CHECK usually take; null for
+   *  every other check, and while none of the project's newest finished jobs passed it (§7.2 V6). */
+  typicalMs?: number | null;
+  /** §7.2 V6's read-time liveness; null for a job waiting its turn, which has no claim to judge.
+   *  `LEASE_EXPIRED` is the same fact as `timedOut`. */
+  liveness?: IntegrationJobLiveness | null;
+  /** Why a queued job is not claimed, or why a claimed one waits on this runner's local lock. */
+  blockingReason?: IntegrationJobBlockingReason | null;
+  /** The landing session this job belongs to (§2.9). Absent until a server fills the slot. */
+  landingSessionId?: string | null;
   /** Whether the owner's Retry (`POST /projects/:id/integration/jobs/:jobId/retry`) takes this job
    *  now. Clients draw the button from this rather than from `timedOut`, so which timed-out jobs a
    *  retry can end is the server's to say. */
   retryable: boolean;
+}
+
+// ── The landing session's view (contract §2.9 LS1, LS6) ─────────────────────────────────────────
+
+/** One finished check of the current attempt: `{ name, command, expectedExitCode, exitCode,
+ *  timedOut, durationMs, outputTail }`, the runner's own result shape. Read as data — the landing
+ *  view carries it through without re-typing what the runner reports. */
+export type LandingCheckResult = Record<string, unknown>;
+
+/** The newest attempt of a landing subject, as its session's page draws it. */
+export interface SessionLandingAttempt<Instant = string> {
+  jobId: string;
+  kind: IntegrationJobKind;
+  /** QUEUED | RUNNING | READY | CONFIRMED | MERGED | DECLINED | CANCELLED | ERROR | … */
+  state: string;
+  /** Which landing of its subject this attempt is, counting from 1. */
+  generation: number;
+  phase: IntegrationJobPhase | null;
+  /** The round inside the current claim, from 1; null before one was reported. */
+  round: number | null;
+  step: string | null;
+  /** The claim generation: 0 before the first claim, one more per takeover. */
+  claim: number;
+  runnerName: string | null;
+  /** The work session this attempt is about, when that row still exists. NULL once it was purged:
+   *  `job.session_id` is a history reference with no relation (0424), so a gone source reads null
+   *  rather than failing the read. */
+  sourceSessionId: string | null;
+  /** The branch the attempt writes, as the job froze it. */
+  targetRef: string;
+  startedAt: Instant;
+  heartbeatAt: Instant | null;
+  outputMovedAt: Instant | null;
+  progressProtocol: string | null;
+  /** The check in flight under a v2 claim; null between checks and for a legacy claim. */
+  check: ProjectIntegrationCheck<Instant> | null;
+  /** §7.2 V6's liveness, read at the moment this view was built; null while queued. */
+  liveness: IntegrationJobLiveness | null;
+  /** Why it waits, or where it stopped. */
+  blockingReason: IntegrationJobBlockingReason | null;
+  timedOut: boolean;
+  limitSeconds: number | null;
+  /** Whether the owner's Retry (`POST /projects/:id/integration/jobs/:jobId/retry`) takes this
+   *  attempt now — the server's answer, never inferred from `timedOut` (§7.2 V6). False for a job
+   *  that is not in flight and for every kind but `LAND_TASK`, which is the only kind that door
+   *  reruns. */
+  retryable?: boolean;
+  /** Whether the current claim is past the push boundary (§2.2 J-T4): a v2 claim's
+   *  `push_reported_generation = claim_generation`, or a legacy claim whose phase is PUSH/VERIFY.
+   *  A stop or cancel is refused past it; the landing page hides those doors on this fact. */
+  pushBoundaryPassed?: boolean;
+}
+
+/** One entry of the landing's todo list: an OPEN integration item about its subject that somebody
+ *  still owes. The item's own card is where it is answered; the landing only lists it. */
+export interface SessionLandingTodo<Instant = string> {
+  id: string;
+  kind: string;
+  state: string;
+  title: string;
+  waitingSince: Instant;
+}
+
+/** One generation (segment/round) of the landing subject. `sessionId` is the landing session's id —
+ *  pre-generated when the subject opened, whether or not its row exists yet. */
+export interface SessionLandingGeneration<Instant = string> {
+  sessionId: string;
+  episode: number;
+  openedAt: Instant;
+  settledAt: Instant | null;
+  settledAs: string | null;
+}
+
+// ── the landing timeline (contract §2.9 LS2, LS4) ──────────────────────────────────────────────
+
+/** The closed set of facts an attempt records (migration 0438's CHECK, spelled in
+ *  `projects/project-integration-event.ts`). Each one is written by the door that decided it, in
+ *  the same transaction as the job-gate write it describes; the two claim facts are backfilled from
+ *  the committed claim right after it (LS2). */
+export type IntegrationJobEventKind =
+  | 'ENQUEUED'
+  | 'STEP'
+  | 'ROUND'
+  | 'CHECK_STARTED'
+  | 'CHECK_FINISHED'
+  | 'CLAIMED'
+  | 'TAKEN_OVER'
+  | 'RELEASED'
+  | 'PUSH_REFUSED'
+  | 'RECHECK_ON_MOVED_MAIN'
+  | 'NEXT_GENERATION'
+  | 'RESULT'
+  | 'REQUEUED'
+  | 'HANDED_TO'
+  | 'STOP_REQUESTED'
+  | 'CANCELLED'
+  | 'ABANDONED'
+  | 'TIMED_OUT';
+
+/** A line read-time derived from another row rather than stored as its own event (LS4): a rerun's
+ *  requester and reason (`retry_*`), an item being handled (`handling_*`), the owner's
+ *  confirmation, the skipped check, a timeout the job row alone cannot explain, the Nth automatic
+ *  attempt, and the task a fix was filed as. */
+export type DerivedTimelineKind =
+  | 'RETRY'
+  | 'SKIPPED_CHECK'
+  | 'HANDLING'
+  | 'CONFIRMATION'
+  | 'RESULT_FALLBACK'
+  | 'AUTOMATIC_ATTEMPT'
+  | 'FIX_TASK';
+
+/** Who caused a timeline line. */
+export interface IntegrationTimelineActor {
+  type: 'OWNER' | 'COORDINATOR' | 'PLATFORM' | 'RUNNER' | 'AUTOMATIC';
+  /** The conversation that acted, when a coordinator did. */
+  sessionId?: string | null;
+  /** The person that acted, when the owner did. */
+  userId?: string | null;
+}
+
+/**
+ * One line of the landing timeline, as `GET /sessions/:id` and the runner read serve it.
+ *
+ * `text` is the whole sentence, written by the server (mockup v4 §05's wording); `data` carries the
+ * structured fields the same line is drawn with. A client lays the line out and never composes one
+ * from the fields — which is what keeps the three clients saying the same thing. `id` is the event
+ * row's id, and null for a line derived at read time from another row whose decision this ledger
+ * does not copy (LS4).
+ */
+export interface IntegrationTimelineEntry<Instant = string> {
+  id: string | null;
+  /** The ledger's own order, for a stored fact; absent on a derived line. Two facts one transaction
+   *  appends share the same `at`, and this is what orders them. */
+  seq?: number;
+  /** An `IntegrationJobEventKind`, or one of `DerivedTimelineKind`. */
+  kind: IntegrationJobEventKind | DerivedTimelineKind;
+  at: Instant;
+  /** The claim the fact happened under; 0 before the first claim. */
+  claim: number;
+  round: number | null;
+  check: { name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK'; index: number } | null;
+  phase: IntegrationJobPhase | null;
+  step: string | null;
+  actor: IntegrationTimelineActor | null;
+  reason: string | null;
+  /** Structured fields the line is drawn with: the moved commits, the item handed to, a timeout's
+   *  limit, the job a rerun repeats, the automatic attempt's count. */
+  data: Record<string, unknown> | null;
+  text: string;
+  /** True for a line derived from another row at read time; absent for a stored fact. */
+  derived?: boolean;
+}
+
+/** One section of the timeline: a task landing's generation, or one merge round's attempt.
+ *  `title` is the server-written heading (`Generation 1`, `Merge check · 2`, `Merge to main · 1`);
+ *  `generation` is the section's number among the subject's attempts of its kind, which is the
+ *  number the title carries — not the job's own per-candidate generation. */
+export interface IntegrationTimelineSection<Instant = string> {
+  title: string;
+  jobId: string;
+  kind: IntegrationJobKind;
+  generation: number;
+  state: string;
+  /** Oldest first: by claim, then by round, then by the instant the fact happened. */
+  entries: IntegrationTimelineEntry<Instant>[];
+}
+
+/** A subject-level derived fact that belongs to no one attempt (a fix task, the promotion state). */
+export interface IntegrationTimelineFact {
+  kind: DerivedTimelineKind | 'PROMOTION_STATE';
+  text: string;
+  data: Record<string, unknown> | null;
+}
+
+/** The landing subject's whole timeline: one section per attempt, oldest first. */
+export interface SessionLandingTimeline<Instant = string> {
+  sections: IntegrationTimelineSection<Instant>[];
+  facts: IntegrationTimelineFact[];
+  /** True when the subject had more attempts or entries than the read returns. */
+  truncated: boolean;
+}
+
+/** One page of one attempt's timeline, as the runner read's `timeline` slot serves it. */
+export interface IntegrationTimelinePage<Instant = string> {
+  jobId: string;
+  entries: IntegrationTimelineEntry<Instant>[];
+  nextCursor: string | null;
+}
+
+/**
+ * The landing view `GET /sessions/:id` and `session_get` answer for a LANDING session (contract
+ * §2.9 LS1, LS6; errata E4): the subject, its newest attempt, the phase/round/checks/activity the
+ * attempt reports, why it is blocked, its OPEN todos, and every generation of the subject.
+ *
+ * The session row may not exist yet — the row is inserted after the first claim commits — so the
+ * same view is reachable through `project_landing.session_id` from the moment the subject opens.
+ * The timeline and the per-check output are later readers on top of this one, which is why neither
+ * is part of it yet.
+ */
+export interface SessionLandingView<Instant = string> {
+  /** The LANDING session's id: `project_landing.session_id`, pre-generated. */
+  sessionId: string;
+  projectId: string;
+  subject: 'TASK' | 'PROMOTION';
+  taskId: string | null;
+  promotionId: string | null;
+  episode: number;
+  openedAt: Instant;
+  settledAt: Instant | null;
+  /** LANDED | ALREADY_LANDED | NOTHING_TO_LAND | MERGED | HANDLED | DECLINED | CANCELLED | DELETED,
+   *  or null while the subject is open. */
+  settledAs: string | null;
+  /** The newest attempt's phase and round, lifted so a card can draw them without reaching into it. */
+  phase: IntegrationJobPhase | null;
+  round: number | null;
+  /** The newest attempt's finished check results (runner shape), `[]` when it has none. */
+  checks: LandingCheckResult[];
+  liveness: IntegrationJobLiveness | null;
+  blockingReason: IntegrationJobBlockingReason | null;
+  /** The newest attempt of the subject, whatever its state; null for a subject no attempt claimed. */
+  currentAttempt: SessionLandingAttempt<Instant> | null;
+  /** The subject's integration items still OPEN and still owed (`openItemOwed`), oldest first. */
+  todos: SessionLandingTodo<Instant>[];
+  /** Every generation of the subject, oldest first. */
+  generations: SessionLandingGeneration<Instant>[];
+  /** The ordered timeline the landing page draws (§2.9 LS2/LS4): one section per attempt, with
+   *  the stored facts each one recorded and the lines derived from the rows that kept the
+   *  decisions. Read-only, and bounded — `truncated` says the read returned less than the subject
+   *  holds. Absent on servers that predate the timeline (contract §2.9: a new field is optional). */
+  timeline?: SessionLandingTimeline<Instant>;
+}
+
+/**
+ * One generation of an integration job, as the agent read port lists it (contract §2.2 J-T3, §2.9
+ * LS6): the queue's entry for an attempt still in flight, each task's newest `LAND_TASK`, and each
+ * merge candidate's newest check and merge. It is the job row's own facts — never a conclusion drawn
+ * from the task's status or from whether an exception card exists.
+ *
+ * A generation is what the coordinator needs to answer "which attempt is this, how far did it get,
+ * and what stopped it": `generation` is the attempt's number, `round` the round inside its current
+ * claim, and `check` the check that was running when it last reported. `blockingReason` is present
+ * where the row is in a state a reason is read for — a queued attempt, or a `LAND_TASK` that stopped.
+ */
+export interface IntegrationJobGeneration<Instant = string> {
+  jobId: string;
+  kind: IntegrationJobKind;
+  generation: number;
+  state: IntegrationJobState;
+  /** The landing session of this attempt's subject (§2.9), as `landTasks` and the queue carry it;
+   *  null for a job written before 0436. Absent from a server that predates the field. */
+  landingSessionId?: string | null;
+  /** The step it last reported, or stopped at; null before its first claim. */
+  phase: IntegrationJobPhase | null;
+  /** Why it ended as an error (contract J12); null unless `state` is `ERROR`. */
+  errorCode: string | null;
+  /** The task it lands; null for a promotion job, which lands no single task. */
+  taskId: string | null;
+  /** The task's title as the row can still name it; null for a promotion or a task since deleted. */
+  taskTitle: string | null;
+  /** The merge candidate it checks or lands; null for a task landing. */
+  promotionId: string | null;
+  /** The round inside the current claim, from 1; null before a v2 report named one. */
+  round: number | null;
+  /** The check in flight, or the one it stopped at; null between checks and for a legacy claim. */
+  check: ProjectIntegrationCheck<Instant> | null;
+  /** Why it waits or where it stopped, in the one shape every reader uses. */
+  blockingReason: IntegrationJobBlockingReason | null;
+  /** Enqueue, first claim, the claimer's latest report, and the terminal write. */
+  queuedAt: Instant;
+  startedAt: Instant | null;
+  heartbeatAt: Instant | null;
+  finishedAt: Instant | null;
+}
+
+/**
+ * One merge candidate as the agent read port lists it (§3.2, §3.6): the candidate's own state and
+ * recorded checks, the newest `CHECK_PROMOTION` and `LAND_PROMOTION` generations, and the merge when
+ * there was one.
+ *
+ * Which candidates appear is bounded like `landTasks`: the live ones (a card or a check in flight),
+ * the blocked ones, and the one merged last — never the project's merge history.
+ */
+export interface ProjectPromotionIntegrationRead<Instant = string> {
+  promotionId: string;
+  sourceKind: PromotionSourceKind;
+  sourceRef: string;
+  upstreamRef: string;
+  state: PromotionState;
+  /** Why the candidate is blocked, when it is; null otherwise. */
+  blockedReason: PromotionBlockedReason | null;
+  /** The checks the candidate's last attempt recorded (§3.6). */
+  checks: IntegrationCheckResult[];
+  /** The merge, once it happened; null on every candidate that did not land. */
+  merged: {
+    sha: string;
+    at: Instant;
+    /** Nobody pressed Merge: the project's Automatic setting confirmed it (M-T11). */
+    automatic: boolean;
+    /** The account owner who pressed Merge, or null when it was Automatic. */
+    byUserId: string | null;
+  } | null;
+  /** The newest `CHECK_PROMOTION` generation, or null when the candidate never had one. */
+  check: IntegrationJobGeneration<Instant> | null;
+  /** The newest `LAND_PROMOTION` generation, or null when the merge has not been attempted. */
+  land: IntegrationJobGeneration<Instant> | null;
+}
+
+/**
+ * The slots the integration read pages its timeline and check log by (contract §2.2 J-T4, §2.9
+ * LS6). Revision 12 reserves them on the read now, before the timeline and log rows exist, so a
+ * caller that learns to pass them does not have to change when those reads are added: `jobId`
+ * names the attempt, `claim` its claim generation, `round` the round inside it, `check` the check's
+ * position, and `cursor` continues a page. Each is null when the request did not name it.
+ */
+export interface ProjectIntegrationReadPagination {
+  jobId: string | null;
+  claim: number | null;
+  round: number | null;
+  check: number | null;
+  cursor: string | null;
+  /** The attempt timeline's own continuation, when the request passed one (`timelineCursor`); the
+   *  log and the timeline are paged independently. Absent on servers that predate the timeline. */
+  timelineCursor?: string | null;
+}
+
+/**
+ * One stored chunk of a check's output (contract §2.2 J-T4's output route, §2.9 LS2), as the log
+ * reads return it. `truncatedBytes` is non-zero only where the server dropped a middle: the reader
+ * draws one "N bytes omitted" line immediately before this chunk and nothing else.
+ */
+export interface ProjectIntegrationLogEntry<Instant = string> {
+  jobId: string;
+  /** The claim generation the chunk was uploaded under. */
+  claim: number;
+  /** The round inside that claim. */
+  round: number;
+  check: IntegrationJobOutputCheck;
+  /** The chunk's number within this check, from 0. */
+  seq: number;
+  /** The chunk's text, already redacted by the runner. */
+  text: string;
+  /** Bytes dropped from the middle immediately before this chunk; 0 elsewhere. */
+  truncatedBytes: number;
+  at: Instant;
+}
+
+/**
+ * One page of a check's output, as `GET /sessions/:id/landing/log` and the runner read's `log` slot
+ * serve it. Entries are in production order — claim, then round, then check position, then seq — and
+ * `nextCursor` continues the same narrowed read.
+ */
+export interface ProjectIntegrationLogPage<Instant = string> {
+  /** The job the page is about; null when the landing has no attempt yet. */
+  jobId: string | null;
+  entries: ProjectIntegrationLogEntry<Instant>[];
+  nextCursor: string | null;
+}
+
+/**
+ * `GET /runner/projects/:id/integration` — the agent's read of a project's integration line
+ * (`project_integration_get`, contract §2.2 J-T4, §2.9 LS6).
+ *
+ * Read only, and the one door an agent has onto the queue itself: before it, a coordinator that
+ * needed to know why a landing was stuck either read the project summary, which says nothing about
+ * generations, or queried the production database directly, which is not an interface. Every part
+ * is bounded by the queue and by what failed rather than by the project's history.
+ *
+ * `queue` is every QUEUED and RUNNING job — all three kinds — in `inFlightJobs`' order (running
+ * first, then the queue oldest first). `generations` says where each current attempt stands.
+ * `landTasks` is each task's newest `LAND_TASK` through the same read model the task page uses, and
+ * `promotions` is each live, blocked or last-merged candidate's newest check and merge.
+ */
+export interface ProjectIntegrationRead<Instant = string> {
+  projectId: string;
+  projectTitle: string;
+  /** The line's settings: where work lands, the merge check, and how long a wait is a person's. */
+  line: ProjectIntegrationSettings<Instant>;
+  /** Every QUEUED and RUNNING job, in `inFlightJobs`' order. */
+  queue: ProjectIntegrationJob<Instant>[];
+  /** Where each current attempt stands: the queue, each task's newest landing, each candidate's jobs. */
+  generations: IntegrationJobGeneration<Instant>[];
+  /** Each task's newest `LAND_TASK`, bounded by the queue and by what stopped. */
+  landTasks: ProjectLandTask<Instant>[];
+  /** Each live, blocked or last-merged candidate, with its newest check and merge. */
+  promotions: ProjectPromotionIntegrationRead<Instant>[];
+  /** The timeline and log page slots, echoed as the read resolved them. */
+  pagination: ProjectIntegrationReadPagination;
+  /** The check output of the job the request named by `jobId`; absent when it named none, so a
+   *  caller that only wants the line reads the shape it always did. */
+  log?: ProjectIntegrationLogPage<Instant> | null;
+  /** One attempt's timeline, paged by the selectors a caller already passes (`jobId` names the
+   *  attempt, `claim` and `round` narrow it, `timelineCursor` continues it — its own cursor, so the
+   *  log and the timeline of one attempt are paged independently). Absent when the request named
+   *  no `jobId`, like the log. */
+  timeline?: IntegrationTimelinePage<Instant> | null;
 }
 
 /** The integration claim's existing lease window, also used to stop stale activity indicators. */
@@ -205,19 +736,34 @@ export type TaskIntegrationHandler = 'COORDINATOR' | 'OWNER';
  * the same conditions the claim reads, in the claim's order; a client renders it and never derives
  * one from the task's status or from whether an exception card exists.
  *
- *  - `CANCELLING`: a cancel was asked for; the claim skips it.
+ *  - `CANCELLING`: a historical QUEUED row still carrying a stop request, which no claim takes.
+ *    J-T8 ends a queued job CANCELLED in the transaction that asks, so rows written since then
+ *    never read this way.
  *  - `WAITING_TASK_WORK`: the task's work session has not finished, so its branch can still move.
  *  - `WAITING_MAIN_SYNC`: another task's landing could not absorb upstream into this target, and
  *    its item is still open (M2) — the project line has to be synced first.
- *  - `WAITING_SERIAL_SLOT`: another job is running on the same repository and target branch.
  *  - `WAITING_RUNNER`: the runner of the work's workspace is offline, silent, draining, has no
  *    heartbeat lease or does not take integration jobs.
+ *  - `WAITING_AUTOMATIC_RUNNER`: the merge was confirmed by the Automatic setting, and the runner
+ *    that would claim it does not declare `promotion-automatic-land/v1` (M-T12).
+ *  - `WAITING_SERIAL_SLOT`: another job is running on the same repository and target branch.
  *  - `WAITING_DISPATCH`: nothing holds it; the next heartbeat of that runner claims it.
+ *  - `WAITING_LOCAL_LOCK`: a claimed job is waiting for this runner's own repository lock — a v2
+ *    claim reporting `step = WAITING_LOCAL_LOCK`, or a legacy claim whose runner already has an
+ *    earlier job on the same repository and target branch.
  *  - `CONFLICT` / `CHECK_FAILED` / `ERROR`: where a finished attempt stopped.
+ *
+ * A stopped attempt is not named here: a QUEUED job somebody cancels is ended CANCELLED in the
+ * transaction that asks (J-T8), so no queued row waits on a cancellation.
  */
 export type LandTaskBlockingReasonCode =
-  | 'CANCELLING' | 'WAITING_TASK_WORK' | 'WAITING_MAIN_SYNC' | 'WAITING_SERIAL_SLOT'
-  | 'WAITING_RUNNER' | 'WAITING_DISPATCH' | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR';
+  | 'CANCELLING' | 'WAITING_TASK_WORK' | 'WAITING_MAIN_SYNC' | 'WAITING_RUNNER'
+  | 'WAITING_AUTOMATIC_RUNNER' | 'WAITING_SERIAL_SLOT' | 'WAITING_DISPATCH'
+  | 'WAITING_LOCAL_LOCK' | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR';
+
+/** Why any integration job — of any of the three kinds — waits or where it stopped. The shape
+ *  `landTask.blockingReason` has always used, carried on `inFlightJobs` entries as well (§7.2 V6). */
+export type IntegrationJobBlockingReason = LandTaskBlockingReason;
 
 /**
  * A task's newest `LAND_TASK` generation, as its own job row says it (§2.7a). Kept apart from the
@@ -228,8 +774,19 @@ export type LandTaskBlockingReasonCode =
 export interface LandTaskIntegrationView<Instant = string> {
   jobId: string;
   state: IntegrationJobState;
+  /**
+   * The landing session this generation belongs to (§2.9): `project_landing.session_id`, which is
+   * pre-generated when the subject opens, so it is present even before the session row is inserted
+   * and even when the job's own source session has since been deleted (0424: `session_id` is a
+   * history reference). `session_get` serves that session's landing view by this id. Null when the
+   * attempt has no subject (a job written before 0436); absent from a server that predates the field.
+   */
+  landingSessionId?: string | null;
   /** The runner's step, or the one the attempt stopped at; null before its first report. */
   phase: IntegrationJobPhase | null;
+  /** Why the attempt ended as an error (contract J12), null unless `state` is `ERROR`. Absent from a
+   *  server that predates it. */
+  errorCode?: string | null;
   /** A decimal string, as every 64-bit counter crosses this API. */
   generation: string;
   /** Enqueue, first claim, the claimer's latest heartbeat, and the terminal write. */
@@ -267,6 +824,12 @@ export interface TaskIntegrationView<Instant = string> {
   checksRunningForMs: number | null;
   /** Null when no LAND_TASK exists; absent only on servers predating the unified read model. */
   landTask?: LandTaskIntegrationView<Instant> | null;
+  /**
+   * The project's main branch by name — `project_codebase.upstream_ref` without `refs/heads/` — that
+   * `ON_UPSTREAM` is on. Null when the task is in no project or its project has no repository
+   * bound. Absent from an older server.
+   */
+  mainBranch?: string | null;
 }
 
 /**
@@ -296,7 +859,9 @@ export interface ProjectIntegrationBuckets {
  * What opened an exception item, as §4.2's closed set spells it — and `START_REQUEST`, a
  * coordinator asking its owner to start the project (`project_request_start`, `project-start.ts`),
  * and `DONE_REQUEST`, one asking its owner to record the project done (`project-done.ts`), plus
- * `DELIVERY_REVIEW`, a finished delivery whose landing needs a bounded decision.
+ * `DELIVERY_REVIEW`, a finished delivery whose landing needs a bounded decision, and
+ * `LANDING_LEASE_EXPIRED`, the owner's item about a landing attempt whose runner stopped reporting
+ * (§4.6 X-E5).
  * The set is closed in the database too (`project_open_item_kind_chk`): a new kind is a migration.
  */
 export type OpenItemKind =
@@ -309,7 +874,8 @@ export type OpenItemKind =
   | 'FUSE_PAUSED'
   | 'START_REQUEST'
   | 'DONE_REQUEST'
-  | 'DELIVERY_REVIEW';
+  | 'DELIVERY_REVIEW'
+  | 'LANDING_LEASE_EXPIRED';
 
 /**
  * The kinds a project's coordinator can be handling (§7.1 V1/V2): `OpenItemKind` minus the owner-only
@@ -375,7 +941,10 @@ export type OpenItemAction =
   | 'CANCEL_TASK'
   | 'ASK_COORDINATOR_AGAIN'
   | 'RESUME'
-  | 'ANSWER';
+  | 'ANSWER'
+  | 'OPEN_LANDING'
+  /** §4.7 J-T10: end a landing attempt whose runner stopped reporting. Owner-only. */
+  | 'ABANDON';
 
 /** What a coordinator asked its owner to decide (§5.2 R7). */
 export interface CoordinatorQuestion {
@@ -431,8 +1000,10 @@ export interface OpenItemFacts {
   } | null;
   /** The landing question and the declaration used for a DELIVERY_REVIEW item. */
   review?: {
-    reason: 'OUTSIDE_DECLARED_SCOPE' | 'MERGE_REFUSED_BY_GIT';
+    reason: 'CRITERION_EXEMPTION_ARGUED' | 'OUTSIDE_DECLARED_SCOPE' | 'MERGE_REFUSED_BY_GIT';
     declaredPaths: string[];
+    /** The task's written reason for keeping its completion criterion (CRITERION_EXEMPTION_ARGUED). */
+    argument?: string;
   } | null;
 }
 
@@ -551,6 +1122,51 @@ export interface ProjectOpenItemRow<Instant = string> {
   handledBy?: Array<{ taskId: string; title: string; state: string }>;
   /** The attempt this item is about, when there is one: the run whose failure opened it. */
   sessionId: string | null;
+  /**
+   * The landing session of the attempt this item is about (§2.9 LS1), when the row recorded one:
+   * the conversation that owns the landing whose failure opened it. `OPEN_LANDING` opens it, and
+   * the transcript card links to it. Null for a row an older build opened, and for a kind that
+   * lands nothing (a question, a pause, a start request).
+   */
+  landingSessionId?: string | null;
+  /**
+   * The landing attempt an X-E5 item is about (§4.6): the integration job whose claim stopped
+   * reporting. The server fills it with the job row's UUID; like every id in `PUBLIC_ID_FIELDS`,
+   * a response outside the machine protocol spells it as the job's base62 public id instead
+   * (`PublicIdInterceptor`), with the same value beside it as `integrationJobPublicId`. `ABANDON`
+   * names that job in its route, which takes either spelling, so a client drawing this row's doors
+   * needs it. Null for every other kind, and absent from a server that predates it.
+   */
+  integrationJobId?: string | null;
+  /**
+   * The claim an X-E5 item is about, as the card's heading and its Abandon consequence read it
+   * (§4.6, revision 23): the last report the runner made — the heading's "<N>m" counts from it —
+   * and J12's two facts, the claim's protocol and whether it ever recorded a push. Null on every
+   * other kind, and absent from a server that predates it. A card that does not know them says the
+   * cautious half of J12 ("it may have been pushed") and leaves the heading's number out — never
+   * that nothing was pushed.
+   */
+  lease?: {
+    lastReportAt: Instant | null;
+    /** When the claim's lease ran out — the last report plus the step's limit (§7.2 V6). */
+    leaseExpiredAt?: Instant | null;
+    /** `LAND_TASK`, `CHECK_PROMOTION` or `LAND_PROMOTION`: J12's verdict branches on it. */
+    jobKind: string | null;
+    /** Which generation of the work the claim was on. */
+    generation?: number | null;
+    /** The step the runner last reported, and its sub-step. */
+    phase?: string | null;
+    step?: string | null;
+    /** The claim the job is on, the round inside it, and how many checks the run has (`checkCount`
+     *  is not the M of "round N of M", which comes from `jobKind`: §7.2 V6). */
+    claimGeneration?: number | null;
+    round?: number | null;
+    checkCount?: number | null;
+    /** The runner holding the claim, by name. */
+    runner?: string | null;
+    progressProtocol: string | null;
+    pushReported: boolean;
+  } | null;
   promotionId: string | null;
   fuseEpisodeId: string | null;
   delivery: { state: OpenItemDeliveryState; sessionId: string | null; at: Instant | null };
@@ -583,10 +1199,43 @@ export interface ProjectOpenItemRow<Instant = string> {
   chat?: OpenItemChat | null;
 }
 
+/**
+ * A question the coordinator put to the owner that has ended (§5.2 R10, R12): the owner answered
+ * it, or it was withdrawn. The card the conversation drew for it is drawn as this record — the
+ * question as it was asked, every option, what the owner chose and wrote, and where the answer went —
+ * so it survives a relaunch and reads the same on a device that never saw the question open.
+ */
+export interface ProjectClosedQuestion<Instant = string> {
+  itemId: string;
+  /** The question as it was asked: the same shape as an open row's `question`. */
+  question: CoordinatorQuestion;
+  /** When the coordinator asked it. */
+  askedAt: Instant;
+  resolution: 'ANSWERED' | 'WITHDRAWN';
+  /** Who ended it: the owner (`USER`), or the conversation that asked it (`COORDINATOR`). */
+  resolvedBy: 'USER' | 'COORDINATOR';
+  /** When it was answered or withdrawn — the moment the record is drawn at. */
+  resolvedAt: Instant;
+  /** What the owner answered: an option's index, their own words, or both. Null when withdrawn. */
+  answer: { option: number | null; text: string | null } | null;
+  /** The first coordinator conversation the answer was delivered to, and when. Null while none has
+   *  had it — no conversation was coordinating the project — and for a withdrawn question. */
+  delivery: { sessionId: string; at: Instant } | null;
+  /** The reason it was withdrawn with; null for an answered question. */
+  withdrawReason: string | null;
+}
+
 /** The project's open exceptions, split by who is expected to act (§4.8). */
 export interface ProjectOpenItemsView<Instant = string> {
   needsYou: Array<ProjectOpenItemRow<Instant>>;
   withCoordinator: Array<ProjectOpenItemRow<Instant>>;
+  /**
+   * The coordinator's questions that have ended — answered or withdrawn — newest first, at most 50
+   * (§4.8, §5.2 R10, R12). Kept out of `needsYou`: nobody owes anything about them, and a
+   * conversation draws each at the moment it ended, as the record its card became. Absent from a
+   * server that predates it.
+   */
+  closedQuestions?: Array<ProjectClosedQuestion<Instant>>;
   /**
    * Exceptions the coordinator closed in the last day, newest first (§4.7 H5): handled — its rerun
    * landed or passed, or it closed the item with a reason — or superseded by the new item its failed
@@ -609,6 +1258,11 @@ export interface ProjectOpenItemsView<Instant = string> {
    * the reason `startRequest` is. Absent from a server that predates done requests.
    */
   doneRequest?: ProjectOpenItemRow<Instant> | null;
+  /**
+   * The project's main branch by name — `project_codebase.upstream_ref` without `refs/heads/` — which
+   * a row's merge into main is a merge into. Null when the project has no repository bound.
+   */
+  mainBranch?: string | null;
 }
 
 /**
@@ -675,6 +1329,38 @@ export interface OpenItemDeliveryCard {
     upstream: string;
     integration: string;
   } | null;
+  /**
+   * The landing session of the attempt this item is about (§2.9 LS1), or null for a delivery whose
+   * item recorded none (a promotion's item, a kind that lands nothing, a row an older build
+   * opened). The card's "Open the landing ↗" is drawn from it.
+   */
+  landingSessionId: string | null;
+}
+
+/**
+ * What the turn telling a coordinator the owner's answer carries beside its words (§5.2 R10): the
+ * answer to a question it asked (`ask_owner`), or the owner's Not yet… to its request to record the
+ * project done.
+ *
+ * The words are written for the AGENT — `From Orbit · owner answer: you asked "…"`, the question
+ * replayed in full and the answer with its ISO moment — and they stay exactly what they were: a
+ * coordinator rotated in after the answer learns from them what was asked. Without this a client
+ * had nothing else to draw the turn from, and drew the platform's message as a bubble the owner had
+ * typed. Recorded beside the runner's echo like `OpenItemDeliveryCard`, so a client draws the turn as
+ * one line — `Sent to the coordinator · 08:29`, opening to those words.
+ */
+export interface OwnerAnswerCard {
+  /** The item answered, in the uuid spelling every other read of one uses. */
+  itemId: string;
+  /** What was answered: a coordinator's question, or its request to record the project done. */
+  kind: Extract<OpenItemKind, 'COORDINATOR_QUESTION' | 'DONE_REQUEST'>;
+  /** The conversation the answer was delivered to: the one this turn is on. */
+  sessionId: string;
+  /**
+   * When this conversation was handed the answer — its own delivery row's moment, which for a
+   * coordinator rotated in after the answer is when IT was told, not when the owner answered.
+   */
+  deliveredAt: string;
 }
 
 /**
@@ -760,6 +1446,13 @@ export type PromotionState =
 /** What is being merged: the project's own branch, or one task's branch on a `MAIN` line (§3.2). */
 export type PromotionSourceKind = 'PROJECT_BRANCH' | 'TASK_BRANCH';
 
+/**
+ * Why a candidate is `BLOCKED`, as the job that blocked it answered (migration 0409): the source was
+ * already on the upstream, so there is nothing to merge; a check on the combined tree failed; the
+ * merge conflicted; or the job stopped before any check could answer.
+ */
+export type PromotionBlockedReason = 'ALREADY_LANDED' | 'CHECK_FAILED' | 'CONFLICT' | 'ERROR';
+
 /** One task a candidate would carry onto the upstream, as the card's Tasks row lists it (§3.6). */
 export interface PromotionTask {
   taskId: string;
@@ -801,6 +1494,13 @@ export interface ProjectPromotionView<Instant = string> {
   checks: IntegrationCheckResult[];
   /** The paths the merge could not reconcile, empty unless the candidate is BLOCKED. */
   conflicts: string[];
+  /**
+   * Why a BLOCKED candidate is blocked, stored with the block rather than read off `checks` and
+   * `conflicts`: both are empty when there was nothing to merge, and when the job errored before a
+   * check ran. Null on a candidate blocked before the reason was recorded, and on one that is not
+   * blocked.
+   */
+  blockedReason: PromotionBlockedReason | null;
   /** Null until a check has passed; after that, the upstream tip that check ran against. */
   upstreamShaChecked: string | null;
   /** The tree the checks passed on, which is the tree that lands (M6). Null before they have. */
@@ -823,6 +1523,22 @@ export interface ProjectPromotionView<Instant = string> {
    * able to say "2m so far" when the platform has neither rather than print a zero it made up.
    */
   recheck: { upstreamMovedBy: number | null; startedAt: Instant; typicalMs: number | null } | null;
+  /**
+   * The landing session of this round of merging into main (§2.9 LS1), while there is one to open:
+   * `CHECKING`, `CONFIRMED` and `RECHECKING` (the check line opens it), and `MERGED` (the receipt's
+   * "Open landing ›"). Null on every other state — a candidate asking its owner, a blocked one, one
+   * that was declined or retracted — and on a candidate whose round recorded no session. Absent
+   * from a server that predates the field.
+   */
+  landingSessionId?: string | null;
+  /**
+   * What the check in flight leads to when it passes (§3.6): `MERGE` when the project's Automatic
+   * setting will merge it into main by itself (§3.3 M-T11), `ASK` when the owner will get the card.
+   * Read as the project stands now, so a project whose Automatic is switched while the check runs
+   * reads the other answer on its next poll. Null on every state but `CHECKING`; absent from a server
+   * older than the field.
+   */
+  onPass?: 'MERGE' | 'ASK' | null;
   /** The active job for this candidate's own confirmed merge, never another project job.
    * Confirmation authorizes a merge; it does not mean a runner has started it. */
   execution?: {
@@ -830,6 +1546,18 @@ export interface ProjectPromotionView<Instant = string> {
     phase: IntegrationJobPhase | null;
     startedAt: Instant;
   } | null;
+  /**
+   * That job has been asked to stop and has not ended yet: the card draws it as "cancelling"
+   * (§3.3 M-T10). The promotion keeps the state it was in until the job's own result settles
+   * whether it landed; absent from a server older than the field.
+   */
+  cancelRequested?: boolean;
+  /**
+   * That job's current claim has passed the push boundary (§2.2 J-T4) — a v2 claim that reported
+   * `PUSH` under this `claim_generation`, or a legacy claim at `PUSH` / `VERIFY`. Cancel is no
+   * longer accepted past it; the result is the fact. Absent from a server older than the field.
+   */
+  pushBoundaryPassed?: boolean;
   /**
    * The merge, once it happened (state C). `byUserId` is who pressed Merge; `automatic` is true when
    * nobody did — the project's Automatic setting merged its own branch because the check was clean
@@ -1017,6 +1745,12 @@ export interface SessionOwnerItem<Instant = string> {
   since: Instant;
   /** The short reason for an escalated item, derived from its raw kind. */
   need?: string;
+  /**
+   * The item's project's main branch by name — `project_codebase.upstream_ref` without
+   * `refs/heads/` — which a merge approval asks to merge into. Null when the project has no
+   * repository bound.
+   */
+  mainBranch?: string | null;
 }
 
 /**

@@ -1,0 +1,76 @@
+<!doctype html>
+<!-- Design board iOS 1 (T0, Cursor engine): a new session's Engine sheet (EngineSwitchSheet) with Cursor CLI,
+     and its hero. 393 × 852 pt, drawn on ../antigravity-accounts/kit.css with the builders of
+     ../provider-engine-decoupling/board.js. "现在" follows today's AgentsView.swift / AgentIdentity.swift /
+     SessionProviderChoices.swift; "改后" is the proposal. macOS is the same SwiftUI; Android follows. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>iOS 1 · New session: Cursor CLI in the Engine sheet</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<script src="../antigravity-accounts/kit.js"></script>
+<script src="kit.js"></script>
+</head>
+<body class="m">
+<section class="board m-sheet" style="width:1980px">
+  <h1 class="m-h1 zh">iOS 1 · 新会话：Engine 表多一行 Cursor CLI；选中后 hero 是 Cursor 的标，模型默认 Auto</h1>
+  <p class="m-sub zh">iOS 的新会话点中间的名字弹出「Engine」表（<code>EngineSwitchSheet</code>），一行一个 engine，右边是落到的凭据的默认模型；跑不了时右边蓝字写原因，点了去这台机器的引擎页。Cursor CLI 是第 7 行（<code>ProviderEngines.all</code> 末尾），默认模型 Auto。凭据和账号仍在 composer 的模型菜单 → Provider 里选（iOS 5、iOS 6）。数据同 Web 板（工作区 orbit 在 hpc 上）。Android 跟这张稿。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① Engine 表与 hero</div>
+    <div class="phones">
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k">现在</span>六个 engine</div><div id="p1"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>第 7 行 Cursor CLI</div><div id="p2"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>选中 Cursor CLI</div><div id="p3"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>跑不了的四种写法</div><div class="cuts" id="p4"></div></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+<script>
+const draft = (e, s2, chip, mode = 'Auto') => iHero({ e, top: 210, s2 }) + iComposer({ chip, mode });
+const rows = (cursor) => [
+  sheetRow('claude', 'Claude Code', 'Opus 5.5', { on: !cursor }),
+  sheetRow('codex', 'Codex', 'gpt-5.6-sol'),
+  sheetRow('kimi', 'Kimi Code', 'Kimi for Coding'),
+  sheetRow('antigravity', 'Antigravity CLI', 'Gemini 3.8 Flash'),
+  sheetRow('opencode', 'OpenCode', 'Managed by OpenCode'),
+  sheetRow('dsh', 'DeepSeek Harness', 'DeepSeek V4 Pro'),
+  ...(cursor ? [cursor] : []),
+];
+document.getElementById('p1').innerHTML = chatPhone({ id: 'ph1', title: 'orbit', body: draft('claude', 'Opus 5.5', '<b>Opus 5.5</b><i>Default</i>'), overlay: engineSheet(rows()) });
+document.getElementById('p2').innerHTML = chatPhone({ id: 'ph2', title: 'orbit', body: draft('claude', 'Opus 5.5', '<b>Opus 5.5</b><i>Default</i>'), overlay: engineSheet(rows(sheetRow('cursor', 'Cursor CLI', 'Auto', { id: 'cur' }))) });
+document.getElementById('p3').innerHTML = chatPhone({ id: 'ph3', title: 'orbit', body: draft('cursor', 'Auto', '<b>Auto</b>', 'Accept Edits') });
+const cut = (label, under) => `<div class="cut-l zh">${label}</div><div class="ph cutbox"><div class="i-sec">${sheetRow('cursor', 'Cursor CLI', '', { under })}</div></div>`;
+document.getElementById('p4').innerHTML =
+  cut('没装', 'Not installed →') +
+  cut('没登录（也没有 Cursor key）', 'Not signed in, sign in →') +
+  cut('runner 早于 Cursor', 'Update runner →') +
+  cut('不是固定版本', 'Unsupported version →');
+finish();
+requestAnimationFrame(() => {
+  const ph = (id) => document.getElementById(id);
+  ring(ph('ph2'), '#cur', 1, 2);
+  ring(ph('ph3'), '.i-hero', 2, -6);
+  ring(ph('ph3'), '.i-comp .mode', 3, 4);
+});
+document.getElementById('notes').innerHTML = notes([
+  [1, '<b>第 7 行 Cursor CLI</b>：Cursor 的立方体标（黑底，<code>BrandMarks.swift</code> 加一项；iOS 的 <code>VectorMark</code> 只认绝对坐标的 M/L/C/Z，LobeHub 的路径要先转成绝对命令），右边 Auto。'],
+  [2, '<b>hero</b>：68pt 的 Cursor 标、「Cursor CLI ⌄」，下面「Send a task to get started.」和默认模型「Auto」。暗色下黑底标加一圈细描边，避免和背景融在一起。'],
+  [3, '<b>模式</b>：账号默认是 Default 时，Cursor 新会话落到 Accept Edits（D6 方案 A，见 iOS 6）；默认是 Auto 时保持 Auto。'],
+  ['·', '<b>跑不了时</b>：原因写在名字下面一行（蓝字 + 「→」），同今天「Connect a DeepSeek key →」的放法——放在右边会被截成「Not signed in, sig…」。措辞同 <code>fixSuffix</code>（登录类加「, sign in →」，其余加「 →」），点了去这台机器的 Cursor 引擎页（iOS 2）。原因优先级同 Web 1。'],
+  ['·', '<b>不变的：</b>表的结构、Done、底部两行说明、选中后记为工作区默认。'],
+]);
+</script>
+</body>
+</html>

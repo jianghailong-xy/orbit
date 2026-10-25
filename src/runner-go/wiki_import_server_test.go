@@ -15,19 +15,20 @@ import (
 	"time"
 )
 
-// `orbit wiki import` when the server reads (contract `import.server`, wiki_import_server.go): the
+// `orbit wiki import`, read by the server (contract `import.server`, wiki_import_server.go): the
 // command's half of it. The server's half — the job that reads the notes with the System model and
 // proposes what it found — is src/apiserver/src/wiki-worker/wiki-import-job.pg.spec.ts; here a fake door
 // plays it, registering notes as the real one does (the fake import door's own note route) and answering
 // the job routes from a script, so a test can hold the command to what it hands the job and to what it
 // makes of the report.
 
-// fakeImportServer is the door when the account's wiki runs on the server.
+// fakeImportServer is the door: the note route, the executor's question and the import job's routes.
 type fakeImportServer struct {
 	door *fakeImportDoor
 	URL  string
 	mu   sync.Mutex
-	// executor is what GET .../import answers; modelState what every read of a job says of the model.
+	// executor is what GET .../import answers — "server", or what a server too old for the command answers —
+	// and modelState what every read of a job says of the model.
 	executor   string
 	modelState string
 	// jobs are the jobs made, by id, in order; run turns a job's input into its report.
@@ -37,10 +38,13 @@ type fakeImportServer struct {
 	// failWith ends the next job failed, with this error; retries holds every job queued, tried that many times.
 	failWith string
 	retries  int
-	// probeMissing answers the executor route 404, as a server never asked by an older command looks to it;
-	// probeFails answers it 500.
+	// probeMissing answers the executor route 404, as a server from before the import job does; probeFails
+	// answers it 500.
 	probeMissing bool
 	probeFails   bool
+	// delay holds every answer back before it is written: a test that sets it longer than
+	// wikiImportHealthWait makes a single poll outlast the wait that measures it.
+	delay time.Duration
 	// bodies are the note registrations as they arrived.
 	bodies []map[string]interface{}
 }
@@ -60,11 +64,14 @@ type fakeImportJob struct {
 
 func newFakeImportServer(t *testing.T, run func(input fakeImportJobInput) map[string]interface{}) *fakeImportServer {
 	t.Helper()
-	door := &fakeImportDoor{mode: "tiered", queueCap: 30, refusePaths: map[string]bool{}, notes: map[string]map[string]interface{}{}, answers: map[string][]byte{}}
+	door := &fakeImportDoor{refusePaths: map[string]bool{}, notes: map[string]map[string]interface{}{}}
 	s := &fakeImportServer{door: door, executor: "server", modelState: "up", run: run}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		if s.delay > 0 {
+			time.Sleep(s.delay)
+		}
 		w.Header().Set("content-type", "application/json")
 		raw, _ := io.ReadAll(r.Body)
 		const space = "/api/runner/wiki/spaces/space-1"
@@ -83,9 +90,14 @@ func newFakeImportServer(t *testing.T, run func(input fakeImportJobInput) map[st
 				door.note(w, raw)
 				return
 			}
-			// What the server reads is not handed back.
+			// What the server reads is not handed back; a refusal is, as it came.
 			recorder := httptest.NewRecorder()
 			door.note(recorder, raw)
+			if recorder.Code != http.StatusOK {
+				w.WriteHeader(recorder.Code)
+				_, _ = w.Write(recorder.Body.Bytes())
+				return
+			}
 			var answer map[string]interface{}
 			_ = json.Unmarshal(recorder.Body.Bytes(), &answer)
 			delete(answer, "text")
@@ -158,11 +170,11 @@ func (s *fakeImportServer) Jobs() []fakeImportJobInput {
 	return out
 }
 
-// wikiImportServerSession is wikiImportSession with the door the server's, and no model of the session's:
-// the server reads, so nothing of ANTHROPIC_* is needed, and a Claude Code that ran would be a failure.
-func wikiImportServerSession(t *testing.T, server *fakeImportServer) func() []fakeVerifySpawn {
+// wikiImportServerSession points the CLI at the server's door from inside a session, with no model of the
+// session's: the server reads, so nothing of ANTHROPIC_* is needed. The checkout is a repository of the
+// test's own.
+func wikiImportServerSession(t *testing.T, server *fakeImportServer) {
 	t.Helper()
-	spawns := fakeVerifyClaude(t)
 	home := t.TempDir()
 	config := `{"serverUrl":` + strconv.Quote(server.URL) + `,"runnerId":"r1","runnerToken":"runner-token","name":"test"}`
 	if err := os.WriteFile(home+"/config.json", []byte(config), 0o600); err != nil {
@@ -181,7 +193,6 @@ func wikiImportServerSession(t *testing.T, server *fakeImportServer) func() []fa
 	wikiImportRepoDir = wikiImportTestRepo(t)
 	wikiImportJobPoll = 5 * time.Millisecond
 	t.Cleanup(func() { wikiImportRepoDir, wikiImportJobPoll = previous, previousPoll })
-	return spawns
 }
 
 // readAll is a run that reads every note it is handed and finds `found[file]` entries in it, proposing all
@@ -244,19 +255,15 @@ func TestWikiImportOnTheServerHandsTheNotesToTheServersJob(t *testing.T) {
 		"reference-release.md": {"reference", "`release.sh next` tags at once."},
 	})
 	server := newFakeImportServer(t, readAll(map[string]int{"memory/feedback-rules.md": 1, "memory/reference-release.md": 2}))
-	spawns := wikiImportServerSession(t, server)
+	wikiImportServerSession(t, server)
 
 	out, err := runImport(t, "--from", library, "--space", "space-1")
 	if err != nil {
 		t.Fatalf("orbit wiki import: %v\n%s", err, out)
 	}
-	// The files still go to the server as notes, the owner's own guidance first and the index never; and no
-	// model of this machine's is asked anything.
+	// The files go to the server as notes, the owner's own guidance first and the index never.
 	if got := server.door.Registrations(); !reflect.DeepEqual(got, []string{"memory/feedback-rules.md", "memory/reference-release.md", "memory/project-status.md"}) {
 		t.Errorf("registered %v", got)
-	}
-	if n := len(spawns()); n != 0 {
-		t.Errorf("Claude Code ran %d times: the server reads", n)
 	}
 	for _, body := range server.bodies {
 		if body["readBy"] != "server" {
@@ -446,6 +453,25 @@ func TestWikiImportOnTheServerStopsWaitingForAModelThatIsAway(t *testing.T) {
 	}
 }
 
+// The model is away and every answer arrives after the wait has already passed — the first read of the job
+// returns to a run whose whole wikiImportHealthWait is spent, as a poll does on a loaded machine. What the
+// run says must still be about the model: the job has not started because the model is away, which is the
+// true cause, and never the "did not start" deadline the model's own wait runs ahead of.
+func TestWikiImportOnTheServerSaysTheModelIsAwayWhenThePollOutlastsTheWait(t *testing.T) {
+	library := memoryLibrary(t, map[string][2]string{"feedback-1.md": {"feedback", "fact one"}})
+	server := newFakeImportServer(t, readAll(map[string]int{"memory/feedback-1.md": 1}))
+	wikiImportServerSession(t, server)
+	previous := wikiImportHealthWait
+	wikiImportHealthWait = 50 * time.Millisecond
+	t.Cleanup(func() { wikiImportHealthWait = previous })
+	server.modelState = "down"
+	server.delay = 60 * time.Millisecond
+	_, err := runImport(t, "--from", library, "--space", "space-1")
+	if err == nil || !strings.Contains(err.Error(), "was not ready within") {
+		t.Fatalf("a model that is away, answered after the wait = %v", err)
+	}
+}
+
 func TestWikiImportOnTheServerHandsAFailedJobsNotesToTheNextOne(t *testing.T) {
 	library := memoryLibrary(t, map[string][2]string{"feedback-1.md": {"feedback", "fact one"}})
 	server := newFakeImportServer(t, readAll(map[string]int{"memory/feedback-1.md": 1}))
@@ -464,18 +490,21 @@ func TestWikiImportOnTheServerHandsAFailedJobsNotesToTheNextOne(t *testing.T) {
 	}
 }
 
-func TestWikiImportOnTheRunnerWhenTheServerSaysSo(t *testing.T) {
+// A server that answers another executor than itself leaves the reading to the session's own model, which this
+// build no longer has: the command says the server is too old, and registers nothing — a note registered for a
+// reader that never comes would only be one the next run finds already there.
+func TestWikiImportRefusesAServerThatDoesNotReadTheFiles(t *testing.T) {
 	library := memoryLibrary(t, map[string][2]string{"feedback-1.md": {"feedback", "fact one"}})
 	server := newFakeImportServer(t, readAll(nil))
 	server.executor = "runner"
-	vllm := newFakeVLLM(t, scripted(map[string]string{"memory/feedback-1.md": manyEntries("One", 1)}))
-	spawns := fakeVerifyClaude(t)
-	wikiImportSession(t, &fakeImportDoor{URL: server.URL}, vllm)
-	// The fake server answers the notes route only; the runner's own path proposes through /imports, which
-	// this door does not have — what matters is that the job routes are never asked and the model is.
-	_, _ = runImport(t, "--from", library, "--space", "space-1")
-	if len(server.Jobs()) != 0 || len(spawns()) != 1 || len(vllm.Requests()) != 1 {
-		t.Errorf("under runner: %d jobs, Claude Code ran %d times, the model asked %d times", len(server.Jobs()), len(spawns()), len(vllm.Requests()))
+	wikiImportServerSession(t, server)
+	_, err := runImport(t, "--from", library, "--space", "space-1")
+	if err == nil || !strings.Contains(err.Error(), "does not extract entries from imported files itself (it answered executor \"runner\")") ||
+		!strings.Contains(err.Error(), "too old") || !strings.Contains(err.Error(), "Nothing was registered or proposed in space space-1") {
+		t.Fatalf("an import against a server that does not read = %v, want the refusal that says it is too old", err)
+	}
+	if len(server.bodies) != 0 || len(server.Jobs()) != 0 {
+		t.Errorf("registered %v and made %d jobs: nothing may be registered for a server that does not read", server.bodies, len(server.Jobs()))
 	}
 }
 
@@ -484,9 +513,6 @@ func TestWikiImportOnTheServerIsTheContracts(t *testing.T) {
 	server, ok := imports["server"].(map[string]interface{})
 	if !ok {
 		t.Fatal("the contract's import has no server section")
-	}
-	if server["systemPrompt"] != wikiImportSystemPrompt {
-		t.Errorf("the import's system prompt is the contract's on both paths:\n here: %q\n there: %q", wikiImportSystemPrompt, server["systemPrompt"])
 	}
 	if int(server["maxNotes"].(float64)) != wikiImportJobMaxNotes {
 		t.Errorf("import.server.maxNotes is %v, and %d here", server["maxNotes"], wikiImportJobMaxNotes)
@@ -502,43 +528,35 @@ func TestWikiImportOnTheServerIsTheContracts(t *testing.T) {
 	}
 }
 
-// An orbit wiki import that predates the server's import never asks which path it takes: it registers a note
-// and would read it with the session's own model. Against an account the server reads for, the note route
-// refuses it before anything is registered — so it stops there, and no model of the session's is asked.
-func TestWikiImportThatPredatesTheServersImportStopsBeforeAnyModel(t *testing.T) {
+// A server from before the import job has no route to ask which path the import takes: it is too old for the
+// command just the same, and nothing is registered.
+func TestWikiImportRefusesAServerWithoutTheImportJob(t *testing.T) {
 	library := memoryLibrary(t, map[string][2]string{"feedback-1.md": {"feedback", "fact one"}})
 	server := newFakeImportServer(t, readAll(nil))
 	server.probeMissing = true
-	vllm := newFakeVLLM(t, scripted(map[string]string{"memory/feedback-1.md": manyEntries("One", 1)}))
-	spawns := fakeVerifyClaude(t)
-	wikiImportSession(t, &fakeImportDoor{URL: server.URL}, vllm)
+	wikiImportServerSession(t, server)
 	_, err := runImport(t, "--from", library, "--space", "space-1")
-	if err == nil || !strings.Contains(err.Error(), "WIKI_SERVER_EXECUTES") {
-		t.Fatalf("an import that reads for itself, against an account the server reads for = %v", err)
+	if err == nil || !strings.Contains(err.Error(), "it has no GET /api/runner/wiki/spaces/space-1/import") || !strings.Contains(err.Error(), "too old") {
+		t.Fatalf("an import against a server without the import job = %v, want the refusal that says it is too old", err)
 	}
-	if len(spawns()) != 0 || len(vllm.Requests()) != 0 || len(server.Jobs()) != 0 {
-		t.Errorf("Claude Code ran %d times and the model was asked %d times: nothing may read for the session", len(spawns()), len(vllm.Requests()))
-	}
-	if len(server.bodies) != 1 || server.bodies[0]["readBy"] != nil {
-		t.Errorf("the registrations were %v", server.bodies)
+	if len(server.bodies) != 0 || len(server.Jobs()) != 0 {
+		t.Errorf("registered %v and made %d jobs", server.bodies, len(server.Jobs()))
 	}
 }
 
-// A command that cannot learn which path to take goes its own, and an account the server reads for still
-// stops it at the first registration: asking wrong costs a refusal, never a model call.
-func TestWikiImportThatCannotAskWhichPathStopsBeforeAnyModel(t *testing.T) {
+// A command that cannot learn which path to take goes no further: the server's answer is the error, and
+// nothing is registered.
+func TestWikiImportThatCannotAskWhichPathRegistersNothing(t *testing.T) {
 	library := memoryLibrary(t, map[string][2]string{"feedback-1.md": {"feedback", "fact one"}})
 	server := newFakeImportServer(t, readAll(nil))
 	server.probeFails = true
-	vllm := newFakeVLLM(t, scripted(map[string]string{"memory/feedback-1.md": manyEntries("One", 1)}))
-	spawns := fakeVerifyClaude(t)
-	wikiImportSession(t, &fakeImportDoor{URL: server.URL}, vllm)
-	// A 500 is no transient failure the transport sends again (wiki_retry.go): the run asks once and goes on.
+	wikiImportServerSession(t, server)
+	// A 500 is no transient failure the transport sends again (wiki_retry.go): the run asks once and stops.
 	_, err := runImport(t, "--from", library, "--space", "space-1")
-	if err == nil || !strings.Contains(err.Error(), "WIKI_SERVER_EXECUTES") {
-		t.Fatalf("an import that could not ask = %v", err)
+	if err == nil || !strings.HasPrefix(err.Error(), "orbit wiki import: ") || !strings.Contains(err.Error(), "500") {
+		t.Fatalf("an import that could not ask = %v, want the server's 500", err)
 	}
-	if len(spawns()) != 0 || len(vllm.Requests()) != 0 || len(server.Jobs()) != 0 {
-		t.Errorf("Claude Code ran %d times and the model was asked %d times", len(spawns()), len(vllm.Requests()))
+	if len(server.bodies) != 0 || len(server.Jobs()) != 0 {
+		t.Errorf("registered %v and made %d jobs", server.bodies, len(server.Jobs()))
 	}
 }

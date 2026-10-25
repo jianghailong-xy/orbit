@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { WIKI_IMPORT_JOB, WIKI_IMPORT_RULES, type WikiOpOutcome } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
+import { stripNul } from '../runner-api/strip-nul';
 import { wikiImportPrincipal } from '../wiki/wiki-import';
 import { WikiRefusalError, type WikiProposeInput, type WikiService } from '../wiki/wiki.service';
 import { WikiJobContentError, type WikiJobContext, type WikiJobRunner } from './wiki-job-executor';
@@ -25,6 +26,7 @@ import {
   readWikiRepoOp,
   readWikiRepoReadiness,
   readWikiRepoSnapshot,
+  wikiRepoStepsCanRun,
   waitForWikiRepoOp,
   WikiRepoOpRefused,
   WikiRepoOpWaitTimedOut,
@@ -41,7 +43,8 @@ import {
  * (`import.note`) and remembers on its machine how far it has taken each (`import.cli.resume`); what it hands
  * this job is the notes, in the order it would have read them, each either to be read or carrying the ops an
  * earlier run found in it and has not proposed yet. The job's report is what the command prints and what it
- * writes back into its memory — so a run picks up where the last one stopped whichever of the two paths ran it.
+ * writes back into its memory — so a run picks up where the last one stopped, even one the runner's own path ran
+ * before P11.
  *
  * ONE RUN, AS THE RUNNER RAN IT. Notes are read a wave at a time (the command's --concurrency) until the run's
  * ops are found (--max-ops, at most rules.opsPerRun); each read is one call through the queue (step `import`,
@@ -229,7 +232,9 @@ class WikiImportRun {
     const { prisma } = this.deps;
     let asked: { sha: string } | null = null;
     const readiness = await readWikiRepoReadiness(prisma, { ownerId: job.ownerId, spaceId: job.spaceId });
-    if (readiness.look === 'ready') {
+    // A machine that can be handed operations at all takes one, whether or not it reads whole files: a
+    // snapshot is not a read, and a runner that reads only the old window still builds the index.
+    if (wikiRepoStepsCanRun(readiness)) {
       const opId = wikiImportSnapshotOpId(job.id);
       try {
         if (!(await readWikiRepoOp(prisma, { id: opId, ownerId: job.ownerId }))) {
@@ -493,7 +498,9 @@ class WikiImportRun {
       ...(dryRun ? { dryRun: true } : { idempotencyKey: wikiImportIdempotencyKey(job.spaceId, ops) }),
     };
     try {
-      const answer = await this.deps.wiki.submitChangeset(wikiImportPrincipal(job.ownerId, this.input.sessionId), job.spaceId, body);
+      // What the model wrote goes to the shared writer without any U+0000 (contract `jobs.serverWrites`): Postgres keeps
+      // none, and a model may copy one out of the code it was shown — the runner gate drops it from a report the same way.
+      const answer = await this.deps.wiki.submitChangeset(wikiImportPrincipal(job.ownerId, this.input.sessionId), job.spaceId, stripNul(body));
       return Array.isArray(answer.ops) ? (answer.ops as WikiOpOutcome[]) : [];
     } catch (error) {
       // A refusal of the whole request — not of an op — is no answer this run can go on from.

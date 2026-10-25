@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-20T22:38:05.095+00:00",
+  "baseUrl": "https://api.deepseek.com/anthropic",
+  "defaultModel": "deepseek-v4-pro",
+  "enabled": true,
+  "id": "34jQvZsFI8sXt4VV24V1y",
+  "label": "DeepSeek (owner key, lab)",
+  "owner": "deepkey",
+  "presetSlug": "deepseek",
+  "runtime": "claude",
+  "slug": "deepseek-2"
+}

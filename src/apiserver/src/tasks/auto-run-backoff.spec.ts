@@ -143,6 +143,8 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
         { id: 'runner-1', planUsage: options.planUsage ?? null, engines: options.engines ?? null },
       ],
     },
+    // No configured key holds a slug here: a credential that is no sign-in is a pool or nothing.
+    modelProvider: { findFirst: async () => null },
     // Read for the Codex or Claude account a task's run spends, which is its workspace's to say.
     workspace: {
       findMany: async () => [

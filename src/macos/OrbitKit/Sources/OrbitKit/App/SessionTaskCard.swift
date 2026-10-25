@@ -118,21 +118,22 @@ public struct SessionTaskCard: Equatable, Sendable {
 }
 
 extension WatchSessionSummary {
-    /// The watches the Watching card draws: those waiting on something that is not a task. A task
-    /// the session waits on is an eye in its Tasks card instead. Nil when every watch waits on tasks.
+    /// The watches the Watching card draws: those waiting on something that is neither a task nor a
+    /// task's run session (`WatchTarget.waitedOn`). A task the session waits on is an eye in its Tasks
+    /// card instead. Nil when every watch waits on tasks.
     public var beyondTasks: WatchSessionSummary? {
         let kept = watches.filter { watch in
-            watch.targets.contains { $0.state != .gone && $0.targetKind != .task }
+            watch.targets.contains { $0.state != .gone && $0.waitedOn.targetKind != .task }
         }
         return kept.isEmpty ? nil : WatchSessionSummary(observing: kept)
     }
 
-    /// The tasks the live watches wait on, for the Tasks card (`SessionTaskCard`). `name` names a
-    /// target the watch carries no title for.
+    /// The tasks the live watches wait on, a task's run session as that task (`WatchTarget.waitedOn`),
+    /// for the Tasks card (`SessionTaskCard`). `name` names a target the watch carries no title for.
     public func watchedTasks(now: Date = Date(), name: (WatchTarget) -> String?) -> [SessionWatchedTask] {
         watches.flatMap { watch in
             let stale = WatchProjection.stripStaleLine(for: watch, now: now) != nil
-            return watch.targets.filter { $0.state != .gone && $0.targetKind == .task }.map { target in
+            return watch.targets.filter { $0.state != .gone }.map(\.waitedOn).filter { $0.targetKind == .task }.map { target in
                 SessionWatchedTask(id: target.targetResourceId,
                                    title: WatchProjection.targetTitle(kind: .task, id: target.targetResourceId,
                                                                       name: target.targetTitle ?? name(target)),
@@ -146,7 +147,7 @@ extension WatchSessionSummary {
     public func taskStaleLines(now: Date = Date()) -> [String] {
         var seen = Set<String>()
         return watches
-            .filter { watch in !watch.targets.contains { $0.state != .gone && $0.targetKind != .task } }
+            .filter { watch in !watch.targets.contains { $0.state != .gone && $0.waitedOn.targetKind != .task } }
             .compactMap { WatchProjection.stripStaleLine(for: $0, now: now) }
             .filter { seen.insert($0).inserted }
     }

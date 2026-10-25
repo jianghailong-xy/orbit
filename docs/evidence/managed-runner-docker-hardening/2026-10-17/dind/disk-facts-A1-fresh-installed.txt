@@ -1,0 +1,29 @@
+== disk facts at 2026-10-17T17:30:32Z, checkout 2d16d5f1e60df0d51763af9374940a52aa978a5c
+-- filesystems: Docker's data root, the checkout and the channel's state directory (bytes)
+/var/lib/docker: type=ext2/ext3 blocks=3875398791 blocksize=4096 free=3731247443 fsid=b035fd6ae24482e4
+/work/orbit: type=tmpfs blocks=786432 blocksize=4096 free=624504 fsid=11d28d787da4d6de
+/work/orbit/data/managed-runners/state: type=tmpfs blocks=786432 blocksize=4096 free=624504 fsid=11d28d787da4d6de
+  Filesystem           Type       1-blocks       Used Available Use% Mounted on
+  /dev/sdb             ext4       15873633447936 430418141184 15283189526528   3% /evidence
+  tmpfs                tmpfs      3221225472 663257088 2557968384  21% /work
+-- docker-channel: its command and mounts
+cmd=["serve","--config","/var/lib/orbit-managed-runners/channel.json","--disk-probe-path","/var/lib/orbit-docker-volumes"] image=orbit-docker-channel:local
+volume name=c7d5c5409a2250f8dfa5d7a79499f51c6e14d13c2e0533de445588be7f005179 source=/var/lib/docker/volumes/c7d5c5409a2250f8dfa5d7a79499f51c6e14d13c2e0533de445588be7f005179/_data -> /var/lib/orbit-docker-volumes rw=false
+bind name= source=/work/orbit/data/managed-runners -> /var/lib/orbit-managed-runners rw=true
+bind name= source=/var/run/docker.sock -> /var/run/docker.sock rw=true
+
+-- the probe volume c7d5c5409a2250f8dfa5d7a79499f51c6e14d13c2e0533de445588be7f005179: labels, and the filesystem of its mount point on the host
+driver=local mountpoint=/var/lib/docker/volumes/c7d5c5409a2250f8dfa5d7a79499f51c6e14d13c2e0533de445588be7f005179/_data labels={"com.docker.volume.anonymous":""}
+/var/lib/docker/volumes/c7d5c5409a2250f8dfa5d7a79499f51c6e14d13c2e0533de445588be7f005179/_data: type=ext2/ext3 blocks=3875398791 blocksize=4096 free=3731247443 fsid=b035fd6ae24482e4
+   files in it: 0
+-- writing to it from inside docker-channel:
+touch: /var/lib/orbit-docker-volumes/x: Read-only file system
+exit=1
+/dev/sdb /var/lib/orbit-docker-volumes ext4 ro,noatime 0 0
+-- the channel's /v1/info (host and limits)
+{"body": {"allowVolumeRemoval": false, "diskCheckSeconds": 120, "host": {"cpus": 24, "disk": {"freeBytes": 15283189526528, "path": "/var/lib/orbit-docker-volumes", "totalBytes": 15873633447936}, "managedVolumeBytes": 0, "memoryBytes": 16102998016, "name": "d8-host", "serverVersion": "29.8.2"}, "image": "sha256:26eefb8145b8dba29cc04ce78c65a87b2cdd16ef04e3d238ac8ac6d412e1ae32", "instanceId": "orbit-92523c8f", "limits": {"maxConcurrent": 8, "maxContainers": 14, "maxCpuMillis": 4000, "maxMemoryBytes": 8589934592, "maxPids": 4096, "maxTmpBytes": 2147483648, "maxVolumeBytes": 107374182400}, "network": {"interContainer": false, "internal": false, "name": "orbit-managed-runners"}, "schemaVersion": 1, "stopGraceSeconds": 240}, "request": "GET /v1/info", "sent": null, "status": 200}
+-- the capacity pool the apiserver derived (bytes), if it has one yet
+storage_usable_bytes=15283189055488 | storage_headroom_bytes=1587363344794 | pods=2 | durable_bytes_reserved=0 | updated_at=2026-10-17 17:30:05.823+00
+-- docker-channel's log lines about the disk, the cap and /tmp
+2026-10-17T17:30:02Z orbit-docker-channel: at most 14 containers of this instance (one per CPU and per GiB of this host's memory, whichever is fewer)
+2026-10-17T17:30:02Z orbit-docker-channel: instance orbit-92523c8f serving on /var/lib/orbit-managed-runners/channel.sock; image sha256:26eefb8145b8dba29cc04ce78c65a87b2cdd16ef04e3d238ac8ac6d412e1ae32, network orbit-managed-runners

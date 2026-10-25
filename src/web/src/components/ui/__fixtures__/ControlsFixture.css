@@ -1,10 +1,12 @@
 .controls-page { max-width: 1100px; margin: 0 auto; padding: 24px; font-family: var(--orbit-font-family); color: var(--text-1); }
-.controls-page h2 { margin: 24px 0 12px; }
+/* Section headings only: a component's own h2 (a card title) keeps its own margins. */
+.controls-page > h2 { margin: 24px 0 12px; }
+/* The third column held the replaced control beside each sample; it stays, so every sample keeps its width. */
 .controls-case { display: grid; grid-template-columns: 180px minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 16px; padding: 12px; border-bottom: 1px solid var(--border); background: var(--bg-raised); }
 .controls-case h3 { margin: 0; font-size: 13px; font-weight: 400; }
 .controls-cell { display: flex; align-items: center; min-width: 0; gap: 12px; }
 .controls-source { width: 36px; flex-shrink: 0; font-size: 11px; color: var(--text-3); }
-.controls-cell > input, .controls-cell > textarea, .controls-cell > .orbit-input, .controls-cell > .ant-input-affix-wrapper { width: 220px; max-width: calc(100% - 48px); }
+.controls-cell > input, .controls-cell > textarea, .controls-cell > .orbit-input { width: 220px; max-width: calc(100% - 48px); }
 .controls-behavior { display: grid; gap: 16px; margin-top: 32px; padding: 16px; border: 1px solid var(--border); border-radius: var(--orbit-radius); }
 .controls-behavior form { display: grid; justify-items: start; gap: 12px; }
 .controls-behavior .controls-field { display: grid; gap: 4px; max-width: 100%; }

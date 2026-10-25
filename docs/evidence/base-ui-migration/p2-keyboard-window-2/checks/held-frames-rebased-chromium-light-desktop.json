@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.config.mjs --project chromium-light-desktop'",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "f162a2f9de3cb4bdea8e9a6120dd28a8e2184328",
+ "webTree": "d8ae59f026644577041afea38b5994da1eef0f9f",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-08T03:24:58.692578+00:00",
+ "endedAt": "2026-10-08T03:26:53.284495+00:00",
+ "loadAverage": {
+  "start": [
+   27.50146484375,
+   22.45458984375,
+   19.41748046875
+  ],
+  "end": [
+   45.9677734375,
+   28.80078125,
+   21.94775390625
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "6355fbc9051000f4108c4adefce5cadb540f3335633410cdeffbe87ab8c74829",
+ "outputBytes": 8982,
+ "raw": "/var/tmp/kw2-246921c8/runs/held-frames-rebased-chromium-light-desktop",
+ "stats": {
+  "expected": 49,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 114218.681,
+  "samples": 49
+ }
+}

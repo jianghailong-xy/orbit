@@ -24,12 +24,30 @@ Ctrl/Meta+Enter sends only outside composition. A bounded scroll area keeps Send
 | Resume | POST /sessions/:id/resume, retaining selected configuration |
 | Stop | POST /sessions/:id/interrupt |
 | Queue withdrawal | DELETE /sessions/:id/turns/:turnId |
+| Queue for next turn | Send held while a turn runs on Claude or Codex: POST /sessions/:id/turns with intent NEXT_TURN |
+| Steer a queued message | POST /sessions/:id/turns/:turnId/steer; 409 CURRENT_WORK_UNAVAILABLE leaves it queued |
 | Retry failed message | POST /sessions/:id/retry-message, server recovers sender and attachments |
 | Cancel automatic retry | DELETE /sessions/:id/auto-retry |
 | Model / runtime-compatible provider | PATCH /sessions/:id/config; terminal selection saved for resume |
 | Account | PATCH /sessions/:id/account; runner account-move/v1 capability required |
 | Upload | POST /attachments multipart field file; sessionId omitted for new draft |
 | Download | Authenticated GET /attachments/:id or session artifact path |
+
+The tray above the composer (docs/mocks/steer-tray, decided 2026-10-16; `composer/PendingTray.kt`) holds the reader's own
+messages nothing has read yet, one row each in send order: a steer into the running turn (Sending…, Waiting to be read,
+Withdrawing…) and a message queued for the next one (Queued for next turn). The conversation leaves such a steer out until a
+`user_delivery` settles it (`reader/SteerDelivery.kt`, `place`): acknowledged, it is drawn after the output written before the
+reading; failed or unconfirmed — or settled by the active listing's durable receipt — where that became known; withdrawn, never;
+requeued, it waits as queued until it arrives as a message of its own. A window short of the live tail draws steers where they
+were sent. What Orbit queued keeps its card in the transcript's tail. Withdraw returns the words under any draft; Steer is offered
+on a queued, non-shell row while a turn runs on Claude or Codex.
+
+Under each of the reader's steers the conversation draws, a line says how it came out, in the web's and iOS's words
+(`SteerDelivery.label`): Read in this turn, Not delivered, Couldn't confirm it was read — the last two in the warning tone, the
+runner's reason a long press away. Not delivered offers Put back in the composer: the words return under any draft, and nothing is
+sent. A steer known only from the active listing's receipt (no echo, no runner's word) is drawn at the end of the queued tail with
+why it did not land, in the sender's words (`SteerDelivery.failureExplanation`); its Put back returns the words, then discards the
+turn (DELETE /sessions/:id/turns/:turnId), and a refusal is said as "Couldn't discard the message".
 
 Before the first turn/resume POST, persist an immutable clientTurnId, endpoint, JSON body and
 attachments. Duplicate taps are gated. A lost reply keeps that record, even while a new draft

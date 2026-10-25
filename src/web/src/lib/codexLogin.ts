@@ -13,8 +13,8 @@ import type { PoolMember, PoolMemberState, ProviderPool } from './providerPools'
  * again. `login` is the first of them — the account its sessions run on.
  *
  * The pages draw such a pool the way they draw every other one: each account is one of the pool's members
- * (`withLogin`), carrying `login` the way a shared pool's member carries its `key` — so the Providers
- * card, the session picker and the composer take it as they take any pool.
+ * (`withLogin`), carrying `login` the way a shared pool's member carries its `key` — so its card on
+ * Infrastructure, the session picker and the composer take it as they take any pool.
  */
 
 /** The account a Codex pool runs on, as the server reads it (codex-login.ts). */

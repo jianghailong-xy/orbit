@@ -25,8 +25,8 @@ import {
 } from './enums';
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 import { SessionSourceSnapshot } from './source';
-import type { WikiMaintenanceRun } from './wiki';
 import type { WikiRepoOpCommand } from './wikiRepoOps';
+import type { ManagedRunnerSleepRequest, ManagedRunnerWorkload } from './managedRunner';
 
 /** Why an ended session cannot currently be resumed on its original runner. */
 export type SessionResumeBlockedReason =
@@ -153,6 +153,11 @@ export interface AgentExecConfig {
    *  a re-spawn; Codex takes it per request. Either way it travels on a `reload`, never a
    *  `setconfig`. */
   fastMode?: boolean;
+  /** Spawn Claude Code with `--prompt-suggestions`, so each finished turn is followed by a
+   *  `prompt_suggestion` event (docs/prompt-suggestions-design.md §3.1). Decided by the control
+   *  plane on claim and reclaim; absent means off, so an older control plane never turns it on.
+   *  Like fastMode it is read once, at spawn. */
+  promptSuggestions?: boolean;
   maxTurns?: number;
   maxBudgetUsd?: number;
   /** MCP server config passed through to the SDK (`mcpServers`). */
@@ -294,6 +299,20 @@ export interface RunnerModelInfo {
   /** Whether this model has the runtime's fast lane, from the same probe. Absent is "the runner
    *  could not say" and false is "it said no"; only the first falls back to the static table. */
   fastMode?: boolean;
+  /** Every setting the model takes beside its name, as the runtime lists them: Cursor CLI's effort,
+   *  context size, fast lane and thinking (runner-go cursor_models.go). Absent for a runtime that
+   *  lists none. A Cursor session names the ones it sets in its model value (cursorModels.ts). */
+  parameters?: RunnerModelParameter[];
+}
+
+/** One setting a model takes: the id that selects it, which is the model's own (one model's effort is
+ *  `effort`, another's `reasoning_effort`), the values it accepts and the one it starts on. */
+export interface RunnerModelParameter {
+  id: string;
+  label: string;
+  category?: string;
+  default?: string;
+  values: Array<{ value: string; label: string }>;
 }
 
 /** Models a runner says its local runtimes can use. Keys are provider ids. Antigravity's rows
@@ -309,7 +328,8 @@ export type RunnerModelCatalog = Partial<Record<AgentProvider, RunnerModelInfo[]
 export type RuntimeDefaultModels = Partial<Record<AgentProvider, string>>;
 
 /** One rate-limit window from a provider quota snapshot. Claude reports named
- *  5-hour / weekly windows; Codex reports primary / secondary windows. */
+ *  5-hour / weekly windows; Codex reports primary / secondary windows; Kimi Code reports named
+ *  5-hour / weekly / monthly ones (PlanUsageSnapshot.month). */
 export interface PlanUsageWindow {
   /** Percent of the window consumed, 0..100. */
   utilization: number;
@@ -392,8 +412,42 @@ export interface PlanUsageRateLimitReset {
   sequence: number;
 }
 
+/**
+ * One engine's quota as a runner reports it.
+ *
+ * Kimi Code's (`PlanUsage.kimi`, provider `kimi`) is read from `GET <base_url>/usages` of the managed
+ * Kimi Code provider in the account's config.toml, whose `usages` names four limits, each
+ * `{used_ratio, reset_time}`. They land in named windows, each with `utilization = used_ratio × 100`
+ * and `resetsAt = reset_time`:
+ *
+ *   usages.limit_5h           → fiveHour
+ *   usages.limit_7d           → sevenDay
+ *   usages.limit_month_total  → month
+ *   usages.limit_month_code   → monthCode
+ *
+ * Its other accounts are under `accounts`, by id, the way Codex's and Claude's are.
+ *
+ * Cursor CLI's (`PlanUsage.cursor`, provider `cursor`) is read per account, with that account's own
+ * saved sign-in, from Cursor's dashboard: `GetCurrentPeriodUsage` and `GetPlanInfo`
+ * (docs/cursor-runtime-contract.md §11). It names its account (`account`), the plan (`planName`) and
+ * the account's included usage this period (`includedUsage`), and no window: Cursor's percentages do
+ * not say whether an account can run — 0% both for an account that used nothing and for one whose
+ * use Cursor does not count there (Auto, the Free plan's requests) — so an account is spent only once
+ * a turn on it met Cursor's usage limit, until its included usage resets (`includedUsage`). Every
+ * other account is under `accounts`, by id, as for the engines above.
+ */
 export interface PlanUsageSnapshot {
   provider?: AgentProvider;
+  /** Cursor CLI only: the account this snapshot is about — `default`, or the id of an account the
+   *  runner added, the same as its key under `accounts` (RunnerEngineAccount.id). Absent from a
+   *  snapshot that holds only other accounts. */
+  account?: string;
+  /** Cursor CLI only: the plan the account is on, in Cursor's words (`GetPlanInfo` `planInfo.planName`:
+   *  "Free", "Pro", "Premium", …). Absent when GetPlanInfo did not answer. */
+  planName?: string;
+  /** Cursor CLI only: the account's included usage this period (PlanUsageIncludedUsage). Absent when
+   *  Cursor's dashboard has not answered for the account and no turn on it has met its limit. */
+  includedUsage?: PlanUsageIncludedUsage;
   /** Rolling 5-hour session limit. */
   fiveHour?: PlanUsageWindow;
   /** 7-day all-models limit. */
@@ -402,6 +456,10 @@ export interface PlanUsageSnapshot {
   sevenDayOpus?: PlanUsageWindow;
   /** 7-day Sonnet-scoped limit. */
   sevenDaySonnet?: PlanUsageWindow;
+  /** Kimi Code only: the monthly limit on everything the account spends (`usages.limit_month_total`). */
+  month?: PlanUsageWindow;
+  /** Kimi Code only: the monthly limit on coding use (`usages.limit_month_code`), beside `month`. */
+  monthCode?: PlanUsageWindow;
   /** Codex primary rolling limit. */
   primary?: PlanUsageWindow;
   /** Codex secondary rolling limit. */
@@ -416,16 +474,50 @@ export interface PlanUsageSnapshot {
   /** Codex earned rate-limit reset state (docs/codex-rate-limit-reset-contract.md). Absent from
    *  older runners and from non-Codex snapshots. */
   rateLimitReset?: PlanUsageRateLimitReset;
-  /** The snapshot of every other account on the runner — of Codex, Claude Code or Antigravity —
-   *  keyed by its id (RunnerEngineAccount.id); the windows beside it are Default's
+  /** The snapshot of every other account on the runner — of Codex, Claude Code, Antigravity, Kimi
+   *  Code or Cursor CLI — keyed by its id (RunnerEngineAccount.id); the windows beside it are Default's
    *  (codexAccountSnapshot). An entry never carries a reset block — reset is Default's alone. Absent
-   *  from older runners, and until the runner has read an account other than Default. */
+   *  from older runners, and until the runner has read an account other than Default. On a runner
+   *  Orbit serves with that engine's Default removed (RunnerEngineHealth.removedDefault), the windows
+   *  beside it are the one remaining account's, and there are none when two or more remain. */
   accounts?: Record<string, PlanUsageSnapshot>;
   /** Antigravity only: the Google account's quota buckets from the runner's `/usage` probe
    *  (docs/antigravity-runtime-contract.md §16.6), flattened across agy's model groups. */
   buckets?: PlanUsageBucket[];
   /** ISO-8601 when the runner fetched this. */
   fetchedAt?: string;
+}
+
+/**
+ * One Cursor CLI account's included usage this period, as Cursor's dashboard reports it to that
+ * account's own token (docs/cursor-runtime-contract.md §11). Every field is absent when Cursor did not
+ * send it: what was not read is unavailable, never 0.
+ */
+export interface PlanUsageIncludedUsage {
+  /** How long a period is, as Cursor names it (`GetPlanInfo` `planInfo.includedUsagePeriod`):
+   *  `weekly` for INCLUDED_USAGE_PERIOD_WEEKLY (measured on a paid plan), `monthly` for
+   *  INCLUDED_USAGE_PERIOD_MONTHLY. Absent when Cursor names none — the Free plan, whose period is its
+   *  billing month. */
+  period?: 'weekly' | 'monthly';
+  /** ISO-8601: when this period began (`GetCurrentPeriodUsage` `billingCycleStart`). */
+  startsAt?: string;
+  /** ISO-8601: when the included usage resets — `GetPlanInfo` `planInfo.includedUsageResetsAt` where
+   *  Cursor sends it (a paid plan's week), else the end of the period `GetCurrentPeriodUsage` reports
+   *  (`billingCycleEnd`: the Free plan's billing month, whose end is when its requests come back).
+   *  Never `planInfo.billingCycleEnd`, which on a paid plan is the billing month, not the week. A
+   *  spent account runs again then, and a retry Cursor's usage limit armed fires then. */
+  resetsAt?: string;
+  /** Share of the included usage used, in percent, as Cursor reports it (`GetCurrentPeriodUsage`
+   *  `planUsage.totalPercentUsed`). Present only above 0: Cursor reports 0% for an account that used
+   *  nothing and for one whose use it does not count there (Auto, the Free plan's requests), so a 0 is
+   *  no reading — shown as unavailable, and never taken for room when accounts are ranked. A reading
+   *  never says the account is spent, at 100% neither: past its included usage a paid plan can go on,
+   *  on demand. */
+  percentUsed?: number;
+  /** ISO-8601: when a turn on this account last met Cursor's usage limit ("Upgrade your plan to
+   *  continue", contract §12) within this period. The account is spent from then until `resetsAt`; a
+   *  later turn on it that ends well takes it back, and so does the next period. */
+  limitReachedAt?: string;
 }
 
 /**
@@ -450,7 +542,13 @@ export interface PlanUsageBucket {
 export interface PlanUsage extends PlanUsageSnapshot {
   claude?: PlanUsageSnapshot;
   codex?: PlanUsageSnapshot;
+  /** Kimi Code's accounts: Default's windows as the snapshot's own, every other account's under
+   *  `accounts` (the mapping from Kimi's `usages` is on PlanUsageSnapshot). */
   kimi?: PlanUsageSnapshot;
+  /** Cursor CLI's accounts: Default's snapshot as its own, every other account's under `accounts`
+   *  (the mapping from Cursor's dashboard is on PlanUsageSnapshot and PlanUsageIncludedUsage). Only
+   *  ever nested here, as Kimi Code's is. */
+  cursor?: PlanUsageSnapshot;
   /** Antigravity's Google accounts. Never in a heartbeat's own planUsage: a runner reports it with the
    *  engine's health (RunnerEngineHealth.planUsage), and a reader that weighs every engine's quota the
    *  same way folds it in here first (withEnginePlanUsage). */
@@ -503,6 +601,80 @@ export type ProviderBalanceRead =
  * It is not what any session spent: DeepSeek has no per-request or per-day spend API.
  */
 export type ProviderBalance = ProviderBalanceRead & { sharedWith: ProviderBalanceSibling[] };
+
+/**
+ * GET /providers/mine/:id/usage: what uses one of the caller's own keys, per engine — its open
+ * sessions (not completed, not in Trash) and the tasks still to run whose pin names it
+ * (docs/provider-engine-contract.md §3.6). What a client shows before the key is disabled or deleted,
+ * which every one of them, on every engine, then waits on; the same count that refuses a protocol
+ * change while they use it (PROVIDER_DIALECT_IN_USE). Engines nothing uses are absent.
+ */
+export interface ProviderKeyUsage {
+  providerId: string;
+  engines: Array<{ engine: AgentProvider; sessions: number; tasks: number }>;
+  /** The totals over `engines`. */
+  sessions: number;
+  tasks: number;
+}
+
+/**
+ * What Cursor CLI on a runner last answered when asked with a Cursor API key (`agent models`,
+ * docs/cursor-runtime-contract.md §9): Cursor accepted the key, refused it ("The provided API key is
+ * invalid."), or could not be reached to ask — which says nothing about the key. A Cursor key's row
+ * carries it as `keyCheckState`, beside `keyCheckedAt`; both null until a runner has checked the key
+ * it holds now. A runner reports it as it checks a session's key (POST /runner/sessions/:id/cursor-key-check).
+ */
+export const CURSOR_KEY_CHECK_STATES = ['VALID', 'INVALID', 'UNREACHABLE'] as const;
+export type CursorKeyCheckState = (typeof CURSOR_KEY_CHECK_STATES)[number];
+
+/**
+ * What a check of a Cursor API key somebody asked for came to: on connect (POST /providers/test with
+ * `runtime: 'cursor'`) or again for a saved key (POST /providers/mine/:id/key-check, "Check Again").
+ * The server never uses the key itself: a runner of theirs asks Cursor CLI's `agent models` with it
+ * (docs/cursor-runtime-contract.md §9). Either what Cursor answered, as that runner read it
+ * (CURSOR_KEY_CHECK_STATES), or NO_RUNNER: no runner of theirs could ask — none is online with the
+ * pinned Cursor CLI and a runner release that declares `cursor-key-check/v1`, or the one asked did not
+ * answer in time. Only INVALID says anything against the key: a client offers to save it anyway on
+ * UNREACHABLE and NO_RUNNER, and the key is checked again before a session starts on it.
+ */
+export const CURSOR_KEY_CHECK_OUTCOMES = [...CURSOR_KEY_CHECK_STATES, 'NO_RUNNER'] as const;
+export type CursorKeyCheckOutcome = (typeof CURSOR_KEY_CHECK_OUTCOMES)[number];
+
+/** The answer to a Cursor key check somebody asked for. */
+export interface CursorKeyCheckAnswer {
+  /** True for VALID alone. */
+  ok: boolean;
+  keyCheck: CursorKeyCheckOutcome;
+  /** What happened, in a sentence a client may show as it stands. Never carries the key. */
+  message: string;
+}
+
+/** The answer to Check Again: the check's own, and the saved key's last check as it stands after it. */
+export interface CursorKeyRecheckAnswer extends CursorKeyCheckAnswer {
+  /** Whether this check's answer was kept on the key: never for NO_RUNNER, nor for an answer about a key
+   *  replaced while it was being checked. */
+  recorded: boolean;
+  keyCheckState: CursorKeyCheckState | null;
+  keyCheckedAt: string | null;
+}
+
+/** Control plane → runner, on the heartbeat of a process that declares `cursor-key-check/v1`: a Cursor
+ *  API key to ask `agent models` with, in a throwaway home with credentials in memory, and to answer by
+ *  POST /runner/cursor-key-check-result. Handed over once; the key is written to no file, log or event
+ *  on either side. */
+export interface CursorKeyCheckCommand {
+  checkId: string;
+  apiKey: string;
+}
+
+/** Runner → control plane: what Cursor answered a CursorKeyCheckCommand's key with, and the key it was
+ *  about by its fingerprint, never the key. An answer the runner cannot read is no verdict on the key,
+ *  and is reported UNREACHABLE: the key could not be checked. */
+export interface CursorKeyCheckResult {
+  checkId: string;
+  state: CursorKeyCheckState;
+  keyFingerprint: string;
+}
 
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
@@ -566,6 +738,10 @@ export interface RunnerHeartbeatRequest {
    *  field; absent from an older one — or one rolled back to an older release — which the control
    *  plane stores as NULL, "not reported", rather than keeping what a newer binary last said. */
   selfUpdate?: RunnerSelfUpdate;
+  /** What a managed runner's instance is doing (managedRunner.ts, MANAGED_RUNNER_SLEEP_CAPABILITY).
+   *  Sent only by a managed instance that declares that capability; the control plane stores it only
+   *  from the instance the manager authorized. Absent: nothing about this runner may be put to sleep. */
+  managedWorkload?: ManagedRunnerWorkload;
 }
 
 /** What a runner's self-updater last found:
@@ -751,6 +927,39 @@ export interface RunnerRepoCleanupResult {
   message?: string;
 }
 
+/**
+ * What drives a session (migration 0436, contract §2.9): CONVERSATION for every session an engine
+ * may run, LANDING for the platform-driven container a landing subject opens. Optional on payloads
+ * — a server older than the column omits it, and a client that does not know it ignores it.
+ */
+export type SessionKind = 'CONVERSATION' | 'LANDING';
+
+/**
+ * The landing this conversation produced work for (contract §2.9 LS1, migration 0436): the newest
+ * generation of integration work whose source session this is, and the subject it belongs to.
+ *
+ * Optional everywhere it appears. A conversation that produced no landing work answers null; a
+ * client that does not know the field ignores it. `state` is the newest attempt's own job state
+ * (QUEUED, RUNNING, READY, …) and `settledAs` is how the subject ended, so a label can say
+ * "Landing · checking" while it moves and "On project/<id> ✓" once it landed.
+ */
+export interface SessionSourceLanding {
+  /** The LANDING session's id (available before its row exists: it is pre-generated). */
+  landingSessionId: string;
+  subject: 'TASK' | 'PROMOTION';
+  /** The newest attempt's job state. */
+  state: string;
+  /** The step the newest attempt last reported, or the one it stopped at; null before its first
+   *  report. The label reads it where the attempt is RUNNING ("Landing · checking"), and a server
+   *  that predates the field sends none. */
+  phase?: string | null;
+  /** LANDED | ALREADY_LANDED | NOTHING_TO_LAND | MERGED | HANDLED | DECLINED | CANCELLED |
+   *  DELETED, or null while the subject is open. */
+  settledAs: string | null;
+  /** The branch the attempt writes, as the job froze it. */
+  targetRef: string;
+}
+
 /** One supervised session's live worktree diff (cf. TurnCompleteRequest, which carries
  *  the same snapshot at turn boundaries). */
 export interface SessionLiveState {
@@ -862,9 +1071,12 @@ export interface RunnerHeartbeatResponse {
    *  branch onto its project's integration line
    *  (docs/project-integration-line-contract.md §2.3 J-T2). Sent only to a process that declared
    *  `integration-job/v1`, heartbeats with a leaseOwner and is not draining. At most
-   *  two per beat with distinct serial keys, because the claim is what serialises them — a job
-   *  named here is already RUNNING in the database and is nobody else's to take. Answered via
-   *  POST /runner/integration-jobs/:jobId/{progress,result}. Absent on older control planes. */
+   *  two new claims per beat with distinct serial keys, because the claim is what serialises them
+   *  — a job named here is already RUNNING in the database and is nobody else's to take. Before
+   *  them come the claims this process already holds and has not reported on for longer than the
+   *  lease, handed to it again under the same claim (§2.3 J-T3a): the runner starts one it is not
+   *  running and skips one it is. Answered via POST /runner/integration-jobs/:jobId/{progress,result}.
+   *  Absent on older control planes. */
   integrationJobs?: IntegrationJobCommand[];
   /** Repository operations this runner has just claimed (contract `repoOps`, design §7): the wiki's
    *  pipelines run on the server, which holds no repository, so a step that needs to know what the
@@ -873,6 +1085,14 @@ export interface RunnerHeartbeatResponse {
    *  beat, and a row named here is already RUNNING in the database. Answered via
    *  POST /runner/wiki/repo-ops/:id/{progress,fragments,result}. Absent on older control planes. */
   wikiRepoOps?: WikiRepoOpCommand[];
+  /** Present only to the authorized instance of a managed runner the manager is putting to sleep
+   *  (managedRunner.ts): with nothing to do, stop claiming, drain and exit. Absent otherwise, so
+   *  every other runner sees the response shape it always had. */
+  managedSleep?: ManagedRunnerSleepRequest;
+  /** Cursor API keys somebody is waiting to have checked (CursorKeyCheckCommand): sent only to a
+   *  process that declared `cursor-key-check/v1`, each handed over once. Absent otherwise, so every
+   *  other runner sees the response shape it always had. */
+  cursorKeyChecks?: CursorKeyCheckCommand[];
 }
 
 /** `account/rateLimitResetCredit/consume` outcomes, spelled as the provider spells them. */
@@ -1082,9 +1302,11 @@ export interface CodexRateLimitResetResultRefusal {
 /**
  * Engines a runner signs in with on its own machine, rather than using a configured API key.
  * Antigravity signs in a Google account, and only on a runner that declares
- * `antigravity-google-login/v1` (RunnerAntigravityState.googleLogin).
+ * `antigravity-google-login/v1` (RunnerAntigravityState.googleLogin). Cursor CLI's sign-in is its own
+ * `agent login` (docs/cursor-runtime-contract.md §9); the relay that starts one on a runner is not
+ * offered for it yet, so a runner is never sent one.
  */
-export type LoginEngine = 'claude' | 'codex' | 'kimi' | 'antigravity';
+export type LoginEngine = 'claude' | 'codex' | 'kimi' | 'antigravity' | 'cursor';
 
 /**
  * Kimi Code's two sign-in sites, as `kimi login --region` names them: `mainland-cn` is kimi.com,
@@ -1100,7 +1322,9 @@ export const KIMI_REGIONS: readonly KimiRegion[] = ['mainland-cn', 'global'];
 export const KIMI_LOGIN_REGION_V1 = 'kimi-login-region/v1';
 
 /** Engines with an install action in Providers: every engine a runner signs in with, plus `dsh` and
- *  OpenCode, which are installed without one — the relay needs an install command, not a way in. */
+ *  OpenCode, which are installed without one — the relay needs an install command, not a way in.
+ *  Cursor CLI's (`cursor`, the same request for Install and Reinstall) goes only to a runner that knows
+ *  Cursor CLI: it declares `provider:cursor` or reports the engine. */
 export type InstallEngine = LoginEngine | 'opencode' | 'dsh';
 
 /**
@@ -1166,7 +1390,9 @@ export type AntigravityKeyAvailableByRunner = Record<string, boolean>;
  */
 export interface LoginCommand {
   action: 'start' | 'code' | 'cancel';
-  /** Which CLI to sign in. Absent from an older control plane, which only ever drove claude. */
+  /** Which CLI to sign in. Absent from an older control plane, which only ever drove claude. A
+   *  `cursor` start, Default's included, goes only to a runner that declares `cursor-account-login/v1`:
+   *  an older one signs in Claude Code for an engine it does not know. */
   engine?: LoginEngine;
   /** The authorization code the user pasted, for `code`. */
   code?: string;
@@ -1183,7 +1409,8 @@ export interface LoginCommand {
   accountName?: string;
   /** Kimi only: the site to sign in on (`kimi login --region`). Only a runner that declares
    *  `kimi-login-region/v1` is handed a start naming one; absent, the runner runs a bare `kimi login`,
-   *  exactly as before the choice. */
+   *  exactly as before the choice. A start adding a Kimi account (`accountName`, to a runner that
+   *  declares `kimi-account-login/v1`) carries both: the new account signs in on that site. */
   region?: KimiRegion;
 }
 
@@ -1235,6 +1462,15 @@ export interface LoginResult {
   /** The one-time code the user types on the sign-in page, for the device flow. */
   userCode?: string;
   message?: string;
+  /** With `url`: when that link stops working, ISO 8601. Cursor CLI's `agent login` prints one link
+   *  and gives up on it about 27 minutes later (docs/cursor-runtime-contract.md §9), so the runner
+   *  reports the start of the sign-in plus that. Absent where the runner names no such time. */
+  expiresAt?: string;
+  /** With `failed`: why, when a client answers it differently from any other failure — the one value
+   *  is `expired`, the link running out before anyone signed in with it (Cursor CLI's "Login failed or
+   *  timed out"), which a client answers with a new link rather than a retry. `message` still says it
+   *  in words. Absent for every other failure. */
+  reason?: LoginFailureReason;
   /** The `attempt` of the start this reports on. A report about an attempt the control plane has
    *  moved past (cancelled, or replaced by a new sign-in) changes nothing. Absent from an older
    *  runner, whose reports are taken as they come. */
@@ -1259,14 +1495,16 @@ export interface RunnerEngineHealth {
   installationError?: string;
   /** Harness session keys arrive with dispatch; the runner's own report leaves validation unknown. */
   dsh?: DshRuntimeHealth;
-  /** The CLI's own answer to "am I signed in", with `unknown` for anything ambiguous. */
+  /** The CLI's own answer to "am I signed in", with `unknown` for anything ambiguous. While Default is
+   *  removed from Orbit (`removedDefault`), the answer of the accounts that remain instead. */
   auth: 'yes' | 'no' | 'unknown';
   /** What the runner's updater last did to this engine. Absent from an older runner, and until
    *  the first pass — shown as "not reported yet", never as a problem. */
   update?: RunnerEngineUpdate;
-  /** Codex, Claude Code and Antigravity: every account signed into this machine's CLI, Default
-   *  first, each with its own sign-in state. `auth` above stays the engine's answer, which is what
-   *  every reader older than accounts takes it for — for Antigravity that may be a GEMINI_API_KEY,
+  /** Codex, Claude Code, Antigravity, Kimi Code and Cursor CLI: every account signed into this
+   *  machine's CLI, Default first (left out while it is removed from Orbit: `removedDefault`), each
+   *  with its own sign-in state. `auth` above stays the engine's answer, which is
+   *  what every reader older than accounts takes it for — for Antigravity that may be a GEMINI_API_KEY,
    *  while its Default account is the runner's Google sign-in alone. Absent from an older runner, and
    *  whenever the runner couldn't list its accounts — read as the one account every machine had
    *  before accounts. */
@@ -1284,6 +1522,28 @@ export interface RunnerEngineHealth {
    *  on this machine (an installer's default is not a sign-in), after a logout, and from an older
    *  runner. */
   kimiRegion?: KimiRegion;
+  /** Codex, Claude Code, Antigravity, Kimi Code and Cursor CLI: the Default the owner removed from
+   *  Orbit on this runner (`DELETE /runners/:id/accounts/:engine/default`), which `POST
+   *  /runners/:id/accounts/:engine/default/restore` brings back. Present only while the runner reports
+   *  another account of this engine. Default is then left out of `accounts`, and what sums up sign-in
+   *  here (`auth`, `authSource`, `kimiRegion` and Antigravity's `planUsage`, beside the engine's part
+   *  of the runner's planUsage) speaks for the accounts that remain, as if the machine had only them.
+   *  The machine keeps Default and its sign-in, and the CLI in a terminal there still uses it. Absent
+   *  otherwise: with no other account reported, Default is listed and used as reported, removed or not. */
+  removedDefault?: RunnerRemovedDefault;
+}
+
+/** The Default an engine leaves out while it is removed from Orbit (RunnerEngineHealth.removedDefault):
+ *  what a client names it by on the line that offers it back. */
+export interface RunnerRemovedDefault {
+  /** Its directory on that machine, absolute, as the runner reports it: the one the machine's own
+   *  environment selects (~/.codex for Codex). */
+  home: string;
+  /** The name it was given in Orbit. Absent for a Default never renamed, which is "Default". */
+  name?: string;
+  /** As on its account (RunnerEngineAccount.fingerprintPrefix): a remaining account showing the same
+   *  one is the same login. Absent where the runner read none. */
+  fingerprintPrefix?: string;
 }
 
 export interface DshRuntimeHealth {
@@ -1298,8 +1558,8 @@ export interface DshRuntimeHealth {
 
 /**
  * One account on a runner: a directory the CLI keeps that login in — a Codex CODEX_HOME, a Claude
- * Code's CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory — which the runner signs
- * in and runs sessions on.
+ * Code's CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory, a Kimi Code
+ * KIMI_CODE_HOME, a Cursor CLI account's directory — which the runner signs in and runs sessions on.
  *
  * Nothing here names the account itself. Neither its email nor its account id leaves the machine
  * (docs/codex-rate-limit-reset-contract.md §3): `name` is what the user called the slot, and
@@ -1324,6 +1584,10 @@ export interface RunnerEngineAccount {
   codexHome?: string;
   /** The CLI's own answer for this account, with `unknown` for anything ambiguous. */
   auth: 'yes' | 'no' | 'unknown';
+  /** Kimi Code only: the site this account's login is on — kimi.com or kimi.ai, whose accounts are
+   *  separate — read as the engine's own kimiRegion is (RunnerEngineHealth.kimiRegion), from this
+   *  account's config.toml. Absent before its first sign-in, and for every other engine. */
+  kimiRegion?: KimiRegion;
   /** `cxa1_` and the first 8 hex digits of the account's fingerprint. Absent until the runner has
    *  read one for this account, and for engines that report none. Two accounts showing the same one
    *  are the same account. */
@@ -1432,7 +1696,20 @@ export interface RunnerLoginState {
    *  names none — the runner's own login — and for a new account until the runner reports the
    *  slot it added. */
   account?: string | null;
+  /** When the link at `url` stops working, ISO 8601, as the runner reported it (LoginResult.expiresAt):
+   *  what a client counts down from. Present only while a sign-in is waiting on a link that has one. */
+  expiresAt?: string;
+  /** Why a `failed` sign-in failed, when a client answers it differently (LoginResult.reason).
+   *  Present only on such a failure. */
+  reason?: LoginFailureReason;
 }
+
+/** Why a sign-in failed, when a client answers it differently from any other failure: `expired` is
+ *  the sign-in link running out before anyone signed in with it. */
+export type LoginFailureReason = 'expired';
+
+/** Every LoginFailureReason, for a reader that checks one it is handed. */
+export const LOGIN_FAILURE_REASONS: readonly LoginFailureReason[] = ['expired'];
 
 /** `code` of the 409 a new session gets when its engine is signed out on an online runner. */
 export const ENGINE_SIGNED_OUT = 'ENGINE_SIGNED_OUT';
@@ -1463,7 +1740,8 @@ export interface RunnerAccountRemoveState {
   /** The engine whose account store the removal is about (`codex` on a row written before
    *  accounts-per-engine). */
   engine: LoginEngine;
-  /** The slot being removed (`default` is never it), or null when nothing is in flight. */
+  /** The slot being removed, or null when nothing is in flight. `default` only in the answer to
+   *  removing Default, which is removed from Orbit alone: `done` at once, never relayed to the runner. */
   account: string | null;
   status: 'pending' | 'done' | 'failed' | null;
   /** The machine's own words when it failed: the account is in use by a session, the runner is too
@@ -1616,10 +1894,20 @@ export interface ClaimedSession {
    *  `source-pin/v1` (SR35), so a payload carrying this field only ever reaches a process that
    *  knows it must pin before it may create a worktree or spawn an engine (SR33). */
   source?: SessionSourceSnapshot;
-  /** Present on a Wiki maintenance session only (contracts/wiki.contract.json `maintenance.run`): the run it is
-   *  pinned to, and the clean start and guardrails it is started with. Only a runner that declares
-   *  `wiki-maintenance-run/v1` is handed such a session at all. */
-  wikiMaintenance?: WikiMaintenanceRun;
+  /** Asks the runner to name the session through the engine running it, once its opening turn is
+   *  underway (runner session_naming.go): present only while nothing else will name it and its engine
+   *  can answer from inside its own process. A runner that ignores it leaves the title it has. */
+  naming?: SessionNamingJob;
+}
+
+/** What a runner names a session by (ClaimedSession.naming), answered through
+ *  POST /runner/sessions/:id/naming. */
+export interface SessionNamingJob {
+  /** The session's opening request, bounded as every naming request is. */
+  description: string;
+  /** Orbit's naming prompt, for an engine that takes one of Orbit's — the Codex side thread. Claude
+   *  Code's generate_session_title brings its own and reads `description` alone. */
+  instructions: string;
 }
 
 export interface RunEventBatch {
@@ -1759,6 +2047,12 @@ export interface ApprovalDecisionResponse {
 // It is deliberately its own kind rather than a relaxation of the message gate — a steer
 // neither occupies the single in-flight slot nor waits for it, and it settles its own turn
 // on the engine's echo rather than on a `result`, which belongs to the turn it joined.
+// 'withdraw' asks the runner to take back one steer the engine has not read yet. Its `content` is
+// JSON naming that steer ({"turnId": …}); the runner asks the engine to drop the message and
+// completes this turn with what the engine answered (TURN_COMPLETE_STEER_WITHDRAW), which the
+// completion writes back into `content` for the request that filed it to read. Deliverable
+// mid-turn like interrupt — a steer only exists while a turn runs — and filed only for a runtime
+// and runner that can do it (supportsSteerWithdraw).
 export type ConversationTurnKind =
   | 'message'
   | 'interrupt'
@@ -1767,7 +2061,8 @@ export type ConversationTurnKind =
   | 'setconfig'
   | 'shell'
   | 'diff'
-  | 'steer';
+  | 'steer'
+  | 'withdraw';
 
 /** What a routing-v1 sender wants a message to do. Omission retains the installed N-1
  * server-side auto-steer/queue protocol; new clients always send one explicit value. */
@@ -1825,6 +2120,23 @@ export interface RunInterruptRequest {
   content?: string;
   /** Ids of pre-uploaded attachments (`POST /api/attachments`) for the follow-up. */
   attachmentIds?: string[];
+  /**
+   * Stop this session's background work along with the turn: the shells and Monitors the
+   * engine's own turn launched, its background Workflows, and the jobs the runner hosts
+   * (bg_run — kind 'service' included, deliberately: a dev server or watcher is taken down
+   * too, and that cost was accepted rather than softened with an allow-list).
+   *
+   * Explicit, and this is the whole point of it being a field. An interrupt does not kill
+   * anything — the process, its conversation and its stdin survive it, which is the entire
+   * difference from `end` — and a client that omits this asks for exactly that, unchanged.
+   * The composer's Stop is the one caller that asks for more, because a turn that left its
+   * own dev server running has not stopped what the person pointed at.
+   *
+   * It is not a promise the runner can confirm the way the turn's own stop is confirmed:
+   * what the runner hosts is killed and reported, and the engine's own tasks are reported
+   * as stopped with it. The session is not ended by any of this.
+   */
+  stopBackgroundWork?: boolean;
 }
 
 /** Control plane → browser: the interrupt was accepted, and the turn the follow-up (if
@@ -1961,8 +2273,6 @@ export interface ReclaimSession {
    *  (SR29): a session already `PINNED` keeps the SHA its first claim froze, whatever the
    *  binding's configuration or the ref's tip have done since. */
   source?: SessionSourceSnapshot;
-  /** The maintenance run, cf. ClaimedSession.wikiMaintenance: a restarted runner starts it clean again. */
-  wikiMaintenance?: WikiMaintenanceRun;
 }
 
 /** Control plane → runner response for GET /runner/sessions/reclaim. */
@@ -2042,6 +2352,37 @@ export interface TurnCompleteRequest {
  * twice. See docs/codex-turn-steer-contract.md §4.3.
  */
 export const TURN_COMPLETE_STEER_REQUEUE = 'steer_requeue';
+
+/**
+ * `TurnCompleteRequest.subtype` for a `withdraw` turn: the runner asked the engine to drop the steer
+ * it names, and `result` is what came of it (SteerWithdrawOutcome), with `error` saying why when it
+ * was not `withdrawn`. Only `withdrawn` changes anything: the steer's row goes, as a cancelled
+ * queued message's does. Every other outcome leaves the steer exactly where it was, on its way to
+ * being read.
+ */
+export const TURN_COMPLETE_STEER_WITHDRAW = 'steer_withdraw';
+
+/**
+ * What asking the engine to drop a steer came to.
+ *
+ * - `withdrawn`: the engine dropped it unread (claude's `cancel_async_message` answered
+ *   `cancelled: true`). Nothing will ever read it.
+ * - `already_read`: the engine had taken it into the turn first (`cancelled: false`).
+ * - `not_waiting`: the runner holds no such message on its way into the engine — it was read,
+ *   it failed, or it belongs to an engine process that is gone.
+ * - `failed`: the engine never answered, or refused the request; the message is where it was.
+ */
+export type SteerWithdrawOutcome = 'withdrawn' | 'already_read' | 'not_waiting' | 'failed';
+
+/** The machine codes DELETE /sessions/:id/turns/:turnId refuses a steer's withdrawal with. */
+export const STEER_WITHDRAW_ERRORS = {
+  /** The engine had read it already; it is part of the running turn. */
+  ALREADY_READ: 'STEER_ALREADY_READ',
+  /** The engine has it and has no way to give it back (codex, or a runner that predates withdraw). */
+  NOT_WITHDRAWABLE: 'STEER_NOT_WITHDRAWABLE',
+  /** The runner did not answer in time; the message was not withdrawn. */
+  NO_ANSWER: 'STEER_WITHDRAW_NO_ANSWER',
+} as const;
 
 /**
  * One mid-turn message that was leased by a runner process which then died holding it.
@@ -2311,6 +2652,10 @@ export interface SessionSearchHit {
    *  highlight by locating the query inside it — no offset is carried, since collapsing the
    *  whitespace would invalidate one anyway. */
   snippet: string | null;
+  /** What drives the session. Every row a search answers is a CONVERSATION — LANDING rows are
+   *  excluded from every list — but the field is carried so a row read anywhere names its kind.
+   *  Absent from servers older than migration 0436. */
+  sessionKind?: SessionKind;
 }
 
 /** GET /sessions/search. `contentSearched` is false when the query was too short to search
@@ -2440,17 +2785,135 @@ export interface IntegrationJobCommand {
    *  `promotion-automatic-land/v1`; absent on every other job. */
   automatic?: boolean;
   checks: IntegrationCheckSpec[];
-  /** Somebody asked for this job to stop; the runner checks it at each phase boundary. */
+  /** Somebody asked for this job to stop. Today's runner reads it once, when it starts the job (and
+   *  a takeover's new process reads the request its claim carries), so a request written while a
+   *  legacy job runs only takes effect if the job is claimed again; the progress protocol adds it to
+   *  every answer (§2.2 J-T4, J-T12). */
   cancelRequested: boolean;
+  /** Earlier landings on this job's serial key whose push outcome the control plane could not know
+   *  (ERROR · PUSH_OUTCOME_UNKNOWN) and that have no receipt yet (J12). After its fetch the runner
+   *  asks git whether each one's tested commit is already an ancestor of the target, and reports
+   *  which are. An older runner ignores the field, and the control plane leaves those results to a
+   *  coordinator as it always did. */
+  unknownPushes?: IntegrationUnknownPush[];
+  /** The v2 progress protocol (§2.2 J-T4): before it pushes, the runner reports `phase = PUSH` and
+   *  waits for the answer. Sent only to a claim whose `progress_protocol` this server wrote as
+   *  `v2`; absent on every legacy claim, whose runner pushes without asking. */
+  reportBeforePush?: true;
 }
 
-/** Runner → control plane: still working (POST /runner/integration-jobs/:jobId/progress). */
+/** One earlier landing the control plane could not read the push outcome of, as a command names it
+ *  (J12): the job, and the commit it tested and would have pushed. */
+export interface IntegrationUnknownPush {
+  jobId: string;
+  testedSha: string;
+}
+
+/** That same landing after the runner asked git: `landed` is whether its tested commit is now an
+ *  ancestor of the target. Only an entry git answered for is reported, so an absent one means
+ *  "cannot tell", never "not landed". */
+export interface IntegrationUnknownPushCheck {
+  jobId: string;
+  landed: boolean;
+}
+
+/** The named sub-step a v2 claim is on, beside `phase` (§2.2 J-T4). It does not widen
+ *  `IntegrationJobPhase`: waiting for this runner's own integration lock happens inside FETCH, and
+ *  preparing the tree inside CHECK. */
+export type IntegrationJobStep = 'WAITING_LOCAL_LOCK' | 'PREPARE';
+
+/** The check a v2 claim is running, as its progress reports name it (§2.1, §2.2 J-T4). The job
+ *  row's `checks` holds FINISHED results in a different shape; this one is the check in flight. */
+export interface IntegrationJobCurrentCheck {
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  /** Position of this check in the run, from 1, and how many the run has in all. */
+  index: number;
+  count: number;
+  budgetSeconds: number;
+  startedAt: string;
+}
+
+/** Runner → control plane: still working (POST /runner/integration-jobs/:jobId/progress). Every
+ *  field past the fence is optional: a legacy runner sends only the first three and is still
+ *  served the same way. */
 export interface IntegrationJobProgressRequest {
   claimGeneration: string;
   leaseOwner: string;
   phase: IntegrationJobPhase;
+  /** The named sub-step, while one is (J-T4). Absent between steps. */
+  step?: IntegrationJobStep;
+  /** Which round inside this claim, from 1: a landing may retry its push onto a moved target. */
+  round?: number;
+  /** The check in flight, while one is. */
+  check?: IntegrationJobCurrentCheck;
+  /** How long the current step's output has been idle. The server writes `output_moved_at` as the
+   *  instant it received this report minus this; absent is "not measured". */
+  outputIdleMs?: number;
+  /** Bytes this step has produced so far. */
+  outputBytes?: number;
   /** Upstream moved under the job while it worked, for a reader of the timeline. */
   upstreamMoved?: { from: string; to: string; commits?: number };
+  /** The synchronous PUSH report's facts (J12), sent on `phase = PUSH` and nowhere else: the commit
+   *  about to be pushed, its tree, the commit it replays or merges into it, and the target tip it
+   *  expects. The control plane writes them on the row while the claim still holds it, so a job
+   *  whose push outcome later becomes unknown leaves the next landing on its serial key enough to
+   *  check — and, if the push did happen, to write the receipt nobody got to report. */
+  testedSha?: string;
+  testedTreeSha?: string;
+  sourceSha?: string;
+  targetShaBefore?: string;
+}
+
+/** Control plane → runner: the renewal was taken, and — a stop signal in the other direction —
+ *  whether somebody asked this job to stop (§2.2 J-T4). A v2 runner that reads `true` kills the
+ *  check's process group and answers CANCELLED. A 409 STALE_CLAIM / 409 ALREADY_FINAL / 404 is
+ *  the same signal with no answer left to report into. */
+export interface IntegrationJobProgressResponse {
+  accepted: true;
+  cancelRequested: boolean;
+}
+
+/** The check a chunk of output belongs to (POST /runner/integration-jobs/:jobId/output, contract
+ *  §2.2 J-T4, §2.9 LS2). `index` is the check's position in the run, from 1. */
+export interface IntegrationJobOutputCheck {
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  index: number;
+}
+
+/** Runner → control plane: one chunk of a running check's combined output, uploaded as it is
+ *  written. Only a v2 claim uploads; a legacy claim keeps the 16 KB tail its result already carries.
+ *
+ *  A chunk is fenced on the claim the same way a progress report is: a 409 STALE_CLAIM / 409
+ *  ALREADY_FINAL or a 404 is a claim that can never be written into again, and the runner stops
+ *  uploading. `seq` numbers the chunks of one check from 0, so a resend is the chunk already stored
+ *  rather than a second copy. `text` is redacted by the runner before it leaves the machine. */
+export interface IntegrationJobOutputRequest {
+  claimGeneration: string;
+  leaseOwner: string;
+  check: IntegrationJobOutputCheck;
+  seq: number;
+  text: string;
+}
+
+/** Control plane → runner: the chunk was taken (or was already stored under its seq). */
+export interface IntegrationJobOutputResponse {
+  accepted: true;
+}
+
+/** Runner → control plane: give a claimed job back to the queue (POST
+ *  /runner/integration-jobs/:jobId/release, contract §2.2 J-T11). Sent by a stopping runner for a job
+ *  it did not start, or one it stopped before its push: nothing was pushed under this claim. */
+export interface IntegrationJobReleaseRequest {
+  claimGeneration: string;
+  leaseOwner: string;
+}
+
+/** Control plane → runner: `released` when the job went back to the queue, to be claimed by the next
+ *  heartbeat that asks for work. Otherwise `state` is what it ended as instead: CANCELLED when
+ *  somebody had asked it to stop, since a queued job with a stop request is never claimed (J-T12). */
+export interface IntegrationJobReleaseResponse {
+  released: boolean;
+  state: IntegrationJobState;
 }
 
 /** Runner → control plane: what the job came to (POST /runner/integration-jobs/:jobId/result). */
@@ -2476,12 +2939,55 @@ export interface IntegrationJobResultRequest {
    *  measured it (0346). The only fact §1.4 lets that answer out of a criterion's roll-up on;
    *  absent is "not measured", which an older runner sends, and withholds. */
   sourceOnUpstream?: boolean | null;
+  /** With NOTHING_TO_LAND: true when the branch carried commits of its own and the target already had
+   *  every one of them, false when it carried none, as the runner measured it (0410). The first is
+   *  the task's work on the target; absent is "not measured", which an older runner sends. */
+  sourceFullyApplied?: boolean | null;
   /** How many files the merge would change, for the card the owner reads (§3.2). */
   filesChanged?: number | null;
   checks?: IntegrationCheckResult[];
   conflicts?: string[];
   errorCode?: string | null;
   errorDetail?: Record<string, unknown> | null;
+  /** With a LAND_PROMOTION that ended because the upstream moved under it (J-T13, M-T12): what the
+   *  upstream gained between the tip the job worked from and the tip it found. Written into the job
+   *  row and carried at the top level of its INTEGRATION_ERROR item's payload; never put in
+   *  `errorDetail`, which is copied verbatim into delivery text. */
+  upstreamMovedCommits?: UpstreamMovedCommits | null;
+  /** What this job's fetch found about the earlier unknown pushes its command named (J12): only the
+   *  entries git could answer for. */
+  unknownPushes?: IntegrationUnknownPushCheck[];
+}
+
+/** The commits that moved the upstream under a landing, as the runner measured them on the
+ *  repository it fetched (J-T4, J-T13 / M-T12): first-parent, newest first, at most twenty, with the
+ *  true total beside them. */
+export interface UpstreamMovedCommits {
+  total: number;
+  commits: UpstreamMovedCommit[];
+}
+
+export interface UpstreamMovedCommit {
+  sha: string;
+  /** Cut to 200 characters by the runner. */
+  subject: string;
+}
+
+/** The list as the control plane stores it: the runner's commits with its own reading of each one
+ *  added. Not what a runner sends — `IntegrationJobResultRequest` carries `UpstreamMovedCommits` —
+ *  because these two facts are the control plane's to establish, never the reporting machine's. */
+export interface UpstreamMovedCommitsEnriched {
+  total: number;
+  commits: UpstreamMovedCommitEnriched[];
+}
+
+export interface UpstreamMovedCommitEnriched extends UpstreamMovedCommit {
+  /** True when no LANDED LAND_PROMOTION on the job's serial key landed this commit, so it arrived
+   *  from outside the landing queue. */
+  outsideQueue: boolean;
+  /** The landing that put it there, when one did: the promotion job and its candidate for this
+   *  account, or only the reason for another account's — never its ids or titles. */
+  landedBy?: { jobId: string; promotionId: string } | { reason: 'ANOTHER_ACCOUNT' };
 }
 
 /** Control plane → runner: whether the result was taken, and what it derived. */

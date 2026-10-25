@@ -1,0 +1,353 @@
+{
+ "cli": {
+  "version": "2026.10.14-941492e",
+  "tarballSha256": "6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d",
+  "launcherSha256": "2ccc9a8e167797641448b5e5c936f006ba137a2555f117f38c5eb76a5238a233",
+  "indexJsSha256": "27776c587649c9b6fa9671ac8dda2810f29346e66937efe8ac254012d2113482"
+ },
+ "platform": {
+  "os": "linux",
+  "arch": "x64",
+  "kernel": "6.12.107+deb13-amd64",
+  "cpus": 24,
+  "harnessNode": "v26.10.0"
+ },
+ "orbitCommit": "1702cf31027a0339252b6931784adfe34033f859",
+ "lastRunId": "2026-10-16T18-31-28-072Z",
+ "realPromptsSpent": 20,
+ "realPromptCap": 30,
+ "realCursorDirsBefore": {
+  "/root/.cursor": null,
+  "/root/.config/cursor": null,
+  "/root/.local/share/cursor-agent": null
+ },
+ "realCursorDirsAfter": {
+  "/root/.cursor": null,
+  "/root/.config/cursor": null,
+  "/root/.local/share/cursor-agent": null
+ },
+ "scenarios": [
+  {
+   "name": "api-key-session-management",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T17-56-34-043Z",
+   "finishedAt": "2026-10-16T17:57:59.461Z",
+   "checks": 32,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "ask-question",
+   "current": true,
+   "passed": false,
+   "runId": "2026-10-16T17-45-59-200Z",
+   "finishedAt": "2026-10-16T17:51:23.181Z",
+   "checks": 6,
+   "failedChecks": [
+    "cursor/ask_question arrives as a JSON-RPC request with toolCallId, title and questions[{id,prompt,options,allowMultiple}]",
+    "nothing times out while a question waits unanswered for 30 s (turn still open)",
+    "an error reply makes the CLI fall back to session/request_permission with the answers as options plus __ask_question_skip__",
+    "an \"answered\" reply reaches the model (second answer used)",
+    "…and so does the fallback selection (first answer used)"
+   ],
+   "realPrompts": 1,
+   "postHocAnalysis": {
+    "file": "analysis/ask-question.json",
+    "reason": "The scenario expected the model to call AskQuestion. In ACP agent mode the server offered no such tool (the model said so and asked in plain text), so cursor/ask_question was never sent; its handling stays unverified.",
+    "correctedChecks": 2,
+    "hold": 2
+   }
+  },
+  {
+   "name": "background-shell-and-commit",
+   "current": true,
+   "passed": false,
+   "runId": "2026-10-16T17-45-59-200Z",
+   "finishedAt": "2026-10-16T17:53:19.772Z",
+   "checks": 3,
+   "failedChecks": [
+    "the commit was made",
+    "no unsolicited turn after end_turn: no session/update in the 40 s after the prompt answered"
+   ],
+   "realPrompts": 1,
+   "postHocAnalysis": {
+    "file": "analysis/background-shell-and-commit.json",
+    "reason": "The prompt hit the Free plan's request limit, so no commit and no background shell happened. Recorded instead: the exact shape of an exhausted quota.",
+    "correctedChecks": 3,
+    "hold": 3
+   }
+  },
+  {
+   "name": "cancel-mid-tool",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T17-30-18-093Z",
+   "finishedAt": "2026-10-16T17:30:54.990Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 1
+  },
+  {
+   "name": "crash-continue-and-shell-wrapper",
+   "current": false,
+   "passed": false,
+   "runId": "2026-10-16T17-45-08-331Z",
+   "finishedAt": "2026-10-16T17:46:34.056Z",
+   "checks": 6,
+   "failedChecks": [
+    "with SHELL pointing at a wrapper, agent commands see the wrapper's HOME, not the CLI's"
+   ],
+   "realPrompts": 2,
+   "postHocAnalysis": {
+    "file": "analysis/crash-continue-and-shell-wrapper.json",
+    "reason": "The wrapper was named orbit-shell. The CLI uses $SHELL only when that path contains \"bash\" (or \"zsh\"; index.js@7385715 `t?.includes(\"bash\")?t:…`) and otherwise runs bash from PATH, so the wrapper never ran. The recall half of the scenario passed.",
+    "correctedChecks": 2,
+    "hold": 2
+   }
+  },
+  {
+   "name": "crash-recover-and-move",
+   "current": true,
+   "passed": false,
+   "runId": "2026-10-16T17-45-08-331Z",
+   "finishedAt": "2026-10-16T17:46:01.106Z",
+   "checks": 9,
+   "failedChecks": [
+    "loading writes an error tool result for the interrupted shell call"
+   ],
+   "realPrompts": 1,
+   "postHocAnalysis": {
+    "file": "analysis/crash-recover-and-move.json",
+    "reason": "The run-time check looked for the interrupted call's tool result right after session/load; the CLI writes it when the next prompt is sent, which the same run's continuation did.",
+    "correctedChecks": 1,
+    "hold": 1
+   }
+  },
+  {
+   "name": "credential-stores",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T18-16-35-138Z",
+   "finishedAt": "2026-10-16T18:19:14.878Z",
+   "checks": 10,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "debug-log-location",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T18-16-35-138Z",
+   "finishedAt": "2026-10-16T18:25:24.653Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "directory-variables",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T17-56-34-043Z",
+   "finishedAt": "2026-10-16T18:04:10.002Z",
+   "checks": 8,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "failure-shapes-without-prompt",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T17-56-34-043Z",
+   "finishedAt": "2026-10-16T18:05:56.298Z",
+   "checks": 16,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "install-and-version",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T17-56-34-043Z",
+   "finishedAt": "2026-10-16T17:56:45.838Z",
+   "checks": 7,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "login-link-and-logout",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T17-56-34-043Z",
+   "finishedAt": "2026-10-16T18:13:35.279Z",
+   "checks": 4,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "mcp-and-hook-sources-at-startup",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T17-56-34-043Z",
+   "finishedAt": "2026-10-16T18:08:23.618Z",
+   "checks": 8,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "multi-turn-tools-default",
+   "current": true,
+   "passed": false,
+   "runId": "2026-10-16T17-27-51-600Z",
+   "finishedAt": "2026-10-16T17:29:23.393Z",
+   "checks": 24,
+   "failedChecks": [
+    "the orbit MCP server (`orbit mcp`) was callable as an ACP-injected stdio server and asked permission"
+   ],
+   "realPrompts": 2,
+   "postHocAnalysis": {
+    "file": "analysis/multi-turn-tools-default.json",
+    "reason": "The run-time check also demanded that the model quote the task title; ACP never carries MCP result content (rawOutput is {success:true}), so that part was not a property of the CLI.",
+    "correctedChecks": 2,
+    "hold": 2
+   }
+  },
+  {
+   "name": "parameterized-model-picker",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T17-56-34-043Z",
+   "finishedAt": "2026-10-16T17:58:39.208Z",
+   "checks": 7,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "permission-auto-review",
+   "current": true,
+   "passed": false,
+   "runId": "2026-10-16T17-45-08-331Z",
+   "finishedAt": "2026-10-16T17:48:10.412Z",
+   "checks": 2,
+   "failedChecks": [
+    "scenario ran to completion"
+   ],
+   "realPrompts": 1,
+   "postHocAnalysis": {
+    "file": "analysis/permission-auto-review.json",
+    "reason": "The scenario read the session store without its -wal file, found no tables and threw before its checks ran (fixed in lib/harness.mjs). The prompt itself completed and is fully recorded.",
+    "correctedChecks": 5,
+    "hold": 5
+   }
+  },
+  {
+   "name": "permission-force",
+   "current": true,
+   "passed": false,
+   "runId": "2026-10-16T17-45-08-331Z",
+   "finishedAt": "2026-10-16T17:47:22.185Z",
+   "checks": 2,
+   "failedChecks": [
+    "scenario ran to completion"
+   ],
+   "realPrompts": 1,
+   "postHocAnalysis": {
+    "file": "analysis/permission-force.json",
+    "reason": "The scenario read the session store without its -wal file, found no tables and threw before its checks ran (fixed in lib/harness.mjs). The prompt itself completed and is fully recorded.",
+    "correctedChecks": 5,
+    "hold": 5
+   }
+  },
+  {
+   "name": "plan-and-ask-modes-concurrent",
+   "current": true,
+   "passed": false,
+   "runId": "2026-10-16T17-45-08-331Z",
+   "finishedAt": "2026-10-16T17:48:52.506Z",
+   "checks": 5,
+   "failedChecks": [
+    "plan and ask mode: no file was created and no shell command ran",
+    "plan and ask mode: the MCP record tool did not run"
+   ],
+   "realPrompts": 2,
+   "postHocAnalysis": {
+    "file": "analysis/plan-and-ask-modes-concurrent.json",
+    "reason": "The run-time checks expected plan and ask mode to stop writes, shell commands and MCP calls. The real CLI did not; these are the corrected checks, stating what it did.",
+    "correctedChecks": 7,
+    "hold": 7
+   }
+  },
+  {
+   "name": "process-signals",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T17-56-34-043Z",
+   "finishedAt": "2026-10-16T18:15:47.474Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "prompt-while-busy",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T17-30-18-093Z",
+   "finishedAt": "2026-10-16T17:31:31.596Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 2
+  },
+  {
+   "name": "signed-out-handshake",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T17-56-34-043Z",
+   "finishedAt": "2026-10-16T17:57:06.605Z",
+   "checks": 12,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "startup-processes-and-network",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T18-25-59-777Z",
+   "finishedAt": "2026-10-16T18:30:53.526Z",
+   "checks": 12,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "subagent-and-todos",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T17-45-59-200Z",
+   "finishedAt": "2026-10-16T17:52:14.414Z",
+   "checks": 6,
+   "failedChecks": [],
+   "realPrompts": 1
+  },
+  {
+   "name": "team-pin",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T17-56-34-043Z",
+   "finishedAt": "2026-10-16T18:06:06.279Z",
+   "checks": 4,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "usage-api",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-16T17-56-34-043Z",
+   "finishedAt": "2026-10-16T18:14:04.128Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 0
+  }
+ ],
+ "allPassed": false,
+ "allPassedOrExplained": true
+}

@@ -1,0 +1,168 @@
+{
+ "name": "ask-question-plan-mode",
+ "runId": "2026-10-17T02-12-05-187Z",
+ "startedAt": "2026-10-17T02:12:05.192Z",
+ "finishedAt": "2026-10-17T02:14:26.731Z",
+ "passed": true,
+ "realPromptsDeclared": 1,
+ "realPrompts": [
+  {
+   "n": 7,
+   "at": "2026-10-17T02:12:12.517Z",
+   "note": "cursor/ask_question (plan mode): unanswered 30 s then error (fallback), then answered"
+  }
+ ],
+ "protocol": "protocol/ask-question-plan-mode.ndjson",
+ "protocolLines": 457,
+ "fixtures": [
+  "ask-question-plan-mode/ask"
+ ],
+ "checks": [
+  {
+   "name": "session/set_mode plan",
+   "ok": true
+  },
+  {
+   "name": "no cursor/ask_question in plan mode: the model says it has no such tool and asks in plain text",
+   "ok": true,
+   "detail": "st. I’ll wait for your answer before asking about color.The question tool is not available in this session, so I cannot ask “Pick a fruit” or “Pick a color” or return `fruit=<answer>, color=<answer>`."
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "questions": {
+   "mode": "plan",
+   "questions": [],
+   "fallbackPermissionRequests": [],
+   "createPlan": [],
+   "stopReason": "end_turn",
+   "answer": "uestion first, then I’ll wait for your answer before asking about color.The fruit question comes first. I’ll wait for your answer before asking about color.The question tool is not available in this session, so I cannot ask “Pick a fruit” or “Pick a color” or return `fruit=<answer>, color=<answer>`.",
+   "tools": [
+    {
+     "title": "Find `**/*ask*question*`",
+     "kind": "search",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "grep | head -30 \"AskQuestion\"",
+     "kind": "search",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "Find `**/*.{json,md}`",
+     "kind": "search",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "Read README.md",
+     "kind": "read",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "grep | head -20 --include=\"*.md\" \"AskQuestion|ask.question\"",
+     "kind": "search",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "grep | head -20 --include=\"*.json\" \"askQuestion|AskQuestion\"",
+     "kind": "search",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "grep | head -5 \"AskQuestion\"",
+     "kind": "search",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "Read README.md (1 - 5)",
+     "kind": "read",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "grep | head -1 --include=\"README.md\" \".\"",
+     "kind": "search",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "grep --include=\"README.md\" \"probe\"",
+     "kind": "search",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "grep --include=\"README.md\" \"probe\"",
+     "kind": "search",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "grep --include=\"README.md\" \"probe\"",
+     "kind": "search",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "grep --include=\"README.md\" \"probe\"",
+     "kind": "search",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    }
+   ]
+  },
+  "tools offered in the stored context (dynamic-tool namespaces)": {
+   "namespaces": {},
+   "mentionsAskQuestion": true
+  }
+ }
+}

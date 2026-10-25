@@ -19,12 +19,18 @@ class DirectoryApi(private val api: OrbitApi, private val handle: SessionHandle)
         listOf("q" to query, "limit" to "100"))
     suspend fun moveTargets(id: String): MoveTargets = read(listOf("sessions", id, "move-targets"), MoveTargets.serializer())
     suspend fun objectRead(path: List<String>): JsonObject = read(path, JsonObject.serializer())
+    /** A file's bytes, bounded by the server's 25 MiB upload limit. */
+    suspend fun bytes(path: List<String>, query: List<Pair<String, String>> = emptyList()): ByteArray =
+        api.request(handle, ApiRequest(path, query = query, maxResponseBytes = 25L * 1024 * 1024)).body
 
     suspend fun mutate(path: List<String>, method: HttpMethod = HttpMethod.POST, body: JsonObject? = null): ByteArray =
         api.request(handle, ApiRequest(path, method, body = body?.toString()?.encodeToByteArray())).body
     suspend fun rename(id: String, name: String) { mutate(listOf("sessions", id), HttpMethod.PATCH, buildJsonObject { put("title", name.trim()) }) }
     suspend fun pin(id: String, pinned: Boolean) { mutate(listOf("sessions", id, "pin"), if (pinned) HttpMethod.POST else HttpMethod.DELETE) }
     suspend fun complete(id: String) { mutate(listOf("sessions", id, "complete")) }
+    /** Write the session's recap again now, past the settle hooks' two-minute window: the conversation's Recap card's refresh.
+     * Answers once the pass has finished, with what it did. */
+    suspend fun refreshRecap(id: String): RecapOutcome = Wire.decode(mutate(listOf("sessions", id, "recap")), RecapOutcome.serializer())
     suspend fun restore(id: String) { mutate(listOf("sessions", id, "restore")) }
     suspend fun delete(id: String, permanent: Boolean) { mutate(listOf("sessions", id) + if (permanent) listOf("purge") else emptyList(), HttpMethod.DELETE) }
     suspend fun end(id: String) { mutate(listOf("sessions", id, "end")) }

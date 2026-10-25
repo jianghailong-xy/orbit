@@ -27,7 +27,7 @@ const HEADER = 'x-orbit-client';
 
 /** Runners are absent on purpose: `Runner.version` already carries theirs, reported on every
  *  heartbeat. Two sources of truth for one fact is how they end up disagreeing. */
-const KINDS = new Set(['web', 'ios', 'macos']);
+const KINDS = new Set(['web', 'ios', 'macos', 'android']);
 
 /** Anything a real build number is made of. Bounded so a junk header can't store a novel. */
 const VERSION_RE = /^[0-9A-Za-z.+-]{1,32}$/;
@@ -50,6 +50,8 @@ export class ClientVersionInterceptor implements NestInterceptor {
     const userId = req?.user?.userId;
     const raw = req?.headers?.[HEADER];
     if (!userId || typeof raw !== 'string') return;
+    // An administrator viewing Orbit as this account is not one of its clients.
+    if (req?.user?.credential?.kind === 'IMPERSONATION') return;
 
     const slash = raw.indexOf('/');
     if (slash < 0) return;

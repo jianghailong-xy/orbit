@@ -1,0 +1,135 @@
+{
+ "scenario": "ask-question",
+ "process": "ask",
+ "version": "2026.10.14-941492e",
+ "exit": null,
+ "actions": [
+  {
+   "t": 10,
+   "channel": "spawn",
+   "value": {
+    "args": [
+     "acp"
+    ],
+    "cwd": "<RUN>/work",
+    "envKeys": [
+     "AGENT_CLI_CREDENTIAL_STORE",
+     "CURSOR_API_KEY",
+     "CURSOR_CONFIG_DIR",
+     "CURSOR_DATA_DIR",
+     "HOME",
+     "LANG",
+     "NO_OPEN_BROWSER",
+     "ORBIT_P0_CANARY",
+     "PATH",
+     "TERM",
+     "XDG_CACHE_HOME",
+     "XDG_CONFIG_HOME",
+     "XDG_DATA_HOME"
+    ]
+   }
+  },
+  {
+   "t": 11,
+   "channel": "client->agent",
+   "id": 1,
+   "method": "initialize"
+  },
+  {
+   "t": 421,
+   "channel": "client->agent",
+   "id": 2,
+   "method": "session/new"
+  },
+  {
+   "t": 10538,
+   "channel": "client->agent",
+   "id": 3,
+   "method": "session/prompt"
+  },
+  {
+   "t": 22953,
+   "channel": "client->agent",
+   "id": 0,
+   "method": null
+  },
+  {
+   "t": 37819,
+   "channel": "client->agent",
+   "id": 1,
+   "method": null
+  },
+  {
+   "t": 59277,
+   "channel": "client->agent",
+   "id": 2,
+   "method": null
+  },
+  {
+   "t": 67308,
+   "channel": "client->agent",
+   "id": 3,
+   "method": null
+  },
+  {
+   "t": 82976,
+   "channel": "client->agent",
+   "id": 4,
+   "method": null
+  },
+  {
+   "t": 118748,
+   "channel": "client->agent",
+   "id": 5,
+   "method": null
+  },
+  {
+   "t": 180853,
+   "channel": "client->agent",
+   "id": 6,
+   "method": null
+  },
+  {
+   "t": 194046,
+   "channel": "client->agent",
+   "id": 7,
+   "method": null
+  },
+  {
+   "t": 195417,
+   "channel": "client->agent",
+   "id": 8,
+   "method": null
+  },
+  {
+   "t": 247450,
+   "channel": "client->agent",
+   "id": 9,
+   "method": null
+  },
+  {
+   "t": 255946,
+   "channel": "client->agent",
+   "id": 10,
+   "method": null
+  },
+  {
+   "t": 256944,
+   "channel": "client->agent",
+   "id": 11,
+   "method": null
+  },
+  {
+   "t": 262776,
+   "channel": "client->agent",
+   "id": 12,
+   "method": null
+  },
+  {
+   "t": 301930,
+   "channel": "client->agent",
+   "id": 13,
+   "method": null
+  }
+ ]
+}

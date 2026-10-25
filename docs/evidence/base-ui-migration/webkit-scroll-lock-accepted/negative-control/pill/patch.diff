@@ -1,0 +1,12 @@
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index 99ccdca71..c0156f70f 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -23348,3 +23348,7 @@ button.agent-progress-agent:hover {
+   text-align: center;
+   text-wrap: balance;
+ }
++
++/* Negative control, never delivered: on the settings page (the only P0 page with the "Smart model selection" switch),
++   the "Setting saved" pill 1px further right. */
++body:has([aria-label="Smart model selection"]) .toast--pill { position: relative; left: 1px; }

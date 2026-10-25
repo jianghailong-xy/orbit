@@ -1,5 +1,5 @@
 import { readMergeRecovery, type MergeRecoveryAction } from '@orbit/shared';
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
 import { Client } from 'pg';
@@ -28,12 +28,15 @@ import {
   SourceRefusalCode,
   SourceState,
 } from '@orbit/shared';
-import { Observable, Subject, filter, map, mergeMap } from 'rxjs';
+import { Observable, Subject, filter, map, merge, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { sessionEngine } from '../providers/session-engine';
 import { PushService } from '../push/push.service';
+import { enqueueRecap } from '../sessions/recap';
 import { deriveSessionCapabilities } from '../sessions/session-state';
 import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { isNoiseSystemEvent, NON_REPLAYABLE_EVENT_TYPES } from '../common/system-noise';
 import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { readOpenRequestPeers } from '../sessions/session-request';
@@ -42,6 +45,7 @@ import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
 import { RUNNER_WAKE_CHANNEL } from './runner-wake';
+import { RunnerHints, type LinkLiveEvent, type LinkTurnPrefix } from './runner-hints';
 import {
   ownerItemsForRow,
   readOwnerDecisionsBySession,
@@ -55,6 +59,7 @@ import {
   errorPayloadOf,
   isUserScopedType,
 } from './control-events';
+import { RUNNER_BEATS } from '../runners/runner-presence';
 
 const EVENT_CHANNEL = 'orbit_event';
 const INBOX_CHANNEL = 'orbit_inbox';
@@ -71,6 +76,20 @@ const CANCEL_MAX_AGE_MS = 60 * 60_000; // stop redelivering a cancel after an ho
  * backfill exists to remove, so the honest degradation is back to handing over nothing.
  */
 const TURN_PREFIX_MAX_CHARS = 64_000;
+
+/** Live events from the runner link held while a stream's turn prefix is asked of the runner (linkStream). */
+const LINK_LIVE_HOLD_CAP = 500;
+
+/**
+ * How much of a reply preview rides in a summary. The list row clips its own two previews to the
+ * same length in SQL (`SessionsService.PREVIEW_LEN`), and the summary is those same two fields on
+ * the same row: a client folds it in verbatim, so the two have to agree on the text or a row's
+ * preview would change length every time an update landed. Counted in code points, as `left()`
+ * counts them, so a clip never splits a surrogate pair.
+ */
+const PREVIEW_LEN = 200;
+const previewText = (text: string | null | undefined): string | null =>
+  text == null || text.length <= PREVIEW_LEN ? (text ?? null) : [...text].slice(0, PREVIEW_LEN).join('');
 
 /** One session's streamed-but-unpersisted text for the turn in flight. `null` is a kind that blew
  *  past TURN_PREFIX_MAX_CHARS and stays abandoned until the next boundary clears it. */
@@ -171,7 +190,8 @@ function endedSessionStates(
  * Realtime fan-out. Within a process it uses an in-memory RxJS hub (events) and an
  * EventEmitter (inbox wakeups) — zero latency. Across replicas it bridges those over
  * Postgres LISTEN/NOTIFY: every publish/notifyInbox also NOTIFYs (tagged with this
- * instance id), and a dedicated listener connection re-emits notifications from OTHER
+ * instance id) — a runner's event batch once, and its live-only events not at all
+ * (publishBatch) — and a dedicated listener connection re-emits notifications from OTHER
  * instances into the local hub/inbox. The own-instance tag means single-replica
  * behaviour is unchanged (a process ignores its own notifications; clients also dedup
  * by seq as a backstop).
@@ -220,6 +240,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly push: PushService,
+    /** The runner link's hints, published beside the wakes below (runner-hints.ts); absent in the specs that build
+     *  this service by hand. */
+    @Optional() private readonly hints?: RunnerHints,
   ) {
     this.inbox.setMaxListeners(0);
     this.runnerWake.setMaxListeners(0);
@@ -288,7 +311,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   private onNotify(channel: string, payload?: string): void {
     if (!payload) return;
-    let m: { i?: string; r: string; c?: true; e?: NormalizedRunEvent; s?: number };
+    let m: { i?: string; r: string; c?: true; e?: NormalizedRunEvent; s?: number; b?: NormalizedRunEvent[]; f?: number; t?: number };
     try {
       m = JSON.parse(payload);
     } catch {
@@ -303,11 +326,21 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     }
     if (channel === RUNNER_WAKE_CHANNEL) {
       this.wakeRunnerLocally(m.r);
+      // A wake written inside a transaction (notifyRunnerWakeOnCommit) arrives here, at its commit, on every
+      // replica, and none has hinted it yet, so each one does: the spare ones cost one extra heartbeat, as the held
+      // wake above does. Any other wake was hinted by the replica that emitted it.
+      if (m.c) this.hints?.commands(m.r);
       return;
     }
     if (channel === EVENT_CHANNEL) {
       if (m.e) {
         this.hub.next({ runId: m.r, event: m.e });
+      } else if (Array.isArray(m.b)) {
+        // A batch the ingest stored, whole (publishBatch).
+        for (const event of m.b) this.hub.next({ runId: m.r, event });
+      } else if (typeof m.f === 'number' && typeof m.t === 'number') {
+        // A batch too big to ride along: read back what the ingest stored of it.
+        this.relayStoredBatch(m.r, m.f, m.t);
       } else if (typeof m.s === 'number') {
         // Oversized event was sent as a signal — fetch it from the durable log.
         this.prisma.runEvent
@@ -331,6 +364,32 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Another replica's batch, from the rows the ingest stored, in seq order (publishBatch's range): what that replica
+   * published of it and nothing else, so neither a noise ping nor a live-only row (a tombstone, a legacy delta).
+   */
+  private relayStoredBatch(runId: string, from: number, to: number): void {
+    this.prisma.runEvent
+      .findMany({
+        where: { sessionId: runId, seq: { gte: from, lte: to }, type: { notIn: [...NON_REPLAYABLE_EVENT_TYPES] } },
+        orderBy: { seq: 'asc' },
+        select: { seq: true, type: true, payload: true, turnId: true, createdAt: true },
+      })
+      .then((rows) => {
+        for (const row of rows) {
+          const event: NormalizedRunEvent = {
+            seq: row.seq,
+            type: row.type as RunEventType,
+            payload: row.payload as Record<string, unknown>,
+            turnId: row.turnId ?? undefined,
+            ts: row.createdAt.toISOString(),
+          };
+          if (!isNoiseSystemEvent(event)) this.hub.next({ runId, event });
+        }
+      })
+      .catch(() => undefined);
+  }
+
   private notifyRaw(channel: string, payload: string): void {
     // executeRaw (not queryRaw): pg_notify returns void, which Prisma's queryRaw
     // can't deserialize ("Failed to deserialize column of type 'void'"). executeRaw
@@ -343,10 +402,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   // ── inbox (interactive turn delivery) ───────────────────────────────────
 
-  /** Wake a runner parked in GET /runner/runs/:id/inbox after a turn is enqueued. */
+  /** Wake a runner parked in GET /runner/runs/:id/inbox after a turn is enqueued, and hint the runner the session is
+   *  assigned to over the runner link. */
   notifyInbox(runId: string): void {
     this.inbox.emit(runId); // same replica
     this.notifyRaw(INBOX_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId })); // others
+    this.hints?.inbox(runId);
   }
 
   /** Park until a turn is enqueued for this run, or the timeout elapses. */
@@ -370,11 +431,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * spinner. The runner parks in GET /runner/wake (waitForRunnerWake) and beats when it returns.
    *
    * Only a nudge: the work itself stays in the row and is delivered by the heartbeat, so a wake that
-   * is lost costs the old half-minute and nothing else.
+   * is lost costs the old half-minute and nothing else. Over the runner link the same wake is also a
+   * hint (runner-hints.ts), which has the runner send its heartbeat at once.
    */
   notifyRunnerWake(runnerId: string): void {
     this.wakeRunnerLocally(runnerId);
     this.notifyRaw(RUNNER_WAKE_CHANNEL, JSON.stringify({ i: this.instanceId, r: runnerId }));
+    this.hints?.commands(runnerId);
   }
 
   /** A wake with nobody parked is held for the next poll, so one asked for in the moment between
@@ -412,9 +475,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   // ── run events (SSE) ────────────────────────────────────────────────────
 
   publish(runId: string, event: NormalizedRunEvent): void {
-    this.retainTurnPrefix(runId, event); // before the hub, so no subscriber can read it stale
-    this.hub.next({ runId, event }); // same replica
-    this.published.next({ runId, event });
+    this.publishHere(runId, event);
     const payload = JSON.stringify({ i: this.instanceId, r: runId, e: event });
     // NOTE: NOTIFY's limit is 8000 BYTES — measure UTF-8 bytes, not string length
     // (a multibyte CJK/emoji event can be < 7000 chars but > 8000 bytes).
@@ -425,6 +486,55 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // (already-persisted) RunEvent row.
       this.notifyRaw(EVENT_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId, s: event.seq }));
     }
+    // A person's decision on a card, published once its write has committed (SessionsService.decideApproval): the
+    // card's reader may be waiting for it, so over the runner link the runner the session is assigned to is hinted
+    // (runner-hints.ts). Here and not in publishHere: this single-event path is the one the decision takes, on the
+    // replica that made it. An event the NOTIFY bridge carries in from another replica never passes through it, and
+    // neither does an ingest batch (publishBatch). A card collected as ABANDONED carries no behavior: it is no
+    // decision, and nothing is left waiting for it.
+    if (event.type === RunEventType.APPROVAL_RESOLVED) {
+      const resolved = event.payload as { id?: unknown; behavior?: unknown };
+      if (typeof resolved.id === 'string' && (resolved.behavior === 'allow' || resolved.behavior === 'deny')) {
+        this.hints?.approval(runId, resolved.id);
+      }
+    }
+  }
+
+  /**
+   * A batch of a session's events as the ingest took them (RunnerApiController.ingestEvents). Each one reaches this
+   * replica's streams as `publish` hands it over. The other replicas hear of the batch ONCE, not once per event
+   * (docs/runner-link-design.md §6.7), and only of what was stored:
+   *
+   *   - live-only events (NON_REPLAYABLE_EVENT_TYPES: reply and thinking deltas, tool output snapshots, background
+   *     output) are not announced at all. A runner on the link sends them on its live stream, which reaches every
+   *     replica a client watches from over NATS (`ses.<id>.live`, runner-hints.ts). One on HTTPS reaches the streams
+   *     of the replica it posts to, which with one replica is every stream there is.
+   *   - the stored events ride the notification whole when it fits (MAX_NOTIFY_BYTES), and otherwise as the seq range
+   *     the other replicas read back from run_event, where the ingest has already stored them.
+   */
+  publishBatch(runId: string, events: readonly NormalizedRunEvent[]): void {
+    const stored: NormalizedRunEvent[] = [];
+    for (const event of events) {
+      this.publishHere(runId, event);
+      if (!NON_REPLAYABLE_EVENT_TYPES.includes(event.type)) stored.push(event);
+    }
+    if (stored.length === 0) return;
+    const whole = JSON.stringify({ i: this.instanceId, r: runId, b: stored });
+    if (Buffer.byteLength(whole, 'utf8') <= MAX_NOTIFY_BYTES) {
+      this.notifyRaw(EVENT_CHANNEL, whole);
+      return;
+    }
+    const seqs = stored.map((event) => event.seq);
+    const from = seqs.reduce((a, b) => Math.min(a, b));
+    const to = seqs.reduce((a, b) => Math.max(a, b));
+    this.notifyRaw(EVENT_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId, f: from, t: to }));
+  }
+
+  /** One event to this replica's own streams and consumers; `publish` and `publishBatch` add the other replicas. */
+  private publishHere(runId: string, event: NormalizedRunEvent): void {
+    this.retainTurnPrefix(runId, event); // before the hub, so no subscriber can read it stale
+    this.hub.next({ runId, event }); // same replica
+    this.published.next({ runId, event });
     // Locally-originated only — NOTIFY-bridged events from other replicas arrive via onNotify →
     // hub, not here — so the owner's badge is reconciled and synced exactly once, on the origin.
     if (RealtimeService.BADGE_EVENTS.has(event.type)) {
@@ -446,16 +556,85 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     const status = event.payload as { final?: boolean; retryAt?: string | null };
     if (event.type === RunEventType.STATUS && status.final && !status.retryAt) {
       void this.push.notifySessionSettled(runId);
+      // The same settlement, one line later, asks for the session's last recap (sessions/recap.ts):
+      // this branch is the one event per finalization — /turn-complete's failure, the runner's
+      // /finalize, the reaper's forceFinalize, a spent retry — so hooking here covers every way a
+      // session ends rather than the doors that happen to end it. `finalize` is what a settle that
+      // arrives inside the two-minute window needs: the pass ignores the window, and the write is
+      // what the session list draws next. Fire and forget, like the push above it: the pass is
+      // queued and this call returns, and nothing the pass can meet may fail a settlement.
+      void enqueueRecap({
+        db: this.prisma,
+        sessionId: runId,
+        finalize: true,
+        onWritten: () => this.publishSessionUpdated(runId),
+      }).catch(() => undefined);
     }
   }
 
   streamForRun(runId: string): Observable<NormalizedRunEvent> {
-    return this.hub.asObservable().pipe(
+    const hub$ = this.hub.asObservable().pipe(
       // Lifecycle signals (session_created/ended) are control-plane-internal: they ride the hub
       // for the NOTIFY bridge but must never leak into a per-session transcript stream.
       filter((m) => m.runId === runId && !isLifecycleType(m.event.type)),
       map((m) => m.event),
     );
+    // Without the runner link the stream is the hub alone, exactly as before.
+    if (!this.hints?.enabled) return hub$;
+    return merge(hub$, this.linkStream(this.hints, runId));
+  }
+
+  /**
+   * The half of a session's stream the runner link carries (docs/runner-link-design.md §5.9; runner-hints.ts): while
+   * it is open, this stream counts as one of the session's watchers, so the runner sends its live stream; it starts
+   * with what the runner's current turn has streamed so far, asked of the runner, and goes on with the live events
+   * after it. Events that arrive while the runner is asked are held, and those the prefix already folds in are left
+   * out, so a delta reaches the client once. A runner that works over HTTPS answers nothing here, and its stream is
+   * the hub's, its prefix this replica's own (`turnPrefix`).
+   */
+  private linkStream(hints: RunnerHints, runId: string): Observable<NormalizedRunEvent> {
+    return new Observable<NormalizedRunEvent>((subscriber) => {
+      const release = hints.watch(runId);
+      let prefix: LinkTurnPrefix | null | undefined; // undefined while the runner is asked
+      let held: LinkLiveEvent[] = [];
+      // Only the prefix's own turn is cut at its live_seq: another turn's events are all new.
+      const fresh = (e: LinkLiveEvent): boolean =>
+        !prefix || e.event.turnId !== prefix.turnId || e.liveSeq > prefix.throughLiveSeq;
+      const stop = hints.liveEvents(runId, (e) => {
+        if (prefix === undefined) {
+          if (held.length < LINK_LIVE_HOLD_CAP) held.push(e);
+          return;
+        }
+        if (fresh(e)) subscriber.next(e.event);
+      });
+      let closed = false;
+      void hints.turnPrefix(runId).then((answer) => {
+        if (closed) return;
+        prefix = answer;
+        if (answer?.turnId) {
+          const ts = new Date().toISOString();
+          // Thinking first, as the replay hands a held prefix over (sessions.controller.ts prefixEvents).
+          if (answer.thinking) {
+            subscriber.next({ seq: 0, type: RunEventType.THINKING_DELTA, payload: { text: answer.thinking }, turnId: answer.turnId, ts });
+          }
+          if (answer.text) {
+            subscriber.next({ seq: 0, type: RunEventType.TEXT_DELTA, payload: { text: answer.text }, turnId: answer.turnId, ts });
+          }
+        }
+        for (const e of held) if (fresh(e)) subscriber.next(e.event);
+        held = [];
+      });
+      return () => {
+        closed = true;
+        stop();
+        release();
+      };
+    });
+  }
+
+  /** This instance's watcher counts of the sessions given, which the heartbeat route answers a link call with. */
+  linkWatchersOf(sessionIds: Iterable<string>): { instance: string; sessions: Array<{ sessionId: string; watchers: number }> } | null {
+    return this.hints?.enabled ? this.hints.watchersOf(sessionIds) : null;
   }
 
   /**
@@ -626,9 +805,11 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   /** Drop the cached owner + workspace of a session that moved to another workspace
    *  (SessionsService.move). The cached workspaceId is otherwise only evicted when the session
-   *  ends, and it is what every later control event names as the envelope's `agentId`. */
+   *  ends, and it is what every later control event names as the envelope's `agentId`. The runner
+   *  its inbox hints go to is forgotten with them: a move to another workspace can change it. */
   forgetSessionOwner(sessionId: string): void {
     this.ownerCache.delete(sessionId);
+    this.hints?.forgetSession(sessionId);
   }
 
   /** A still-PENDING user turn was added or withdrawn. Queued turns have no durable transcript
@@ -949,7 +1130,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         runtimeSessionId: true,
         assignedRunnerId: true,
         assignedRunner: {
-          select: { id: true, status: true, lastHeartbeatAt: true },
+          select: { id: true, status: true, ...RUNNER_BEATS },
         },
         workspaceId: true,
         folderId: true,
@@ -961,6 +1142,17 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         sourceRefusalCode: true,
         sourceRefusalDetail: true,
         lastTurnAt: true,
+        // What the row previews, and the recap the list prefers to it: an already-open list
+        // learns a new reply (or a fresh recap) from this event alone, so a summary that omitted
+        // them would leave every row on screen previewing the turn before the one just finished.
+        lastAssistantText: true,
+        lastUserText: true,
+        recapText: true,
+        recapAt: true,
+        // The engine it runs on, and what the old rules derive it from for a row that has none.
+        engine: true,
+        provider: true,
+        providerBuiltin: true,
         workspace: { select: { id: true, name: true, model: true, effort: true } },
         coordinatorForProject: { select: { id: true, title: true } },
       },
@@ -999,6 +1191,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       lifecycleState,
       filingState,
       capabilities,
+      // The engine it runs on (docs/provider-engine-contract.md §6.1): recorded, else derived, null
+      // when nobody can tell.
+      engine: await sessionEngine(this.prisma, s),
       agentId: s.workspaceId ?? null,
       agent: s.workspace
         ? {
@@ -1036,6 +1231,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
       owesReplyTo: peers?.owesReplyTo ?? [],
       lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,
+      // The two previews, clipped the way the list's own query clips them, and the recap beside
+      // them. Null as a value, not "unchanged": a preview the server cleared has to clear on the
+      // row holding this summary, and a recap the session does not have is a null.
+      lastAssistantText: previewText(s.lastAssistantText),
+      lastUserText: previewText(s.lastUserText),
+      recapText: s.recapText ?? null,
+      recapAt: s.recapAt ? s.recapAt.toISOString() : null,
       // Read fresh with the status it qualifies: the same summary has to be able to say both
       // "failed, retrying at 12:04" and, once the retries are spent, "failed, nothing coming".
       retryAt: s.retryAt ? s.retryAt.toISOString() : null,
@@ -1143,6 +1345,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     const sessions = await this.prisma.session.findMany({
       where: {
         assignedRunnerId: runnerId,
+        // A LANDING row has no branch and no runner, and must never be handed one (§2.9 LS6).
+        sessionKind: 'CONVERSATION',
         mergeStatus: 'pending',
         ...(!supportsRecovery ? { mergeRecoveryAction: null } : {}),
         mergeOperationId: { not: null },
@@ -1262,6 +1466,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     const sessions = await this.prisma.session.findMany({
       where: {
         assignedRunnerId: runnerId,
+        // A LANDING row has no worktree to commit (§2.9 LS6).
+        sessionKind: 'CONVERSATION',
         commitStatus: 'pending',
         commitOperationId: { not: null },
         branch: { not: null },

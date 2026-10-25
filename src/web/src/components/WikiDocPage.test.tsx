@@ -5,7 +5,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { App as AntApp } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiDocView, WikiDocsDirectory, WikiDocsIndexItem, WikiPlanJob, WikiPlanProposal, WikiPlanVersion } from '@orbit/shared';
 import { WikiPage } from '../pages/WikiPage';
@@ -119,18 +118,16 @@ async function open(path: string): Promise<void> {
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[path]}>
-          <AntApp>
-            <Routes>
-              <Route path="/wiki/:space" element={<WikiPage route="home" />} />
-              <Route path="/wiki/:space/browse" element={<WikiPage route="browse" />} />
-              <Route path="/wiki/:space/az" element={<WikiPage route="index" />} />
-              <Route path="/wiki/:space/d/:doc" element={<WikiPage route="doc" />} />
-              <Route path="/wiki/:space/plan" element={<WikiPage route="plan" />} />
-              <Route path="/wiki/:space/e/:entry" element={<span>entry</span>} />
-              <Route path="/sessions/:id" element={<span>session</span>} />
-            </Routes>
-            <Where />
-          </AntApp>
+          <Routes>
+            <Route path="/wiki/:space" element={<WikiPage route="home" />} />
+            <Route path="/wiki/:space/browse" element={<WikiPage route="browse" />} />
+            <Route path="/wiki/:space/az" element={<WikiPage route="index" />} />
+            <Route path="/wiki/:space/d/:doc" element={<WikiPage route="doc" />} />
+            <Route path="/wiki/:space/plan" element={<WikiPage route="plan" />} />
+            <Route path="/wiki/:space/e/:entry" element={<span>entry</span>} />
+            <Route path="/sessions/:id" element={<span>session</span>} />
+          </Routes>
+          <Where />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -190,8 +187,8 @@ describe("a document's page", () => {
     await open('/wiki/orbit/d/session-runtime');
     await vi.waitFor(() => expect(page()?.querySelector('[aria-label="Footnote 44"]')).toBeTruthy());
     await press(page().querySelector('[aria-label="Footnote 44"]'));
-    await vi.waitFor(() => expect(document.querySelector('.ant-popover .wk-fn2')).toBeTruthy());
-    const card = document.querySelector('.ant-popover .wk-fn2')!;
+    await vi.waitFor(() => expect(document.querySelector('.orbit-popover .wk-fn2')).toBeTruthy());
+    const card = document.querySelector('.orbit-popover .wk-fn2')!;
     expect(spaced(card.querySelector('.k')!)).toBe('[44] Session · User message quote verified ✓');
     expect(text('.wk-quote-text', card)).toEqual(['“runner — drain 就会把作业杀掉，唤醒不一定送到，你这次就是这么停了六小时”']);
     expect(text('.loc', card)[0]).toContain('执行任务：例外待办：模型、FAILED 全路径来源 · 项目推进可靠性 · turn #4');
@@ -206,8 +203,8 @@ describe("a document's page", () => {
     await open('/wiki/orbit/d/session-runtime');
     await vi.waitFor(() => expect(page()?.querySelector('[aria-label="Footnote 9"]')).toBeTruthy());
     await press(page().querySelector('[aria-label="Footnote 9"]'));
-    await vi.waitFor(() => expect(document.querySelector('.ant-popover .wk-fn2 .code')).toBeTruthy());
-    const card = document.querySelector('.ant-popover .wk-fn2')!;
+    await vi.waitFor(() => expect(document.querySelector('.orbit-popover .wk-fn2 .code')).toBeTruthy());
+    const card = document.querySelector('.orbit-popover .wk-fn2')!;
     expect(text('.code .ln.q .i', card)).toEqual(['330']);
     expect(text('.code .ln.cut', card)).toEqual(['… 4 more lines']);
     const link = card.querySelector<HTMLAnchorElement>('.loc a')!;

@@ -296,7 +296,7 @@ describe('a wiki link’s pages', { timeout: 60_000 }, () => {
     ]);
 
     await click(container.querySelector('#wk-fnref-1'), 'footnote 1');
-    const card = document.body.querySelector('.ant-popover .wk-fn2')!;
+    const card = document.body.querySelector('.orbit-popover .wk-fn2')!;
     expect(card.querySelector('.k')?.textContent).toContain('Code');
     expect(card.querySelector('.code .ln.q')?.textContent).toContain('claimTurn(next);');
     expect(card.querySelector('.loc')?.textContent).toBe('src/runner/loop.ts · RunLoop.claim · L10–12');
@@ -304,7 +304,7 @@ describe('a wiki link’s pages', { timeout: 60_000 }, () => {
     expect(card.querySelector('.via')).toBeNull();
 
     await click(container.querySelector('#wk-fnref-3'), 'footnote 3');
-    const comment = [...document.body.querySelectorAll('.ant-popover .wk-fn2')].find((c) => c.textContent?.includes('it retries'))!;
+    const comment = [...document.body.querySelectorAll('.orbit-popover .wk-fn2')].find((c) => c.textContent?.includes('it retries'))!;
     expect(comment.querySelector('.k')?.textContent).toContain('Owner’s comment');
     expect(comment.querySelector('.k')?.textContent).toContain('quote not found');
     // A visitor cannot open the original, so they are not told to.

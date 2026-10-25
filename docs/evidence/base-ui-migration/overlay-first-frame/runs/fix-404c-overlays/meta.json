@@ -1,0 +1,16 @@
+{
+ "label": "fix-404c-overlays",
+ "step": "overlays",
+ "tree": "/mnt/data/tmp/overlay-first-frame-34brok/run",
+ "command": "npm run test:ui-overlays -w @orbit/web",
+ "commit": "aa162207c1bd1353224d62e38634dc21f9707e78",
+ "webChanges": [],
+ "webDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "startedAt": "2026-10-08T17:52:28Z",
+ "endedAt": "2026-10-08T17:56:24+00:00",
+ "loadAverage": {
+  "start": "12.55 14.65 13.95",
+  "end": "13.42 12.89 13.29"
+ },
+ "exitCode": 0
+}

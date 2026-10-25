@@ -58,6 +58,9 @@ interface ProjectTaskWorkStateRow {
  * row that has work is one somebody runs, reads progress on and expects to see in RUNNING or READY.
  * Only `VERIFICATION_PASSED` says that nothing here is ever dispatched, which is what makes
  * "waiting for its verifier" the whole truth about the row rather than half of it.
+ *
+ * Migration 0441's `project_rollup_candidate` triggers spell this test again in SQL, to note a task
+ * the moment it becomes a gate row; `project-rollup-candidate.pg.spec.ts` holds the two together.
  */
 export function verificationSubjectSql(alias = 't'): string {
   return `${alias}."completion_policy" = 'VERIFICATION_PASSED'::"task_completion_policy"

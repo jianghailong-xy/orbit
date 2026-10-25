@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { OpenItemDeliveryCard as Delivery, TaskStartCard as StartCard } from '@orbit/shared';
+import type {
+  ConfirmationReviewRequestCard as ReviewCard,
+  OpenItemDeliveryCard as Delivery,
+  TaskStartCard as StartCard,
+} from '@orbit/shared';
 import type { PublicLinkResolver, RunEvent } from '../components/Transcript';
+import { OPEN_TASK_SESSION } from '../components/ConfirmationReviewTurnCards';
+import { REVIEW_REQUESTED } from '../components/OwnerConfirmationReview';
 import { encodeId } from './idCodec';
 import { exportSessionHtml, type ExportSession } from './sessionExport';
 import { TASK_START_LABEL, TASK_START_OPEN_TASK } from './taskStartCard';
@@ -18,12 +24,13 @@ vi.mock('highlight.js/styles/github.css?raw', () => ({ default: '' }));
  * The file is built by rendering the very same `<Transcript>` the app shows, through
  * `renderToStaticMarkup` — which builds a render tree of its own, so the router the page is sitting
  * under is NOT in it. Anything the transcript drew as a react-router `<Link>` therefore had nothing
- * to route with and threw ("Cannot destructure property 'basename'"), so a session that named a task
- * (`orbit-task:<id>`), started one, or delivered an exception item about one exported as nothing at
- * all: the page could only say "Download failed".
+ * to route with and threw ("Cannot destructure property 'basename'"), and the review card's press
+ * onto the run threw for the same reason (`useNavigate()`). So a session that named a task
+ * (`orbit-task:<id>`), started one, delivered an exception item about one, or was handed a
+ * confirmation review request exported as nothing at all: the page could only say "Download failed".
  *
  * Two things are held here, and they are different. The export does not throw — each case below is
- * one of the three shapes that used to take it down. And every link it leaves behind is a whole URL,
+ * one of the four shapes that used to take it down. And every link it leaves behind is a whole URL,
  * which is not a cosmetic difference: the file is opened from disk, offline, where the router's own
  * path (`/tasks/<id>`) resolves against the filesystem and goes nowhere. Saved from the public page,
  * the file links no further than that page does (its PublicLinkResolver): the rest are words.
@@ -104,7 +111,9 @@ const DELIVERY: Delivery = {
   check: null,
   errorCode: null,
   failure: null,
-  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+  // A conflict's cell holds no rerun door (`decideIntegrationRetry` refuses one), so the server
+  // lists none here: the card is what the server sends, and `Retry the task` is not in it.
+  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'CANCEL_TASK'],
   landing: { receipts: 0, state: 'NOT_KNOWN', upstream: 'main', integration: 'main' },
 };
 
@@ -116,6 +125,30 @@ const DELIVERED: RunEvent = {
   payload: {
     text: `【例外待办】Merge conflict: ${DELIVERY.title}\n\n冲突的文件（4 个）：\n- ${DELIVERY.files[0]}`,
     openItemDelivery: DELIVERY,
+  },
+};
+
+/** 4. The turn a reviewer is handed: which task's report they are asked to review, by when, and the
+ *  way onto the run that reported — a press in the app, a link here (lib/confirmationReviewTurns). */
+const REVIEW_REQUEST: ReviewCard = {
+  requestId: '01920000-0000-7000-8000-0000000000f1',
+  reviewId: 'rv1',
+  taskId: TASK,
+  title: 'runner + web：配额按账户归属',
+  runSessionId: FAILED_SESSION,
+  branch: 'orbit/p1-1c207b',
+  sha: '59d98153ef85c565646fede291f66f61940573c7',
+  dueAt: '2026-09-21T12:55:00.000Z',
+};
+
+const REVIEWING: RunEvent = {
+  seq: 4,
+  type: 'user',
+  turnId: 'turn-4',
+  ts: '2026-09-21T12:31:20.000Z',
+  payload: {
+    text: `【复核请求】请复核任务「${REVIEW_REQUEST.title}」。`,
+    confirmationReviewRequest: REVIEW_REQUEST,
   },
 };
 
@@ -184,6 +217,17 @@ describe('exporting a session that names Orbit objects', () => {
     expect(links).toContain(`${ORIGIN}/tasks/${encodeId(CONFLICTED_TASK)}`);
     expect(links).toContain(`${ORIGIN}/sessions/${encodeId(FAILED_SESSION)}`);
     expect(html).toContain('Open the failed session ↗');
+  });
+
+  it('links a review request’s task and run by URL', async () => {
+    const html = await exported([REVIEWING]);
+
+    const links = bodyLinks(html);
+    expect(links).toContain(`${ORIGIN}/tasks/${encodeId(TASK)}`);
+    expect(links).toContain(`${ORIGIN}/sessions/${encodeId(FAILED_SESSION)}`);
+    // The card, not the block the reviewer was handed — and its way onto the run is still there.
+    expect(html).toContain(REVIEW_REQUESTED);
+    expect(html).toContain(OPEN_TASK_SESSION);
   });
 
   it('saved from a session link, leaves each of those links its words and no address', async () => {

@@ -24,12 +24,21 @@ public enum TaskDetailCopy {
 
     /// The detail's own name for a first run (the list rows say `Run`).
     public static let runNow = "Run now"
+    /// Under a Run that is the task's only start (`TaskDetailLogic.runNowHint`): the web's `runNowHint`.
+    public static let nothingStartsThisTask =
+        "Nothing starts this task by itself: auto-run needs a prerequisite or a project, and it has neither."
 
     // MARK: details
 
     public static let assigneeLabel = "Assignee"
+    /// The engine pin, above the Provider pin (board 6 ①): the CLI the task's runs use.
+    public static let engineLabel = "Engine"
     public static let providerLabel = "Provider"
     public static let modelLabel = "Model"
+    /// The Engine field's unpinned choice: the assignee workspace's engine.
+    public static let assigneesEngine = "Assignee's"
+    /// The Provider field's unpinned choice: the engine's own default credential (board 6 ②).
+    public static let engineDefault = "Engine default"
     public static let listLabel = "List"
     public static let startAtLabel = "Start at"
     public static let createdByLabel = "Created by"
@@ -412,6 +421,19 @@ public enum TaskDetailLogic {
             trailing = entry.kind == .retry ? .retry : .runNow
         }
         return TaskDetailActionRow(leading: leading, trailing: trailing)
+    }
+
+    /// What a Run the page can take says when it is the task's only start — the web's `runNowHint`,
+    /// its fifth case. Auto-run never picks up an OPEN task in no project that has no prerequisites
+    /// (the dependency sweep wants a prerequisite, the independent release a project), so it looks
+    /// ready and waits for this press; a scheduled start does start it, so a task with one is not this
+    /// case. Nil for every other task, and for a payload that does not carry the task's prerequisites.
+    /// The reasons a Run cannot be taken come first, as on the web: the page asks this only of a Run
+    /// it can take.
+    public static func runNowHint(_ task: TaskItem) -> String? {
+        guard task.status == .open, task.projectId == nil, task.dependsOn?.isEmpty == true,
+              (task.runAt ?? "").isEmpty else { return nil }
+        return TaskDetailCopy.nothingStartsThisTask
     }
 
     // MARK: details

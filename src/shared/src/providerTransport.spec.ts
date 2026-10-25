@@ -4,6 +4,7 @@ import {
   PROVIDER_TRANSPORTS,
   SESSION_CODEX_STEER_V1,
   SESSION_CURRENT_WORK_ROUTING_V1,
+  runtimeTakesMidTurnSteer,
   supportsMidTurnSteer,
   supportsTargetBoundCurrentWorkSteer,
 } from './providerTransport';
@@ -18,6 +19,20 @@ import {
  */
 
 const DECLARED = [SESSION_CODEX_STEER_V1];
+
+describe('runtimeTakesMidTurnSteer', () => {
+  it('offers Steer for the runtimes that can be written into mid-turn, whatever their runner said', () => {
+    // A client cannot see what the runner declared; the server asks it and refuses an old one.
+    expect(runtimeTakesMidTurnSteer(AgentProvider.CLAUDE)).toBe(true);
+    expect(runtimeTakesMidTurnSteer(AgentProvider.CODEX)).toBe(true);
+  });
+
+  it('never offers it where a mid-turn message can only queue', () => {
+    for (const runtime of [AgentProvider.KIMI, AgentProvider.DSH, AgentProvider.OPENCODE, AgentProvider.ANTIGRAVITY, 'gemini']) {
+      expect(runtimeTakesMidTurnSteer(runtime), runtime).toBe(false);
+    }
+  });
+});
 
 describe('supportsMidTurnSteer', () => {
   it('lets claude steer on any runner that speaks the kind at all', () => {

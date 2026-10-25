@@ -1,0 +1,17 @@
+14 pairs of stylesheets linked in opposite order (the project tip's order, then the delivery's):
+  components/ui/Badge.css before components/ui/Floating.css  ->  components/ui/Floating.css before components/ui/Badge.css
+  components/ui/Badge.css before components/ui/Select.css  ->  components/ui/Select.css before components/ui/Badge.css
+  components/ui/Badge.css before components/ui/ChoiceControls.css  ->  components/ui/ChoiceControls.css before components/ui/Badge.css
+  components/ui/Badge.css before components/ui/NumberInput.css  ->  components/ui/NumberInput.css before components/ui/Badge.css
+  components/ui/Floating.css before components/ui/NumberInput.css  ->  components/ui/NumberInput.css before components/ui/Floating.css
+  components/ui/Avatar.css before components/ui/Select.css  ->  components/ui/Select.css before components/ui/Avatar.css
+  components/ui/Avatar.css before components/ui/ChoiceControls.css  ->  components/ui/ChoiceControls.css before components/ui/Avatar.css
+  components/ui/Avatar.css before components/ui/NumberInput.css  ->  components/ui/NumberInput.css before components/ui/Avatar.css
+  components/ui/Select.css before components/ui/NumberInput.css  ->  components/ui/NumberInput.css before components/ui/Select.css
+  components/ui/Segmented.css before components/ui/ChoiceControls.css  ->  components/ui/ChoiceControls.css before components/ui/Segmented.css
+  components/ui/Segmented.css before components/ui/NumberInput.css  ->  components/ui/NumberInput.css before components/ui/Segmented.css
+  components/ui/ChoiceControls.css before components/ui/NumberInput.css  ->  components/ui/NumberInput.css before components/ui/ChoiceControls.css
+  components/ui/Card.css before components/ui/NumberInput.css  ->  components/ui/NumberInput.css before components/ui/Card.css
+  components/ui/Skeleton.css before components/ui/NumberInput.css  ->  components/ui/NumberInput.css before components/ui/Skeleton.css
+9 stylesheets, 9424 rule pairs across the reordered pairs, 2685 of the same specificity, 1 candidates (JSX class groups read: 4983)
+  components/ui/Floating.css | components/ui/NumberInput.css: [] .orbit-menu-icon > *  vs  [] .orbit-number-input-field  (0, 1, 0)  ['min-width']  (a subject without a class)

@@ -1,0 +1,27 @@
+{
+ "label": "ref-404c-build",
+ "step": "build",
+ "tree": "/mnt/data/tmp/overlay-first-frame-34brok/ref",
+ "command": "npm run build -w @orbit/shared && npm run build -w @orbit/web",
+ "commit": "aa162207c1bd1353224d62e38634dc21f9707e78",
+ "webChanges": [
+  "M src/web/src/components/ui/Combobox.tsx",
+  " M src/web/src/components/ui/Floating.ts",
+  " M src/web/src/components/ui/Menu.tsx",
+  " M src/web/src/components/ui/MultiSelect.tsx",
+  " M src/web/src/components/ui/Overlay.tsx",
+  " M src/web/src/components/ui/Popconfirm.tsx",
+  " M src/web/src/components/ui/Popover.tsx",
+  " M src/web/src/components/ui/README.md",
+  " M src/web/src/components/ui/Select.tsx",
+  " M src/web/src/components/ui/Tooltip.tsx"
+ ],
+ "webDiffSha256": "e344fb1940fc8bc16b4819846bb7ca31597804ebab372e31f06072e48aa58daa",
+ "startedAt": "2026-10-08T18:25:19Z",
+ "endedAt": "2026-10-08T18:25:41+00:00",
+ "loadAverage": {
+  "start": "9.95 13.33 13.97",
+  "end": "13.65 13.97 14.17"
+ },
+ "exitCode": 0
+}

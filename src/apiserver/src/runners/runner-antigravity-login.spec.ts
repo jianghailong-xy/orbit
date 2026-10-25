@@ -72,6 +72,7 @@ function harness(storedCapabilities: string[] = [ANTIGRAVITY_GOOGLE_LOGIN_V1, 'o
     },
   };
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: runnerModel,
     workspace: { findMany: async () => [] },
     codexRateLimitResetOperation: { findMany: async () => [] },

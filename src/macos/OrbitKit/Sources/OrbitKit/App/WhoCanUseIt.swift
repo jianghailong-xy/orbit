@@ -74,7 +74,7 @@ public struct WhoCanUseIt: Equatable, Sendable {
     public var modeHint: String { people ? Self.theySee(pool.label) : Self.nobodyElse }
 
     public static func theySee(_ label: String) -> String {
-        "They see \(label) on their Providers page and in the session picker."
+        "They see \(label) on their Infrastructure page and in the session picker."
     }
     public static let nobodyElse = "Nobody else in Orbit sees this pool or its accounts."
 
@@ -198,7 +198,7 @@ public enum SharePool {
         }
         var facts = [
             AddPoolKey.Fact(lead: "They see \(pool.label)",
-                            rest: " on their Providers page and in the session picker, and can start sessions on it."),
+                            rest: " on their Infrastructure page and in the session picker, and can start sessions on it."),
             run,
         ]
         // The accounts' own rule (migration 0371): what a member may sign in of their own, said before the

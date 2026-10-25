@@ -60,4 +60,20 @@ describe('mergeBackgroundShells', () => {
     expect(merged.map((s) => s.shellId)).toEqual(['done', 'brand-new']);
     expect(merged[0].latestOutput).toBe('server');
   });
+
+  it('takes the live row for a shell that terminated after the server snapshot was taken', () => {
+    // The snapshot is read once per session open, so a shell running at that moment and stopped
+    // afterwards is known to the live stream alone. Keeping the snapshot's `running` left the tray
+    // spinning — and its completion toast silent — for a process that had already stopped: exactly
+    // what a person sees after pressing Stop on a session with a job behind it.
+    const merged = mergeBackgroundShells(
+      [shell({ status: 'running', latestOutput: 'the last snapshot', latestOutputSeq: 20 })],
+      [shell({ status: 'killed', latestOutput: 'the tail before the kill', latestOutputSeq: 18 })],
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].status).toBe('killed');
+    // What the process wrote is not lost with it: the server's snapshot is still the newer output.
+    expect(merged[0].latestOutput).toBe('the last snapshot');
+  });
 });

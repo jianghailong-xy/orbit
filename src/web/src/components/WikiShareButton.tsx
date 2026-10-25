@@ -1,11 +1,11 @@
 import { GlobalOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Button } from 'antd';
 import { useState } from 'react';
 import { getShareLink } from '../api';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import { wikiSpacePath } from '../lib/wiki';
 import { ShareModal, shareLinkQueryKey } from './ShareModal';
+import { Button } from './ui/Button';
 
 /**
  * The Wiki head's way to the space's public link (docs/share-links-design.md §10, mock share-links

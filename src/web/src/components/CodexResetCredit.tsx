@@ -7,8 +7,7 @@ import {
   SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Modal } from 'antd';
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import {
   codexRateLimitResetOf,
   type CodexRateLimitResetOperationView,
@@ -42,6 +41,8 @@ import {
 import { runnersQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
 import { compatibleUuid } from '../lib/uuid';
+import { Button } from './ui/Button';
+import { Dialog } from './ui/Dialog';
 
 /** Where a reset is confirmed from: the runner whose default Codex account it spends, and the
  *  workspace whose composer asked, which the create route checks for an account override. */
@@ -81,7 +82,9 @@ export interface CodexResetCreditState {
   confirm: () => void;
   retry: () => void;
   dismiss: () => void;
-  restoreFocus: () => void;
+  /** Where focus goes as the confirmation closes, read when it closes: the status line a confirmation
+   *  started, else the entry that opened it, or the popover when the entry can no longer take focus. */
+  returnFocus: RefObject<HTMLElement | null>;
   statusRef: RefObject<HTMLDivElement | null>;
   useButtonRef: RefObject<HTMLButtonElement | null>;
 }
@@ -108,7 +111,7 @@ export function useCodexResetCredit(
   context: CodexResetContext | undefined,
   visible: boolean,
   /** Where focus goes when the control that had it is gone and no enabled entry replaces it. */
-  fallbackFocus?: () => void,
+  fallbackFocus?: () => HTMLElement | null | undefined,
 ): CodexResetCreditState {
   const qc = useQueryClient();
   const toast = useToast();
@@ -351,11 +354,21 @@ export function useCodexResetCredit(
   };
 
   /** The entry when it can take focus, otherwise the popover itself — never the page body. */
-  const focusEntry = () => {
+  const fallback = useRef(fallbackFocus);
+  fallback.current = fallbackFocus;
+  const entry = useCallback((): HTMLElement | null => {
     const use = useButtonRef.current;
-    if (use && !use.disabled) use.focus();
-    else fallbackFocus?.();
-  };
+    return use && !use.disabled ? use : (fallback.current?.() ?? null);
+  }, []);
+  const focusEntry = () => entry()?.focus();
+  const returnFocus = useMemo<RefObject<HTMLElement | null>>(
+    () => ({
+      get current() {
+        return confirmed.current ? statusRef.current : entry();
+      },
+    }),
+    [entry],
+  );
 
   const dismiss = () => {
     if (operation) dismissed.current.add(operation.id);
@@ -384,7 +397,7 @@ export function useCodexResetCredit(
     confirm,
     retry,
     dismiss,
-    restoreFocus: () => (confirmed.current ? statusRef.current?.focus() : focusEntry()),
+    returnFocus,
     statusRef,
     useButtonRef,
   };
@@ -522,8 +535,8 @@ export function CodexResetCreditCard({ state }: { state: CodexResetCreditState }
         <>
           <Button
             ref={state.useButtonRef}
-            type="primary"
-            block
+            variant="primary"
+            style={{ width: '100%' }}
             disabled={!!blocked}
             aria-haspopup="dialog"
             aria-describedby={blocked ? reasonId : undefined}
@@ -541,7 +554,7 @@ export function CodexResetCreditCard({ state }: { state: CodexResetCreditState }
       {(settled || notice || create.phase === 'unanswered') && (
         <div className="cu-rc-actions">
           {create.phase === 'unanswered' && (
-            <Button size="small" type="primary" onClick={state.retry}>
+            <Button size="small" variant="primary" onClick={state.retry}>
               Retry
             </Button>
           )}
@@ -560,27 +573,27 @@ export function CodexResetConfirm({ state, usagePercent }: { state: CodexResetCr
   const card = state.card;
   const expiry = card ? codexResetExpiry(card.block, fmtDay) : null;
   return (
-    <Modal
+    <Dialog
       open={state.confirmOpen}
       title="Use reset credit?"
       width={440}
-      onCancel={state.cancelConfirm}
-      // Cancel is where focus starts: the safe answer to an action that can't be undone. Closing
-      // puts it back on the entry that opened this, or on the status line a confirmation started.
-      afterOpenChange={(open) => (open ? cancelRef.current?.focus() : state.restoreFocus())}
-      focusable={{ focusTriggerAfterClose: false }}
-      // The Plan usage popover stays open underneath, and antd stacks popovers (1030) above modals
-      // (1000): without this the popover would sit on top of the confirmation's own buttons.
-      zIndex={1100}
-      destroyOnHidden
-      footer={[
-        <Button key="cancel" ref={cancelRef} onClick={state.cancelConfirm}>
-          Cancel
-        </Button>,
-        <Button key="use" type="primary" onClick={state.confirm}>
-          Use reset
-        </Button>,
-      ]}
+      className="cu-rc-confirm-dialog"
+      onClose={state.cancelConfirm}
+      // Cancel is where focus starts: the safe answer to an action that can't be undone. Closing puts
+      // it back on the entry that opened this, or on the status line a confirmation started. The Plan
+      // usage popover stays open underneath; the dialog and its mask come after it, on top.
+      initialFocus={cancelRef}
+      returnFocus={state.returnFocus}
+      footer={
+        <>
+          <Button ref={cancelRef} onClick={state.cancelConfirm}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={state.confirm}>
+            Use reset
+          </Button>
+        </>
+      }
     >
       <p className="cu-rc-confirm-text">
         This consumes 1 earned credit and resets eligible Codex usage windows. This action can’t be undone.
@@ -593,6 +606,6 @@ export function CodexResetConfirm({ state, usagePercent }: { state: CodexResetCr
         {card ? `${codexResetCountLabel(card.details)}${expiry ? ` · ${expiry.label}` : ''}. ` : ''}
         Your conversations and their context aren’t affected.
       </p>
-    </Modal>
+    </Dialog>
   );
 }

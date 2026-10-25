@@ -1,0 +1,25 @@
+{
+  "cases": [
+    {
+      "name": "live: reply and thinking deltas",
+      "subject": "ses.0190a0b0-0000-7000-8000-0000000000a1.live",
+      "message": "{\"liveBatch\":{\"sessionId\":\"0190a0b0-0000-7000-8000-0000000000a1\",\"events\":[{\"liveSeq\":\"41\",\"type\":\"thinking_delta\",\"tsUnixMs\":\"1761380000123\",\"turnId\":\"0190a0b0-0000-7000-8000-0000000000b1\",\"payloadJson\":\"eyJ0ZXh0Ijoid2VpZ2hpbmcgPGI+ICYgw7wifQ==\"},{\"liveSeq\":\"42\",\"type\":\"text_delta\",\"tsUnixMs\":\"1761380000124\",\"turnId\":\"0190a0b0-0000-7000-8000-0000000000b1\",\"payloadJson\":\"eyJ0ZXh0IjoiSGVsbG8gd29yIn0=\"},{\"liveSeq\":\"9007199254740990\",\"type\":\"text_delta\",\"tsUnixMs\":\"1761380000125\",\"turnId\":\"0190a0b0-0000-7000-8000-0000000000b1\",\"payloadJson\":\"eyJ0ZXh0IjoibGQg4oCUIOS4reaWhyJ9\"}]}}"
+    },
+    {
+      "name": "live: a tool output snapshot, a background tail, and an event the live stream may not carry",
+      "subject": "ses.0190a0b0-0000-7000-8000-0000000000a1.live",
+      "message": "{\"liveBatch\":{\"sessionId\":\"0190a0b0-0000-7000-8000-0000000000a1\",\"events\":[{\"liveSeq\":\"43\",\"type\":\"tool_output\",\"tsUnixMs\":\"1761380000126\",\"turnId\":\"0190a0b0-0000-7000-8000-0000000000b1\",\"payloadJson\":\"eyJ0b29sVXNlSWQiOiJ0b29sdV8wMSIsImNvbnRlbnQiOiJsaW5lIDFcbmxpbmUgMiJ9\"},{\"liveSeq\":\"44\",\"type\":\"background_output\",\"tsUnixMs\":\"1761380000127\",\"payloadJson\":\"eyJzaGVsbElkIjoic2hlbGwtMSIsInRleHQiOiJ0YWlsIn0=\"},{\"liveSeq\":\"45\",\"type\":\"assistant\",\"tsUnixMs\":\"1761380000128\",\"turnId\":\"0190a0b0-0000-7000-8000-0000000000b1\",\"payloadJson\":\"eyJ0ZXh0IjoiZHVyYWJsZSBldmVudHMgbmV2ZXIgcmlkZSB0aGUgbGl2ZSBzdHJlYW0ifQ==\"}]}}"
+    },
+    {
+      "name": "prefix: what the turn has streamed so far",
+      "subject": "_INBOX.fixture.1",
+      "message": "{\"turnPrefixResponse\":{\"requestId\":\"0190a0b0-0000-4000-8000-0000000000c1\",\"sessionId\":\"0190a0b0-0000-7000-8000-0000000000a1\",\"turnId\":\"0190a0b0-0000-7000-8000-0000000000b1\",\"text\":\"Hello wor\",\"thinking\":\"weighing \\u003cb\\u003e \\u0026 ü\",\"throughLiveSeq\":\"42\"}}"
+    },
+    {
+      "name": "prefix: no turn is streaming, or nobody could be asked",
+      "subject": "_INBOX.fixture.2",
+      "message": "{\"turnPrefixResponse\":{\"requestId\":\"0190a0b0-0000-4000-8000-0000000000c2\",\"sessionId\":\"0190a0b0-0000-7000-8000-0000000000a1\"}}"
+    }
+  ],
+  "generatedBy": "src/link-gateway/fixtures_test.go (go test -run TestLiveFixtures -args -update-live-fixtures), with the gateway's protojson encoder"
+}

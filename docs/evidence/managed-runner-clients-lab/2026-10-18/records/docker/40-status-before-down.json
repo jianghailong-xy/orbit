@@ -1,0 +1,26 @@
+{
+  "at": "2026-10-18T06:43:16Z",
+  "docker": {
+    "containers": [
+      "t07-docker-pg\tUp 13 minutes"
+    ],
+    "volumes": [
+      "mr-data-01a14db4-2860-74e4-ba71-9f655918b8b5",
+      "mr-data-01a14db4-4337-71fe-91f7-313820ecb3dd"
+    ]
+  },
+  "listening": [
+    "127.0.0.1:13730",
+    "127.0.0.1:13742",
+    "127.0.0.1:15434",
+    "172.18.0.1:13730",
+    "172.18.0.1:13742"
+  ],
+  "units": {
+    "t07-docker-api": "active",
+    "t07-docker-channel": "active",
+    "t07-docker-fake": "active",
+    "t07-docker-relay-api": "active",
+    "t07-docker-relay-fake": "active"
+  }
+}

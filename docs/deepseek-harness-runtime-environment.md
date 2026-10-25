@@ -1,20 +1,35 @@
 # DeepSeek Harness 安装与会话环境
 
-这份交付说明供 runner 的 ACP 驱动和恢复流程使用。安装与配置遵循 [P0 契约](deepseek-harness-runtime-contract.md)，固定 `@deepseek-ai/dsh@0.2.0-rc.2`，保留原有通过 Claude 执行的 DeepSeek provider。P2 提供启动环境、目录探针和健康字段；会话协议循环由 P3 实现。
+这份交付说明供 runner 的 ACP 驱动和恢复流程使用。安装与配置遵循 [P0 契约](deepseek-harness-runtime-contract.md)，固定 `@deepseek-ai/dsh@0.2.0-rc.2`。P2 提供启动环境、目录探针和健康字段；会话协议循环由 P3 实现。
+
+凭据（2026-10-09 起，[provider 与 engine 解耦](provider-engine-contract.md)）：
+
+- DeepSeek key 不属于某个 engine：同一把 key 同时用于 Claude Code、OpenCode 和 DeepSeek Harness。
+- dsh 会话用的是会话所选的那把 DeepSeek key，可以在多把之间切换。
+- 停用或删除一把 key，会同时影响它在所有 engine 上的会话。
+- dsh 会把 key 从它跑的命令的环境里去掉（见下文「凭据」）；同一把 key 交给 Claude Code、OpenCode 时，agent 跑的命令能在环境里直接读到它（[解耦契约](provider-engine-contract.md) §4.6）。
 
 ## 固定版本安装
 
-首版准入为 Linux x64、服务 PATH 中的 Node 26。P0 的真实实验使用 Node 26.10.0；其他平台、架构、Node 主版本及真实模型仍未验证。runner 拒绝未准入平台，返回 `DSH_PLATFORM_UNSUPPORTED` 或 `DSH_NODE_UNSUPPORTED`。
+首版准入为 Linux x64 上的 Node 26。P0 的真实实验使用官方 Node v26.10.0 构建（自带 npm 11.19.1）；其他平台、架构、Node 主版本及真实模型仍未验证。runner 拒绝其他平台，返回 `DSH_PLATFORM_UNSUPPORTED`。
+
+Node 从哪来（`src/runner-go/dsh_node.go`）：
+
+- 服务 PATH 上的 `node --version` 是 v26.x，就用它，和以前一样。
+- 否则由安装提供：下载官方 `node-v26.10.0-linux-x64.tar.gz`（nodejs.org），核对钉住的大小和 SHA-256（取自 SHASUMS256.txt，它的签名已用 Node.js 发布密钥核对过），解包到 `${ORBIT_HOME}/engines/node/v26.10.0`。确认 `bin/node` 在本机能启动后才发布，发布后不再改写。官方构建在本机起不来（例如 glibc 太旧、缺 libatomic）时安装失败，返回 `DSH_NODE_UNSUPPORTED`。
+- 这份 Node 不进任何会话看得到的 PATH。dsh 以 `<这份 node> <入口绝对路径>` 启动，dsh 自己的 Node 子进程都用 `process.execPath`；agent 跑的命令仍用机器自己的 node，或者没有 node。只有 `npm ci` 的 PATH 把它放在最前面，npm 和安装脚本都跑在它上面。
+- 服务 PATH 没有 Node 26、Orbit 也还没装自己那份时，runner 报 `DSH_NOT_INSTALLED`，客户端因此显示 Install，Install 把 Node 一起装上。以前这里报 `DSH_NODE_UNSUPPORTED`，客户端读作「不支持」，不给 Install。CLI 已经装好、后来服务 PATH 上的 Node 26 没了的，同样报 `DSH_NOT_INSTALLED`；Install 只补 Node，不重装已发布的版本目录。
+- 2026-10-21 实测：服务 PATH 只有 Node v22.22.2 的 Linux x64 主机上，Install 约 1 分钟完成（下载 Node 加 `npm ci`），之后真 dsh 在这份 Node 上读出模型目录，并在 bwrap 沙箱里跑通一轮 bash 工具回合，agent 看到的 node 是 `/usr/bin/node` v22.22.2。
 
 安装使用嵌入的 P0 `package.json` 和完整 `package-lock.json`，在私有暂存目录执行 `npm ci`，核对 CLI `--version` 精确等于 `0.2.0-rc.2` 后，发布到 `${ORBIT_HOME}/engines/dsh/0.2.0-rc.2`。未指定 ORBIT_HOME 时沿用 runner 的 machineHome。启动使用该目录内部的绝对入口；用户 PATH 上的 dsh 和 npm latest 都不参与选择。ACP 的插件版本不用于判断发行版本。
 
 `src/runner-go/dsh-install/` 的两个文件与 `scripts/deepseek-harness-p0/` 当前版本逐字节相同（测试断言），包括 `@deepseek-ai/libreoffice-kit` 的 `fflate` 0.8.3 安全覆盖；`@deepseek-ai/dsh` 0.2.0-rc.2 的 integrity 不变。P0 锁文件更新时同步复制这两个文件。已发布的 `0.2.0-rc.2` 目录不可变，不会因锁文件更新而重装。
 
-首次自动安装沿用 `AutoInstallEngines` 授权，默认拒绝；用户发起的浏览器 Install 使用既有单次授权。安装、更新共用原有锁。更新只在已有 Orbit 管理的 dsh 安装上工作，活动会话沿用原有延后策略；以后提升支持版本时安装相邻的新目录，保留旧目录。损坏、不兼容或链接到外部目录的已发布安装会报错，不原地覆写。
+首次自动安装沿用 `AutoInstallEngines` 授权，默认拒绝；用户发起的浏览器 Install 使用既有单次授权。下载 Node 是安装的一部分，授权相同。安装、更新共用原有锁。更新只在已有 Orbit 管理的 dsh 安装上工作，活动会话沿用原有延后策略；以后提升支持版本时安装相邻的新目录，保留旧目录。损坏、不兼容或链接到外部目录的已发布安装会报错，不原地覆写。
 
 ## 启动与恢复接口
 
-`PrepareDshLaunch(ctx, DshLaunchInput)` 返回 P0 的 `DshLaunchSpec`。`PrepareDshSessionLaunch(ctx, job, executionDir, fileMode)` 从已授权派发的 `job.Agent.Env` 读取 `ORBIT_DSH_API_KEY` 和 `ORBIT_DSH_BASE_URL`。配置 provider 的 Key 仍通过现有 AES GCM 加密存储、授权解密和派发链进入 runner；本模块不建立第二个凭据存储。
+`PrepareDshLaunch(ctx, DshLaunchInput)` 返回 P0 的 `DshLaunchSpec`。`PrepareDshSessionLaunch(ctx, job, executionDir, fileMode)` 从已授权派发的 `job.Agent.Env` 读取 `ORBIT_DSH_API_KEY` 和 `ORBIT_DSH_BASE_URL`，也就是会话所选 DeepSeek key 的 key 与 baseUrl。服务端按会话 engine 注入它们（[解耦契约](provider-engine-contract.md) §4.2）；同一把 key 用在 Claude Code 会话上时注入的是 `ANTHROPIC_*`，两者互不影响。key 仍通过现有 AES GCM 加密存储、授权解密和派发链进入 runner；本模块不建立第二个凭据存储。
 
 共享声明 `dsh_launch.go` 与 P3a 提交一致，避免并行合并出现重复类型或常量。P3a 的 `prepareDshSessionLaunch(ctx, job, scratchDir, execDir)` seam 保持未接入时明确失败；P3b 需要忽略 scratchDir，以 execDir 和显式验证的文件策略调用 P2 准备器，两个签名的字符串参数含义不同，不能直接赋值。
 
@@ -62,13 +77,13 @@ P3 按以下顺序接入：
 runner 在 `X-Orbit-Supported-Providers` 和心跳里声明 `dsh`，只表示它支持这一协议，不表示 CLI 已安装（D1）。所以服务端另外读取该 runner 最近一次心跳里的引擎报告 `engines[dsh]`（`runner-provider-support.ts` 的 `dshRuntimeUnavailable`）。只有固定版本已安装、版本核对通过、平台准入时，才会派发 dsh 会话。快照缺失、报告里没有 dsh 条目，或者字段无法解析时，一律按未安装处理，不放行。
 
 - 新建会话（`POST /sessions`）和恢复已结束的会话（`POST /sessions/:id/resume`）返回 409，提示与升级提示同类。提示以 runner 自己的诊断码开头，Web 的 `dshRepair` 和 OrbitKit 的 `DshRuntime.repair` 按已有修复卡识别：
-  - `DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; install it from Providers, then try again`
+  - `DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; install it from Infrastructure, then try again`
   - `DSH_PLATFORM_UNSUPPORTED: …`，报告为 `DSH_PLATFORM_UNSUPPORTED` 或 `DSH_NODE_UNSUPPORTED` 时使用
-  - `DSH_VERSION_INCOMPATIBLE: …; reinstall it from Providers, then try again`，用于已安装但版本不符或版本探测失败。客户端暂无对应修复卡，只显示原文。
+  - `DSH_VERSION_INCOMPATIBLE: …; reinstall it from Infrastructure, then try again`，用于已安装但版本不符或版本探测失败。客户端暂无对应修复卡，只显示原文。
 
   被拒绝的请求不写会话，也不改变已有会话。runner 没有声明 dsh 时，仍先得到 P1b 的升级提示，升级提示优先于权限模式校验；安装状态在权限模式校验之后判断。
-- 领取（`GET /runner/sessions/claim`）：runner 的声明原样保留。该 runner 上的 dsh 会话（内置 `dsh`，以及 runtime 为 dsh 的配置 provider）不派发；PENDING 行写上同一条提示，机制与升级提示相同，领取成功时清除。已持久化会话的后续消息照常入队，保持 PENDING，不会被领取后失败。数据库层的 `orbit.runner_supports_dsh` 在这次领取中同样为 `0`。
-- 安装完成（Providers 的 Install，即 `POST /runners/:id/install {engine: dsh}`）后，runner 重新探测引擎，下一次心跳（30 秒以内）带上 `installed=true`。新建和恢复随即放行。等待中的会话在下一个领取长轮询（25 秒以内）派发，沿用原 runtimeSessionId 和 DSH_HOME 续聊。
+- 领取（`GET /runner/sessions/claim`）：runner 的声明原样保留。该 runner 上 engine 为 dsh 的会话不派发。解耦前它们是内置 `dsh` 与 runtime 为 dsh 的配置 provider；engine 为空的旧行仍按这条旧规则判断。PENDING 行写上同一条提示，机制与升级提示相同，领取成功时清除。已持久化会话的后续消息照常入队，保持 PENDING，不会被领取后失败。数据库层的 `orbit.runner_supports_dsh` 在这次领取中同样为 `0`。
+- 安装完成（Infrastructure 页上 DeepSeek Harness 的 Install，即 `POST /runners/:id/install {engine: dsh}`）后，runner 重新探测引擎，下一次心跳（30 秒以内）带上 `installed=true`。新建和恢复随即放行。等待中的会话在下一个领取长轮询（25 秒以内）派发，沿用原 runtimeSessionId 和 DSH_HOME 续聊。
 - 不受影响的部分：runner 重启后的 reclaim 和租约接管只检查声明，因为它们交还的是这台 runner 已经在运行的会话；修改会话配置不读取安装状态；其他引擎照常派发，不会被 dsh 未安装卡住。
 - 时效：门禁以最近一次报告为准，领取长轮询在开始时读取报告。已经发布的安装目录如果事后消失，在下一次探测（5 分钟以内）上报之前，以及其后一个领取长轮询内，会话仍可能被领取，并在 runner 上以 `DSH_NOT_INSTALLED` 失败。从未安装过的 runner 不存在这个窗口。
 - 运维：升级 runner 后不必赶在开放入口前先装好 dsh。未安装期间，API、CLI 和自动派发的任务都会得到上述提示，而不是一个失败的会话。
@@ -93,7 +108,7 @@ DSH_HOME 内的 `orbit-turns.json` 是 runner 的回合台账：保存 runtimeSe
 
 结算优先级由 `dshSettlementOutcome` 固定，从高到低：本地停止（interrupt、end、关机、会话取消、租约丢失）一律为 cancelled，晚到的 end_turn 也不改变；其次 prompt 响应（end_turn、max_tokens 输出上限、refusal、cancelled）；再次 JSON-RPC 错误；最后是无响应的进程退出或传输断开。每个回合只结算一次。审批请求在本阶段一律回复 cancelled，停止或断开后不会有迟到许可；已结算回合的迟到 `tool_call_update` 与消息块被丢弃，不进入下一回合。
 
-租约丢失时先结束整个进程组（含工具子进程），只在本地结算，不向新租约持有者回报，台账保留 `prompted` 给下一任处理。进程意外退出且有活动回合时，回合 FAILED 并结束会话；若该回合已先被本地停止，则结算 INTERRUPTED，会话保持可恢复。关机与 end 先 `session/close`，保留整棵 DSH_HOME。reload 改变 Key、baseURL 或文件策略时结束旧进程，由监督者从最新派发重新 Prepare 并 resume；仅模型变化时在线 `session/set_config_option`。撤销 Key 后 Prepare 以 `DSH_CREDENTIAL_MISSING` 失败，不再启动。
+租约丢失时先结束整个进程组（含工具子进程），只在本地结算，不向新租约持有者回报，台账保留 `prompted` 给下一任处理。进程意外退出且有活动回合时，回合 FAILED 并结束会话；若该回合已先被本地停止，则结算 INTERRUPTED，会话保持可恢复。关机与 end 先 `session/close`，保留整棵 DSH_HOME。reload 改变 Key、baseURL 或文件策略时结束旧进程，由监督者从最新派发重新 Prepare 并 resume；会话切换到另一把 DeepSeek key 也走这条路径，ACP 会话 id 与 DSH_HOME 不变；仅模型变化时在线 `session/set_config_option`。撤销 Key 后 Prepare 以 `DSH_CREDENTIAL_MISSING` 失败，不再启动。
 
 运行时 stderr 与 RPC 错误的 Message/Data 在写入日志或结算前替换启动 Key 及 `sk-` 形态的值，错误仍为失败终态。
 

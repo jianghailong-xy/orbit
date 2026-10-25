@@ -1,0 +1,196 @@
+<!doctype html>
+<!-- Design board iOS 1: the iOS/macOS Infrastructure page (Settings → Machines & models → Infrastructure),
+     the machine page's Engines and the DeepSeek Harness engine page, 393 × 852 pt. "现在" is drawn from
+     main 0a887da2c (SkillsRunnersView.swift, InfrastructureSections.swift, OrbitKit Infrastructure.swift,
+     RunnerEnginePage.swift) and the P4 iPhone screenshots; "改后" is the proposal. macOS uses the same
+     SwiftUI; Android follows this structure. Not shipped code. Render: render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>iOS 1 · Infrastructure page — provider/engine decoupling</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<link rel="stylesheet" href="board.css">
+<script src="glyphs.js"></script>
+<script src="board.js"></script>
+<style>
+  /* Needs you (InfrastructureSections.NeedsYouRow) */
+  .nr { display: flex; align-items: center; gap: 12px; }
+  .nr-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #ff9500; }
+  .nr-dot.idle { background: #aeaeb2; }
+  .nr-t { flex: 1; min-width: 0; font-size: 17px; line-height: 22px; }
+  .nr-t b { font-weight: 600; }
+  .nr-s { font-size: 15px; line-height: 20px; color: #8a8a8e; }
+  /* What your agents can run on (EngineOverviewRow) */
+  .ov { display: flex; align-items: flex-start; gap: 12px; }
+  .ov-m { flex: 1; min-width: 0; }
+  .ov-n { display: flex; align-items: center; gap: 8px; font-size: 17px; line-height: 22px; font-weight: 600; }
+  .ov-chip { font-size: 11px; line-height: 16px; font-weight: 600; padding: 1px 6px; border-radius: 5px; background: rgba(120, 120, 128, .14); color: #8a8a8e; }
+  .ov-chip.ready { background: rgba(52, 199, 89, .16); color: #248a3d; }
+  .ov-l { font-size: 15px; line-height: 20px; color: #8a8a8e; margin-top: 3px; }
+  .ov-l b { font-weight: 600; color: #6c6c70; }
+  .ov-l .mdl { color: rgba(138, 138, 142, .75); }
+  .ov-l a { color: #3e69f6; }
+  /* machine rows */
+  .mr { display: flex; align-items: center; gap: 10px; }
+  .mr-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #34c759; }
+  .mr-m { flex: 1; min-width: 0; }
+  .mr-n { display: flex; align-items: center; gap: 10px; font-size: 17px; line-height: 22px; }
+  .mr-slot { width: 64px; height: 4px; border-radius: 2px; background: rgba(120, 120, 128, .2); overflow: hidden; }
+  .mr-slot i { display: block; height: 100%; background: #3e69f6; }
+  .mr-s { font-size: 15px; line-height: 20px; color: #8a8a8e; }
+  .grey-d { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 7px; background: linear-gradient(160deg, #9ea2a9, #868a91); color: #fff; font-weight: 700; font-size: 13px; }
+  .ph.dark .ov-l b { color: #b4b4ba; }
+  .ph.dark .ov-chip.ready { background: rgba(48, 209, 88, .2); color: #5fcf65; }
+  .ph.dark .ov-n, .ph.dark .nr-t, .ph.dark .mr-n { color: #fff; }
+  .ph.dark .nr-s, .ph.dark .mr-s, .ph.dark .ov-l { color: #9e9ea5; }
+  .ph.dark .ov-l a { color: #5b84ff; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">iOS 1 · Infrastructure 页：概览一把 key 出现在它能跑的每个 engine 下；DeepSeek Harness 有自己的一行；API keys 写可用 engine</h1>
+  <p class="m-sub zh">设置 → Machines &amp; models → Infrastructure；macOS 侧边栏的 Infrastructure 是同一套 SwiftUI。iOS 不能加、改、停用、删除 key，照旧写「Adding or changing a key happens on the web.」。今天「What your agents can run on」只有四行：Claude Code、Codex、Kimi Code、Antigravity，每把 key 按 runtime 只归一个 engine。DeepSeek Harness 和 OpenCode 没有行，Harness key 不归任何 engine；它在 API keys 里那一行连副标题都没有。机器页上 DeepSeek Harness 是一个灰色「D」。改后和 Web 板 1 同一个规则：六个 engine 各一行，一把 key 出现在它能跑的每个 engine 下。engine 显示名按待定项 A（Web 板 1 ③-2）。数据同 Web 板 1。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① Infrastructure 页（第二、四台手机往下滚到 API keys）</div>
+    <div class="phones">
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k">现在</span>顶部</div><div id="p1"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k">现在</span>往下滚</div><div id="p2"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>滚到概览</div><div id="p3"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>往下滚</div><div id="p4"></div></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 机器页（hpc）的 Engines，和 DeepSeek Harness 引擎页</div>
+    <div class="phones">
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k">现在</span>机器页</div><div id="p5"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>机器页</div><div id="p6"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k">现在</span>DeepSeek Harness 引擎页</div><div id="p7"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>DeepSeek Harness 引擎页</div><div id="p8"></div></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+
+<script>
+const needs = iSection({ header: 'Needs you', rows: [
+  `<div class="r"><div class="nr"><span class="nr-dot"></span><div class="nr-t"><b>Codex</b> is signed out on <b>old-mac</b><div class="nr-s">Sessions there can’t use it</div></div><span class="bb prom">Sign in</span></div></div>`,
+] });
+const ovRow = (key, name, ready, lines, id = '') => `<div class="r"${id ? ` id="${id}"` : ''}><div class="ov">${iMk(key, 28)}<div class="ov-m">
+  <div class="ov-n">${name}<span class="ov-chip${ready ? ' ready' : ''}">${ready ? 'Ready' : 'Not set up'}</span></div>${lines.map((l) => `<div class="ov-l">${l}</div>`).join('')}</div></div></div>`;
+const ks = (pairs) => pairs.map(([l, m]) => `${l} <span class="mdl">${m}</span>`).join(', ');
+const overviewNow = iSection({ header: 'What your agents can run on', id: 'ovnow', rows: [
+  ovRow('anthropic', 'Claude Code', true, ['<b>Subscription</b> · hpc ×2, old-mac, build-box', `<b>API key</b> · ${ks([['DeepSeek', 'DeepSeek V4 Pro'], ['Z.AI (GLM)', 'GLM-5.2'], ['Claude Max', 'Claude Opus 5.5']])}`, '<b>Pool</b> · Claude accounts']),
+  ovRow('openai', 'Codex', true, ['<b>Subscription</b> · hpc, build-box']),
+  ovRow('kimi', 'Kimi Code', true, [`<b>API key</b> · ${ks([['Kimi (Moonshot)', 'Kimi K2.7 Code']])}`]),
+  ovRow('antigravity', 'Antigravity', true, ['<b>Subscription</b> · hpc', `<b>API key</b> · ${ks([['Antigravity', 'Gemini 3.8 Flash']])}`]),
+], footer: 'Every engine, and everything that can pay for it right now.' });
+const dsPair = [['DeepSeek', 'DeepSeek V4 Pro'], ['DeepSeek 2', 'DeepSeek V4 Pro']];
+const overviewAfter = iSection({ header: 'What your agents can run on', id: 'ovafter', rows: [
+  ovRow('anthropic', 'Claude Code', true, ['<b>Subscription</b> · hpc ×2, old-mac, build-box', `<b>API key</b> · ${ks([...dsPair, ['Z.AI (GLM)', 'GLM-5.2'], ['Claude Max', 'Claude Opus 5.5']])}`, '<b>Pool</b> · Claude accounts'], 'ovcc'),
+  ovRow('openai', 'Codex', true, ['<b>Subscription</b> · hpc, build-box']),
+  ovRow('kimi', 'Kimi Code', true, [`<b>API key</b> · ${ks([['Kimi (Moonshot)', 'Kimi K2.7 Code']])}`]),
+  ovRow('antigravity', 'Antigravity CLI', true, ['<b>Subscription</b> · hpc', `<b>API key</b> · ${ks([['Gemini', 'Gemini 3.8 Flash']])}`]),
+  ovRow('opencode', 'OpenCode', true, ['<b>Own sign-in</b> · hpc', `<b>API key</b> · ${ks([...dsPair, ['Gemini', 'Gemini 3.8 Flash'], ['Kimi (Moonshot)', 'Kimi K2.7 Code'], ['Z.AI (GLM)', 'GLM-5.2']])}`], 'ovoc'),
+  ovRow('deepseek', 'DeepSeek Harness', true, [`<b>API key</b> · ${ks(dsPair)}`], 'ovdsh'),
+], footer: 'Every engine, and everything that can pay for it right now.' });
+const machineRow = (name, line, busy) => `<div class="r"><div class="mr"><span class="mr-dot"></span><div class="mr-m"><div class="mr-n">${name}${busy !== undefined ? `<span class="mr-slot"><i style="width:${busy}%"></i></span>` : ''}</div><div class="mr-s">${line}</div></div>${IC.chev}</div></div>`;
+const machines = iSection({ header: 'Machines', trailing: '3 machines · 4 / 24 slots busy', rows: [
+  machineRow('hpc', '3 / 16 running · All signed in', 19), machineRow('old-mac', '1 / 4 running · 1 engine signed out', 25), machineRow('build-box', '0 / 4 running · All signed in', 0),
+], footer: 'Subscriptions signed in here are spent only by sessions on that machine.' })
+  + iSection({ rows: ['<div class="r btn">Add Runner</div>'], footer: 'Run one command on the new machine — it installs Orbit, then asks you to confirm it’s yours.' });
+const pools = iSection({ header: 'Account pools', rows: [iRow({ mark: iMk('anthropic', 26), title: 'Claude accounts', sub: 'Just me · 2 accounts', trailing: '2 of 2 available' })], footer: 'Several accounts under one name.' });
+const keysFooter = 'On your account and usable from every machine — billed per token. Adding or changing a key happens on the web.';
+const keyRow = (o) => `<div class="r"${o.id ? ` id="${o.id}"` : ''}><div class="e"><div class="e-l" style="align-items:center">${iMk(o.brand, 26)}<div class="e-m"><div class="e-n">${o.title}</div>${(o.subs || []).map((x) => `<div class="e-s">${x}</div>`).join('')}</div></div>
+  ${o.trailing ? `<span class="e-s" style="flex:none">${o.trailing}</span>` : ''}${o.chevron ? IC.chev : ''}</div></div>`;
+const keysNow = iSection({ header: 'API keys', id: 'keys', rows: [
+  keyRow({ brand: 'deepseek', title: 'DeepSeek Harness', subs: [], trailing: '¥36.20', chevron: true, id: 'kdsh' }),
+  keyRow({ brand: 'deepseek', title: 'DeepSeek', subs: ['DeepSeek V4 Pro'], trailing: '¥110.00', chevron: true }),
+  keyRow({ brand: 'antigravity', title: 'Antigravity', subs: ['Gemini 3.8 Flash'] }),
+  keyRow({ brand: 'kimi', title: 'Kimi (Moonshot)', subs: ['Kimi K2.7 Code'] }),
+  keyRow({ brand: 'glm', title: 'Z.AI (GLM)', subs: ['GLM-5.2'] }),
+  keyRow({ brand: 'anthropic', title: 'Claude Max', subs: ['Claude Opus 5.5'] }),
+], footer: keysFooter });
+const EL = (list) => list.map((e) => ENGINES[e].name).join(' · ');
+const keysAfter = iSection({ header: 'API keys', id: 'keys', rows: [
+  keyRow({ brand: 'deepseek', title: 'DeepSeek', subs: ['DeepSeek V4 Pro', EL(WORKS.deepseek)], trailing: '¥110.00', chevron: true, id: 'k1' }),
+  keyRow({ brand: 'deepseek', title: 'DeepSeek 2', subs: ['DeepSeek V4 Pro', EL(WORKS.deepseek)], trailing: '¥36.20', chevron: true }),
+  keyRow({ brand: 'gemini', title: 'Gemini', subs: ['Gemini 3.8 Flash', EL(WORKS.gemini)] }),
+  keyRow({ brand: 'kimi', title: 'Kimi (Moonshot)', subs: ['Kimi K2.7 Code', EL(WORKS.moonshot)] }),
+  keyRow({ brand: 'glm', title: 'Z.AI (GLM)', subs: ['GLM-5.2', EL(WORKS.anthropicKey)] }),
+  keyRow({ brand: 'anthropic', title: 'Claude Max', subs: ['Claude Opus 5.5', 'Claude Code · subscription token'], id: 'kmax' }),
+], footer: keysFooter });
+
+document.getElementById('p1').innerHTML = sheetPhone({ title: 'Infrastructure', id: 'ph1', body: needs + overviewNow + machines + pools + keysNow });
+document.getElementById('p2').innerHTML = sheetPhone({ title: 'Infrastructure', id: 'ph2', body: needs + overviewNow + machines + pools + keysNow });
+document.getElementById('p3').innerHTML = sheetPhone({ title: 'Infrastructure', id: 'ph3', body: needs + overviewAfter + machines + pools + keysAfter });
+document.getElementById('p4').innerHTML = sheetPhone({ title: 'Infrastructure', id: 'ph4', body: needs + overviewAfter + machines + pools + keysAfter });
+
+/* the machine page's Engines (RunnerPageParts / RunnerPageFormat) */
+const eRow = (mark, name, sub, chevron = true, id = '') => iRow({ id, mark, title: name, sub, chevron });
+const enginesFooter = 'Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.';
+const machinePage = (dsh, after) => iSection({ header: 'Engines', trailing: 'Checked 2 min ago', rows: [
+  eRow(iEng('claude'), 'Claude Code', '2.1.290 · <span class="ok">2 accounts signed in</span>'),
+  eRow(iEng('codex'), 'Codex', '0.162.0 · <span class="ok">Signed in</span>'),
+  eRow(iEng('kimi'), 'Kimi Code', 'Not installed', false),
+  eRow(iEng('opencode'), 'OpenCode', '1.18.35'),
+  eRow(iEng('antigravity'), after ? 'Antigravity CLI' : 'Antigravity', '1.3.2 · <span class="ok">Signed in</span>'),
+  dsh,
+], footer: enginesFooter });
+document.getElementById('p5').innerHTML = sheetPhone({ title: 'hpc', id: 'ph5', body: machinePage(eRow('<span class="grey-d">D</span>', 'DeepSeek Harness', '0.2.0-rc.2 · Uses API keys', true, 'dshrow')) });
+document.getElementById('p6').innerHTML = sheetPhone({ title: 'hpc', id: 'ph6', body: machinePage(eRow(iEng('dsh'), 'DeepSeek Harness', '0.2.0-rc.2 · Uses API keys', true, 'dshrow'), true) });
+
+/* the DeepSeek Harness engine page (RunnerEnginePage.dshSection) */
+const head = (mark) => `<div class="hd">${mark}<div><div class="n">DeepSeek Harness</div><div class="s">0.2.0-rc.2 · checked 5 min ago</div></div></div>`;
+document.getElementById('p7').innerHTML = sheetPhone({ title: 'DeepSeek Harness', id: 'ph7', body: head('<span class="grey-d" style="width:30px;height:30px">D</span>')
+  + iSection({ id: 'dshnow', rows: ['<div class="r txt sec">Ready · sessions use the DeepSeek Harness API key they were started with</div>'] })
+  + iSection({ id: 'dshfootnow', rows: ['<div class="r btn">Update Engines Now</div>'], footer: enginesFooter }) });
+document.getElementById('p8').innerHTML = sheetPhone({ title: 'DeepSeek Harness', id: 'ph8', body: head(iEng('dsh', 30))
+  + iSection({ id: 'dshafter', rows: ['<div class="r txt sec">Ready · each session uses the DeepSeek key it was started with</div>'] })
+  + iSection({ id: 'dshfootafter', rows: ['<div class="r btn">Update Engines Now</div>'], footer: 'Orbit keeps DeepSeek Harness updated every 30 min. It has no sign-in: every session runs on a DeepSeek key.' }) });
+
+finish();
+requestAnimationFrame(() => {
+  const ph = (id) => document.getElementById(id);
+  scrollPhone(ph('ph2'), '#keys', 110);
+  scrollPhone(ph('ph4'), '#keys', 90);
+  scrollPhone(ph('ph3'), '#ovafter', 40);
+  ring(ph('ph1'), '#ovnow', 'A', 2);
+  ring(ph('ph2'), '#kdsh', 'B', 2);
+  ring(ph('ph3'), '#ovcc', 1, 2);
+  ring(ph('ph3'), '#ovoc', 2, 2);
+  ring(ph('ph3'), '#ovdsh', '', 2);
+  ring(ph('ph4'), '#k1', 3, 2);
+  ring(ph('ph4'), '#kmax', 4, 2);
+  ring(ph('ph5'), '#dshrow', 'C', 2);
+  ring(ph('ph6'), '#dshrow', 5, 2);
+  ring(ph('ph7'), '#dshnow', 'D', 2);
+  ring(ph('ph8'), '#dshafter', 6, 2);
+  ring(ph('ph8'), '#dshfootafter', 7, 2);
+  document.querySelectorAll('.mk-n').forEach((m) => { if (/^[A-Z]$/.test(m.textContent)) m.style.background = '#6b7280'; });
+});
+
+document.getElementById('notes').innerHTML = notes([
+  ['A', '<b>概览四行，每把 key 只归一个 engine：</b>DeepSeek key 只在 Claude Code 下；Harness key 不归任何 engine；OpenCode、DeepSeek Harness 没有行；Gemini key 叫「Antigravity」。'],
+  ['B', '<b>Harness key 那一行没有副标题：</b>它的 models 为空、没有默认模型，key 行就只剩名字和余额。另外 Gemini key 叫「Antigravity」。'],
+  ['C', '<b>机器页上 DeepSeek Harness 是灰色「D」：</b><code>BrandMarks.swift</code> 没有 <code>dsh</code>，而 key 行和新会话里用的是 DeepSeek 的鲸鱼。'],
+  ['D', '<b>引擎页写「the DeepSeek Harness API key」</b>，底部又照抄「Sign-ins live on this machine」——Harness 没有登录。'],
+  [1, '<b>概览六行</b>，顺序同 <code>ALL_ENGINES</code>：Claude Code、Codex、Kimi Code、Antigravity CLI、OpenCode、DeepSeek Harness。<b>一把 key 出现在它能跑的每个 engine 下</b>，读接口的 <code>engines</code>：两把 DeepSeek key 同时在 Claude Code、OpenCode、DeepSeek Harness 下。模型按（engine, key）取。'],
+  [2, '<b>新增 OpenCode 行：</b>「Own sign-in · 机器」，再加上它能用的各把 key。订阅 token 不列。DeepSeek Harness 行只有 API key 一项。'],
+  [3, '<b>API keys 每行多一行副标题，写能用的 engine</b>，第一行仍是默认模型；按厂商排序，同厂商相邻，厂商看图标。Harness key 并入 DeepSeek（另一把叫 DeepSeek 2），Gemini key 显示它自己的名字。DeepSeek key 照旧能点进去看余额（iOS 2）。'],
+  [4, '<b>Claude 订阅 token 只写 Claude Code</b>，注明是订阅 token。'],
+  [5, '<b>机器页的 DeepSeek Harness 用鲸鱼图标</b>（BrandMarks 补 <code>dsh</code>）。状态照旧写「Uses API keys」，跑不了时写原因，与 Web 板 1 ② 一致。'],
+  [6, '<b>引擎页：</b>「Ready · each session uses the DeepSeek key it was started with」。'],
+  [7, '<b>引擎页底部改写：</b>「Orbit keeps DeepSeek Harness updated every 30 min. It has no sign-in: every session runs on a DeepSeek key.」其它引擎页不变。'],
+  ['·', '<b>不变的：</b>Needs you、Machines 行的摘要（只数能登录的 engine）、Add Runner、账号池、两段 footer、只读。macOS 的 Infrastructure 页同此。'],
+]);
+</script>
+</body>
+</html>

@@ -2,28 +2,28 @@ import {
   useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type KeyboardEvent,
   type MouseEvent as ReactMouseEvent, type SyntheticEvent, type UIEvent,
 } from 'react';
-import { App as AntApp, Avatar, Button as AntButton, ConfigProvider, Image, Input as AntInput } from 'antd';
 import { ArrowUpOutlined, CloseOutlined, EyeOutlined, PaperClipOutlined, PlusOutlined } from '@ant-design/icons';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MAX_PROMPT_CHARS } from '@orbit/shared';
 import { ThemeProvider, useThemeMode } from '../../../lib/theme';
-import { darkTheme, lightTheme } from '../../../theme';
 import { ComposerMirror } from '../../ComposerMirror';
 import { applyReferencePick, materializeReferences, referenceToken, type ReferenceMap } from '../../../lib/composerRefs';
 import {
   LOCAL_SLASH_ITEMS, pickSlash as replaceSlashToken, slashMatches as getSlashMatches, slashToken as getSlashToken,
   type ComposerSlashItem,
 } from '../../../lib/slashCommands';
+import { AppRoot } from '../AppRoot';
+import { Avatar } from '../Avatar';
+import { Button } from '../Button';
+import { Image } from '../Image';
 import { Textarea } from '../Textarea';
 import './ComposerFixture.css';
 
 // Private P3.1 fixture for ui-migration/composer.html. The session composer (WorkspaceView) and the
 // task comment composer (TaskDetailPanel) are reproduced with their real CSS, mirror and helpers,
-// around either the AntD field they use today (?impl=ant) or the Orbit Textarea. Everything but the
-// field is shared, so a difference between the two pages belongs to the field.
+// around the Orbit Textarea, with the Orbit buttons, image and avatar those pages draw.
 
 const params = new URLSearchParams(location.search);
-const impl = params.get('impl') === 'ant' ? 'ant' : 'orbit';
 const scenario = params.get('scenario') === 'comment' ? 'comment' : params.get('scenario') === 'plain' ? 'plain' : 'session';
 const fixedWidth = Number(params.get('width')) || undefined;
 const disabled = params.has('disabled');
@@ -43,18 +43,15 @@ const REFERENCES = [
 ];
 const HISTORY = ['Earlier prompt', 'Earlier prompt\nwith a second line'];
 
-/** The field under test. Both expose the native textarea the way their callers reach it today. */
+/** The field under test: its ref is the native textarea, as its callers reach it. */
 function useField() {
-  const ant = useRef<any>(null);
   const orbit = useRef<HTMLTextAreaElement>(null);
-  // AntD: through its internal ref, as WorkspaceView/TaskDetailPanel do now. Orbit: the element itself.
-  const node = useCallback((): HTMLTextAreaElement | null | undefined =>
-    impl === 'ant' ? ant.current?.resizableTextArea?.textArea : orbit.current, []);
-  const focus = useCallback(() => (impl === 'ant' ? ant.current?.focus() : orbit.current?.focus()), []);
-  return { ant, orbit, node, focus };
+  const node = useCallback((): HTMLTextAreaElement | null => orbit.current, []);
+  const focus = useCallback(() => orbit.current?.focus(), []);
+  return { orbit, node, focus };
 }
 
-/** Exactly what the two pages pass their field today. */
+/** Exactly what the two pages pass their field. */
 interface FieldProps {
   fieldRefs: ReturnType<typeof useField>;
   'aria-label': string;
@@ -73,7 +70,7 @@ interface FieldProps {
   onScroll?: (event: UIEvent<HTMLTextAreaElement>) => void;
 }
 function Field({ fieldRefs, ...props }: FieldProps) {
-  return impl === 'ant' ? <AntInput.TextArea ref={fieldRefs.ant} {...props} /> : <Textarea ref={fieldRefs.orbit} {...props} />;
+  return <Textarea ref={fieldRefs.orbit} {...props} />;
 }
 
 interface Staged { uid: string; name: string; size: number; mime: string; previewUrl?: string }
@@ -239,7 +236,7 @@ function SessionComposer() {
         <div className="composer-attachments">
           {images.map((im) => im.previewUrl ? (
             <span key={im.uid} className="composer-pill composer-attach">
-              <Image className="composer-attach-thumb" src={im.previewUrl} alt="" preview={{ mask: <EyeOutlined className="composer-attach-eye" /> }} />
+              <Image className="composer-attach-thumb" src={im.previewUrl} alt="" cover={<EyeOutlined className="composer-attach-eye" />} />
               <button type="button" className="composer-attach-remove" onClick={() => setImages((list) => list.filter((it) => it.uid !== im.uid))}
                 aria-label="Remove image"><CloseOutlined /></button>
             </span>
@@ -340,9 +337,9 @@ function SessionComposer() {
         />
       </div>
       <div className="composer-toolbar">
-        <AntButton className="composer-attach-btn" type="text" icon={<PlusOutlined />} disabled={disabled} aria-label="Add attachment" />
+        <Button className="composer-attach-btn" variant="text" icon={<PlusOutlined />} disabled={disabled} aria-label="Add attachment" />
         <span className="composer-pill-spacer" />
-        <AntButton className="composer-send" type="primary" shape="circle" icon={<ArrowUpOutlined />}
+        <Button className="composer-send" variant="primary" icon={<ArrowUpOutlined />}
           disabled={disabled || (!text.trim() && images.length === 0)} onClick={() => onSend()} aria-label="Send" />
       </div>
     </div>
@@ -453,7 +450,7 @@ function CommentComposer() {
           }
         }}
       />
-      <AntButton type="primary" onClick={submit} disabled={!draft.trim()}>Send</AntButton>
+      <Button variant="primary" onClick={submit} disabled={!draft.trim()}>Send</Button>
     </div>
     <div className="fixture-controls">
       <output aria-label="Posted comments">{JSON.stringify(posted)}</output>
@@ -477,13 +474,14 @@ const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcS
 
 function Content() {
   const { resolved } = useThemeMode();
-  return <ConfigProvider theme={resolved === 'dark' ? darkTheme : lightTheme}><AntApp>
-    <main className={`composer-fixture composer-fixture-${scenario}`} data-impl={impl}
+  // The app's root (AppRoot, as main.tsx draws it).
+  return <AppRoot>
+    <main className={`composer-fixture composer-fixture-${scenario}`}
       style={fixedWidth ? { ['--fixture-width' as string]: `${fixedWidth}px` } : undefined}>
       <output data-testid="theme">{resolved}</output>
       {scenario === 'session' ? <SessionComposer /> : scenario === 'comment' ? <CommentComposer /> : <PlainField />}
     </main>
-  </AntApp></ConfigProvider>;
+  </AppRoot>;
 }
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

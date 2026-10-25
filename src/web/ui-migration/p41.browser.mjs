@@ -294,7 +294,7 @@ test.describe('P4.1 settings', () => {
     await expect(card(page, 'Session defaults').locator(SELECT).first()).toContainText('Plan');
     trace.push(await observe(page, fixtures, 'mode chosen'));
 
-    const smart = card(page, 'Session defaults').getByRole('switch');
+    const smart = card(page, 'Session defaults').getByRole('switch', { name: 'Smart model selection' });
     await smart.click();
     await expect(smart).toHaveAttribute('aria-checked', 'true');
     trace.push(await observe(page, fixtures, 'smart model selection on'));

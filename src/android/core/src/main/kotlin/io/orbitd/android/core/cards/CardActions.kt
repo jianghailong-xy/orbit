@@ -98,9 +98,18 @@ class CardActions(private val auth: AuthSession, private val store: RealtimeStor
                 catch (cancel: CancellationException) { throw cancel }
                 catch (_: Exception) { /* Uncertain session access remains stale until A04 re-reads. */ }
             }
+            val reason = (error as? ApiError)?.let { it.messages.joinToString("\n").ifBlank { null } ?: "the server returned ${it.status}" }
             val message = when {
                 unknown -> uncertainMessage
                 error is ApiError && error.status == 403 -> "Permission denied. Refresh to check your access."
+                // The confirmation door's refusals in its own words (OrbitKit `OwnerConfirmations.refusalTitle`): an out-of-date
+                // card says so, whatever else refused it says "Not recorded".
+                error is ApiError && card.family == CardFamily.OWNER_CONFIRMATION && verb in setOf(CardVerb.CONFIRM_OWNER, CardVerb.SEND_BACK) ->
+                    "${OwnerReview.refusalTitle(error.code)} — $reason."
+                error is ApiError && verb == CardVerb.REOPEN_TASK -> "Task status was not changed — $reason."
+                // An exception card's doors say which one refused, in the browser's headline (`ExceptionCards`).
+                error is ApiError && card.family == CardFamily.EXCEPTION && ExceptionCards.refusalHeadline(verb) != null ->
+                    "${ExceptionCards.refusalHeadline(verb)} — $reason."
                 error is ApiError && error.status in setOf(404, 409, 410) -> listOfNotNull("This card changed, expired, or was handled elsewhere.", error.code,
                     (error.body as? JsonObject)?.text("requiredAction")).joinToString("\n")
                 error is ApiError -> (error.messages.firstOrNull() ?: "The request was refused.") + (error.code?.let { "\n$it" } ?: "")
@@ -131,7 +140,10 @@ class CardAuthority(private val api: OrbitApi, private val handle: SessionHandle
         if (card.family == CardFamily.WIKI || card.family == CardFamily.BACKGROUND) return readAuxiliary(card)
         // Session REST verifies ownership, active approvals, queues and standing questions together.
         val snapshot = RealtimeRest(api).session(handle, card.sessionId)
-        return CardCatalog.session(card.sessionId, snapshot).firstOrNull { it.key == card.key }
+        val current = CardCatalog.session(card.sessionId, snapshot).firstOrNull { it.key == card.key }
+        // A revision waiting for the coordinator is pressed as the evidence card Decide it myself opened it into, while it still
+        // waits; one that has since become the owner's card is that card, and one sent to the coordinator meanwhile is no longer it.
+        return if (CoordinatorQueue.isDecidingMyself(card)) current?.let { CoordinatorQueue.decideMyself(it) ?: it } else current
     }
 
     private suspend fun readAuxiliary(card: InteractionCard): InteractionCard? = when (card.context.text("resource")) {

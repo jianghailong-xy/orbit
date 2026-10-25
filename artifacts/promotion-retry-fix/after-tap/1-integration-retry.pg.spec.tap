@@ -1,0 +1,155 @@
+TAP version 13
+# coordinator-pg-isolation database=pccspec_1 user=pccspec_ server=172.17.0.17/32:5432 system_identifier=7694707570175406115 version=16.15
+# Subtest: Automatic: the coordinator reruns a red landing with a reason — one new generation, the failure class and the reason kept, its item handled but still open
+ok 1 - Automatic: the coordinator reruns a red landing with a reason — one new generation, the failure class and the reason kept, its item handled but still open
+  ---
+  duration_ms: 963.527003
+  type: 'test'
+  ...
+# Subtest: in flight: a second rerun while the first is queued is refused, and two at once queue one generation
+ok 2 - in flight: a second rerun while the first is queued is refused, and two at once queue one generation
+  ---
+  duration_ms: 536.663677
+  type: 'test'
+  ...
+# Subtest: success: the rerun lands on the project branch, answers what was open, and the project branch goes on to its merge check
+ok 3 - success: the rerun lands on the project branch, answers what was open, and the project branch goes on to its merge check
+  ---
+  duration_ms: 578.230226
+  type: 'test'
+  ...
+# Subtest: failing again: the next red opens a classified item for the coordinator, naming the rerun and its reason — never the owner's
+ok 4 - failing again: the next red opens a classified item for the coordinator, naming the rerun and its reason — never the owner's
+  ---
+  duration_ms: 557.431779
+  type: 'test'
+  ...
+# Subtest: the rerun lands the branch the task's work ended on, not the one the failed generation was handed
+ok 5 - the rerun lands the branch the task's work ended on, not the one the failed generation was handed
+  ---
+  duration_ms: 543.971429
+  type: 'test'
+  ...
+# Subtest: CHECK_TIMED_OUT and ERROR are rerun, a CONFLICT is not
+ok 6 - CHECK_TIMED_OUT and ERROR are rerun, a CONFLICT is not
+  ---
+  duration_ms: 1020.625903
+  type: 'test'
+  ...
+# Subtest: a MAIN_SYNC conflict is refused as well, and the refusal sends the absorb to the project line
+ok 7 - a MAIN_SYNC conflict is refused as well, and the refusal sends the absorb to the project line
+  ---
+  duration_ms: 467.267275
+  type: 'test'
+  ...
+# Subtest: the coordinator closed the item by hand: an Automatic project still reruns the landing (the state ③ was left in)
+ok 8 - the coordinator closed the item by hand: an Automatic project still reruns the landing (the state ③ was left in)
+  ---
+  duration_ms: 416.891731
+  type: 'test'
+  ...
+# Subtest: not Automatic: the failure is the owner's and the coordinator is refused — until the owner hands it back
+ok 9 - not Automatic: the failure is the owner's and the coordinator is refused — until the owner hands it back
+  ---
+  duration_ms: 730.658616
+  type: 'test'
+  ...
+# Subtest: escalated: a failure that went to the owner on the clock is theirs, and the coordinator is refused
+ok 10 - escalated: a failure that went to the owner on the clock is theirs, and the coordinator is refused
+  ---
+  duration_ms: 368.410359
+  type: 'test'
+  ...
+# Subtest: an open blocker waiting on the owner about the task refuses the rerun
+ok 11 - an open blocker waiting on the owner about the task refuses the rerun
+  ---
+  duration_ms: 444.979554
+  type: 'test'
+  ...
+# Subtest: only the project's coordinator: the task's own session, another project's coordinator and no session at all are refused
+ok 12 - only the project's coordinator: the task's own session, another project's coordinator and no session at all are refused
+  ---
+  duration_ms: 487.277065
+  type: 'test'
+  ...
+# Subtest: a reason is required: empty, blank and over-long reasons write nothing
+ok 13 - a reason is required: empty, blank and over-long reasons write nothing
+  ---
+  duration_ms: 399.304965
+  type: 'test'
+  ...
+# Subtest: owner task retry records a USER requester, creates one generation, and deduplicates concurrent presses
+ok 14 - owner task retry records a USER requester, creates one generation, and deduplicates concurrent presses
+  ---
+  duration_ms: 371.337109
+  type: 'test'
+  ...
+# Subtest: owner task retry resolves as USER, or supersedes as USER with the next item still owned by the owner
+ok 15 - owner task retry resolves as USER, or supersedes as USER with the next item still owned by the owner
+  ---
+  duration_ms: 690.424925
+  type: 'test'
+  ...
+# Subtest: owner task retry uses the shared refusal codes
+ok 16 - owner task retry uses the shared refusal codes
+  ---
+  duration_ms: 1164.574161
+  type: 'test'
+  ...
+# Subtest: owner promotion recheck records USER and a READY result is automatically merged
+ok 17 - owner promotion recheck records USER and a READY result is automatically merged
+  ---
+  duration_ms: 536.719221
+  type: 'test'
+  ...
+# Subtest: a task of another project is refused, as is one that is not DONE, one that landed, and one with no landing at all
+ok 18 - a task of another project is refused, as is one that is not DONE, one that landed, and one with no landing at all
+  ---
+  duration_ms: 747.468383
+  type: 'test'
+  ...
+# Subtest: timed out: the owner retries a landing whose runner never answered its claim — the lost generation ends ERROR · RUNNER_LOST and the next one is queued as theirs (§2.2 J-T9)
+ok 19 - timed out: the owner retries a landing whose runner never answered its claim — the lost generation ends ERROR · RUNNER_LOST and the next one is queued as theirs (§2.2 J-T9)
+  ---
+  duration_ms: 350.800919
+  type: 'test'
+  ...
+# Subtest: timed out: the coordinator's integration_retry takes a landing whose runner went silent mid-step, and refuses one that is still reporting
+ok 20 - timed out: the coordinator's integration_retry takes a landing whose runner went silent mid-step, and refuses one that is still reporting
+  ---
+  duration_ms: 341.354022
+  type: 'test'
+  ...
+# Subtest: the 2026-10-09 incident: a re-check of an owner-confirmed candidate carries no stale confirmation — the clean result is accepted and the Automatic setting confirms it
+ok 21 - the 2026-10-09 incident: a re-check of an owner-confirmed candidate carries no stale confirmation — the clean result is accepted and the Automatic setting confirms it
+  ---
+  duration_ms: 619.869501
+  type: 'test'
+  ...
+# Subtest: timed out: integration_retry (promotionId) ends a silent RUNNING check and requeues it, with the candidate readmitted from CHECKING (§2.2 J-T9)
+ok 22 - timed out: integration_retry (promotionId) ends a silent RUNNING check and requeues it, with the candidate readmitted from CHECKING (§2.2 J-T9)
+  ---
+  duration_ms: 970.272339
+  type: 'test'
+  ...
+# Subtest: timed out: the owner's promotion retry ends the silent check without an item of theirs, and a healthy check is refused on the owner door too
+ok 23 - timed out: the owner's promotion retry ends the silent check without an item of theirs, and a healthy check is refused on the owner door too
+  ---
+  duration_ms: 534.924711
+  type: 'test'
+  ...
+# Subtest: the integration-retry PostgreSQL target is explicitly disposable
+ok 24 - the integration-retry PostgreSQL target is explicitly disposable
+  ---
+  duration_ms: 1.098698
+  type: 'test'
+  ...
+1..24
+# tests 24
+# suites 0
+# pass 24
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 14829.798942

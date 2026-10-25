@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep '\"'\"' orbit-submenu-sample (sub-right-tab|sub-right-shift-tab|sub-enter|sub-enter-enter|sub-enter-down-enter) (burst|paced) sample'\"'\"''",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "25f13640b93fd92d9b59e2f4ff3645cf5cf73b2a",
+ "webTree": "d0a53fc0735666a86981095e9efa200b8a80d62c",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-07T23:04:43.226051+00:00",
+ "endedAt": "2026-10-07T23:12:18.745340+00:00",
+ "loadAverage": {
+  "start": [
+   8.0908203125,
+   7.1689453125,
+   6.88720703125
+  ],
+  "end": [
+   5.8515625,
+   6.6123046875,
+   6.779296875
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "29b0e7842c4a384eb487b46cd3140d74e9c07eafb6e2f23c653a1bd11f658893",
+ "outputBytes": 38989,
+ "raw": "/var/tmp/kw2-246921c8/runs/after2-sub-c-sample",
+ "stats": {
+  "expected": 200,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 455148.40599999996,
+  "samples": 200
+ }
+}

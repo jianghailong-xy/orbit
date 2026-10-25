@@ -172,6 +172,20 @@ describe('a project start told to the coordinator', () => {
     expect(card()!.querySelector('.psc-title')?.nextElementSibling).toBe(settings);
   });
 
+  it('says Directly into the main branch the start recorded: main as before, else the branch by name', async () => {
+    const direct = { line: 'MAIN', automatic: false, maxConcurrentTasks: 1, mergeCheckCommand: null };
+    await mount([told({ ...CARD, settings: direct, differsFromRequest: [] })]);
+    expect(card()!.querySelector('.psc-settings')?.textContent)
+      .toBe('Directly into main · Automatic off · 1 task at a time · no merge check');
+    await act(async () => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    await mount([told({ ...CARD, settings: { ...direct, upstreamRef: 'refs/heads/master' }, differsFromRequest: [] })]);
+    expect(card()!.querySelector('.psc-settings')?.textContent)
+      .toBe('Directly into master · Automatic off · 1 task at a time · no merge check');
+  });
+
   it('draws no settings line for a start that recorded none, nor for a malformed one', async () => {
     await mount([told(CARD)]);
     expect(card()!.querySelector('.psc-settings')).toBeNull();

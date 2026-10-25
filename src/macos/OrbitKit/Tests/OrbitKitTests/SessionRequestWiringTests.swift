@@ -59,7 +59,7 @@ final class SessionRequestWiringTests: XCTestCase {
         let view = try section(try source(Self.rowPath),
                                from: "struct UserTurnRow: View", to: "private func attachedRest")
         let user = statements(try section(view, from: "var body: some View {",
-                                          to: "UserBubbleView(bubble: b, onCancelQueued: cancel)\n"))
+                                          to: "UserBubbleView(bubble: b, onCancelQueued: cancel, steer: steer, onPutBack: putBack)\n"))
         let branch = try XCTUnwrap(user.firstIndex(of: "} else if let replies = b.sessionReplies, !replies.isEmpty {"),
                                    "a turn that handed outcomes back is not drawn as reply cards")
         // After the cards whose own wiring test pins the first branches, before the readings of text.

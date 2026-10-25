@@ -110,7 +110,10 @@ evidence.
   decided, undecidable, or whose dispatching session has ended is not delivered at all.
 - **Decision.** The dispatching session decides it with `task_evidence_decide` (CONFIRM, or
   SEND_BACK with a note). The decision door and its independence rule are unchanged: the run that
-  did the work still cannot decide it.
+  did the work still cannot decide it. A SEND_BACK's note is handed to the run that submitted the
+  revision as a platform turn of its own (`evidence-send-back:v1:<decisionId>`, delivered the way
+  the review is), so the next attempt learns what it has to show without anybody relaying it; the
+  decision, note included, is also on the revision in `task_evidence_list` for any session to read.
 - **Back to the owner.** While the dispatching session holds the revision, nobody else is asked: no
   card, no count. It holds it while the delivery turn exists, that session has not ended, and 30
   minutes have not passed since the delivery — read at read time, nothing scheduled. After that, or
@@ -278,7 +281,7 @@ A person's access token, `ORBIT_USER_TOKEN`, is removed from both sources the sa
 (`docs/personal-access-token-design.md` §8). The runner then sets `ORBIT_RUNNER_CHILD=1`, whatever
 either source said about it, as it does on every process it starts for a session. The `orbit` CLI
 in the command therefore acts as the machine, never as a login saved in the runner's `ORBIT_HOME`
-(§7.2 of the same document), so `orbit wiki check` and `orbit wiki plan check` run with the runner
+(§7.2 of the same document), so a command such as `orbit token list` runs with the runner
 credential.
 No extra criterion-specific env is injected.
 

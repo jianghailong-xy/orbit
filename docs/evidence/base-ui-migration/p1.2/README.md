@@ -8,6 +8,19 @@
 
 服务于 [P1.2 实现 Orbit 基础控件与状态样例](orbit-task:34Za391ERoVi0sWSzRhvD)。起点 `5bea0a3f6` 已包含 P0、P1.1 与依赖准备修复。开工读取完整任务、历史评论（空）、项目目标/作业指导/验收、前置任务历史及 P0/P1.1 交付。项目验收原文：**P1：Orbit 公共基础组件使用现有设计变量与主题机制，呈现与当前控件基准一致。** 本任务完成基础控件子范围。
 
+## 交付提交（2026-10-11 补记）
+
+本节由收尾并入任务 [34drbkA2TPuREKzGS0FUh](orbit-task:34drbkA2TPuREKzGS0FUh) 补上，回应 [P7.2 复核](orbit-task:34Za39UxopXFSlSSCGBZG)「缺口与遗留」第 3 条：本 README 此前只写了起点，没有写交付提交的 SHA。
+
+| | |
+| --- | --- |
+| 交付提交（任务分支） | `66cc6cbf0b0884e10c2374a34e6be19b78bbe7b2`，`feat(web): add Orbit basic controls and state comparisons`，2026-10-04 10:05:46 +0800 |
+| 所在分支 | `orbit/p1-2-orbit-e7d654`（tip） |
+| 父提交 | `5bea0a3f6`，即本 README 开头写的起点（P1.1 的落地版本） |
+| 项目线落地提交 | `297d33e97729c66ebdc8f2b63b0e094db1d9e8df`，提交信息相同；`docs/evidence/base-ui-migration/p1.2` 的 tree 两处逐字节相同（都是 `9d007e23940706d0f67bd95d136ab4b5d3de1cea`） |
+
+**依据**：任务记录把 `66cc6cbf0…` 写作 P1.2 的交付提交（进度报告 revision 5「提交 66cc6cbf0」；集成评论 `34ZrGMI1HooAyKpg2KJBj` 记录第 2 代落地作业 `2Bq74fpOHzBVq4ljSI3ecG`）；该提交是任务分支 `orbit/p1-2-orbit-e7d654` 的 tip，父提交等于本 README 开头写的起点 `5bea0a3f6`。落地时它被重写为项目线上的 `297d33e97`：提交信息相同，改动的文件清单与增删行数也相同（338 个文件，+295,987/−4），`docs/evidence/base-ui-migration/p1.2` 的 tree 逐字节相同。`297d33e97` 现在是 `origin/main` 的祖先；`66cc6cbf0…` 本身不在项目分支/main 的历史里，只在任务分支上——引用这个 SHA 时以任务分支为准，引用落地结果用 `297d33e97`。
+
 ## 交付与范围
 
 `src/web/src/components/ui/` 增加 Button、Input、Textarea、Checkbox、Radio/RadioGroup、Switch、Badge、Spinner；Button 文件另提供保持原生链接语义的 LinkButton。Button/选择控件封装已锁定的 Base UI 1.8.0；文本字段、标签与加载图形采用原生 HTML，图标沿用 @ant-design/icons。组件只导入自己的局部 CSS，复用已有 surface/text/border/主题机制；foundation.css 只补足实测交互色和标签色变量，没有新增全局 reset 或业务选择器。

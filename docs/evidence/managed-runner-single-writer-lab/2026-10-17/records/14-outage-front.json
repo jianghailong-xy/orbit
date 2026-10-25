@@ -1,0 +1,28 @@
+{
+  "afterRestore": {
+    "answer": "pod/t02a-outage-unmanaged",
+    "exit": 0
+  },
+  "attempts": [
+    {
+      "admitted": false,
+      "answer": "Error from server (InternalError): error when creating \"STDIN\": Internal error occurred: failed calling webhook \"pods.managed-runner.orbit.dev\": failed to call webhook: Post \"https://10.0.2.2:13711/api/managed-runner/admission?timeout=10s\": dial tcp 10.0.2.2:13711: connect: connection refused",
+      "at": "2026-10-17T19:54:39.910+00:00",
+      "case": "unlabelled Pod on the claim, by the cluster admin, while the guard cannot answer",
+      "identity": "lab cluster-admin",
+      "labels": null,
+      "name": "t02a-second-outage",
+      "node": "orbit-mr-lab"
+    },
+    {
+      "answer": "Error from server (InternalError): error when creating \"STDIN\": Internal error occurred: failed calling webhook \"pods.managed-runner.orbit.dev\": failed to call webhook: Post \"https://10.0.2.2:13711/api/managed-runner/admission?timeout=10s\": dial tcp 10.0.2.2:13711: connect: connection refused",
+      "at": "2026-10-17T19:54:39.964+00:00",
+      "case": "a Pod on no managed claim (dry run), while the guard cannot answer",
+      "exit": 1
+    }
+  ],
+  "restoreStartedAt": "2026-10-17T19:54:40.009+00:00",
+  "restoredAt": "2026-10-17T19:54:43.908+00:00",
+  "stoppedAt": "2026-10-17T19:54:37.903+00:00",
+  "what": "TLS front 10.0.2.2:13711 stopped (Orbit unreachable)"
+}

@@ -1,0 +1,24 @@
+{
+ "head": "09d94a12f4bb969d69edf75c208d8ab0f9777423",
+ "tree": "74bc29723385e663cbe65c6e85dff6d701e0a40d",
+ "acceptanceCommand": "npm run build -w @orbit/web && npm run test -w @orbit/web && npm run test:ui-migration -w @orbit/web",
+ "workingDirectory": "/root/.orbit/worktrees/8c4849bc-8104-5198-b7bc-a9b80b8ffeb7",
+ "note": "Each step was run with its own exit code captured (set -u, no && chaining): the three commands the task declares, in its order, in this one worktree.",
+ "steps": [
+  {
+   "step": "build",
+   "exitCode": 0,
+   "durationMs": 2140
+  },
+  {
+   "step": "test",
+   "exitCode": 0,
+   "durationMs": 196645
+  },
+  {
+   "step": "ui-migration",
+   "exitCode": 0,
+   "durationMs": 169389
+  }
+ ]
+}

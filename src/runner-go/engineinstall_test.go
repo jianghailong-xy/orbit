@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -342,5 +344,54 @@ func TestEngineAuthPreflightOnASignedOutEngine(t *testing.T) {
 		}
 	} else if msg != "" {
 		t.Errorf("a signed-in (or unprobeable) engine must not be blocked: %q", msg)
+	}
+}
+
+// A session the sign-in preflight refuses has found its engine signed out, which the engine probe the
+// Providers page reads may not know yet: it last ran up to five minutes ago. The refusal re-probes the
+// engines and beats at once (noteEngineSignedOut), so the page stops calling the engine signed in.
+func TestSignedOutPreflightReprobesTheEngines(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // no stored credentials to answer before the CLI is asked
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	bin := t.TempDir()
+	writeFakeBin(t, bin, "claude", `case "$1" in
+  --version) echo '2.1.295 (Claude Code)' ;;
+  auth) echo '{"loggedIn":false}' ;;
+  *) exit 2 ;;
+esac`)
+	// The preflight resolves claude through the service PATH, which puts this account's installer
+	// directories — where a development machine keeps its real claude — in front of anything not
+	// already on PATH. Named behind the fake, they stay where they are.
+	u, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", strings.Join(append(append([]string{bin}, engineInstallerDirs(u.HomeDir)...), os.Getenv("PATH")), ":"))
+	if path, ok := lookEngine(providerClaude); !ok || path != filepath.Join(bin, "claude") {
+		t.Fatalf("the runner resolves claude to %q, not the fake", path)
+	}
+	var reprobes atomic.Int32
+	seen := func() { reprobes.Add(1) }
+	previous := engineSignedOutSeen.Load()
+	engineSignedOutSeen.Store(&seen)
+	t.Cleanup(func() { engineSignedOutSeen.Store(previous) })
+
+	var errs []string
+	emit := func(eventType string, payload map[string]interface{}) {
+		if eventType == evError {
+			errs = append(errs, asString(payload["message"]))
+		}
+	}
+	job := &ClaimedSession{SessionID: "s-signed-out", Provider: providerClaude}
+	st, ended, _ := runSessionProcess(context.Background(), context.Background(), nil, job, "", "", t.TempDir(),
+		emit, nil, func(string) {}, true, nil, nil, nil, nil, nil)
+	if st != stFailed || !ended {
+		t.Fatalf("runSessionProcess = (%s, ended=%v), want a failed end", st, ended)
+	}
+	if len(errs) != 1 || errs[0] != engineSignedOutMessage(providerClaude) {
+		t.Fatalf("errors = %q, want just the signed-out refusal", errs)
+	}
+	if n := reprobes.Load(); n != 1 {
+		t.Fatalf("the refusal asked for %d engine re-probes, want 1", n)
 	}
 }

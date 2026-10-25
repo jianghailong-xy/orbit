@@ -575,6 +575,12 @@ test('an answered card queues one generation that is handed no merge check, and 
       assert.equal(skipped.failureClass, 'CHECK_FAILED');
       assert.equal(skipped.reason, REASON, 'the reason is kept as given, trimmed');
       assert.equal(skipped.sourceRef, `refs/heads/${task.branch}`);
+      const segment = await stack.db.projectLanding.findFirstOrThrow({
+        where: { taskId: task.taskId, subject: 'TASK' },
+        select: { sessionId: true },
+      });
+      assert.equal(skipped.landingSessionId, segment.sessionId,
+        'the answer addresses the landing session the skipped generation belongs to');
 
       // THE RECORD: the skip, who approved it, and why — on the row itself, not inferred from an
       // empty checks array (which is also what a project with no check command produces).
@@ -799,7 +805,15 @@ test('the account owner needs no card: their own press is the approval, and the 
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
-      const w = await world(stack, 'skip-owner');
+      // The owner's own door answers an item that is THEIRS, and who a failed landing's item belongs
+      // to is the contract's answer, not this file's: in an Automatic project the failure opens a
+      // coordinator item and this door refuses by name ("use the project coordinator's
+      // integration_retry door") — integration-retry.pg.spec's own refusal case. In a project whose
+      // Automatic switch is off there is no hand-over to make, so the item is the owner's from
+      // birth, and their press on it is what this case is about. Same for the two refusals below:
+      // each is about a failure that is not a check failure, so each needs the same switch off to
+      // reach it rather than the ownership refusal in front of it.
+      const w = await world(stack, 'skip-owner', false);
       const { task } = await failedLanding(stack, w, 'skip-owner');
       const skipped = await ownerSkip(stack, w, task.taskId, REASON);
 
@@ -812,11 +826,17 @@ test('the account owner needs no card: their own press is the approval, and the 
       assert.equal(second.skipApprovalId, null, 'no card was raised, and none is claimed');
       assert.equal(second.retryRequestedByUserId, w.ownerId, 'the owner asked, on the user channel');
       assert.equal(second.retryRequestedBySessionId, null);
+      const segment = await stack.db.projectLanding.findFirstOrThrow({
+        where: { taskId: task.taskId, subject: 'TASK' },
+        select: { sessionId: true },
+      });
+      assert.equal(skipped.landingSessionId, segment.sessionId,
+        'the owner door answers the same landing session as the coordinator door');
 
       // An error is not a check: the machinery stopping is answered by running the landing again,
       // and the next task's landing is where that is said — its own world, so the queue this case
       // reads holds exactly the one job it is about.
-      const other = await world(stack, 'skip-owner-error');
+      const other = await world(stack, 'skip-owner-error', false);
       const errored = await failedLanding(stack, other, 'skip-owner-error', {
         state: 'ERROR',
         phase: 'PUSH',
@@ -830,7 +850,7 @@ test('the account owner needs no card: their own press is the approval, and the 
       assert.equal(refused.code, 'INTEGRATION_SKIP_CHECK_NOT_A_CHECK_FAILURE');
       assert.match(refused.message, /integration_retry/);
       // And a conflict, which is the branch's: only a branch that changed answers one.
-      const conflicted = await world(stack, 'skip-owner-conflict');
+      const conflicted = await world(stack, 'skip-owner-conflict', false);
       const clashed = await failedLanding(stack, conflicted, 'skip-owner-conflict', {
         state: 'CONFLICT',
         phase: 'REBASE',

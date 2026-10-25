@@ -1,0 +1,8 @@
+Test Case '-[LandingSessionMacProbeUITests.LandingPageFixesTests testMacFailedCheckOutputLoadsInline]' started.
+Test Case '-[LandingSessionMacProbeUITests.LandingPageFixesTests testMacFailedCheckOutputLoadsInline]' passed (35.255 seconds).
+Test Case '-[LandingSessionMacProbeUITests.LandingPageFixesTests testMacMergeCheckThatEndedReadyDrawsACheckmark]' started.
+Test Case '-[LandingSessionMacProbeUITests.LandingPageFixesTests testMacMergeCheckThatEndedReadyDrawsACheckmark]' passed (30.305 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 65.560 (65.561) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 65.560 (65.562) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 65.560 (65.564) seconds
+** TEST SUCCEEDED **

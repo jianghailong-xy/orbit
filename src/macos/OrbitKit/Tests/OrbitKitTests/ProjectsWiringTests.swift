@@ -272,6 +272,19 @@ final class ProjectsWiringTests: XCTestCase {
                        "readiness alone cannot diagnose a runner problem")
     }
 
+    /// The lanes and the criteria name the project's main branch: the Work overview off the
+    /// integration read the page holds (as the browser's header hands its card `mainBranch`), the
+    /// criteria off the project document (as `ProjectAcceptanceCard` reads `integration.upstreamRef`).
+    func testTheOverviewAndTheCriteriaNameTheProjectsMainBranch() throws {
+        let view = code(try appSource("Views/ProjectsView.swift"))
+        let overview = try slice(view, from: "private func overviewSection(", to: "private func overviewCell(")
+        XCTAssertTrue(overview.contains("main: RunSettings.mainBranchName(store.integration?.upstreamRef))"))
+        let criteria = try slice(view, from: "private func criteriaSection(", to: "private func criterionRow(")
+        XCTAssertTrue(criteria.contains("main: RunSettings.mainBranchName(document.integration?.upstreamRef))"))
+        let row = try slice(view, from: "private func criterionRow(", to: "\n    }\n")
+        XCTAssertTrue(row.contains("ProjectPage.criterionWork(criterion, integrationRef: ref, main: main)"))
+    }
+
     /// A project nobody has started (mock board3 ②) says so in its header, and its Open items lead
     /// with the start: the coordinator's request — whose Review lands on the card in the coordinator
     /// conversation, by Answer's own door and origin, rather than a second copy drawn here — or,
@@ -287,7 +300,9 @@ final class ProjectsWiringTests: XCTestCase {
 
         let row = try slice(view, from: "private func startItem(", to: "private func reviewStart(")
         XCTAssertTrue(row.contains("case .asked(let row):"))
-        XCTAssertTrue(row.contains("StartProject.requestSummary($0.settings)"))
+        XCTAssertTrue(row.contains("StartProject.requestSummary($0.settings, main: StartProject.mainBranch("),
+                      "the request's row says directly into the main branch the start card opens with")
+        XCTAssertTrue(row.contains("suggested: $0.settings.upstreamRef, standing: store.integration))"))
         XCTAssertTrue(row.contains("reviewStart(store)"))
         XCTAssertTrue(row.contains("case .own:"))
         XCTAssertTrue(row.contains("pageSheet = .start"))
@@ -330,6 +345,10 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(sheet.contains("requestId: nil"))
         XCTAssertTrue(sheet.contains("hasCoordinator: document.coordinatorSessionId != nil,"),
                       "a project nobody coordinates yet is told a start with Automatic on opens one")
+        XCTAssertTrue(sheet.contains("StartSettingsDraft(settings, standing: store.integration)"),
+                      "the owner's own card opens on the main branch the integration read puts first")
+        XCTAssertTrue(sheet.contains("branches: store.integration?.branches,"))
+        XCTAssertTrue(sheet.contains("lastMainBranch: store.integration?.lastMainBranch,"))
         XCTAssertFalse(sheet.contains("onChatAbout"), "there is no conversation to talk in over the page")
         let cards = code(try appSource("Views/ApprovalCards.swift"))
         let card = try slice(cards, from: "struct StartProjectCard: View {",
@@ -360,8 +379,8 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(block.contains("if RunSettings.shown(started: document.started) {"))
         XCTAssertTrue(block.contains("sectionHeader(StartProject.howItRuns, detail: RunSettings.appliesFromNextTask)"))
         XCTAssertTrue(block.contains("Text(RunSettings.notLoaded)"))
-        let order = ["lineSetting(", "automaticSetting(", "atMostSetting(", "mergeCheckSetting(",
-                     "escalationSetting(", "pauseSetting("]
+        let order = ["lineSetting(", "mainBranchSetting(", "automaticSetting(", "atMostSetting(",
+                     "mergeCheckSetting(", "escalationSetting(", "pauseSetting("]
         let positions = order.map { block.range(of: $0)?.lowerBound }
         XCTAssertFalse(positions.contains(nil), "the block lost one of \(order)")
         XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),
@@ -371,6 +390,22 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(line.contains("if view.locked {"))
         XCTAssertTrue(line.contains("systemImage: \"lock.fill\")"), "a locked line is drawn locked")
         XCTAssertTrue(line.contains("RunSettings.lineLocked(since:"), "and says why it can no longer move")
+        XCTAssertTrue(line.contains("if RunSettings.storedMainBranch(view) == nil {"),
+                      "there, only on a project with no Main branch row: one that has the row says it under the row")
+        XCTAssertTrue(line.contains("RunSettings.lineMain(main)"), "Directly into the main branch it stands on")
+        // Main branch (board ③ ⑧ ⑩): under the line, picked on the start card's sheet and written the
+        // moment it is picked, locked with the line, and drawn only for a project with a repository.
+        let branch = try slice(view, from: "private func mainBranchSetting(", to: "private func automaticSetting(")
+        XCTAssertTrue(branch.contains("if let main = RunSettings.storedMainBranch(view),"))
+        XCTAssertTrue(branch.contains("let note = RunSettings.mainBranchNote(view, since:"))
+        XCTAssertTrue(branch.contains("if view.locked {"))
+        XCTAssertTrue(branch.contains("Label(main, systemImage: \"lock.fill\")"), "a locked branch is drawn locked")
+        XCTAssertTrue(branch.contains("pageSheet = .mainBranch"))
+        let sheet = try slice(view, from: "case .mainBranch:", to: "case .landingJobs:")
+        XCTAssertTrue(sheet.contains("MainBranchPicker(current: main, branches: view.branches,"))
+        XCTAssertTrue(sheet.contains("remembered: view.lastMainBranch?.branch)"))
+        XCTAssertTrue(sheet.contains("notice = await store.updateIntegration(RunSettings.mainBranchWrite(view, to: name))"),
+                      "a pick is written at once, and a refusal says Couldn't do that")
         let option = try slice(view, from: "private func lineOption(", to: "private func automaticSetting(")
         XCTAssertTrue(option.contains("store.updateIntegration(RunSettings.lineWrite(view, to: line))"))
         let automatic = try slice(view, from: "private func automaticSetting(", to: "private func atMostSetting(")
@@ -399,7 +434,8 @@ final class ProjectsWiringTests: XCTestCase {
         let pause = try slice(view, from: "private func pauseSetting(", to: "private func goalSection(")
         XCTAssertTrue(pause.contains("Button(paused ? RunSettings.resume : RunSettings.pause)"))
         XCTAssertTrue(pause.contains("store.setPaused(!paused)"))
-        XCTAssertTrue(pause.contains("RunSettings.pauseFootnote(pausedAt: document.pausedAt, now: now)"))
+        XCTAssertTrue(pause.contains("RunSettings.pauseFootnote(pausedAt: document.pausedAt, now: now, main: main)"),
+                      "and what a pause stops is merges into the main branch the project stands on")
 
         // The writes: the integration door, now written from this client too, and the project's own
         // with `automatic` — never `coordinatorEnabled`, whose off the server also reads as a pause.
@@ -440,19 +476,27 @@ final class ProjectsWiringTests: XCTestCase {
                       "project detail reads remain concurrent")
     }
 
-    /// The Work overview's landing row opens the jobs it counts (docs/mocks/landing-jobs-sheet) on a
-    /// server that lists them, through the page's own sheet rather than one its clock would redraw,
-    /// and stays a row on an older server. A task opens over the page once the sheet is down, as the
-    /// page's rows open theirs, and a Retry goes through the page's store, which reads it again.
+    /// The Work overview's landing is the same card the sessions page draws (owner decision
+    /// 2026-10-11, docs/mocks/project-landing-card): a press opens the jobs it counts
+    /// (docs/mocks/landing-jobs-sheet) on a server that lists them, through the page's own sheet
+    /// rather than one its clock would redraw, and a server that lists none draws the card as a
+    /// read. A task opens over the page once the sheet is down, as the page's rows open theirs, and
+    /// a Retry goes through the page's store, which reads it again.
+    ///
+    /// Since 2026-10-19 (owner decision) it draws every job in flight — a merge job included, as
+    /// web and Android do — because this page has no merge card to hand that job to.
     func testTheLandingRowOpensTheJobsInFlightOverTheProjectPage() throws {
         let view = code(try appSource("Views/ProjectsView.swift"))
         let row = try slice(view, from: "private func landingRow(_ store: ProjectDetailModel) -> some View {",
                             to: "\n    }\n")
-        XCTAssertTrue(row.contains("if integration.inFlightJobs != nil {"))
-        XCTAssertTrue(row.contains("Button { pageSheet = .landingJobs } label: {"))
-        XCTAssertTrue(row.contains("} else {\n                        ProjectLandingRow(line: line)"),
-                      "an older server's row stays a row")
-        XCTAssertFalse(row.contains(".sheet("), "the row redraws every second; the sheet is the page's")
+        XCTAssertTrue(row.contains("if let card = ProjectPage.landingCard(integration, now: context.date,"))
+        XCTAssertFalse(row.contains("ProjectMergeCard.taskLandingCard"),
+                       "a merge job in flight is drawn here too, not hidden behind the merge card")
+        XCTAssertTrue(row.contains("onOpenJobs: integration.inFlightJobs == nil ? nil : { pageSheet = .landingJobs },"))
+        XCTAssertTrue(row.contains("onOpenProject: nil,"),
+                      "on the project's own page a card with no list to open is a read")
+        XCTAssertTrue(row.contains("retry: { jobID in try await store.retryIntegrationJob(jobID) })"))
+        XCTAssertFalse(row.contains(".sheet("), "the card redraws every second; the sheet is the page's")
         let kinds = try slice(view, from: "private enum ProjectPageSheet: String, Identifiable {", to: "\n}\n")
         XCTAssertTrue(kinds.contains("case landingJobs"))
         let sheet = try slice(view, from: "case .landingJobs:", to: "\n                }\n")
@@ -479,7 +523,8 @@ final class ProjectsWiringTests: XCTestCase {
         let jobs = code(try appSource("Views/ProjectLandingJobsSheet.swift"))
         for part in ["TimelineView(.periodic(from: .now, by: 1)) { context in", "let rows = lines(context.date)",
                      "ProjectPage.landingJobsTitle(", ".keyboardShortcut(.cancelAction)",
-                     "ProjectLandingRow(line: row.line)", "if let taskID = row.taskId {",
+                     "ProjectLandingHead(title: row.line.word, head: row.line.head, running: row.line.running,",
+                     "if let what = row.line.what {", "if let taskID = row.taskId {",
                      "Button { openTask(taskID) } label: {", "if row.retryable {",
                      "Text(ProjectPage.landingRetry)", ".font(.orbitLabel.weight(.semibold))",
                      ".buttonStyle(.bordered)", ".buttonBorderShape(.capsule)", ".controlSize(.small)",
@@ -495,12 +540,13 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertLessThan(shared.lowerBound, iOS.lowerBound, "the sheet is the Mac's project page's too")
         XCTAssertTrue(jobs.contains("#else\n        .frame(minWidth: 420, idealWidth: 520, minHeight: 420, idealHeight: 560)"))
 
-        // A job the server judged timed out trades the ring for the warning mark, which never spins.
-        let landingRow = code(try appSource("Views/ProjectLandingRow.swift"))
-        for part in ["let ink = line.timedOut ? ProjectPalette.warningInk", "if line.timedOut {",
-                     "Image(systemName: \"exclamationmark.triangle.fill\")", "LandingRing(running: line.running)",
-                     ".foregroundStyle(line.timedOut ? ink : Color.secondary)"] {
-            XCTAssertTrue(landingRow.contains(part), "the landing row keeps `\(part)`")
+        // A job the server judged timed out trades the ring for the warning mark, which never
+        // spins — one rule for every landing row, drawn by the head
+        // (`testTheHeadsWearTheMergedLinesRowAndCarryNoChevron`).
+        let head = code(try appSource("Views/ProjectLandingRow.swift"))
+        for part in ["if timedOut {", "Image(systemName: \"exclamationmark.triangle.fill\")",
+                     "LandingRing(size: 15, running: running)"] {
+            XCTAssertTrue(head.contains(part), "the head keeps `\(part)`")
         }
     }
 }

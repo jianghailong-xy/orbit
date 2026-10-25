@@ -13,8 +13,10 @@ import { ACCESS_TOKEN_FALLBACK_MS, accountOf, maskedAccount } from './codex-logi
 import {
   ACCESS_TOKEN_REFRESH_WINDOW_MS,
   codexUsageSnapshot,
+  loginBackendBase,
   loginForwardedHeaders,
   loginMissingReason,
+  loginProviderRequest,
   loginSignedOutNotice,
   loginSpentNotice,
   POOL_LOGIN_TOKEN_ENDPOINT,
@@ -94,7 +96,9 @@ type Refreshed =
  *   nothing more: which upstream a request goes to is the session's (PoolGatewayController) — an owner's
  *   session the claim put on one of the pool's API keys (migration 0358) goes to OpenAI's API on that key,
  *   through PoolGatewayService, on this same token.
- * - WHAT: only the allowed paths (pool-gateway.service.ts gatewayAllows); anything else is 403.
+ * - WHAT: only the allowed paths (codex-login-gateway.ts loginGatewayAllows — the turn, and the ChatGPT
+ *   backend calls the CLI makes for itself when signed in: routing, plugins, settings, analytics);
+ *   anything else is 403.
  * - WHOSE (`forward`): a ChatGPT account of the pool runs the sessions of everyone in the pool — its
  *   owner's, and those of the people they added (2026-10-03; the pool's owner asked for it), whatever kind
  *   of token the request arrived on. Signing an account in or out is still the owner's alone, and a
@@ -190,9 +194,19 @@ export class PoolLoginGatewayService {
     }
     const now = new Date();
     let access = decryptSecret(login.accessTokenEnc);
-    const url = `${this.upstream}${target.path}${target.query}`;
+    // The turn comes from a session's codex on a configured provider, which omits what only the CLI's
+    // built-in ChatGPT provider adds and never asks for the backend's other paths — so the gateway builds
+    // that shape for `/responses` alone. Every other allowed path is one the CLI sends when it is signed
+    // in itself, and is forwarded as it came, on the login's credential.
+    const turn = target.path === '/responses';
+    const url = `${turn ? this.upstream : loginBackendBase(this.upstream)}${target.path}${target.query}`;
+    const prepared = turn ? loginProviderRequest(req.headers, body) : { body, extra: {} };
     const send = (credential: string) =>
-      sendUpstream(this.agent, req.method, url, loginForwardedHeaders(req.headers, credential, login.accountId, body.length), body, res);
+      sendUpstream(
+        this.agent, req.method, url,
+        loginForwardedHeaders(req.headers, credential, login.accountId, prepared.body.length, prepared.extra),
+        prepared.body, res,
+      );
     let answer: Answer;
     try {
       // Refreshed ahead of its own expiry, as the codex CLI does. A token endpoint that cannot be reached

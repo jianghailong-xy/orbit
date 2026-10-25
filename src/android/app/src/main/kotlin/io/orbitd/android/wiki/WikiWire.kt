@@ -15,15 +15,7 @@ internal fun wikiKey(id: String?): String = id?.let { ObjectId.canonical(it) ?: 
 internal fun sameWikiId(a: String?, b: String?) = a != null && b != null && wikiKey(a) == wikiKey(b)
 
 /** OrbitKit `PublicID.toPublic`: a UUID's 16 bytes as Base62, the spelling the deployment's own routes use. */
-internal fun wikiPublicId(id: String): String {
-    val uuid = ObjectId.canonical(id) ?: return id
-    var number = java.math.BigInteger(uuid.replace("-", ""), 16)
-    if (number.signum() == 0) return "0"
-    val alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-    val out = StringBuilder(); val base = java.math.BigInteger.valueOf(62)
-    while (number.signum() > 0) { val (q, r) = number.divideAndRemainder(base); out.append(alphabet[r.toInt()]); number = q }
-    return out.reverse().toString()
-}
+internal fun wikiPublicId(id: String): String = ObjectId.toPublic(id)
 
 internal fun <T> JsonElement?.lenient(serializer: KSerializer<T>): T? =
     this?.takeIf { it !is JsonNull }?.let { runCatching { Wire.json.decodeFromJsonElement(serializer, it) }.getOrNull() }
@@ -46,11 +38,11 @@ data class WikiAnchor(
 
 // MARK: a space
 
-/** Contract `space.settings.maintenance`; a key left out reads as its default, a null look-back is all history. */
-data class WikiMaintenanceSettings(val enabled: Boolean, val workspaceId: String?, val provider: String,
-    val dailyRunLimit: Int, val lookbackDays: Int?, val listId: String?) {
+/** Contract `space.settings.maintenance`; a key left out reads as its default, a null look-back is all history. Its
+ * `provider` and `listId` are history the server keeps from before server execution, which this client does not read. */
+data class WikiMaintenanceSettings(val enabled: Boolean, val workspaceId: String?, val dailyRunLimit: Int, val lookbackDays: Int?) {
     companion object {
-        val default = WikiMaintenanceSettings(false, null, "local-vllm", 8, 14, null)
+        val default = WikiMaintenanceSettings(false, null, 8, 14)
         val dailyRunLimitRange = 1..48
         val lookbackDaysRange = 0..365
         fun read(element: JsonElement?): WikiMaintenanceSettings? {
@@ -58,8 +50,7 @@ data class WikiMaintenanceSettings(val enabled: Boolean, val workspaceId: String
             val limit = c["dailyRunLimit"].integer()?.takeIf { it in dailyRunLimitRange }
             val lookback = if (c.containsKey("lookbackDays") && c["lookbackDays"] is JsonNull) null
                 else c["lookbackDays"].integer()?.takeIf { it in lookbackDaysRange } ?: default.lookbackDays
-            return WikiMaintenanceSettings(c["enabled"].bool() ?: default.enabled, c["workspaceId"].text(),
-                c["provider"].text() ?: default.provider, limit ?: default.dailyRunLimit, lookback, c["listId"].text())
+            return WikiMaintenanceSettings(c["enabled"].bool() ?: default.enabled, c["workspaceId"].text(), limit ?: default.dailyRunLimit, lookback)
         }
     }
 }
@@ -87,6 +78,13 @@ data class WikiSpace(
     val id: String, val slug: String, val title: String? = null, val repoUrlNorm: String? = null, val rootCommitSha: String? = null,
     val settings: WikiSpaceSettings? = null, val createdAt: String? = null, val updatedAt: String? = null,
     val pendingOps: Int? = null, val usage: WikiUsage? = null,
+    /** What of the space's plan waits on the owner (`planWaiting`, c6e66aaef): the drawer's number counts it beside the
+     * proposals. Absent from an older server, which then counts the proposals alone. */
+    val planWaiting: Int? = null,
+    /** The live workspaces bound to the space, in bind order: the space the Wiki opens from one of them. */
+    val workspaceIds: List<String>? = null,
+    /** The confirmed plan's documents and how many are written; null while the space has no confirmed plan. */
+    val docs: WikiDocsDirectory.Counts? = null,
 )
 
 // MARK: an entry
@@ -155,6 +153,9 @@ data class WikiChangesetOp(
     val tainted: Boolean? = null, val decision: String? = null, val decisionReason: String? = null, val decisionNote: String? = null,
     val resultEntryId: String? = null, val resultRevision: Int? = null, val decidedAt: String? = null,
     val verification: WikiOpVerification? = null, val appliedByMode: String? = null, val spotCheck: Boolean? = null,
+    /** The current title of the entry `entryId` names — Review's read adds it, so a card can name an entry no other read
+     * holds. Null when the op names none, and on every other read. */
+    val entryTitle: String? = null,
 )
 
 @Serializable
@@ -226,9 +227,11 @@ data class WikiMaintenanceHealth(
     val lastRun: LastRun? = null, val lastFailure: LastFailure? = null,
 ) {
     data class Held(val reason: String, val at: String)
-    data class Running(val sessionId: String?, val startedAt: String)
-    data class LastRun(val sessionId: String?, val outcome: String?, val endedAt: String)
-    data class LastFailure(val kind: String, val reason: String?, val at: String, val sessionId: String?)
+    /** The run under way: its session, and — from P9 — the server's job when the server runs it. */
+    data class Running(val sessionId: String?, val jobId: String?, val startedAt: String)
+    /** The run that ended last: its session, or the server's job, whose page View run opens instead. */
+    data class LastRun(val sessionId: String?, val jobId: String?, val outcome: String?, val endedAt: String)
+    data class LastFailure(val kind: String, val reason: String?, val at: String, val sessionId: String?, val jobId: String?)
     companion object {
         /** Every field reads as its default when a server one release apart leaves it out. */
         fun read(element: JsonElement?): WikiMaintenanceHealth {
@@ -238,11 +241,11 @@ data class WikiMaintenanceHealth(
                 val at = h["at"].text()
                 if (reason != null && at != null) Held(reason, at) else null
             }
-            val running = (c["running"] as? JsonObject)?.let { r -> r["startedAt"].text()?.let { Running(r["sessionId"].text(), it) } }
-            val lastRun = (c["lastRun"] as? JsonObject)?.let { r -> r["endedAt"].text()?.let { LastRun(r["sessionId"].text(), r["outcome"].text(), it) } }
+            val running = (c["running"] as? JsonObject)?.let { r -> r["startedAt"].text()?.let { Running(r["sessionId"].text(), r["jobId"].text(), it) } }
+            val lastRun = (c["lastRun"] as? JsonObject)?.let { r -> r["endedAt"].text()?.let { LastRun(r["sessionId"].text(), r["jobId"].text(), r["outcome"].text(), it) } }
             val lastFailure = (c["lastFailure"] as? JsonObject)?.let { f ->
                 val kind = f["kind"].text(); val at = f["at"].text()
-                if (kind != null && at != null) LastFailure(kind, f["reason"].text(), at, f["sessionId"].text()) else null
+                if (kind != null && at != null) LastFailure(kind, f["reason"].text(), at, f["sessionId"].text(), f["jobId"].text()) else null
             }
             val look = c["look"].text()?.takeIf { it in setOf("off", "failing", "running", "behind", "ok") } ?: "unknown"
             return WikiMaintenanceHealth(look, c["enabled"].bool() ?: false, c["lastOkAt"].text(), c["lastRunAt"].text(),
@@ -252,12 +255,133 @@ data class WikiMaintenanceHealth(
     }
 }
 
-data class WikiSpaceHealth(val spaceId: String, val entries: Int, val maintenance: WikiMaintenanceHealth) {
+/** What the space's repository steps depend on (contract `repoOps.looks`, P2). */
+data class WikiSpaceRepoHealth(val look: String, val pending: Int = 0) {
+    companion object {
+        fun read(element: JsonElement?): WikiSpaceRepoHealth? {
+            val c = element as? JsonObject ?: return null
+            return WikiSpaceRepoHealth(c["look"].text() ?: "unknown", c["pending"].integer() ?: 0)
+        }
+    }
+}
+
+/** Whether the server runs this account's wiki (contract `jobs.executor.read`): a control plane older than P9 sends
+ * none, and the server-only parts are then not drawn. */
+data class WikiExecutorView(val mode: String, val serverExecutes: Boolean) {
+    companion object {
+        fun read(element: JsonElement?): WikiExecutorView? {
+            val c = element as? JsonObject ?: return null
+            return WikiExecutorView(c["mode"].text() ?: "unknown", c["serverExecutes"].bool() ?: false)
+        }
+    }
+}
+
+/** The deployment's System model (contract `systemModel.read`): its name and state, never its address or key. The
+ * health read carries the same without `executor`, beside a space's health. */
+data class WikiSystemModelStatus(
+    val state: String, val model: String? = null, val since: String? = null, val checkedAt: String? = null,
+    val workerSeenAt: String? = null, val executor: WikiExecutorView? = null,
+) {
+    companion object {
+        fun read(element: JsonElement?): WikiSystemModelStatus {
+            val c = element as? JsonObject ?: JsonObject(emptyMap())
+            return WikiSystemModelStatus(c["state"].text() ?: "unknown", c["model"].text(), c["since"].text(),
+                c["checkedAt"].text(), c["workerSeenAt"].text(), WikiExecutorView.read(c["executor"]))
+        }
+    }
+}
+
+data class WikiSpaceHealth(
+    val spaceId: String, val entries: Int, val maintenance: WikiMaintenanceHealth,
+    val repo: WikiSpaceRepoHealth? = null, val executor: WikiExecutorView? = null, val systemModel: WikiSystemModelStatus? = null,
+) {
+    /** The server runs this account's wiki: what the status line's reasons and Activity's Runs band ask first. */
+    val serverExecutes: Boolean get() = executor?.serverExecutes == true
     companion object {
         fun decode(element: JsonElement): WikiSpaceHealth {
             val c = element.jsonObject
             return WikiSpaceHealth(requireNotNull(c["spaceId"].text()), requireNotNull(c["entries"].integer()),
-                WikiMaintenanceHealth.read(c["maintenance"]))
+                WikiMaintenanceHealth.read(c["maintenance"]), WikiSpaceRepoHealth.read(c["repo"]),
+                WikiExecutorView.read(c["executor"]), c["systemModel"]?.takeIf { it !is JsonNull }?.let(WikiSystemModelStatus::read))
+        }
+    }
+}
+
+// MARK: the server's runs (contract `jobs.read`, P9)
+
+/** One model call of a run, as its call log shows it: its metadata alone, never its prompt or answer. */
+data class WikiJobCall(
+    val id: String, val step: String, val unit: String, val attempt: Int = 1, val attempts: Int = 0, val state: String,
+    val enqueuedAt: String, val startedAt: String? = null, val endedAt: String? = null, val inputTokens: Int? = null,
+    val outputTokens: Int? = null, val httpStatus: Int? = null, val error: String? = null, val errorKind: String? = null,
+    val ahead: Int? = null,
+) {
+    companion object {
+        fun read(element: JsonElement?): WikiJobCall? {
+            val c = element as? JsonObject ?: return null
+            return WikiJobCall(c["id"].text() ?: "", c["step"].text() ?: "", c["unit"].text() ?: "", c["attempt"].integer() ?: 1,
+                c["attempts"].integer() ?: 0, c["state"].text() ?: "unknown", c["enqueuedAt"].text() ?: "", c["startedAt"].text(),
+                c["endedAt"].text(), c["inputTokens"].integer(), c["outputTokens"].integer(), c["httpStatus"].integer(),
+                c["error"].text(), c["errorKind"].text(), c["ahead"].integer())
+        }
+    }
+}
+
+/** A run's calls counted by state, and the tokens they reported. */
+data class WikiJobCallCounts(
+    val total: Int = 0, val queued: Int = 0, val running: Int = 0, val succeeded: Int = 0, val failed: Int = 0,
+    val cancelled: Int = 0, val inputTokens: Int = 0, val outputTokens: Int = 0,
+) {
+    companion object {
+        fun read(element: JsonElement?): WikiJobCallCounts {
+            val c = element as? JsonObject ?: return WikiJobCallCounts()
+            return WikiJobCallCounts(c["total"].integer() ?: 0, c["queued"].integer() ?: 0, c["running"].integer() ?: 0,
+                c["succeeded"].integer() ?: 0, c["failed"].integer() ?: 0, c["cancelled"].integer() ?: 0,
+                c["inputTokens"].integer() ?: 0, c["outputTokens"].integer() ?: 0)
+        }
+    }
+}
+
+/** A run's position as its pipeline writes it: one step, and, when it counts, done of total. */
+data class WikiJobProgress(val step: String? = null, val done: Int? = null, val total: Int? = null) {
+    companion object {
+        fun read(element: JsonElement?): WikiJobProgress? {
+            val c = element as? JsonObject ?: return null
+            return WikiJobProgress(c["step"].text(), c["done"].integer(), c["total"].integer())
+        }
+    }
+}
+
+/** One server run of the space — one `wiki_job` row, as Activity reads it (contract `jobs.read.job`). */
+data class WikiJob(
+    val id: String, val kind: String, val state: String, val waitingFor: String? = null, val priority: Int = 0,
+    val attempts: Int = 0, val createdAt: String, val updatedAt: String, val startedAt: String? = null, val endedAt: String? = null,
+    val nextAttemptAt: String? = null, val failureKind: String? = null, val error: String? = null, val ahead: Int? = null,
+    val progress: WikiJobProgress? = null, val calls: WikiJobCallCounts = WikiJobCallCounts(),
+    val nextCall: NextCall? = null, val requests: List<WikiJobCall> = emptyList(),
+) {
+    /** Of its calls that wait, the one the queue reaches first. */
+    data class NextCall(val ahead: Int, val enqueuedAt: String)
+    companion object {
+        fun read(element: JsonElement?): WikiJob? {
+            val c = element as? JsonObject ?: return null
+            return WikiJob(c["id"].text() ?: "", c["kind"].text() ?: "unknown", c["state"].text() ?: "unknown",
+                c["waitingFor"].text(), c["priority"].integer() ?: 0, c["attempts"].integer() ?: 0,
+                c["createdAt"].text() ?: "", c["updatedAt"].text() ?: c["createdAt"].text() ?: "", c["startedAt"].text(),
+                c["endedAt"].text(), c["nextAttemptAt"].text(), c["failureKind"].text(), c["error"].text(), c["ahead"].integer(),
+                WikiJobProgress.read(c["progress"]), WikiJobCallCounts.read(c["calls"]),
+                (c["nextCall"] as? JsonObject)?.let { n -> n["enqueuedAt"].text()?.let { NextCall(n["ahead"].integer() ?: 0, it) } },
+                (c["requests"] as? JsonArray)?.mapNotNull(WikiJobCall::read).orEmpty())
+        }
+    }
+}
+
+/** `GET /wiki/spaces/:id/jobs`: the space's newest server runs, newest first (contract `jobs.read`). */
+data class WikiJobsRead(val spaceId: String, val jobs: List<WikiJob>) {
+    companion object {
+        fun decode(element: JsonElement): WikiJobsRead {
+            val c = element as? JsonObject ?: JsonObject(emptyMap())
+            return WikiJobsRead(c["spaceId"].text() ?: "", (c["jobs"] as? JsonArray)?.mapNotNull(WikiJob::read).orEmpty())
         }
     }
 }
@@ -329,7 +453,10 @@ data class WikiDocsDirectory(val spaceId: String? = null, val plan: WikiDocsPlan
     @Serializable
     data class Doc(val slug: String, val number: String? = null, val title: String, val question: String? = null,
         val written: Boolean? = null, val status: String? = null, val updatedAt: String? = null, val planVersion: Int? = null,
-        val sections: List<Section>? = null)
+        val sections: List<Section>? = null,
+        /** The first two sentences of its first section, cut at 200 characters (contract `docs.lead`); null until it is
+         * written, and from a server before the lead. */
+        val lead: String? = null)
     @Serializable
     data class Category(val key: String, val number: Int? = null, val title: String, val question: String? = null,
         val forAgents: Boolean? = null, val docs: List<Doc>? = null)

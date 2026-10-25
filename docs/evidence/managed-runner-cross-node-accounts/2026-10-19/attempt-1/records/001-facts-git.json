@@ -1,0 +1,25 @@
+{
+ "checks": [
+  {
+   "check": "the apiserver is built in this checkout",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-19T14:22:30.011+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "facts",
+ "result": {
+  "apiserverBuiltAt": "2026-10-19T14:03:00+00:00",
+  "branch": "orbit/task-t08x-d1b825",
+  "head": "abc8c1dbd7d467948b0a5614187fcfa618d75235",
+  "originMain": "e7168b246175a18b4af1928aa2c5b2bf4a656297",
+  "projectLine": "9fb3ecdcb77a174e1c4f3e7a1eafa57d5ea74ee9",
+  "projectLineIsAncestor": true,
+  "subject": "test(managed-runner-lab): the T08x driver: two accounts' runners across the lab's two nodes",
+  "uncommitted": []
+ },
+ "seconds": 3.3,
+ "startedAt": "2026-10-19T14:22:26.757+00:00",
+ "step": "git"
+}

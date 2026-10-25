@@ -16,8 +16,9 @@ import type {
   RunnerLoginState,
   SlashCommandInfo,
 } from '@orbit/shared';
+import { LOGIN_FAILURE_REASONS } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
-import { namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
+import { namedRunnerEngines, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
 import {
   antigravityGoogleLoginRefusal,
   antigravitySignInUnderWay,
@@ -33,39 +34,26 @@ import {
   CLAUDE_ACCOUNT_REMOVE_V1,
   ANTIGRAVITY_ACCOUNT_REMOVE_V1,
   CODEX_ACCOUNT_REMOVE_V1,
+  CURSOR_ACCOUNT_LOGIN_V1,
+  CURSOR_ACCOUNT_REMOVE_V1,
+  CURSOR_LOGIN_TOO_OLD,
+  KIMI_ACCOUNT_REMOVE_V1,
   LOGIN_RELAY_TIMEOUT_MS,
+  accountLoginTooOld,
 } from '../runner-api/runner-api.controller';
+import { CURSOR_RUNNER_UPGRADE_ERROR, runnerKnowsCursor } from '../runner-api/runner-provider-support';
 import { loginCodeRelay } from './login-code-relay';
 import { engineKeepsAccounts } from '../common/runner-engines';
+import { ENGINE_LABELS } from '../sessions/engine-signin-preflight';
 import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
 import { accountPauseUntil } from '../common/account-pause';
-import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
+import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
+import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
 
-// Three missed 30s heartbeats — a runner quieter than this reads as offline.
-const OFFLINE_AFTER_MS = 90_000;
 // Cap device-enrollment userCode lookups per user, so an authenticated insider
 // cannot brute-force another user's pending enrollment code online.
 const DEVICE_LOOKUP_WINDOW_MS = 5 * 60_000;
 const DEVICE_LOOKUP_MAX = 20;
-
-/**
- * Is this machine reachable right now?
- *
- * Exported because "online" has to mean the same thing everywhere it decides something. The
- * runners list renders it; the clone-target list REFUSES on it (a clone runs on the machine, so an
- * offline one is not a slower choice, it is not a choice). Two spellings of this rule would drift
- * into a picker that offers a machine the create call then rejects.
- */
-export function isRunnerOnline(
-  runner: { status: string; lastHeartbeatAt: Date | null },
-  now: number = Date.now(),
-): boolean {
-  return (
-    runner.status !== 'OFFLINE' &&
-    !!runner.lastHeartbeatAt &&
-    runner.lastHeartbeatAt.getTime() >= now - OFFLINE_AFTER_MS
-  );
-}
 
 @Injectable()
 export class RunnersService {
@@ -124,7 +112,8 @@ export class RunnersService {
         status: true,
         maxConcurrent: true,
         version: true,
-        lastHeartbeatAt: true,
+        // When it was last heard from (runners/runner-presence.ts), shown as `lastHeartbeatAt`.
+        ...RUNNER_BEATS,
         enrolledAt: true,
         position: true,
         availableCommands: true,
@@ -140,7 +129,7 @@ export class RunnersService {
         // Same: reported, not configured. Withdraws Bypass from this machine's Mode pickers, which
         // is the only reason clients need to know (see ROOT_REFUSED_PERMISSION_MODES).
         runsAsRoot: true,
-        // Reported too: why this runner is or isn't updating itself, for the Runners page's card
+        // Reported too: why this runner is or isn't updating itself, for its card on Infrastructure
         // and its Update Runner Now. Re-sanitized below, null for a runner that does not report it.
         selfUpdate: true,
         // The runner page's Capacity › Keep Free reads the floor it writes (PATCH minFreeDiskMb),
@@ -155,17 +144,19 @@ export class RunnersService {
         heartbeatLeaseOwner: true,
         heartbeatDraining: true,
         // Per-engine health, and any install the user started for one of them — both drive the
-        // Providers page's "On your runners" section. The accounts carry the names given them here
-        // (namedRunnerEngines), not only the ones the runner reports.
+        // engine rows under each machine on Infrastructure. The accounts carry the names given
+        // them here, not only the ones the runner reports, and leave out a Default removed from
+        // Orbit (usedRunnerEngines).
         engines: true,
         accountNames: true,
         accountPauses: true,
+        defaultRemoved: true,
         installStatus: true,
         installEngine: true,
         installCommand: true,
         installMessage: true,
         installMode: true,
-        // The account-removal relay the Providers page reads its outcome from: which engine's
+        // The account-removal relay Infrastructure reads its outcome from: which engine's
         // store, which slot is going, and — when the machine refused — what it said.
         accountRemoveEngine: true,
         codexAccountRemoveAccount: true,
@@ -189,6 +180,10 @@ export class RunnersService {
     // A runner heartbeats every 30s; treat a missed window as offline so the UI
     // reflects dropouts without waiting for a background reaper.
     const now = Date.now();
+    // Each runner's engines as Orbit uses them (usedRunnerEngines): named, paused, and without a
+    // Default removed from Orbit. null (not []) for a runner that has never reported: "we don't know
+    // yet" and "nothing is installed" are different answers, and only one of them is ours to make up.
+    const used = runners.map((runner) => usedRunnerEngines(runner));
     return runners.map(({
       availableCommands,
       availableSkills,
@@ -196,6 +191,7 @@ export class RunnersService {
       engines,
       accountNames,
       accountPauses,
+      defaultRemoved,
       installStatus,
       installEngine,
       installCommand,
@@ -206,16 +202,19 @@ export class RunnersService {
       codexAccountRemoveStatus,
       codexAccountRemoveMessage,
       selfUpdate,
+      presence,
       ...r
-    }) => ({
+    }, index) => ({
       ...r,
+      // Its last beat, from either record of it: what every client reads "last seen" from.
+      lastHeartbeatAt: runnerLastBeatAt({ lastHeartbeatAt: r.lastHeartbeatAt, presence }),
+      // Without the part of a removed Default, as the engines are.
+      planUsage: usedPlanUsage(r.planUsage, used[index]),
       // Never expose null or malformed JSON: clients can always index this as a provider map.
       runtimeDefaultModels: sanitizeRuntimeDefaultModels(runtimeDefaultModels),
       selfUpdate: sanitizeRunnerSelfUpdate(selfUpdate),
-      // null (not []) for a runner that has never reported: "we don't know yet" and "nothing is
-      // installed" are different answers, and only one of them is ours to make up.
-      engines: namedRunnerEngines({ engines, accountNames, accountPauses }),
-      antigravity: antigravityState({ capabilities: r.capabilities, engines }),
+      engines: used[index],
+      antigravity: antigravityState({ capabilities: r.capabilities, engines: used[index] }),
       install: installStateOf({
         installStatus,
         installEngine,
@@ -229,7 +228,7 @@ export class RunnersService {
         codexAccountRemoveStatus,
         codexAccountRemoveMessage,
       }),
-      online: isRunnerOnline(r, now),
+      online: runnerIsOnline({ status: r.status, lastHeartbeatAt: r.lastHeartbeatAt, presence }, now),
       activeSessions: activeByRunner.get(r.id) ?? 0,
       // Surface the `/` autocomplete catalog under clean names (mirrors the heartbeat DTO).
       commands: (availableCommands ?? []) as unknown as SlashCommandInfo[],
@@ -446,6 +445,12 @@ export class RunnersService {
    * Kimi may be told which of its two sites to sign in on (`region`: kimi.com or kimi.ai, whose
    * accounts are separate). Naming none is the bare `kimi login` it always was, which goes wherever
    * the CLI decides; a runner too old to choose is refused at the heartbeat that would hand it over.
+   * Kimi keeps accounts too, so a site can come with an account or a new one's name: the start hands
+   * both over, and the new account signs in on that site.
+   *
+   * Cursor CLI is signed in only on a runner that declares cursor-account-login/v1, Default's account
+   * included, and any other is refused here as Antigravity's is: an older runner would sign Claude Code
+   * in for an engine it does not know. The heartbeat asks the polling process again.
    */
   async startLogin(ownerId: string, id: string, dto: StartLoginDto = {}): Promise<RunnerLoginState> {
     const engine: LoginEngine = dto.engine ?? 'claude';
@@ -469,7 +474,13 @@ export class RunnersService {
     if (runner.status === 'OFFLINE') {
       throw new BadRequestException('Runner is offline — it can only sign in while connected');
     }
-    const refusal = engine === 'antigravity' ? antigravityGoogleLoginRefusal(runner) : null;
+    const signsInCursor = !!runner.capabilitiesReportedAt && !!runner.capabilities?.includes(CURSOR_ACCOUNT_LOGIN_V1);
+    const namesAccount = dto.accountName != null || (dto.account != null && dto.account !== 'default');
+    const refusal = engine === 'antigravity'
+      ? antigravityGoogleLoginRefusal(runner)
+      : engine === 'cursor' && !signsInCursor
+        ? (namesAccount ? accountLoginTooOld('cursor') : CURSOR_LOGIN_TOO_OLD)
+        : null;
     if (refusal) throw new BadRequestException(refusal);
     const r = await this.prisma.runner.update({
       where: { id },
@@ -483,6 +494,8 @@ export class RunnersService {
         loginUserCode: null,
         loginCode: null,
         loginMessage: null,
+        loginExpiresAt: null,
+        loginReason: null,
         loginAt: new Date(),
       },
     });
@@ -557,6 +570,8 @@ export class RunnersService {
         loginUserCode: null,
         loginCode: null,
         loginMessage: null,
+        loginExpiresAt: null,
+        loginReason: null,
         loginAt: stopOnRunner ? runner.loginAt : null,
       },
     });
@@ -570,9 +585,9 @@ export class RunnersService {
    * the CLI keeps in it — a CODEX_HOME, a CLAUDE_CONFIG_DIR — and the record beside it. The runner
    * is woken to heartbeat at once, picks it up there and reports what happened.
    *
-   * `default` is refused here rather than on the runner: it is the directory the machine's own
-   * environment selects, and the one the CLI typed in a terminal shares, so there is nothing to
-   * remove without taking the user's own login with it.
+   * `default` never reaches the runner: it is the directory the machine's own environment selects,
+   * and the one the CLI typed in a terminal shares, so there is nothing to remove there without taking
+   * the user's own login with it. It is removed from Orbit instead (removeDefault).
    *
    * A runner that has not declared that engine's account-removal capability is refused in words the
    * person who pressed the button can act on — the alternative is a request that sits pending until
@@ -595,11 +610,7 @@ export class RunnersService {
     if (!ACCOUNT_ID_PATTERN.test(account ?? '')) {
       throw new BadRequestException('Unknown account');
     }
-    if (account === 'default') {
-      throw new BadRequestException(
-        `Default is this machine's own login, which the CLI in a terminal shares — it cannot be removed`,
-      );
-    }
+    if (account === 'default') return this.removeDefault(ownerId, id, engine);
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
     const capability = ACCOUNT_REMOVE_CAPABILITIES[engine];
@@ -619,6 +630,55 @@ export class RunnersService {
     // Delivered on the runner's next heartbeat; have that be now, as for a sign-in.
     this.realtime?.notifyRunnerWake(id);
     return accountRemoveStateOf(r);
+  }
+
+  /**
+   * Remove this runner's Default of `engine` from Orbit. The machine keeps it and its sign-in, and the
+   * CLI in a terminal there keeps working on it; Orbit stops listing and using it. Orbit's own record,
+   * kept in `runner.default_removed`, so the runner takes no part: no relay row, no wake, no
+   * capability to declare, and it can be offline. The answer is the removal done, at once.
+   *
+   * Only while the runner reports another account of that engine: Default is otherwise the one
+   * account Orbit has there, and is refused in words that say what to do first. The engine goes into
+   * the list in the statement itself, once however often it is asked, so two removals at once cannot
+   * lose either.
+   */
+  private async removeDefault(ownerId: string, id: string, engine: LoginEngine): Promise<RunnerAccountRemoveState> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { engines: true } });
+    if (!runner) throw new NotFoundException('runner not found');
+    const another = sanitizeRunnerEngines(runner.engines)
+      ?.find((entry) => entry.engine === engine)
+      ?.accounts?.some((entry) => entry.id !== 'default');
+    if (!another) {
+      throw new BadRequestException(`Add another ${ENGINE_LABELS[engine]} account to this machine before removing Default.`);
+    }
+    const written = await this.prisma.$executeRaw`
+      UPDATE "runner"
+         SET "default_removed" = CASE
+               WHEN ${engine}::text = ANY("default_removed") THEN "default_removed"
+               ELSE array_append("default_removed", ${engine}::text)
+             END
+       WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
+    if (written === 0) throw new NotFoundException('runner not found');
+    return { engine, account: 'default', status: 'done', message: null };
+  }
+
+  /**
+   * Bring this runner's Default of `engine` back into Orbit, after removeAccount removed it: the
+   * engine comes out of `runner.default_removed` in one statement. Orbit's own record, so the runner
+   * need not be online, and bringing back a Default that is not removed is the same state, not an
+   * error.
+   */
+  async restoreDefault(ownerId: string, id: string, engine: LoginEngine): Promise<{ ok: true }> {
+    if (!engineKeepsAccounts(engine)) {
+      throw new BadRequestException(`Only an engine that keeps accounts has a Default to bring back`);
+    }
+    const written = await this.prisma.$executeRaw`
+      UPDATE "runner"
+         SET "default_removed" = array_remove("default_removed", ${engine}::text)
+       WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
+    if (written === 0) throw new NotFoundException('runner not found');
+    return { ok: true };
   }
 
   /**
@@ -717,6 +777,10 @@ export class RunnersService {
    *
    * One at a time per machine, like the sign-in relay: a second request replaces the first, since
    * a user staring at a stuck row needs a way out that isn't waiting for a timeout.
+   *
+   * Cursor CLI's install, Reinstall included, goes only to a runner that knows Cursor CLI
+   * (runnerKnowsCursor), and any other is refused here in words that say to update it: an older one has
+   * no install for it. The heartbeat asks the polling process again (drainInstallRequest).
    */
   async startInstall(ownerId: string, id: string, engine: InstallEngine): Promise<RunnerInstallState> {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
@@ -726,6 +790,9 @@ export class RunnersService {
     }
     if (engine === 'antigravity' && !antigravityState(runner).supported) {
       throw new BadRequestException('Antigravity needs Orbit runner 0.1.209 or newer — updates itself when idle');
+    }
+    if (engine === 'cursor' && !runnerKnowsCursor(runner)) {
+      throw new BadRequestException(CURSOR_RUNNER_UPGRADE_ERROR);
     }
     const r = await this.prisma.runner.update({
       where: { id },
@@ -924,6 +991,7 @@ export class RunnersService {
   async rotateToken(ownerId: string, id: string) {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
+    await refuseManagedRunnerRotation(this.prisma, id);
     const token = generateToken(32);
     await this.prisma.runner.update({ where: { id }, data: { tokenHash: sha256(token) } });
     return { token };
@@ -964,6 +1032,8 @@ const ACCOUNT_REMOVE_TOO_OLD: Record<string, string> = {
   codex: 'This runner is too old to remove a Codex account — update it, then try again.',
   claude: 'This runner is too old to remove a Claude account — update it, then try again.',
   antigravity: 'This runner is too old to remove an Antigravity account — update it, then try again.',
+  kimi: 'This runner is too old to remove a Kimi account — update it, then try again.',
+  cursor: 'This runner is too old to remove a Cursor account — update it, then try again.',
 };
 
 /** The capability each engine's removal needs the runner to declare. */
@@ -971,6 +1041,8 @@ const ACCOUNT_REMOVE_CAPABILITIES: Record<string, string> = {
   codex: CODEX_ACCOUNT_REMOVE_V1,
   claude: CLAUDE_ACCOUNT_REMOVE_V1,
   antigravity: ANTIGRAVITY_ACCOUNT_REMOVE_V1,
+  kimi: KIMI_ACCOUNT_REMOVE_V1,
+  cursor: CURSOR_ACCOUNT_REMOVE_V1,
 };
 
 /** Project a runner row onto the browser-facing account-removal view. */
@@ -997,9 +1069,13 @@ function loginStateOf(r: {
   loginUrl: string | null;
   loginUserCode: string | null;
   loginMessage: string | null;
+  loginExpiresAt?: Date | null;
+  loginReason?: string | null;
 }): RunnerLoginState {
   // A cancel still owed to the runner (cancelLogin) is a sign-in the user has already dismissed.
   const status = r.loginStatus === 'cancelling' ? null : r.loginStatus;
+  const waiting = status === 'awaiting_code' || status === 'awaiting_approval';
+  const reason = LOGIN_FAILURE_REASONS.find((known) => known === r.loginReason);
   return {
     status: (status as RunnerLoginState['status']) ?? null,
     // A row written before the relay drove anything but claude carries no engine.
@@ -1008,6 +1084,10 @@ function loginStateOf(r: {
     url: r.loginUrl,
     message: r.loginMessage,
     account: status ? (r.loginAccount ?? null) : null,
+    // As the runner reported them (RunnerApiController.loginResult): how long the link lasts while one
+    // is waiting, and why a sign-in failed when a client answers that differently.
+    ...(waiting && r.loginExpiresAt ? { expiresAt: r.loginExpiresAt.toISOString() } : {}),
+    ...(status === 'failed' && reason ? { reason } : {}),
   };
 }
 

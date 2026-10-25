@@ -47,7 +47,7 @@ var userModeActions = map[string]string{
 	"task dependency-add":    "",
 	"task dependency-remove": "",
 	"task batch-pin": "no user route re-pins tasks in bulk; re-pin them one at a time with " +
-		"`orbit task update TASK_ID --provider SLUG --model MODEL`",
+		"`orbit task update TASK_ID --engine ENGINE --provider SLUG --model MODEL`",
 	"task evidence-decide": "a decision on completion evidence is an independent session's, made from inside " +
 		"it (ORBIT_SESSION_ID), or the account owner's own in the Orbit app — never a personal access token's",
 	"task request-confirmation": "a task's own run declares its work finished, from inside its session (ORBIT_SESSION_ID)",
@@ -56,6 +56,7 @@ var userModeActions = map[string]string{
 	"task await":                "a watch wakes the session that made it, and you are not one; poll `orbit task get TASK_ID` instead",
 
 	"project get":             "",
+	"project integration":     "",
 	"project crossings":       "",
 	"project resolve-blocker": "",
 	// Runs as the person, and unlike the rest it is the door's OTHER side there: the skip is the
@@ -248,7 +249,7 @@ type taskTransport interface {
 	updateTask(sessionID, id string, body interface{}) (json.RawMessage, error)
 	deleteTask(id string) (json.RawMessage, error)
 	startTask(id, triggerID string) (json.RawMessage, error)
-	commentTask(id, agentID, bodyText string) (json.RawMessage, error)
+	commentTask(id, agentID, sessionID, bodyText string) (json.RawMessage, error)
 	getTaskProgress(id string) (json.RawMessage, error)
 	reportTaskProgress(id string, body map[string]interface{}) (json.RawMessage, error)
 	taskDependencyGraph(id string, maxDepth, maxNodes int) (json.RawMessage, error)
@@ -362,7 +363,7 @@ func (u *userTransport) startTask(id, triggerID string) (json.RawMessage, error)
 	})
 }
 
-func (u *userTransport) commentTask(id, _, bodyText string) (json.RawMessage, error) {
+func (u *userTransport) commentTask(id, _, _, bodyText string) (json.RawMessage, error) {
 	return u.at(http.MethodPost, "/tasks", id, "/comments", map[string]string{"body": bodyText})
 }
 
@@ -407,6 +408,7 @@ func (u *userTransport) removeTaskDependency(id, dependsOnTaskID string) (json.R
 // the task commands.
 type projectTransport interface {
 	getProject(id string) (json.RawMessage, error)
+	getProjectIntegration(sessionID, id, jobID, claim, round, check, cursor, timelineCursor string) (json.RawMessage, error)
 	getProjectHandoffs(id, state string) (json.RawMessage, error)
 	resolveProjectBlocker(projectID, blockerID string, body map[string]interface{}) (json.RawMessage, error)
 	recordProjectMergeEvidence(id string, body map[string]interface{}) (json.RawMessage, error)
@@ -439,6 +441,27 @@ func cliProjectTransport() (projectTransport, error) {
 
 func (u *userTransport) getProject(id string) (json.RawMessage, error) {
 	return u.at(http.MethodGet, "/projects", id, "", nil)
+}
+
+// getProjectIntegration reads the line through the account owner's own route. The user door answers
+// the settings and the queue the project page draws; the agent's route adds the per-task and
+// per-candidate detail, so this call answers what the person's page shows rather than the agent
+// read — the same relationship `project get` has with the runner route.
+func (u *userTransport) getProjectIntegration(_ string, id, jobID, claim, round, check, cursor, timelineCursor string) (json.RawMessage, error) {
+	query := url.Values{}
+	for name, value := range map[string]string{
+		"jobId": jobID, "claim": claim, "round": round, "check": check,
+		"cursor": cursor, "timelineCursor": timelineCursor,
+	} {
+		if value != "" {
+			query.Set(name, value)
+		}
+	}
+	rest := "/integration"
+	if encoded := query.Encode(); encoded != "" {
+		rest += "?" + encoded
+	}
+	return u.at(http.MethodGet, "/projects", id, rest, nil)
 }
 
 func (u *userTransport) getProjectHandoffs(id, state string) (json.RawMessage, error) {

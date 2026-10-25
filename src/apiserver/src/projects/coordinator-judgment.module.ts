@@ -6,6 +6,7 @@ import { CompletionEvidenceProducer } from './completion-evidence.producer';
 import { CompletionInputRouter } from './completion-input-router.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorDeliveryService } from './coordinator-delivery.service';
+import { CoordinatorEvidenceQueueService } from './coordinator-evidence-queue.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
@@ -63,6 +64,11 @@ import { WakeDispositionService } from './wake-disposition.service';
  * `CoordinatorDeliveryService` is registered beside the judgment one rather than in SessionsModule
  * even though `SessionsService` is what it ultimately calls: what it decides is which wake reaches
  * a coordinator, which is this module's subject, and SessionsModule is imported here already.
+ *
+ * `CoordinatorEvidenceQueueService` hands a coordinator the evidence that waited for it while it was
+ * paused, through `CompletionEvidenceProducer` — this module's provider — so it is provided here and
+ * exported to the three doors that call it: the runner's turn end, the coordinator's replacement and
+ * the task service's tick.
  */
 @Module({
   // `forwardRef` because SessionsModule now imports this one back: `MergeReceiptService` delivers
@@ -88,6 +94,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     TaskDispatchRefusalProducer,
     DependentReadyProducer,
     CompletionEvidenceProducer,
+    CoordinatorEvidenceQueueService,
     WakeDispositionService,
   ],
   exports: [
@@ -106,6 +113,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     TaskDispatchRefusalProducer,
     DependentReadyProducer,
     CompletionEvidenceProducer,
+    CoordinatorEvidenceQueueService,
     WakeDispositionService,
   ],
 })

@@ -28,8 +28,8 @@ let root: Root;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  // antd's list subscribes to breakpoints on mount and jsdom ships no matchMedia. The stub answers
-  // "no breakpoint matches", which is the desktop reading — the layout is not this file's subject.
+  // jsdom ships no matchMedia. The stub answers "no breakpoint matches", which is the desktop
+  // reading — the layout is not this file's subject.
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
     media: query,

@@ -1,0 +1,187 @@
+{
+  "approvalCards": [],
+  "controlPlane": null,
+  "facts": {
+    "cards": 0,
+    "mode": "dontAsk",
+    "ordinaryRanUnasked": true,
+    "posted": 0
+  },
+  "modelRequests": 3,
+  "orbitEvents": [
+    {
+      "payload": {
+        "argv": [
+          "--profile",
+          "acp",
+          "--patch",
+          "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealToolGateRefusesInDontAsk285852662/001/dsh-home/orbit.patch.json",
+          "--patch",
+          "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealToolGateRefusesInDontAsk285852662/001/dsh-home/orbit-agent.patch.json"
+        ],
+        "cliVersion": "0.2.0-rc.2",
+        "configHash": "e27e0668e2455cb48278517b00c7071b934d85e2a1bf0436be8909a3759e2683",
+        "dshHome": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealToolGateRefusesInDontAsk285852662/001/dsh-home",
+        "executable": "/tmp/orbit-dsh-p4-OFKGjI/install/node_modules/.bin/dsh",
+        "provider": "dsh",
+        "runtime": "acp",
+        "subtype": "launch"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "cliVersion": "0.2.0-rc.2",
+        "provider": "dsh",
+        "resumed": false,
+        "runtime": "acp",
+        "runtimeSessionId": "f93215cd-65d3-4990-805c-481ba83e0a17",
+        "sessionId": "f93215cd-65d3-4990-805c-481ba83e0a17",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "runtimeSessionId": "f93215cd-65d3-4990-805c-481ba83e0a17",
+        "text": "Post, then print."
+      },
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "payload": {
+        "contextTokens": 47442,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "f93215cd-65d3-4990-805c-481ba83e0a17",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_1",
+        "input": {
+          "command": "curl -sS -X POST --data-binary P4-gate http://127.0.0.1:32815/upload \u0026\u0026 echo posted",
+          "description": "post"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "bash",
+        "runtimeSessionId": "f93215cd-65d3-4990-805c-481ba83e0a17",
+        "status": "in_progress",
+        "toolCallId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "name": "bash",
+        "provider": "dsh",
+        "reason": "Don't Ask refuses without asking",
+        "runtimeSessionId": "f93215cd-65d3-4990-805c-481ba83e0a17",
+        "subtype": "permission_denied",
+        "toolCallId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "Error: the user rejected tool \"bash\"",
+        "isError": true,
+        "localTurnId": "t1",
+        "runtimeSessionId": "f93215cd-65d3-4990-805c-481ba83e0a17",
+        "status": "failed",
+        "toolCallId": "call_p4_1",
+        "toolUseId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "contextTokens": 47481,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "f93215cd-65d3-4990-805c-481ba83e0a17",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_2",
+        "input": {
+          "command": "printf ordinary",
+          "description": "print"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "bash",
+        "runtimeSessionId": "f93215cd-65d3-4990-805c-481ba83e0a17",
+        "status": "in_progress",
+        "toolCallId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "ordinary",
+        "isError": false,
+        "localTurnId": "t1",
+        "runtimeSessionId": "f93215cd-65d3-4990-805c-481ba83e0a17",
+        "status": "completed",
+        "toolCallId": "call_p4_2",
+        "toolUseId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "messageId": "526f59c6-9197-42ac-a898-67167d3e9de1",
+        "runtimeSessionId": "f93215cd-65d3-4990-805c-481ba83e0a17",
+        "text": "P4 gate answer"
+      },
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "payload": {
+        "contextTokens": 47503,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "f93215cd-65d3-4990-805c-481ba83e0a17",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "contextTokens": 47503,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "numTurns": 1,
+        "runtimeSessionId": "f93215cd-65d3-4990-805c-481ba83e0a17",
+        "stopReason": "end_turn",
+        "subtype": "completed"
+      },
+      "turn": "t1",
+      "type": "turn_end"
+    }
+  ],
+  "permissionMode": "dontAsk",
+  "scenario": "TestDshRealToolGateRefusesInDontAsk"
+}

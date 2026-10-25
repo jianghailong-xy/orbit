@@ -77,6 +77,9 @@ function sourceFiles(root: string = ROOT): string[] {
     .filter(Boolean);
   return [...new Set(listed)]
     .filter((file) => !file.startsWith('src/apiserver/prisma/migrations/'))
+    // Frozen evidence reports record what was run at the time, for the same reason the migration
+    // ledger is excluded above: they are history, not a live caller.
+    .filter((file) => !file.startsWith('docs/evidence/'))
     .filter((file) => existsSync(path.join(root, file)) && statSync(path.join(root, file)).isFile());
 }
 
@@ -271,16 +274,27 @@ const CORE_TRIGGERS_AFTER: Readonly<Record<string, readonly string[]>> = {
   conversation_turn: [],
   run_event: ['run_event_ingestion_provenance_guard'],
   session: [
+    // 0414's: a session's recorded engine is claimed and leased only by a transaction that declares it
+    // reads it, so an older control plane cannot run it on the engine its slug suggests. Another SIBLING
+    // change, like the two below it.
+    'session_acquisition_engine_guard',
     'session_admission_lock_order_insert_delete',
     'session_admission_lock_order_update',
     // 0367's: an older control plane's claim cannot start an Antigravity row as Claude, the same
     // fence 0080 put up for OpenCode (`session_opencode_runner_claim_guard` below). A SIBLING change.
     'session_antigravity_runner_claim_guard',
     'session_completed_at_compat',
+    // 0426's: Cursor CLI claims and inbox acquisitions require the request's and the persisted
+    // heartbeat's declarations, as 0377's do for DeepSeek Harness. Another SIBLING change.
+    'session_cursor_runner_acquisition_guard',
     'session_dispatch_dependency_check',
     // 0377's: DeepSeek Harness claims and positive inbox acquisitions require the current
     // request and persisted heartbeat declarations. Another SIBLING change.
     'session_dsh_runner_acquisition_guard',
+    // 0414's: a run an older control plane creates on a task's pinned credential takes the task's
+    // engine pin, and a recorded engine never changes.
+    'session_engine_from_task_pin',
+    'session_engine_immutable',
     'session_merge_projection_checkpoint_authority_trg',
     'session_opencode_runner_claim_guard',
     'session_project_capacity_serialize_insert_delete',
@@ -314,7 +328,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 24; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 47,
+  assert.equal(core.length, 53,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -331,7 +345,12 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '`session_antigravity_runner_claim_guard` with the Antigravity runtime, and 47 once 0370 '
     + 'added `task_owner_confirmation_review_reviewer_ended` to `session` — and 46 on this line, '
     + 'where 0329 removed 0122\'s `task_dispatch_authority_derive` with the column it stamped, '
-    + 'and 47 once 0377 added `session_dsh_runner_acquisition_guard` for DeepSeek Harness');
+    + 'and 47 once 0377 added `session_dsh_runner_acquisition_guard` for DeepSeek Harness, and 50 '
+    + 'once 0414 added `session_acquisition_engine_guard`, `session_engine_from_task_pin` and '
+    + '`session_engine_immutable` with the recorded session engine, and 51 once 0426 added '
+    + '`session_cursor_runner_acquisition_guard` for Cursor CLI, and 53 once 0441 added '
+    + '`project_rollup_candidate_task_insert` and `project_rollup_candidate_task_update` to `task`, '
+    + 'appending the tasks GET /projects has to classify itself');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
@@ -343,10 +362,14 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + 'and 34 until 0329 removed 0122\'s `task_dispatch_authority_derive` with the column it stamped');
   assert.deepEqual(
     core.filter((entry) => Number(entry.since.slice(0, 4)) >= 207).map((entry) => entry.trigger).sort(),
-    ['project_task_status_count_delete', 'project_task_status_count_insert',
+    ['project_rollup_candidate_task_insert', 'project_rollup_candidate_task_update',
+      'project_task_status_count_delete', 'project_task_status_count_insert',
       'project_task_status_count_move', 'run_event_ingestion_provenance_guard',
+      'session_acquisition_engine_guard',
       'session_antigravity_runner_claim_guard',
+      'session_cursor_runner_acquisition_guard',
       'session_dsh_runner_acquisition_guard',
+      'session_engine_from_task_pin', 'session_engine_immutable',
       'session_request_asker_stopped', 'session_request_recipient_ended', 'session_source_freeze_guard',
       'task_list_task_count_delete', 'task_list_task_count_insert', 'task_list_task_count_relist',
       'task_owner_confirmation_review_reviewer_ended', 'task_progress_epoch_advance'],
@@ -356,7 +379,9 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + 'three `project_task_status_count_*`, 0350\'s `session_request_recipient_ended`, 0352\'s '
     + '`session_request_asker_stopped`, 0367\'s `session_antigravity_runner_claim_guard` and '
     + '0370\'s `task_owner_confirmation_review_reviewer_ended` and '
-    + '0377\'s `session_dsh_runner_acquisition_guard`. '
+    + '0377\'s `session_dsh_runner_acquisition_guard` and 0414\'s `session_acquisition_engine_guard`, '
+    + '`session_engine_from_task_pin` and `session_engine_immutable` and 0426\'s '
+    + '`session_cursor_runner_acquisition_guard` and 0441\'s two `project_rollup_candidate_task_*`. '
     + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(
@@ -401,7 +426,21 @@ test('(i) this is subtraction: no new service, no new resident process, less ins
   // wiki-worker and its start:wiki-worker are the wiki's server-side executor, which the account owner
   // added on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), not this removal;
   // test/compose-topology.test.mjs (l) pins its whole definition.
-  assert.deepEqual(services, ['apiserver', 'gateway', 'pgbackup', 'postgres', 'web', 'wiki-worker'],
+  // docker-channel is the managed runners' restricted Docker channel, which the account owner allowed on
+  // 2026-10-17 under a Compose profile a fresh install switches on (docs/managed-runner-design.md,
+  // "Implementation record: new deployments"), not this removal; test/compose-topology.test.mjs (m) pins it.
+  // managed-runner-firewall is the managed runners' host firewall, which the account owner decided on
+  // 2026-10-19 under a Compose profile of its own (docs/managed-runner-design.md, "Implementation record: the
+  // managed runners' host firewall"), not this removal; test/compose-topology.test.mjs (n) pins it.
+  // link-gateway is the runner link's WebSocket gateway, which the runner link project added on 2026-10-25 under a Compose
+  // profile of its own that no install switches on (docs/runner-link-design.md §6.1 and D1; project 34bc0CsOzPh9KshG7H3DW,
+  // task A4), not this removal; test/compose-topology.test.mjs (o) pins it.
+  // nats is the runner link's message bus, which the runner link project added on 2026-10-25 beside link-gateway,
+  // under the same Compose profile (docs/runner-link-design.md §6.3; project 34bc0CsOzPh9KshG7H3DW, task B1), not
+  // this removal; test/compose-topology.test.mjs (p) pins it.
+  assert.deepEqual(services,
+    ['apiserver', 'docker-channel', 'gateway', 'link-gateway', 'managed-runner-firewall', 'nats', 'pgbackup', 'postgres',
+      'web', 'wiki-worker'],
     'the removal may not add a Compose service');
   const apiScripts = JSON.parse(read('src/apiserver/package.json')).scripts as Record<string, string>;
   assert.deepEqual(Object.keys(apiScripts).filter((name) => name.startsWith('start:')).sort(),

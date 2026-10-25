@@ -1,0 +1,43 @@
+/* Descriptions: a 1px split-colour frame with 8px corners, rows split by the same line, labels on the
+   alternate fill in the secondary text colour, 8px/16px cells. */
+.orbit-descriptions {
+  border: 1px solid var(--orbit-border-split);
+  border-radius: 8px;
+  color: var(--text-1);
+  font-size: 14px;
+  line-height: 1.5714285714285714;
+}
+.orbit-descriptions table {
+  min-width: 100%;
+  table-layout: auto;
+  border-collapse: collapse;
+}
+.orbit-descriptions tr {
+  border-bottom: 1px solid var(--orbit-border-split);
+}
+.orbit-descriptions tr:last-child {
+  border-bottom: none;
+}
+.orbit-descriptions th,
+.orbit-descriptions td {
+  box-sizing: border-box;
+  padding: 8px 16px;
+  text-align: start;
+}
+.orbit-descriptions th {
+  border-inline-end: 1px solid var(--orbit-border-split);
+  background: var(--orbit-fill-alter);
+  color: var(--text-2);
+  font-weight: normal;
+  white-space: nowrap;
+}
+.orbit-descriptions td {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.orbit-descriptions tr:first-child > th {
+  border-start-start-radius: 8px;
+}
+.orbit-descriptions tr:last-child > th {
+  border-end-start-radius: 8px;
+}

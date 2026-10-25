@@ -213,15 +213,18 @@ settle 成失败、`retryable: true`、把重发的决定交给人。
 
 沿用 `claude_delivery.go` 已有的 `deliveryState`,不新增状态:
 
-| 状态 | Codex 侧的含义 | 客户端显示(`steerDelivery.ts`,不变) |
+| 状态 | Codex 侧的含义 | 客户端显示(`steerDelivery.ts`) |
 | --- | --- | --- |
 | `pending` | inbox 交出了这条 steer,还没发 | Sending… |
 | `enqueued` | 已写进 app-server stdin,response 未回 | Sending… |
-| `written` | `turn/steer` 返回 OK 且 `turnId` 校验通过 —— **Codex 收下了,模型还没看见** | Delivering… |
-| `acknowledged` | 收到 `item.clientId` 匹配的 userMessage 回显 —— **消息在会话里了** | Sent into this turn |
+| `written` | `turn/steer` 返回 OK 且 `turnId` 校验通过 —— **Codex 收下了,模型还没看见** | Waiting to be read |
+| `acknowledged` | 收到 `item.clientId` 匹配的 userMessage 回显 —— **消息在会话里了** | Read in this turn |
 | `failed` | §4.2 里任何一行 | Not delivered |
 
-`written → acknowledged` 实测可以隔 31 秒。**这段时间显示 "Delivering…" 是正确的,不是卡住。**
+`written → acknowledged` 实测可以隔 31 秒。**这段时间显示 "Waiting to be read" 是正确的,不是卡住。**
+(2026-10-16 起的词。原来叫 "Delivering…",读起来像消息还在路上、一停几分钟就像卡住;`acknowledged` 原来叫
+"Sent into this turn",在聊天软件的回执里 Sent 比 Delivered 还早。改成"发送中 → 等待被读 → 已读"的顺序,
+`unconfirmed` 也从 "Delivery could not be confirmed" 改成 "Couldn't confirm it was read"。)
 
 Web / iOS / macOS 三端**行为**不需要改:`steerDelivery.ts` 与 `SteerDelivery.swift` 是双胞胎,
 都只看 `delivery` 字段,词表没变。唯一要动的是**注释**:两边现在都写着 `claude` / `--replay-user-messages`,
@@ -243,6 +246,9 @@ apiserver 侧 `runner-api.controller.ts` 的 steer 分支已经保证了"只 ack
   **保持同一 seq、同一 clientTurnId**(与 turn-complete 里既有的"PENDING steer 降级成 message"完全一致,
   只是触发者从"turn 结束了"变成"runner 说它送不进去")。
 - 幂等:同一 turnId 重复报 `steer_requeue` 必须只生效一次(行已经是 `kind='message'` 时是 no-op)。
+- 例外(2026-10-16):目标轮被按了 Stop(目标之后有 `interrupt` turn)时不重排,重排了它会在 Stop 之后自己跑起来。
+  apiserver 把它记为没送达(`CURRENT_WORK_INTERRUPTED`),Codex 与 Claude 相同;目标轮以 INTERRUPTED 落定时还没读到的
+  steer 也一样(`stopOvertookTarget`)。
 - 旧 apiserver 收到未知 subtype 会当成普通 steer ack(标 ANSWERED)→ 消息丢失。所以
   **`steer_requeue` 必须受 §5 的能力门控保护**:runner 只在控制面明确支持时才走这条路。
 
@@ -319,11 +325,40 @@ delivered by codex`)。反向验证:把"读 `user` 事件自带的 delivery"这�
 - **API**:`POST /turns` 返回 `kind`;`GET /sessions/:id/turns` 每行带 `kind`;
 - **CLI / MCP**:`orbit session send` 与 `session_send` 都是 raw JSON 透传,旧服务端不带 `kind` 时也**不补默认值**。
 
-**Cancel 的唯一规则**:`kind='steer'` 不给 Cancel,`message`/`shell` 照旧给。三层都已闭合 ——
-服务端 `cancelQueuedTurn` 只删 `message`/`shell`,steer 命中专门的 409("being written into the running
-turn");web 由 `QueuedTurnMeta` 渲染,steer 分支不渲染 Cancel;macOS/iOS 的 `MessageBubbles.meta` 里
-Cancel 嵌在 `else if bubble.pending` 分支内,而 `bubble.steer` 分支排在它**前面**,结构上不可达。
-(OrbitApp 不在 Linux 可测范围内,所以 Swift 侧钉的是视图分支所读的 `bubble.steer`/`queued` 状态本身。)
+**Cancel 与 Withdraw(2026-10-16 起)**:Cancel 仍只给 `message`/`shell`。steer 有自己的 **Withdraw**,
+走同一个 `DELETE /sessions/:id/turns/:turnId`,只给用户自己打的字(`senderSessionId` 为空且不是
+`isOrbitAuthoredTurn`),规则按它此刻在谁手里分(`apiserver/src/sessions/steer-withdraw.ts`):
+
+- **还 PENDING**(runner 没取):只在 Orbit 手里,服务端直接删,任何引擎都行;
+- **IN_FLIGHT、Claude、runner 声明了 `session-claude-steer-withdraw-v1`**:服务端排一个 `withdraw` 控制 turn,
+  runner 对 CLI 发 `cancel_async_message`(`runner-go/claude_withdraw.go`;steer 的帧带 `uuid = turnId`),
+  以 CLI 的回答为准:`cancelled: true` 才删行,`false` 就是已读;请求方同步等最多 15 秒;
+- **IN_FLIGHT、Codex 或旧 runner**:409 `STEER_NOT_WITHDRAWABLE` —— `turn/steer` 交出去就收不回;
+- **已读**(`ACKNOWLEDGED` 或已结算):409 `STEER_ALREADY_READ`。
+
+客户端只在 runner 在 steer 的 `user` 事件里写了 `withdrawable: true`、且状态还是 `enqueued`/`written` 时给
+Withdraw(排队列表里还 PENDING 的 steer 也给);撤回成功后气泡消失、文字回到输入框,runner 再发一条
+`user_delivery`(`delivery: "withdrawn"`)让别的端也把气泡拿掉。
+
+**托盘与 Steer(2026-10-16 起,板子见 `docs/mocks/steer-tray`)**:用户自己打的、模型还没读到的消息不画在
+对话里,放在输入框上方的托盘,一行一条 —— 还没被读的 steer(`enqueued`/`written`/还没给 runner 的 PENDING),
+和排着等下一轮的 message/shell。steer 的气泡在它**结算的那一刻**才进对话,位置就是结算事件的位置:
+`acknowledged` 排在模型读到它之前写出的输出之后,`failed`/`unconfirmed`(含服务端的持久回执)排在知道没送到的
+地方;`withdrawn` 不画;`requeued` 在托盘里显示为排着,等它作为下一轮的消息送达时画成那一轮的开头。Orbit 自己
+排的(唤醒、任务简报、别的会话的消息、回复卡)不进托盘,照旧画在对话末尾或回显落下的地方。web 的判断在
+`Transcript.tsx`(`UnreadSteer`/`readersOwnWords`)与 `WorkspaceView.tsx`(`inPendingTray`),原生在
+`TranscriptState.unreadSteers`、`SteerDelivery.isReadersOwn` 与 `PendingTray`;原生翻历史分页时分页里的 steer
+画在发出的位置(分页看不到后面的结算)。Android 在 `reader/SteerDelivery.kt`(`place`)与 `composer/PendingTray.kt`,
+读窗口没到实时尾部时同样画在发出的位置。
+
+托盘里排着的 message 可以 **Steer**:`POST /sessions/:id/turns/:turnId/steer`(`SessionsService.steerQueuedTurn`)
+在会话行锁里把这一行**原地**改成指向正在跑的那一轮的 CURRENT_WORK steer(同一行、同 seq、同附件),问的问题与
+`createTurn` 的 CURRENT_WORK 一样;不行就 409 `CURRENT_WORK_UNAVAILABLE`(`NO_CURRENT_WORK` / `STEER_UNSUPPORTED` /
+`TARGET_LEASE_EXPIRED`),行原样排着。inbox 里 steer 排在普通消息前面,所以它马上交给 runner,前面排着的消息
+照旧等这一轮的结果。反方向:回合进行中 web 的 ⌥Enter 或长按发送键、原生发送键的上下文菜单(Mac 右键、iPhone
+与 Android 长按;Mac 上 ⌥Return 是系统的换行)发 `intent: NEXT_TURN`;原生平时的 `POST /turns` 仍不带 intent。客户端只在
+Claude/Codex 会话上给 Steer(`runtimeTakesMidTurnSteer`),runner 太旧由服务端拒绝。垃圾桶就是上面的 Withdraw /
+Cancel,文字一律回到输入框、接在草稿下面。
 
 **`steer_requeue` 的客户端结局**:重排不发任何事件,**排队列表就是公告** —— 同一 `turnId` 以
 `kind='message'` 重新出现,Cancel 必须跟着回来。两端都验了;Swift 侧把
@@ -333,7 +368,7 @@ Cancel 嵌在 `else if bubble.pending` 分支内,而 `bubble.steer` 分支排在
 到第一次 `announce` 之间(实测 6ms~520ms,上限 10s 即 RPC 超时),对**刷新/第三方视角**不可见;
 发送方自己有乐观气泡。**不把 `IN_FLIGHT` 的 steer 列进 `listQueuedTurns` 的理由**:
 
-1. 那个列表的语义是"还没有人读过、可以撤回的行",把已投递的行混进去会让 Cancel 的判据从 `kind` 变成
+1. 那个列表的语义是"还没有人读过、可以取消的行",把已投递的行混进去会让 Cancel 的判据从 `kind` 变成
    `kind + status`,而 `status` 客户端根本看不到;
 2. 要正确实现必须再查 `run_event` 排除"已经有 `user` 事件"的行 —— 每个 focused 客户端都会打这个接口;
 3. 真正无界的那一格是 §4.8(runner 死掉),而那一格**列出来更糟**:会变成一条永远停在 "Sending…"、

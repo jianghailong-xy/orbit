@@ -1,0 +1,16 @@
+{
+ "label": "nb-fix-p41",
+ "step": "p41",
+ "tree": "/mnt/data/tmp/overlay-first-frame-34brok/run",
+ "command": "cd src/web && P41_SNAPSHOTS=/mnt/data/tmp/overlay-first-frame-34brok/runs/nb-fix-p41/shots P41_OUTPUT=/mnt/data/tmp/overlay-first-frame-34brok/runs/nb-fix-p41/results npx playwright test -c ui-migration/p41.config.mjs --update-snapshots=all",
+ "commit": "c4c94c924e6163abd1bcff74d376899f69c4a8a0",
+ "webChanges": [],
+ "webDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "startedAt": "2026-10-08T15:16:53Z",
+ "endedAt": "2026-10-08T15:19:51+00:00",
+ "loadAverage": {
+  "start": "15.62 21.73 25.01",
+  "end": "13.67 18.04 22.98"
+ },
+ "exitCode": 1
+}

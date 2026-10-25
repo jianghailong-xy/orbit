@@ -1,0 +1,79 @@
+== git
+HEAD 23595f8171b07197fbb752f96bb77fe59cf73097 tree 04408b26b974e5d9f371c33bbaeb058caefd8236
+23595f817 e894faa57 991f9493c Merge origin/main (991f9493c) into the D7 managed runner recovery branch
+git merge-tree --write-tree origin/main(991f9493c) 23595f817 -> 04408b26b974e5d9f371c33bbaeb058caefd8236
+git merge-tree --write-tree origin/project(1f5bc9cec) 23595f817 -> 04408b26b974e5d9f371c33bbaeb058caefd8236
+
+== merge check (bgj_c062b510db10), exit 0
+> orbit@0.1.232 test:compose-topology
+> node --test --test-reporter=tap test/compose-topology.test.mjs
+# tests 14
+# pass 14
+# fail 0
+> orbit@0.1.232 prisma:generate
+> npm run prisma:generate -w @orbit/apiserver
+> @orbit/apiserver@0.1.0 prisma:generate
+> prisma generate
+> orbit@0.1.232 build
+> npm run build -w @orbit/shared && npm run build -w @orbit/apiserver && npm run build -w @orbit/web
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+> @orbit/apiserver@0.1.0 build
+> rm -rf dist && tsc -p tsconfig.json
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+> @orbit/shared@0.1.0 test
+> vitest run
+ Test Files  32 passed (32)
+      Tests  490 passed (490)
+> @orbit/apiserver@0.1.0 test
+> tsc -p tsconfig.test.json && SPECS=$(ls build/*/*.spec.js | grep -v '\.pg\.spec\.js$') && node --test $SPECS
+ℹ tests 5316
+ℹ pass 5316
+ℹ fail 0
+ℹ skipped 0
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2
+ Test Files  414 passed (414)
+      Tests  5371 passed (5371)
+
+== managed-runner Python (bgj_0f0786413e36), exit 0
+Ran 132 tests in 5.148s
+
+OK
+
+== run-pg-spec.sh (bgj_99c311d72252), exit 0
+==> OK: <worktree> is ready to build and test
+==> provisioning pccspec-pg-3706719-30110 (postgres:16-alpine, PGDATA on tmpfs)
+==> prisma migrate deploy (template pccspec_tpl)
+ok 1 - managed runner recovery: restarts, visibility, a held volume and a restored one, on both backends
+# tests 13
+ok 1 - the manager drives a mapping on DockerBackend, through the restricted channel
+# tests 13
+ok 1 - a disabled account's managed runner is put to sleep and kept there, against a fake cluster
+# tests 5
+ok 1 - the manager drives a mapping on a run backend with no Kubernetes in it
+# tests 7
+ok 1 - managed runners off: the production server starts without Kubernetes or Ceph credentials and nothing managed happens
+# tests 5
+ok 1 - managed runner capacity admission: persistent, atomic reservations of a fixed budget
+# tests 7
+ok 1 - managed runners switched off with existing state: nothing is stopped, deleted, cleaned up or revoked, across a restart
+# tests 3
+ok 1 - managed runner single-writer gate: no new generation without a stop proof or a fencing receipt
+ok 2 - managed runner instance binding over HTTP: the authorized instance only, a predecessor refused, self-managed runners unchanged
+# tests 16
+ok 1 - managed runner manager: unique mapping and idempotent reconciliation against a fake cluster
+# tests 14
+ok 1 - managed runners at sign-in: off changes nothing; on, sign-in records intent and the first session runs on a supplied runtime
+# tests 12
+ok 1 - managed runner idle sleep and wake against a fake cluster
+# tests 10
+ok 1 - managed runners wake on demand and sleep through the real application
+# tests 10
+ok 1 - tenant isolation: past the runner gate and through the share links, another account's objects are answered as nothing and written to by nobody
+# tests 725
+==> OK: 13 spec(s) witnessed against PostgreSQL 16.15, no skips
+
+== OrbitKit swift test, swift:6.1 (bgj_49009e48012c), exit 0
+	 Executed 3870 tests, with 5 tests skipped and 0 failures (0 unexpected) in 41.493 (41.493) seconds

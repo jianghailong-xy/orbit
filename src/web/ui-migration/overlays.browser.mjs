@@ -54,7 +54,7 @@ async function locked(page) {
   expect(await page.evaluate(() => [document.documentElement, document.body].some((el) => /hidden|clip/.test(getComputedStyle(el).overflowY)))).toBe(true);
 }
 
-test('dialog and drawers match current surfaces, geometry, typography and actions', async ({ page }, info) => {
+test('dialog and drawers open with no control hovered or focused; the sheet field takes hover and focus', async ({ page }, info) => {
   const measurements = {};
   const settleState = (locator) => locator.evaluate(async (el) => {
     await Promise.all(el.getAnimations({ subtree: true })
@@ -66,18 +66,16 @@ test('dialog and drawers match current surfaces, geometry, typography and action
     return { hovered: el.matches(':hover'), focused: el.matches(':focus'), focusVisible: el.matches(':focus-visible'),
       borderColor: style.borderColor, borderWidth: style.borderWidth, borderStyle: style.borderStyle, boxShadow: style.boxShadow };
   });
-  const measure = async (system, kind) => {
-    await page.getByRole('button', { name: `${system} ${kind}`, exact: true }).click();
-    const overlay = page.getByRole(system === 'Orbit' && kind === 'confirm' ? 'alertdialog' : 'dialog');
+  const measure = async (kind) => {
+    await page.getByRole('button', { name: `Orbit ${kind}`, exact: true }).click();
+    const overlay = page.getByRole(kind === 'confirm' ? 'alertdialog' : 'dialog');
     await settled(overlay);
-    // Sample the same neutral state. Opening buttons can leave the pointer over
-    // a newly positioned input, and the two libraries choose different autofocus.
+    // Sample a neutral state. Opening buttons can leave the pointer over a newly positioned input.
     await page.mouse.move(0, 0);
-    const focusRoot = system === 'AntD' && kind.includes('drawer') ? page.locator('.reference-drawer-root').filter({ has: overlay }) : overlay;
-    await focusRoot.focus();
-    await expect(focusRoot).toBeFocused();
+    await overlay.focus();
+    await expect(overlay).toBeFocused();
     await settleState(overlay);
-    const root = system === 'Orbit' ? overlay : page.locator('.reference-surface:visible');
+    const root = overlay;
     const result = await root.evaluate((el) => {
       const s = getComputedStyle(el), r = el.getBoundingClientRect();
       const keys = ['fontFamily', 'fontSize', 'lineHeight', 'color', 'backgroundColor', 'borderRadius', 'padding', 'boxShadow'];
@@ -90,13 +88,10 @@ test('dialog and drawers match current surfaces, geometry, typography and action
       });
       return { x: r.x, y: r.y, width: r.width, height: r.height, ...Object.fromEntries(keys.map((key) => [key, s[key]])), controls: text };
     });
-    if (system === 'AntD' && kind.includes('drawer')) {
-      result.boxShadow = await page.locator('.reference-drawer-wrapper:visible').evaluate((el) => getComputedStyle(el).boxShadow);
-    }
     if (kind.includes('drawer')) {
       result.separators = {};
       for (const [part, edge] of [['header', 'Bottom'], ['footer', 'Top']]) {
-        const region = root.locator(system === 'AntD' ? `.reference-${part}` : `:scope > .orbit-overlay-${part}`);
+        const region = root.locator(`:scope > .orbit-overlay-${part}`);
         result.separators[part] = await region.evaluate((el, edge) => {
           const style = getComputedStyle(el);
           return { color: style[`border${edge}Color`], width: style[`border${edge}Width`], style: style[`border${edge}Style`] };
@@ -104,11 +99,11 @@ test('dialog and drawers match current surfaces, geometry, typography and action
       }
     }
     for (const control of result.controls) {
-      expect(control.hovered, `${system} ${kind}: ${control.name} is not hovered`).toBe(false);
-      expect(control.focused, `${system} ${kind}: ${control.name} is not focused`).toBe(false);
-      expect(control.focusVisible, `${system} ${kind}: ${control.name} has no focus ring`).toBe(false);
+      expect(control.hovered, `${kind}: ${control.name} is not hovered`).toBe(false);
+      expect(control.focused, `${kind}: ${control.name} is not focused`).toBe(false);
+      expect(control.focusVisible, `${kind}: ${control.name} has no focus ring`).toBe(false);
     }
-    await shot(page, info, `${system}-${kind}`, root);
+    await shot(page, info, `Orbit-${kind}`, root);
     if (kind === 'bottom drawer') {
       const input = overlay.getByRole('textbox', { name: 'Workspace name' });
       await input.hover();
@@ -116,7 +111,7 @@ test('dialog and drawers match current surfaces, geometry, typography and action
       const hover = await inputState(input);
       expect(hover.hovered).toBe(true);
       expect(hover.focused).toBe(false);
-      await shot(page, info, `${system}-${kind}-input-hover`, root);
+      await shot(page, info, `Orbit-${kind}-input-hover`, root);
       await page.mouse.move(0, 0);
       await input.focus();
       await expect(input).toBeFocused();
@@ -124,20 +119,15 @@ test('dialog and drawers match current surfaces, geometry, typography and action
       const focus = await inputState(input);
       expect(focus.hovered).toBe(false);
       expect(focus.focusVisible).toBe(true);
-      await shot(page, info, `${system}-${kind}-input-focus`, root);
+      await shot(page, info, `Orbit-${kind}-input-focus`, root);
       result.inputStates = { hover, focus };
     }
     await overlay.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(overlay).not.toBeVisible();
     return result;
   };
-  for (const kind of ['dialog', 'right drawer', 'bottom drawer', 'confirm']) {
-    const ant = await measure('AntD', kind);
-    const orbit = await measure('Orbit', kind);
-    measurements[kind] = { ant, orbit };
-  }
+  for (const kind of ['dialog', 'right drawer', 'bottom drawer', 'confirm']) measurements[kind] = { orbit: await measure(kind) };
   await attach(info, 'appearance', measurements);
-  for (const [kind, { ant, orbit }] of Object.entries(measurements)) expect(orbit, kind).toEqual(ant);
 });
 
 test('dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus', async ({ page }, info) => {
@@ -209,84 +199,6 @@ test('nested dialog and imperative confirmation close only the top layer', async
   await expect(trigger).toBeFocused();
   await expect.poll(() => pageScroll(page)).toEqual(before);
   await attach(info, 'nested-focus-and-scroll', { before, after: await pageScroll(page), parentPreserved: true, restoredEachLayer: true });
-});
-
-for (const kind of ['Dialog', 'Drawer']) test(`actual legacy modal, Popconfirm and Select work inside Orbit ${kind.toLowerCase()}`, async ({ page }, info) => {
-  await page.getByRole('button', { name: `Open ${kind}`, exact: true }).click();
-  const parent = page.getByRole('dialog', { name: `Workspace ${kind.toLowerCase()}`, exact: true });
-  await settled(parent);
-  const trigger = parent.getByRole('button', { name: 'Open legacy child' });
-  await trigger.click();
-  const child = page.getByRole('dialog', { name: 'Legacy child', exact: true });
-  await settled(child);
-  await topmost(child);
-  await child.getByRole('textbox', { name: 'Legacy name' }).fill('Nested draft');
-  await trapped(page, child, 5);
-  await shot(page, info, 'legacy-inside-orbit');
-  await page.keyboard.press('Escape');
-  await expect(child).not.toBeVisible();
-  await expect(parent).toBeVisible();
-  await expect(trigger).toBeFocused();
-  await locked(page);
-  await parent.getByRole('button', { name: 'Turn off link', exact: true }).click();
-  const popup = page.getByRole('tooltip', { name: /Turn off this link/ });
-  await settled(popup);
-  await topmost(popup);
-  await popup.getByRole('button', { name: 'Cancel', exact: true }).focus();
-  await page.keyboard.press('Escape');
-  await expect(popup).not.toBeVisible();
-  await expect(parent).toBeVisible();
-  const select = parent.getByRole('combobox', { name: 'Expires' });
-  await select.click();
-  await expect(select).toHaveAttribute('aria-expanded', 'true');
-  await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('Enter');
-  await expect(parent.getByRole('status', { name: 'Expiry' })).toHaveText('7 days');
-  await expect(select).toHaveAttribute('aria-expanded', 'false');
-  await select.click();
-  await expect(select).toHaveAttribute('aria-expanded', 'true');
-  await page.keyboard.press('Escape');
-  await expect(select).toHaveAttribute('aria-expanded', 'false');
-  await expect(parent).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(parent).not.toBeVisible();
-  await attach(info, 'legacy-children', { modal: true, popconfirm: true, select: true, parentPreserved: true });
-});
-
-for (const kind of ['parent', 'drawer']) test(`Orbit dialog and nested confirmation work inside a legacy ${kind === 'parent' ? 'modal' : 'drawer'}`, async ({ page }, info) => {
-  const before = await pageScroll(page);
-  const trigger = page.getByRole('button', { name: `Open Legacy ${kind}` });
-  await trigger.click();
-  const parent = page.getByRole('dialog', { name: `Legacy ${kind}`, exact: true });
-  await settled(parent);
-  await parent.getByRole('textbox', { name: 'Legacy parent name' }).fill('Blur still reaches the form');
-  await page.keyboard.press('Tab');
-  await expect(parent.getByRole('status', { name: 'Legacy field blurred' })).toHaveText('true');
-  const childTrigger = parent.getByRole('button', { name: 'Open Orbit child' });
-  await childTrigger.click();
-  const child = page.getByRole('dialog', { name: 'Orbit child', exact: true });
-  await settled(child);
-  await topmost(child);
-  await trapped(page, child, 10);
-  await shot(page, info, 'orbit-inside-legacy');
-  const confirmTrigger = child.getByRole('button', { name: 'Discard draft' });
-  await confirmTrigger.click();
-  const confirmation = page.getByRole('alertdialog');
-  await settled(confirmation);
-  await trapped(page, confirmation, 3);
-  await page.keyboard.press('Escape');
-  await expect(confirmation).not.toBeVisible();
-  await expect(confirmTrigger).toBeFocused();
-  await page.keyboard.press('Escape');
-  await expect(child).not.toBeVisible();
-  await expect(parent).toBeVisible();
-  await expect(childTrigger).toBeFocused();
-  await locked(page);
-  await parent.getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(parent).not.toBeVisible();
-  await expect(trigger).toBeFocused();
-  await expect.poll(() => pageScroll(page)).toEqual(before);
-  await attach(info, 'legacy-parent', { focusAtEveryLayer: true, scrollRestored: true });
 });
 
 test('async confirmation prevents duplicate submits, retains failures and permits retry or cancellation', async ({ page }, info) => {
@@ -370,6 +282,29 @@ test('dismissal controls, retained form values, long content and bottom sheet re
   await long.getByRole('button', { name: 'Done long' }).click();
   await expect(long).not.toBeVisible();
   await attach(info, 'sizing-and-controls', { escapeAndOutsideOptOut: true, retainedDraft: true, bottomSheet: true, longFooterReachable: true });
+});
+
+test('a dialog taller than the screen keeps its scroll when the control with focus gives way', async ({ page }, info) => {
+  await page.getByRole('button', { name: 'Open Long dialog' }).click();
+  const long = page.getByRole('dialog', { name: 'Long dialog' });
+  await settled(long);
+  // It runs past the screen, so a focus() on it that may scroll brings the viewport to its top.
+  expect(await long.evaluate((el) => el.getBoundingClientRect().height > innerHeight)).toBe(true);
+  const scrolled = () => long.evaluate((el) => el.parentElement.scrollTop);
+  const before = await scrolled();
+  const notYet = long.getByRole('button', { name: 'Not yet' });
+  await notYet.focus();
+  await page.keyboard.press('Enter');
+  await expect(long.getByText('The note goes here.')).toBeVisible();
+  await long.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  // Chromium reports the pressed button's removal and Base UI hands focus back to the dialog; WebKit
+  // reports nothing and focus is left on the body. Either way the dialog stays where it was.
+  const after = await scrolled();
+  const active = await page.evaluate(() => (document.activeElement === document.body ? 'body' : document.activeElement?.getAttribute('role') ?? document.activeElement?.tagName));
+  expect(after).toBe(before);
+  await attach(info, 'focused-control-gives-way', { before, after, active });
+  await page.keyboard.press('Escape');
+  await expect(long).not.toBeVisible();
 });
 
 test('open portals inherit live theme changes and composing Escape preserves the dialog', async ({ page }, info) => {

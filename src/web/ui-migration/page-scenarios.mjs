@@ -62,7 +62,7 @@ export async function projectsScenario({ page, expect, capture, measure }) {
   await capture('project-graph', { graph, node: '.pdg-task', task: '.project-task-row' });
   await page.getByRole('button', { name: 'Open project task graph full screen' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
-  await capture('project-graph-fullscreen', { dialog: page.getByRole('dialog'), surface: '.ant-modal-container' });
+  await capture('project-graph-fullscreen', { dialog: page.getByRole('dialog'), surface: page.getByRole('dialog') });
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).not.toBeVisible();
 }
@@ -87,7 +87,7 @@ export async function wikiScenario({ page, expect, capture }) {
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Record', exact: true })).toBeDisabled();
-  await capture('wiki-new-entry', { dialog, surface: '.ant-modal-container', input: dialog.locator('input').first() });
+  await capture('wiki-new-entry', { dialog, surface: dialog, input: dialog.locator('input').first() });
   await page.keyboard.press('Escape');
   await expect(dialog).not.toBeVisible();
 }

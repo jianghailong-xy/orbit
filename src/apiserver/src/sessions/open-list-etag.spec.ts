@@ -24,6 +24,7 @@ import { SessionsService } from './sessions.service';
  */
 
 const OWNER_ID = '22222222-2222-4222-8222-222222222222';
+const PROJECT_ID = '33333333-3333-4333-8333-333333333333';
 
 async function harness(t: { after: (fn: () => Promise<void>) => void }) {
   const state = { version: 'v1', listed: 0, versions: 0 };
@@ -144,6 +145,19 @@ test('other views keep the body-hash ETag and never consult the version', async 
   assert.equal(completed.status, 200);
   assert.doesNotMatch(completed.etag ?? '', /ol1-/);
   assert.equal(state.versions, 0);
+});
+
+test('a plain project read is built every time and never consults the version', async (t) => {
+  const { state, get } = await harness(t);
+  const project = await get(`?view=open&projectId=${PROJECT_ID}`);
+  assert.equal(project.status, 200);
+  assert.doesNotMatch(project.etag ?? '', /ol1-/);
+  assert.equal(state.versions, 0);
+  assert.equal(state.listed, 1);
+  // The project page's landing-aware read keeps its own version scope.
+  const landing = await get(`?view=open&projectId=${PROJECT_ID}&includeLanding=1`);
+  assert.match(landing.etag ?? '', /^W\/"ol1-/);
+  assert.equal(state.versions, 1);
 });
 
 test('a delta poll (`since`) is the delta store\'s to answer, not the version\'s', async (t) => {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -42,10 +43,16 @@ const (
 	loginFailed           = "failed"
 )
 
-// The sign-in URL claude prints. It is emitted inside an OSC 8 hyperlink and then repeated in
-// wrapped fragments, so a match is the escape sequence's target, terminated by BEL. Requiring
-// the oauth path keeps a stray docs link from matching.
-var loginURLRe = regexp.MustCompile(`https://claude\.com/[^\s\x07"']*oauth/authorize\?[^\s\x07"']+`)
+// loginReasonExpired is why a failed sign-in failed when its link ran out before anyone signed in with
+// it (LoginResultRequest.Reason): a client offers a new link rather than a retry.
+const loginReasonExpired = "expired"
+
+// The sign-in URL claude prints. It is emitted inside an OSC 8 hyperlink: the escape sequence's
+// target, terminated by BEL, then the URL again as the visible label — whole, or in wrapped
+// fragments, depending on the CLI version — closed by an escape byte (its colour's reset, or the
+// link's end). So a match stops at BEL or ESC. Requiring the oauth path keeps a stray docs link
+// from matching.
+var loginURLRe = regexp.MustCompile(`https://claude\.com/[^\s\x1b\x07"']*oauth/authorize\?[^\s\x1b\x07"']+`)
 
 // What the CLI prints when a pasted code is rejected: "Invalid code. Please make sure the full
 // code was copied." — written after the existing prompt, on the same line. This is the ONLY
@@ -125,6 +132,9 @@ type loginFlow struct {
 	// successOnExit makes a clean CLI exit authoritative. Claude and Codex retain
 	// their post-command auth probe because their exit status is not reliable.
 	successOnExit bool
+	// outcome, when set, decides how the sign-in ended once the CLI has exited, linkAge after its link
+	// was published: Cursor CLI's, whose link expires (cursorLoginOutcome).
+	outcome func(run *loginRun, exitErr error, linkAge time.Duration) LoginResultRequest
 }
 
 func (f loginFlow) cmdLine() string { return strings.Join(f.argv, " ") }
@@ -172,6 +182,17 @@ func loginFlowFor(engine string) loginFlow {
 			progress:  antigravityGoogleLoginProgress,
 		}
 	}
+	// Cursor CLI's `agent login` prints a link and polls Cursor until someone signs in with it, for 24 to
+	// 27 minutes (docs/cursor-runtime-contract.md §9). The pinned build runs from Orbit's own version
+	// directory, in the account's own directories (cursor_account_slot.go).
+	if engine == providerCursor {
+		return loginFlow{
+			engine:   providerCursor,
+			argv:     []string{cursorEntryPoint, "login"},
+			progress: cursorLoginProgress,
+			outcome:  cursorLoginOutcome,
+		}
+	}
 	// Anything else (including the empty engine an older control plane sends) is claude.
 	return loginFlow{
 		engine: providerClaude,
@@ -190,12 +211,12 @@ func loginFlowFor(engine string) loginFlow {
 // loginRelay drives engine logins on this machine while the user completes
 // their browser authorization through the control plane.
 //
-// One at a time per account: a CLI writes the credentials of the account it signs in — Kimi's,
-// and the machine's one login for any engine without account slots; one directory's worth of files
-// for Codex's CODEX_HOME and Claude's CLAUDE_CONFIG_DIR — so two concurrent sign-ins into the same
-// account would race over them, while sign-ins into different slots write different files and run
-// side by side. The heartbeat redelivers a `start` until the server sees a status change, so
-// start() must be idempotent while that account's sign-in is already running.
+// One at a time per account: a CLI writes the credentials of the account it signs in — the
+// machine's one login for any engine without account slots; one directory's worth of files for
+// Codex's CODEX_HOME, Claude's CLAUDE_CONFIG_DIR and Kimi's KIMI_CODE_HOME — so two concurrent
+// sign-ins into the same account would race over them, while sign-ins into different slots write
+// different files and run side by side. The heartbeat redelivers a `start` until the server sees a
+// status change, so start() must be idempotent while that account's sign-in is already running.
 type loginRelay struct {
 	mu sync.Mutex
 	wg sync.WaitGroup
@@ -246,12 +267,18 @@ type loginRun struct {
 	slot   string
 	kind   accountSlotKind
 	google *antigravityGoogleLoginOutput
+	// googleCopied is closed once agy's terminal output has stopped coming into google.
+	googleCopied <-chan struct{}
 	// googleDir is the Gemini directory an Antigravity sign-in writes: Default's, or its account's.
 	googleDir string
-	ctx       context.Context
-	binPath   string
-	finished  chan struct{}
-	signedIn  bool
+	// cursorDir is the account directory a Cursor CLI sign-in writes: Default's, or its account's.
+	cursorDir string
+	// manual is how to run this sign-in by hand, when loginCommandIn cannot spell it.
+	manual   string
+	ctx      context.Context
+	binPath  string
+	finished chan struct{}
+	signedIn bool
 }
 
 // loginAccountKey names the account a sign-in writes: the engine's one login, or — for an engine
@@ -299,7 +326,7 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		return
 	}
 	if flow.engine == providerAntigravity && runtime.GOOS != "linux" {
-		report(LoginResultRequest{Status: loginFailed, Message: "Antigravity 的 Google 登录暂时只支持 Linux runner", Attempt: attempt})
+		report(LoginResultRequest{Status: loginFailed, Message: "Signing Antigravity in with Google works only on a Linux runner for now.", Attempt: attempt})
 		return
 	}
 	// An engine whose CLI keeps a login per directory can sign in another account; every other
@@ -308,6 +335,12 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 	account, name := "", ""
 	if hasAccounts {
 		account, name = lr.Account, strings.TrimSpace(lr.AccountName)
+	}
+	// A runner that keeps only Cursor CLI's Default account (D4's approach D) adds no other, and signs
+	// none in.
+	if flow.engine == providerCursor && !cursorAccountsSupported() && (name != "" || (account != "" && account != accountSlotDefaultID)) {
+		report(LoginResultRequest{Status: loginFailed, Message: cursorAccountsUnsupportedMessage(), Attempt: attempt})
+		return
 	}
 	createdSlot := ""
 	r.mu.Lock()
@@ -387,19 +420,39 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 	if flow.engine == providerCodex {
 		spec, _ := specFor(providerCodex)
 		if path, ok := lookLoginEngine(providerCodex); !ok || !supportsLoginFlag(path, spec, env) {
-			giveUp("this runner's codex is too old to sign in from the browser — run `codex update` on that machine, or sign in there with `" + loginCommandIn(env, "codex login") + "`")
+			giveUp("this runner's codex is too old to sign in from the browser — run `codex update` on that machine, or sign in there with `" + loginCommandIn(providerCodex, env, "codex login") + "`")
 			return
 		}
 	}
 	// Kimi signs in on one of two sites, each with accounts of its own (kimi_region.go). A start
 	// naming one passes it on; one naming none is the bare `kimi login` it always was.
 	if flow.engine == providerKimi && lr.Region != "" {
-		argv, refusal := kimiLoginArgv(flow.argv, lr.Region)
+		argv, refusal := kimiLoginArgv(flow.argv, lr.Region, env)
 		if refusal != "" {
 			giveUp(refusal)
 			return
 		}
 		flow.argv = argv
+	}
+	// Cursor CLI signs in from the pinned build, in the account's own directories and an environment made
+	// for it rather than the runner's: Default's included, nothing of the sign-in lands anywhere else
+	// (cursor_account_slot.go).
+	cursorDir, cursorExe, manual := "", "", ""
+	if flow.engine == providerCursor {
+		var ok bool
+		if cursorExe, ok = lookLoginEngine(providerCursor); !ok {
+			giveUp("Cursor CLI " + cursorSupportedVersion + " is not installed on this runner — run `orbit doctor` there, then sign in again")
+			return
+		}
+		var err error
+		if cursorDir, err = cursorLoginAccountDir(account); err == nil {
+			err = prepareCursorLoginDir(cursorDir)
+		}
+		if err != nil {
+			giveUp("could not prepare the Cursor CLI account for its sign-in: " + firstLine(err.Error()))
+			return
+		}
+		env, manual = cursorLoginEnv(cursorDir), cursorLoginHintFor(cursorDir)
 	}
 	r.mu.Lock()
 	if prev := r.runs[key]; prev != nil {
@@ -424,6 +477,9 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 	timeout := r.timeout
 	if timeout <= 0 {
 		timeout = loginRelayTimeout
+		if flow.engine == providerCursor {
+			timeout = cursorLoginRelayTimeout
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	var cmd *exec.Cmd
@@ -459,6 +515,11 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 			return
 		}
 		google = &antigravityGoogleLoginOutput{}
+	} else if flow.engine == providerCursor {
+		cmd = exec.CommandContext(ctx, cursorExe, flow.argv[1:]...)
+		cmd.Dir = filepath.Join(cursorDir, "home")
+		// The whole tree goes when the sign-in ends early: the launcher execs node, which keeps polling.
+		configureEngineCommandTree(cmd)
 	} else if flow.pty {
 		cmd = ptyCommand(ctx, flow.argv...)
 	} else {
@@ -483,8 +544,9 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 	}
 	out := &syncBuffer{}
 	var startErr error
+	var googleCopied <-chan struct{}
 	if google != nil {
-		stdin, startErr = startAntigravityGooglePTY(cmd, google)
+		stdin, googleCopied, startErr = startAntigravityGooglePTY(cmd, google)
 	} else {
 		cmd.Stdout = out
 		cmd.Stderr = out
@@ -503,7 +565,7 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		giveUp(signInStartError(startErr, flow))
 		return
 	}
-	run = &loginRun{key: key, attempt: attempt, stdin: stdin, cancel: cancel, out: out, slot: createdSlot, kind: kind, google: google, googleDir: antigravityGoogleDirIn(env), ctx: ctx, binPath: binPath, finished: make(chan struct{})}
+	run = &loginRun{key: key, attempt: attempt, stdin: stdin, cancel: cancel, out: out, slot: createdSlot, kind: kind, google: google, googleCopied: googleCopied, googleDir: antigravityGoogleDirIn(env), cursorDir: cursorDir, manual: manual, ctx: ctx, binPath: binPath, finished: make(chan struct{})}
 	if r.runs == nil {
 		r.runs = map[string]*loginRun{}
 	}
@@ -527,6 +589,13 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 
 // stop cancels and joins every relay process started by this runner. The caller
 // must first stop heartbeat delivery so no new start can race with Wait.
+// inFlight counts the sign-ins running now, for the managed workload report (managed_sleep.go).
+func (r *loginRelay) inFlight() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.runs)
+}
+
 func (r *loginRelay) stop() {
 	r.mu.Lock()
 	for _, run := range r.runs {
@@ -610,11 +679,12 @@ func (r *loginRelay) pump(run *loginRun, flow loginFlow, cmd *exec.Cmd, env []st
 	var exitErr error
 	exited := false
 	sent := false
+	var published time.Time
 poll:
 	for {
 		if res := flow.progress(out.String()); res != nil {
 			report(*res)
-			sent = true
+			sent, published = true, time.Now()
 			break
 		}
 		select {
@@ -628,6 +698,14 @@ poll:
 	}
 
 	if !sent {
+		// A CLI that decides how its sign-in ended by itself and has already ended says why, even before
+		// its link was seen: Cursor CLI's, which refuses one in its own words.
+		if exited && flow.outcome != nil {
+			res := flow.outcome(run, exitErr, 0)
+			signedIn = res.Status == loginDone
+			report(res)
+			return
+		}
 		if exited && exitErr == nil && flow.successOnExit {
 			signedIn = true
 			report(LoginResultRequest{Status: loginDone})
@@ -639,15 +717,25 @@ poll:
 			_ = cmd.Process.Kill()
 			<-waited
 		}
+		manual := run.manual
+		if manual == "" {
+			manual = loginCommandIn(flow.engine, env, flow.cmdLine())
+		}
 		report(LoginResultRequest{
 			Status:  loginFailed,
-			Message: "couldn't read a sign-in URL from the CLI — run `" + loginCommandIn(env, flow.cmdLine()) + "` on this machine instead",
+			Message: "couldn't read a sign-in URL from the CLI — run `" + manual + "` on this machine instead",
 		})
 		return
 	}
 
 	if !exited {
 		exitErr = <-waited
+	}
+	if flow.outcome != nil {
+		res := flow.outcome(run, exitErr, time.Since(published))
+		signedIn = res.Status == loginDone
+		report(res)
+		return
 	}
 	if exitErr == nil && flow.successOnExit {
 		signedIn = true
@@ -812,9 +900,11 @@ func probeAuthNow(engine string, env []string) authState {
 }
 
 // loginCommandIn spells a sign-in command the way to run it by hand for the account env signs in:
-// run bare, a command meant for one account's directory would sign in Default instead.
-func loginCommandIn(env []string, cmdLine string) string {
-	for _, kind := range accountSlotKinds {
+// run bare, a command meant for one account's directory would sign in Default instead. Only engine's
+// own variable is read: env is the runner's environment plus that one, and the runner's may well set
+// another engine's.
+func loginCommandIn(engine string, env []string, cmdLine string) string {
+	if kind, ok := accountSlotKindFor(engine); ok {
 		if dir := envValue(env, kind.varName); dir != "" {
 			return kind.varName + "=" + shellQuote(dir) + " " + cmdLine
 		}

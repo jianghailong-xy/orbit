@@ -48,6 +48,21 @@ public enum WorktreeBarLogic {
         return .none
     }
 
+    /// Whether a turn is in flight: what holds Merge back and keeps Commit and the merge recovery's
+    /// steps disabled. A port of web's `isSessionTurnActive`, read off the session's authoritative
+    /// run status. A queued turn counts as much as a running one — the server refuses to merge or
+    /// commit during either. So does a message on its way (`sending`): the send queues the turn at
+    /// once, before the record says so, and a Merge pressed in that gap came back "wait for the
+    /// current turn to finish before merging". A parked session whose sub-agents still run is
+    /// still writing to the worktree. An ended session holds nothing back.
+    public static func turnActive(status: RunStatus, runningSubagents: Int?, sending: Bool) -> Bool {
+        switch status {
+        case .pending, .running: return true
+        case .awaitingInput, .interrupted: return sending || (runningSubagents ?? 0) > 0
+        case .succeeded, .failed, .cancelled: return false
+        }
+    }
+
     /// The left-segment default merge target: the agent's remembered target if it's still on offer,
     /// else main, else master, else the first reported branch; nil = no reported targets, so let the
     /// runner auto-detect (the older-runner path).

@@ -30,6 +30,22 @@ private struct DismissApprovalReviewKey: EnvironmentKey {
     static let defaultValue: () -> Void = {}
 }
 
+/// A card answered in THIS review, drawn as its record: the title the sheet takes, the line where
+/// its buttons were, and what the card needs to show the answer it was given.
+struct ReviewRecord {
+    let title: String
+    let footer: ReviewRecordFooter
+    /// The labels an AskUserQuestion sent, by question — what its record ticks.
+    var answers: [String: [String]]? = nil
+    /// Dimmed, so the record does not read as something still to press. A question's record is
+    /// not: it greys what was not picked instead, the coordinator question's way.
+    var dimsContent = true
+}
+
+private struct ReviewRecordKey: EnvironmentKey {
+    static let defaultValue: ReviewRecord? = nil
+}
+
 extension EnvironmentValues {
     var openApprovalReview: (ApprovalReviewTarget) -> Void {
         get { self[OpenApprovalReviewKey.self] }
@@ -50,11 +66,18 @@ extension EnvironmentValues {
         get { self[DismissApprovalReviewKey.self] }
         set { self[DismissApprovalReviewKey.self] = newValue }
     }
+
+    /// Set on a card the review answered: the card draws itself as its record, read-only.
+    var reviewRecord: ReviewRecord? {
+        get { self[ReviewRecordKey.self] }
+        set { self[ReviewRecordKey.self] = newValue }
+    }
 }
 
 /// One compact transcript preview and a scrolling review with its decisions always in reach.
 struct ApprovalReviewLayout<Content: View, Actions: View>: View {
     @Environment(\.inApprovalReview) private var inReview
+    @Environment(\.reviewRecord) private var record
     @Environment(\.approvalReviewTarget) private var target
     @Environment(\.openApprovalReview) private var openReview
     let title: String
@@ -93,6 +116,7 @@ struct ApprovalReviewLayout<Content: View, Actions: View>: View {
                     }
                     content
                 }
+                .opacity(record?.dimsContent == true ? 0.6 : 1)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
             }
@@ -103,12 +127,17 @@ struct ApprovalReviewLayout<Content: View, Actions: View>: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 VStack(spacing: ApprovalMetrics.spacing) {
                     Divider()
-                    actions
+                    // Answered here: where the buttons were, who answered and when.
+                    if let record {
+                        ReviewRecordFooterView(footer: record.footer)
+                    } else {
+                        actions
+                    }
                 }
                 .padding(.horizontal).padding(.bottom)
                 .background(.bar)
             }
-            .navigationTitle(title)
+            .navigationTitle(record?.title ?? title)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -160,36 +189,42 @@ private struct ApprovalAnswerUnderWay: View {
     }
 }
 
-/// The press's own outcome, drawn once the door has taken it, for the moment before the sheet
-/// leaves with the request it just answered.
-///
-/// A receipt rather than a dismissal on the press, because nothing is decided until the door has
-/// it — a refusal leaves the reader here, with the card re-seeded and the reason above it. And a
-/// receipt rather than nothing, because this is the one surface still showing the question (the
-/// transcript's card is already gone) and the reader is owed the words for what happened to their
-/// press. Not for the other way a subject goes away: that one keeps the card and says so.
-private struct ReviewReceipt: View {
-    @Environment(\.dismiss) private var dismiss
-    let title: String
-    let detail: String
+/// Where a review's buttons were, once its own answer was taken: who answered and when, then what
+/// became of it — the coordinator question's record footer, for every card (`ReviewRecords`).
+struct ReviewRecordFooterView: View {
+    let footer: ReviewRecordFooter
 
     var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.orbitHeroGlyph).foregroundStyle(.green)
-            Text(title).font(.orbitProse.weight(.semibold))
-            Text(detail).font(.orbitLabel).foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: symbol).foregroundStyle(footer.mark == .done ? Color.green : Color.secondary)
+                Text(footer.line).font(.orbitProse.weight(.semibold))
+            }
+            if let detail = footer.detail {
+                Text(detail)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .padding(.leading, 22)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
-        .navigationTitle("Answered")
-        // Long enough to read two lines, short enough not to be a thing to dismiss. The Close
-        // button stays live throughout, and a sheet closed by hand cancels this with the view.
-        .task {
-            try? await Task.sleep(for: .seconds(1.2))
-            dismiss()
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var symbol: String {
+        switch footer.mark {
+        case .done:     return "checkmark.circle.fill"
+        case .keptOpen: return "arrow.uturn.backward.circle.fill"
+        case .refused:  return "xmark.circle.fill"
         }
+    }
+}
+
+/// The one way a sheet still leaves on its own: a card this window answered whose record it has
+/// no copy of. Every card the review presses keeps one, so this is a guard, not a path.
+private struct ReviewAnswered: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Color.clear.task { dismiss() }
     }
 }
 
@@ -235,9 +270,11 @@ struct ApprovalReviewSheet: View {
                         // press back to them as somebody else's news.
                         switch answer {
                         case .sending: ApprovalAnswerUnderWay()
-                        case .sent:    ReviewReceipt(
-                            title: "Answer sent",
-                            detail: "The agent has been told, and this request has nothing left to answer.")
+                        // The card as it was asked, as its record: the answer it was given ticked,
+                        // and who gave it where its buttons were.
+                        case .sent(let answered):
+                            ApprovalCard(console: console, approval: answered.approval)
+                                .environment(\.reviewRecord, answered.record)
                         }
                     } else {
                         Text("This request is no longer waiting for an answer.")
@@ -248,11 +285,13 @@ struct ApprovalReviewSheet: View {
                     }
                 case .delivered(let card):
                     if console.answeredHere(card) {
-                        // Closed HERE (`close(_:)`): the question is over, and the record the read
-                        // publishes where the decision was made is what the conversation keeps.
-                        ReviewReceipt(
-                            title: "Decision recorded",
-                            detail: "The conversation keeps the record where it was made.")
+                        // Closed HERE (`close(_:)`): the card as it was asked, as its record. The
+                        // live card would read its own answer back as somebody else's.
+                        if let answered = console.answeredDecision(card) {
+                            AnsweredDecisionView(console: console, answered: answered)
+                        } else {
+                            ReviewAnswered()
+                        }
                     } else {
                         DeliveredDecisionCardView(console: console, card: card)
                     }
@@ -286,5 +325,23 @@ struct ApprovalReviewSheet: View {
         #else
         .frame(minWidth: 520, minHeight: 560)
         #endif
+    }
+}
+
+extension ConsoleModel.AnsweredApproval {
+    /// The record the review draws this approval as: the sheet's title, and the line where its
+    /// buttons were. A question ticks what it sent rather than dimming; the rest dim.
+    var record: ReviewRecord {
+        switch approval.kind {
+        case .question:
+            return ReviewRecord(title: ReviewRecords.answeredTitle, footer: ReviewRecords.question(at: at),
+                                answers: answers ?? [:], dimsContent: false)
+        case .plan:
+            return ReviewRecord(title: ReviewRecords.answeredTitle,
+                                footer: ReviewRecords.plan(approved: behavior == .allow, at: at))
+        case .tool:
+            // Only Orbit's own asks are answered in a review, and their no goes to the composer.
+            return ReviewRecord(title: ReviewRecords.answeredTitle, footer: ReviewRecords.toolAsk(at: at))
+        }
     }
 }

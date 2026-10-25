@@ -1,0 +1,17 @@
+tree: /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/base
+head: f78e93f615fceda94eeea0c9cdd400fb44b7949e
+case: toasts / exit keeps its own native progress through modal transfers with no-preference motion / webkit-dark-desktop x4
+load: 11.07 10.93 11.13 9/3319 2510056
+started: 2026-10-10T18:11:24Z
+
+P0 expected screenshots: 44 P0.2 originals, 165 main drift references, 43 accepted migration differences.
+
+Running 4 tests using 1 worker
+
+  ✓  1 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓  2 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓  3 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓  4 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+
+  4 passed (11.7s)
+exit=0

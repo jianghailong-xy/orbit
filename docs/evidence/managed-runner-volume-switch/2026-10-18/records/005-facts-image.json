@@ -1,0 +1,28 @@
+{
+ "checks": [
+  {
+   "check": "the pinned image is in the guest",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-18T15:18:45.766+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "facts",
+ "result": {
+  "id": "sha256:1a46bd5c8af6a4d997b2b124a78968f4aa2ad3b4f96b9db6aa9875b3d4611a90",
+  "pushed": false,
+  "reference": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+  "repoDigests": [
+   "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312"
+  ],
+  "repoTags": [
+   "docker.io/library/orbit-managed-runner-lab:t06b-ebf54ab8d"
+  ],
+  "size": "500247056",
+  "source": "ebf54ab8d"
+ },
+ "seconds": 0.7,
+ "startedAt": "2026-10-18T15:18:45.096+00:00",
+ "step": "image"
+}

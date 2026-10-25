@@ -1,0 +1,81 @@
+<!doctype html>
+<!-- Design board 7 (web): a workspace's "Engines it may use" lists engines only. "现在" is drawn from today's
+     RunnerDetailPage.tsx (RoutingEngines inside "Smart model selection for tasks", and the derived model line);
+     "改后" is the proposal. Hand-drawn on the shipped tokens; not shipped code. Render: render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>7 · Workspace: Engines it may use (web) — provider/engine decoupling</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="board.css">
+<script src="glyphs.js"></script>
+<script src="board.js"></script>
+<style>
+  .form { padding: 16px 22px 18px; }
+  .form .hd { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .form .hs { font-size: 12.5px; color: var(--text-3); margin-bottom: 8px; }
+  .w-sr .w-switch { margin-top: 2px; }
+  .eng-l { font-size: 13px; font-weight: 600; color: var(--text-2); margin-top: 12px; }
+  .eng-n { font-size: 12px; line-height: 1.6; color: var(--text-3); margin-top: 6px; }
+  .w-cb .own { font-size: 11.5px; color: var(--text-3); margin-left: 2px; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">7 · 工作区设置（Web）：「Engines it may use」只列 engine</h1>
+  <p class="m-sub zh">Runner 页 → 工作区 → 编辑，开了「Smart model selection for tasks」才出现这一组勾选：智能选择可以把这个工作区的任务挪到哪些 engine 上（有档位表的是 Claude Code、Codex）。今天这组勾选拿工作区上次的 provider 当「自己的 engine」，于是会出现 <code>deepseek</code>、<code>deepseek-harness</code> 这种 key 的 id，标签也都是原始 id。改后工作区的种子同时带出 (engine, provider)（项目说明「都不给」那条），这里只列 engine，用 engine 名。下面两个工作区：orbit 上次是 Claude Code + DeepSeek key，builds 上次是 DeepSeek Harness + DeepSeek 2。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 工作区设置里的这一段</div>
+    <div class="cols2" id="rows"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+
+<script>
+const row = (desc, boxes, note) => `<div class="w-sr"><div class="tx"><b>Smart model selection for tasks</b>
+  <div class="d">Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected.</div>
+  <div class="eng-l">Engines it may use</div><div class="w-cbs">${boxes}</div>
+  <div class="eng-n">${note}</div></div><span class="w-switch"></span></div>`;
+const cb = (label, state, own) => `<span class="w-cb ${state}"><i>${state === 'on' || state === 'lock' ? '✓' : ''}</i>${label}${own ? `<span class="own">${own}</span>` : ''}</span>`;
+const nowNote = "Only this agent's own engine is ticked by default, so a task never moves to another engine unless you tick it here.";
+const form = (name, body) => `<div class="w-app form"><div class="hd">${name}</div><div class="hs">Workspace on hpc · /root/orbit</div>${body}</div>`;
+
+const cases = [
+  ['orbit：上次是 Claude Code + DeepSeek key',
+    form('orbit', mk('A', row('', cb('deepseek', 'lock') + cb('claude', '') + cb('codex', ''), nowNote))
+      + mk('B', '<div class="w-derived">Model <b>deepseek-v4-pro</b> · resolved by DeepSeek on this runner. Pick a different one from the session composer.</div>')),
+    form('orbit', mk(1, row('', cb(eng('claude', 16), 'lock', 'this agent\'s engine') + cb(eng('codex', 16), ''),
+      nowNote))
+      + mk(2, '<div class="w-derived">Model <b>DeepSeek V4 Pro</b> · Claude Code via DeepSeek on this runner. Pick a different one from the session composer.</div>')),
+  ],
+  ['builds：上次是 DeepSeek Harness + DeepSeek 2',
+    form('builds', mk('C', row('', cb('deepseek-harness', 'lock') + cb('claude', '') + cb('codex', ''), nowNote))
+      + '<div class="w-derived">Model <b>DeepSeek V4 Pro</b> · resolved by DeepSeek Harness 2 on this runner. Pick a different one from the session composer.</div>'),
+    form('builds', mk(3, row('', cb(eng('dsh', 16), 'lock', 'this agent\'s engine') + cb(eng('claude', 16), '') + cb(eng('codex', 16), ''),
+      nowNote))
+      + '<div class="w-derived">Model <b>DeepSeek V4 Pro</b> · DeepSeek Harness via DeepSeek 2 on this runner. Pick a different one from the session composer.</div>'),
+  ],
+];
+document.getElementById('rows').innerHTML = cases.map(([title, now, after]) => `
+  <div><div class="lbl zh"><span class="m-k">现在</span>${title}</div>${now}</div>
+  <div><div class="lbl zh"><span class="m-k new">改后</span>${title}</div>${after}</div>`).join('');
+
+document.getElementById('notes').innerHTML = notes([
+  ['A', '<b>「自己的 engine」其实是 key 的 id：</b><code>deepseek</code> 是一把跑 Claude Code 的 key，和旁边的 <code>claude</code> 是同一个 engine，却成了两个勾。'],
+  ['B', '<b>模型行说「resolved by DeepSeek」</b>，看不出是哪个 engine 在跑。'],
+  ['C', '<b>Harness 也一样</b>：锁住的勾是 <code>deepseek-harness</code>（旧的 key slug），标签全是原始 id。'],
+  [1, '<b>只列 engine，用 engine 名带图标：</b>工作区自己的 engine 排第一、勾上、锁住，旁注「this agent\'s engine」；其余是智能选择能去的 engine（今天有档位表的 Claude Code、Codex）。工作区自己是 Claude Code 时不重复列。'],
+  [2, '<b>模型行写 engine + provider：</b>「Model DeepSeek V4 Pro · Claude Code via DeepSeek on this runner.」——工作区种子的 (engine, provider) 原样说出来。'],
+  [3, '<b>DeepSeek Harness 工作区</b>：锁住的是 DeepSeek Harness 这个 engine，key 不出现在勾选里。任务被挪到别的 engine 时，原来的 key 那个 engine 也能用就继续用（DeepSeek key → Claude Code），用不了就用那个 engine 的默认凭据（→ Codex 用 runner 登录）——项目说明「顺带修复」里模型路由保留原 key 那条。'],
+  ['·', '<b>不变的：</b>开关、说明文字、只有勾上才会换 engine 的规则、保存方式。'],
+]);
+finish();
+</script>
+</body>
+</html>

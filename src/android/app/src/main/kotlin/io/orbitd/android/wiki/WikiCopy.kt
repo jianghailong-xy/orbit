@@ -11,12 +11,32 @@ internal object WikiCopy {
     const val title = "Wiki"
     const val searchPlaceholder = "Search the wiki"
     const val reviewTitle = "Review"
-    fun proposalsToReview(count: Int) = "$count proposals to review"
+    fun proposalsToReview(count: Int) = "$count proposal${if (count == 1) "" else "s"} to review"
     fun proposalsFrom(count: Int, sessions: Int) =
         "$count proposal${if (count == 1) "" else "s"} from $sessions session${if (sessions == 1) "" else "s"}"
     fun oldest(`when`: String) = "oldest $`when`"
 
+    /** Activity and the number waiting on the owner (design §12.3.2–§12.3.4, §12.3.7): every space's proposals and the
+     * things each plan waits on the owner for; the drawer's Wiki row and the bar's Activity badge show it, and say it the
+     * way the Projects row says its own. */
+    const val activity = "Activity"
+    fun waitingOnYou(count: Int) = "$count waiting on you"
+    /** Beside Recently changed: how many of its rows came after the reader last looked. */
+    fun newSinceLastLooked(count: Int) = "$count new since you last looked"
+    /** The share of Activity's first banner that is another space's: `3 proposals to review · 2 in wikova`. */
+    fun countInSpace(count: Int, space: String) = "· $count in $space"
+    /** After another space's plan banner, which space it is: `Plan draft ready to confirm · in wikova`. */
+    fun inSpace(space: String) = "· in $space"
+    /** After a space's name in the picker, what waits on the owner in it: `wikova · 2 waiting`. */
+    fun spaceWaiting(count: Int) = "· $count waiting"
+    /** The picker's words (mock 31 ④): the way into Wiki settings under the spaces, and each space's documents. */
+    const val manageSpaces = "Manage spaces"
+    fun documentCount(count: Int) = "${WikiArticleCopy.count(count)} ${if (count == 1) "document" else "documents"}"
+    const val noDocuments = "No documents yet"
+
     const val principles = "Principles"
+    /** After the home's first three principles, the way to all of them: `All 6 ›` (`wikiAllPrinciples`). */
+    fun allPrinciples(count: Int) = "All $count ›"
     const val recentDecisions = "Recent decisions"
     const val recentlyChanged = "Recently changed"
     const val agentsUsed = "Agents used the wiki"
@@ -26,6 +46,8 @@ internal object WikiCopy {
     fun anchorsVerified(ref: String, ago: String) = if (ago.isEmpty()) "Anchors verified at $ref" else "Anchors verified at $ref $ago"
 
     const val noSpaces = "No wiki space yet. A space is a codebase, and the first one is made when a session proposes into it."
+    /** What the Wiki section says to an account the server has not switched the wiki on for. */
+    const val disabledNote = "The wiki is not switched on for this account."
     const val spacePickerHint = "The codebase this wiki describes"
     const val sessionsReceived = "sessions received wiki context"
     const val searches = "searches"
@@ -61,7 +83,20 @@ internal object WikiCopy {
     const val settingsSaved = "Wiki settings saved"
     const val superseded = "Superseded"
     const val retired = "Retired"
-    const val refused = "The server refused it"
+    /** A write that failed names the action (iOS d625d9809); the server's reason is on the line below. */
+    const val entrySaveFailed = "Couldn't save the entry"
+    const val entrySupersedeFailed = "Couldn't supersede the entry"
+    const val entryRetireFailed = "Couldn't retire the entry"
+    const val entryConfirmFailed = "Couldn't confirm the entry"
+    const val entryRejectFailed = "Couldn't reject the entry"
+    const val settingsSaveFailed = "Couldn't save the wiki settings"
+    const val runRevertFailed = "Couldn't revert the run"
+    const val planDraftFailed = "Couldn't draft the plan"
+    const val planRedraftFailed = "Couldn't redraft the plan"
+    const val planConfirmFailed = "Couldn't confirm the plan"
+    const val changeAcceptFailed = "Couldn't accept the change"
+    const val changeEditFailed = "Couldn't edit the change"
+    const val changeRejectFailed = "Couldn't reject the change"
     /** A decide the server recorded `conflict`: the entry had moved past the op (a newer revision), so nothing was
      * applied. iOS shows the action's own toast here — an iOS defect, not copied. */
     const val conflictRefused = "Nothing was applied: the entry changed after this was proposed."
@@ -138,7 +173,6 @@ internal object WikiCopy {
     const val tabAmend = "Amend"
     const val tabRetire = "Retire"
 
-    const val noEntries = "Nothing has been recorded in this space yet."
     const val noReview = "Nothing is waiting for you."
     const val noChanges = "Nothing has changed yet."
     const val noDecisions = "No decision has been recorded yet."
@@ -179,7 +213,7 @@ internal object WikiModeCopy {
     fun modeNote(mode: String?) = when (mode) {
         "manual" -> "Every change from sessions, maintenance and imports waits for you in Review."
         "tiered" -> "Your own words and machine-checked entries apply at once; the rest show as Unreviewed and are not sent to agents."
-        "automatic" -> "local-vllm checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason."
+        "automatic" -> "The System model checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason."
         else -> ""
     }
     const val spotCheck = "Spot-check Automatic"
@@ -188,17 +222,11 @@ internal object WikiModeCopy {
     const val floorsNote = "principles, anything a session proposed after reading the web, and changes to entries you wrote or confirmed. A run that would change more than 10% of the wiki stops."
     const val maintenance = "Maintenance"
     const val maintenanceName = WikiCopy.historyMaintenance
-    const val maintenanceNote = "Keeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the workspace you pick, with the provider pinned."
     const val off = "Off"
     const val on = "On"
     const val setUp = "Set up…"
     const val setUpTitle = "Set up maintenance"
     const val status = "Status"
-    const val workspace = "Workspace"
-    const val workspaceNote = "The runner that checks out this codebase; maintenance runs there."
-    const val provider = "Provider"
-    const val providerNote = "Pinned: a run never falls back to another provider."
-    const val pinnedNoFallback = "pinned, no fallback"
     const val dailyLimit = "Daily limit"
     const val runsADayUnit = "runs a day"
     const val dailyLimitNote = "A run starts when 20 sessions have settled, or when the oldest waits a day. Each run writes at most 30 changes."
@@ -220,6 +248,16 @@ internal object WikiModeCopy {
         days == 1 -> "Last 1 day"
         else -> "Last $days $lookbackUnit"
     }
+
+    // MARK: maintenance as the server executes the wiki (mock 35 ①②, P9)
+
+    /** The workspace row's name: where the server reads the repository (`WIKI_REPO_FROM`). */
+    const val repoFrom = "Reads the repository from"
+    const val repoFromNote = "The runner that checks out this codebase; the server reads the repository there."
+    const val model = "Model"
+    const val modelNote = "Set by this deployment, the same for every space."
+    const val maintenanceNoteServer = "Keeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the server with this deployment’s System model."
+    const val privacyNote = "The wiki sends its material — session summaries, entries and repository excerpts — to this deployment’s System model."
 
     const val confirm = "Confirm"
     const val confirmed = "Confirmed"
@@ -279,6 +317,15 @@ internal object WikiHealthCopy {
     fun lastRun(ago: String) = "last run $ago"
     fun lastSuccess(ago: String) = "last success $ago"
     fun failed(count: Int) = if (count == 1) "Maintenance failed" else "Maintenance failed $count times"
+
+    // MARK: the server's reasons (mock 35 ⑥, P9)
+
+    const val reasonWorker = "wiki worker not running"
+    const val reasonUnconfigured = "System model not configured"
+    const val reasonKeyRefused = "System model refused the key"
+    const val reasonUnreachable = "System model unreachable"
+    const val reasonRunnerOffline = "Waiting for the runner to come online"
+    const val reasonRunnerUpgrade = "Upgrade the runner to read the repository"
 }
 
 internal object WikiArticleCopy {
@@ -393,4 +440,15 @@ internal object WikiDocCopy {
     }
     fun monthDayTime(iso: String?, zone: ZoneId = ZoneId.systemDefault()): String? =
         iso?.let { WikiModeLogic.runWhen(it, zone).ifEmpty { null } }
+
+    // The home, by the confirmed plan (design §12.3.1, mocks 30 ③, 31 ① ⑥).
+
+    /** The line under the home's head once a plan is confirmed: `35 documents · 5 written` (`wikiDocsWritten`). */
+    fun docsWritten(total: Int, written: Int) = "${plural(total, "document", "documents")} · ${WikiArticleCopy.count(written)} written"
+    /** A new space's one card (mock 31 ⑥): why it has nothing, over Set up maintenance (`WIKI_NO_DOCUMENTS_NOTE`). */
+    const val noDocumentsNote = "This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space."
+    /** A category's documents not written yet, folded into one row under its written ones (`wikiNotWrittenYet`). */
+    fun notWrittenYet(n: Int) = "+${WikiArticleCopy.count(n)} not written yet"
+    /** A category none of whose documents is written yet, as its one row (`wikiDocsNotWrittenYet`). */
+    fun docsNotWrittenYet(n: Int) = "${plural(n, "document", "documents")} · $notWrittenShort"
 }

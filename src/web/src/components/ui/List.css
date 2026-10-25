@@ -1,0 +1,82 @@
+/* The replaced list (P4.3a), for native markup: rows a page renders itself, in the box, rhythm and
+   dividers the replaced list drew them in.
+     <div class="orbit-list orbit-list-split [orbit-list-sm]">
+       <ul class="orbit-list-items">
+         <li class="orbit-list-item">…</li>
+   A row that is title over description uses
+     <div class="orbit-list-item-meta"><div class="orbit-list-item-meta-content">
+       <h4 class="orbit-list-item-meta-title">…</h4><div class="orbit-list-item-meta-description">…</div>
+   12px rows (8px/16px small), a 1px split line between rows, none after the last; rows wrap their
+   content at 576px and below. Selectors keep the replaced rules' weight, and this file loads after
+   index.css, so the pages' own row rules cascade as they did. Nothing inside draws an outline, as in
+   the replaced list: a row's own focus mark is the page's to draw. */
+.orbit-list {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  color: var(--text-1);
+  font-size: var(--orbit-font-size);
+  line-height: 1.5714285714285714;
+  list-style: none;
+  font-family: var(--orbit-font-family);
+  position: relative;
+}
+.orbit-list * { outline: none; }
+.orbit-list .orbit-list-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.orbit-list .orbit-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  color: var(--text-1);
+}
+.orbit-list .orbit-list-item .orbit-list-item-meta {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  max-width: 100%;
+}
+.orbit-list .orbit-list-item .orbit-list-item-meta .orbit-list-item-meta-content {
+  flex: 1 0;
+  width: 0;
+  color: var(--text-1);
+}
+.orbit-list .orbit-list-item .orbit-list-item-meta .orbit-list-item-meta-title {
+  margin: 0 0 4px 0;
+  color: var(--text-1);
+  font-size: var(--orbit-font-size);
+  line-height: 1.5714285714285714;
+}
+.orbit-list .orbit-list-item .orbit-list-item-meta .orbit-list-item-meta-title > a {
+  color: var(--text-1);
+  transition: all 0.3s;
+}
+.orbit-list .orbit-list-item .orbit-list-item-meta .orbit-list-item-meta-title > a:hover {
+  color: var(--orbit-control-primary);
+}
+.orbit-list .orbit-list-item .orbit-list-item-meta .orbit-list-item-meta-description {
+  color: var(--text-3);
+  font-size: var(--orbit-font-size);
+  line-height: 1.5714285714285714;
+}
+.orbit-list .orbit-list-item-no-flex {
+  display: block;
+}
+.orbit-list-split .orbit-list-item {
+  border-block-end: 1px solid var(--orbit-border-split);
+}
+.orbit-list-split .orbit-list-item:last-child {
+  border-block-end: none;
+}
+.orbit-list-sm .orbit-list-item {
+  padding: 8px 16px;
+}
+@media screen and (max-width: 576px) {
+  .orbit-list .orbit-list-item {
+    flex-wrap: wrap;
+  }
+}

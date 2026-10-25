@@ -406,6 +406,20 @@ test('signedIn: on, it never throws; an owner with a mapping, or one the server 
   });
   await refused.signedIn({ id: OWNER });
   assert.deepEqual(asked, [OWNER]);
-  assert.deepEqual(calls, ['managedRunner.findUnique']);
+  assert.deepEqual(calls, ['managedRunner.findUnique', 'user.findUnique'], 'the mapping, then whether the account is disabled: reads only');
+  assert.equal(kicks.n, 0);
+
+  // A disabled account: not eligible whatever the rule says, and the rule is not asked.
+  calls.length = 0;
+  asked.length = 0;
+  const disabled = new ManagedRunnerService(
+    recordingPrisma(calls, (call) => (call === 'user.findUnique' ? { disabledAt: new Date() } : null)) as never,
+    ON,
+    enabledRuntime(kicks),
+    { eligible: async (ownerId) => (asked.push(ownerId), true) },
+  );
+  await disabled.signedIn({ id: OWNER });
+  assert.deepEqual(asked, []);
+  assert.deepEqual(calls, ['managedRunner.findUnique', 'user.findUnique']);
   assert.equal(kicks.n, 0);
 });

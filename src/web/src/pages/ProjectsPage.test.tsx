@@ -1249,7 +1249,7 @@ describe('ProjectDetailPage', () => {
     expect(html).toContain('Project could not be loaded');
     expect(html).toContain('This link is missing a project id');
     expect(html).not.toContain('Retry'); // nothing was asked for, so there is nothing to retry
-    expect(html).not.toContain('ant-spin'); // and nothing in flight to wait on
+    expect(html).not.toContain('role="status" aria-label="Loading"'); // and nothing in flight to wait on
     expect(html).toContain('href="/projects"'); // only a way back
   });
 
@@ -1269,7 +1269,7 @@ describe('ProjectDetailPage', () => {
 
   it('spins while the project is still loading', () => {
     // Nothing seeded: react-query reports the optimistic pending state on first render.
-    expect(renderDetail(newClient(), encodeId(P1))).toContain('ant-spin');
+    expect(renderDetail(newClient(), encodeId(P1))).toContain('role="status" aria-label="Loading"');
   });
 
   it('shows an error with a Retry action when the project fails to load', async () => {
@@ -1400,7 +1400,7 @@ describe('ProjectDetailPage — top-level tasks', () => {
     const { html } = withProject();
     const out = html();
     expect(out).toContain('Tasks');
-    expect(out).toContain('ant-spin');
+    expect(out).toContain('role="status" aria-label="Loading"');
     expect(out).not.toContain('No top-level tasks yet');
   });
 
@@ -1528,7 +1528,13 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
     expect(out).toMatch(
       /<button[^>]*aria-expanded="false"[^>]*>[^<]*<span>Show subtasks<\/span>/,
     );
-    expect(out.match(/aria-expanded="[^"]*"/g)).toEqual([
+    // Popup triggers on the page (a menu, a confirmation) say whether their popup is open too, and
+    // say what it is (`aria-haspopup`); every other expandable control is a row's disclosure.
+    expect(
+      (out.match(/<[^>]*aria-expanded="[^"]*"[^>]*>/g) ?? [])
+        .filter((element) => !element.includes('aria-haspopup'))
+        .map((element) => element.match(/aria-expanded="[^"]*"/)![0]),
+    ).toEqual([
       'aria-expanded="false"',
       'aria-expanded="false"',
     ]);
@@ -1571,7 +1577,11 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
     expect(out).toContain('A leaf');
     expect(out).toContain('0 subtasks');
     expect(out).not.toContain('Show subtasks');
-    expect(out).not.toContain('aria-expanded');
+    // Popup triggers on the page say whether their popup is open too, and say what it is
+    // (`aria-haspopup`); nothing else on the page is expandable.
+    expect(
+      (out.match(/<[^>]*aria-expanded="[^"]*"[^>]*>/g) ?? []).filter((element) => !element.includes('aria-haspopup')),
+    ).toEqual([]);
     expect(out).not.toMatch(/aria-label="(?:Show|Hide) subtasks/);
   });
 
@@ -1675,7 +1685,7 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
     // Nothing seeded for this level: react-query reports the pending state on first render, which
     // is a state of its own rather than a row that silently opened onto nothing.
     const out = renderLevel(newClient(), encodeId(P1), 't1');
-    expect(out).toContain('ant-spin');
+    expect(out).toContain('role="status" aria-label="Loading"');
     expect(out).not.toContain('No subtasks');
   });
 
@@ -1712,7 +1722,7 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
     qc.setQueryData(childKey(P1, 't1'), { items: [], nextCursor: null });
     const out = renderLevel(qc, encodeId(P1), 't1');
     expect(out).toContain('No subtasks — the count on this row is out of date');
-    expect(out).not.toContain('ant-spin');
+    expect(out).not.toContain('role="status" aria-label="Loading"');
   });
 
   it('says more subtasks exist when the child page returns a cursor — without a pager', () => {
@@ -2211,6 +2221,8 @@ describe('ProjectDetailPage — integration', () => {
     // with only one of them would be testing a page nobody serves.
     qc.setQueryData(['project', encodeId(P1)], detail({
       integration: { line: 'PROJECT_BRANCH', ref: 'project/bg-jobs', upstreamRef: 'main' },
+      // The document's half of How it runs, which the settings block draws beside the line.
+      maxConcurrentTasks: 3,
       ...over,
     }));
     qc.setQueryData(integrationKey(P1), integration());
@@ -2258,7 +2270,7 @@ describe('ProjectDetailPage — integration', () => {
 
   it('says main, and nothing about a branch, when the line is main', () => {
     const qc = newClient();
-    qc.setQueryData(['project', encodeId(P1)], detail());
+    qc.setQueryData(['project', encodeId(P1)], detail({ maxConcurrentTasks: 3 }));
     qc.setQueryData(
       integrationKey(P1),
       integration({ line: 'MAIN', ref: 'main', commitsAheadOfUpstream: null,

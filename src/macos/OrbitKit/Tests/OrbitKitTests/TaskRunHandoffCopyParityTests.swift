@@ -200,7 +200,7 @@ final class TaskRunHandoffCopyParityTests: XCTestCase {
                                                          liveRun: true),
                        live)
 
-        let idle = filled(try literal(web, containing: "Your next message runs on"),
+        let idle = filled(try literal(web, containing: "Your next message uses"),
                           ["to": "deepseek"])
         XCTAssertEqual(TaskRunHandoff.providerSwitchNote(from: "claude", to: "deepseek",
                                                          liveRun: false),

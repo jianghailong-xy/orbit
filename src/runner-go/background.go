@@ -670,6 +670,137 @@ func (b *bgTailer) killEngineShells() {
 	}
 }
 
+// stopBackgroundWork ends the background work this session still has running, because somebody
+// pressed Stop in front of it — an interrupt carrying RunInterruptRequest.stopBackgroundWork.
+// It is the ONE way an interrupt ends anything: a plain one (the engine's own `session_interrupt`,
+// the MCP tool, the CLI, every other caller of the browser door) leaves all of this running,
+// which is what the contract's "no kill anywhere on this path" still means.
+//
+// What it ends, and how:
+//   - the engine-owned shells this tailer is watching: their tails end and they are reported
+//     killed. These are the engine's own Bash(run_in_background) shells (for a provider whose
+//     guard cannot deny them) and, for Kimi, the engine's background tool calls — work that runs
+//     in the engine's process tree, which this runner cannot address by pid. What it can do, and
+//     does, is end their standing in the session: the tray resolves, and the session stops
+//     painting itself busy over work nobody can see any more. The turn stop is what actually ends
+//     them: an engine that is mid-teardown of its own turn takes its children with it, and the
+//     ones that outlive a turn (a persistent Monitor) keep running in the engine until the engine
+//     is recycled — reported here rather than left as a row that says "running" forever.
+//   - the Monitors it registered, reported the same way killEngineShells reports them.
+//   - the background Workflows, whose agent transcripts are finished as killed
+//     (finishWorkflowTranscript) so a workflow's agents do not stay "running" in the transcript.
+//   - the runner-hosted jobs (bg_run) — and this is the real kill. All of them, `kind:'service'`
+//     included: a dev server or a watcher started by the turn the person just stopped is taken
+//     down with it. That cost was accepted deliberately (2026-10-05) rather than softened with an
+//     allow-list, because a Stop that spares the dev server is a Stop that has to explain why the
+//     tray still says something is running. Each is marked with bgStopReason BEFORE it is
+//     cancelled, so its own waiter reports the terminal event (finishJob) with the reason on it —
+//     and a job that had already finished is not relabelled, exactly as in killJob.
+//
+// Deliberately NOT ended: the `!cmd &` shells the person started themselves. They are the runner's
+// own processes (not the engine's), nothing else in this codebase can end one except the session's
+// own end, and ending them here would also need their exit reporting to grow a "killed" arm it does
+// not have. Left running is the honest reading of today's design: the tray still shows them, so
+// nothing claims they stopped.
+//
+// Called before the interrupt control request is even queued (see the interrupt arm): the engine's
+// answer decides whether the TURN stopped, and nothing about ending the session's own background
+// work waits on it. Returns nothing and blocks on nothing — the kills are cancels, and each job's
+// terminal event is emitted by the waiter that owns it.
+func (b *bgTailer) stopBackgroundWork() {
+	type killedShell struct{ toolUseID, shellID string }
+	b.mu.Lock()
+	killed := make([]killedShell, 0, len(b.live))
+	for id, s := range b.live {
+		if !s.engineOwned {
+			continue // a `!cmd &` shell: see the note above
+		}
+		s.cancel()
+		delete(b.live, id)
+		b.releaseHold(id)
+		killed = append(killed, killedShell{toolUseID: id, shellID: s.shellID})
+	}
+	monitors := b.monitors
+	b.monitors = map[string]engineMonitor{}
+	b.monitorsLive.Add(-int64(len(monitors)))
+	workflowIDs := make([]string, 0, len(b.workflows))
+	for id := range b.workflows {
+		workflowIDs = append(workflowIDs, id)
+	}
+	var jobs []*bgJob
+	for _, job := range b.jobs {
+		if job.status != bgStatusRunning || job.killReason != "" {
+			continue
+		}
+		job.killReason = bgStopReason
+		jobs = append(jobs, job)
+	}
+	b.mu.Unlock()
+	for _, id := range workflowIDs {
+		b.finishWorkflowTranscript(id, "killed")
+	}
+	for _, s := range killed {
+		if !b.markTerminal(s.toolUseID) {
+			continue // its own notification already reported a terminal state
+		}
+		b.emit(evBackgroundTask, map[string]interface{}{
+			"shellId":   s.shellID,
+			"toolUseId": s.toolUseID,
+			"status":    "killed",
+			"summary":   "Background command stopped by Stop",
+		})
+	}
+	for toolUseID, m := range monitors {
+		if !b.markTerminal(toolUseID) {
+			continue
+		}
+		payload := map[string]interface{}{
+			"shellId":   m.taskID,
+			"toolUseId": toolUseID,
+			"status":    "killed",
+			"tool":      "Monitor",
+			"summary":   "Monitor stopped by Stop; it will send no more events",
+		}
+		if m.persistent {
+			payload["persistent"] = true
+		} else {
+			payload["timeoutMs"] = m.timeoutMs
+		}
+		b.emit(evBackgroundTask, payload)
+	}
+	for _, job := range jobs {
+		job.cancel() // its waiter reaps and reports it; nothing here waits for that
+	}
+}
+
+// stopBackgroundWorkRequested reads the flag a turn carries, from the JSON payload the control
+// plane writes into an interrupt turn's `content` (sessions.service.interrupt). Absent, empty or
+// unparseable all read as "no": an interrupt that says nothing extra must stay the interrupt that
+// kills nothing, so the parse failure that matters is the one that would invent a kill. An older
+// control plane sends the follow-up payload alone ({content, attachmentIds}) and reads as false.
+func stopBackgroundWorkRequested(content string) bool {
+	if strings.TrimSpace(content) == "" {
+		return false
+	}
+	var payload struct {
+		StopBackgroundWork bool `json:"stopBackgroundWork"`
+	}
+	if err := json.Unmarshal([]byte(content), &payload); err != nil {
+		return false
+	}
+	return payload.StopBackgroundWork
+}
+
+// stopBackgroundWorkForTurn is the interrupt arm's one line: end this session's background work
+// when — and only when — the turn that arrived asked for it.
+func stopBackgroundWorkForTurn(bg *bgTailer, resp *RunInboxResponse) {
+	if bg == nil || resp == nil || !stopBackgroundWorkRequested(resp.Content) {
+		return
+	}
+	bg.stopBackgroundWork()
+}
+
+
 // stopAll ends and joins every tail, transcript watcher, and runner-owned
 // background shell. Returning is the supervisor handoff barrier: no old epoch
 // goroutine may emit or retain the worktree after it completes.

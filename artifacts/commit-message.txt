@@ -1,0 +1,30 @@
+feat(clients): the plan's line under Draft plan names the System model while the server drafts
+
+While ORBIT_WIKI_EXECUTOR gives the account to the server, a plan draft is the
+wiki-worker's, on this deployment's System model (P6) — so the line beside
+Draft plan no longer names the account's provider. Owner's call 2026-10-08, the
+line board 35 left as "留给 P6、另议": while the server executes the account it
+reads `System model · about 1–2 hours`, the duration untouched until P10
+measures it in production; under runner it is word for word what it always was.
+
+- the words live in src/shared/src/wiki-server-execution.fixture.json
+  (`plan.note`), which the web and OrbitKit both read, so the two ends cannot
+  drift into two sentences;
+- web: `WIKI_PLAN_NOTE_SERVER` in lib/wikiPlan.ts, taken by `wikiPlanCard`
+  (Activity's Plan card) and `wikiPlanEmptyNote` (the plan's empty page) when
+  the space's health read says `executor.serverExecutes` (P9's read);
+- native: `WikiPlanCopy.noteServer` and
+  `emptyNote(where:provider:serverExecutes:)`, fed by the plan screen's own
+  `loadSystemModel()` read (`WikiModel.serverExecutes`) — the empty plan card is
+  where macOS/iOS draw Draft plan with that line; Activity's plan banners carry
+  no such line, and giving them one would be a new shape that wants a mock;
+- tests: the web's lib, Activity and plan-page tests cover both modes; OrbitKit's
+  `WikiServerExecutionCopyParityTests` holds native, web source and fixture
+  together, and the plan/wiring parity tests moved with the new signatures;
+- evidence: docs/evidence/wiki-plan-server-note/ — the real page (vite with a
+  fake API, as board 35 was shot) under server execution and under runner.
+
+Verified: OrbitKit 3435 tests / 0 failures in docker swift:6.1, web vitest
+4743/4743, shared 406/406, compose topology 11/11.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

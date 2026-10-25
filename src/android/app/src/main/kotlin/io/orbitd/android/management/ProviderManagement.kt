@@ -33,7 +33,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import io.orbitd.android.navigation.Destination
+import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
 import kotlinx.coroutines.CancellationException
@@ -41,114 +41,71 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 
-/** The account's providers as iOS's Providers page reads them: runners, own and shared pools, API keys. */
-@Stable
-private class ProvidersModel(private val api: ManagementApi) {
-    var runners by mutableStateOf<List<JsonObject>>(emptyList()); private set
-    var keys by mutableStateOf<List<JsonObject>>(emptyList()); private set
-    var own by mutableStateOf<List<JsonObject>>(emptyList()); private set
-    var shared by mutableStateOf<List<JsonObject>>(emptyList()); private set
-    var access by mutableStateOf<Map<String, JsonObject>>(emptyMap()); private set
-    var loaded by mutableStateOf(false); private set
-    var error by mutableStateOf<String?>(null); private set
-    suspend fun load() {
-        try {
-            runners = providerObjects(api.get("runners"))
-            keys = providerObjects(api.get("providers"))
-            own = providerObjects(api.get("providers/pools"))
-            shared = providerObjects(api.get("providers/shared-pools"))
-            loaded = true; error = null
-        } catch (e: CancellationException) { throw e } catch (e: Exception) { error = personalFailure(e); return }
-        // A Codex pool of one's own is drawn with its people and keys, read pool by pool.
-        access = own.filter { it.str("engine") == "codex" }.mapNotNull { pool ->
-            try { pool.text("id") to api.get("providers/shared-pools/${pool.text("id")}").jsonObject }
-            catch (e: CancellationException) { throw e } catch (_: Exception) { null }
-        }.toMap()
-    }
-}
-
 @Composable
 private fun rememberReload(resumed: Boolean, revision: Long, load: suspend () -> Unit) {
     LaunchedEffect(resumed, revision) { if (resumed) load() }
 }
 
-/** ProvidersSettingsPage, or one pool's page when the route names it (own:<id> / shared:<id>). */
+/** Infrastructure (Settings' Machines & models row), or one of its pages when the route names it: a pool (own:<id> / shared:<id>), a
+ * DeepSeek key (key:<id>) or a Cursor key (cursor-key:<id>). */
 @Composable
-fun ProviderManagement(api: ManagementApi, revision: Long, record: String?, open: (OrbitRoute) -> Unit, back: () -> Unit) {
+fun InfrastructureSettings(api: ManagementApi, revision: Long, record: String?, open: (OrbitRoute) -> Unit, back: () -> Unit) {
     when {
         record?.startsWith("own:") == true -> PoolScreen(api, revision, ownId = record.removePrefix("own:"), sharedId = null, back = back)
         record?.startsWith("shared:") == true -> PoolScreen(api, revision, ownId = null, sharedId = record.removePrefix("shared:"), back = back)
-        else -> ProvidersOverview(api, revision, open)
+        record?.startsWith("key:") == true -> DeepSeekKeyPage(api, revision, record.removePrefix("key:"))
+        record?.startsWith("cursor-key:") == true -> CursorKeyPage(api, revision, record.removePrefix("cursor-key:"))
+        else -> InfrastructurePage(api, revision, open)
     }
 }
 
-@Composable
-private fun ProvidersOverview(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit) {
-    val model = remember(api) { ProvidersModel(api) }
-    val now = rememberNow()
-    val scope = rememberCoroutineScope()
-    rememberReload(rememberResumed(), revision) { model.load() }
-    fun pool(record: String) = open(OrbitRoute(Destination.SETTINGS, "providers", recordId = record))
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
-        model.error?.let { error ->
-            Text(error, color = Ink.red, style = MaterialTheme.typography.labelMedium)
-            TextButton(onClick = { scope.launch { model.load() } }) { Text("Retry") }
-        }
-        if (!model.loaded) { if (model.error == null) Text("Loading…", Modifier.padding(16.dp), color = Ink.muted); return@Column }
-        FormSection("On your runners", footer = "Signed in on the machine itself — a session spends that subscription, nothing to paste.") {
-            model.runners.forEachIndexed { index, runner ->
-                if (index > 0) HorizontalDivider()
-                Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { open(OrbitRoute(Destination.RUNNER, runner.text("id"))) }.padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(RunnerPage.displayName(runner))
-                        Text(ProviderPools.runnerSummary(runner), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-                    }
-                    Text("›", Modifier.clearAndSetSemantics { }, color = Ink.muted)
-                }
-            }
-        }
-        if (model.own.isNotEmpty() || model.shared.isNotEmpty()) FormSection("Account pools",
-            footer = "Several keys under one name — each session starts on one with room, and moves on when it runs out.") {
-            val rows = model.shared.map { "shared:${it.text("id")}" to ProviderPools.shared(it, now) } +
-                model.own.filter { own -> model.shared.none { ObjectId.same(it.text("id"), own.text("id")) } }.map { json ->
-                    val pool = ProviderPools.own(json, now)
-                    "own:${pool.id}" to (model.access[pool.id]?.let { ProviderPools.withAccess(pool, it, now) } ?: pool)
-                }
-            rows.forEachIndexed { index, (record, pool) ->
-                if (index > 0) HorizontalDivider()
-                Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { pool(record) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (ProviderPools.runsCodex(pool)) {
-                        val value = ProviderPools.codexPoolValue(pool, now)
-                        Column(Modifier.weight(1f)) {
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(pool.label, Modifier.align(Alignment.CenterVertically), maxLines = 1)
-                                if (ProviderPools.isShared(pool)) Chip("SHARED", Modifier.align(Alignment.CenterVertically), brand = true)
-                            }
-                            Text(ProviderPools.codexPoolLine(pool, now), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-                        }
-                        value?.let { Text(it.label, color = poolTone(it.tone), style = MaterialTheme.typography.bodySmall) }
-                    } else {
-                        Text(pool.label, Modifier.weight(1f), maxLines = 1)
-                        Text(ProviderPools.poolSummary(pool, now), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-                    }
-                    Text("›", Modifier.clearAndSetSemantics { }, color = Ink.muted)
-                }
-            }
-        }
-        FormSection("Your API keys", footer = "On your account and usable from every runner — billed per token. Adding or changing a key happens on the web.") {
-            if (model.keys.isEmpty()) Text("No keys yet", Modifier.padding(vertical = 8.dp), color = Ink.muted)
-            model.keys.forEachIndexed { index, key ->
-                if (index > 0) HorizontalDivider()
-                Column(Modifier.padding(vertical = 8.dp)) {
-                    Text(key.str("label") ?: key.text("slug"))
-                    key.str("defaultModel")?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
-                }
-            }
-        }
-        Spacer(Modifier.height(48.dp))
+/** The names the pool pages have read, so the shell's title is the pool's, as iOS titles the page. */
+private val poolNames = mutableStateMapOf<String, String>()
+
+internal fun poolTitle(id: String): String? = poolNames[ObjectId.canonical(id) ?: id]
+
+/**
+ * What the API keys list and a key's page say about the engines a key runs on (boards 1 ③④ and 2): the server's answer, each key's
+ * `engines` with its default first (docs/provider-engine-contract.md §6.3) — only the server, holding the key, can tell a Claude
+ * subscription token, which runs on Claude Code alone. A key is never named after one of its engines.
+ */
+internal object KeyEngines {
+    const val WORKS_WITH_FOOTER = "Pick it for a session on any of these in the composer's model menu → Provider."
+    const val KEY = "Key"
+    const val PROTOCOL = "Protocol"
+
+    /** The engines [key] runs on, its default first. */
+    fun engines(key: JsonObject): List<String> = ProviderEngines.providerEngines(key.str("slug"), listOf(key))
+
+    /** A Claude subscription token: the one key on Anthropic's protocol that only Claude Code runs — as the server says; a payload
+     * from before `engines` says nothing of it. */
+    fun subscriptionToken(key: JsonObject) = key["engines"] is JsonArray &&
+        ProviderEngines.keyDialect(key.str("runtime")) == "anthropic" && engines(key) == listOf(ProviderEngines.CLAUDE)
+
+    /** The line under a key's default model: `Claude Code · OpenCode · DeepSeek Harness`, `Claude Code · subscription token`. */
+    fun line(key: JsonObject): String? = engines(key).takeIf { it.isNotEmpty() }
+        ?.let { engines -> engines.map(ProviderEngines::cliName) + listOfNotNull(DeepSeekBalance.SUBSCRIPTION_TOKEN.takeIf { subscriptionToken(key) }) }
+        ?.joinToString(RunnerCopy.SEP)
+
+    /** The protocol a key's endpoint speaks, its row's `runtime` (web `runtimeSummary`) — not an engine: a key runs on several. */
+    fun protocol(runtime: String?) = when (runtime) {
+        ProviderEngines.CODEX -> "OpenAI-compatible"; ProviderEngines.KIMI -> "Moonshot API"; ProviderEngines.ANTIGRAVITY -> "Gemini API"
+        ProviderEngines.CURSOR -> CursorCopy.PROTOCOL
+        else -> "Anthropic-compatible"
     }
+
+    /** A key's page footer: where it changes, and that turning it off there stops it on every engine it runs on. */
+    fun footer(engines: List<String>) = if (engines.isEmpty()) DeepSeekBalance.EDIT_ON_WEB
+        else "${DeepSeekBalance.EDIT_ON_WEB} Turning it off there stops it on ${andList(engines)}."
+
+    private fun andList(names: List<String>) = if (names.size == 1) names.single() else names.dropLast(1).joinToString(", ") + " and " + names.last()
+
+    /** The vendor a key belongs to, by its preset: a Harness key is DeepSeek's, a key with none is Custom. */
+    fun vendorOf(presetSlug: String?) = when { presetSlug.isNullOrEmpty() -> "custom"; presetSlug == "deepseek-harness" -> "deepseek"; else -> presetSlug }
+
+    /** The keys with each vendor's together (board 1 ③), the vendors in the order of each one's first key, and each vendor's keys in
+     * the list's own order. */
+    fun byVendor(keys: List<JsonObject>): List<JsonObject> = keys.groupBy { vendorOf(it.str("presetSlug")) }.values.flatten()
 }
 
 @Composable
@@ -156,8 +113,9 @@ internal fun poolTone(tone: String) = when (tone) {
     "success" -> Ink.green; "brand" -> MaterialTheme.colorScheme.primary; "warning" -> Ink.amber; "danger" -> Ink.red; else -> Ink.muted
 }
 
+/** A small mark beside a name — NEXT, SHARED, OWNER — as the account pools and the engine page draw it. */
 @Composable
-private fun Chip(text: String, modifier: Modifier = Modifier, brand: Boolean = false) {
+internal fun Chip(text: String, modifier: Modifier = Modifier, brand: Boolean = false) {
     Text(text, modifier.clip(RoundedCornerShape(5.dp)).background(if (brand) MaterialTheme.colorScheme.primary.copy(alpha = .12f) else Ink.muted.copy(alpha = .1f))
         .padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
         color = if (brand) MaterialTheme.colorScheme.primary else Ink.muted, maxLines = 1, softWrap = false)
@@ -200,6 +158,7 @@ private fun PoolScreen(api: ManagementApi, revision: Long, ownId: String?, share
                     catch (e: CancellationException) { throw e } catch (e: Exception) { accessError = personalFailure(e) }
                 else access = null
             } else access = api.get("providers/shared-pools/$sharedId").jsonObject
+            (own?.let { it.str("label") ?: it.str("slug") } ?: access?.str("label"))?.let { poolNames[ObjectId.canonical(accessId) ?: accessId] = it }
             loaded = true; error = null
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {

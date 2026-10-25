@@ -1,0 +1,243 @@
+{
+  "approvalCards": [
+    {
+      "ID": "approval-1",
+      "Body": {
+        "input": {
+          "value": "p4-refused-effect"
+        },
+        "toolName": "mcp__thirdparty__record",
+        "toolUseId": "call_p4_1"
+      },
+      "Status": "DENIED",
+      "Polls": 2,
+      "LatePoll": false
+    },
+    {
+      "ID": "approval-2",
+      "Body": {
+        "input": {
+          "value": "p4-third-party-effect"
+        },
+        "toolName": "mcp__thirdparty__record",
+        "toolUseId": "call_p4_2"
+      },
+      "Status": "ALLOWED",
+      "Polls": 3,
+      "LatePoll": false
+    }
+  ],
+  "controlPlane": [
+    {
+      "agent": "",
+      "body": {
+        "input": {
+          "value": "p4-refused-effect"
+        },
+        "toolName": "mcp__thirdparty__record",
+        "toolUseId": "call_p4_1"
+      },
+      "method": "POST",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": {
+        "input": {
+          "value": "p4-third-party-effect"
+        },
+        "toolName": "mcp__thirdparty__record",
+        "toolUseId": "call_p4_2"
+      },
+      "method": "POST",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-2",
+      "session": ""
+    }
+  ],
+  "facts": {
+    "allowedEffect": true,
+    "approvalRequests": 2,
+    "refusedEffect": false
+  },
+  "modelRequests": 3,
+  "orbitEvents": [
+    {
+      "payload": {
+        "argv": [
+          "--profile",
+          "acp",
+          "--patch",
+          "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealThirdPartyMCPAsksFirst2049562285/001/dsh-home/orbit.patch.json",
+          "--patch",
+          "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealThirdPartyMCPAsksFirst2049562285/001/dsh-home/orbit-agent.patch.json"
+        ],
+        "cliVersion": "0.2.0-rc.2",
+        "configHash": "928a843be751d3a9e948412cb91eaee012f49aecdb3043a67224aa2ca71f9885",
+        "dshHome": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealThirdPartyMCPAsksFirst2049562285/001/dsh-home",
+        "executable": "/tmp/orbit-dsh-p4-OFKGjI/install/node_modules/.bin/dsh",
+        "provider": "dsh",
+        "runtime": "acp",
+        "subtype": "launch"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "cliVersion": "0.2.0-rc.2",
+        "provider": "dsh",
+        "resumed": false,
+        "runtime": "acp",
+        "runtimeSessionId": "6eecde49-ae81-4c15-af22-13f35651b64c",
+        "sessionId": "6eecde49-ae81-4c15-af22-13f35651b64c",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "runtimeSessionId": "6eecde49-ae81-4c15-af22-13f35651b64c",
+        "text": "Call the third-party MCP tool."
+      },
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "payload": {
+        "contextTokens": 47473,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "6eecde49-ae81-4c15-af22-13f35651b64c",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_1",
+        "input": {
+          "value": "p4-refused-effect"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "mcpServer": "thirdparty",
+        "mcpTool": "record",
+        "name": "mcp__thirdparty__record",
+        "runtimeSessionId": "6eecde49-ae81-4c15-af22-13f35651b64c",
+        "status": "in_progress",
+        "toolCallId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Error: the user rejected tool \"mcp__thirdparty__record\"",
+        "isError": true,
+        "localTurnId": "t1",
+        "runtimeSessionId": "6eecde49-ae81-4c15-af22-13f35651b64c",
+        "status": "failed",
+        "toolCallId": "call_p4_1",
+        "toolUseId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "contextTokens": 47518,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "6eecde49-ae81-4c15-af22-13f35651b64c",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_2",
+        "input": {
+          "value": "p4-third-party-effect"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "mcpServer": "thirdparty",
+        "mcpTool": "record",
+        "name": "mcp__thirdparty__record",
+        "runtimeSessionId": "6eecde49-ae81-4c15-af22-13f35651b64c",
+        "status": "in_progress",
+        "toolCallId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "recorded:p4-third-party-effect",
+        "isError": false,
+        "localTurnId": "t1",
+        "runtimeSessionId": "6eecde49-ae81-4c15-af22-13f35651b64c",
+        "status": "completed",
+        "toolCallId": "call_p4_2",
+        "toolUseId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "messageId": "22db66bb-2371-4c9b-a6f5-236e9fd942d7",
+        "runtimeSessionId": "6eecde49-ae81-4c15-af22-13f35651b64c",
+        "text": "P4 third-party answer"
+      },
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "payload": {
+        "contextTokens": 47548,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "6eecde49-ae81-4c15-af22-13f35651b64c",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "contextTokens": 47548,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "numTurns": 1,
+        "runtimeSessionId": "6eecde49-ae81-4c15-af22-13f35651b64c",
+        "stopReason": "end_turn",
+        "subtype": "completed"
+      },
+      "turn": "t1",
+      "type": "turn_end"
+    }
+  ],
+  "permissionMode": "auto",
+  "scenario": "TestDshRealThirdPartyMCPAsksFirst"
+}

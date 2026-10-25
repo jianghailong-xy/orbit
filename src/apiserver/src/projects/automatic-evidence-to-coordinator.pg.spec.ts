@@ -19,6 +19,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { EvidenceReviewService } from '../tasks/evidence-review.service';
 import {
   countPendingEvidenceJudgments,
   readPendingEvidenceJudgments,
@@ -32,6 +33,7 @@ import { completionEvidenceRevisedFact, completionEvidenceWakeKey } from './comp
 import { CompletionInputRouter } from './completion-input-router.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import {
+  DELIVERY_COORDINATOR_PAUSED,
   DELIVERY_COORDINATOR_SESSION_UNAVAILABLE,
   DELIVERY_NO_COORDINATOR_SESSION,
   CoordinatorDeliveryService,
@@ -68,7 +70,10 @@ import { WakeDispositionService } from './wake-disposition.service';
  * coordinator switch is on has the revision queued on its standing conversation to DECIDE, and the
  * owner's read and the "Needs you" count leave the revision out while the coordinator holds it:
  * delivered, the project still Automatic, the conversation not ended, and less than the project's
- * `exceptionEscalationSeconds` since the delivery.
+ * `exceptionEscalationSeconds` since the delivery. Since 2026-10-09 a conversation that is only
+ * paused — its run FAILED and nobody ended it, or it is parked on a retry — is not ended: it holds
+ * what it was handed with no clock running, and a revision it could not be handed waits for it
+ * (`evidence-waits-for-coordinator.pg.spec.ts` follows that through to the delivery when it is back).
  *
  * WHAT EACH CASE HOLDS
  * ====================
@@ -87,10 +92,15 @@ import { WakeDispositionService } from './wake-disposition.service';
  *    (7) No coordinator conversation at all: the owner is asked.
  *    (8) The coordinator's CONFIRM settles the task, and nobody is asked any more, then or later.
  *    (9) The hold ends the moment the coordinator cannot act: switched off, or its conversation
- *        over.
+ *        over — and not while that conversation is only paused (FAILED, or parked on a retry).
  *   (10) A revision the coordinator could not decide is only recorded, and is the owner's at once.
  *   (11) The hold decides where the question is asked, not who may answer it: the owner's own
  *        answer to a held revision is taken at the same door, and settles the task.
+ *   (12) A SEND_BACK's note is handed to the run that submitted the revision, as a platform turn
+ *        of its own — in a project as out of one, and whoever decided — and is on the revision in
+ *        the list read for anybody else, the coordinator included.
+ *   (13) A coordinator conversation that is only down is not written to or revived either, but the
+ *        revision refused on it waits for it instead of becoming the owner's.
  *
  * Every "the owner is asked" is paired with a "the owner is not asked" over the same read, so a
  * read that filters nothing and a read that filters everything both fail.
@@ -162,7 +172,9 @@ async function connect(): Promise<Stack> {
   return {
     db,
     prisma,
-    evidence: new TaskCompletionEvidenceService(prisma, undefined, router),
+    evidence: new TaskCompletionEvidenceService(
+      prisma, undefined, router, undefined, new EvidenceReviewService(prisma, sessions),
+    ),
     unrouted: new TaskCompletionEvidenceService(prisma),
     producer,
     deliveries,
@@ -527,13 +539,13 @@ test('(1) an Automatic project hands the revision to its coordinator to decide, 
       const content = message!.content ?? '';
       assert.match(content, /held 要交证据的活/);
       assert.match(content, new RegExp(uuidToBase62(w.taskId)));
-      assert.match(content, /第 1 版/);
-      assert.match(content, /evidenceRevision 传 "1"/);
-      assert.ok(content.includes(`「${STANDARD}」`), 'the quoted criterion is not in it');
+      assert.match(content, /revision 1/);
+      assert.match(content, /evidenceRevision: "1"/);
+      assert.ok(content.includes(`“${STANDARD}”`), 'the quoted criterion is not in it');
       assert.ok(content.includes(w.criterionKey), 'the criterion is not named by its key');
       for (const word of [
         'task_evidence_list', 'task_evidence_decide', 'CONFIRM', 'SEND_BACK', 'note',
-        'exceptionEscalationSeconds', `${ESCALATION_SECONDS} 秒`, 'ask_owner',
+        'exceptionEscalationSeconds', `${ESCALATION_SECONDS} seconds`, 'ask_owner',
       ]) {
         assert.ok(content.includes(word), `the message does not say ${word}`);
       }
@@ -835,7 +847,7 @@ test('(8) the coordinator confirms the revision, the task is DONE, and nobody is
     }
   });
 
-test('(9) the hold ends the moment the coordinator cannot act on it',
+test('(9) the hold ends the moment the coordinator cannot act on it, and not while it is only paused',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
@@ -852,10 +864,34 @@ test('(9) the hold ends the moment the coordinator cannot act on it',
       await setProject(stack, w, { coordinatorEnabled: true });
       assert.deepEqual(await ownerAsked(stack, w), [], 'switched back on, it is held again');
 
-      // The conversation it was delivered to is over: it will not decide anything.
+      // The conversation it was delivered to FAILED — a usage limit, nobody ended it. Until
+      // 2026-10-09 that ended the hold at once; it is only paused, so the coordinator keeps it, with no
+      // clock running, and the owner's own conversation lists it as waiting for the coordinator.
+      const later = new Date(Date.now() + (ESCALATION_SECONDS + 60) * 1_000);
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId! },
         data: { status: RunStatus.FAILED },
+      });
+      assert.deepEqual(await ownerAsked(stack, w), [], 'a paused coordinator lost the revision it was handed');
+      assert.deepEqual(await ownerAsked(stack, w, later), []);
+      assert.equal(await ownerCount(stack, w), 0);
+      const paused = await readPendingEvidenceJudgments(stack.prisma, w.ownerId, {
+        id: w.coordinatorSessionId!, taskId: null,
+      });
+      assert.deepEqual(paused.waitingOnCoordinator.map((r) => r.taskId), [w.taskId]);
+
+      // Parked on a retry is the same pause.
+      await stack.db.session.update({
+        where: { id: w.coordinatorSessionId! },
+        data: { status: RunStatus.AWAITING_INPUT, retryAt: new Date(Date.now() + 3_600_000) },
+      });
+      assert.deepEqual(await ownerAsked(stack, w, later), []);
+      assert.equal(await ownerCount(stack, w, later), 0);
+
+      // Over — filed as Completed by its owner: it will not decide anything, and the owner is asked.
+      await stack.db.session.update({
+        where: { id: w.coordinatorSessionId! },
+        data: { status: RunStatus.FAILED, retryAt: null, completedAt: new Date() },
       });
       assert.deepEqual(await ownerAsked(stack, w), [w.taskId]);
       assert.equal(await ownerCount(stack, w), 1);
@@ -929,6 +965,101 @@ test('(11) the owner may answer a revision the coordinator holds, at any moment,
       const later = new Date(Date.now() + (ESCALATION_SECONDS + 60) * 1_000);
       assert.deepEqual(await ownerAsked(stack, w, later), []);
       assert.equal(await ownerCount(stack, w, later), 0);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(12) a send-back’s note is handed to the run, and is on the revision for anybody to read',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'sent-back');
+      await submit(stack, w);
+      const [row] = await evidenceWakes(stack.db, w.taskId);
+      assert.equal(row!.status, 'DELIVERED', `refused with ${row!.refusalCode}`);
+
+      // The coordinator sends it back: the runner door, its own session as the deciding one.
+      const decided = await stack.evidence.decide(
+        w.ownerId,
+        w.taskId,
+        { type: CreatorType.AGENT, id: w.workspaceId },
+        {
+          decidingSessionId: w.coordinatorSessionId!,
+          evidenceRevision: '1',
+          decision: 'SEND_BACK',
+          note: '日志里要有一次干净运行六个场景全 PASS 的输出',
+        },
+      );
+      assert.equal(decided.decision, 'SEND_BACK');
+      assert.equal(
+        (await stack.db.task.findUniqueOrThrow({ where: { id: w.taskId } })).status,
+        TaskStatus.IN_PROGRESS,
+        'a send-back leaves the task open',
+      );
+
+      // The note reaches the run that submitted the revision, as a platform turn of its own —
+      // until 2026-10-09 it went nowhere, and neither the run nor the coordinator could see why.
+      const notices = await stack.db.conversationTurn.findMany({
+        where: { sessionId: w.runSessionId, clientTurnId: `evidence-send-back:v1:${decided.id}` },
+      });
+      assert.equal(notices.length, 1, 'the run was handed the reason its evidence came back');
+      const [notice] = notices;
+      assert.equal(notice.senderSessionId, null, 'the platform’s words, not the coordinator’s');
+      assert.ok((notice.content ?? '').includes('日志里要有一次干净运行六个场景全 PASS 的输出'));
+      assert.match(notice.content ?? '', /sent back by the session that reviewed it/);
+      assert.match(notice.content ?? '', new RegExp(`<orbit-evidence-send-back task="${uuidToBase62(w.taskId)}" revision="1">`));
+
+      // And it is on the revision in the list read, for the coordinator and anybody else.
+      const [listed] = await stack.evidence.list(w.ownerId, w.taskId);
+      assert.equal(listed.decision?.decision, 'SEND_BACK');
+      assert.equal(listed.decision?.note, '日志里要有一次干净运行六个场景全 PASS 的输出');
+      assert.equal(listed.decision?.decidedByType, CreatorType.AGENT);
+
+      // Nobody else was told anything: not the owner, not an unrelated reader.
+      assert.deepEqual(await messagesOn(stack.db, w.readerSessionId), []);
+      assert.deepEqual(await ownerAsked(stack, w), []);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(13) a coordinator conversation that is only down is not written to or revived, and the revision waits for it',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      // Down when the revision arrives: FAILED on a usage limit, nobody ended it. Until 2026-10-09 the
+      // delivery took that for an ended conversation and the owner was asked at once (case (6)).
+      const w = await world(stack, 'down');
+      await stack.db.session.update({
+        where: { id: w.coordinatorSessionId! },
+        data: { status: RunStatus.FAILED },
+      });
+      const badgeBefore = await badge(stack, w);
+      await submit(stack, w);
+
+      const [row] = await evidenceWakes(stack.db, w.taskId);
+      assert.equal(row!.status, 'REFUSED');
+      assert.equal(row!.refusalCode, DELIVERY_COORDINATOR_PAUSED);
+      assert.equal(row!.sessionId, null);
+      assert.deepEqual(await messagesOn(stack.db, w.coordinatorSessionId), [],
+        'a conversation that is down was written to');
+      const standing = await stack.db.session.findUniqueOrThrow({
+        where: { id: w.coordinatorSessionId! },
+        select: { status: true },
+      });
+      assert.equal(standing.status, RunStatus.FAILED, 'the conversation was revived to be told');
+      // Refused before the convergence ledger: it is judged when it is delivered, once the coordinator is back.
+      assert.equal(await convergenceDecisions(stack.db, w.projectId), 0);
+
+      // Not the owner's: it waits for the coordinator.
+      assert.deepEqual(await ownerAsked(stack, w), []);
+      assert.equal(await ownerCount(stack, w), 0);
+      assert.equal(await badge(stack, w), badgeBefore);
+      const read = await readPendingEvidenceJudgments(stack.prisma, w.ownerId, {
+        id: w.coordinatorSessionId!, taskId: null,
+      });
+      assert.deepEqual(read.waitingOnCoordinator.map((r) => r.taskId), [w.taskId]);
     } finally {
       await stack.db.$disconnect();
     }

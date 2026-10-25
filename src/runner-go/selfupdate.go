@@ -280,14 +280,19 @@ func recordSelfUpdate(from, to string, at time.Time) {
 // one it replaced (previous/version.json). A runner registered with server asks it which of the two
 // to run (assignedManifest), so a staged rollout can hold it at the previous release and a rollback
 // can send it back there. Without a credential for server, or from a control plane older than that
-// question, it is the latest.
+// question, it is the latest. A runner whose work goes over the runner link is told instead, by the
+// link's Welcome and HeartbeatAck (linkAssignedRelease), and asks nothing.
 func publishedManifest(ctx context.Context, server string) (Manifest, error) {
 	server = strings.TrimRight(server, "/")
 	m, err := fetchManifest(ctx, server, "")
 	if err != nil {
 		return Manifest{}, err
 	}
-	if token := runnerTokenFor(server); token != "" {
+	if assigned := linkAssignedRelease.Load(); assigned != nil {
+		if m, err = linkAssignedManifest(ctx, server, m, *assigned); err != nil {
+			return Manifest{}, err
+		}
+	} else if token := runnerTokenFor(server); token != "" {
 		if m, err = assignedManifest(ctx, server, token, m); err != nil {
 			return Manifest{}, err
 		}
@@ -364,6 +369,13 @@ func assignedManifest(ctx context.Context, server, token string, latest Manifest
 	if err != nil {
 		return Manifest{}, err
 	}
+	return pickAssignedManifest(latest, previous, assigned)
+}
+
+// pickAssignedManifest is the manifest of the release assigned, of latest and previous (zero when
+// /dl publishes none), marked as a rollback when it is one, and records whether a staged rollout
+// holds the runner back.
+func pickAssignedManifest(latest, previous Manifest, assigned releaseAssignment) (Manifest, error) {
 	m := latest
 	switch {
 	case assigned.Version == latest.Version:
@@ -379,6 +391,40 @@ func assignedManifest(ctx context.Context, server, token string, latest Manifest
 		recordRolloutHold("")
 	}
 	return m, nil
+}
+
+// linkAssignedRelease is the release the runner link last assigned this runner, in a Welcome or a
+// HeartbeatAck (link_mode.go, docs/runner-link-design.md §7): what a release check installs, from
+// /dl and checked against its digest as ever, in place of asking GET /api/runner/release. Nil while
+// the link assigns none or is not in use.
+var linkAssignedRelease atomic.Pointer[releaseAssignment]
+
+// setLinkAssignedRelease records a, nil for none, and reports whether that changed what was recorded.
+func setLinkAssignedRelease(a *releaseAssignment) bool {
+	prev := linkAssignedRelease.Swap(a)
+	switch {
+	case prev == nil || a == nil:
+		return (prev == nil) != (a == nil)
+	default:
+		return *prev != *a
+	}
+}
+
+// linkAssignedManifest is assignedManifest for a release the link assigned. The link's
+// AssignedRelease carries no heldByRollout: the previous release assigned without a rollback is
+// what a staged rollout that has not reached this runner assigns (runner-release.ts), so that is
+// what it means here too.
+func linkAssignedManifest(ctx context.Context, server string, latest Manifest, assigned releaseAssignment) (Manifest, error) {
+	var previous Manifest
+	if assigned.Version != latest.Version {
+		p, err := fetchManifest(ctx, server, "previous/")
+		if err != nil && !errors.Is(err, errNotPublished) {
+			return Manifest{}, err
+		}
+		previous = p
+	}
+	assigned.HeldByRollout = !assigned.Rollback && previous.Version != "" && assigned.Version == previous.Version
+	return pickAssignedManifest(latest, previous, assigned)
 }
 
 // runnerTokenFor is the credential this machine registered with at server — the one server alone
@@ -531,8 +577,9 @@ func downloadAndSwap(server, key string, manifest Manifest, logf func(string)) b
 		logf("download failed: " + err.Error() + "\n")
 		return false
 	}
-	// /dl binaries are unsigned: the manifest's digest is what ties this download to the release it
-	// announces. Checked before anything is decompressed or written next to the executable.
+	// No signature on a /dl binary is checked here (a macOS one may carry a Developer ID, which only
+	// macOS reads): the manifest's digest is what ties this download to the release it announces.
+	// Checked before anything is decompressed or written next to the executable.
 	sum := sha256.Sum256(body)
 	got, want := hex.EncodeToString(sum[:]), manifest.Assets[key].SHA256
 	if want == "" {

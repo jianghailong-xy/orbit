@@ -193,6 +193,12 @@ class WikiWritesTest {
         assertTrue("and the queue is the newer read's", store.state.value.review.flatMap { it.ops.orEmpty() }.none { it.id == card.op.id })
     }
 
+    /** The nudges below wait on [Dispatchers.Default], in real time: a loaded host gets up to a minute for [condition]. */
+    private fun eventually(what: String, condition: () -> Boolean) {
+        val until = System.currentTimeMillis() + 60_000
+        while (!condition()) { assertTrue(what, System.currentTimeMillis() < until); Thread.sleep(20) }
+    }
+
     @Test fun nudgesNeverStartAReReadWhileOneIsInFlight() {
         val server = Server()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -201,14 +207,13 @@ class WikiWritesTest {
         val first = server.hold("GET", "wiki/spaces")
         val before = server.inFlight("GET", "wiki/spaces")
         store.nudge()
-        Thread.sleep(1_500)
+        eventually("the first re-read is out") { server.inFlight("GET", "wiki/spaces") > before }
         assertEquals("the first re-read is out", before + 1, server.inFlight("GET", "wiki/spaces"))
         store.nudge()
         Thread.sleep(1_500)
         assertEquals("a second nudge waits for the re-read in flight", before + 1, server.inFlight("GET", "wiki/spaces"))
         first.complete(Unit)
-        Thread.sleep(1_500)
-        assertTrue("and then reads once more", server.inFlight("GET", "wiki/spaces") >= before + 2)
+        eventually("and then reads once more") { server.inFlight("GET", "wiki/spaces") >= before + 2 }
         scope.cancel()
     }
 }
