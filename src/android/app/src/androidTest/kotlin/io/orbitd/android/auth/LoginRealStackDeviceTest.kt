@@ -139,7 +139,7 @@ class LoginRealStackDeviceTest {
     private fun signIn(email: String, password: String) {
         compose.onNodeWithText("Email").performTextReplacement(email)
         compose.onNodeWithText("Password").performTextReplacement(password)
-        compose.onNodeWithText("Sign In").performScrollTo().performClick()
+        compose.pressSignIn()
     }
 
     private fun awaitText(text: String) = compose.waitUntil(20_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }

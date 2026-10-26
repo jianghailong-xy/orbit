@@ -16,6 +16,7 @@ import io.orbitd.android.BuildConfig
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.auth.chooseServer
+import io.orbitd.android.auth.pressSignIn
 import io.orbitd.android.core.auth.AuthState
 import java.io.File
 import java.time.Instant
@@ -76,7 +77,7 @@ class LandingAndStartDeviceTest {
                 compose.chooseServer(server.url("/").toString())
                 compose.onNodeWithText("Email").performTextReplacement("a11f@example.test")
                 compose.onNodeWithText("Password").performTextReplacement("a11f-fixture-password")
-                compose.onNodeWithText("Sign In").performScrollTo().performClick()
+                compose.pressSignIn()
                 compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
                 await { exists(hasTestTag("workspace:$alpha")) }
                 compose.onNodeWithTag("workspace:$alpha").performClick()

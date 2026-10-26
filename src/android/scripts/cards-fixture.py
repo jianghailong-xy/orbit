@@ -104,6 +104,7 @@ class Handler(BaseHTTPRequestHandler):
         path = normalize(urlparse(self.path).path)
         if path == '/__control':
             with LOCK:
+                if body.get('reset'): state['journal'] = [] # A new journey: the requests before it were another journey's.
                 if 'case' in body: state.update(case=body['case'], pending=True, denied=False, mode=body.get('mode', ''), assignment=0 if body.get('mode', '').startswith('assignment-') else None, final=None, cancelled=[])
                 if 'assignment' in body: state['assignment'] = body['assignment']
                 if 'mode' in body: state['mode'] = body['mode']
