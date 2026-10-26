@@ -1708,30 +1708,20 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 	defer subRelay.stop()
 	pollCtx, pollCancel := context.WithCancel(ctx)
 	defer pollCancel()
+	// The generation's inbox: what fetches its turns, and the turnIds being processed.
+	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	defer inbox.close()
 	inboxCh := make(chan *RunInboxResponse, 8)
 	app.wg.Add(1)
 	go func() {
 		defer app.wg.Done()
 		for pollCtx.Err() == nil {
-			resp, pollErr := t.inbox(pollCtx, job.SessionID, leaseGeneration)
+			resp, pollErr := inbox.next(pollCtx)
 			if pollErr != nil {
-				if pollCtx.Err() != nil {
-					return
-				}
-				if isLeaseOwnershipError(pollErr) {
+				if pollCtx.Err() == nil && isLeaseOwnershipError(pollErr) {
 					onLeaseLost(pollErr)
-					return
 				}
-				logln("inbox poll failed for", job.SessionID+":", pollErr)
-				select {
-				case <-time.After(time.Second):
-				case <-pollCtx.Done():
-					return
-				}
-				continue
-			}
-			if resp == nil {
-				continue
+				return
 			}
 			select {
 			case inboxCh <- resp:
@@ -1742,7 +1732,6 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 	}()
 
 	promptDone := make(chan kimiPromptResult, 1)
-	inflight := map[string]bool{}
 	var pendingShellCtx []string
 	draining := false
 	var drainTimer <-chan time.Time
@@ -1820,7 +1809,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 		}); completeErr != nil {
 			logln("turn-complete failed for", job.SessionID+":", completeErr)
 		}
-		delete(inflight, done.turnID)
+		inbox.clearInflight(done.turnID)
 		setTurn("")
 	}
 
@@ -1899,7 +1888,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 					return stCancelled, true, false
 				}
 				setTurn(resp.TurnID)
-				if inflight[resp.TurnID] {
+				if inbox.isInflight(resp.TurnID) {
 					continue
 				}
 				activeMu.Lock()
@@ -1917,7 +1906,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 					setTurn("")
 					continue
 				}
-				inflight[resp.TurnID] = true
+				inbox.markInflight(resp.TurnID)
 				prepared := prepareKimiPrompt(ctx, t, job, resp, pendingShellCtx)
 				pendingShellCtx = nil
 				userEvent := map[string]interface{}{"text": resp.Content}
@@ -1971,10 +1960,9 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				if !waitTurnPermit(ctx) {
 					return stCancelled, true, false
 				}
-				if inflight[resp.TurnID] {
+				if !inbox.markInflight(resp.TurnID) {
 					continue
 				}
-				inflight[resp.TurnID] = true
 				setTurn(resp.TurnID)
 				if shellCommand, background := shellTurnBackgroundCommand(resp); background {
 					runShellTurnBackground(bg, execDir, scratchDir, shellCommand, resp.TurnID, emit, job.Agent.Env)
@@ -2000,7 +1988,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 						logln("shell turn-complete failed for", job.SessionID+":", err)
 					}
 				}
-				delete(inflight, resp.TurnID)
+				inbox.clearInflight(resp.TurnID)
 				setTurn("")
 
 			case "interrupt":

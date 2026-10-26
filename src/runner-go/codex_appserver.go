@@ -338,17 +338,9 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 
 	var activeMu sync.Mutex
 	var active *codexAppActiveTurn
-	inflight := map[string]bool{}
-	var inflightMu sync.Mutex
-
-	clearInflight := func(turnID string) {
-		if turnID == "" {
-			return
-		}
-		inflightMu.Lock()
-		delete(inflight, turnID)
-		inflightMu.Unlock()
-	}
+	// The generation's inbox: what fetches its turns, and the turnIds being processed.
+	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	defer inbox.close()
 
 	steerDispatch := &codexSteerDispatcher{
 		app: app, t: t, job: job, threadID: threadID,
@@ -462,7 +454,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			logln("turn-complete failed for", job.SessionID+":", err)
 		}
 		finishCodexAppTurnFinalize(&activeMu, &active, a)
-		clearInflight(snapshot.orbitTurnID)
+		inbox.clearInflight(snapshot.orbitTurnID)
 		setTurn("")
 	}
 
@@ -591,7 +583,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		if active != nil {
 			activeMu.Unlock()
 			emit(evError, map[string]interface{}{"message": "codex app-server already has an active turn"})
-			clearInflight(resp.TurnID)
+			inbox.clearInflight(resp.TurnID)
 			setTurn("")
 			return
 		}
@@ -717,21 +709,15 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		default:
 		}
 
-		resp, err := t.inbox(pollCtx, job.SessionID, leaseGeneration)
+		resp, err := inbox.next(pollCtx)
 		if err != nil {
 			if pollCtx.Err() != nil {
 				continue
 			}
 			if isLeaseOwnershipError(err) {
 				onLeaseLost(err)
-				return stCancelled, true, false
 			}
-			logln("inbox poll failed for", job.SessionID+":", err)
-			time.Sleep(time.Second)
-			continue
-		}
-		if resp == nil {
-			continue
+			return stCancelled, true, false
 		}
 		// A warm timer/LRU eviction may cancel the engine while its inbox
 		// long-poll response is in flight. Never feed a newly-claimed message to
@@ -746,13 +732,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 				return stCancelled, true, false
 			}
 			setTurn(resp.TurnID)
-			inflightMu.Lock()
-			dup := inflight[resp.TurnID]
-			if !dup {
-				inflight[resp.TurnID] = true
-			}
-			inflightMu.Unlock()
-			if dup {
+			if !inbox.markInflight(resp.TurnID) {
 				continue
 			}
 			startTurn(resp, pendingShellCtx)
@@ -773,13 +753,9 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			if !waitTurnPermit(ctx) {
 				return stCancelled, true, false
 			}
-			inflightMu.Lock()
-			if inflight[resp.TurnID] {
-				inflightMu.Unlock()
+			if !inbox.markInflight(resp.TurnID) {
 				continue
 			}
-			inflight[resp.TurnID] = true
-			inflightMu.Unlock()
 			setTurn(resp.TurnID)
 			if shCmd, isBg := shellTurnBackgroundCommand(resp); isBg {
 				runShellTurnBackground(bg, execDir, scratchDir, shCmd, resp.TurnID, emit, job.Agent.Env)
@@ -807,7 +783,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 					logln("shell turn-complete failed for", job.SessionID+":", err)
 				}
 			}
-			clearInflight(resp.TurnID)
+			inbox.clearInflight(resp.TurnID)
 			setTurn("")
 
 		case "interrupt":
