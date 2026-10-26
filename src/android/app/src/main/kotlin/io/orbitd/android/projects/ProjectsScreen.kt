@@ -532,7 +532,9 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             cancel = { crossingAsk = null; crossingRefusal = null }) { row, approve ->
             // The second press: the answer goes with the key of the crossing it was given on. Taken, the question closes over the
             // re-read row — a confirmed move reads as moved; refused, it stays open beside the door's own code and reason. It is
-            // being answered until that read lands (iOS's `defer`), so the row's key is never sent again over an answer it took.
+            // being answered until that read lands (iOS's `defer`), so the row's key is never sent again over an answer it took, and
+            // its question stays up until then (iOS's `answerCrossing`): closed before, the row would offer its first press again,
+            // over the row it read before the answer.
             val rowId = row.text("id")
             if (rowId != null && state.answeringCrossing == null) {
                 state.answeringCrossing = rowId
@@ -542,11 +544,10 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                             catch (cancel: CancellationException) { throw cancel }
                             catch (failure: Exception) { ProjectCrossings.refusal(failure) }
                         if (refusal != null) crossingRefusal = rowId to refusal
-                        else {
-                            crossingAsk = null; crossingRefusal = null
+                        else try {
                             app.realtime.refreshDirectory()
                             if (state.attached) load(settled = true)
-                        }
+                        } finally { crossingAsk = null; crossingRefusal = null }
                     } finally { state.answeringCrossing = null }
                 }
             }
