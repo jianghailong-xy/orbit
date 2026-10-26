@@ -250,3 +250,63 @@ A01c's list (part 2/7: A06-11, 12, 13, 14, 15 and 17), ported from the iOS sourc
 - **A running agent's live line** (`SubagentLiveLine.kt`; A06-17, iOS ea175e5af): a folded, running Agent, Task or
   Workflow card says its sub-agent's last step in place of its progress line. `ToolLine` approximates OrbitKit's
   `ToolDisplay` (label and file, else label and summary).
+
+## A06g: D09 collection points P02 and P03
+
+A15 reads every D09 collection point with one logcat collector (A06g comment 34mPWCRYn3Shl96g3IQwZ): lines under the
+`OrbitPerf` tag (`perf/OrbitPerf.kt`), present in release builds and off unless the tag is loggable at DEBUG. Off, nothing
+is recorded, registered or allocated beyond one property read per Activity callback and per opened session.
+
+```sh
+adb shell setprop log.tag.OrbitPerf D        # on; no reinstall or restart
+adb logcat -c && adb logcat -v epoch -s OrbitPerf:D > perf.log
+adb shell setprop log.tag.OrbitPerf INFO     # off
+```
+
+Each line is `v=1 ev=<event> key=value … rt=<elapsedRealtimeNanos> mono=<System.nanoTime>`, the two clocks read back to
+back. Input and frame times are on `mono` (CLOCK_MONOTONIC); the pair carries them onto `rt`.
+
+**P02, a long session's last page** (`reader/LastPageMark.kt`). Opening a session at its last page — from a list, Search, a
+link or a notification's tap, not a route to one record — writes
+`p02_start sid8=<first 8 hex of the SHA-256 of its UUID> via=list|search|link|push inputMono=<ns>|na`, where `inputMono` is
+the time of the ACTION_UP whose dispatch opened it (a link, a notification or TalkBack has none). Its reader then writes
+`p02_ready sid8=… source=cache|network tailSeq=… frameVsyncMono=… frameEndMono=… frameTotalNs=… dropped=…` once, for the frame
+that first draws both halves of the condition:
+- the newest durable row of a window at the live tail, laid out on screen: not the loading line, an empty window or a page
+  of history (a window that opens on history is marked when it reaches the tail);
+- the composer's input enabled and given room, in a window that has the focus (no dialog or sheet over it).
+
+Each half is told to the mark where that frame produces it (the reader's composition, the transcript list's measure), and
+`OrbitPerf.emitOnFrame` reports the first frame of MainActivity's window whose UI-thread work ends after that. A sample with
+`dropped>0` is invalid. `source` is where the window's first content came from: the reader's bookmark or the transcript the
+store restored from RealtimeCache (`cache`, D09's warm cache), or a read from the server (`network`, its first open).
+`tailSeq` is the newest seq the newest row draws. Going back and opening the session again is a new entry. P02 is
+`frameEndMono − inputMono`.
+
+**P03, `hwuiRenderGt700Count`** (`perf/WindowFrames.kt`). Each app window's `FrameMetrics.TOTAL_DURATION`, counted per window
+for the life of the process from when it is first watched, first frames (FIRST_DRAW_FRAME=1) included:
+- `frame_gt700 win=… totalNs=… vsyncMono=<INTENDED_VSYNC_TIMESTAMP> first=0|1` for each frame over 700 ms, as it is reported;
+- `frames win=… framesTotal=… gt700Total=… droppedTotal=… maxTotalNs=… firstTotal=… firstSeen=0|1` every 10 s while the
+  window has new reports, when its Activity pauses and when the window goes. A collector subtracts the summaries around a
+  journey. Growth of `droppedTotal` (the listener's dropCountSinceLastInvocation, reports lost, not frames dropped) makes the
+  sample invalid. `firstTotal` counts first frames, and `firstSeen=0` says the window was already drawn when it was first
+  watched, so its first frame is not in the counts;
+- `win` is `main` (MainActivity's window, across recreations), `activity:<class>`, or `dialog:<class>#<n>` for a Compose
+  Dialog, AlertDialog or ModalBottomSheet (any ComponentDialog). A popup (DropdownMenu, tooltip, text toolbar) has no Window
+  whose frames can be read: `window_unobserved win=popup:<class>#<n>` says one opened, so a journey with one cannot show zero
+  long frames for every window.
+
+With the tag on, an Activity being created or resumed, or a session being opened, starts the watching; the next Activity
+callback or 10 s tick that finds the tag off lets every window go. An Activity's window is watched from its creation, so turn
+the tag on before launching to count its first frame (`adb shell am force-stop <package>`, then start it). Other windows are
+found as a watched window or a popup draws, before a dialog's own first frame when one draws first (a tap's ripple);
+otherwise the dialog says `firstSeen=0`. TOTAL_DURATION measures drawing a frame and handing it to the display system, not a
+frozen screen; it is not gfxinfo.
+
+`scripts/perf-marks-device-test.py APK NEW_DIR [--serial S] [--port P]` runs one collection on the emulator from a real
+build (a test-signed release from `build-release.sh`, as a package of its own): it holds the UI lock (starting the API 36
+emulator service when it is down), serves the DS3 fixture, signs in through the login page, opens "Long conversation" twice
+from its list (network, then cache), scrolls, opens the session's menu and Session details, then checks `perf.log` and
+writes `summary.json`. A fixture on an emulator shows the lines and how to collect them, not D09 numbers.
+`perf/WindowFramesTest`, `reader/LastPageMarkTest` and `RealtimeStoreTest.aTranscriptSaysWhetherItsSeedCameFromTheCache`
+pin the conditions and the counts.

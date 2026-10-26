@@ -113,29 +113,23 @@ func TestAStreamOpenedWhileAnAckEmptiesItIsStillTheSessions(t *testing.T) {
 }
 
 // A supervisor's stream is let go once it holds nothing and nobody holds it. What the session hands over after that
-// (bg.recordJobs reports the jobs it ended after the supervisor returned, session.go) is sent all the same, and a wait
-// for it ends: by the stream itself, taken up again, or by the stream a newer supervisor opened since.
+// (bg.recordJobs reports the jobs it ended after the supervisor returned, session.go) is sent all the same, by the stream
+// taken up again, and a wait for it ends. Once a newer supervisor holds a stream of the session, it is not sent
+// (TestLateEventsAreNotHandedToANewerSupervisorsStream).
 func TestEventsHandedOverAfterTheirSupervisorReturnedAreSent(t *testing.T) {
 	r, in := newLinkEventsRig(t)
 	r.useLink(t)
-	for _, newer := range []bool{false, true} {
-		id := fmt.Sprintf("session-late-%v", newer)
-		s := r.m.events.open(id)
-		if err := s.submit(linkTestRunEvents(1, 3, 10)); err != nil {
-			t.Fatal(err)
-		}
-		linkWaitStored(t, s, 10*time.Second)
-		s.release() // the supervisor returned
-		if newer {
-			n := r.m.events.open(id)
-			defer n.release()
-		}
-		if err := s.submit(linkTestRunEvents(4, 1, 10)); err != nil {
-			t.Fatal(err)
-		}
-		linkWaitStored(t, s, 5*time.Second)
-		in.assertContiguous(t, id, 1, 4)
+	s := r.m.events.open("session-late")
+	if err := s.submit(linkTestRunEvents(1, 3, 10)); err != nil {
+		t.Fatal(err)
 	}
+	linkWaitStored(t, s, 10*time.Second)
+	s.release() // the supervisor returned
+	if err := s.submit(linkTestRunEvents(4, 1, 10)); err != nil {
+		t.Fatal(err)
+	}
+	linkWaitStored(t, s, 5*time.Second)
+	in.assertContiguous(t, "session-late", 1, 4)
 }
 
 // A stream the session's own refusal ended (its lease lost) is never taken up again: what is handed to it later is
@@ -480,30 +474,53 @@ func TestAnHTTPSFlushLeavesTheLinksBatchInFlightAlone(t *testing.T) {
 
 // Every delta is folded into the turn prefix, in HTTP mode as over the link, so that a TurnPrefixRequest just after the
 // cut-over finds the turn whole. Folding one costs the same however long the prefix has grown: the emitter holds the
-// session's buffer lock no longer for the last words of a long reply than for its first.
+// session's buffer lock no longer for the last words of a long reply than for its first. Counted, not timed (a loaded
+// host made the timing flaky): a reply of 60,000 characters folded in two at a time is copied to a new array, all told,
+// no more than a few times its own length (the array grows geometrically, by a quarter once it is large, so its moves add
+// up to about five times its length, where a fold that copied the prefix would copy 900 MB), and no fold counts the
+// prefix's length again (each adds the delta's to the part's own count).
 func TestFoldingADeltaIntoTheTurnPrefixCostsTheSameAtAnyLength(t *testing.T) {
 	m, _ := linkEventsOffline(t)
 	s := m.events.open("session-fold")
 	defer s.release()
 	buf := &sessionEventBuffer{next: 1, clock: &thinkingClock{}, link: s, provider: func() string { return providerClaude }}
+	buf.add("turn-1", evAssistant, map[string]interface{}{"text": "done"}, nil) // a new draft
 	delta := map[string]interface{}{"text": "ab"}
-	emit := func(n int) time.Duration {
-		began := time.Now()
-		for i := 0; i < n; i++ {
-			buf.add("turn-1", evTextDelta, delta, nil)
+	const folds = 30_000
+	copied, recounted := 0, 0
+	for i := 0; i < folds; i++ {
+		s.live.mu.Lock()
+		before := s.live.text
+		// A unit of length the fold is not told of: carried on by a fold that adds the delta's length to the part's count,
+		// lost by one that counts the prefix again. Taken back out after the fold.
+		s.live.text.n++
+		s.live.mu.Unlock()
+		buf.add("turn-1", evTextDelta, delta, nil)
+		s.live.mu.Lock()
+		after := s.live.text
+		s.live.text.n--
+		s.live.mu.Unlock()
+		if len(before.b) > 0 && len(after.b) > 0 && &after.b[0] != &before.b[0] {
+			copied += len(before.b) // the prefix moved to a new array
 		}
-		took := time.Since(began)
-		buf.take()
-		return took
+		if after.n != before.n+1+2 {
+			recounted++
+		}
+		if i%1000 == 999 {
+			buf.take()
+		}
 	}
-	first, last := time.Hour, time.Hour
-	for trial := 0; trial < 3; trial++ {
-		buf.add("turn-1", evAssistant, map[string]interface{}{"text": "done"}, nil) // a new draft
-		first = min(first, emit(2000))
-		emit(26_000)
-		last = min(last, emit(2000))
+	s.live.mu.Lock()
+	length, gone := len(s.live.text.b), s.live.text.gone
+	s.live.mu.Unlock()
+	if gone || length != 2*folds {
+		t.Fatalf("the prefix holds %d characters (given up: %v), want %d", length, gone, 2*folds)
 	}
-	if last > 3*first+25*time.Millisecond {
-		t.Errorf("2,000 deltas took %s at the start of a reply and %s at 56,000 characters", first, last)
+	if recounted > 0 {
+		t.Errorf("%d of %d folds counted the prefix's length again", recounted, folds)
 	}
+	if copied > 8*length {
+		t.Errorf("folding a reply of %d characters copied %d bytes of it to new arrays, more than 8 times its length", length, copied)
+	}
+	t.Logf("a reply of %d characters folded in %d deltas: %d bytes copied in all, %d folds counted its length again", length, folds, copied, recounted)
 }
