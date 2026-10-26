@@ -3,7 +3,7 @@ import { AgentProvider, type PlanUsageSnapshot } from '@orbit/shared';
 import { api } from '../api';
 import { accountIsPaused } from './accountPause';
 import { loginName, loginSpentUntil, loginState, type CodexLogin } from './codexLogin';
-import { encodeId } from './idCodec';
+import { encodeId, routeId } from './idCodec';
 import type { PoolMember, PoolMemberState, ProviderPool } from './providerPools';
 
 /**
@@ -202,6 +202,25 @@ function loginMember(pool: SharedPool, login: SharedPoolLogin): PoolMember {
     pausedUntil: login.pausedUntil,
     login,
   };
+}
+
+/**
+ * Every account pool the account can start sessions on, as the Machines & models page lists them: the pools
+ * it was added to, then its own — a Codex pool of its own drawn with its people and keys once `accessOf`
+ * holds that read (ownPoolWithAccess), by the pool's id.
+ */
+export function accountPoolList(
+  own: ProviderPool[],
+  shared: SharedPool[],
+  accessOf: Map<string | null, SharedPool>,
+): ProviderPool[] {
+  return [
+    ...shared.map(sharedPoolAsProviderPool),
+    ...own.map((pool) => {
+      const view = accessOf.get(routeId(pool.id));
+      return view ? ownPoolWithAccess(pool, view) : pool;
+    }),
+  ];
 }
 
 /**

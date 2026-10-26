@@ -127,7 +127,7 @@ const UPGRADE_SESSION = {
  * is in `error`, in the server's own words (runner-provider-support.ts).
  */
 const CURSOR_UPGRADE = 'Cursor CLI requires a newer Orbit runner with Cursor CLI support; update this runner first';
-const CURSOR_NOT_INSTALLED = "Cursor CLI isn't installed on this runner; install it from Infrastructure, then try again";
+const CURSOR_NOT_INSTALLED = "Cursor CLI isn't installed on this runner; install it from the Machines & models page, then try again";
 const LAST_REPLY = 'P9 marker C3-R1-9A75BA';
 const TALKED_EVENTS = [
   { seq: 1, type: 'user', payload: { text: 'Write the marker file, then repeat its line.' }, turnId: 't1', ts: '2026-10-25T05:21:43Z' },
@@ -423,7 +423,7 @@ describe('a session whose run never started', { timeout: 60_000 }, () => {
     expect(found?.getAttribute('data-run-never-started')).toBe('ENGINE_NOT_INSTALLED');
     const text = found!.textContent ?? '';
     expect(text).toContain('Cursor CLI isn’t installed on longdeMac-mini.local');
-    expect(text).toContain('Install it from Infrastructure, and this run starts as soon as it’s installed.');
+    expect(text).toContain('Install it from the Machines & models page, and this run starts as soon as it’s installed.');
     expect(text).not.toMatch(/newer Orbit runner|update this runner first|send your message again/);
     expect(cardAt).toBeGreaterThan(replyAt);
     expect(mounted().querySelector('.chat-slot-wait')).toBeNull();

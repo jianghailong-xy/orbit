@@ -525,7 +525,7 @@ struct AuthErrorCardView: View {
         case .connectGemini:
             EmptyView()
         case .apiKey(let slug):
-            Text("The API key for \(Text(slug).font(.orbitMono)) was rejected. Update it in Infrastructure on the Orbit web app, then send your message again.")
+            Text("The API key for \(Text(slug).font(.orbitMono)) was rejected. Update it on the Machines & models page of the Orbit web app, then send your message again.")
                 .font(.orbitLabel).foregroundStyle(.secondary)
         }
     }
@@ -596,7 +596,7 @@ struct AntigravityRepairCardView: View {
                             .disabled(!console.canInstallAntigravity)
                     }
                     // This runner's Antigravity page, in the app: where it is installed and signed in.
-                    Button("Open in Infrastructure") {
+                    Button("Open in Machines & models") {
                         if let runnerID = console.runnerID { app.openRunnerEngine(runnerID, engine: "antigravity") }
                     }
                     .buttonStyle(.bordered)

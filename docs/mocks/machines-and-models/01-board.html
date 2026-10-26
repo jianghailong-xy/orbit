@@ -1,0 +1,231 @@
+<!doctype html>
+<!-- Design board: the Infrastructure page renamed "Machines & models" on every client, and every sentence that
+     names it. Web frames are real-page captures of main a3d923687 ("现在") and the same tree with
+     capture/rename-web.py ("改后"); iOS, macOS and Android frames are drawn from SettingsHome.swift, AppSection.swift
+     and SettingsScreen.kt. Not shipped code. Render: render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Infrastructure → Machines &amp; models</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="../cursor-engine/board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<script src="../cursor-engine/kit.js"></script>
+<script src="shots/marks.js"></script>
+<style>
+  .m-sheet { width: 1980px; }
+  .row-frames { display: flex; flex-wrap: wrap; gap: 26px 30px; align-items: flex-start; }
+  .pair { display: flex; gap: 22px; align-items: flex-start; }
+  .note { max-width: 900px; font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 6px 2px 0; }
+  .amber { color: #b35a00; }
+  .t-copy { width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 1.6; }
+  .t-copy th, .t-copy td { border: 1px solid var(--border-subtle); padding: 6px 10px; text-align: left; vertical-align: top; }
+  .t-copy th { background: var(--fill-muted); font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .t-copy td.where { width: 210px; color: var(--text-2); }
+  .t-copy td.before { width: 640px; color: var(--text-3); font-family: -apple-system, Inter, sans-serif; }
+  .t-copy td.after { font-family: -apple-system, Inter, sans-serif; color: var(--text-1); }
+  .t-copy mark { background: #ffe9c7; color: inherit; border-radius: 3px; padding: 0 2px; }
+  .t-copy .grp td { background: var(--bg-subtle); font-weight: 600; color: var(--text-1); }
+  .tags span { display: inline-block; margin: 0 4px 2px 0; padding: 0 6px; border-radius: 4px; background: var(--fill-muted); font-size: 11px; color: var(--text-2); }
+  /* macOS window (drawn) */
+  .mac { width: 620px; height: 330px; border-radius: 12px; overflow: hidden; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.12), 0 8px 24px rgba(0,0,0,.10); display: grid; grid-template-columns: 210px 1fr; font-family: -apple-system, Inter, sans-serif; }
+  .mac-side { background: #ecebf0; padding: 12px 10px; border-right: 1px solid #d9d8de; }
+  .mac-dots { display: flex; gap: 7px; margin: 0 0 18px 4px; }
+  .mac-dots i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; display: block; }
+  .mac-dots i:nth-child(2) { background: #febc2e; } .mac-dots i:nth-child(3) { background: #28c840; }
+  .mac-row { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 9px; border-radius: 7px; font-size: 13.5px; color: #1d1d1f; }
+  .mac-row.on { background: #d9d8de; font-weight: 600; }
+  .mac-row svg { width: 16px; height: 16px; color: #3e69f6; flex: none; }
+  .mac-main { padding: 14px 22px; }
+  .mac-bar { height: 22px; font-size: 13px; font-weight: 600; color: #1d1d1f; text-align: center; margin-bottom: 22px; }
+  .mac-h { font-size: 22px; font-weight: 700; color: #1d1d1f; margin-bottom: 8px; }
+  .mac-sub { font-size: 13px; color: #6e6e73; }
+  /* Android (drawn, Material 3) */
+  .and { width: 360px; border-radius: 26px; overflow: hidden; background: #fdfbff; box-shadow: 0 0 0 1px rgba(0,0,0,.12); font-family: Roboto, Inter, sans-serif; color: #1b1b1f; }
+  .and-bar { display: flex; align-items: center; gap: 22px; height: 64px; padding: 0 16px; font-size: 22px; }
+  .and-bar svg { width: 24px; height: 24px; flex: none; }
+  .and-h { padding: 18px 20px 6px; font-size: 14px; font-weight: 600; color: #3e5ba9; }
+  .and-row { display: flex; align-items: center; gap: 18px; min-height: 56px; padding: 6px 20px; font-size: 16px; }
+  .and-row .ic { width: 24px; height: 24px; border-radius: 6px; background: #dfe2ec; flex: none; }
+  .and-row .v { margin-left: auto; font-size: 14px; color: #5d5e66; }
+  .and-f { padding: 2px 20px 8px 62px; font-size: 13px; line-height: 18px; color: #5d5e66; }
+  .and-body { padding: 4px 0 14px; }
+  .and-card { margin: 6px 16px; padding: 14px 16px; border-radius: 16px; background: #eff0f7; font-size: 15px; }
+  .ph .amber { color: #b35a00; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Infrastructure 改名为「Machines &amp; models」：web、iOS / macOS、Android 和服务端的句子一起改</h1>
+  <p class="m-sub zh">手机上设置里那一组早就叫「Machines &amp; models」，点进去页面却叫「Infrastructure」；web 侧栏和页头也叫 Infrastructure。改后各端都叫 <b>Machines &amp; models</b>：web 的侧栏、页头、返回链接，Mac 的侧栏和窗口标题，iPhone / Android 设置里的那一行和页面标题，以及所有在句子里指向这个页面的文案（共约 65 处，见 ④）。<b>不改的</b>：地址 <code>/infrastructure</code>（旧的 <code>/runners</code>、<code>/providers</code> 照旧跳过来）、代码里的名字（<code>InfrastructurePage</code>、<code>Infrastructure.swift / .kt</code>、<code>infra-*</code> 样式）、页头下面那句「Where your agents run, and whose model quota they spend.」。Web 帧是真实页面截图（main a3d923687，「改后」只改了文案）；iOS / macOS / Android 按现有代码的结构画。橙色数字标改动，待你定的在 ⑥。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① Web：侧栏和页头（1280 宽）</div>
+    <div class="row-frames" id="w1"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② Web：手机抽屉、手机页头、key 页的返回链接</div>
+    <div class="row-frames" id="w2"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ iPhone 设置 → 页面，Mac 侧栏，Android 设置 → 页面（示意）</div>
+    <div class="row-frames" id="n1"></div>
+    <div class="row-frames" id="n2" style="margin-top:26px"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">④ 所有写到这个页面的文案：现在 → 改后（句子按 ⑥-1 的建议写「the Machines &amp; models page」）</div>
+    <div id="copy"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑤ 改动的文件</div>
+    <div class="two">
+      <ul class="files zh">
+        <li><b>Web</b> — <code>components/TasksSidePanel.tsx</code>（侧栏 / 抽屉）、<code>pages/InfrastructurePage.tsx</code>（页头）、<code>pages/ProviderConnectPage.tsx</code> 和 <code>pages/ProviderPoolPage.tsx</code>（返回链接各 3 处）、<code>components/Transcript.tsx</code>、<code>components/RunNeverStartedCard.tsx</code>、<code>components/NewSessionProviderHero.tsx</code>、<code>components/SharedPool.tsx</code>、<code>lib/dshRuntime.ts</code>，和断言这些文案的测试。</li>
+        <li><b>iOS / macOS</b> — <code>OrbitKit/App/AppSection.swift</code>（Mac 侧栏、窗口标题、设置那一行都读它）、<code>SettingsHome.swift</code>（⑥-2）、<code>DshRuntime.swift</code>、<code>EngineAuth.swift</code>、<code>ManagedRunnerDisplay.swift</code>、<code>SessionRunStart.swift</code>、<code>WhoCanUseIt.swift</code>、<code>OrbitApp/Views/RunnerSignInView.swift</code>，和 OrbitKit 里对着 web 原文的 copy-parity 测试。</li>
+        <li><b>Android</b> — <code>management/Infrastructure.kt</code>（<code>TITLE</code>）、<code>SettingsScreen.kt</code>（⑥-2）、<code>PoolLogic.kt</code>、<code>reader/AntigravityRepairCard.kt</code>、<code>core/cards/AntigravityRepair.kt</code>、<code>DshRuntime.kt</code>、<code>SessionRunStart.kt</code>，和对着 Swift 原文的 parity 测试。</li>
+      </ul>
+      <ul class="files zh">
+        <li><b>服务端</b> — <code>apiserver</code> 的 <code>managed-runner-manager.ts</code>、<code>managed-runner-supply.ts</code>、<code>pool-admission.ts</code>、<code>runner-provider-support.ts</code>、<code>engine-signin-preflight.ts</code>；<code>shared/managedRunnerDisplay.ts</code>；和它们的 spec。这些句子由服务端写、各端照原样显示。</li>
+        <li><b>文档</b>（⑥-4）— 对外文章 <code>docs/article-private-multi-runtime-control-plane.md</code> 写着「Infrastructure → Add → Register a machine」。其余设计文档记的是当时的名字，不动。</li>
+        <li><b>什么时候生效</b> — web 和服务端句子随下一次部署；iPhone / Mac / Android 随下一个 <code>v*</code> 版本。中间一段时间旧版 App 里还叫 Infrastructure，但服务端发来的句子已经是新名字。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑥ 待你定（建议项带绿框；板上按建议画）</div>
+    <div class="ask zh">
+      <h4><span class="tbd">1</span>句子里怎么指这个页面</h4>
+      <div class="ab"><div class="ab-opt rec"><h5><span class="ab-k">A</span>「the Machines &amp; models page」</h5><div class="ab-sub">「Install it from <b>the Machines &amp; models page</b>, then send your message again.」名字里有「&amp;」，放在句子中间不加「page」容易被读成普通的「机器和模型」；加上就一定是页面名。按钮、标题、返回链接仍用单独的名字（「Open Machines &amp; models」「‹ Machines &amp; models」）。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">B</span>直接替换：「from Machines &amp; models」</h5><div class="ab-sub">「Install it from <b>Machines &amp; models</b>, then send your message again.」最短，和今天「from Infrastructure」一个写法；代价是上面说的歧义。</div></div></div>
+    </div>
+    <div class="ask zh">
+      <h4><span class="tbd">2</span>手机设置里那一组（③ 左、③ 右）</h4>
+      <div class="ab"><div class="ab-opt rec"><h5><span class="ab-k">A</span>去掉组标题，那一行叫 Machines &amp; models</h5><div class="ab-sub">一行就说完，组下面那句说明照旧；iOS 和 Android 设置里本来就有不带标题的组。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">B</span>保留组标题</h5><div class="ab-sub">标题和行同一个名字，上下重复一遍。</div></div></div>
+    </div>
+    <div class="ask zh">
+      <h4><span class="tbd">3</span>范围</h4>
+      <div class="ab"><div class="ab-opt rec"><h5><span class="ab-k">A</span>web、iOS / macOS、Android、服务端句子一起改</h5><div class="ab-sub">改名就是为了各端一个名字；服务端的句子在所有客户端里显示，只改 web 会让 web 上的错误提示还叫 Infrastructure。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">B</span>这次只改 web</h5><div class="ab-sub">先上 web；但手机上设置那一组和页面标题继续不一致，服务端句子也还是旧名。</div></div></div>
+    </div>
+    <div class="ask zh">
+      <h4><span class="tbd">4</span>文档</h4>
+      <div class="ab"><div class="ab-opt rec"><h5><span class="ab-k">A</span>只改对外文章里的那条路径</h5><div class="ab-sub">「Machines &amp; models → Add → Register a machine」。设计文档、证据记录保留当时的名字。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">B</span>文档都不动</h5><div class="ab-sub">对外文章里写的路径就和界面对不上了。</div></div></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑦ 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+<script>
+const frame = (kind, label, html, cap = '') => `<div class="frame"><div class="lbl zh"><span class="m-k${kind.startsWith('改后') ? ' new' : ''}">${kind}</span>${label}</div>${html}${cap ? `<p class="note zh">${cap}</p>` : ''}</div>`;
+
+/* ① ② web, real captures */
+document.getElementById('w1').innerHTML =
+  frame('现在', '侧栏和页头都叫 Infrastructure', shot('head-today', { width: 940 })) +
+  frame('改后', '侧栏和页头叫 Machines &amp; models', shot('head-new', { width: 940, marks: [{ box: 'nav', n: 1, pad: 2 }, { box: 'h1', n: 2, pad: 4 }] }));
+document.getElementById('w2').innerHTML =
+  `<div class="pair">${frame('现在', '手机抽屉', shot('drawer-today', { width: 330 }))}${frame('改后', '手机抽屉', shot('drawer-new', { width: 330, marks: [{ box: 'nav', n: 1, pad: 2 }] }))}</div>` +
+  `<div class="pair">${frame('现在', '手机页头', shot('phone-today', { width: 330 }))}${frame('改后', '手机页头', shot('phone-new', { width: 330, marks: [{ box: 'h1', n: 2, pad: 4 }] }))}</div>` +
+  `<div class="pair">${frame('现在', 'key 页的返回链接（pool 页同）', shot('back-today', { width: 700 }))}${frame('改后', '返回链接', shot('back-new', { width: 700, marks: [{ box: 'back', n: 3, pad: 3 }] }))}</div>`;
+
+/* ③ native, drawn */
+const amber = (s) => `<span class="amber">${s}</span>`;
+const sessions = iSection({ header: 'Sessions', rows: [
+  iRow({ title: 'Default permission', trailing: 'Auto' }),
+  iRow({ title: 'Session orchestration', trailing: 'On' }),
+  iRow({ title: 'Smart model selection', trailing: 'Off' }),
+] });
+const prefs = iSection({ header: 'Preferences', rows: [iRow({ title: 'Notifications', trailing: 'On' }), iRow({ title: 'Appearance', trailing: 'System' })] });
+const FOOT = 'Where your agents run, and whose model quota they spend.';
+const machinesGroup = (header, row, id) => iSection({ header, id, rows: [iRow({ title: row, trailing: amber('1 needs you') })], footer: FOOT });
+const settings = (header, row, id) => sheetPhone({ title: 'Settings', back: false, height: 560, body: sessions + machinesGroup(header, row, id) + prefs });
+const pageBody = iSection({ header: 'Machines', trailing: '4 · 6 / 52 busy', rows: [
+  iRow({ title: 'wikova', sub: amber('Kimi Code signed out'), trailing: '' }),
+  iRow({ title: 'workstation', sub: amber('Claude Code, Codex signed out') }),
+  iRow({ title: 'HPC', sub: '5 / 16 running' }),
+] });
+const page = (title, id) => sheetPhone({ title, id, height: 330, body: pageBody });
+document.getElementById('n1').innerHTML =
+  frame('现在', 'iPhone 设置：组叫 Machines &amp; models，行叫 Infrastructure', settings('Machines &amp; models', 'Infrastructure', 'ios-now')) +
+  frame('改后 A（建议）', '组标题去掉，行叫 Machines &amp; models', settings('', 'Machines &amp; models', 'ios-a')) +
+  frame('改后 B', '组标题保留：名字上下重复', settings('Machines &amp; models', 'Machines &amp; models', 'ios-b')) +
+  `<div style="display:flex;flex-direction:column;gap:22px">${frame('现在', '点进去的页面', page('Infrastructure'))}${frame('改后', '页面标题', page('Machines &amp; models', 'ios-page'))}</div>`;
+
+const macIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.5" y="2.5" width="13" height="9" rx="1.5"/><path d="M5 14h6M8 11.5V14"/></svg>';
+const dot = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="2.5" width="11" height="11" rx="3"/></svg>';
+const mac = (name) => `<div class="mac"><div class="mac-side"><div class="mac-dots"><i></i><i></i><i></i></div>
+  <div class="mac-row on">${macIcon}${name}</div>${['Workspaces', 'Projects', 'Tasks', 'Wiki', 'Following', 'Settings'].map((n) => `<div class="mac-row">${dot}${n}</div>`).join('')}</div>
+  <div class="mac-main"><div class="mac-bar">${name}</div><div class="mac-h">${name}</div><div class="mac-sub">${FOOT}</div></div></div>`;
+const back = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12H5M11 5l-7 7 7 7"/></svg>';
+const andSettings = (header, row) => `<div class="and"><div class="and-bar">Settings</div>
+  <div class="and-h">Sessions</div><div class="and-row"><span class="ic"></span>Default permission<span class="v">Auto</span></div><div class="and-row"><span class="ic"></span>Session orchestration<span class="v">On</span></div>
+  ${header ? `<div class="and-h">${header}</div>` : '<div style="height:14px"></div>'}<div class="and-row"><span class="ic"></span>${row}<span class="v amber">1 needs you</span></div><div class="and-f">${FOOT}</div>
+  <div class="and-h">Preferences</div><div class="and-row"><span class="ic"></span>Notifications<span class="v">On</span></div></div>`;
+const andPage = (title) => `<div class="and"><div class="and-bar">${back}${title}</div><div class="and-body"><div class="and-card">wikova · <span class="amber">Kimi Code signed out</span></div><div class="and-card">HPC · 5 / 16 running</div></div></div>`;
+document.getElementById('n2').innerHTML =
+  `<div style="display:flex;flex-direction:column;gap:22px">${frame('现在', 'Mac：侧栏和窗口标题', mac('Infrastructure'))}${frame('改后', 'Mac：侧栏和窗口标题', mac('Machines &amp; models'))}</div>` +
+  frame('现在', 'Android 设置', andSettings('Machines &amp; models', 'Infrastructure')) +
+  frame('改后 A（建议）', 'Android 设置', andSettings('', 'Machines &amp; models')) +
+  `<div style="display:flex;flex-direction:column;gap:22px">${frame('现在', 'Android 页面', andPage('Infrastructure'))}${frame('改后', 'Android 页面', andPage('Machines &amp; models'))}</div>`;
+
+/* ④ the copy, before → after */
+const M = (s) => s.replace(/Infrastructure/g, '<mark>Infrastructure</mark>');
+const N = (s) => s.replace(/(the Machines &amp; models page|Machines &amp; models)/g, '<mark>$1</mark>');
+const tags = (list) => `<span class="tags">${list.map((t) => `<span>${t}</span>`).join('')}</span>`;
+const rows = [
+  ['名字本身', null],
+  [tags(['Web 侧栏 / 抽屉', 'Web 页头']), 'Infrastructure', 'Machines &amp; models'],
+  [tags(['Mac 侧栏', '窗口标题', 'iPhone 设置行', '页面标题']), 'Infrastructure', 'Machines &amp; models'],
+  [tags(['Android 设置行', '页面标题']), 'Infrastructure', 'Machines &amp; models'],
+  [tags(['Web 返回链接 ×6']), '‹ Infrastructure', '‹ Machines &amp; models'],
+  [tags(['Web', 'iOS', '服务端（shared）']), 'Open Infrastructure', 'Open Machines &amp; models'],
+  [tags(['Web', 'iOS', 'Android']), 'Open in Infrastructure', 'Open in Machines &amp; models'],
+  ['句子（各端同一句）', null],
+  [tags(['Web', 'iOS', 'Android']), 'Install it from Infrastructure, then send your message again.', 'Install it from the Machines &amp; models page, then send your message again.'],
+  [tags(['Web']), 'Install it from Infrastructure, and this run starts as soon as it’s installed.', 'Install it from the Machines &amp; models page, and this run starts as soon as it’s installed.'],
+  [tags(['Web', 'iOS', 'Android']), 'This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.', 'This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key on the Machines &amp; models page, then send your message again.'],
+  [tags(['Web', 'iOS', 'Android']), 'Update {key} in Infrastructure, then send your message again.', 'Update {key} on the Machines &amp; models page, then send your message again.'],
+  [tags(['Web', 'iOS', 'Android']), 'Sign in with Google on this runner, or connect a Gemini API key in Infrastructure.', 'Sign in with Google on this runner, or connect a Gemini API key on the Machines &amp; models page.'],
+  [tags(['Web', 'iOS', 'Android']), 'Install DeepSeek Harness on this runner from Infrastructure.', 'Install DeepSeek Harness on this runner from the Machines &amp; models page.'],
+  [tags(['Web', 'iOS', 'Android']), 'This runner has a DeepSeek Harness version Orbit does not support. Reinstall it from Infrastructure.', 'This runner has a DeepSeek Harness version Orbit does not support. Reinstall it from the Machines &amp; models page.'],
+  [tags(['Web 新会话']), '{engine}: {why}{on runner} — fix it in Infrastructure', '{engine}: {why}{on runner} — fix it on the Machines &amp; models page'],
+  [tags(['Web', 'iOS', 'Android']), 'They see {pool} on their Infrastructure page and in the session picker.', 'They see {pool} on their Machines &amp; models page and in the session picker.'],
+  [tags(['iOS']), 'The API key for {slug} was rejected. Update it in Infrastructure on the Orbit web app, then send your message again.', 'The API key for {slug} was rejected. Update it on the Machines &amp; models page of the Orbit web app, then send your message again.'],
+  ['服务端写的句子（各端照原样显示）', null],
+  [tags(['apiserver', 'shared', 'iOS']), '… so it cannot start a session. Sign one in, or add a model key, from Infrastructure.', '… so it cannot start a session. Sign one in, or add a model key, from the Machines &amp; models page.'],
+  [tags(['apiserver']), 'Sign one in, or add a model key, from Infrastructure, then start the session again.', 'Sign one in, or add a model key, from the Machines &amp; models page, then start the session again.'],
+  [tags(['apiserver']), 'the account pool "{label}" has no accounts in it — add one under Account pools on Infrastructure, or pick another provider', 'the account pool "{label}" has no accounts in it — add one under Account pools on the Machines &amp; models page, or pick another provider'],
+  [tags(['apiserver']), '… fix one under Account pools on Infrastructure, or pick another provider', '… fix one under Account pools on the Machines &amp; models page, or pick another provider'],
+  [tags(['apiserver']), 'Cursor CLI isn’t installed on this runner; install it from Infrastructure, then try again (and “reinstall it from Infrastructure”)', 'Cursor CLI isn’t installed on this runner; install it from the Machines &amp; models page, then try again (and “reinstall it from the Machines &amp; models page”)'],
+  [tags(['apiserver']), 'Sign it in from Infrastructure, then start this session again. (and “… or run `{command}` on that machine …”)', 'Sign it in from the Machines &amp; models page, then start this session again. (and “… or run `{command}` on that machine …”)'],
+  [tags(['apiserver']), '… connect Gemini under API keys on Infrastructure (/providers/new/gemini) — Orbit stores the key encrypted …', '… connect Gemini under API keys on the Machines &amp; models page (/providers/new/gemini) — Orbit stores the key encrypted …'],
+  [tags(['apiserver']), '{head} Sign in with Google from Infrastructure, or {connect a Gemini key}.', '{head} Sign in with Google from the Machines &amp; models page, or {connect a Gemini key}.'],
+];
+document.getElementById('copy').innerHTML = `<table class="t-copy"><tr><th>在哪</th><th>现在</th><th>改后</th></tr>${rows.map((r) => r[1] === null
+  ? `<tr class="grp"><td colspan="3" class="zh">${r[0]}</td></tr>`
+  : `<tr><td class="where">${r[0]}</td><td class="before">${M(r[1])}</td><td class="after">${N(r[2])}</td></tr>`).join('')}</table>
+  <p class="note zh">大括号里的是变量。改后写法按 ⑥-1 的 A；选 B 时把「the Machines &amp; models page」换成「Machines &amp; models」，介词随之用「in / from」。</p>`;
+
+document.getElementById('notes').innerHTML = notes([
+  [1, '<b>侧栏 / 抽屉的那一行</b>：web 的 <code>TasksSidePanel</code> 和手机抽屉同一个标签。「Machines &amp; models」放得下，不截断（截图里 280 和 390 宽都量过）。'],
+  [2, '<b>页头</b>：web 的 h1、iPhone 和 Mac 的标题（<code>AppSection.runners.title</code>）、Android 的标题（<code>Infrastructure.TITLE</code>）一起改；下面那句说明不变。'],
+  [3, '<b>返回链接</b>：key 页和 pool 页上的「‹ Infrastructure」共 6 处，都回到同一个地址 <code>/infrastructure</code>。'],
+  ['·', '<b>不变</b>：所有地址（<code>/infrastructure</code>、<code>#keys</code>、<code>#pools</code>、<code>?runner=&amp;engine=</code>，以及跳过来的 <code>/runners</code>、<code>/providers</code>），代码和样式里的名字，图标，页面内容。'],
+]);
+finish();
+</script>
+</body>
+</html>

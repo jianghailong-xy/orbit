@@ -16,6 +16,8 @@ import (
 // Fixed by the design rather than configured (docs/runner-link-design.md §5.1, §5.7, §6.1). They are fields of
 // config only so that tests can shorten them.
 const (
+	// maxMergeBatches is how many batches the apiserver takes in one merged call (MAX_LINK_CALL_BATCHES, link-events.ts).
+	maxMergeBatches          = 256
 	maxFrameBytes            = 256 << 10
 	defaultHeartbeatInterval = 30 * time.Second
 	defaultModeInterval      = time.Second
@@ -124,6 +126,8 @@ type linkTuning struct {
 	// WelcomeTimeout bounds the welcome route's call a Welcome waits for (welcome.go), retries included: well inside the
 	// 10 s a runner waits for Welcome after its Hello.
 	WelcomeTimeout time.Duration
+	// Merge is what merged ingest calls are bound by (events_merge.go).
+	Merge mergeTuning
 }
 
 // creditLevel is an amount of durable events: a count and their payload bytes.
@@ -145,6 +149,7 @@ func defaultLinkTuning() linkTuning {
 		WatchersTTL:      60 * time.Second,
 		PrefixTimeout:    10 * time.Second,
 		WelcomeTimeout:   3 * time.Second,
+		Merge:            defaultMergeTuning(),
 	}
 }
 
@@ -238,6 +243,25 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		RPCTimeout:         dur("LINK_RPC_TIMEOUT", 60*time.Second),
 		link:               defaultLinkTuning(),
 	}
+	// Merged ingest (events_merge.go): a window of 0 forwards every batch alone, as before merging.
+	switch v := strings.TrimSpace(getenv("LINK_EVENT_MERGE_WINDOW")); v {
+	case "":
+	case "0", "off":
+		c.link.Merge.Window = 0
+	default:
+		d, err := time.ParseDuration(v)
+		if err != nil || d <= 0 || d > mergeMaxWindow {
+			problems = append(problems, fmt.Sprintf("LINK_EVENT_MERGE_WINDOW=%q is not 0 or a duration up to %s, such as 100ms", v, mergeMaxWindow))
+		} else {
+			c.link.Merge.Window = d
+		}
+	}
+	c.link.Merge.MaxBatches = integer("LINK_EVENT_MERGE_MAX_BATCHES", c.link.Merge.MaxBatches)
+	if c.link.Merge.MaxBatches > maxMergeBatches {
+		problems = append(problems, fmt.Sprintf("LINK_EVENT_MERGE_MAX_BATCHES=%d is more than the %d batches the apiserver takes in one call", c.link.Merge.MaxBatches, maxMergeBatches))
+	}
+	c.link.Merge.MaxBytes = integer("LINK_EVENT_MERGE_MAX_BYTES", c.link.Merge.MaxBytes)
+
 	switch mode := str("LINK_MODE", "http"); mode {
 	case "http":
 	case "link":

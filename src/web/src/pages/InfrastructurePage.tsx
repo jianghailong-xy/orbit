@@ -1,4 +1,4 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DownOutlined } from '@ant-design/icons';
@@ -9,7 +9,7 @@ import { providersQuery, publishedRunnerVersionQuery, runnersQuery, workspacesQu
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { poolEligibleCount, poolRefusals, providerPoolsQuery } from '../lib/providerPools';
 import { latestRunnerVersion, runnerAttention, type AttentionWorkspace } from '../lib/runnerAttention';
-import { ownPoolWithAccess, poolAccessQuery, sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
+import { accountPoolList, poolAccessQuery, sharedPoolsQuery } from '../lib/sharedPools';
 import { AccountPools, NewPoolModal, PoolHint } from '../components/AccountPools';
 import { EngineOverview } from '../components/InfrastructureOverview';
 import { KeyImpact } from '../components/KeyImpact';
@@ -87,13 +87,7 @@ export function InfrastructurePage() {
       .map((pool) => ({ ...poolAccessQuery(pool.id), refetchInterval: 60_000 })),
   });
   const accessOf = new Map(access.flatMap((read) => (read.data ? [[routeId(read.data.id), read.data] as const] : [])));
-  const poolList = [
-    ...(shared.data ?? []).map(sharedPoolAsProviderPool),
-    ...(pools.data ?? []).map((pool) => {
-      const view = accessOf.get(routeId(pool.id));
-      return view ? ownPoolWithAccess(pool, view) : pool;
-    }),
-  ];
+  const poolList = accountPoolList(pools.data ?? [], shared.data ?? [], accessOf);
   const eligible = poolEligibleCount(providers.data ?? []);
   const refusals = poolRefusals(providers.data ?? []);
   const [creatingPool, setCreatingPool] = useState(false);
@@ -167,9 +161,14 @@ export function InfrastructurePage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      {/* The page is Settings' (docs/mocks/machines-and-models, 02): no sidebar row is lit on it, so the
+          way back is named here, as the pages under this one name it. */}
+      <Link className="provider-back" to="/settings" style={{ marginBottom: 8 }}>
+        ‹ Settings
+      </Link>
       <div className="prov-page-head">
         <h1 className="page-title" style={{ marginBottom: 0 }}>
-          Infrastructure
+          Machines &amp; models
         </h1>
         <Menu
           align="end"

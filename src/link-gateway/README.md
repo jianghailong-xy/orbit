@@ -55,6 +55,8 @@ It is one static binary with these subcommands:
 | `LINK_MODE` | `http` | `http`: runners are told what the server's `RUNNER_LINK_REQUIRED` switch says, `MODE_HTTP` (the shadow period: compare, forward nothing) while it is off and `MODE_LINK` (forward) while it is on. `link`: `MODE_LINK`, whatever the switch says. See [The switch](#the-switch). |
 | `LINK_INTERNAL_API_URLS` | required with `LINK_MODE=link` | The apiserver's internal listener for runner link calls (`RUNNER_LINK_INTERNAL_PORT`), one `http://` address per apiserver instance, comma-separated, for example `http://apiserver:3001`. Without it there is nowhere to forward to: the gateway does not read the switch, and runners are told `MODE_HTTP`. |
 | `LINK_RPC_TIMEOUT` | `60s` | How long one forwarded call may take, retries on other backends included. |
+| `LINK_EVENT_MERGE_WINDOW` | `100ms` | How long an event batch waits for others, from any connection, to go with it in one [merged call](#merged-calls), up to `500ms`. `0` forwards every batch alone. |
+| `LINK_EVENT_MERGE_MAX_BATCHES`, `LINK_EVENT_MERGE_MAX_BYTES` | `64`, `2097152` | What one merged call may carry: the sessions its transaction holds at once (at most the apiserver's 256), and the bytes of its events. A full call goes at once. |
 | `LINK_HELLO_TIMEOUT` | `10s` | How long after the upgrade a Hello may take. |
 | `LINK_HANDSHAKE_TIMEOUT` | `5s` | How long the TLS handshake and the upgrade request may take, together. |
 | `LINK_IP_RATE`, `LINK_IP_BURST` | `1`, `20` | New connections per second per client address, and the burst allowed. |
@@ -409,6 +411,25 @@ and acknowledged under the id the runner sent. One session's batches are forward
 A failure's `durable_seq` is the last this connection acknowledged; the runner sends again from it plus one. `rejected`
 stays empty until B5 writes tombstones.
 
+#### Merged calls
+
+Every connection's batches go to the apiserver in merged calls (§6.6, `events_merge.go`): a batch waits up to
+`LINK_EVENT_MERGE_WINDOW` for others, from any connection, and they go as one `POST /runner/link/events`, which the
+apiserver stores in one transaction (`src/apiserver/src/runner-api/link-events.ts`). Each batch's answer in it is the
+one the events route would give it alone, and it is acknowledged on its own connection as the table above says. A call
+goes at once when it is full or when a batch carries a `turn_end` (a turn completion waits for its events: `after_seq`);
+at most four calls are out at once, and batches collect behind them.
+
+| What happens | The batch |
+| --- | --- |
+| The call answers it stored. | Acknowledged from that answer. |
+| The call answers it `sendAlone`: the apiserver wrote nothing of it (its session another writer holds, a refusal of the route's, a value the database refuses). | Forwarded alone to the events route, and acknowledged from that answer. |
+| It is 256 KiB or more of events. | Forwarded alone. |
+| The call is refused or fails otherwise (an apiserver without the route, a call it could not read, a 500). | Every batch of it forwarded alone. |
+| The database turns the call away (503), or no backend answers. | Every batch of it fails as it would have alone, retryable. |
+
+A session's batches still go one after another: its next batch is merged into a later call once this one is answered.
+
 Credit is granted by the depth of the ingest queue (§5.8): the events and payload bytes every connection has queued or
 in flight to the apiserver. While it holds more than 100,000 events or 512 MiB, every connection's credit drops from
 10,000 events or 64 MiB to a tenth of that, in a `Credit` frame, and it comes back once the queue holds less than half
@@ -621,6 +642,12 @@ Every metric is served at `/metrics` on `LINK_METRICS_ADDR`, in Prometheus text 
 | `link_event_batches_total` | counter | `result`: stored, credit_exceeded, gap, malformed, no_answer, refused, refused_retryable, failed_behind, empty |
 | `link_events_stored_total` | counter | — (events stored and acknowledged) |
 | `link_event_ack_duration_seconds` | histogram | — (from a batch's arrival to its EventAck: the acknowledgement latency) |
+| `link_event_merge_calls_total` | counter | `result`: answered, alone (every batch forwarded alone instead), failed (no answer, or the database turned the call away) |
+| `link_event_merge_flushes_total` | counter | `reason`: window, batches, bytes, turn_end, due (a call slot freed) |
+| `link_event_merge_alone_total` | counter | `reason`: too_large, answered_alone, call |
+| `link_event_merge_batches` | histogram | — (batches per merged call) |
+| `link_event_merge_call_duration_seconds` | histogram | — (from a merged call's start to its answer) |
+| `link_event_merge_held_seconds` | histogram | — (how long the call's transaction held its sessions, as the apiserver states it) |
 | `link_ingest_queue_events`, `link_ingest_queue_bytes` | gauge | — (queued or in flight to the apiserver: the depth credit is granted by; the unacknowledged events) |
 | `link_credit_reduced`, `link_credit_changes_total` | gauge, counter | `to`: reduced, restored |
 | `link_live_events_total` | counter | `result`: published, no_watchers, nats_down, publish_failed, bad_session |

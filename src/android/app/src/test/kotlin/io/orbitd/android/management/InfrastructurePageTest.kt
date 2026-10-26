@@ -163,8 +163,8 @@ class InfrastructurePageTest {
         compose.waitUntil(60_000) { runnerReads() == paused + 1 }
     }
 
-    /** Settings' Machines & models group: one row, Infrastructure — "1 needs you" while something does, else the machines online — and
-     * the page's line under it. */
+    /** Settings' Machines & models group: one row, Machines & models, and no header over it to say the name twice (iOS SettingsHome,
+     * docs/mocks/machines-and-models ⑥-2) — "1 needs you" while something does, else the machines online — and the page's line under it. */
     @Test fun settingsHasOneInfrastructureRowWithItsValueAndTheLineUnderIt() {
         val api = api()
         compose.setContent {
@@ -175,7 +175,8 @@ class InfrastructurePageTest {
         compose.onNode(hasText(Infrastructure.TITLE) and hasText("1 of 1 online") and hasClickAction()).assertExists()
         compose.onNodeWithText(Infrastructure.SUBTITLE).assertExists()
         listOf("Runners", "Providers").forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
-        assertTrue("Machines & models comes before Preferences", top("Machines & models") < top(Infrastructure.TITLE) &&
+        compose.onAllNodesWithText(Infrastructure.TITLE).assertCountEquals(1)
+        assertTrue("Machines & models comes before Preferences", top("Sessions") < top(Infrastructure.TITLE) &&
             top(Infrastructure.TITLE) < top(Infrastructure.SUBTITLE) && top(Infrastructure.SUBTITLE) < top("Preferences"))
         codexSignedOut()
         revision++

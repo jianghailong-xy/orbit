@@ -272,7 +272,7 @@ final class DshRuntimeTests: XCTestCase {
         }
         // A rejected key is named at both ends (`the DeepSeek key “DeepSeek 2”`), so the web's sentence is a
         // template with the name in it, and "the DeepSeek key" where there is none.
-        let template = "Update ${help.keyName ?? 'the DeepSeek key'} in Infrastructure, then send your message again."
+        let template = "Update ${help.keyName ?? 'the DeepSeek key'} on the Machines & models page, then send your message again."
         XCTAssertTrue(transcript.contains("`\(template)`"), "web lost \(template)")
         let slot = "${help.keyName ?? 'the DeepSeek key'}"
         XCTAssertEqual(DshRuntime.Repair.invalidKey.detail, template.replacingOccurrences(of: slot, with: "the DeepSeek key"))

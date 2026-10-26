@@ -142,7 +142,7 @@ export function ProviderPickPage() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <Link className="provider-back" to="/infrastructure#keys">
-        ‹ Infrastructure
+        ‹ Machines & models
       </Link>
       <h1 className="page-title" style={{ marginTop: 8 }}>
         Add a provider
@@ -202,7 +202,7 @@ export function ProviderConnectPage() {
       return (
         <div className="provider-form">
           <Link className="provider-back" to="/infrastructure#keys">
-            ‹ Infrastructure
+            ‹ Machines & models
           </Link>
           <div style={{ marginTop: 16, color: 'var(--text-3)' }}>That provider no longer exists.</div>
         </div>
@@ -569,7 +569,7 @@ function ProviderForm({
   return (
     <div className="provider-form">
       <Link className="provider-back" to={editing ? '/infrastructure#keys' : '/providers/new'}>
-        {editing ? '‹ Infrastructure' : '‹ All providers'}
+        {editing ? '‹ Machines & models' : '‹ All providers'}
       </Link>
       <h1 className="page-title" style={{ marginTop: 8 }}>
         {title}

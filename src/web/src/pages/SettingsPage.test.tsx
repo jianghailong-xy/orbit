@@ -2,17 +2,25 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import { meQuery, type UserPreferences } from '../lib/queries';
+import { providerPoolsQuery, type ProviderPool } from '../lib/providerPools';
+import { meQuery, runnersQuery, type UserPreferences } from '../lib/queries';
+import { sharedPoolsQuery } from '../lib/sharedPools';
 import { SettingsPage } from './SettingsPage';
 
 // The theme control reaches for localStorage and matchMedia, neither of which Node has, and it
 // is not what these tests are about.
 vi.mock('../lib/theme', () => ({ useThemeMode: () => ({ mode: 'system', setMode: () => {} }) }));
 
-/** The page with the query it reads seeded, so nothing has to be fetched. */
-function render(preferences: UserPreferences) {
+/** The page with the queries it reads seeded, so nothing has to be fetched — the machines and the pools
+ *  only when given, as they are still being read otherwise. */
+function render(preferences: UserPreferences, machines?: { runners: unknown[]; pools: ProviderPool[] }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(meQuery().queryKey, { id: 'u1', email: 'a@b.c', name: 'A', preferences });
+  if (machines) {
+    qc.setQueryData(runnersQuery().queryKey, machines.runners);
+    qc.setQueryData(providerPoolsQuery().queryKey, machines.pools);
+    qc.setQueryData(sharedPoolsQuery().queryKey, []);
+  }
   return renderToStaticMarkup(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
@@ -59,13 +67,51 @@ describe('the way into Settings → Shared links', () => {
   });
 });
 
+describe('the way into Machines & models (docs/mocks/machines-and-models, 02)', () => {
+  const online = (id: string) => ({ id, name: id, online: true });
+  const value = (html: string) => html.match(/class="settings-machines-value"[^>]*>([^<]*)</)?.[1] ?? null;
+
+  it('is a card that names what the page holds, with its line and Manage', () => {
+    const html = render({});
+    expect(html).toMatch(/<h2[^>]*>Machines &amp; models<\/h2>/);
+    expect(html).toContain('<div>Machines, API keys and account pools</div>');
+    expect(html).toContain('Where your agents run, and whose model quota they spend.');
+    expect(html.slice(html.indexOf('Machines, API keys'))).toMatch(/<button[^>]*><span>Manage<\/span><\/button>/);
+  });
+
+  it('says nothing more until the machines and the pools have been read', () => {
+    expect(value(render({}))).toBeNull();
+  });
+
+  it('says how many machines are online when nothing needs you, as the phone’s row does', () => {
+    expect(value(render({}, { runners: [online('a'), online('b')], pools: [] }))).toBe('2 of 2 online');
+    expect(value(render({}, { runners: [], pools: [] }))).toBe('None');
+  });
+
+  it('counts, in amber, a machine offline and a pool nothing can start on', () => {
+    const pool = { id: 'p1', slug: 'team', label: 'Team', resetsAt: null, unavailable: 'Not signed in', members: [], engine: 'claude' };
+    const html = render({}, { runners: [online('a'), { id: 'b', name: 'b', online: false }], pools: [pool] });
+    expect(value(html)).toBe('2 need you');
+    expect(html).toMatch(/class="settings-machines-value" style="[^"]*color:var\(--warning\)/);
+    expect(value(render({}, { runners: [online('a'), { id: 'b', name: 'b', online: false }], pools: [] }))).toBe('1 needs you');
+  });
+});
+
 describe('the order of the cards', () => {
-  it('reads as Settings on iOS does: how sessions start, then the alerts and the look, then sharing', () => {
+  it('reads as Settings on iOS does: how sessions start, then where agents run, then the alerts and the look, then sharing', () => {
     // iOS lays the same settings out as one list (SettingsHome in OrbitKit); a card moved here alone
     // would put the two clients' pages in different orders. Access tokens comes last: the web's alone
     // until the apps list tokens too.
     const html = render({});
-    const titles = [...html.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1]);
-    expect(titles).toEqual(['Session defaults', 'Session orchestration', 'Notifications', 'Appearance', 'Sharing', 'Access tokens']);
+    const titles = [...html.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1].replace(/&amp;/g, '&'));
+    expect(titles).toEqual([
+      'Session defaults',
+      'Session orchestration',
+      'Machines & models',
+      'Notifications',
+      'Appearance',
+      'Sharing',
+      'Access tokens',
+    ]);
   });
 });

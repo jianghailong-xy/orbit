@@ -87,7 +87,7 @@ public enum ManagedRunnerCopy {
         case .waking:
             return "It is starting again. Messages sent meanwhile wait for it and run once it is up."
         case .modelUnavailable:
-            return "None of its runtimes is signed in yet and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure."
+            return "None of its runtimes is signed in yet and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page."
         case .waitingCapacity:
             return "The managed environment has no room for it right now. It starts by itself when room frees up."
         case .available:
@@ -111,7 +111,7 @@ public enum ManagedRunnerCopy {
 
     public static let retry = "Retry"
     public static let ensure = "Set up"
-    public static let signIn = "Open Infrastructure"
+    public static let signIn = "Open Machines & models"
     public static let registerOwn = "Register your own machine"
 }
 

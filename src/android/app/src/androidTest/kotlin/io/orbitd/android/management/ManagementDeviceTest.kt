@@ -226,7 +226,7 @@ class ManagementDeviceTest {
                 click(hasText("Done") and hasClickAction(), scroll = false)
                 compose.waitUntil(10_000) { workspaceName == "Configured workspace" }
                 settings()
-                click(hasText("Infrastructure") and hasClickAction())
+                click(hasText("Machines & models") and hasClickAction())
                 await("Controlled remote")
                 capture("infrastructure")
                 click(hasText("Controlled remote") and hasClickAction())
@@ -263,8 +263,8 @@ class ManagementDeviceTest {
                 await("Rotate Token…")
                 capture("runner-deep-link")
                 back()
-                await("Infrastructure")
-                click(hasText("Infrastructure") and hasClickAction())
+                await("Machines & models")
+                click(hasText("Machines & models") and hasClickAction())
                 await("Team Codex")
                 compose.onNodeWithText("Account pools").performScrollTo()
                 capture("infrastructure-pools")
@@ -293,7 +293,7 @@ class ManagementDeviceTest {
             try {
                 role = "ADMIN"; runnerOnline = true; accountsPass = true; claudeRenewed = false
                 signIn(server); settings()
-                click(hasText("Infrastructure") and hasClickAction()); await("Controlled remote")
+                click(hasText("Machines & models") and hasClickAction()); await("Controlled remote")
                 click(hasText("Controlled remote") and hasClickAction()); await("Max Concurrent")
                 // One window per Engines row; Antigravity's names the account a new session starts on above its own.
                 await("Next: Default"); await("2 accounts signed in"); await("98% remaining")
@@ -382,7 +382,7 @@ class ManagementDeviceTest {
             try {
                 role = "ADMIN"; runnerOnline = true; kimiPass = true; kimiTwo = false; kimiOld = false
                 signIn(server); settings()
-                click(hasText("Infrastructure") and hasClickAction()); await("Controlled remote")
+                click(hasText("Machines & models") and hasClickAction()); await("Controlled remote")
                 click(hasText("Controlled remote") and hasClickAction()); await("Max Concurrent")
                 // One login: its site after its version, and its window nearest the limit.
                 await("2.1.1 · kimi.ai · Signed in")
@@ -495,7 +495,7 @@ class ManagementDeviceTest {
                 await("Revoked by an administrator")
                 capture("a13d-access-tokens-ended")
                 back(); await("Default permission")
-                click(hasText("Infrastructure") and hasClickAction()); await("¥110.00 · $5.00"); await("Unavailable")
+                click(hasText("Machines & models") and hasClickAction()); await("¥110.00 · $5.00"); await("Unavailable")
                 compose.onAllNodesWithText("API keys").onFirst().performScrollTo()
                 capture("a13d-infrastructure-keys")
                 click(hasText("DeepSeek") and hasClickAction()); await("DeepSeek account balance"); await("Total")
@@ -579,11 +579,11 @@ class ManagementDeviceTest {
         click(hasText("Notifications") and hasClickAction()); await("When a session finishes"); capture("$pass-notifications"); back()
         click(hasText("Shared links") and hasClickAction()); await("Fixture shared session"); capture("$pass-shared-links"); back()
         click(hasText("Admin") and hasClickAction()); await("Second user"); capture("$pass-admin-users"); back()
-        click(hasText("Infrastructure") and hasClickAction()); await("Controlled remote"); capture("$pass-infrastructure")
+        click(hasText("Machines & models") and hasClickAction()); await("Controlled remote"); capture("$pass-infrastructure")
         click(hasText("Controlled remote") and hasClickAction()); await("Max Concurrent"); capture("$pass-runner")
         click(hasText("Claude Code") and hasClickAction()); await("Add Account"); capture("$pass-runner-engine")
         back(); back(); back()
-        click(hasText("Infrastructure") and hasClickAction()); await("Team Codex")
+        click(hasText("Machines & models") and hasClickAction()); await("Team Codex")
         compose.onNodeWithText("Account pools").performScrollTo(); capture("$pass-infrastructure-pools")
         click(hasText("Team Codex") and hasClickAction()); await("Who can use it"); capture("$pass-codex-pool")
         back(); back()
@@ -603,7 +603,7 @@ class ManagementDeviceTest {
             try {
                 role = "ADMIN"; runnerOnline = true; fleet = listOf(alpha, bravo, charlie)
                 signIn(server); settings()
-                click(hasText("Infrastructure") and hasClickAction()); await("Charlie box")
+                click(hasText("Machines & models") and hasClickAction()); await("Charlie box")
                 compose.onAllNodes(hasText("Edit") and hasClickAction()).assertCountEquals(0)
                 // The machines sit under what needs you and what each engine runs on: bring them on screen.
                 compose.onNode(hasText("Add Runner") and hasClickAction()).performScrollTo()
@@ -656,7 +656,7 @@ class ManagementDeviceTest {
                 compose.onNodeWithText("Where your agents run, and whose model quota they spend.").assertExists()
                 listOf("Runners", "Providers").forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
                 capture("infrastructure-settings-row")
-                click(hasText("Infrastructure") and hasClickAction())
+                click(hasText("Machines & models") and hasClickAction())
                 await("Codex is signed out on Controlled remote"); await("ThinkPad is offline"); await("Old keys is unavailable")
                 capture("infrastructure-needs-you")
                 val sections = listOf("Needs you", "What your agents can run on", "Machines", "Add Runner", "Account pools", "API keys")
@@ -756,7 +756,7 @@ class ManagementDeviceTest {
                 compose.onNode(hasText("Settings") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
                 await("Default permission")
                 page("settings-home", report, problems)
-                activate("Infrastructure", "talkback-settings-infrastructure", report, problems); await("Controlled remote")
+                activate("Machines & models", "talkback-settings-infrastructure", report, problems); await("Controlled remote")
                 report.appendLine("double tap Infrastructure -> the Infrastructure page opened")
                 page("infrastructure", report, problems)
                 // The row's own words: its ⋯ button is "More for Controlled remote", and the engines' lines name the machine too.
@@ -767,7 +767,7 @@ class ManagementDeviceTest {
                 compose.waitUntil(10_000) { calls.any { it == "PATCH /api/runners/$runnerId" } }
                 report.appendLine("double tap Increase Max Concurrent -> PATCH /api/runners/$runnerId sent")
                 back(); back(); await("Default permission")
-                activate("Infrastructure", "talkback-settings-infrastructure-pools", report, problems); await("Team Codex")
+                activate("Machines & models", "talkback-settings-infrastructure-pools", report, problems); await("Team Codex")
                 report.appendLine("double tap Infrastructure -> the Infrastructure page opened again")
                 // The pool's row by its SHARED mark: "Team Codex" is also the Codex engine's pool line, which opens nothing.
                 activate("SHARED", "talkback-infrastructure-pool", report, problems); await("Who can use it")

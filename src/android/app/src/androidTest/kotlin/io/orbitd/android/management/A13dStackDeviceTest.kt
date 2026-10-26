@@ -155,7 +155,7 @@ class A13dStackDeviceTest {
         // A13-16: the DeepSeek key's balance is the server's answer — this key is refused, so no amount is drawn.
         val key = read("providers/mine").objects().first { it.s("label") == "DeepSeek (a13d)" }
         val answer = keep("server-deepseek-balance", "providers/mine/${key.s("id")}/balance").jsonObject
-        click(hasText("Infrastructure") and hasClickAction()); await("DeepSeek (a13d)")
+        click(hasText("Machines & models") and hasClickAction()); await("DeepSeek (a13d)")
         if (answer["ok"] == JsonPrimitive(false)) await("Unavailable")
         compose.onAllNodesWithText("API keys").onFirst().performScrollTo()
         capture("stack-infrastructure-keys")
@@ -172,7 +172,7 @@ class A13dStackDeviceTest {
 
         // A13-11: the runners' order is the dragged one, and a runner removed from its menu is gone.
         val before = keep("server-runners-before", "runners").objects()
-        click(hasText("Infrastructure") and hasClickAction()); await("a13d-spare")
+        click(hasText("Machines & models") and hasClickAction()); await("a13d-spare")
         // The machines sit under what needs you and what each engine runs on: bring them on screen.
         compose.onNode(hasText("Add Runner") and hasClickAction()).performScrollTo()
         capture("stack-runners")
