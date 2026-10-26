@@ -42,8 +42,11 @@ const round = (v, d = 1) => (v == null || Number.isNaN(v) ? null : Math.round(v 
 const STACK = ['postgres', 'apiserver', 'apiserver-b', 'link-gateway', 'gateway', 'nats'];
 
 // --- CPU from the 5 s samples. -----------------------------------------------------------------------------------------
-// Samples at the window's edges are included one interval out, so every second of the window is covered.
+// Samples at the window's edges are included one interval out, so every second of the window is covered. A mean counts
+// each interval for the part of it inside the window (`w`): counted whole, the interval after the window's end, in which
+// the loadgen stops, took up to 5% off a run's mean cores, by how the samples happened to fall (O2, 2026-10-26).
 const covering = samples.filter((s) => s.t >= steadyFrom - 6000 && s.t <= steadyTo + 6000);
+const insideUs = (from, to) => Math.max(0, Math.min(to, steadyTo) - Math.max(from, steadyFrom)) * 1000;
 function cpuSeries(key, field = 'cpuUsec') {
   const out = [];
   for (let i = 1; i < covering.length; i++) {
@@ -52,7 +55,7 @@ function cpuSeries(key, field = 'cpuUsec') {
     if (!a || !b) continue;
     const dt = (covering[i].t - covering[i - 1].t) * 1000;
     if (dt <= 0) continue;
-    out.push({ t: covering[i].t, dt, v: (b[field] - a[field]) / dt, mem: b.memBytes });
+    out.push({ t: covering[i].t, dt, w: insideUs(covering[i - 1].t, covering[i].t), v: (b[field] - a[field]) / dt, mem: b.memBytes });
   }
   return out;
 }
@@ -72,8 +75,8 @@ function peak(points, spanMs) {
   return best;
 }
 function mean(points) {
-  const used = points.reduce((n, p) => n + p.v * p.dt, 0);
-  const time = points.reduce((n, p) => n + p.dt, 0);
+  const used = points.reduce((n, p) => n + p.v * (p.w ?? p.dt), 0);
+  const time = points.reduce((n, p) => n + (p.w ?? p.dt), 0);
   return time > 0 ? used / time : null;
 }
 const components = {};
