@@ -15,6 +15,8 @@
 #                            CPU, load, memory and swap
 #   slices.jsonl             every 15 s: CPU of every service and container on the host, for what else ran
 #   metrics.prom             every 15 s: the link gateway's /metrics, each scrape after a "# scrape <ms>" line
+#   threads.jsonl            every 5 s: each apiserver's node process, its CPU time as a whole and its main thread's: a
+#                            process's main thread is what fills (task O3)
 #   db.jsonl                 every 15 s: the database's sessions by state, transactions, statements, rows and WAL
 #                            position
 #   pgss.json, db-before.json, db-after.json, sizes.txt, logs/   the database's statements, totals and the containers' logs
@@ -196,6 +198,25 @@ sample_db() {
     sleep 15
   done
 }
+# Each apiserver's node process (the child of the container's `sh -c`): its CPU time in clock ticks, as a whole
+# (/proc/<pid>/stat) and its main thread's (/proc/<pid>/task/<pid>/stat), which a process cannot share between cores.
+sample_threads() {
+  local tck svc root p line
+  tck="$(getconf CLK_TCK)"
+  while :; do
+    line="{\"t\":$(date +%s%3N),\"clkTck\":$tck"
+    for svc in "${services[@]}"; do
+      [[ "$svc" == apiserver* ]] || continue
+      root="$(docker inspect -f '{{.State.Pid}}' "$project-$svc" 2>/dev/null)" || continue
+      p="$(pgrep -P "$root" -x 'node|node-MainThread' | head -1)"
+      [ -n "$p" ] && [ -r "/proc/$p/stat" ] || continue
+      line+=",\"$svc\":{\"pid\":$p,\"processTicks\":$(awk '{ sub(/^[^)]*\) /, ""); print $12 + $13 }' "/proc/$p/stat")"
+      line+=",\"mainTicks\":$(awk '{ sub(/^[^)]*\) /, ""); print $12 + $13 }' "/proc/$p/task/$p/stat")}"
+    done
+    printf '%s}\n' "$line" >> "$out/threads.jsonl"
+    sleep 5
+  done
+}
 mark_runners() {
   while :; do
     psql_at -c 'UPDATE "runner_presence" SET "changes" = "changes" + 1' > /dev/null 2>> "$out/db.err" || true
@@ -218,6 +239,7 @@ sample_cgroups & pids+=($!)
 sample_slices & pids+=($!)
 sample_metrics & pids+=($!)
 sample_db & pids+=($!)
+sample_threads & pids+=($!)
 if [ -n "$mark_every" ]; then mark_runners & pids+=($!); fi
 
 # --- The watchers (--watch): a session stream on each of the first running sessions, as their owners. ----------------

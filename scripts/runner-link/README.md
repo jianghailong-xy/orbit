@@ -25,6 +25,8 @@ be taken for a deployment's.
 | `loadgen-run.sh` | One load test run: `src/link-gateway/cmd/loadgen` against the stack, with the stack's CPU, memory, metrics, database and logs collected beside it, then the report. |
 | `loadgen-report.mjs` | A run's report: each criterion with the figure it rests on (`report.md`, `report.json`). |
 | `loadgen-baseline.mjs` | What one heartbeat and one event batch cost, from a heartbeats-only run and a run with events, and with `--live` what one forwarded live delta costs: see [Per-operation baseline](#per-operation-baseline). |
+| `loadgen-connects.mjs` | What one connect costs (a link token, the TLS handshake and Hello, the Welcome route, the first heartbeat reconciled in full), from a run's ramp: see [The cell's size](#the-cells-size). |
+| `cell-spec.mjs` | A cell's size projected from what each operation costs: apiserver processes, database cores, gateway nodes, and what a gateway node's loss adds. See [The cell's size](#the-cells-size). |
 | `loadgen-watch.mjs` | The load test's watchers: a session stream (SSE) on each of a run's first running sessions, as their owners, counting the live deltas that reach them and how late. `loadgen-run.sh --watch` starts it. See [The live stream](#the-live-stream). |
 
 ```bash
@@ -127,7 +129,8 @@ scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 20
   (`samples.jsonl`); every service's and container's CPU on the host every 15 s, for what else ran (`slices.jsonl`);
   the gateway's `/metrics` every 15 s (`metrics.prom`); the database's sessions, transactions, rows and WAL every 15 s
   (`db.jsonl`), its statements (`pgss.json`, the 60 with the most time, after `pg_stat_statements_reset()` at the start;
-  `pgss-totals.json`, every statement's calls) and sizes; and each container's log over the run (`logs/`).
+  `pgss-totals.json`, every statement's calls) and sizes; each apiserver's node process every 5 s, its CPU time as a
+  whole and its main thread's (`threads.jsonl`, since task O3); and each container's log over the run (`logs/`).
 - **The report** takes every figure over the steady window. Errors are counted wherever a part can report them: the
   runners, the gateway's counters and its WARN/ERROR lines, the apiserver's ERROR lines and any 5xx of the web
   gateway, the database's ERROR/FATAL/PANIC lines and deadlocks, NATS's `[ERR]` lines. The database's CPU peak is the
@@ -370,3 +373,151 @@ node scripts/runner-link/loadgen-baseline.mjs <state>/loadgen/runs/hb <state>/lo
 A run without `-live-rate` and `--watch` sends no `LiveBatch`, and its report is the same as before task O3, byte for
 byte. The loadgen's test (`TestNoLiveBatchWithoutTheLiveRate`) shows the first. The second was checked by reporting
 copies of O1's and O2's runs with both versions of `loadgen-report.mjs` and `loadgen-baseline.mjs`.
+
+### Several apiservers
+
+A stack runs several apiservers in one of two ways:
+
+- **`ORBIT_LINK_STAGING_BACKENDS=N`** (1 to 16). `apiserver-b`, then `apiserver-c` and on, each the first one's whole
+  definition on the same database, starting once it is healthy. The link gateway is given every one.
+- **A deployment's override file.** This is the `docker-compose.override.yml` that
+  [docs/self-hosting.md](../../docs/self-hosting.md#several-apiservers) gives, with `apiserver-2` and on. Put it on top
+  of the stack's Compose files beside a link to `docker-compose.yml`, plus staging's renaming of what it adds (the
+  container's name and its image's tag). Task O3 brought its stack up so, with the file cut out of the document byte
+  for byte, and recorded what follows. Every process was healthy. From the web gateway's container, `apiserver`
+  resolved to the first one alone. The link gateway was given both. The second applied no migration and started only
+  once the first was healthy.
+
+Either way `loadgen-run.sh` samples every apiserver it finds running, `apiserver-*` beside the first, and the report and
+the baseline count them all: "apiserver CPU" is the sum. Each process's main thread is what fills: a process carries
+about a core of the load test's work, less what its other threads take. The figures below say how much.
+
+### The cell's size
+
+Task O3 (2026-10-26) measured what each operation costs once tasks O1 and O2 were in, and projected the cell's size
+from it. [docs/self-hosting.md](../../docs/self-hosting.md#the-cells-size) gives the result for operators.
+
+**How it was measured.**
+
+- **The stack.** The private stack `orbit-link-o3`, its apiserver and gateway built from 8a8c0abdc: the project tip with
+  O1 and O2 merged. C1c, merged after, added only drill hooks, off unless `LINK_DRILL_LOSE_ANSWERS` is set.
+- **The load.** One apiserver, and the per-operation baseline's fleet (3,000 runners, 1,000 running sessions), with the
+  containers on HPC's P-cores (CPUs 0–7).
+- **The rules.** Every run held the host's load-test lock. Before it ran, it waited for two minutes without another
+  loadgen, and for a calm host: swap-in under 60 pages/s and 3 GB available. It waited up to 20 minutes, then gave the
+  lock back. A run whose host swapped in more than 100 pages/s over its steady window is void.
+- **The host.** On 2026-10-26 another project's Android regression (emulators and a Kotlin daemon) kept the host
+  swapping for most of the day. Of 27 attempts, two were clean: `o3-hb-1` and `o3-ev400-1`. Their swap-in was 37 and
+  90 pages/s, and the host's other work took 8.6 and 9.1 cores.
+
+| Per operation | apiserver CPU ms | database CPU ms | link gateway CPU ms | SQL statements | commits |
+| --- | --- | --- | --- | --- | --- |
+| heartbeat, 10.3% of them reconciled in full | 0.86 | 1.03 | 0.31 | 3.37 | 3.38 |
+| event, merged: 1.55 a batch, 27 batches a call | 0.445 | 0.58 | 0.045 | 1.94 | none of its own: 9.3 calls a second |
+| connect: link token, TLS, Welcome, first beat reconciled in full | 4.7 | 8.6 | 1.05, and 0.16 at the web gateway | | |
+| live delta forwarded to a watcher | pending | | | | |
+
+- **Where the rows come from.** `loadgen-baseline.mjs o3-hb-1 o3-ev400-1` gives the first two rows, and
+  `loadgen-connects.mjs o3-hb-1` the third. A beat's statements and commits are the steady window's, renewals and the
+  reaper's sweeps included.
+- **The merged calls.** Each held its sessions p50 38 ms, p99 132 ms. EventAck p99 at the runner was 189 ms.
+- **The main thread.** The apiserver's main thread took 0.91 of its process's CPU, sampled beside `o3-ev400-1` as
+  `threads.jsonl` now records it.
+- **WAL and storage.** Heartbeats alone write no WAL (`runner_presence` is UNLOGGED). Events wrote 2.22 MiB/s at 400 a
+  second: about 5.7 KB each, with `wal_compression` on. Stored, an event takes about 1.5 KB: `run_event`'s row and
+  indexes 1,070 bytes, its tool calls about 400.
+- **Peaks.** The database's 10-second peak was 1.40 times its mean with events, and the apiserver's 1.17.
+
+**What the projection takes** (`node scripts/runner-link/cell-spec.mjs <inputs.json>`):
+
+| Input | Value | From |
+| --- | --- | --- |
+| a beat, unflagged | 0.59 ms apiserver, 0.63 ms database | O1, pinned, reports moving (`-volatile`). Every attempt at this task's split (`--mark-every`, `-volatile`) was void. This task's clean mixed beat read 23% and 14% above O1's mixed beat, within this host's spread. |
+| a beat reconciled in full | 2.39 ms, 6.37 ms | O1, the same |
+| beats reconciled in full | 25% | An estimate. The five-minute period alone is 10%. Each command, cancellation or settings change marks its runner, which then reconciles in full at once and while the change settles. |
+| a beat at the link gateway | 0.31 ms | this task |
+| an event | 0.47 ms apiserver, 0.761 ms database | O2: unpinned, on mixed cores, with other work on the host. The coordinator's rule is to size with it. This task's 0.58 ms on the P-cores goes beside it. |
+| an event at the link gateway | 0.045 ms | this task |
+| a connect | 4.7, 8.6 and 1.05 ms | this task |
+| a live delta | pending | |
+| a process's own background work | pending | |
+| the main thread's share of a process | 0.91 | this task |
+| gateway memory | 190 KB a connection | C2; this task saw 155–194 KB at 3,000 connections |
+
+- **Rules.** The 10-second peak is 1.2 times the mean for the apiservers, and 1.5 times for the database (C2 at scale).
+  A process's main thread may be at most 60% busy at the peak, and 75% with one process down. The database may use at
+  most 60% of its cores (the project's criterion). The cell has at least 3 gateway nodes, each carrying at most 7,500
+  connections with one node down (§9) and taking 200 handshakes a second.
+- **Heartbeats, events and renewals** come to 1.48 apiserver cores, spread over every process. Four processes carry
+  them: each main thread is 42% busy at the peak, 56% with one process down. The first process also takes the live
+  relay (pending) and people's requests (not measured).
+- **The database** takes 2.6 cores on average (heartbeats 1.03, events 1.52, renewals 0.04, the processes' own work),
+  3.9 at the 10-second peak: 7 cores at 60%, 8 recommended.
+- **A gateway node's loss** sends its 5,000 runners to the other two nodes at 400 a second, for 12.5 s. Meanwhile it
+  adds 1.9 apiserver and 3.45 database cores.
+- **Each percent of beats reconciled in full** adds 0.009 apiserver and 0.029 database cores.
+
+**Before production with more than one apiserver** (the coordinator filed these tasks on 2026-10-26):
+
+- **(a) The singleton jobs on one process** (task 34mNe88onMT6k23kHz7ce): the reaper, with a heartbeat-write-failure
+  hold every process sees; the task sweep; auto-retry.
+- **(b) The runner-relayed sign-in state carried across processes** over NATS, without persistence (task
+  34mNe8DOyUq2wlk81EGlZ): Antigravity's pasted code and the Cursor key check.
+- **(c) The default upgrade recreating the replicas** (task 34mNe8H0YZ4Qkwd0t6jPJ). Until then, the manual step in
+  docs/self-hosting.md applies.
+
+**If the database runs hot.** The Prisma adapter sends every statement unnamed except those marked `PREPARED_STATEMENT`
+(task O1), and an unnamed statement costs about 0.21 ms of database CPU in parse and plan each time it runs.
+
+- **First choice: name the merged event call's five fixed statements.** O2 estimated 0.02–0.05 ms an event, or 0.04 to
+  0.1 cores at 2,000 events a second.
+- **Next: give the statements that vary with the batch a fixed text first, then name them.** These are the event insert
+  and the session and tool-call writes. An event's 1.94 statements cost up to about 0.4 ms of parse and plan, of its
+  0.58–0.76 ms.
+- **Then the full reconcile.** Its 23 statements cost up to about 5 ms of parse and plan, of its 6.37.
+
+These are upper bounds, from 0.21 ms a statement. None of them is implemented.
+
+### Re-testing at cell scale (task C2b)
+
+**The machine.** One machine of its own, for the whole stack and the loadgen, with one kind of core. On it, the
+containers need no pinning.
+
+- **32 cores.** At the cell's peak the stack takes about 18:
+  - the database's allocation, 8;
+  - four apiservers, about 1 core each;
+  - one link gateway carrying all 15,000 connections, 1 to 2 cores;
+  - the loadgen and the watchers, about 1 core each;
+  - NATS and nginx, less than 1.
+
+  The rest is room for the host, the samplers, and a gateway release's reconnects.
+- **64 GB of memory.** The database 16 GB, four apiservers up to 3 GB each, the gateway about 3 GB (190 KB a connection),
+  the loadgen about 1.5 GB.
+- **200 GB of SSD.** An hour at 2,000 events a second stores about 11 GB of tables, and writes about 40 GB of WAL into
+  the stack's archive before it is compressed.
+
+**The stack**, in the cell's shape, except that one gateway node carries every connection:
+
+```bash
+export ORBIT_LINK_STAGING_PROJECT=orbit-link-c2b ORBIT_LINK_STAGING_DIR=/var/tmp/orbit-link-c2b
+export ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_LOADGEN=1 ORBIT_LINK_STAGING_BACKENDS=4 \
+  ORBIT_LINK_STAGING_DB_CPUS=8 ORBIT_LINK_STAGING_DB_MEM=16g
+scripts/runner-link/staging-up.sh
+docker exec orbit-link-c2b-postgres psql -U orbit -d orbit -c "ALTER SYSTEM SET shared_buffers = '4GB'" \
+  -c "ALTER SYSTEM SET max_wal_size = '8GB'" -c "ALTER SYSTEM SET max_connections = 200"
+docker restart orbit-link-c2b-postgres && scripts/runner-link/staging-up.sh --no-build
+scripts/runner-link/loadgen-seed.sh seed                 # 10,000 owners, 15,000 runners, 40,000 open sessions
+scripts/runner-link/loadgen-seed.sh arm && scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 2000 -volatile
+scripts/runner-link/loadgen-seed.sh arm && scripts/runner-link/loadgen-run.sh --name live-1h --watch 500 -- \
+  -duration 1h -event-rate 2000 -volatile -live-rate 10000
+```
+
+- **`-volatile`.** The reports that move in production move at their production rates (the coordinator's ruling of
+  2026-10-25), so beats reconcile in full about as often as they would there.
+- **The database's CPU peak** in the report is a share of `ORBIT_LINK_STAGING_DB_CPUS`: the 8 cores the spec gives the
+  database.
+- **What the report holds.** Each apiserver's main thread is in the report (`threads.jsonl`): the spec has each at most
+  60% busy at the peak. `loadgen-connects.mjs` gives the ramp's cost per connect beside the gateway-release
+  measurement.
+- **The second run is not the pass/fail run.** It carries the cell's live load (500 watched sessions, 20 deltas a second
+  each), and is reported apart from the 1-hour run that decides the criterion.

@@ -573,6 +573,42 @@ The stack as installed runs one apiserver, which is enough for a team. Once runn
 people, with 15,000 runner connections. Its runners' heartbeats, events and live streams alone keep several Node
 processes and a database host of its own busy.
 
+### The cell's size
+
+The cell's load at its peak:
+- 15,000 connections;
+- 500 heartbeats a second, a quarter of them reconciled in full (an estimate for production's commands and changes);
+- 2,000 durable events a second;
+- 10,000 live deltas a second, forwarded to whoever watches.
+
+The sizes below are what each operation costs on the runner link's load test, measured at a fifth of that and projected
+linearly. [The load test's README](../scripts/runner-link/README.md#the-cells-size) gives the measurements, the
+arithmetic, and how to repeat both.
+
+| Part | For a cell | What it carries at the peak |
+| --- | --- | --- |
+| Link gateway | 3 nodes, each 2 cores and 4 GB, behind a TCP (layer 4) load balancer | 5,000 connections each, 7,500 with one node down (about 1.4 GB of connections); about 1 core across the cell |
+| apiservers | 4 processes, each 2 GB | The runners' calls: about 1.8 cores at the peak, spread evenly. Each process's main thread is 42% busy, 56% with one of them down. The first one also takes people's requests and the live relay (see below). |
+| Database | 8 cores, 32 GB of memory, its own fast disk | 3.9 cores at its 10-second peak, under 60% of 7 cores |
+| NATS | 1 node, 1 core | Hints, and the live stream |
+
+- **The apiservers' limit is the main thread.** It does nine tenths of a process's work, so a process carries about one
+  core. The count leaves room for one process to fail: three carry the peak at 56%.
+- **Losing a gateway node.** Its 5,000 runners reconnect to the other two, which let in 200 handshakes a second each.
+  For about 13 seconds that adds up to 1.9 apiserver cores and 3.5 database cores, while each connection's first
+  heartbeat is reconciled in full. The database then runs near its 8 cores; about 13 would keep even that under 60%.
+- **Commands and changes.** A heartbeat costs the database 0.63 ms, or 6.37 ms when it is reconciled in full: when
+  something it delivers changed (a merge, a commit, a sign-in, a cancellation), and at least every five minutes. Each
+  percent of beats reconciled in full adds about 0.03 database cores.
+- **The database's disk and memory.** On the load test's sessions an event takes about 1.5 KB stored (its row, its tool
+  call and their indexes) and about 5.7 KB of WAL. At 4,000 events a person a day that is about 60 GB of tables and
+  230 GB of WAL a day for a cell, before the archive compresses it. Size the disk and the WAL archive for that.
+  - Raise `max_wal_size` to 8 GB or more. At the default 1 GB the peak's WAL forces a checkpoint every 90 seconds or
+    so, each followed by full-page writes. With 8 GB, checkpoints wait for `checkpoint_timeout` (5 minutes).
+  - Give `shared_buffers` a quarter of the memory.
+- **Not measured here:** people's own requests (web, apps, their streams), which go to the first apiserver, and the
+  live relay's cost (pending). Each process's figures leave room for them.
+
 ### Several apiservers
 
 An apiserver is one Node process, and its main thread is what fills first. The link gateway can spread the runners'

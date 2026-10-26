@@ -100,6 +100,22 @@ for (const key of [...STACK, 'loadgen']) {
   };
 }
 
+// Each apiserver's main thread over the window (threads.jsonl, task O3): how busy it was, in cores, and its share of its
+// process's CPU. A Node process's main thread is what fills, so it is what a process carries. Only for a run that
+// recorded it: the report of an older run is what it was.
+const threads = jsonl('threads.jsonl').filter((s) => s.t >= steadyFrom && s.t <= steadyTo);
+if (threads.length >= 2) {
+  const [a, b] = [threads[0], threads.at(-1)];
+  const secs = (b.t - a.t) / 1000;
+  for (const key of Object.keys(b)) {
+    if (!components[key] || !a[key] || a[key].pid !== b[key].pid || !(secs > 0)) continue;
+    const main = (b[key].mainTicks - a[key].mainTicks) / b.clkTck;
+    const all = (b[key].processTicks - a[key].processTicks) / b.clkTck;
+    components[key].mainThreadBusy = round(main / secs, 3);
+    components[key].mainThreadShare = all > 0 ? round(main / all, 3) : null;
+  }
+}
+
 // The host: busy CPUs from /proc/stat, and what of that was not this test.
 const host = { cpus: run.hostCpus };
 {
@@ -577,6 +593,11 @@ row('Component', 'mean cores', 'peak 10 s', 'peak 60 s', 'peak MiB', 'CPU pressu
 row('---', '---', '---', '---', '---', '---', '---');
 for (const [k, c] of Object.entries(components)) {
   row(k, c.meanCores, c.peak10sCores, c.peak60sCores, c.peakMemMiB, `${c.cpuPressurePct}% / ${c.cpuPressurePeak60sPct}%`, `${c.throttledPct}%`);
+}
+const mainThreads = Object.entries(components).filter(([, c]) => c.mainThreadBusy != null);
+if (mainThreads.length) {
+  md.push('', 'Main thread of each apiserver (busy cores, share of its process): ' +
+    mainThreads.map(([k, c]) => `${k} ${c.mainThreadBusy} (${c.mainThreadShare})`).join(', ') + '.');
 }
 md.push('', '## The host', '');
 row('Measure', 'Value');
