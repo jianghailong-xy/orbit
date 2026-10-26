@@ -90,7 +90,7 @@ func TestClaimRecoveryFaultProcess(t *testing.T) {
 		// The harness's proxy answers the claim with a dropped connection, so this returns a
 		// transport error rather than a job — the same thing runLoop sees when a control plane
 		// committed the claim and never got to say so.
-		job, claimErr := tr.claimSession(ctx)
+		job, claimErr := tr.claimSession(ctx, nil)
 		if claimErr == nil {
 			out["fatal"] = "the claim was answered; the harness's proxy did not drop it"
 			reply(id, out)
