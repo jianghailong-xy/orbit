@@ -105,7 +105,7 @@ class LoginPageDeviceTest {
             capture("typing")
 
             // A refused password reads as one, and nothing of it is remembered.
-            compose.onNodeWithText("Sign In").performScrollTo().performClick()
+            compose.pressSignIn()
             compose.waitUntil(10_000) { compose.onAllNodesWithText("Incorrect email or password.").fetchSemanticsNodes().isNotEmpty() }
             val context = compose.activity
             runBlocking {
@@ -117,7 +117,7 @@ class LoginPageDeviceTest {
 
             // The right password signs in and remembers this server and its email; signing out comes back to both.
             compose.onNodeWithText("Password").performTextReplacement(PASSWORD)
-            compose.onNodeWithText("Sign In").performScrollTo().performClick()
+            compose.pressSignIn()
             compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn }
             runBlocking {
                 assertEquals(canonical, AndroidInstanceStore(context).load())

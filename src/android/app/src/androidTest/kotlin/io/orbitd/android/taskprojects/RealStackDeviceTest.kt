@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.auth.chooseServer
+import io.orbitd.android.auth.pressSignIn
 import io.orbitd.android.*
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.cards.*
@@ -174,7 +175,7 @@ class RealStackDeviceTest {
         compose.chooseServer(server)
         compose.onNodeWithText("Email").performTextReplacement(arg("${who}Email"))
         compose.onNodeWithText("Password").performTextReplacement(arg("${who}Password"))
-        compose.onNodeWithText("Sign In").performScrollTo().performClick()
+        compose.pressSignIn()
         compose.waitUntil(30_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
         val account = (app.session.state.value as AuthState.SignedIn).handle.account
         assertEquals("signed in as the stack's $who", seed.obj("accounts")!!.obj(who)!!.text("id"), account.userId)
