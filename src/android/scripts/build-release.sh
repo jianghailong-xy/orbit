@@ -66,6 +66,7 @@ bash "$android_dir/gradlew" -p "$android_dir" --no-daemon --max-workers=2 \
   2>&1 | tee "$output/build.log"
 cp "$android_dir/app/build/outputs/apk/release/app-release.apk" "$output/app-release.apk"
 "$tools/aapt" dump badging "$output/app-release.apk" > "$output/badging.txt"
+"$tools/aapt2" dump xmltree --file AndroidManifest.xml "$output/app-release.apk" > "$output/manifest.txt"
 "$tools/apksigner" verify --verbose --print-certs "$output/app-release.apk" > "$output/signing.txt"
 cp "$android_dir/app/build/generated/source/buildConfig/release/io/orbitd/android/BuildConfig.java" "$output/BuildConfig.java"
 python3 - "$output" <<'PY'
@@ -80,6 +81,9 @@ assert code == os.environ['ORBIT_ANDROID_VERSION_CODE']
 assert version == os.environ['ORBIT_ANDROID_VERSION_NAME']
 assert "sdkVersion:'29'" in badging and "targetSdkVersion:'36'" in badging
 assert 'application-debuggable' not in badging, 'Release APK must not be debuggable'
+profileable = re.search(r'^( +)E: profileable .*\n((?:\1 +A: .*\n)*)', (p / 'manifest.txt').read_text(), re.M)
+assert profileable and re.search(r'android:shell\(0x[0-9a-f]+\)=true$', profileable[2], re.M), \
+    'Release APK must be profileable by the shell (the D09 measurement build)'
 certs = re.findall(r'^Signer #\d+ certificate SHA-256 digest: ([0-9a-f]+)$', (p / 'signing.txt').read_text(), re.M)
 expected_cert = os.environ['ORBIT_ANDROID_CERT_SHA256'].replace(':', '').lower()
 assert re.fullmatch('[0-9a-f]{64}', expected_cert), 'Expected certificate must be a SHA-256 fingerprint'
@@ -98,7 +102,7 @@ for name, value in firebase.items():
 with zipfile.ZipFile(p / 'app-release.apk') as apk:
     assert any(source.encode() in apk.read(n) for n in apk.namelist() if re.fullmatch(r'classes\d*\.dex', n)), 'Source SHA absent from packaged DEX'
 identity = dict(applicationId=app_id, versionName=version, versionCode=int(code), minSdk=29, targetSdk=36,
-                buildType='release', debuggable=False, sourceSha=source, sourceDirty=False,
+                buildType='release', debuggable=False, profileableByShell=True, sourceSha=source, sourceDirty=False,
                 apkSha256=hashlib.sha256((p / 'app-release.apk').read_bytes()).hexdigest(),
                 certificateSha256=certs[0], signingPurpose=os.environ['ORBIT_ANDROID_SIGNING_PURPOSE'],
                 distributionSignature=os.environ['ORBIT_ANDROID_SIGNING_PURPOSE'] == 'release', updateApi=update_api,
