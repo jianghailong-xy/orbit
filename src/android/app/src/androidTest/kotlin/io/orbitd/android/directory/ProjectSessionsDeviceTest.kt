@@ -208,9 +208,12 @@ class ProjectSessionsDeviceTest {
                 if (seen.add(node.id) && text in setOf("Coordinator", "Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older", "Coordinate launch",
                         "Wire tests", "Quota retry", "Shipped docs")) lines += text!!
             }
-            val range = list.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
+            val node = list.fetchSemanticsNode()
+            val range = node.config[SemanticsProperties.VerticalScrollAxisRange]
             if (range.value() >= range.maxValue()) return lines
-            list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, list.fetchSemanticsNode().size.height * 0.7f) }
+            // The action runs on the main thread, where the test may not read the tree: the step is measured first.
+            val step = node.size.height * 0.7f
+            list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, step) }
             settle()
         }
         throw AssertionError("The project's sessions page did not reach its end")
