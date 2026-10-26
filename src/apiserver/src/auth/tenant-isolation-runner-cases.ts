@@ -1484,11 +1484,11 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
   'POST /runner/link/events':
     'the runner link gateway\'s merged event call, served on the link\'s internal listener alone, which admits only the '
     + 'gateway, by its service secret (404 over HTTPS, and with the link off) — runner-link-events.controller.ts:34, '
-    + 'runner-link-call.ts:183. It carries batches of many runners, and each batch is the runner\'s whose link token its '
+    + 'runner-link-call.ts:188. It carries batches of many runners, and each batch is the runner\'s whose link token its '
     + 'connection carries, admitted as RunnerAuthGuard admits a link call: the token verified, the runner read with its '
     + 'credential, its owner and its managed instance — link-events.ts:420, :450. A batch is written only into a session '
     + 'assigned to that runner and leased to that process, locked under that fence before anything is written — '
-    + 'runner-api.controller.ts:8759, :8748, :6839; any other batch is answered sendAlone with nothing written, and '
+    + 'runner-api.controller.ts:8961, :8950, :7041; any other batch is answered sendAlone with nothing written, and '
     + 'the gateway sends it to the events route, which refuses it there as it refuses any runner\'s call',
   'GET /runner/link/mode':
     'the runner link gateway\'s door, behind the same gateway service secret (RunnerLinkGatewayGuard, 404 with the '
