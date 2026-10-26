@@ -242,13 +242,16 @@ fi
 if [[ "$steps" == *" crossdevice "* ]]; then
   home
   title="A10 Android push cross-device check $(date -u +%H%M%S)"
+  mark() { printf '%s host_utc=%s device_epoch=%s\n' "$1" "$(date -u +%FT%T.%3NZ)" "$(device_now)" >> "$output/crossdevice-timeline.txt"; }
   created="$(device_now)"
+  mark session_create_sent
   "$orbit" session create --title "$title" --permission-mode default --json --prompt "This session only raises one permission \
 request for an Android notification test. Use the Write tool to create /tmp/a10-push-check.txt containing the word ok. Do \
 nothing else; if the write is refused, stop." > "$output/crossdevice-session.json" 2>&1 9>&- || true
   scratch="$(python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); print(d.get("id") or d.get("sessionId") or "")' \
     "$output/crossdevice-session.json" 2>/dev/null || true)"
   if [[ -n "$scratch" ]] && await_entry "$title" 300; then
+    mark approval_entry_seen
     entry "$title" > "$output/crossdevice-entry.txt"
     shade crossdevice-1-approval-tray
     collapse
@@ -256,9 +259,11 @@ nothing else; if the write is refused, stop." > "$output/crossdevice-session.jso
     # Another client answers it: ending the scratch session takes it out of "needs you", and the server's sync push
     # names it in clearSessions; the app re-reads the approval before removing the entry.
     ended="$(device_now)"
+    mark session_end_sent
     "$orbit" session end "$scratch" --json > "$output/crossdevice-end.json" 2>&1 9>&- || true
     scratch=''
     if await_gone "$title" 120; then
+      mark approval_entry_gone
       shade crossdevice-2-cleared
       receipts_since "$ended" sync > "$output/crossdevice-sync.txt"
       if [[ -s "$output/crossdevice-receipt.txt" && -s "$output/crossdevice-sync.txt" ]]; then record crossdevice PASS
