@@ -1,13 +1,22 @@
 package io.orbitd.android
 
+import android.app.NotificationManager
+import android.content.Intent
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.push.PushMessage
+import io.orbitd.android.push.PushNotifications
 import java.time.Instant
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -19,6 +28,7 @@ import org.junit.rules.TestWatcher
 import org.junit.runner.Description
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /** A11-9 in the production shell (iOS 6b4bef713, 39adc7561): the merge into main is on the project's sessions page — a card under the
@@ -40,6 +50,8 @@ class ProjectMergeShellTest {
     @Before fun start() = ProjectShell.reset()
 
     private val launch = ProjectShell.LAUNCH
+    /** The owner item a merge's push names (`openItemID`). */
+    private val mergeItem = "019a11a9-0000-7000-8000-000000000001"
     private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
     private fun candidate(state: String, conflicts: String = "[]", execution: String? = null, extra: String = "") = """{"promotionId":"pr-1","state":"$state",
         "sourceRef":"refs/heads/project/launch","sourceSha":"5e5bfca23aa1","upstreamRef":"refs/heads/main","commitsAhead":7,"filesChanged":10,
@@ -333,6 +345,67 @@ class ProjectMergeShellTest {
         assertFalse("the coordinator conversation is not where it opens", ProjectShell.calls.contains("GET sessions/${ProjectShell.COORD}"))
         compose.onNodeWithContentDescription("Back").assertExists()
     }
+
+    /** A11-9's push (iOS 6b4bef713 `Notifications.intent` → `openProjectSessions(_:inColumn: false)`): the tap on the tray entry of a merge
+     * waiting on the owner opens its project's sessions page as that project's root — the page showing goes, the drawer's button leads
+     * and the project's row is the selected one — with the card to press, not the coordinator conversation the payload also names. A
+     * session's alert still opens over the page showing, and Back returns to it. */
+    @Test fun theMergesPushOpensItsSessionsPageAsTheProjectsRoot() {
+        ProjectShell.promotion = candidate("READY")
+        signIn()
+        await { exists(hasTestTag("workspace:${ProjectShell.ALPHA}")) }
+        compose.onNodeWithTag("workspace:${ProjectShell.ALPHA}").performClick()
+        await { exists(hasText("Plain notes") and hasClickAction()) }
+        compose.onNode(hasText("Plain notes") and hasClickAction()).performClick()
+        await { exists(hasContentDescription("Back")) }
+        tap("approve-merge-to-main", "sessionID" to ProjectShell.COORD, "projectID" to launch, "openItemID" to mergeItem)
+        await { exists(hasTestTag("project-sessions")) && exists(hasTestTag("project-merge-card:asking")) }
+        compose.onNodeWithContentDescription("Back").assertDoesNotExist()
+        assertFalse("the coordinator conversation is not where it opens", ProjectShell.calls.contains("GET sessions/${ProjectShell.COORD}"))
+        compose.onNodeWithContentDescription("Open navigation").performClick(); compose.waitForIdle()
+        compose.onNode(drawerRow("Alpha")).assertIsNotSelected()
+        compose.onNode(drawerRow("Launch")).assertIsSelected().performClick()
+
+        tap("approval", "sessionID" to ProjectShell.WORKER)
+        await { compose.waitForIdle(); ObjectId.same(app().realtime.state.value.session?.id, ProjectShell.WORKER) }
+        compose.onNodeWithContentDescription("Back").performClick()
+        await { exists(hasTestTag("project-merge-card:asking")) }
+        compose.onNodeWithContentDescription("Back").assertDoesNotExist()
+    }
+
+    /** The same tap while signed out survives the sign-in and lands the page as the project's root once the directory is read. */
+    @Test fun theMergesPushTappedSignedOutOpensItsSessionsPageAfterSignIn() {
+        ProjectShell.promotion = candidate("READY")
+        compose.waitUntil(60_000) { app().session.state.value is AuthState.SignedOut }
+        tap("approve-merge-to-main", "sessionID" to ProjectShell.COORD, "projectID" to launch, "openItemID" to mergeItem)
+        signIn()
+        await { exists(hasTestTag("project-sessions")) && exists(hasTestTag("project-merge-card:asking")) }
+        compose.onNodeWithContentDescription("Back").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Open navigation").performClick(); compose.waitForIdle()
+        compose.onNode(drawerRow("Launch")).assertIsSelected()
+    }
+
+    /** An alert as the server sends it, shown by the production [PushNotifications]; its tray entry's tap is the intent it carries. */
+    private fun tap(kind: String, vararg fields: Pair<String, String>) {
+        val data = mapOf("version" to "1", "type" to "alert", "registrationKey" to UUID.randomUUID().toString(),
+            "eventId" to UUID.randomUUID().toString(), "notificationKey" to "$kind-${UUID.randomUUID()}", "sentAt" to "2026-10-26T00:00:00Z",
+            "payload" to buildJsonObject {
+                put("title", "Fixture"); put("body", "Read current state"); put("kind", kind)
+                fields.forEach { (key, value) -> put(key, value) }
+            }.toString())
+        val manager = app().getSystemService(NotificationManager::class.java)
+        shadowOf(manager).setNotificationsEnabled(true)
+        assertTrue(PushNotifications(app()).show(PushMessage.parse(data)!!, data))
+        val entry = manager.activeNotifications.single { it.tag == "orbit:${data["registrationKey"]}:${data["notificationKey"]}" }
+        val intent = shadowOf(entry.notification.contentIntent).savedIntent
+        compose.activityRule.scenario.onActivity {
+            val launch = it.intent
+            MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java).apply { isAccessible = true }.invoke(it, intent)
+            it.intent = launch
+        }
+        compose.waitForIdle()
+    }
+    private fun drawerRow(text: String) = hasText(text) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
 
     private fun title(text: String) = await { exists(hasTestTag("project-merge-card:title") and hasText(text), unmerged = true) }
     private fun inCard(text: String) = await { exists(hasText(text) and hasAnyAncestor(hasTestTagPrefix("project-merge-card:")), unmerged = true) }

@@ -24,9 +24,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.directory.DirectoryApi
+import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.directory.SessionProjectGrouping
 import io.orbitd.android.directory.StatusMessage
 import io.orbitd.android.directory.directoryError
+import io.orbitd.android.directory.orderedWorkspaces
 import io.orbitd.android.projects.CoordinatorPulse
 import io.orbitd.android.projects.DrawerMark
 import io.orbitd.android.projects.ProjectAttention
@@ -56,6 +58,18 @@ fun rememberDrawerProjects(api: DirectoryApi, revision: Long): DrawerProjectsSta
         catch (failure: Exception) { state.error = directoryError(failure) }
     }
     return state
+}
+
+/** A project's root page, a drawer row's and a merge push's (iOS `openProjectSessions(_:inColumn: false)`, 6f5f883c8, 6b4bef713): its
+ * sessions page over its coordinator's workspace — or the one [showing], or the first — and its page when there is no workspace to
+ * open it over (A05-7). */
+fun projectRoot(id: String, data: DirectoryData, showing: String?, origin: Origin): OrbitRoute {
+    val coordinator = (data.sessions["open"].orEmpty() + data.sessions["completed"].orEmpty()).firstOrNull {
+        it.projectMembership?.isCoordinator == true && ObjectId.same(it.projectMembership?.projectId, id)
+    }
+    val over = coordinator?.workspace ?: showing ?: orderedWorkspaces(data.workspaces).firstOrNull()?.id
+    return if (over == null) OrbitRoute(Destination.PROJECT, id, origin = origin)
+    else OrbitRoute(Destination.PROJECT_SESSIONS, id, over, origin = origin)
 }
 
 /** The drawer's open projects, closing the rail (iOS `CompactShell.projectRows`): the ones waiting on the reader first, then the most

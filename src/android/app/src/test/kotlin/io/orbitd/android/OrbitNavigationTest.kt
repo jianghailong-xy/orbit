@@ -1,6 +1,10 @@
 package io.orbitd.android
 
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.directory.DirectoryData
+import io.orbitd.android.directory.DirectorySession
+import io.orbitd.android.directory.DirectoryWorkspace
+import io.orbitd.android.directory.SessionProjectMembership
 import io.orbitd.android.navigation.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
@@ -76,6 +80,56 @@ class OrbitNavigationTest {
         assertFalse(project.canGoBack)
     }
 
+    /** A11-9's push (iOS 6b4bef713): `orbit://project/<id>` is a merge's project sessions page, which names no workspace, so it waits —
+     * through the login and the process state, and while signed in, over whatever is showing — until the shell has read the directory
+     * and lands it as its project's root, as the drawer's row does. A later link replaces it; a switch of account drops it. */
+    @Test fun aMergesPushWaitsForTheDirectoryAndLandsAsItsProjectsRoot() {
+        val arrival = OrbitLinks.parse("orbit://project/$publicId", origin = Origin.EXTERNAL)!!
+        assertEquals(OrbitRoute(Destination.PROJECT_SESSIONS, uuid, origin = Origin.EXTERNAL), arrival)
+        assertTrue(arrival.waitsForDirectory)
+        val showing = OrbitNavigation().bindAccount("server|user").select("w1", OrbitRoute(Destination.WORKSPACE, "w1", "w1"))
+            .push(OrbitRoute(Destination.SESSION, uuid, "w1"))
+        val waiting = showing.receive(arrival)
+        assertEquals(showing.stacks, waiting.stacks)
+        assertEquals(arrival, waiting.pending)
+        val root = OrbitRoute(Destination.PROJECT_SESSIONS, uuid, "w2", origin = Origin.EXTERNAL)
+        assertFalse(root.waitsForDirectory)
+        val landed = waiting.landPending(root)
+        assertEquals(projectDestination(publicId), landed.section)
+        assertEquals(listOf(root), landed.frames)
+        assertEquals("the stack it left goes", setOf(projectDestination(uuid)), landed.stacks.keys)
+        assertFalse(landed.canGoBack)
+        assertNull(landed.pending)
+
+        val cold = Wire.json.decodeFromString<OrbitNavigation>(Wire.json.encodeToString(OrbitNavigation().receive(arrival)))
+            .bindAccount("server|user")
+        assertEquals(listOf(OrbitRoute(Destination.WORKSPACES)), cold.frames)
+        assertEquals(arrival, cold.pending)
+        assertNull(cold.bindAccount("server|other").pending)
+
+        val task = OrbitRoute(Destination.TASK, uuid, origin = Origin.EXTERNAL)
+        val later = waiting.receive(task)
+        assertNull(later.pending)
+        assertEquals(task, later.current)
+        assertTrue(later.canGoBack)
+    }
+
+    /** A project's root page (iOS `openProjectSessions(_:inColumn: false)`): its sessions page over its coordinator's workspace — or the
+     * one showing, or the first in the drawer's order — and the project's own page when no workspace is known. */
+    @Test fun aProjectsRootIsItsSessionsPageOverItsCoordinatorsWorkspace() {
+        val workspaces = listOf(DirectoryWorkspace("w2", "Beta", "r1", position = 1), DirectoryWorkspace("w1", "Alpha", "r1", position = 0))
+        val coordinator = DirectorySession("c1", agentId = "w2",
+            projectMembership = SessionProjectMembership(uuid, role = "COORDINATOR"))
+        val member = DirectorySession("m1", agentId = "w1", projectMembership = SessionProjectMembership(uuid, role = "TASK"))
+        val data = DirectoryData(workspaces = workspaces, sessions = mapOf("open" to listOf(member), "completed" to listOf(coordinator)))
+        assertEquals(OrbitRoute(Destination.PROJECT_SESSIONS, publicId, "w2", origin = Origin.EXTERNAL),
+            projectRoot(publicId, data, "w1", Origin.EXTERNAL))
+        val noCoordinator = data.copy(sessions = mapOf("open" to listOf(member)))
+        assertEquals("w2", projectRoot(publicId, noCoordinator, "w2", Origin.DRAWER).workspaceId)
+        assertEquals("w1", projectRoot(publicId, noCoordinator, null, Origin.DRAWER).workspaceId)
+        assertEquals(OrbitRoute(Destination.PROJECT, publicId, origin = Origin.EXTERNAL), projectRoot(publicId, DirectoryData(), null, Origin.EXTERNAL))
+    }
+
     /** A05-3: a session completed or moved to Trash from its own page leaves the stack, in either spelling of its id
      * (iOS `NavState.removeConsole`); a stack it is not on stays as it is. */
     @Test fun aSessionLeavingItsPageLeavesTheStack() {
@@ -106,7 +160,7 @@ class OrbitNavigationTest {
     @Test fun rejectsForeignInstancePrivilegedPathsMalformedIdsAndUnsupportedIosSchemes() {
         listOf("https://other.test/tasks/$publicId", "https://orbitd.io:444/tasks/$publicId",
             "https://orbitd.io/api/sessions/$publicId", "https://orbitd.io/s/$publicId",
-            "orbit://project/$publicId", "orbit://session/../x",
+            "orbit://projects/$publicId", "orbit://session/../x",
             "orbit-task:invalid!", "orbit://watch/zzzzzzzzzzzzzzzzzzzzzz", "https://orbitd.io/lists/none").forEach {
             assertNull(it, OrbitLinks.parse(it, "https://orbitd.io"))
         }

@@ -165,15 +165,17 @@ reminder that was showing in it at the moment of the upgrade.
 | --- | --- | --- |
 | `sessionID` for approval/settled/agent-message | `orbit-session:<id>` | Reader, current pending cards, and composer are inherited A06/A08/A07 work. |
 | `sessionID` and `recordID` for confirmation problems | `orbit-session:<id>?at=<recordID>` | Reader requests the server's record anchor; inaccessible/deleted records use its existing error state. |
-| Owner item with `sessionID` | Coordinator session | `openItemID` is not a transcript record ID; do not put it into `?at=`. Card state comes from the project snapshot. |
-| Owner item without coordinator, with `projectID` | `orbit-project:<id>` | A11 owns the project product page. Its completed integration needs separate evidence. |
+| `approve-merge-to-main` with `projectID` | `orbit://project/<id>`: the project's sessions page, as that project's root | A11h, after iOS 6b4bef713 (`Notifications.intent` → `openProjectSessions(_:inColumn: false)`): the merge card is answered there. The link names no workspace, so it waits as the pending route, through sign-in too, until the directory is read; it then lands over the workspace the drawer's project row would pick (`projectRoot`), or on the project's page when there is none. Push-only, like `orbit://wiki/`: not a manifest host. A merge alert naming no project would open its conversation, as on iOS. |
+| Other owner items with `sessionID` | Coordinator session | `openItemID` is not a transcript record ID; do not put it into `?at=`. Card state comes from the project snapshot. |
+| Other owner items without coordinator, with `projectID` | `orbit-project:<id>` | A11 owns the project product page. Its completed integration needs separate evidence. |
 | `watchID` | `orbit://watch/<id>` | A12 owns the watch product page and generation interpretation. |
 | `runnerID`/`engine` | `orbit://runner/<id>` | A13 owns runner/engine management; do not invent a notification-only editor. |
 | `wikiSpaceID` | `orbit://wiki/<spaceId>` | The URI handed to A12 (comment 34aIrgslPhvEl3IPNty9m): `OrbitLinks.parse` → `OrbitRoute(Destination.WIKI, id=canonicalSpaceId)` is A12's branch. Until it is integrated the fixed parser returns null, so the tap opens Orbit without navigating, as iOS does for this payload. A route integration gap until verified with A12's page. |
 | Headless `agent-message` (no `sessionID`) | Launcher `ACTION_MAIN` to MainActivity | No object to open: the tap brings Orbit forward at its current screen, like iOS opening the app. |
 
-The fixed Swift `Notifications.intent` handles session and watch payloads; it
-does not route runner or wiki-space payloads. Extending an Android route is a
+The fixed Swift `Notifications.intent` handles session and watch payloads (and,
+since 6b4bef713, the merge's project sessions page); it does not route runner or
+wiki-space payloads. Extending an Android route is a
 documented difference, not evidence of parity with an installed iOS client.
 The existing pending-login route survives cold entry and is consumed after
 authentication; account switches discard the previous account's path.
