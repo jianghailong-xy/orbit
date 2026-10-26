@@ -67,7 +67,7 @@ class AuthFlowDeviceTest {
             compose.chooseServer(server.url("/").toString())
             compose.onNodeWithText("Email").performTextReplacement("a03@example.test")
             compose.onNodeWithText("Password").performTextReplacement("a03-device-password")
-            compose.onNodeWithText("Sign In").performScrollTo().performClick()
+            compose.pressSignIn()
             compose.waitUntil(10_000) { session.state.value is AuthState.SignedIn }
             compose.onNodeWithContentDescription("Open navigation").performClick()
             compose.onNodeWithText("Settings").performScrollTo().performClick()

@@ -9,6 +9,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.auth.chooseServer
+import io.orbitd.android.auth.pressSignIn
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.AuthState
@@ -91,7 +92,7 @@ class LinkDeviceTest {
                     compose.chooseServer(server.url("/").toString())
                     compose.onNodeWithText("Email").performTextReplacement("a05@example.test")
                     compose.onNodeWithText("Password").performTextReplacement("a05-fixture-password")
-                    compose.onNodeWithText("Sign In").performScrollTo().performClick()
+                    compose.pressSignIn()
                     if (coldKind == "session") awaitSessionPage(firstId, coldTitle)
                     else {
                         compose.waitUntil(10_000) { compose.onAllNodesWithText(coldTitle).fetchSemanticsNodes().isNotEmpty() }

@@ -19,6 +19,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.orbitd.android.auth.awaitKeyboardForSignIn
 import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.*
 import io.orbitd.android.core.auth.AuthState
@@ -123,6 +124,7 @@ class TalkBackCheckTest {
         compose.chooseServer(server)
         compose.onNodeWithText("Email").performTextReplacement("a08@example.test")
         compose.onNodeWithText("Password").performTextReplacement("a08-fixture-password")
+        compose.awaitKeyboardForSignIn()
         press(compose.onNodeWithText("Sign In"))
         compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
     }

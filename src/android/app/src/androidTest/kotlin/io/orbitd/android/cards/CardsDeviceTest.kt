@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.auth.chooseServer
+import io.orbitd.android.auth.pressSignIn
 import io.orbitd.android.*
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.cards.*
@@ -46,12 +47,14 @@ class CardsDeviceTest {
         ready: String = if (kind == "attachment-only") "Review the Orbit card below." else "Decisions and requests") {
         instrument.sendStatus(0, Bundle().apply { putString("a08_pid", Process.myPid().toString()) })
         File(output,"identity.txt").writeText("sha=${BuildConfig.SOURCE_SHA}\ndirty=${BuildConfig.SOURCE_DIRTY}\n")
-        http("/__control", """{"case":"$kind","mode":"$mode"}""")
+        // The journal starts empty with each journey, so a journey reads only its own requests: run-start's execute was once read
+        // beside the x1 retry the business-doors journey had sent to the same task (A15 F-12).
+        http("/__control", """{"reset":true,"case":"$kind","mode":"$mode"}""")
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
         compose.chooseServer(server)
         compose.onNodeWithText("Email").performTextReplacement("a08@example.test")
         compose.onNodeWithText("Password").performTextReplacement("a08-fixture-password")
-        compose.onNodeWithText("Sign In").performScrollTo().performClick()
+        compose.pressSignIn()
         compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
         compose.onNodeWithTag("workspace:01a0cca7-8609-70ed-a0e2-d4b55b832b61").performClick()
         compose.onNodeWithText("Card verification").performClick()
@@ -119,13 +122,20 @@ class CardsDeviceTest {
         // A08-2: a question is a preview in the conversation, answered in the review it opens.
         compose.onNodeWithTag("approval:a2:preview").performScrollTo().performClick()
         compose.waitUntil(15_000) { exists("card-review") }
+        // A08j: the review reads the conversation again as it opens, and its options and doors stay disabled until that read lands
+        // (BusinessCard's `enabled`). "Core" is pressed once it can be, as a person can only press it then.
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Core") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Core").performScrollTo().performClick()
+        compose.onNodeWithText("Core").assertIsSelected()
         compose.onAllNodesWithText("Or type your own answer…")[1].performScrollTo().performTextInput("Server state")
+        // Both questions answered: the review can be sent before the Activity is recreated, so what follows is what recreation kept.
+        compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("approval:a2:ANSWER") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         capture("question-review")
         compose.activityRule.scenario.recreate(); await("Decisions and requests")
-        // The review stays open across the Activity being recreated, with what was typed in it.
+        // The review stays open across the Activity being recreated, with what was picked and typed in it.
         compose.waitUntil(15_000) { exists("card-review") }
         compose.onNodeWithText("Server state").assertExists()
+        compose.onNodeWithText("Core").assertIsSelected()
         press("approval:a2:ANSWER")
         compose.waitUntil(15_000) { !http("/__stats").flag("pending") }
         // The review stays open as the record the question became: what was picked ticked, the words typed in quotes.

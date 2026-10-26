@@ -29,6 +29,7 @@ import io.orbitd.android.BuildConfig
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.auth.chooseServer
+import io.orbitd.android.auth.pressSignIn
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.navigation.ObjectId
@@ -388,7 +389,7 @@ class PushDeviceTest {
         compose.chooseServer(fixture.server.url("/").toString())
         compose.onNodeWithText("Email").performTextReplacement(email)
         compose.onNodeWithText("Password").performTextReplacement("controlled-password")
-        compose.onNodeWithText("Sign In").performScrollTo().performClick()
+        compose.pressSignIn()
         compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.push.registration.activeBinding() != null && app.realtime.state.value.directoryFresh }
     }
     private fun openSession() {
