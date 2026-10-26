@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.auth.chooseServer
+import io.orbitd.android.auth.pressSignIn
 import io.orbitd.android.*
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.cards.*
@@ -46,12 +47,14 @@ class CardsDeviceTest {
         ready: String = if (kind == "attachment-only") "Review the Orbit card below." else "Decisions and requests") {
         instrument.sendStatus(0, Bundle().apply { putString("a08_pid", Process.myPid().toString()) })
         File(output,"identity.txt").writeText("sha=${BuildConfig.SOURCE_SHA}\ndirty=${BuildConfig.SOURCE_DIRTY}\n")
-        http("/__control", """{"case":"$kind","mode":"$mode"}""")
+        // The journal starts empty with each journey, so a journey reads only its own requests: run-start's execute was once read
+        // beside the x1 retry the business-doors journey had sent to the same task (A15 F-12).
+        http("/__control", """{"reset":true,"case":"$kind","mode":"$mode"}""")
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
         compose.chooseServer(server)
         compose.onNodeWithText("Email").performTextReplacement("a08@example.test")
         compose.onNodeWithText("Password").performTextReplacement("a08-fixture-password")
-        compose.onNodeWithText("Sign In").performScrollTo().performClick()
+        compose.pressSignIn()
         compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
         compose.onNodeWithTag("workspace:01a0cca7-8609-70ed-a0e2-d4b55b832b61").performClick()
         compose.onNodeWithText("Card verification").performClick()
@@ -91,6 +94,9 @@ class CardsDeviceTest {
         compose.onNodeWithTag("transcript-list").performTouchInput { swipeDown() }
         compose.onNodeWithTag("transcript-list").performScrollToNode(matcher)
     }
+    /** [scrollTranscriptTo] once the transcript holds [matcher]: a conversation just opened reads its events after its page draws. */
+    private fun awaitInTranscript(matcher: SemanticsMatcher) =
+        compose.waitUntil(15_000) { try { scrollTranscriptTo(matcher); true } catch (_: AssertionError) { false } }
     private fun journey(name: String, block: () -> Unit) {
         try { block(); File(output,"$name-result.txt").writeText("PASS\n") }
         catch (error: Throwable) { capture("$name-failed"); runCatching { semantics("$name-failed") }; throw error }
@@ -116,13 +122,20 @@ class CardsDeviceTest {
         // A08-2: a question is a preview in the conversation, answered in the review it opens.
         compose.onNodeWithTag("approval:a2:preview").performScrollTo().performClick()
         compose.waitUntil(15_000) { exists("card-review") }
+        // A08j: the review reads the conversation again as it opens, and its options and doors stay disabled until that read lands
+        // (BusinessCard's `enabled`). "Core" is pressed once it can be, as a person can only press it then.
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Core") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Core").performScrollTo().performClick()
+        compose.onNodeWithText("Core").assertIsSelected()
         compose.onAllNodesWithText("Or type your own answer…")[1].performScrollTo().performTextInput("Server state")
+        // Both questions answered: the review can be sent before the Activity is recreated, so what follows is what recreation kept.
+        compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("approval:a2:ANSWER") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         capture("question-review")
         compose.activityRule.scenario.recreate(); await("Decisions and requests")
-        // The review stays open across the Activity being recreated, with what was typed in it.
+        // The review stays open across the Activity being recreated, with what was picked and typed in it.
         compose.waitUntil(15_000) { exists("card-review") }
         compose.onNodeWithText("Server state").assertExists()
+        compose.onNodeWithText("Core").assertIsSelected()
         press("approval:a2:ANSWER")
         compose.waitUntil(15_000) { !http("/__stats").flag("pending") }
         // The review stays open as the record the question became: what was picked ticked, the words typed in quotes.
@@ -332,11 +345,16 @@ class CardsDeviceTest {
     @Test fun needsYouBarOpensTheSessionWaitingElsewhere() = journey("needs-you-elsewhere") {
         login("a1", "elsewhere")
         val second = http("/__a08c").obj("secondSession")!!
-        await("${second.obj("agent")!!.text("name")} needs you"); capture("needs-you-elsewhere-bar")
+        // The capsule (A08-21) says what waits and, on its second line, the conversation a press opens.
+        await("${second.obj("agent")!!.text("name")} needs you")
+        compose.waitUntil(15_000) {
+            compose.onAllNodes(hasText(second.text("title")!!) and hasAnyAncestor(hasTestTag("needs-you-bar"))).fetchSemanticsNodes().isNotEmpty()
+        }
+        capture("needs-you-elsewhere-bar")
         compose.onNodeWithTag("needs-you-bar").performClick()
         compose.waitUntil(15_000) { ObjectId.same(app.realtime.state.value.session?.id, second.text("id")) }
-        await(second.text("title")!!)
-        scrollTranscriptTo(hasText("The second session waits on you."))
+        // The page names no session in its bar since A06-18: the session opened is read off its own transcript.
+        awaitInTranscript(hasText("The second session waits on you."))
         compose.onNodeWithTag("approval:b1:ALLOW").performScrollTo().assertIsDisplayed()
         // The session it opened is the one waiting; nothing else waits elsewhere now, so the bar has nothing to say.
         assertFalse(exists("needs-you-bar"))
@@ -393,23 +411,33 @@ class CardsDeviceTest {
         val queue = http("/__a08c").objects("queue")
         fun tag(turn: JsonObject) = "queued:" + turn.text("turnId")!!.let { ObjectId.canonical(it) ?: it }
         compose.waitUntil(15_000) { app.realtime.state.value.session?.let { it.fresh && it.snapshot?.queuedTurns?.size == queue.size } == true }
-        // The list composes only what is on screen: each queued turn is scrolled to before it is read.
-        fun show(turn: JsonObject) = scrollTranscriptTo(hasTestTag(tag(turn)))
+        // The reader's own words still waiting — a message queued for the next turn, a steer no runner has taken — are the tray's
+        // above the composer since A07-23 (b0f32ebbd), each with its Withdraw; what Orbit queued, the session's reply, keeps its card
+        // at the transcript's end with the queue's Cancel.
+        fun inTray(turn: JsonObject) = hasAnyAncestor(hasTestTag("pending-tray:" + turn.text("turnId")!!))
+        fun shows(matcher: SemanticsMatcher) = compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
+        compose.waitUntil(15_000) { shows(hasText(queue[0].text("content")!!) and inTray(queue[0])) && shows(hasText(queue[1].text("content")!!) and inTray(queue[1])) }
+        compose.onNode(hasText("Queued for next turn") and inTray(queue[0])).assertExists()
+        compose.onNode(hasText("Sending…") and inTray(queue[1])).assertExists()
+        compose.onNode(hasTestTag("pending-tray-withdraw") and inTray(queue[0])).assertExists()
+        compose.onNode(hasTestTag("pending-tray-withdraw") and inTray(queue[1])).assertExists()
+        capture("queued-tray")
+        // The list composes only what is on screen: the queued turn is scrolled to before it is read.
         fun cancel(turn: JsonObject) = compose.onNode(hasTestTag("queued-foot:cancel") and hasAnyAncestor(hasTestTag(tag(turn))))
-        show(queue[0]); await(queue[0].text("content")!!); cancel(queue[0]).assertExists()
-        capture("queued-tail")
-        show(queue[1]); compose.onNode(hasTestTag("queued-steer") and hasAnyAncestor(hasTestTag(tag(queue[1])))).assertExists()
-        cancel(queue[1]).assertDoesNotExist()
-        show(queue[2]); cancel(queue[2]).performScrollTo().assertExists()
+        scrollTranscriptTo(hasTestTag(tag(queue[2]))); cancel(queue[2]).performScrollTo().assertExists()
+        assertFalse("the tray's, not the tail's", exists(tag(queue[0])) || exists(tag(queue[1])))
         capture("queued-reply")
-        show(queue[0]); cancel(queue[0]).performScrollTo().performClick()
+        compose.onNode(hasTestTag("pending-tray-withdraw") and inTray(queue[0])).performClick()
         compose.waitUntil(15_000) { http("/__stats").objects("journal").any { it.text("method") == "DELETE" } }
         val row = http("/__stats").objects("journal").single { it.text("method") == "DELETE" }
         assertEquals("/api/sessions/${http("/__corpus").text("sessionId")}/turns/${queue[0].text("turnId")}", row.text("path"))
         assertEquals(200, row.number("status"))
-        // The server's queue no longer lists it, and neither does the transcript's end.
+        // The server's queue no longer lists it, nor does the tray; its words are back in the composer.
         compose.waitUntil(15_000) { app.realtime.state.value.session?.snapshot?.queuedTurns?.size == queue.size - 1 }
-        show(queue[1]); assertFalse(exists(tag(queue[0]))); capture("queued-cancelled")
+        compose.waitUntil(15_000) { !shows(hasAnyAncestor(hasTestTag("pending-tray:" + queue[0].text("turnId")!!))) }
+        compose.onNode(hasText(queue[1].text("content")!!) and inTray(queue[1])).assertExists()
+        compose.waitUntil(15_000) { shows(hasTestTag("composer-input") and hasText(queue[0].text("content")!!)) }
+        capture("queued-cancelled")
     }
 
     /** A08-5: a run that never started says why, and "Start it again" is a new run of the task the server records. */

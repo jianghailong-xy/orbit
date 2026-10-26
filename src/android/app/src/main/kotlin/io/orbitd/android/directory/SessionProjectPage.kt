@@ -51,6 +51,7 @@ import io.orbitd.android.projects.ProjectPageState
 import io.orbitd.android.projects.ProjectSettledCard
 import io.orbitd.android.projects.RequestedStartSheet
 import io.orbitd.android.projects.StartProjectCopy
+import io.orbitd.android.projects.StartSheetLoad
 import io.orbitd.android.projects.failureReason
 import io.orbitd.android.reader.LandingSessionCopy
 import io.orbitd.android.taskprojects.canWrite
@@ -479,20 +480,25 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         StartSheet.ASKED -> RequestedStartSheet(projects, projectId, enabled, viewTasks, close = { startSheet = null; scope.launch { loadStart() } }, start = startWrite)
         StartSheet.OWN -> {
             // The owner's own card reads the document, the plan and the line it starts from, as the project page has them; a read that
-            // did not answer is asked again every 4 s until the card can be drawn.
+            // did not answer is asked again every 4 s until the card can be drawn, and a document that could not be read is said, with
+            // Retry, in the spinner's place.
             val page = remember(projectId) { ProjectPageState() }
-            LaunchedEffect(page) {
-                suspend fun <T> read(block: suspend () -> T): T? = try { block() } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
+            var failure by remember(projectId) { mutableStateOf<String?>(null) }
+            var retries by remember(projectId) { mutableIntStateOf(0) }
+            LaunchedEffect(page, retries) {
                 while (page.document == null || page.integration == null) {
+                    var documentFailed: String? = null
                     coroutineScope {
-                        launch { if (page.document == null) read { projects.document(projectId) }?.let { page.document = it } }
-                        launch { if (page.graph == null) read { projects.graph(projectId) }?.let { page.graph = it } }
-                        launch { if (page.integration == null) read { projects.integration(projectId) }.let { page.integration = it; page.integrationReadFailed = it == null } }
+                        launch { if (page.document == null) StartSheetLoad.read({ documentFailed = it }) { projects.document(projectId) }?.let { page.document = it } }
+                        launch { if (page.graph == null) StartSheetLoad.read { projects.graph(projectId) }?.let { page.graph = it } }
+                        launch { if (page.integration == null) StartSheetLoad.read { projects.integration(projectId) }.let { page.integration = it; page.integrationReadFailed = it == null } }
                     }
+                    failure = documentFailed
                     if (page.document == null || page.integration == null) delay(4_000)
                 }
             }
-            OwnerStartSheet(projects, projectId, page, enabled, viewTasks, close = { startSheet = null; scope.launch { loadStart() } }, start = startWrite)
+            OwnerStartSheet(projects, projectId, page, enabled, viewTasks, close = { startSheet = null; scope.launch { loadStart() } },
+                failure = failure, retry = { retries++ }, start = startWrite)
         }
         null -> Unit
     }

@@ -44,7 +44,6 @@ class AuthFlowDeviceTest {
         assertTrue("Use a signed-out dedicated debug installation", session.state.value is AuthState.SignedOut)
         MockWebServer().use { server ->
             val requests = java.util.concurrent.CopyOnWriteArrayList<RecordedRequest>()
-            var rejected = false
             server.dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
                     requests += request
@@ -54,7 +53,10 @@ class AuthFlowDeviceTest {
                         "/api/auth/methods" -> MockResponse().setResponseCode(404)
                         "/api/auth/login" -> MockResponse().setBody(Wire.json.encodeToString(fixtureTokens()))
                         "/api/auth/refresh" -> MockResponse().setBody(Wire.json.encodeToString(fixtureTokens(1)))
-                        "/api/users/me" -> if (!rejected) { rejected = true; MockResponse().setResponseCode(401) }
+                        // The signed-in access token has expired for users/me: every read on it is refused, whoever asks first (the
+                        // account's own read after sign-in can beat this test's). The session rotates once, and a read on the old token
+                        // waits for that rotation, so session.me returns only once the rotated credentials are saved.
+                        "/api/users/me" -> if (request.getHeader("Authorization") == "Bearer ${fixtureTokens().accessToken}") MockResponse().setResponseCode(401)
                             else MockResponse().setBody(Wire.json.encodeToString(fixtureTokens().user))
                         "/api/events" -> MockResponse().setHeader("Content-Type", "text/event-stream").setBody(": connected\n\n")
                         "/api/auth/logout" -> MockResponse().setBody("{\"success\":true}")
@@ -65,7 +67,7 @@ class AuthFlowDeviceTest {
             compose.chooseServer(server.url("/").toString())
             compose.onNodeWithText("Email").performTextReplacement("a03@example.test")
             compose.onNodeWithText("Password").performTextReplacement("a03-device-password")
-            compose.onNodeWithText("Sign In").performScrollTo().performClick()
+            compose.pressSignIn()
             compose.waitUntil(10_000) { session.state.value is AuthState.SignedIn }
             compose.onNodeWithContentDescription("Open navigation").performClick()
             compose.onNodeWithText("Settings").performScrollTo().performClick()
@@ -98,9 +100,11 @@ class AuthFlowDeviceTest {
         compose.onNodeWithContentDescription("Edit profile").assertIsDisplayed()
     }
 
+    /** Into the app's own files, which auth-device-test.sh takes out with run-as: Android 11 lets adb read none of
+     * /sdcard/Android/data. */
     private fun capture(name: String) {
         val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-        val directory = compose.activity.getExternalFilesDir("a03-auth")!!
+        val directory = File(compose.activity.filesDir, "a03-auth")
         directory.mkdirs()
         File(directory, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()

@@ -336,9 +336,11 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
     LaunchedEffect(Unit) { while (true) { delay(1_000); now = Instant.now() } }
     LaunchedEffect(state.copied) { if (state.copied != null) { delay(2500); state.copied = null } }
 
-    /** One write: busy while it is out, then the page read again; a refusal comes back as the sentence to show
-     * (`write`/`runWrite`). The write belongs to the app, not to the page (iOS's model-owned Task): whoever
-     * waits on it may go away — the page, a sheet — and it still finishes. */
+    /** One write: busy while it is out and until the page has read it back; a refusal comes back as the sentence to show
+     * (`write`/`runWrite`). The read is inside busy, where iOS's `defer` puts it: a press before it lands would go out over what
+     * the page read before the write — Automatic and At most under the revision the write has just moved on, refused as stale
+     * (A15 F-22). The write belongs to the app, not to the page (iOS's model-owned Task): whoever waits on it may go away — the
+     * page, a sheet — and it still finishes. */
     suspend fun attempt(refusal: String, body: suspend () -> Unit): String? {
         if (state.busy) return null
         state.busy = true
@@ -347,9 +349,10 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             catch (cancel: CancellationException) { throw cancel }
             catch (failure: Exception) { "$refusal${failureReason(failure)}." }
             finally {
-                state.busy = false
-                app.realtime.refreshDirectory()
-                if (state.attached) load(settled = true)
+                try {
+                    app.realtime.refreshDirectory()
+                    if (state.attached) load(settled = true)
+                } finally { state.busy = false }
             }
         }.await()
     }
@@ -367,6 +370,9 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
         concurrencyWrite?.cancel()
         concurrencyWrite = app.processScope.launch {
             delay(700)
+            // Another press's write, until the page has read it back, holds the revision this one goes under: it waits for that
+            // read rather than being dropped behind the write.
+            while (state.busy) delay(50)
             val doc = state.document
             if (doc != null && count != doc.number("maxConcurrentTasks")) {
                 val body = RunSettings.authorization(doc, maxConcurrentTasks = count)
@@ -525,21 +531,24 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
         crossingsSection(state, connected, crossingAsk, crossingRefusal, ask = { row, approve -> crossingRefusal = null; crossingAsk = row.text("id")?.let { it to approve } },
             cancel = { crossingAsk = null; crossingRefusal = null }) { row, approve ->
             // The second press: the answer goes with the key of the crossing it was given on. Taken, the question closes over the
-            // re-read row — a confirmed move reads as moved; refused, it stays open beside the door's own code and reason.
+            // re-read row — a confirmed move reads as moved; refused, it stays open beside the door's own code and reason. It is
+            // being answered until that read lands (iOS's `defer`), so the row's key is never sent again over an answer it took, and
+            // its question stays up until then (iOS's `answerCrossing`): closed before, the row would offer its first press again,
+            // over the row it read before the answer.
             val rowId = row.text("id")
             if (rowId != null && state.answeringCrossing == null) {
                 state.answeringCrossing = rowId
                 app.processScope.launch {
-                    val refusal = try { api.decideCrossing(id, row, approve); null }
-                        catch (cancel: CancellationException) { throw cancel }
-                        catch (failure: Exception) { ProjectCrossings.refusal(failure) }
-                        finally { state.answeringCrossing = null }
-                    if (refusal != null) crossingRefusal = rowId to refusal
-                    else {
-                        crossingAsk = null; crossingRefusal = null
-                        app.realtime.refreshDirectory()
-                        if (state.attached) load(settled = true)
-                    }
+                    try {
+                        val refusal = try { api.decideCrossing(id, row, approve); null }
+                            catch (cancel: CancellationException) { throw cancel }
+                            catch (failure: Exception) { ProjectCrossings.refusal(failure) }
+                        if (refusal != null) crossingRefusal = rowId to refusal
+                        else try {
+                            app.realtime.refreshDirectory()
+                            if (state.attached) load(settled = true)
+                        } finally { crossingAsk = null; crossingRefusal = null }
+                    } finally { state.answeringCrossing = null }
                 }
             }
         }

@@ -14,6 +14,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.auth.chooseServer
+import io.orbitd.android.auth.pressSignIn
 import io.orbitd.android.core.auth.AuthState
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
@@ -53,7 +54,7 @@ class NavigationIncrementDeviceTest {
                 compose.chooseServer(server.url("/").toString())
                 compose.onNodeWithText("Email").performTextReplacement("a05c@example.test")
                 compose.onNodeWithText("Password").performTextReplacement("a05c-fixture-password")
-                compose.onNodeWithText("Sign In").performScrollTo().performClick()
+                compose.pressSignIn()
                 compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
 
                 // A05-8 · the drawer's rows are destinations: its workspaces in iOS's order, its open project.
@@ -108,7 +109,10 @@ class NavigationIncrementDeviceTest {
                 compose.onNode(hasText("Review navigation") and hasClickAction()).performClick()
                 await { exists(hasContentDescription("Session actions") and isEnabled()) }
                 compose.onNodeWithContentDescription("Session actions").performClick(); settle()
-                assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Open Task", "Complete Session", "Move to Trash"), menuItems())
+                // Session details heads the group that opens what the session is part of since A06-18 (the session's name under the
+                // bar opened them until that row went with iOS's title).
+                assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Session details", "Open Task", "Complete Session",
+                    "Move to Trash"), menuItems())
                 compose.onNode(hasText("Complete Session") and hasText("Stops the current run") and hasAnyAncestor(isPopup())).assertExists()
                 capture("10-session-menu")
                 // Copy Link: the signed-in address, and the toast that says so.
@@ -145,7 +149,7 @@ class NavigationIncrementDeviceTest {
                 await { exists(hasContentDescription("Session actions") and isEnabled()) }
                 awaitWritable()
                 compose.onNodeWithContentDescription("Session actions").performClick(); settle()
-                assertEquals(listOf("Move to Open", "Delete Permanently"), menuItems())
+                assertEquals(listOf("Session details", "Move to Open", "Delete Permanently"), menuItems())
                 capture("14-trash-menu")
                 awaitWritable()
                 press(hasText("Delete Permanently") and hasAnyAncestor(isPopup()))

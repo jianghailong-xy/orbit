@@ -14,6 +14,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.auth.chooseServer
+import io.orbitd.android.auth.pressSignIn
 import io.orbitd.android.*
 import io.orbitd.android.core.auth.AuthState
 import java.io.File
@@ -565,7 +566,7 @@ class TranscriptDeviceTest {
         compose.chooseServer(server)
         compose.onNodeWithText("Email").performTextReplacement("a06@example.test")
         compose.onNodeWithText("Password").performTextReplacement("a06-fixture-password")
-        compose.onNodeWithText("Sign In").performScrollTo().performClick()
+        compose.pressSignIn()
         compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
     }
     private fun openSession() {

@@ -16,6 +16,7 @@ import io.orbitd.android.BuildConfig
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.auth.chooseServer
+import io.orbitd.android.auth.pressSignIn
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.net.ServerAddress
 import io.orbitd.android.core.protocol.Wire
@@ -120,7 +121,7 @@ class WikiWatchDeviceTest {
                         compose.chooseServer(server)
                         compose.onNodeWithText("Email").performTextReplacement("a12@example.test")
                         compose.onNodeWithText("Password").performTextReplacement("a12-fixture-password")
-                        compose.onNodeWithText("Sign In").performScrollTo().performClick()
+                        compose.pressSignIn()
                     }
                     compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
                     block(scenario, ids)

@@ -9,8 +9,6 @@ import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -18,6 +16,7 @@ import io.orbitd.android.BuildConfig
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.auth.chooseServer
+import io.orbitd.android.auth.pressSignIn
 import io.orbitd.android.core.auth.AuthState
 import java.security.MessageDigest
 import kotlinx.coroutines.runBlocking
@@ -58,7 +57,7 @@ class RealPushDeviceTest {
         compose.chooseServer(server)
         compose.onNodeWithText("Email").performTextReplacement(email)
         compose.onNodeWithText("Password").performTextReplacement(password)
-        compose.onNodeWithText("Sign In").performScrollTo().performClick()
+        compose.pressSignIn()
         // Waits that need the UI go through the compose rule, which drives recomposition (see FcmTokenDeviceTest).
         pump("signed in", 60_000) { app.session.state.value is AuthState.SignedIn }
         var allow: AccessibilityNodeInfo? = null

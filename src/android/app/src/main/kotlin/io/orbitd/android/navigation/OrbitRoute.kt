@@ -121,8 +121,17 @@ object OrbitLinks {
     // `orbit://project/<id>` is a merge push's (A11-9): the project's sessions page. Like `orbit://wiki/<space>`, no iOS DeepLink host.
     private val deepLinks = references.filterKeys { it !in setOf("project", "wiki") } +
         mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER, "wiki" to Destination.WIKI, "project" to Destination.PROJECT_SESSIONS)
+    /** iOS DeepLink's `case "active", ""` (A05h, DL-1): an `orbit:` link with no host, an empty one or `active` (percent-decoded,
+     * in any case) opens the workspaces home, whatever path, query or fragment follows — iOS's URL percent-encodes a blank there
+     * and DeepLink never reads it — while a blank in the host is no URL there, so nothing opens. Read off the link itself:
+     * java.net.URI refuses `orbit://` and `orbit:`, and reads no host in `orbit://%20`. Group 1 is the host. */
+    private val home = Regex("""orbit:(?:(?!//).*|//(?:[^/?#@\s]*@)?([^/?#:@\s]*)(?::\d*)?(?:[/?#].*)?)""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
 
     fun parse(raw: String, server: String? = null, origin: Origin = Origin.LINK): OrbitRoute? { return try {
+        home.matchEntire(raw)?.let {
+            if (URLDecoder.decode(it.groupValues[1], "UTF-8").lowercase() in setOf("", "active")) return OrbitRoute(Destination.WORKSPACES, origin = origin)
+        }
         val uri = URI(raw)
         val scheme = uri.scheme?.lowercase().orEmpty()
         var kind: Destination? = null
@@ -131,7 +140,6 @@ object OrbitLinks {
             kind = references[scheme.removePrefix("orbit-")]
             id = if (kind == Destination.SESSION) uri.schemeSpecificPart.substringBefore('?') else uri.schemeSpecificPart
         } else if (scheme == "orbit") {
-            if (uri.host in listOf(null, "", "active") && uri.path.orEmpty().trim('/').isEmpty()) return OrbitRoute(Destination.WORKSPACES, origin = origin)
             kind = deepLinks[uri.host?.lowercase()]
             val parts = uri.path.orEmpty().trim('/').split('/')
             if (parts.size == 1) id = parts.first()

@@ -2077,8 +2077,8 @@ def search_answers(world, words):
     return wire({word: world.search(word) for word in words})
 
 
-def build_ds1():
-    bundle = Bundle('DS1', SPEC['DS1'])
+def ds1_world():
+    """DS1's rows before they are rendered: what build_ds1 writes, and what stack.py seeds a real server with."""
     world = World('DS1', 'owner@ds1.orbit.test', 'DS1 Owner', 'ADMIN')
     world.add_runners()
     world.add_workspaces(20)
@@ -2097,6 +2097,12 @@ def build_ds1():
     world.add_tasks(100)
     world.add_wiki(100, spaces=2)
     world.add_watches(20)
+    return world, missing
+
+
+def build_ds1():
+    bundle = Bundle('DS1', SPEC['DS1'])
+    world, missing = ds1_world()
     summary = directory_files(bundle, world)
     routes = session_routes() + business_routes(bundle, world, 'api')
     failing_task = sorted(world.tasks, key=lambda t: t['created'])[0]
