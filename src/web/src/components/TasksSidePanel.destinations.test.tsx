@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeId } from '../lib/idCodec';
 import type { SidebarProject } from '../lib/projectAttention';
 import { MOBILE_QUERY } from '../lib/useMediaQuery';
-import { isInfrastructureRoute, TasksSidePanel } from './TasksSidePanel';
+import { TasksSidePanel } from './TasksSidePanel';
 
 /**
  * Every sidebar row is a destination, as on the iPhone drawer: a section, a workspace's session list,
@@ -221,22 +221,28 @@ describe('the sidebar’s rows as destinations', () => {
   });
 });
 
-describe('the sidebar’s Infrastructure row', () => {
+describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-models, 02)', () => {
   const litTopEntries = () =>
     [...container!.querySelectorAll<HTMLElement>('.tp-section .tp-item.active .tp-label')].map((label) => label.textContent);
   const litRailEntries = () =>
     [...container!.querySelectorAll<HTMLElement>('.tp-rail-item.active')].map((item) => item.getAttribute('title'));
 
-  it('is the one row for machines, keys and pools, and opens their page', async () => {
+  it('is none of the fixed rows, which are the work, as on the iPhone drawer', async () => {
     serve();
     await visit('/tasks');
     const labels = [...container!.querySelectorAll('.tp-section .tp-label')].map((label) => label.textContent);
-    expect(labels).toContain('Infrastructure');
-    expect(labels).not.toContain('Runners');
-    expect(labels).not.toContain('Providers');
-    await click(topEntry('Infrastructure'));
+    expect(labels).toEqual(['Projects', 'Tasks', 'Wiki']);
+  });
+
+  it('is a row of the account menu, above Settings, that opens its page', async () => {
+    serve();
+    await visit('/tasks');
+    await click(container!.querySelector<HTMLElement>('.tp-user-trigger')!);
+    const rows = [...document.querySelectorAll<HTMLElement>('[role="menu"].tp-account-menu [role="menuitem"]')];
+    const labels = rows.map((row) => row.textContent);
+    expect(labels.indexOf('Machines & models')).toBe(labels.indexOf('Settings') - 1);
+    await click(rows.find((row) => row.textContent === 'Machines & models')!);
     expect(location).toBe('/infrastructure');
-    expect(litTopEntries()).toEqual(['Infrastructure']);
   });
 
   it.each([
@@ -250,19 +256,10 @@ describe('the sidebar’s Infrastructure row', () => {
     '/providers/new/anthropic',
     `/providers/${KEY}`,
     `/providers/pools/${POOL}`,
-  ])('is lit, in both forms, on %s', async (path) => {
+  ])('lights no row, in either form, on %s — as Settings lights none', async (path) => {
     serve();
     await visit(path);
-    expect(litTopEntries()).toEqual(['Infrastructure']);
-    expect(litRailEntries()).toEqual(['Infrastructure']);
-  });
-
-  it('belongs to those addresses alone', () => {
-    for (const path of ['/infrastructure', '/runners', `/runners/${RUNNER}`, '/providers', `/providers/pools/${POOL}`]) {
-      expect(isInfrastructureRoute(path), path).toBe(true);
-    }
-    for (const path of ['/', '/tasks', '/settings', '/admin/providers', '/runnersx', '/providers-old', '/infra']) {
-      expect(isInfrastructureRoute(path), path).toBe(false);
-    }
+    expect(litTopEntries()).toEqual([]);
+    expect(litRailEntries()).toEqual([]);
   });
 });

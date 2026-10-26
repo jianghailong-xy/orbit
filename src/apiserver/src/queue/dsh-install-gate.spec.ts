@@ -54,12 +54,12 @@ test('dsh install gate: the engine report decides whether a declaring runner can
   assert.equal(
     DSH_NOT_INSTALLED_ERROR,
     'DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; ' +
-      'install it from Infrastructure, then try again',
+      'install it from the Machines & models page, then try again',
   );
   assert.equal(
     DSH_VERSION_INCOMPATIBLE_ERROR,
     'DSH_VERSION_INCOMPATIBLE: this runner has a DeepSeek Harness version Orbit does not support; ' +
-      'reinstall it from Infrastructure, then try again',
+      'reinstall it from the Machines & models page, then try again',
   );
 });
 

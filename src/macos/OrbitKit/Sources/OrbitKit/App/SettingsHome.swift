@@ -27,8 +27,8 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
 /// and nothing of its own — the ChatGPT-style sheet the owner picked from the mockups.
 ///
 /// The rows are the web's Settings and Profile pages, regrouped for a phone: Session defaults and
-/// Session orchestration under Sessions, the Infrastructure page — the web's Runners and Providers
-/// pages, made one — under Machines & models, Notifications and Appearance under Preferences,
+/// Session orchestration under Sessions, the Machines & models page — the web's Runners and Providers
+/// pages, made one — on a row of its own, Notifications and Appearance under Preferences,
 /// Profile's email and password under Account with Shared links and Access tokens beside them. The
 /// words are the web's wherever it has one.
 public enum SettingsHome {
@@ -43,10 +43,12 @@ public enum SettingsHome {
         case email, instance, sharedLinks, accessTokens, changePassword, admin
     }
 
-    public static func header(_ group: Group) -> String {
+    /// A group's header. Machines & models has none: its one row says that name, and a header over it
+    /// would say it twice (docs/mocks/machines-and-models, ⑥-2) — the line under the row is its footer.
+    public static func header(_ group: Group) -> String? {
         switch group {
         case .sessions:    return "Sessions"
-        case .machines:    return "Machines & models"
+        case .machines:    return nil
         case .preferences: return "Preferences"
         case .account:     return "Account"
         }

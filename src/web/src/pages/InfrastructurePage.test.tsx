@@ -187,7 +187,10 @@ const card = (name: string) =>
 describe('/infrastructure', () => {
   it('heads the page with its name, its line and Add, then Machines, API keys, Account pools and By engine in that order', async () => {
     await mount();
-    expect(text(document.body.querySelector('h1'))).toBe('Infrastructure');
+    expect(text(document.body.querySelector('h1'))).toBe('Machines & models');
+    // Settings' page (docs/mocks/machines-and-models, 02): the way back to Settings above its name.
+    const back = document.body.querySelector<HTMLAnchorElement>('a.provider-back');
+    expect([text(back), back?.getAttribute('href')]).toEqual(['‹ Settings', '/settings']);
     expect(text(document.body.querySelector('.prov-page-sub'))).toBe('Where your agents run, and whose model quota they spend.');
     expect(button('Add')).not.toBeNull();
     expect([...document.body.querySelectorAll('.re-sec-head h3')].map(text)).toEqual([

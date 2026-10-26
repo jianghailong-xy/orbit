@@ -127,7 +127,7 @@ describe('a session with no SOURCE refusal', () => {
     expect(card.cause).toBe('ENGINE_NOT_INSTALLED');
     expect(card.why).toBe('DeepSeek Harness isn’t installed on longdeMac-mini.local');
     // Still queued: the run is claimed once the engine is there, so nothing has to be sent again.
-    expect(card.body).toBe('Install it from Infrastructure, and this run starts as soon as it’s installed.');
+    expect(card.body).toBe('Install it from the Machines & models page, and this run starts as soon as it’s installed.');
     expect(card.actions).toEqual(['install', 'open-runner']);
     // A run that ended on it is over, and its message goes again once the engine is there.
     expect(
@@ -135,7 +135,7 @@ describe('a session with no SOURCE refusal', () => {
         { status: 'FAILED', numTurns: 0, engineStartedAt: null, error: "OpenCode isn't installed on this runner and installing it failed (exit status 1)" },
         { runtime: 'opencode' },
       ).body,
-    ).toBe('Install it from Infrastructure, then send your message again.');
+    ).toBe('Install it from the Machines & models page, then send your message again.');
   });
 
   it('names a key problem and sends the reader to the page that holds it', () => {
@@ -146,7 +146,7 @@ describe('a session with no SOURCE refusal', () => {
     expect(card.cause).toBe('ENGINE_SIGNED_OUT');
     expect(card.why).toBe('DeepSeek rejected this API key');
     // Which of the DeepSeek keys, by its own name (board 8).
-    expect(card.body).toBe('Update the DeepSeek key “DeepSeek 2” in Infrastructure, then send your message again.');
+    expect(card.body).toBe('Update the DeepSeek key “DeepSeek 2” on the Machines & models page, then send your message again.');
     expect(card.actions).toEqual(['open-providers', 'send-again']);
   });
 
@@ -157,7 +157,7 @@ describe('a session with no SOURCE refusal', () => {
     );
     expect(card.why).toBe('DeepSeek Harness needs a DeepSeek key');
     expect(card.body).toBe(
-      'This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.',
+      'This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key on the Machines & models page, then send your message again.',
     );
   });
 
@@ -217,7 +217,7 @@ describe('a session with no SOURCE refusal', () => {
  * only a claim clears it. The sentences below are the server's own (runner-provider-support.ts).
  */
 const CURSOR_UPGRADE = 'Cursor CLI requires a newer Orbit runner with Cursor CLI support; update this runner first';
-const CURSOR_NOT_INSTALLED = "Cursor CLI isn't installed on this runner; install it from Infrastructure, then try again";
+const CURSOR_NOT_INSTALLED = "Cursor CLI isn't installed on this runner; install it from the Machines & models page, then try again";
 /** A conversation that has talked: three turns, its last run's engine spoke at 05:29. */
 const TALKED = { numTurns: 3, engineStartedAt: '2026-10-25T05:28:02.000Z' };
 
@@ -236,7 +236,7 @@ describe('a conversation that has talked, whose next message waits in the queue'
     const card = facts({ status: 'QUEUED', ...TALKED, error: CURSOR_NOT_INSTALLED }, { runtime: 'cursor', runnerName: 'r2' });
     expect(card.cause).toBe('ENGINE_NOT_INSTALLED');
     expect(card.why).toBe('Cursor CLI isn’t installed on r2');
-    expect(card.body).toBe('Install it from Infrastructure, and this run starts as soon as it’s installed.');
+    expect(card.body).toBe('Install it from the Machines & models page, and this run starts as soon as it’s installed.');
     expect(card.actions).toEqual(['install', 'open-runner']);
     // Nothing on it tells the reader to send the queued message a second time.
     expect(`${card.why} ${card.body}`).not.toMatch(/send your message again|newer Orbit runner|update this runner/i);
@@ -262,7 +262,7 @@ describe('a conversation that has talked, whose next message waits in the queue'
       ['opencode', 'OpenCode requires Orbit runner 0.1.82 or newer; update this runner first', 'RUNNER_UPGRADE'],
       ['antigravity', 'Antigravity requires a newer Orbit runner; update this runner first', 'RUNNER_UPGRADE'],
       ['dsh', 'DeepSeek Harness requires a newer Orbit runner with dsh support; update this runner first', 'RUNNER_UPGRADE'],
-      ['dsh', 'DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; install it from Infrastructure, then try again', 'ENGINE_NOT_INSTALLED'],
+      ['dsh', 'DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; install it from the Machines & models page, then try again', 'ENGINE_NOT_INSTALLED'],
     ] as const) {
       expect(facts({ status: 'QUEUED', ...TALKED, error }, { runtime }).cause, `${runtime}: ${error}`).toBe(cause);
     }

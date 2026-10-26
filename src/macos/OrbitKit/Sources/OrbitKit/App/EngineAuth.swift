@@ -104,11 +104,11 @@ public enum EngineAuth {
                                        runnerVersion: String?) -> String {
         switch repair {
         case .needsKey:
-            return "Sign in with Google on this runner, or connect a Gemini API key in Infrastructure."
+            return "Sign in with Google on this runner, or connect a Gemini API key on the Machines & models page."
         case .updateRunner:
             let version = runnerVersion?.isEmpty == false ? runnerVersion! : "an unknown version"
             return "\(machineName(runnerName)) runs Orbit runner \(version); Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then."
-        case .notInstalled: return "Install it from Infrastructure, then send your message again."
+        case .notInstalled: return "Install it from the Machines & models page, then send your message again."
         }
     }
 

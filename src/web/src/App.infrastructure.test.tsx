@@ -135,17 +135,17 @@ const card = (name: string) =>
 const isOpen = (name: string) => card(name).querySelector('.re-toggle')?.getAttribute('aria-expanded') === 'true';
 
 describe('the Runners and Providers addresses', () => {
-  it('/runners lands on Infrastructure: its machines, its keys, its pools and what each engine can run on', async () => {
+  it('/runners lands on the Machines & models page: its machines, its keys, its pools and what each engine can run on', async () => {
     await visit('/runners');
     expect(addressBar()).toBe('/infrastructure');
-    expect(container.querySelector('h1')?.textContent).toBe('Infrastructure');
+    expect(container.querySelector('h1')?.textContent).toBe('Machines & models');
     expect(headings()).toEqual(['Machines', 'API keys', 'Account pools', 'By engine']);
     // Nothing named, so nothing opened for it, and nothing scrolled to.
     expect([isOpen('Mac Studio'), isOpen('HPC')]).toEqual([false, false]);
     expect(scroll).not.toHaveBeenCalled();
   });
 
-  it('/providers lands on Infrastructure’s keys, and brings them into view', async () => {
+  it('/providers lands on the Machines & models page’s keys, and brings them into view', async () => {
     await visit('/providers');
     expect(addressBar()).toBe('/infrastructure#keys');
     expect(headings()).toEqual(['Machines', 'API keys', 'Account pools', 'By engine']);

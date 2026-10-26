@@ -117,7 +117,7 @@ class ManagementLiveTest {
         click(hasText("Settings") and hasClickAction())
         await("Default permission")
     }
-    private fun providers() { settings(); click(hasText("Infrastructure") and hasClickAction()); await("Account pools") }
+    private fun providers() { settings(); click(hasText("Machines & models") and hasClickAction()); await("Account pools") }
     private fun pick(row: String, option: String) { click(hasText(row) and hasClickAction()); click(hasText(option) and hasClickAction(), scroll = false) }
     private fun field(label: String) = compose.onNode(hasSetTextAction() and hasText(label))
     private fun back() = compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
@@ -234,7 +234,7 @@ class ManagementLiveTest {
     @Test fun step3ARunnerIsApprovedFromThePhoneByItsCode() {
         val owner = account("owner")
         signIn(owner); settings()
-        click(hasText("Infrastructure") and hasClickAction()); await("Add Runner")
+        click(hasText("Machines & models") and hasClickAction()); await("Add Runner")
         click(hasText("Add Runner") and hasClickAction())
         await("No browser on that machine?")
         field("Code").performScrollTo().performTextInput(arg("a13DeviceCode"))
@@ -251,7 +251,7 @@ class ManagementLiveTest {
     @Test fun step4RunnerManagementReachesTheRunnerAndTheServer() {
         val owner = account("owner")
         signIn(owner); settings()
-        click(hasText("Infrastructure") and hasClickAction())
+        click(hasText("Machines & models") and hasClickAction())
         click(hasText("a13-box") and hasClickAction()); await("About This Runner")
         val activity = System.identityHashCode(compose.activity)
         compose.waitForIdle(); Thread.sleep(2_000); await("About This Runner")
@@ -422,7 +422,7 @@ class ManagementLiveTest {
     @Test fun step8RotatingAndRemovingTheRunner() {
         val owner = account("owner")
         signIn(owner); settings()
-        click(hasText("Infrastructure") and hasClickAction())
+        click(hasText("Machines & models") and hasClickAction())
         click(hasText("Stack box") and hasClickAction()); await("About This Runner")
         val id = runner(owner).s("id")!!
         click(hasText("Rotate Token…") and hasClickAction())

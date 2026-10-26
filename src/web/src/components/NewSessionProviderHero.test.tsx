@@ -141,13 +141,13 @@ describe('NewSessionProviderHero', () => {
     expect(html).toContain('Not installed on this runner');
     expect(html).toContain('engine=kimi');
     expect(html).not.toContain('runner login');
-    // Its fix is that engine's row on this machine's card in Infrastructure.
+    // Its fix is that engine's row on this machine's card on the Machines & models page.
     expect(html).toContain(`<a href="/infrastructure?runner=${encodeId(RUNNER_ID)}&amp;engine=kimi"`);
     expect(html).toMatch(/<a href="\/infrastructure\?runner=[^"]*"[^>]*>Fix it<\/a>/);
   });
 
   it('sends a key’s fix to the engine that runs it, not to its own slug', () => {
-    // Kimi (Moonshot) runs on Kimi Code, and `moonshot` has no row on Infrastructure to land on —
+    // Kimi (Moonshot) runs on Kimi Code, and `moonshot` has no row on the Machines & models page to land on —
     // the install that fixes it is the kimi engine's.
     const html = markup('moonshot', {
       engines: [{ engine: 'kimi', installed: false, auth: 'unknown' }],

@@ -104,7 +104,7 @@ class SessionRunStartTest {
         val card = SessionRunStart.card(session(error = "OpenCode isn't installed on this runner and installing it failed (exit 1)"),
             runnerName = "longdeMac-mini.local")!!
         assertEquals("OpenCode isn't installed on longdeMac-mini.local", card.why)
-        assertEquals("Install it from Infrastructure, then send your message again.", card.body)
+        assertEquals("Install it from the Machines & models page, then send your message again.", card.body)
         assertEquals(listOf(SessionRunStart.Kind.OPEN_RUNNER), card.actions.map { it.kind })
     }
 

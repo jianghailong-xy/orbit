@@ -33,7 +33,7 @@ class DshRuntimeTest {
         assertFalse(DshRuntime.RunnerState.UPDATE_RUNNER.installable)
         assertFalse(DshRuntime.RunnerState.UNSUPPORTED_PLATFORM.installable)
         assertNull(DshRuntime.RunnerState.READY.hint)
-        assertEquals("Install DeepSeek Harness on this runner from Infrastructure.", DshRuntime.RunnerState.NOT_INSTALLED.hint)
+        assertEquals("Install DeepSeek Harness on this runner from the Machines & models page.", DshRuntime.RunnerState.NOT_INSTALLED.hint)
         assertEquals("DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only.", DshRuntime.RunnerState.UNSUPPORTED_PLATFORM.hint)
     }
 
@@ -76,15 +76,15 @@ class DshRuntimeTest {
 
     @Test fun eachRepairSaysWhatStopsTheSessionAndWhereItIsFixed() {
         assertEquals("DeepSeek Harness needs a DeepSeek key", DshRuntime.Repair.NEEDS_KEY.title("wikova"))
-        assertEquals("This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.",
+        assertEquals("This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key on the Machines & models page, then send your message again.",
             DshRuntime.Repair.NEEDS_KEY.detail)
         assertEquals("DeepSeek rejected this API key", DshRuntime.Repair.INVALID_KEY.title(null))
-        assertEquals("Update the DeepSeek key in Infrastructure, then send your message again.",
+        assertEquals("Update the DeepSeek key on the Machines & models page, then send your message again.",
             DshRuntime.Repair.INVALID_KEY.detail)
         assertEquals("Waiting for a newer runner", DshRuntime.Repair.UPDATE_RUNNER.title("wikova"))
         assertEquals("DeepSeek Harness isn't installed on “wikova”", DshRuntime.Repair.NOT_INSTALLED.title("wikova"))
         assertEquals("DeepSeek Harness isn't installed on this runner", DshRuntime.Repair.NOT_INSTALLED.title(""))
-        assertEquals("Install it from Infrastructure, then send your message again.", DshRuntime.Repair.NOT_INSTALLED.detail)
+        assertEquals("Install it from the Machines & models page, then send your message again.", DshRuntime.Repair.NOT_INSTALLED.detail)
         assertEquals("DeepSeek Harness can't run on “wikova”", DshRuntime.Repair.UNSUPPORTED_PLATFORM.title("wikova"))
         assertEquals("DeepSeek Harness can't run on this runner", DshRuntime.Repair.UNSUPPORTED_PLATFORM.title(null))
     }
@@ -92,9 +92,9 @@ class DshRuntimeTest {
     /** A07-19 (b) (iOS 6f3083272 `Repair.detail(keyName:)`): a rejected key is named where the reader knows which one it is — one
      * DeepSeek key runs on Claude Code, OpenCode and Harness alike, and there can be several — and said as before where it does not. */
     @Test fun aRejectedKeyIsNamed() {
-        assertEquals("Update the DeepSeek key “DeepSeek 2” in Infrastructure, then send your message again.",
+        assertEquals("Update the DeepSeek key “DeepSeek 2” on the Machines & models page, then send your message again.",
             DshRuntime.Repair.INVALID_KEY.detail("the DeepSeek key “DeepSeek 2”"))
-        assertEquals("Update the DeepSeek key in Infrastructure, then send your message again.", DshRuntime.Repair.INVALID_KEY.detail(null))
+        assertEquals("Update the DeepSeek key on the Machines & models page, then send your message again.", DshRuntime.Repair.INVALID_KEY.detail(null))
         assertEquals("a missing key has none to name", DshRuntime.Repair.NEEDS_KEY.detail, DshRuntime.Repair.NEEDS_KEY.detail("the DeepSeek key “DeepSeek 2”"))
     }
 
