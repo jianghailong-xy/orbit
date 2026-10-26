@@ -3,6 +3,7 @@ package io.orbitd.android
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -31,6 +32,7 @@ import io.orbitd.android.auth.loginBackground
 import io.orbitd.android.auth.openInSignInBrowser
 import io.orbitd.android.core.BuildIdentity
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.reader.LastPageMarks
 import io.orbitd.android.reader.SessionDestination
 import io.orbitd.android.reader.WorktreeModel
 import io.orbitd.android.toast.OrbitToasts
@@ -87,10 +89,20 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); acceptIntent(intent) }
     // After onNewIntent: back from the browser with Google's answer, or without one (A03c).
     override fun onResume() { super.onResume(); auth.onResumed() }
+    // D09 P02: a session a tap opens is stamped with the tap's own time (LastPageMarks).
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked != MotionEvent.ACTION_UP) return super.dispatchTouchEvent(event)
+        LastPageMarks.touchNanos = if (Build.VERSION.SDK_INT >= 34) event.eventTimeNanos else event.eventTime * 1_000_000
+        return try { super.dispatchTouchEvent(event) } finally { LastPageMarks.touchNanos = LastPageMarks.NO_TOUCH }
+    }
     private fun acceptIntent(intent: Intent) {
         // `orbit://auth/google`, from GoogleSignInRedirectActivity; any other address is not Google's answer.
         intent.data?.let { auth.handleGoogleCallback(it.toString()) }
-        if (intent.action == Intent.ACTION_VIEW) intent.dataString?.let { incoming = ++linkSequence to it }
+        if (intent.action == Intent.ACTION_VIEW) intent.dataString?.let {
+            // A notification's tap carries the notification's tag as the intent's identifier (PushNotifications.show).
+            LastPageMarks.delivered(it, intent.identifier != null)
+            incoming = ++linkSequence to it
+        }
     }
 }
 
@@ -118,6 +130,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
     LaunchedEffect(incoming) {
         incoming?.second?.let { raw ->
             OrbitLinks.parse(raw, signedIn?.handle?.account?.server, Origin.EXTERNAL)?.let { route ->
+                if (navigation.current != route) LastPageMarks.arrived(route, raw)
                 navigation = navigation.receive(route)
             }
         }
@@ -173,7 +186,11 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             wikiHeld += kept.filter { it.isWikiOrWatch }
         }
         val route = navigation.current
-        fun open(next: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.push(next) }
+        fun open(next: OrbitRoute) {
+            keyboard?.hide(); focus.clearFocus()
+            if (navigation.current != next) LastPageMarks.opened(next)
+            navigation = navigation.push(next)
+        }
         // A drawer row: the destination already showing only closes the drawer, any other opens at its root (A05-8).
         fun select(key: String, root: OrbitRoute) {
             keyboard?.hide(); focus.clearFocus(); navigation = navigation.select(key, root); scope.launch { drawer.close() }
