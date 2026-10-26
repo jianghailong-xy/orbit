@@ -417,9 +417,27 @@ func firstSpawnFor(job *ClaimedSession) bool {
 	return true
 }
 
+// runtimeSessionIDMu guards ClaimedSession.RuntimeSessionID where one goroutine writes it while
+// others read it. claude's stdout reader records the id off every result (setRuntimeSessionID),
+// while the same session's inbox poller, a withdrawal and a write receipt settle turns on
+// goroutines of their own, each completion carrying the id (currentRuntimeSessionID). A string
+// read beside an unguarded write can come back torn: one id's pointer with another's length.
+var runtimeSessionIDMu sync.Mutex
+
+// setRuntimeSessionID records the id the engine runs the conversation under, where other
+// goroutines of the session may be reading it (runtimeSessionIDMu).
+func setRuntimeSessionID(job *ClaimedSession, id string) {
+	runtimeSessionIDMu.Lock()
+	job.RuntimeSessionID = id
+	runtimeSessionIDMu.Unlock()
+}
+
 func currentRuntimeSessionID(job *ClaimedSession) string {
-	if job.RuntimeSessionID != "" {
-		return job.RuntimeSessionID
+	runtimeSessionIDMu.Lock()
+	id := job.RuntimeSessionID
+	runtimeSessionIDMu.Unlock()
+	if id != "" {
+		return id
 	}
 	if runtimeProvider(job) == providerClaude {
 		return job.SessionUUID
@@ -2819,9 +2837,10 @@ scanLoop:
 			r := resultFrom(msg, procCtx)
 			// Recorded before the carrier check below: the id claude runs the conversation
 			// under is session-level, and a resume can report it on a result that belongs to
-			// no turn of ours.
+			// no turn of ours. Under its lock, because the poller and a withdrawal read it on
+			// their own goroutines.
 			if r.ClaudeSessionID != "" {
-				job.RuntimeSessionID = r.ClaudeSessionID
+				setRuntimeSessionID(job, r.ClaudeSessionID)
 				writeSessionMeta(scratchDir, job, execDir)
 			}
 			// Claude's own synthetic resume turn (see isResumeCarrierResult) ends here too.
