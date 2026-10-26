@@ -370,23 +370,26 @@ sample() {
 # more, and the runners still connected end their turns. Then the control plane is back, and every runner cut off must
 # be heard again, as the same process; every session must have stored what its engine wrote during the outage, end its
 # turn and answer one message more; and the reaper, having held the silence of those cut off for an outage, must have
-# reaped none of them. Sets failed when any of it does not hold.
+# reaped none of them. Sets failed when any of it does not hold. Each run of the phase is numbered (gateway-1,
+# partition-2, …), and names its sessions' release gates and its records.
 outage() {
-  local phase=$1 i line since_at cut_at restore_at reading held_lines reaped_lines reason first_reading="" last_reading=""
+  local phase=$1 run i line since_at cut_at restore_at reading held_lines reaped_lines reason first_reading="" last_reading=""
   local held_count=0 most_held=0 reaped=0 passed=0 n verdict lead released=0 mid ends deadline
   local status_during final_status during_at turn_at ran_seqs rows distinct first last runtime starts told
   local -a why=() verdicts=() log_from=()
   local -A is_cut=() process0=() beat0=() back=() reconnected=()
+  # Each run of a phase has a number: its sessions' release gates and texts, and its records, are its own.
+  run="$phase-$(($(awk -F'\t' -v p="$phase" 'index($1, p "-") == 1' "$outages" | wc -l) + 1))"
   for i in $CUT; do is_cut[$i]=1; done
   statuses=() silence_max=() crossed_at=()
-  : > "$out/$phase-samples.tsv"
+  : > "$out/$run-samples.tsv"
   since_at="$(now)"
-  [ "$(json "$(api switch get)" required)" = true ] || fail "$phase: RUNNER_LINK_REQUIRED is off: run prepare"
+  [ "$(json "$(api switch get)" required)" = true ] || fail "$run: RUNNER_LINK_REQUIRED is off: run prepare"
   for i in $(runners); do
-    wait_presence "$i" 60 || fail "$phase: runner r$i's presence does not say LINK"
+    wait_presence "$i" 60 || fail "$run: runner r$i's presence does not say LINK"
   done
-  quiet_cell "$phase"
-  open_sessions "$phase"
+  quiet_cell "$run"
+  open_sessions "$run"
   # A hint makes a runner beat at once, besides its beat every 30 s: the sessions just opened did, on every runner. One
   # interval more, and each runner's last beat before the cut is its own, wherever it falls in the interval.
   sleep $((heartbeat + 2))
@@ -396,20 +399,20 @@ outage() {
     beat0[$i]="${line##* }"
     log_from[$i]="$(log_lines "$i")"
   done
-  sample "$phase"
+  sample "$run"
 
   # The cut.
   if [ "$phase" = gateway ]; then kill_gateway; else cut_off $CUT; fi
   cut_at="$(now)"
   if [ "$phase" = gateway ]; then
-    say "$phase: $gateway killed: every runner has lost the link"
+    say "$run: $gateway killed: every runner has lost the link"
   else
-    say "$phase: runners $(for i in $CUT; do printf 'r%s ' "$i"; done)cut off, $(wc -w <<< "$CUT") of $count: every packet their processes send is dropped (nft table inet $nft_table)"
+    say "$run: runners $(for i in $CUT; do printf 'r%s ' "$i"; done)cut off, $(wc -w <<< "$CUT") of $count: every packet their processes send is dropped (nft table inet $nft_table)"
   fi
   # Where each runner cut off stood: its last beat before the cut, and so when the reaper reads it as offline.
   for i in $CUT; do
     lead="$(awk -v a="$(epoch "$cut_at")" -v b="$(epoch "${beat0[$i]}")" 'BEGIN { printf "%.1f", a - b }')"
-    say "$phase: runner r$i last beat $lead s before the cut: past the reaper's $offline_after s line at +$(awk -v l="$lead" -v o="$offline_after" 'BEGIN { printf "%.1f", o - l }') s"
+    say "$run: runner r$i last beat $lead s before the cut: past the reaper's $offline_after s line at +$(awk -v l="$lead" -v o="$offline_after" 'BEGIN { printf "%.1f", o - l }') s"
   done
 
   # The outage, sampled every 2 s. Halfway, every engine writes its event during the outage, and the runners still
@@ -417,14 +420,14 @@ outage() {
   mid=$((SECONDS + outage / 2))
   ends=$((SECONDS + outage))
   while [ $SECONDS -lt $ends ]; do
-    sample "$phase"
+    sample "$run"
     if [ "$released" = 0 ] && [ $SECONDS -ge $mid ]; then
       for i in $(runners); do
-        release "$i" "$phase-during"
-        [ -n "${is_cut[$i]:-}" ] || release "$i" "$phase-end"
+        release "$i" "$run-during"
+        [ -n "${is_cut[$i]:-}" ] || release "$i" "$run-end"
       done
       released=1
-      say "$phase: halfway: every engine writes an event; the runners still connected end their turns"
+      say "$run: halfway: every engine writes an event; the runners still connected end their turns"
     fi
     sleep 2
   done
@@ -433,16 +436,16 @@ outage() {
   restore_at="$(now)"
   if [ "$phase" = gateway ]; then start_gateway; else reconnect; fi
   if [ "$phase" = gateway ]; then
-    say "$phase: $gateway started again at $restore_at, $(since "$cut_at") s after the kill, and healthy now; as the outage ended the reaper read ${reading#* } of ${reading% *} runners silent"
+    say "$run: $gateway started again at $restore_at, $(since "$cut_at") s after the kill, and healthy now; as the outage ended the reaper read ${reading#* } of ${reading% *} runners silent"
   else
-    say "$phase: the cut lifted at $restore_at, $(since "$cut_at") s after it began; as the outage ended the reaper read ${reading#* } of ${reading% *} runners silent"
+    say "$run: the cut lifted at $restore_at, $(since "$cut_at") s after it began; as the outage ended the reaper read ${reading#* } of ${reading% *} runners silent"
   fi
 
   # Every runner cut off heard again, as the same process; the samples go on as long as that takes.
   deadline=$((SECONDS + 300))
   for i in $CUT; do
     while :; do
-      sample "$phase"
+      sample "$run"
       line="$(presence "$i")"
       if [ "${line%% *}" = LINK ] && [[ "${line##* }" > "$restore_at" ]]; then back[$i]="${line##* }"; break; fi
       [ $SECONDS -lt $deadline ] || break
@@ -450,44 +453,44 @@ outage() {
     done
     reconnected[$i]="$(log_since "$i" "${log_from[$i]}" 'carries the work of process' | tail -n 1 | sed -nE 's/.*(after [^ ]+ without one).*/\1/p')"
     if [ -n "${back[$i]:-}" ]; then
-      say "$phase: runner r$i heard again at ${back[$i]}, $(awk -v a="$(epoch "$restore_at")" -v b="$(epoch "${back[$i]}")" 'BEGIN { printf "%.1f", b - a }') s after the restore, as process $(cut -d' ' -f2 <<< "$line"); its log: ${reconnected[$i]:-no reconnection}"
+      say "$run: runner r$i heard again at ${back[$i]}, $(awk -v a="$(epoch "$restore_at")" -v b="$(epoch "${back[$i]}")" 'BEGIN { printf "%.1f", b - a }') s after the restore, as process $(cut -d' ' -f2 <<< "$line"); its log: ${reconnected[$i]:-no reconnection}"
     else
-      say "$phase: runner r$i not heard again within 300 s of the restore (presence: $line)"
+      say "$run: runner r$i not heard again within 300 s of the restore (presence: $line)"
     fi
   done
   for i in $CUT; do
-    while IFS= read -r line; do say "$phase: runner r$i log: $line"; done < <(log_since "$i" "${log_from[$i]}" 'runner link: connection' | grep -E 'ended \(|carries the work' || true)
+    while IFS= read -r line; do say "$run: runner r$i log: $line"; done < <(log_since "$i" "${log_from[$i]}" 'runner link: connection' | grep -E 'ended \(|carries the work' || true)
   done
-  sample "$phase"
+  sample "$run"
 
   # Every session: what its engine wrote during the outage stored, its turn ended, one message more answered.
-  for i in $(runners); do wait_until 120 has_during "${suuid[$i]}" "$phase" || true; done
-  for i in $CUT; do release "$i" "$phase-end"; done
+  for i in $(runners); do wait_until 120 has_during "${suuid[$i]}" "$run" || true; done
+  for i in $CUT; do release "$i" "$run-end"; done
   for i in $(runners); do wait_until 120 is_parked "${suuid[$i]}" 2 || true; done
   for i in $(runners); do
     if [ "$(session_status "${suuid[$i]}")" = AWAITING_INPUT ]; then
-      api turn "${sid[$i]}" "Mass disconnect drill, $phase: a message after the outage" > /dev/null ||
-        say "$phase: runner r$i's session refused a message after the outage"
+      api turn "${sid[$i]}" "Mass disconnect drill, $run: a message after the outage" > /dev/null ||
+        say "$run: runner r$i's session refused a message after the outage"
     fi
   done
   for i in $(runners); do wait_until 120 is_parked "${suuid[$i]}" 3 || true; done
 
   # What the reaper did: the apiserver's log since the phase began.
-  reaper_log "$since_at" > "$out/$phase-apiserver.log"
-  docker logs --timestamps --since "$since_at" "$gateway" > "$out/$phase-link-gateway.log" 2>&1 || true
-  held_lines="$(grep -E "$held_pattern" "$out/$phase-apiserver.log" || true)"
-  reaped_lines="$(grep -E 'reaped session [0-9a-f-]+ -> ' "$out/$phase-apiserver.log" || true)"
+  reaper_log "$since_at" > "$out/$run-apiserver.log"
+  docker logs --timestamps --since "$since_at" "$gateway" > "$out/$run-link-gateway.log" 2>&1 || true
+  held_lines="$(grep -E "$held_pattern" "$out/$run-apiserver.log" || true)"
+  reaped_lines="$(grep -E 'reaped session [0-9a-f-]+ -> ' "$out/$run-apiserver.log" || true)"
   if [ -n "$held_lines" ]; then
     held_count="$(wc -l <<< "$held_lines")"
     most_held="$(sed -nE 's/.*not reaping ([0-9]+) session.*/\1/p' <<< "$held_lines" | sort -n | tail -n 1)"
     first_reading="$(head -n 1 <<< "$held_lines" | sed -E 's/.*whose runner looks offline \([^)]*\): //')"
     last_reading="$(tail -n 1 <<< "$held_lines" | sed -E 's/.*whose runner looks offline \([^)]*\): //')"
-    say "$phase: the reaper held $held_count sweep(s), from $(head -n 1 <<< "$held_lines" | cut -d' ' -f1) to $(tail -n 1 <<< "$held_lines" | cut -d' ' -f1); the first: \"$(head -n 1 <<< "$held_lines" | sed -E 's/^.*\[Reaper\] //')\"; the last: \"$last_reading\""
+    say "$run: the reaper held $held_count sweep(s), from $(head -n 1 <<< "$held_lines" | cut -d' ' -f1) to $(tail -n 1 <<< "$held_lines" | cut -d' ' -f1); the first: \"$(head -n 1 <<< "$held_lines" | sed -E 's/^.*\[Reaper\] //')\"; the last: \"$last_reading\""
   else
-    say "$phase: the reaper held no sweep"
+    say "$run: the reaper held no sweep"
   fi
   if [ -n "$reaped_lines" ]; then
-    while IFS= read -r line; do say "$phase: apiserver: $(sed -E 's/^([^ ]+) .*\[Reaper\] /\1 /' <<< "$line")"; done <<< "$reaped_lines"
+    while IFS= read -r line; do say "$run: apiserver: $(sed -E 's/^([^ ]+) .*\[Reaper\] /\1 /' <<< "$line")"; done <<< "$reaped_lines"
   fi
   # A hold the outage did not make (the startup grace, a heartbeat write that failed) says nothing of the mass silence.
   reason="$(sed -nE 's/.*whose runner looks offline \([^)]*\): //p' <<< "$held_lines" | grep -vE 'have been silent for over|went silent together' | head -n 1 || true)"
@@ -519,7 +522,7 @@ outage() {
         why+=("silent for ${silence_max[$i]} s though not cut off")
       fi
     fi
-    during_at="$(assistant_at "${suuid[$i]}" "$phase: written during the outage.")"
+    during_at="$(assistant_at "${suuid[$i]}" "$run: written during the outage.")"
     if [ -z "$during_at" ]; then
       why+=("what its engine wrote during the outage was not stored")
     elif [ -n "${is_cut[$i]:-}" ] && [[ "$during_at" < "$restore_at" ]]; then
@@ -538,15 +541,15 @@ outage() {
     told="$(log_since "$i" "${log_from[$i]}" "no longer holds session" | grep -E -- "${suuid[$i]}|${sid[$i]}" | head -n 1 || true)"
     [ -z "$told" ] || why+=("its runner was told it no longer holds it: $told")
     if [ ${#why[@]} -eq 0 ]; then verdict=PASS; passed=$((passed + 1)); else verdict="$(printf '%s; ' "${why[@]}")"; verdict="${verdict%; }"; fi
-    printf '%s\tr%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$phase" "$i" "${suuid[$i]}" "${is_cut[$i]:+cut}" \
+    printf '%s\tr%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$run" "$i" "${suuid[$i]}" "${is_cut[$i]:+cut}" \
       "${silence_max[$i]:-}" "${crossed_at[$i]:-}" "$n" "$status_during" "${back[$i]:-}" "${reconnected[$i]:-}" \
       "$during_at" "$final_status" "$ran_seqs" "$verdict" >> "$sessions_table"
     if [ "$verdict" != PASS ]; then
-      say "$phase: r$i session ${sid[$i]}: $verdict"
+      say "$run: r$i session ${sid[$i]}: $verdict"
     elif [ -n "${is_cut[$i]:-}" ]; then
-      say "$phase: r$i session ${sid[$i]} holds: RUNNING while out of reach, silent ${silence_max[$i]} s at most and held by the reaper in $n sweep(s); what its engine wrote then stored at $during_at; 3 messages answered; seqs $first..$last each once; its engine started once"
+      say "$run: r$i session ${sid[$i]} holds: RUNNING while out of reach, silent ${silence_max[$i]} s at most and held by the reaper in $n sweep(s); what its engine wrote then stored at $during_at; 3 messages answered; seqs $first..$last each once; its engine started once"
     else
-      say "$phase: r$i session ${sid[$i]} holds: connected throughout, its turn answered at $turn_at during the outage; 3 messages answered; seqs $first..$last each once; its engine started once"
+      say "$run: r$i session ${sid[$i]} holds: connected throughout, its turn answered at $turn_at during the outage; 3 messages answered; seqs $first..$last each once; its engine started once"
     fi
   done
 
@@ -555,12 +558,12 @@ outage() {
   [ -z "$reason" ] || verdicts+=("the reaper held for another reason than the mass silence: $reason")
   [ "$passed" = "$count" ] || verdicts+=("$((count - passed)) of $count sessions did not hold")
   if [ ${#verdicts[@]} -eq 0 ]; then verdict=PASS; else verdict="$(printf '%s; ' "${verdicts[@]}")"; verdict="${verdict%; }"; fi
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$phase" "$count" "$(wc -w <<< "$CUT")" "$outage" "$cut_at" \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$run" "$count" "$(wc -w <<< "$CUT")" "$outage" "$cut_at" \
     "$restore_at" "$held_count" "$first_reading" "$reaped" "$passed/$count" "$verdict" >> "$outages"
   if [ "$verdict" = PASS ]; then
-    say "$phase holds: $(wc -w <<< "$CUT") of $count runners out of reach for $outage s; the reaper held their silence in $held_count sweep(s) (\"$first_reading\") and reaped no session; every session ended its turn, stored what its engine wrote during the outage and answered its next message"
+    say "$run holds: $(wc -w <<< "$CUT") of $count runners out of reach for $outage s; the reaper held their silence in $held_count sweep(s) (\"$first_reading\") and reaped no session; every session ended its turn, stored what its engine wrote during the outage and answered its next message"
   else
-    say "FAIL: $phase: $verdict"
+    say "FAIL: $run: $verdict"
     failed=1
   fi
 }

@@ -296,9 +296,13 @@ The records go to `<state>/client/mass-disconnect/`:
   line, the reaper's held sweeps with its own reading of the cell, each runner heard again and its log's connection
   lines, and each session's account.
 - `outages.tsv` has a line per outage, and `sessions.tsv` a line per session in it.
-- `<phase>-samples.tsv` has the outage sampled every 2 s: each session's status (`S`), each runner's silence in seconds
+- `<run>-samples.tsv` has the outage sampled every 2 s: each session's status (`S`), each runner's silence in seconds
   (`P`), and the cell as the reaper reads it (`F`: runners heard from, runners silent).
-- `<phase>-apiserver.log` and `<phase>-link-gateway.log` are the two logs over the phase.
+- `<run>-apiserver.log` and `<run>-link-gateway.log` are the two logs over the run.
+
+A phase can be run again, with new sessions, as often as its outage should be: when the reaper sweeps, every 30 s,
+falls at a different point of the runners' crossings each time. Each run is numbered (`gateway-1`, `partition-2`, …),
+and names its sessions' release gates and its records; `prepare` starts the numbering again.
 
 The runners keep running after the drill until `mass-disconnect-drill.sh stop`, which also removes the partition's
 nftables table should a drill have died with it in place. Each runner's log and its scripted claude's records are in
