@@ -299,9 +299,10 @@ node scripts/runner-link/loadgen-baseline.mjs <state>/loadgen/runs/hb-1 <state>/
 node scripts/runner-link/loadgen-baseline.mjs <state>/loadgen/runs/hb-2 <state>/loadgen/runs/ev400-on --target-events 2000
 ```
 
-Measured on 2026-10-26 with the apiserver and gateway of commit 03bee4272, the reports written with 99a58ea8e's
-steady-window means, one apiserver, heartbeats-only runs at 0.81 to 0.83 database cores (8.1 ms a beat), each event run
-against the heartbeats-only runs before and after it, the host's other work at 5.2 cores:
+Measured on 2026-10-26 with the apiserver and gateway of commit 03bee4272 (before O1's heartbeat), the containers not
+pinned, the reports written with 99a58ea8e's steady-window means, one apiserver, heartbeats-only runs at 0.81 to 0.83
+database cores (8.1 ms a beat), each event run against the heartbeats-only runs before and after it, the host's other
+work at 5.2 cores:
 
 | Per event | apiserver CPU | database CPU | SQL statements | commits | EventAck p99 at the runner |
 | --- | --- | --- | --- | --- | --- |
@@ -316,6 +317,10 @@ against the heartbeats-only runs before and after it, the host's other work at 5
 - Linear in events, 2,000 events/s needs about 1.5 database cores and 0.95 apiserver cores for the ingest, and at most
   45 commits a second. That is an upper bound: at that rate one gateway's calls fill to their 64-batch cap, where at
   400 events/s they carry 27 (a 250 ms window gives 61 at 400 events/s, but the host swapped through that run).
+- With O1's heartbeat merged, a heartbeats-only run costs the database 0.10 to 0.11 cores instead of 0.8, so the events
+  stand out far better. A round on the merged branch with the containers on the P-cores could not be measured: while
+  the production model used those cores (the host's other work at 9 to 12 cores), every run swapped past 100 pages/s.
+  The one target-shape run of it read about 0.83 ms an event against its heartbeats-only runs.
 - What an event still costs is the derivation's own work, 0.28 ms of execution at 400 events/s: the session's one
   UPDATE (non-HOT whenever the preview text changes, since `session_search_trgm` indexes it), the run_event insert,
   and the tool_call and approval writes. The rest, about 0.23 ms for each of its 2.0 statements, is parse, plan and
