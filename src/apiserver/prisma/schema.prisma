@@ -920,11 +920,20 @@ model RunnerPresence {
   /// What carried the beat: 'HTTP' (POST /api/runner/heartbeat) or 'LINK' (the link gateway).
   linkState     String   @map("link_state")
   /// The runner's hash of the facts it reports (model catalogue, skills, engine state, repository
-  /// health), against which a link heartbeat can say "unchanged". Null over HTTP, which sends them all.
+  /// health), against which a link heartbeat can say "unchanged": a JSON object of one digest per kind,
+  /// as the last full reconcile or report write stored them (runner-api/link-heartbeat.ts). Null over
+  /// HTTP, which sends them all.
   factsHash     String?  @map("facts_hash")
-  /// The hash of what the last full reconciliation compared. Null over HTTP, which reconciles fully
-  /// on every beat.
+  /// The hash of what the last full reconciliation compared: what the beat said that decides what it is
+  /// handed, and the `changes` count it covered. Null over HTTP, which reconciles fully on every beat.
   reconcileHash String?  @map("reconcile_hash")
+  /// How many times something a heartbeat delivers to this runner has changed. Every writer of one adds
+  /// one after its commit (RealtimeService.markRunnerChanged); a link heartbeat whose last full reconcile
+  /// covered a smaller count reconciles in full again (migration 0447).
+  changes       BigInt   @default(0)
+  /// When the last full reconcile that left nothing pending ran; null until one has, which is a reconcile
+  /// owed. A link heartbeat reconciles in full at least once in each five minutes (migration 0447).
+  reconciledAt  DateTime? @map("reconciled_at")
 
   @@map("runner_presence")
 }

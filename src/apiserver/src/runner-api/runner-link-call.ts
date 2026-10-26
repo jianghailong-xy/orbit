@@ -66,6 +66,11 @@ export interface RunnerLinkContext {
   afterSeq: { sessionId: string; seq: number } | null;
   /** The gateway node that forwarded the call; null when it named none. */
   gatewayId?: string | null;
+  /**
+   * Set when RunnerAuthGuard left the caller's admission to the route (AdmitsLinkCallItself): the link token's
+   * credential fingerprint and owner, which the route checks against the runner row before it writes anything.
+   */
+  admission?: { credential: string; ownerId: string };
 }
 
 /** The link call this request is, or undefined for one that came over HTTPS. */

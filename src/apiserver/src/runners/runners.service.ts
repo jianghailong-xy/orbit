@@ -805,6 +805,8 @@ export class RunnersService {
         installMode: 'install',
       },
     });
+    // The heartbeat hands the install over: over the runner link, the next one is told so (markRunnerChanged).
+    this.realtime?.markRunnerChanged(id);
     return installStateOf(r);
   }
 
@@ -837,6 +839,7 @@ export class RunnersService {
         installMode: 'update',
       },
     });
+    this.realtime?.markRunnerChanged(id);
     return installStateOf(r);
   }
 
@@ -861,6 +864,7 @@ export class RunnersService {
     }
     const requestedAt = new Date();
     await this.prisma.runner.update({ where: { id }, data: { modelCatalogRefreshAt: requestedAt } });
+    this.realtime?.markRunnerChanged(id);
     return { requestedAt: requestedAt.toISOString() };
   }
 
@@ -919,6 +923,7 @@ export class RunnersService {
       where: { id },
       data: { claudeHistoryStatus: 'pending', claudeHistoryPath: path, claudeHistoryAt: new Date() },
     });
+    this.realtime?.markRunnerChanged(id);
     return { workDir: path, status: 'pending' };
   }
 

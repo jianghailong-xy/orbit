@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
   Optional,
+  SetMetadata,
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Runner } from '@prisma/client';
@@ -27,6 +28,7 @@ import {
   runnerLinkNotConfigured,
   RunnerLinkTokenRefused,
   verifyRunnerLinkToken,
+  type RunnerLinkClaims,
   type RunnerLinkState,
 } from './runner-link-token';
 
@@ -42,6 +44,46 @@ export const RUNNER_OWNER_STATE = { owner: { select: { disabledAt: true } } } as
 export function admitRunner({ owner, ...runner }: Runner & { owner: { disabledAt: Date | null } }): Runner {
   if (owner.disabledAt) throw accountDisabled();
   return runner;
+}
+
+/** The metadata AdmitsLinkCallItself sets. */
+export const LINK_ADMISSION_IN_ROUTE = 'orbit:runner-link-admission-in-route';
+
+/**
+ * A runner route that admits a call the link gateway forwarded itself. RunnerAuthGuard still checks the link token —
+ * its signature, audience and lifetime, which read nothing — and the link's headers, and leaves the three reads it
+ * would make for any other link call to the route: the runner and the credential it still holds, its owner's account,
+ * and whether it is a managed runner. The route makes them in the statement it runs anyway, before it writes anything,
+ * and refuses exactly as readAdmittedLinkRunner does: RUNNER_LINK_TOKEN_REVOKED, then ACCOUNT_DISABLED. A managed
+ * runner it admits as the guard would, through readAdmittedLinkRunner and its instance's authorization. Until then
+ * `req.runner` is only the token's word (`id`, `ownerId`), and `req.runnerLink.admission` says the admission is the
+ * route's.
+ *
+ * So revocation stays exact on every call: the credential is compared with the runner row's in that statement, as the
+ * guard compares it. Only the heartbeat does this (runner-api/link-heartbeat.ts); an HTTPS call never does.
+ */
+export const AdmitsLinkCallItself = (): MethodDecorator => SetMetadata(LINK_ADMISSION_IN_ROUTE, true);
+
+/** The refusal of a link token whose runner is gone or no longer holds the credential the token was minted with. */
+export function runnerLinkTokenRevoked(): UnauthorizedException {
+  return new UnauthorizedException({
+    code: 'RUNNER_LINK_TOKEN_REVOKED',
+    message: 'The runner credential this link token was minted with was revoked.',
+  });
+}
+
+/**
+ * The runner a link token names, admitted as RunnerAuthGuard admits any link call: read by its id, refused
+ * RUNNER_LINK_TOKEN_REVOKED unless it still holds the credential the token was minted with, then ACCOUNT_DISABLED
+ * when its owner's account is disabled.
+ */
+export async function readAdmittedLinkRunner(prisma: PrismaService, claims: Pick<RunnerLinkClaims, 'runnerId' | 'credential'>): Promise<Runner> {
+  const runner = await prisma.runner.findUnique({
+    where: { id: claims.runnerId },
+    include: RUNNER_OWNER_STATE,
+  });
+  if (!runner || runnerLinkCredential(runner.tokenHash) !== claims.credential) throw runnerLinkTokenRevoked();
+  return admitRunner(runner);
 }
 
 @Injectable()
@@ -115,17 +157,22 @@ export class RunnerAuthGuard implements CanActivate {
         message: `The runner's link token was refused (${error.reason}).`,
       });
     }
-    const runner = await this.prisma.runner.findUnique({
-      where: { id: claims.runnerId },
-      include: RUNNER_OWNER_STATE,
-    });
-    if (!runner || runnerLinkCredential(runner.tokenHash) !== claims.credential) {
-      throw new UnauthorizedException({
-        code: 'RUNNER_LINK_TOKEN_REVOKED',
-        message: 'The runner credential this link token was minted with was revoked.',
-      });
+    const handler = context.getHandler();
+    if (handler && Reflect.getMetadata(LINK_ADMISSION_IN_ROUTE, handler) === true) {
+      // The route admits the caller in its own statement (AdmitsLinkCallItself).
+      const { requestId, afterSeq } = parseRunnerLinkRequest(req.headers);
+      req.runner = { id: claims.runnerId, ownerId: claims.ownerId };
+      req.runnerLink = {
+        leaseOwner: claims.leaseOwner,
+        requestId,
+        afterSeq,
+        gatewayId: parseRunnerLinkGatewayId(req.headers),
+        admission: { credential: claims.credential, ownerId: claims.ownerId },
+      } satisfies RunnerLinkContext;
+      if (afterSeq) await assertAfterSeqStored(this.prisma, claims.runnerId, afterSeq);
+      return true;
     }
-    const admitted = admitRunner(runner);
+    const admitted = await readAdmittedLinkRunner(this.prisma, claims);
     const { requestId, afterSeq } = parseRunnerLinkRequest(req.headers);
     req.managedRunnerInstance = await authorizeManagedRunnerInstance(this.prisma, admitted.id, req.headers);
     req.runner = admitted;

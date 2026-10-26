@@ -1,5 +1,5 @@
-import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
+import { pgAdapterFor } from '../prisma/prisma-client';
 
 /**
  * A real Prisma client that also records every SQL statement it sends.
@@ -66,7 +66,7 @@ export function countingPrismaClientFor(
     },
   });
 
-  const adapter = new PrismaPg(url);
+  const adapter = pgAdapterFor(url);
   const countingAdapter = new Proxy(adapter, {
     get(target, property, receiver) {
       const value = Reflect.get(target, property, receiver) as unknown;
