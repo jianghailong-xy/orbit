@@ -207,22 +207,39 @@ func (l *linkState) release(batches ...*queuedBatch) {
 	l.c.g.credit.give(total)
 }
 
-// store forwards one batch. It returns the durable seq the batch brings the session to and the events of it the route
-// refused, or why it was not stored, and false when the connection ended before an answer.
+// store forwards one batch: in a merged call when the gateway merges (events_merge.go) and the call takes it, and
+// otherwise alone. It returns the durable seq the batch brings the session to and the events of it the route refused,
+// or why it was not stored, and false when the connection ended before an answer.
 func (l *linkState) store(sessionID string, eb *linkpb.EventBatch) (uint64, []*linkpb.RejectedEvent, *linkpb.Failure, bool) {
 	c, m := l.c, l.c.g.metrics
+	if merger := c.g.merger; merger != nil {
+		res, merged, answered := merger.store(l, sessionID, eb)
+		if !answered {
+			return 0, nil, nil, false
+		}
+		if merged {
+			return l.settle(sessionID, eb, res.answer, res.err)
+		}
+	}
 	body, err := json.Marshal(eventsRequestBody(eb, c.claims.LeaseOwner))
 	if err != nil {
 		m.eventBatches.inc("unencodable")
 		return 0, nil, failure("EVENT_BATCH_MALFORMED", "the batch could not be encoded: "+err.Error(), true, time.Second), true
 	}
-	events := eb.GetEvents()
 	answer, err := c.g.backends.do(c.ctx, backendCall{
 		kind: "events", method: http.MethodPost, path: "/api/runner/sessions/" + sessionID + "/events", body: body,
 		header: l.headers(),
 		// Stored once per seq: a batch that reached the route twice stores nothing twice.
 		idempotent: true,
 	})
+	return l.settle(sessionID, eb, answer, err)
+}
+
+// settle reads what the events route answered of one batch, alone or within a merged call: the durable seq and the
+// refused events of a batch it stored, or why it was not stored. False when the connection ended before an answer.
+func (l *linkState) settle(sessionID string, eb *linkpb.EventBatch, answer *backendAnswer, err error) (uint64, []*linkpb.RejectedEvent, *linkpb.Failure, bool) {
+	m := l.c.g.metrics
+	events := eb.GetEvents()
 	if err != nil {
 		if errors.Is(err, errCallCancelled) {
 			return 0, nil, nil, false
@@ -296,13 +313,20 @@ func storedAnswer(body []byte, last uint64) (uint64, []*linkpb.RejectedEvent) {
 // payload_json that is not JSON goes as a JSON string of its bytes, which the route refuses as that event's payload
 // while it stores the others.
 func eventsRequestBody(eb *linkpb.EventBatch, process string) map[string]any {
-	type httpEvent struct {
-		Seq     uint64          `json:"seq"`
-		Type    string          `json:"type"`
-		TS      string          `json:"ts"`
-		TurnID  string          `json:"turnId,omitempty"`
-		Payload json.RawMessage `json:"payload"`
-	}
+	return map[string]any{"leaseOwner": strings.ToLower(process), "events": requestEvents(eb)}
+}
+
+// httpEvent is one event of a RunEventBatch.
+type httpEvent struct {
+	Seq     uint64          `json:"seq"`
+	Type    string          `json:"type"`
+	TS      string          `json:"ts"`
+	TurnID  string          `json:"turnId,omitempty"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+// requestEvents is an EventBatch's events as the events route takes them (eventsRequestBody).
+func requestEvents(eb *linkpb.EventBatch) []httpEvent {
 	events := make([]httpEvent, 0, len(eb.GetEvents()))
 	for _, e := range eb.GetEvents() {
 		payload := json.RawMessage(e.GetPayloadJson())
@@ -317,7 +341,7 @@ func eventsRequestBody(eb *linkpb.EventBatch, process string) map[string]any {
 			TS: time.UnixMilli(e.GetTsUnixMs()).UTC().Format("2006-01-02T15:04:05.000Z07:00"),
 		})
 	}
-	return map[string]any{"leaseOwner": strings.ToLower(process), "events": events}
+	return events
 }
 
 // creditBook is the gateway's ingest queue: the events and bytes every connection has queued or in flight to the

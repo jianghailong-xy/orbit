@@ -267,13 +267,13 @@ export function DshRepairCard({ repair, help, seq }: { repair: DshRepair; help: 
       </div>
       <div className="chat-authfix-desc">
         {repair === 'needsKey'
-          ? 'This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.'
+          ? 'This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key on the Machines & models page, then send your message again.'
           : repair === 'invalidKey'
-            ? `Update ${help.keyName ?? 'the DeepSeek key'} in Infrastructure, then send your message again.`
+            ? `Update ${help.keyName ?? 'the DeepSeek key'} on the Machines & models page, then send your message again.`
             : repair === 'updateRunner'
               ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}, which predates DeepSeek Harness. The runner updates itself when no session is running on it.`
               : repair === 'notInstalled'
-                ? 'Install it from Infrastructure, then send your message again.'
+                ? 'Install it from the Machines & models page, then send your message again.'
                 : 'DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only. Move this work to a runner that can.'}
       </div>
       <div className="chat-authfix-actions">
@@ -322,10 +322,10 @@ export function AntigravityRepairCard({ repair, help, seq }: {
       </div>
       <div className="chat-authfix-desc">
         {repair === 'needsKey'
-          ? 'Sign in with Google on this runner, or connect a Gemini API key in Infrastructure.'
+          ? 'Sign in with Google on this runner, or connect a Gemini API key on the Machines & models page.'
           : repair === 'updateRunner'
             ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}; Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then.`
-            : 'Install it from Infrastructure, then send your message again.'}
+            : 'Install it from the Machines & models page, then send your message again.'}
       </div>
       {repair === 'needsKey' && help.provider === 'antigravity' && (
         help.googleLogin === 'available' && help.runnerId
@@ -341,7 +341,7 @@ export function AntigravityRepairCard({ repair, help, seq }: {
         ) : (
           <>
             {repair === 'notInstalled' && help.onInstall && <button className="chat-authfix-go" type="button" onClick={help.onInstall} disabled={help.installDisabled}>Install</button>}
-            {help.onOpenProviders && <button className="chat-authfix-retry" type="button" onClick={help.onOpenProviders}>Open in Infrastructure</button>}
+            {help.onOpenProviders && <button className="chat-authfix-retry" type="button" onClick={help.onOpenProviders}>Open in Machines & models</button>}
           </>
         )}
       </div>
@@ -2218,7 +2218,7 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
               DeepSeek Harness, so the engine is no way to name it, and its slug is nobody's. */}
           <div className="chat-authfix-desc">
             {help.keyName ? `${help.keyName.charAt(0).toUpperCase()}${help.keyName.slice(1)}` : 'The API key'} was
-            rejected. Update it in Infrastructure, then send your message again.
+            rejected. Update it on the Machines & models page, then send your message again.
           </div>
           {help.onUseApiKey && (
             <button className="chat-authfix-go" onClick={help.onUseApiKey} type="button">

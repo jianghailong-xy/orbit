@@ -480,7 +480,7 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
     {
       pool: empty,
       says: [
-        /the account pool "Nothing in it" has no accounts in it — add one under Account pools on Infrastructure, or pick another provider/,
+        /the account pool "Nothing in it" has no accounts in it — add one under Account pools on the Machines & models page, or pick another provider/,
       ],
     },
     {
@@ -490,7 +490,7 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
         /Refused key: key refused/,
         /Metered since: Metered API key — no 5-hour window/,
         /Switched off: disabled/,
-        /\) — fix one under Account pools on Infrastructure, or pick another provider/,
+        /\) — fix one under Account pools on the Machines & models page, or pick another provider/,
       ],
     },
   ];

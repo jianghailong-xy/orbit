@@ -49,7 +49,7 @@ final class GeminiEntryParityTests: XCTestCase {
         XCTAssertTrue(web.contains(EngineAuth.antigravityBody(.notInstalled, runnerName: nil, runnerVersion: nil)))
         XCTAssertTrue(web.contains("Antigravity CLI isn't installed on ${machine}"))
         XCTAssertTrue(web.contains("${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}; Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then."))
-        for label in ["Connect Gemini", "Switch to Gemini", "Install", "Open in Infrastructure"] {
+        for label in ["Connect Gemini", "Switch to Gemini", "Install", "Open in Machines & models"] {
             XCTAssertTrue(web.contains(label))
         }
         XCTAssertTrue(web.contains("export function antigravityRepair"))
@@ -63,7 +63,7 @@ final class GeminiEntryParityTests: XCTestCase {
         XCTAssertTrue(native.contains(".disabled(!console.canInstallAntigravity)"))
         // Its machine's Antigravity page, in the app — where the web card goes to that machine's
         // engine row on /infrastructure — rather than the web's old /providers?runner=&engine=.
-        XCTAssertTrue(native.contains("Button(\"Open in Infrastructure\") {"))
+        XCTAssertTrue(native.contains("Button(\"Open in Machines & models\") {"))
         XCTAssertTrue(native.contains("app.openRunnerEngine(runnerID, engine: \"antigravity\")"))
         XCTAssertFalse(native.contains("ProvidersURL"))
         XCTAssertTrue(native.contains("EngineAuth.antigravityRepair(message) == .needsKey"))

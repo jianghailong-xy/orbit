@@ -321,7 +321,7 @@ class AntigravityAccountsTest {
         assertEquals("antigravity", out.first().action?.engine)
     }
 
-    /** A machine's line on Infrastructure ("N of M signed in") counts Antigravity only where the runner can sign it in with Google. */
+    /** A machine's line on the Machines & models page ("N of M signed in") counts Antigravity only where the runner can sign it in with Google. */
     @Test fun infrastructureCountsAntigravityOnlyWhereGoogleSignInIsOffered() {
         val now = System.currentTimeMillis()
         assertEquals("1 of 4 signed in", Infrastructure.summary(fixture("google"), now))

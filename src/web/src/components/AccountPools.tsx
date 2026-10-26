@@ -1024,7 +1024,7 @@ export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: 
                 aria-label="People to add"
               />
               <div className="np-field-h">
-                They see it on their Infrastructure page and in the session picker, and can start sessions on it.
+                They see it on their Machines & models page and in the session picker, and can start sessions on it.
               </div>
               <Checkbox checked={canAdd} onCheckedChange={setCanAdd} className="np-can-add">
                 They can add their own keys

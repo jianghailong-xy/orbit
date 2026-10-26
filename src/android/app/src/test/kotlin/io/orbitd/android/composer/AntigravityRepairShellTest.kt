@@ -30,14 +30,14 @@ class AntigravityRepairShellTest : ComposerShellTest() {
         }
         signIn(); openSession()
         awaitText("Antigravity CLI isn't installed on Fixture runner")
-        assertTrue(shows("Install it from Infrastructure, then send your message again."))
+        assertTrue(shows("Install it from the Machines & models page, then send your message again."))
         val install = hasText("Install") and hasClickAction() and isEnabled()
         await { has(install) }
         compose.onNode(install).performScrollTo().performClick()
         await { ComposerShell.body("POST runners/${ComposerShell.RUNNER}/install") != null }
         assertEquals(buildJsonObject { put("engine", "antigravity") }, ComposerShell.body("POST runners/${ComposerShell.RUNNER}/install"))
         awaitText("Installing Antigravity CLI…")
-        assertTrue(has(hasText("Open in Infrastructure") and hasClickAction()))
+        assertTrue(has(hasText("Open in Machines & models") and hasClickAction()))
     }
 
     @Test fun aMissingCredentialOffersGoogleSignInAGeminiKeyAndTheSwitchToOne() {
@@ -48,7 +48,7 @@ class AntigravityRepairShellTest : ComposerShellTest() {
         failure("Failed to authenticate: Antigravity runs on an API key (GEMINI_API_KEY), and neither this session nor the runner has one.")
         signIn(); openSession()
         awaitText("Antigravity needs authentication")
-        assertTrue(shows("Sign in with Google on this runner, or connect a Gemini API key in Infrastructure."))
+        assertTrue(shows("Sign in with Google on this runner, or connect a Gemini API key on the Machines & models page."))
         await { has(hasText("Sign in with Google") and hasClickAction()) }
         assertTrue(has(hasText("Connect Gemini") and hasClickAction()))
         val switch = hasText("Switch to Gemini") and hasClickAction() and isEnabled()
@@ -71,7 +71,7 @@ class AntigravityRepairShellTest : ComposerShellTest() {
         // Named once the card has read the runner.
         awaitText("Fixture runner runs Orbit runner 0.1.200; Antigravity needs 0.1.209 or newer. The runner updates itself when no " +
             "session is running on it, and this session starts then.")
-        assertTrue(has(hasText("Open in Infrastructure") and hasClickAction()))
+        assertTrue(has(hasText("Open in Machines & models") and hasClickAction()))
     }
 
     @Test fun theEngineListSaysWhyAntigravityCannotRunAndOpensItsEnginePage() {

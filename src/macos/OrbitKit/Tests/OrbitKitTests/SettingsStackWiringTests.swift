@@ -101,6 +101,35 @@ final class SettingsStackWiringTests: XCTestCase {
                       "the iPad column is empty; macOS keeps the whole form in it")
     }
 
+    /// On the Mac, Machines & models is Settings' page (docs/mocks/machines-and-models, 02): the source list
+    /// has no row for it, the Settings form has one that opens it — closing the Settings window (⌘,) when
+    /// it is drawn there, so the page is what is left in front — and the page's toolbar goes back.
+    func testMachinesAndModelsIsReachedFromSettingsOnTheMac() throws {
+        XCTAssertFalse(AppSection.visible(isAdmin: true).contains(.runners))
+        let form = code(try slice(try appSource("Views/SettingsAdminView.swift"),
+                                  from: "struct SettingsView: View {", to: "Section(\"Preferences\")"))
+        assertOrder(form, ["Section(\"Account\")", "model.selectedSection = .runners",
+                           "if inSettingsWindow { NSApp.keyWindow?.close() }",
+                           "SettingsHome.title(.infrastructure)", "Text(Infrastructure.subtitle)"])
+        XCTAssertTrue(code(try appSource("OrbitApp.swift")).contains("SettingsView(inSettingsWindow: true)"),
+                      "the Settings window says it is one")
+        let main = code(try appSource("Views/MainView.swift"))
+        let content = try slice(main, from: "struct SectionContent: View {", to: "struct SectionDetail: View {")
+        let runners = try slice(content, from: "case .runners:", to: "case .settings:")
+        assertOrder(runners, ["#if os(macOS)", "RunnersListView()", "Button { model.selectedSection = .settings }",
+                              "Label(\"Settings\", systemImage: \"chevron.left\")", "#else", "RunnersListView()", "#endif"])
+    }
+
+    private func assertOrder(_ text: String, _ parts: [String], file: StaticString = #filePath, line: UInt = #line) {
+        var from = text.startIndex
+        for part in parts {
+            guard let range = text.range(of: part, range: from..<text.endIndex) else {
+                return XCTFail("no `\(part)` in order", file: file, line: line)
+            }
+            from = range.upperBound
+        }
+    }
+
     /// A link or a notification goes somewhere the sheet would cover — and while it is up a push
     /// lands on Settings' stack, not the route's — so the sheet goes down before anything moves.
     func testARouteClosesSettingsBeforeItMoves() throws {
@@ -157,7 +186,8 @@ final class SettingsStackWiringTests: XCTestCase {
                                   from: "struct SettingsHomeView: View {", to: "private struct SettingsRowLabel: View {"))
         XCTAssertTrue(list.contains("ForEach(SettingsHome.Group.allCases, id: \\.self)"))
         XCTAssertTrue(list.contains("SettingsHome.rows(group, isAdmin: isAdmin)"))
-        XCTAssertTrue(list.contains("SettingsHeader(SettingsHome.header(group))"))
+        XCTAssertTrue(list.contains("if let header = SettingsHome.header(group) { SettingsHeader(header) }"),
+                      "a group without a header draws none")
         XCTAssertTrue(list.contains("if let footer = SettingsHome.footer(group) {"),
                       "Machines & models says what its one row is for")
         let rows = try slice(list, from: "@ViewBuilder private func row(_ row: SettingsHome.Row) -> some View {",

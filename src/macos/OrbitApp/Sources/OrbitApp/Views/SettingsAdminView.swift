@@ -17,6 +17,9 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var updater: UpdaterModel   // Sparkle; iOS updates via the App Store
+    /// Drawn in the Settings window (⌘,) rather than the main window's middle column: a row that opens
+    /// a page of the main window closes this one, so the page is what is left in front.
+    var inSettingsWindow = false
 
     @State private var theme = "system"
     @State private var permMode: PermissionMode = .default
@@ -73,6 +76,31 @@ struct SettingsView: View {
                         .font(.orbitLabel)
                         .foregroundStyle(accountMessage == nil ? Color.secondary : Color.red)
                 }
+            }
+
+            // Where agents run and whose quota they spend (docs/mocks/machines-and-models, 02): the page left
+            // the sidebar for this row, as the phone reaches it from Settings, and the row says what the
+            // phone's says — what needs a person there, or how many machines are online.
+            Section {
+                Button {
+                    model.selectedSection = .runners
+                    if inSettingsWindow { NSApp.keyWindow?.close() }
+                } label: {
+                    LabeledContent {
+                        HStack(spacing: 6) {
+                            if let value = machinesValue {
+                                Text(value.text).foregroundStyle(value.needsYou ? RunnerInk.amber : Color.secondary)
+                            }
+                            Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                        }
+                    } label: {
+                        Label(SettingsHome.title(.infrastructure), systemImage: SettingsHome.systemImage(.infrastructure))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } footer: {
+                Text(Infrastructure.subtitle)
             }
 
             Section("Preferences") {
@@ -155,6 +183,7 @@ struct SettingsView: View {
         .onChange(of: promptSuggestions) { savePromptSuggestions() }
         .onChange(of: recaps) { saveRecaps() }
         .task { await model.accessTokens?.load() }
+        .task { await model.runners?.load() }
         .onAppear {
             guard !loaded else { return }
             loaded = true
@@ -171,6 +200,14 @@ struct SettingsView: View {
             name = model.user?.name ?? ""
         }
         .onChange(of: name) { accountMessage = nil }
+    }
+
+    /// What the Machines & models row says, as the phone's does (`SettingsSheet`): how many lines the page's
+    /// Needs you holds, or with none how many machines are online — only once the server has answered.
+    private var machinesValue: (text: String, needsYou: Bool)? {
+        guard let runners = model.runners, runners.loadState.hasLoaded else { return nil }
+        let needsYou = InfrastructureLists(model).attention.count
+        return (SettingsHome.infrastructureValue(needsYou: needsYou, runners: runners.runners), needsYou > 0)
     }
 
     private func saveName() {

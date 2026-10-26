@@ -15,8 +15,9 @@ final class SettingsHomeTests: XCTestCase {
     /// The order the owner picked from the mockups: how sessions start, the machines and models they
     /// run on, the app's own preferences, then the account.
     func testTheGroupsReadInTheOrderTheyWerePicked() {
+        // Machines & models has no header: its one row says that name (docs/mocks/machines-and-models, ⑥-2).
         XCTAssertEqual(SettingsHome.Group.allCases.map(SettingsHome.header),
-                       ["Sessions", "Machines & models", "Preferences", "Account"])
+                       ["Sessions", nil, "Preferences", "Account"])
         XCTAssertEqual(SettingsHome.rows(.sessions, isAdmin: false),
                        [.defaultPermission, .orchestration, .modelRouting, .promptSuggestions, .recaps])
         // One row: the web's Runners and Providers pages are one page, Infrastructure.
@@ -46,7 +47,7 @@ final class SettingsHomeTests: XCTestCase {
         let rows = SettingsHome.Row.allCases
         XCTAssertEqual(Set(rows.map(SettingsHome.title)).count, rows.count, "two rows share a name")
         XCTAssertEqual(Set(rows.map(SettingsHome.systemImage)).count, rows.count, "two rows share a glyph")
-        XCTAssertEqual(SettingsHome.title(.infrastructure), "Infrastructure")
+        XCTAssertEqual(SettingsHome.title(.infrastructure), "Machines & models")
         XCTAssertEqual(SettingsHome.title(.infrastructure), AppSection.runners.title)
         XCTAssertEqual(SettingsHome.systemImage(.infrastructure), AppSection.runners.systemImage)
         XCTAssertEqual(SettingsHome.title(.admin), AppSection.admin.title)
@@ -69,7 +70,7 @@ final class SettingsHomeTests: XCTestCase {
             XCTAssertNil(SettingsHome.page(row), "\(row) opens no SettingsPage")
         }
         XCTAssertEqual(SettingsHome.page(.infrastructure), .infrastructure)
-        XCTAssertEqual(SettingsPage.infrastructure.title, "Infrastructure")
+        XCTAssertEqual(SettingsPage.infrastructure.title, "Machines & models")
     }
 
     /// Machines & models says what its one row is for, in the web page's own line; no other group has

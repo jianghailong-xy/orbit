@@ -242,7 +242,7 @@ export function signedOutEngineRefusal(args: {
     if (slot) {
       return slot.auth === 'no'
         ? `Antigravity account ${accountName(runtime, slot, engines)} is signed out on runner "${machine}" — every session run on that account fails immediately. ` +
-          'Sign it in from Infrastructure, then start this session again.'
+          'Sign it in from the Machines & models page, then start this session again.'
         : null;
     }
     return health.auth === 'no' ? antigravityRefusal(health, args.runner, machine) : null;
@@ -266,18 +266,18 @@ export function signedOutEngineRefusal(args: {
         : LOGIN_COMMANDS[runtime];
     return (
       `${label} account ${login.name} is signed out on runner "${machine}" — every session run on that account fails immediately. ` +
-      `Sign it in from Infrastructure, or run \`${command}\` on that machine, then start this session again.`
+      `Sign it in from the Machines & models page, or run \`${command}\` on that machine, then start this session again.`
     );
   }
   return (
     `${label} is signed out on runner "${machine}" — every session started there fails immediately. ` +
-    `Sign in from Infrastructure, or run \`${LOGIN_COMMANDS[runtime]}\` on that machine, then start this session again.`
+    `Sign in from the Machines & models page, or run \`${LOGIN_COMMANDS[runtime]}\` on that machine, then start this session again.`
   );
 }
 
 /** The Gemini key, the way out of an Antigravity refusal on any runner. */
 const GEMINI_KEY_WAY_OUT =
-  'connect Gemini under API keys on Infrastructure (/providers/new/gemini) — Orbit stores the key encrypted — and start this session on Gemini';
+  'connect Gemini under API keys on the Machines & models page (/providers/new/gemini) — Orbit stores the key encrypted — and start this session on Gemini';
 
 /**
  * Built-in Antigravity has no credential of its own on that runner: no Google sign-in that answers,
@@ -292,7 +292,7 @@ function antigravityRefusal(health: RunnerEngineHealth, runner: EnginePreflightR
       : `Antigravity has no Google sign-in or Gemini API key on runner "${machine}".`;
   switch (antigravityGoogleLogin(runner)) {
     case 'available':
-      return `${head} Sign in with Google from Infrastructure, or ${GEMINI_KEY_WAY_OUT}.`;
+      return `${head} Sign in with Google from the Machines & models page, or ${GEMINI_KEY_WAY_OUT}.`;
     case 'unsupported_platform':
       return `${head} Signing in with Google works on Linux runners only for now, so ${GEMINI_KEY_WAY_OUT}.`;
     default:

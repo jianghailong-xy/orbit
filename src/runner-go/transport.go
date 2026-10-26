@@ -592,8 +592,9 @@ func (t *Transport) worktreesRemovable(ids []string) ([]string, error) {
 	return r.Removable, nil
 }
 
-// inbox long-polls for the next user turn of an interactive session; returns nil
-// when the server holds then yields nothing (turnId == "").
+// inbox fetches the next user turn of an interactive session; returns nil when there is none
+// (turnId == ""): over HTTPS a long poll the server holds, over the runner link at once. Every
+// session loop fetches through its inboxPoller (inbox_poller.go), which decides when.
 //
 // `acceptsSteer` says this binary knows the `steer` kind — a message written into the turn
 // already running. It is a property of the runner, not of the session: every session loop
@@ -601,16 +602,7 @@ func (t *Transport) worktreesRemovable(ids []string) ([]string, error) {
 // can see it (refuseUnsupportedSteer). A runner that predates the kind sends no such flag
 // and is handed no steer, so the message waits and becomes an ordinary turn when the
 // running one ends, instead of being leased by a poller with no case for it.
-//
-// In link mode the inbox does not hang on the server: it is asked once a hint, or the HintState of
-// a heartbeat's answer, names the session (link_hints.go), and nil is no such word coming within
-// the long poll's window.
 func (t *Transport) inbox(ctx context.Context, sessionID, leaseGeneration string) (*RunInboxResponse, error) {
-	if t.link != nil && t.link.inUse() {
-		if due, err := t.link.gates.takeInbox(ctx, sessionID, linkLongPoll); !due {
-			return nil, err
-		}
-	}
 	var r RunInboxResponse
 	path := "/runner/sessions/" + sessionID + "/inbox?acceptsSteer=1"
 	if leaseGeneration != "" {
@@ -621,9 +613,6 @@ func (t *Transport) inbox(ctx context.Context, sessionID, leaseGeneration string
 	}
 	if r.TurnID == "" {
 		return nil, nil
-	}
-	if t.link != nil {
-		t.link.handedTurn(sessionID, &r)
 	}
 	return &r, nil
 }

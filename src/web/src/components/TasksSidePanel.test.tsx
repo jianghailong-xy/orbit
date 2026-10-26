@@ -99,8 +99,9 @@ describe('TasksSidePanel nav', () => {
     // Projects (design §12.1): a codebase has two faces, the work in it and what the work learned.
     // Tasks went in between when the rail's foot became the open projects: the task lists that
     // stood there are picked from the Tasks page's title, and this is the way to it. Runners and
-    // Providers became the one Infrastructure (docs/mocks/infrastructure-page).
-    expect(keys).toEqual(['projects', 'tasks', 'wiki', 'infrastructure']);
+    // Providers became the one Infrastructure (docs/mocks/infrastructure-page), which, renamed Machines &
+    // models, moved to Settings and the account menu (docs/mocks/machines-and-models, 02).
+    expect(keys).toEqual(['projects', 'tasks', 'wiki']);
     // The rows' own group head (WorkspacesHead) names them the way Projects names its rows; it is
     // no destination, so it is no TOP entry either.
     expect(source).not.toContain('tp-workspaces-head');
