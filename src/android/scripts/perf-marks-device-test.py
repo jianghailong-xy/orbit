@@ -23,6 +23,7 @@ import fcntl
 import json
 import os
 import re
+import signal
 import struct
 import subprocess
 import sys
@@ -77,20 +78,26 @@ if package in SHARED:
 # The adb server first, so no daemon it starts can inherit the lock's descriptor.
 subprocess.run([ADB_BIN, 'start-server'], check=True, capture_output=True)
 lock = open(LOCK, 'a')
-deadline = time.time() + 7200
-while True:
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        break
-    except BlockingIOError:
-        if time.time() > deadline:
-            sys.exit('ui.lock not free within 2 h')
-        time.sleep(5)
+
+
+def lock_timeout(*_):
+    raise TimeoutError
+
+
+# A blocking wait, so the kernel wakes this round in turn with the other rounds' flock waits; at most 2 h.
+signal.signal(signal.SIGALRM, lock_timeout)
+signal.alarm(7200)
+try:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+except TimeoutError:
+    sys.exit('ui.lock not free within 2 h')
+signal.alarm(0)
 note(f'holding {LOCK}')
 
 started_emulator = False
 fixture = logcat = None
 old_handwriting = None
+display_overrides = {}  # `wm size`/`wm density` overrides found on the device, put back afterwards
 
 
 def devices():
@@ -103,6 +110,9 @@ def cleanup():
         if old_handwriting is not None:
             shell('settings delete secure stylus_handwriting_enabled' if old_handwriting == 'null'
                   else f'settings put secure stylus_handwriting_enabled {old_handwriting}', check=False)
+        for command, value in display_overrides.items():
+            shell(f'wm {command} {value}', check=False)
+            note(f'put back wm {command} {value}')
         if logcat:
             logcat.terminate()
         adb('uninstall', package, check=False)
@@ -130,6 +140,13 @@ try:
         if time.time() > deadline:
             sys.exit('boot timed out')
         time.sleep(2)
+    # The phone's own panel: raw evdev touches land on the physical display, which an override would letterbox.
+    for command in ('size', 'density'):
+        found = re.search(r'Override \w+: (\S+)', shell(f'wm {command}'))
+        if found:
+            display_overrides[command] = found.group(1)
+            shell(f'wm {command} reset')
+            note(f'wm {command} reset for the round (was {found.group(1)})')
     save('device.txt', '\n'.join(f'{p}={shell("getprop " + p)}' for p in
         ('ro.product.model', 'ro.build.version.release', 'ro.build.version.sdk', 'ro.build.fingerprint', 'ro.kernel.qemu'))
         + f'\nserial={serial}\n{shell("wm size")}\n{shell("wm density")}\n'
@@ -191,7 +208,7 @@ try:
         with open(os.path.join(out, f'{name}.png'), 'wb') as f:
             f.write(adb('exec-out', 'screencap', '-p').stdout)
 
-    def wait(pattern, seconds=60):
+    def poll(pattern, seconds):
         deadline = time.time() + seconds
         while time.time() < deadline:
             hits = find(pattern)
@@ -201,8 +218,14 @@ try:
             if refusal:
                 tap_node(refusal[0])
             time.sleep(1)
-        capture('timeout')
-        sys.exit(f'timed out waiting for {pattern!r}')
+        return None
+
+    def wait(pattern, seconds=60):
+        hit = poll(pattern, seconds)
+        if hit is None:
+            capture('timeout')
+            sys.exit(f'timed out waiting for {pattern!r}')
+        return hit
 
     def centre(node):
         x1, y1, x2, y2 = node['bounds']
@@ -217,29 +240,40 @@ try:
         tap_node(node)
         note(f'tap {pattern!r} at {centre(node)}')
 
-    def triple_tap(node):
-        """Three touches ~150 ms apart through the touchscreen's evdev node (input tap is too slow), with pressure."""
+    def touchscreens():
+        """Each multi-touch evdev node and its axis ranges, as `getevent -lp` lists them."""
+        info = shell('getevent -lp', check=False)
+        save('getevent.txt', info)
+        found = []
+        for block in re.split(r'\n(?=add device )', info):
+            name = re.match(r'add device \d+: (\S+)', block)
+            xmax = re.search(r'ABS_MT_POSITION_X\s*:.*?max (\d+)', block)
+            ymax = re.search(r'ABS_MT_POSITION_Y\s*:.*?max (\d+)', block)
+            if name and xmax and ymax:
+                found.append((name.group(1), int(xmax.group(1)), int(ymax.group(1))))
+        return found
+
+    def triple_tap(node, device, xmax, ymax):
+        """Three touches ~150 ms apart written to [device] (input tap is too slow), with pressure and BTN_TOUCH."""
         x, y = centre(node)
-        X, Y = x * 32767 // width, y * 32767 // height
+        X, Y = x * xmax // width, y * ymax // height
 
         def ev(t, c, v):
             return struct.pack('<qqHHi', 0, 0, t, c, v)
         folder = '/data/local/tmp/a06g-taps'
         shell(f'mkdir -p {folder}')
-        for i in range(3):
-            data = ev(3, 47, 0) + ev(3, 57, 300 + i) + ev(3, 53, X) + ev(3, 54, Y) + ev(3, 58, 512) + ev(3, 48, 5) + ev(0, 0, 0)
-            local = os.path.join(out, f'tap-down{i}')
+        chunks = {f'down{i}': ev(3, 47, 0) + ev(3, 57, 300 + i) + ev(3, 53, X) + ev(3, 54, Y) + ev(3, 58, 512) + ev(3, 48, 5)
+                  + ev(1, 330, 1) + ev(0, 0, 0) for i in range(3)}
+        chunks['up'] = ev(3, 58, 0) + ev(3, 57, -1) + ev(1, 330, 0) + ev(0, 0, 0)
+        for name, data in chunks.items():
+            local = os.path.join(out, f'tap-{name}')
             open(local, 'wb').write(data)
-            adb('push', local, f'{folder}/down{i}')
+            adb('push', local, f'{folder}/{name}')
             os.remove(local)
-        local = os.path.join(out, 'tap-up')
-        open(local, 'wb').write(ev(3, 58, 0) + ev(3, 57, -1) + ev(0, 0, 0))
-        adb('push', local, f'{folder}/up')
-        os.remove(local)
-        script = '; '.join(f'cat {folder}/down{i} > /dev/input/event2; sleep 0.05; cat {folder}/up > /dev/input/event2; sleep 0.1'
-                           for i in range(3))
-        adb('shell', 'su', '0', 'sh', '-c', f"'{script}'")
-        note(f'triple tap at {x},{y}')
+        script = '; '.join(f'cat {folder}/down{i} > {device}; sleep 0.05; cat {folder}/up > {device}; sleep 0.1' for i in range(3))
+        result = adb('shell', 'su', '0', 'sh', '-c', f"'{script}'", check=False)
+        note(f'triple tap at {x},{y} through {device} (0..{xmax} x 0..{ymax}): exit {result.returncode} '
+             + (result.stdout + result.stderr).decode('utf-8', 'replace').strip()[:200])
 
     def dismiss_stylus_sheet():
         for _ in find(r'(?i)stylus'):
@@ -273,8 +307,16 @@ try:
 
     shell(f'am start -W -n {package}/io.orbitd.android.MainActivity')
     wait('^Welcome back$', 120)
-    triple_tap(wait('^Orbit$'))
-    wait('^Server address$', 20)
+    logo = wait('^Orbit$')
+    screens = touchscreens()
+    note(f'multi-touch devices: {screens}')
+    for device, xmax, ymax in screens:
+        triple_tap(logo, device, xmax, ymax)
+        if poll('^Server address$', 10):
+            break
+    else:
+        capture('timeout-server-dialog')
+        sys.exit('three taps on the logo opened no Server dialog')
     dismiss_stylus_sheet()
     replace_field('Server address', f'http://10.0.2.2:{port}')
     tap('^Save$')
