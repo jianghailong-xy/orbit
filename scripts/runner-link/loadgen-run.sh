@@ -28,6 +28,11 @@
 # O1), as a writer of something a heartbeat delivers does: each beat then reconciles in full. loadgen-baseline.mjs
 # --full takes such a run to tell an unflagged beat's cost from a full reconcile's.
 #
+# --watch <N> opens a session stream (SSE) on each of the fleet's first N running sessions while the run lasts, as their
+# owners would in the app (loadgen-watch.mjs, task O3): the stack's apiserver counts them as watchers and the gateway
+# tells their runners, which then send the live deltas loadgen's -live-rate asks for. What reached the streams, and how
+# late, goes to watch.jsonl and watch.json.
+#
 # On a shared host one load test runs at a time: each run, arm included, is wrapped in
 # `flock /var/tmp/orbit-loadgen.lock`. run.json's `loadTestLock` says whether this run held that lock.
 set -euo pipefail
@@ -36,18 +41,21 @@ source "$(dirname "${BASH_SOURCE[0]}")/staging-lib.sh"
 
 name="$(date -u +%Y%m%dT%H%M%SZ)"
 mark_every=""
+watch=""
 args=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --name) name="$2"; shift 2 ;;
     --) shift; args=("$@"); break ;;
     --mark-every) mark_every="$2"; shift 2 ;;
-    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
+    --watch) watch="$2"; shift 2 ;;
+    -h|--help) sed -n '2,37p' "$0"; exit 0 ;;
     *) die "unknown option $1 (see --help)" ;;
   esac
 done
 [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] || die "--name is letters, digits, dots, underscores and hyphens"
 [ -z "$mark_every" ] || [[ "$mark_every" =~ ^[1-9][0-9]*$ ]] || die "--mark-every is a whole number of seconds"
+[ -z "$watch" ] || [[ "$watch" =~ ^[1-9][0-9]*$ ]] || die "--watch is a number of sessions"
 [ -f "$env_file" ] || die "no staging stack in $state: run staging-up.sh first"
 [ "$(setting STAGING_MODE http)" = link ] || die "the stack is not in MODE_LINK: staging-up.sh with ORBIT_LINK_STAGING_MODE=link"
 [ "$(setting STAGING_LOADGEN 0)" = 1 ] || die "the stack lacks the load test's settings: staging-up.sh with ORBIT_LINK_STAGING_LOADGEN=1"
@@ -111,6 +119,7 @@ holds_lock() {
     "$(setting STAGING_DB_CPUS 0)" "$(setting STAGING_BACKENDS 1)" "$(setting STAGING_MERGE_WINDOW_SETTING default)" \
     "$(nproc)" "$(awk '/^MemTotal/{print $2}' /proc/meminfo)"
   printf '"markEverySeconds":%s,"loadTestLock":%s,' "${mark_every:-null}" "$(holds_lock && echo true || echo false)"
+  [ -z "$watch" ] || printf '"watchSessions":%s,' "$watch"
   if [ ${#args[@]} -gt 0 ]; then printf '"loadgenArgs":%s,' "$(printf '%s\n' "${args[@]}" | jq -R . | jq -cs .)"; else printf '"loadgenArgs":[],'; fi
   printf '"containers":{'
   first=1
@@ -209,6 +218,18 @@ sample_metrics & pids+=($!)
 sample_db & pids+=($!)
 if [ -n "$mark_every" ]; then mark_runners & pids+=($!); fi
 
+# --- The watchers (--watch): a session stream on each of the first running sessions, as their owners. ----------------
+if [ -n "$watch" ]; then
+  psql_at -F ' ' -c "SELECT ls.session_id, u.id, u.email FROM loadgen.session ls JOIN loadgen.owner o ON o.n = ls.owner_n
+    JOIN \"user\" u ON u.id = o.user_id WHERE ls.running ORDER BY ls.runner_n LIMIT $watch" > "$out/watch-sessions.txt"
+  [ "$(wc -l < "$out/watch-sessions.txt")" -eq "$watch" ] || die "the fleet has fewer than $watch running sessions to watch"
+  node "$here/loadgen-watch.mjs" "$state" "$api" "$out/watch-sessions.txt" "$out" > "$out/watch.log" 2>&1 & pids+=($!)
+  watcher=${pids[-1]}
+  # The streams are open, and counted as watchers, before the runners connect: each runner hears of them in its first
+  # HeartbeatAck.
+  sleep 5
+fi
+
 # --- The run. ---------------------------------------------------------------------------------------------------------
 started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 log "run $name: loadgen ${args[*]} (results in $out)"
@@ -218,6 +239,11 @@ systemd-run --scope --quiet --unit "$unit" -p MemoryMax=6G \
   "$out/loadgen" -fleet "$fleet" -api "$api" -link-url wss://link-gateway:8443 -connect "$gateway_ip:8443" \
   -ca "$state/tls/ca.pem" -out "$out" "${args[@]}" > "$out/loadgen.stdout" 2> "$out/loadgen.stderr" || rc=$?
 log "loadgen exited $rc"
+if [ -n "${watcher:-}" ]; then
+  # The watchers write what they saw when they stop.
+  kill -TERM "$watcher" 2>/dev/null || true
+  wait "$watcher" 2>/dev/null || log "the watchers ended badly (see $out/watch.log)"
+fi
 if [ -e "$out/stopped-for-memory" ]; then
   log "stopped at $(cat "$out/stopped-for-memory"): the host's available memory stayed under ${LOADGEN_MIN_AVAILABLE_MB:-800} MB"
   jq --arg at "$(cat "$out/stopped-for-memory")" '. + {stoppedForMemory: $at}' "$out/run.json" > "$out/run.json.new" && mv "$out/run.json.new" "$out/run.json"

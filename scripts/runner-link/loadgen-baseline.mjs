@@ -4,7 +4,7 @@
 // The optimisation tasks re-run the same pair and compare with the baseline README.md records.
 //
 //   node scripts/runner-link/loadgen-baseline.mjs <heartbeats-only run> <heartbeats-and-events run> [--full <run>] [--json out.json]
-//     [--target-events 2000]
+//     [--target-events 2000] [--live <run>]
 //
 // Per heartbeat: the first run's apiserver and database CPU (mean cores over the steady window, loadgen-report.mjs)
 // over its heartbeats a second, and its statements and commits over its heartbeats. Per batch: what the second run adds
@@ -21,6 +21,12 @@
 // (an upper bound for merged calls, which carry more batches a call as the rate grows). When the gateway merged the
 // batches (src/link-gateway/events_merge.go), its calls are reported beside them: batches a call, and how long each
 // call's transaction held its sessions.
+//
+// With --live, a run like the second (the same fleet and event rate) with watchers and live deltas besides
+// (loadgen-run.sh --watch N, loadgen -live-rate; task O3): what one forwarded delta costs, as what that run adds to the
+// second over the deltas the watchers received a second. The watchers' streams themselves (their pings, and the durable
+// events they are sent too) are in it, so it is an upper bound per delta. On a stack of two apiservers, "apiserver" is
+// the two together.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -31,11 +37,12 @@ const option = (name) => {
 };
 const jsonOut = option('--json');
 const fullDir = option('--full');
+const liveDir = option('--live');
 const target = option('--target-events');
 const targetEvents = target === null ? null : Number(target);
 if (args.length !== 2 || (targetEvents !== null && !(targetEvents > 0))) {
   console.error('usage: loadgen-baseline.mjs <heartbeats-only run> <heartbeats-and-events run> [--full <run>] [--json out.json] '
-    + '[--target-events N]');
+    + '[--target-events N] [--live <run>]');
   process.exit(2);
 }
 const load = (dir) => {
@@ -70,7 +77,8 @@ const counterAt = (r, key, at) => {
 };
 const [hb, ev] = args.map(load);
 const full = fullDir ? load(fullDir) : null;
-for (const r of [hb, ev, full].filter(Boolean)) {
+const liveRun = liveDir ? load(liveDir) : null;
+for (const r of [hb, ev, full, liveRun].filter(Boolean)) {
   if (!r.steady) throw new Error(`${r.dir} has no steady window`);
   if (r.report.loadgen.config.runners !== hb.report.loadgen.config.runners) throw new Error('the runs played different fleets');
 }
@@ -78,7 +86,8 @@ for (const r of [hb, full].filter(Boolean)) {
   if (r.steady.counters.batchesAcked !== 0) throw new Error(`${r.dir} sent events: run it with -event-rate 0`);
 }
 const round = (v, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
-const cores = (r, svc) => r.report.components[svc]?.meanCores ?? 0;
+// A stack of two apiservers (ORBIT_LINK_STAGING_BACKENDS=2) is one apiserver's worth of work in two processes.
+const cores = (r, svc) => (r.report.components[svc]?.meanCores ?? 0) + (svc === 'apiserver' ? r.report.components['apiserver-b']?.meanCores ?? 0 : 0);
 // A host swapping during a run inflates its CPU figures: on 2026-10-25 a heartbeats-only run swapping in about 1,100
 // pages/s measured 12% more database CPU than its repeat at 2 pages/s. Each run's swap-in over its steady window is
 // reported, and a run past HEAVY_SWAP_IN pages/s is to be run again rather than compared.
@@ -188,6 +197,22 @@ const hbQueries = per(hb, hb.whole.heartbeatAcks);
 const hbSet = new Set(hbQueries.map((q) => q.query));
 const batchQueries = per(ev, ev.whole.batchesAcked).filter((q) => !hbSet.has(q.query));
 
+// Per forwarded live delta (--live): what the live run adds to the events run, over the deltas the watchers received.
+let perLiveDelta = null;
+if (liveRun) {
+  const lv = liveRun.report.live;
+  if (!lv?.watchers?.deltasPerSecond) throw new Error(`${liveRun.dir} has no live deltas received by watchers (loadgen-run.sh --watch, loadgen -live-rate)`);
+  if (liveRun.report.loadgen.config.eventRate !== ev.report.loadgen.config.eventRate) throw new Error('the live run and the events run sent events at different rates');
+  const rate = lv.watchers.deltasPerSecond;
+  const per = (svc) => round(((cores(liveRun, svc) - cores(ev, svc)) * 1000) / rate, 4);
+  perLiveDelta = {
+    run: liveRun.report.run, deltasPerSecond: rate, watchedSessions: lv.watchers.sessions, receivedShare: lv.watchers.receivedShare,
+    deltasPerLiveBatch: lv.loadgen.eventsPerBatch, deltasPerSseMessage: lv.watchers.deltasPerTextMessage,
+    apiserverCpuMs: per('apiserver'), gatewayCpuMs: per('link-gateway'), natsCpuMs: per('nats'), webGatewayCpuMs: per('gateway'),
+    databaseCpuMs: per('postgres'), delayMs: lv.watchers.delayMs, swapInPagesPerSec: swapInPerSec(liveRun),
+  };
+}
+
 const run = hb.report;
 const baseline = {
   commit: run.sha, runs: [hb.report.run, ev.report.run], loadTestLock: [hb, ev].map((r) => r.report.loadTestLock ?? null), fleet: { runners: run.loadgen.config.runners,
@@ -196,6 +221,7 @@ const baseline = {
   hostOtherCores: [hb.report.host.otherCgroupCores, ev.report.host.otherCgroupCores],
   swapInPagesPerSec: [swapInPerSec(hb), swapInPerSec(ev)],
   perHeartbeat: perBeat, perBatch, perEvent, ingest, projected, merged, ...(split ? { perHeartbeatByKind: split } : {}),
+  ...(perLiveDelta ? { perLiveDelta } : {}),
   eventAck: { runnerBatch: ev.steady.ackBatch, gateway: gwOf.eventAck },
   heartbeatStatements: hbQueries.map((q) => ({ perOp: round(q.perOp, 2), meanMs: q.meanMs, query: q.query.slice(0, 200) })),
   batchStatements: batchQueries.map((q) => ({ perOp: round(q.perOp, 2), meanMs: q.meanMs, query: q.query.slice(0, 200) })),
@@ -247,6 +273,15 @@ if (merged) {
   out.push(`Merged calls: ${merged.callsPerSec}/s, ${merged.batchesPerCall} batches each; their transaction held its sessions `
     + `p50 ≈ ${merged.heldMs.p50Ms} ms, p99 ≈ ${merged.heldMs.p99Ms} ms (mean ${merged.heldMs.meanMs} ms); a call took `
     + `p50 ≈ ${merged.callMs.p50Ms} ms, p99 ≈ ${merged.callMs.p99Ms} ms.`);
+}
+if (perLiveDelta) {
+  const d = perLiveDelta;
+  out.push('', `Per forwarded live delta, from ${d.run} against ${ev.report.run}: ${d.deltasPerSecond} deltas/s reached ${d.watchedSessions} watched sessions `
+    + `(${d.receivedShare} of those sent; ${d.deltasPerLiveBatch} a LiveBatch, ${d.deltasPerSseMessage} an SSE message); swap-in ${d.swapInPagesPerSec} pages/s.`, '');
+  out.push('| Per live delta | apiserver CPU ms | link gateway CPU ms | NATS CPU ms | web gateway CPU ms | database CPU ms |');
+  out.push('| --- | --- | --- | --- | --- | --- |');
+  out.push(`| delta | ${d.apiserverCpuMs} | ${d.gatewayCpuMs} | ${d.natsCpuMs} | ${d.webGatewayCpuMs} | ${d.databaseCpuMs} |`);
+  out.push('', `Delay from production to the watcher: p50 ${d.delayMs.p50} ms, p99 ${d.delayMs.p99} ms, max ${d.delayMs.max} ms.`);
 }
 for (const [name, list] of [['heartbeat', hbQueries], ['event batch', batchQueries]]) {
   out.push('', `Statements per ${name}, most database time first (times per ${name}, mean ms):`, '');
