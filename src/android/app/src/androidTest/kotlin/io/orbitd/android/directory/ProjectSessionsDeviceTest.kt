@@ -15,6 +15,7 @@ import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.net.ServerAddress
+import io.orbitd.android.projects.StartSheetLoad
 import java.io.File
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
@@ -117,7 +118,7 @@ class ProjectSessionsDeviceTest {
                 await { exists(hasTestTag("project-sessions-review-start")) && exists(hasText("Not started · 8 tasks")) }
                 capture("07-not-started-asked")
                 compose.onNodeWithTag("project-sessions-review-start").performClick()
-                await { exists(hasTestTag("project-start-request-sheet")) && exists(hasTestTag("project-start-request")) }
+                awaitStartCard()
                 capture("08-start-card")
                 compose.onNodeWithTag("project-start-request-cancel").performClick(); settle()
                 File(evidence, "result.txt").writeText("PASS\n")
@@ -230,6 +231,21 @@ class ProjectSessionsDeviceTest {
     private fun drawerRow(text: String) = hasText(text) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
     private fun exists(matcher: SemanticsMatcher, unmerged: Boolean = false) = compose.onAllNodes(matcher, unmerged).fetchSemanticsNodes().isNotEmpty()
     private fun await(condition: () -> Boolean) = compose.waitUntil(30_000, condition)
+    /**
+     * The start sheet's card. When it has not come in 30 s, the failure record says what the sheet showed instead: its card, its
+     * error with Retry, or its spinner. A spinner over reads the fixture answered is the harness's (A15 F-25 at c17b6ae4c: the
+     * rule's unconfined effects resume on OkHttp's thread), an error is the app's; this records which, it does not retry.
+     */
+    private fun awaitStartCard() {
+        try { await { exists(hasTestTag("project-start-request-sheet")) && exists(hasTestTag("project-start-request")) } }
+        catch (timeout: ComposeTimeoutException) {
+            val sheet = hasAnyAncestor(hasTestTag("project-start-request-sheet"))
+            val shows = "card=${exists(hasTestTag("project-start-request"))} error=${exists(hasText(StartSheetLoad.couldNotLoad, substring = true) and sheet)} " +
+                "spinner=${exists(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo) and sheet)}"
+            File(evidence, "start-sheet.txt").writeText("after 30 s the start sheet showed $shows\n")
+            throw AssertionError("The start sheet's card did not come in 30 s; the sheet showed $shows", timeout)
+        }
+    }
     private fun openDrawer() {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         settle()
