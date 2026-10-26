@@ -584,6 +584,7 @@ func (c *conn) wrote(f *linkpb.Frame) {
 		c.g.metrics.handshakeDuration.observe(time.Since(c.started))
 	}
 	c.logFrame("out", f)
+	c.g.drill.relayed(c, f)
 }
 
 // closeWith closes the connection once: the Close frame saying why, then the WebSocket close. reason is what the
