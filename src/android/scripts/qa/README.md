@@ -225,7 +225,7 @@ server writes every row itself; nothing touches its database. The target is the 
 `http://217.216.108.220:2087` (server 9a4bf087f, rehearsed on a local stack of the same source). The tool refuses
 `orbitd.io` and the production port 2086. It configures no push.
 
-What one `seed` makes, from an empty database (about 4 minutes locally):
+What one `seed` makes, from an empty database (about 3–4 minutes on a local stack, 20 against the QA stack over the internet):
 
 - **Accounts.** `owner@ds1.orbit.test` (ADMIN, DS1's account) holds everything below. `member@ds0.orbit.test`
   (MEMBER) stays empty, as in DS0. Their passwords are made at seed time and written only to
