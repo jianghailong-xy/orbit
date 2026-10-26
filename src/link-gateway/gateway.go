@@ -46,6 +46,8 @@ type gateway struct {
 	backends *backendPool
 	// credit is the ingest queue's depth and the credit it grants (events.go).
 	credit *creditBook
+	// merger collects event batches into merged calls (events_merge.go); nil without backends, or with a window of 0.
+	merger *eventMerger
 	// watchers is who watches which session live, by runner (live.go).
 	watchers *watcherBook
 
@@ -77,6 +79,9 @@ func newGateway(cfg config, logger *slog.Logger) *gateway {
 	if len(cfg.InternalAPIURLs) > 0 {
 		g.backends = newBackendPool(cfg, g.metrics, logger)
 		g.forward = forwardRPC
+		if cfg.link.Merge.Window > 0 {
+			g.merger = newEventMerger(g, cfg.link.Merge)
+		}
 	}
 	g.metrics.mode.set(modeGauge(g.mode()))
 	return g

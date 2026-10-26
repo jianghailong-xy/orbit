@@ -4,6 +4,7 @@
 // The optimisation tasks re-run the same pair and compare with the baseline README.md records.
 //
 //   node scripts/runner-link/loadgen-baseline.mjs <heartbeats-only run> <heartbeats-and-events run> [--full <run>] [--json out.json]
+//     [--target-events 2000]
 //
 // Per heartbeat: the first run's apiserver and database CPU (mean cores over the steady window, loadgen-report.mjs)
 // over its heartbeats a second, and its statements and commits over its heartbeats. Per batch: what the second run adds
@@ -14,7 +15,13 @@
 // With --full, a third heartbeats-only run on the same fleet in which every beat reconciled in full (loadgen-run.sh
 // --mark-every): a beat is either unflagged or reconciled in full (task O1), and each of the two runs' figures over its
 // steady window is its two kinds of beat at their shares, so the two runs give each kind's cost.
-import { readFileSync, writeFileSync } from 'node:fs';
+//
+// Per event is a batch's cost over its events. The ingest's own rate is what the run adds to the heartbeats: its commits
+// and statements a second, and, with --target-events, the same per event at that many events a second, linear in events
+// (an upper bound for merged calls, which carry more batches a call as the rate grows). When the gateway merged the
+// batches (src/link-gateway/events_merge.go), its calls are reported beside them: batches a call, and how long each
+// call's transaction held its sessions.
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const args = process.argv.slice(2);
@@ -24,8 +31,11 @@ const option = (name) => {
 };
 const jsonOut = option('--json');
 const fullDir = option('--full');
-if (args.length !== 2) {
-  console.error('usage: loadgen-baseline.mjs <heartbeats-only run> <heartbeats-and-events run> [--full <run>] [--json out.json]');
+const target = option('--target-events');
+const targetEvents = target === null ? null : Number(target);
+if (args.length !== 2 || (targetEvents !== null && !(targetEvents > 0))) {
+  console.error('usage: loadgen-baseline.mjs <heartbeats-only run> <heartbeats-and-events run> [--full <run>] [--json out.json] '
+    + '[--target-events N]');
   process.exit(2);
 }
 const load = (dir) => {
@@ -37,10 +47,13 @@ const load = (dir) => {
   const before = read('db-before.json');
   const after = read('db-after.json');
   const statements = read('pgss.json');
+  // Every statement's calls (pgss-totals.json); a run recorded before loadgen-run.sh kept them has the 60 listed alone,
+  // which miss whatever a varying statement text pushes off the list.
+  const totals = existsSync(join(dir, 'pgss-totals.json')) ? read('pgss-totals.json') : null;
   return {
-    dir, report, summary, statements, run: read('run.json'),
+    dir, report, summary, statements, totals, run: read('run.json'),
     commits: after.xactCommit - before.xactCommit,
-    calls: statements.reduce((n, q) => n + q.calls, 0),
+    calls: totals ? Number(totals.calls) : statements.reduce((n, q) => n + q.calls, 0),
     steady: summary.steady,
     whole: summary.whole.counters,
     samples,
@@ -66,6 +79,14 @@ for (const r of [hb, full].filter(Boolean)) {
 }
 const round = (v, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
 const cores = (r, svc) => r.report.components[svc]?.meanCores ?? 0;
+// A host swapping during a run inflates its CPU figures: on 2026-10-25 a heartbeats-only run swapping in about 1,100
+// pages/s measured 12% more database CPU than its repeat at 2 pages/s. Each run's swap-in over its steady window is
+// reported, and a run past HEAVY_SWAP_IN pages/s is to be run again rather than compared.
+const HEAVY_SWAP_IN = 100;
+const swapInPerSec = (r) => {
+  const secs = (Number(new Date(r.report.steadyTo)) - Number(new Date(r.report.steadyFrom))) / 1000;
+  return r.report.host?.swapInPages == null || !(secs > 0) ? null : round(r.report.host.swapInPages / secs, 0);
+};
 /** A heartbeats-only run's figures per beat over its steady window, unrounded; the statements need loadgen-run.sh's
  *  `statements` samples (null before task O1), the reconciled share the loadgen's heartbeatsReconciled. */
 const steadyPerBeat = (r) => {
@@ -129,6 +150,35 @@ const perBatch = {
   sqlStatements: round((ev.calls - hb.calls * scale) / ev.whole.batchesAcked, 1),
   commits: round((ev.commits - hb.commits * scale) / ev.whole.batchesAcked, 1),
 };
+// Per event, and the ingest's own rate: the run's commits and statements over its batches, at its batch rate.
+const eventsPerBatch = perBatch.eventsPerBatch;
+const perEvent = {
+  apiserverCpuMs: round(perBatch.apiserverCpuMs / eventsPerBatch, 3),
+  databaseCpuMs: round(perBatch.databaseCpuMs / eventsPerBatch, 3),
+  sqlStatements: round(perBatch.sqlStatements / eventsPerBatch, 2),
+  commits: round(perBatch.commits / eventsPerBatch, 3),
+};
+const ingest = {
+  eventsPerSec: ev.steady.eventsAckedPerSecond,
+  commitsPerSec: round(perBatch.commits * batchesPerSec, 1),
+  sqlStatementsPerSec: round(perBatch.sqlStatements * batchesPerSec, 0),
+  apiserverCores: round((perBatch.apiserverCpuMs * batchesPerSec) / 1000, 3),
+  databaseCores: round((perBatch.databaseCpuMs * batchesPerSec) / 1000, 3),
+};
+const projected = targetEvents === null ? null : {
+  eventsPerSec: targetEvents,
+  commitsPerSec: round(perEvent.commits * targetEvents, 0),
+  sqlStatementsPerSec: round(perEvent.sqlStatements * targetEvents, 0),
+  apiserverCores: round((perEvent.apiserverCpuMs * targetEvents) / 1000, 2),
+  databaseCores: round((perEvent.databaseCpuMs * targetEvents) / 1000, 2),
+};
+const gwOf = ev.report.gateway ?? {};
+const merged = gwOf.mergeCalls > 0 ? {
+  callsPerSec: round(gwOf.mergeCalls / ev.steady.seconds, 1),
+  batchesPerCall: gwOf.mergeBatchesPerCall,
+  heldMs: gwOf.mergeHeld,
+  callMs: gwOf.mergeCall,
+} : null;
 // The statements each operation runs, by how often per operation.
 const per = (r, ops) => r.statements
   .map((q) => ({ perOp: q.calls / ops, meanMs: q.mean_ms, query: q.query }))
@@ -144,7 +194,9 @@ const baseline = {
     activeSessions: ev.report.loadgen.config.activeSessions, perSessionEventsPerSecond: ev.report.loadgen.config.perSessionRate },
   rates: { heartbeatsOnly: { beatsPerSec }, withEvents: { beatsPerSec: evBeatsPerSec, batchesPerSec, eventsPerSec: ev.steady.eventsAckedPerSecond } },
   hostOtherCores: [hb.report.host.otherCgroupCores, ev.report.host.otherCgroupCores],
-  perHeartbeat: perBeat, perBatch, ...(split ? { perHeartbeatByKind: split } : {}),
+  swapInPagesPerSec: [swapInPerSec(hb), swapInPerSec(ev)],
+  perHeartbeat: perBeat, perBatch, perEvent, ingest, projected, merged, ...(split ? { perHeartbeatByKind: split } : {}),
+  eventAck: { runnerBatch: ev.steady.ackBatch, gateway: gwOf.eventAck },
   heartbeatStatements: hbQueries.map((q) => ({ perOp: round(q.perOp, 2), meanMs: q.meanMs, query: q.query.slice(0, 200) })),
   batchStatements: batchQueries.map((q) => ({ perOp: round(q.perOp, 2), meanMs: q.meanMs, query: q.query.slice(0, 200) })),
 };
@@ -157,7 +209,13 @@ out.push(unlocked.length === 0 ? "Every run held the host's load test lock." : `
 // The CPUs the stack's containers were confined to, run by run: a light run's CPU time depends on the kind of core.
 const cpusets = [hb, ev, full].filter(Boolean).map((r) => [...new Set(Object.values(r.run.containers ?? {}).map((c) => c.cpuset || 'any'))].join('/'));
 out.push(new Set(cpusets).size === 1 ? `The containers ran on CPUs ${cpusets[0]} in every run.` : `The containers ran on CPUs ${cpusets.join(', ')}, run by run.`);
-out.push(`Heartbeats only: ${beatsPerSec} beats/s. With events: ${evBeatsPerSec} beats/s, ${batchesPerSec} batches/s (${perBatch.eventsPerBatch} events each, ${ev.steady.eventsAckedPerSecond} events/s).`, '');
+out.push(`Heartbeats only: ${beatsPerSec} beats/s. With events: ${evBeatsPerSec} beats/s, ${batchesPerSec} batches/s (${perBatch.eventsPerBatch} events each, ${ev.steady.eventsAckedPerSecond} events/s).`);
+const heavy = [hb, ev].filter((r, i) => baseline.swapInPagesPerSec[i] > HEAVY_SWAP_IN).map((r) => r.report.run);
+out.push(`Host swap-in over the steady windows: ${baseline.swapInPagesPerSec.join(' and ')} pages/s`
+  + (heavy.length ? `: **${heavy.join(' and ')} swapped past ${HEAVY_SWAP_IN} pages/s, which inflates CPU; run it again**.` : '.'));
+const listedOnly = [hb, ev].filter((r) => !r.totals).map((r) => r.report.run);
+if (listedOnly.length) out.push(`Statements of ${listedOnly.join(' and ')} are the 60 listed alone (no pgss-totals.json): a lower bound.`);
+out.push('');
 out.push('| Per operation | apiserver CPU ms | database CPU ms | gateway CPU ms | SQL statements | commits |');
 out.push('| --- | --- | --- | --- | --- | --- |');
 out.push(`| heartbeat | ${perBeat.apiserverCpuMs} | ${perBeat.databaseCpuMs} | ${perBeat.gatewayCpuMs} | ${perBeat.sqlStatements} | ${perBeat.commits} |`);
@@ -173,6 +231,22 @@ if (split) {
   for (const [label, k] of [['unflagged', split.unflagged], ['reconciled in full', split.reconciled]]) {
     out.push(`| ${label} | ${k.apiserverCpuMs} | ${k.databaseCpuMs} | ${k.statements ?? 'n/a'} | ${k.commits} |`);
   }
+}
+out.push('', '| Per event | apiserver CPU ms | database CPU ms | SQL statements | commits |');
+out.push('| --- | --- | --- | --- | --- |');
+out.push(`| event | ${perEvent.apiserverCpuMs} | ${perEvent.databaseCpuMs} | ${perEvent.sqlStatements} | ${perEvent.commits} |`);
+out.push('', `The ingest at ${ingest.eventsPerSec} events/s: ${ingest.commitsPerSec} commits/s, ${ingest.sqlStatementsPerSec} statements/s, `
+  + `${ingest.apiserverCores} apiserver cores, ${ingest.databaseCores} database cores.`);
+if (projected) {
+  out.push(`At ${projected.eventsPerSec} events/s, linear in events: ${projected.commitsPerSec} commits/s, ${projected.sqlStatementsPerSec} statements/s, `
+    + `${projected.apiserverCores} apiserver cores, ${projected.databaseCores} database cores.`);
+}
+out.push(`EventAck: per batch at the runner p50 ${ev.steady.ackBatch.p50Ms} ms, p99 ${ev.steady.ackBatch.p99Ms} ms; `
+  + `at the gateway p99 ≈ ${gwOf.eventAck?.p99Ms} ms.`);
+if (merged) {
+  out.push(`Merged calls: ${merged.callsPerSec}/s, ${merged.batchesPerCall} batches each; their transaction held its sessions `
+    + `p50 ≈ ${merged.heldMs.p50Ms} ms, p99 ≈ ${merged.heldMs.p99Ms} ms (mean ${merged.heldMs.meanMs} ms); a call took `
+    + `p50 ≈ ${merged.callMs.p50Ms} ms, p99 ≈ ${merged.callMs.p99Ms} ms.`);
 }
 for (const [name, list] of [['heartbeat', hbQueries], ['event batch', batchQueries]]) {
   out.push('', `Statements per ${name}, most database time first (times per ${name}, mean ms):`, '');

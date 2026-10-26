@@ -327,6 +327,22 @@ function closureBody(lines: readonly string[], start: number): { from: number; t
   return null;
 }
 
+/**
+ * A closure handed over by name — `withTransactionRetry(this.prisma, ingest, …)` — read where it is defined: the
+ * nearest `const ingest = async (tx…) => {` above the call. Without this a unit whose closure is written once and run
+ * in two ways (RunnerApiController.ingestEvents: its own transaction, or a merged link call's) would leave both checks
+ * below with nothing to read.
+ */
+function namedClosureBody(lines: readonly string[], index: number): { from: number; to: number } | null {
+  const name = /(?:withTransactionRetry|\$transaction)\(\s*(?:[\w$.]+\s*,\s*)?([A-Za-z_$][\w$]*)\s*[,)]/.exec(lines[index])?.[1];
+  if (!name) return null;
+  const definition = new RegExp(`\\bconst ${name.replace(/\$/g, '\\$')}\\s*=\\s*async\\b`);
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    if (definition.test(lines[cursor])) return closureBody(lines, cursor);
+  }
+  return null;
+}
+
 /** Every transaction closure in a source file that is not a comment. */
 function closures(source: string): Array<{ from: number; to: number; retried: boolean }> {
   const lines = source.split('\n');
@@ -334,7 +350,7 @@ function closures(source: string): Array<{ from: number; to: number; retried: bo
   lines.forEach((line, index) => {
     if (!/\$transaction\(|withTransactionRetry\(/.test(line)) return;
     if (/^\s*(\/\/|\*)/.test(line)) return;
-    const body = closureBody(lines, index);
+    const body = closureBody(lines, index) ?? namedClosureBody(lines, index);
     if (body) found.push({ ...body, retried: /withTransactionRetry\(/.test(line) });
   });
   return found;

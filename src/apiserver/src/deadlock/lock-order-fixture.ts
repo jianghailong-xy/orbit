@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { Client } from 'pg';
 
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
@@ -65,6 +67,39 @@ const SESSION_BATCH_UPDATE = `
   UPDATE "session"
      SET "last_turn_at" = $2, "last_assistant_text" = $3, "last_tool_use" = $4, "updated_at" = $2
    WHERE "id" = $1::uuid`;
+
+/**
+ * `RunnerApiController.lockLinkCallSessions`: every session of a merged link call, in ONE statement, sorted by id, under
+ * lockSessionLeaseOwner's fence, SKIP LOCKED. Rank 30. The statement as the controller issues it, its three arrays
+ * as parameters; `lock-order.spec.ts` holds the two to the same text.
+ */
+export const LOCK_LINK_CALL_SESSIONS = `
+      SELECT s."id"::text AS "id",
+             (s."inbox_lease_owner" IS NOT DISTINCT FROM f.lease_owner) AS "leaseOwnerMatches",
+             s."kind" AS "kind",
+             EXISTS (
+               SELECT 1 FROM "project" p WHERE p."coordinator_session_id" = s."id" AND p."coordinator_enabled"
+             ) AS "coordinator"
+        FROM "session" s
+        JOIN unnest(
+               $1::uuid[],
+               $2::uuid[],
+               $3::uuid[]
+             ) AS f(session_id, runner_id, lease_owner)
+          ON s."id" = f.session_id AND s."assigned_runner_id" = f.runner_id
+       ORDER BY s."id"
+         FOR UPDATE OF s SKIP LOCKED
+    `;
+
+/** A merged link call's one run_event insert: an event of each session it wrote, in one statement, after their writes. */
+const INSERT_RUN_EVENTS = `
+  INSERT INTO "run_event" ("id", "session_id", "seq", "type", "payload", "created_at")
+  SELECT r.id, r.session_id, 1, 'assistant', '{"text":"fixture"}'::jsonb, CURRENT_TIMESTAMP
+    FROM unnest($1::uuid[], $2::uuid[]) AS r(id, session_id)
+  ON CONFLICT DO NOTHING`;
+
+/** Whether another transaction holds a row lock on any of these sessions: refused at once rather than waited for. */
+const PROBE_SESSIONS_FREE = 'SELECT "id" FROM "session" WHERE "id" = ANY($1::uuid[]) FOR UPDATE NOWAIT';
 
 /** The two arrival orders every scenario below is run in. */
 export type Arrival = 'task-first' | 'runner-first';
@@ -470,6 +505,127 @@ export function reverseCycleScenario(ids: FixtureIds, secondTaskId: string): Sce
       { op: 'finish', party: 'second', action: 'ROLLBACK' },
     ],
   };
+}
+
+/** The two arrival orders of a merged link call and a writer of one of its sessions. */
+export type MergedArrival = 'merged-first' | 'single-first';
+
+export const MERGED_ARRIVALS: readonly MergedArrival[] = ['merged-first', 'single-first'];
+
+/**
+ * A merged link call's statements over both fixture sessions (or the first alone): the lock, each one's session write,
+ * then the run_event rows of all of them in one insert.
+ */
+function mergedIngestSteps(ids: FixtureIds, prefix: string, order: string[], write: string[]): Step[] {
+  const lock = {
+    label: `${prefix}1 lock-link-call-sessions`,
+    sql: LOCK_LINK_CALL_SESSIONS,
+    values: [order, order.map(() => ids.runnerId), order.map(() => null)],
+  };
+  if (write.length === 0) return [lock];
+  return [
+    lock,
+    ...write.map((sessionId, i) => ({ label: `${prefix}${2 + i} session-batch-update`, sql: SESSION_BATCH_UPDATE,
+      values: [sessionId, ids.survivorTurnAt, `${ids.label}-merged`, null] })),
+    { label: `${prefix}${2 + write.length} insert-run-events`, sql: INSERT_RUN_EVENTS,
+      values: [write.map(() => randomUUID()), write] },
+  ];
+}
+
+/**
+ * A merged link call over both fixture Sessions against a writer of one of them — a turn completion, which fences the
+ * Session with lockSessionLeaseOwner and writes it once — from both arrival orders.
+ *
+ * merged-first: the call holds both Sessions; the completion waits for it, once, and goes on after its commit.
+ * single-first: the completion holds its Session; the call's lock statement does not wait for it (SKIP LOCKED), takes
+ * the other one alone and writes only that one, while the completion commits — so no wait at all. A probe then takes
+ * the skipped Session FOR UPDATE NOWAIT while the call is still open: it would be refused if the call held it.
+ */
+export function mergedIngestAgainstSingleWriterScenario(ids: FixtureIds, arrival: MergedArrival): ScenarioSpec {
+  const both = [ids.contendedSessionId, ids.telemetrySessionId];
+  const single = [
+    { label: 'T1 lock-session-lease-owner', sql: LOCK_SESSION_LEASE_OWNER, values: [ids.telemetrySessionId, null, ids.runnerId] },
+    { label: 'T2 session-batch-update', sql: SESSION_BATCH_UPDATE,
+      values: [ids.telemetrySessionId, ids.victimTurnAt, `${ids.label}-turn-complete`, null] },
+  ];
+  const run = (party: string, step: Step): PlanStep =>
+    ({ op: 'run', party, label: step.label, sql: step.sql, values: step.values });
+  const parties = [
+    { name: 'merged-ingest', deadlockTimeout: '2s' },
+    { name: 'turn-complete', deadlockTimeout: '2s' },
+    { name: 'probe', deadlockTimeout: '2s' },
+  ];
+  if (arrival === 'merged-first') {
+    const merged = mergedIngestSteps(ids, 'M', both, both);
+    return {
+      name: 'merged-ingest/merged-first',
+      parties,
+      plan: [
+        run('merged-ingest', merged[0]),
+        { op: 'block', party: 'turn-complete', label: single[0].label, sql: single[0].sql, values: single[0].values,
+          blockedBy: ['merged-ingest'] },
+        ...merged.slice(1).map((s) => run('merged-ingest', s)),
+        { op: 'finish', party: 'merged-ingest', action: 'COMMIT' },
+        { op: 'settle', party: 'turn-complete' },
+        run('turn-complete', single[1]),
+        { op: 'finish', party: 'turn-complete', action: 'COMMIT' },
+        { op: 'finish', party: 'probe', action: 'COMMIT' },
+      ],
+    };
+  }
+  // The completion holds the telemetry Session, so the call takes and writes the contended one alone.
+  const merged = mergedIngestSteps(ids, 'M', both, [ids.contendedSessionId]);
+  return {
+    name: 'merged-ingest/single-first',
+    parties,
+    plan: [
+      run('turn-complete', single[0]),
+      run('merged-ingest', merged[0]),
+      run('turn-complete', single[1]),
+      { op: 'finish', party: 'turn-complete', action: 'COMMIT' },
+      run('probe', { label: 'P1 skipped-session-free', sql: PROBE_SESSIONS_FREE, values: [[ids.telemetrySessionId]] }),
+      { op: 'finish', party: 'probe', action: 'COMMIT' },
+      ...merged.slice(1).map((s) => run('merged-ingest', s)),
+      { op: 'finish', party: 'merged-ingest', action: 'COMMIT' },
+    ],
+  };
+}
+
+/**
+ * Two merged link calls naming the same two Sessions in opposite orders, as two gateway nodes might. The first takes
+ * both, sorted; the second's lock statement waits for neither and takes neither (SKIP LOCKED) — its batches would be
+ * sent alone — so there is no wait to order at all. A probe takes both Sessions FOR UPDATE NOWAIT once the first has
+ * committed and while the second is still open: refused if the second had taken either.
+ */
+export function twoMergedIngestsScenario(ids: FixtureIds): ScenarioSpec {
+  const first = mergedIngestSteps(ids, 'A', [ids.contendedSessionId, ids.telemetrySessionId], [ids.contendedSessionId, ids.telemetrySessionId]);
+  const second = mergedIngestSteps(ids, 'B', [ids.telemetrySessionId, ids.contendedSessionId], []);
+  const run = (party: string, step: Step): PlanStep =>
+    ({ op: 'run', party, label: step.label, sql: step.sql, values: step.values });
+  return {
+    name: 'merged-ingest/two-calls',
+    parties: [
+      { name: 'merged-a', deadlockTimeout: '2s' },
+      { name: 'merged-b', deadlockTimeout: '2s' },
+      { name: 'probe', deadlockTimeout: '2s' },
+    ],
+    plan: [
+      run('merged-a', first[0]),
+      run('merged-b', second[0]),
+      ...first.slice(1).map((s) => run('merged-a', s)),
+      { op: 'finish', party: 'merged-a', action: 'COMMIT' },
+      run('probe', { label: 'P1 both-sessions-free', sql: PROBE_SESSIONS_FREE,
+        values: [[ids.contendedSessionId, ids.telemetrySessionId]] }),
+      { op: 'finish', party: 'probe', action: 'COMMIT' },
+      { op: 'finish', party: 'merged-b', action: 'COMMIT' },
+    ],
+  };
+}
+
+/** A merged link call's statements over both fixture Sessions, for a lock-set reading on one backend. */
+export function mergedIngestStatements(ids: FixtureIds): Step[] {
+  const both = [ids.contendedSessionId, ids.telemetrySessionId];
+  return mergedIngestSteps(ids, 'M', both, both);
 }
 
 /** The statuses a telemetry-only Session write is filtered on, kept in step with the service. */
