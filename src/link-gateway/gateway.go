@@ -52,6 +52,9 @@ type gateway struct {
 	// forward hands an Rpc to a backend: forwardRPC, behind mayForward, which lets only a connection in MODE_LINK
 	// forward; nil without backends.
 	forward func(c *conn, rpc *linkpb.Rpc)
+
+	// drill is what LINK_DRILL_LOSE_ANSWERS armed (drill.go); nil, as it is unless a drill sets it.
+	drill *drillFaults
 }
 
 func newGateway(cfg config, logger *slog.Logger) *gateway {
@@ -77,6 +80,9 @@ func newGateway(cfg config, logger *slog.Logger) *gateway {
 	if len(cfg.InternalAPIURLs) > 0 {
 		g.backends = newBackendPool(cfg, g.metrics, logger)
 		g.forward = forwardRPC
+	}
+	if len(cfg.DrillLoseAnswers) > 0 {
+		g.drill = newDrillFaults(cfg.DrillLoseAnswers)
 	}
 	g.metrics.mode.set(modeGauge(g.mode()))
 	return g
@@ -348,6 +354,9 @@ func serveMain(args []string) int {
 	}
 	if g.backends != nil {
 		logger.Info("runner calls are forwarded on connections in MODE_LINK", "backends", g.backends.String(), "timeout", cfg.RPCTimeout)
+	}
+	if g.drill != nil {
+		logger.Warn("LINK_DRILL_LOSE_ANSWERS is set: answers are lost on purpose, for a drill", "lose", g.drill.String())
 	}
 
 	hup := make(chan os.Signal, 1)

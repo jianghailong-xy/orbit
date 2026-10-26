@@ -64,6 +64,7 @@ It is one static binary with these subcommands:
 | `LINK_DRAIN_GRACE` | `15s` | How long past its delay a drained connection may stay open before the gateway closes it. |
 | `LINK_DRAIN_TIMEOUT` | `80s` | When the drain gives up and closes what is left. Keep Compose's `stop_grace_period` (90s) above it. |
 | `LINK_FRAME_LOG` | `lifecycle` | `lifecycle` logs Hello, Welcome, Drain and Close. `all` logs a summary of every frame, in and out. `off` logs no frames. |
+| `LINK_DRILL_LOSE_ANSWERS` | — | For staging drills only: answers the gateway loses on purpose, such as `claim:3,inbox:3` ([Lost answers](#lost-answers-a-drills-fault)). Unset, it loses none. |
 
 These values are fixed by the design: ping every 20s, disconnect after 60s without a pong, heartbeat every 30s, at most
 two connections per runner, frames of at most 256 KiB. Forwarding's bounds are fixed too: 64 calls in flight and 8
@@ -346,6 +347,21 @@ The route's answer comes back as `TunnelResponse{status, json_body, retry_after_
 the route wrote it, with the link's `code` and `retryable` in an error's body, and `retry_after_ms` from its
 `Retry-After-Ms` header, else the body's `retryAfterMs`, else `Retry-After`.
 
+### Lost answers (a drill's fault)
+
+`LINK_DRILL_LOSE_ANSWERS` makes the gateway lose answers on their way to the runner, for the staging drill
+`scripts/runner-link/drills/lost-answer-drill.sh` (§10, an answer lost on its way). It names calls, each with how many
+of its answers to lose: `claim` (`GET /runner/sessions/claim`) and `inbox` (`GET /runner/sessions/:id/inbox`), as in
+`claim:3,inbox:3`; a name without a number loses one. Only an answer that hands out work is lost: a claim's that names a
+session, an inbox's that leases a message or shell turn, never a control turn or a steer. The route has committed it by
+then. In its place the gateway cuts the runner's connection, with no Close frame (`link_disconnects_total` counts it as
+`drill_lost_answer`), and logs `drill: an answer is lost`. The runner reconnects and sends the call again under the same
+request_id; the gateway logs the answer that call gets next as `drill: the call whose answer was lost is answered
+again`, with how long after the loss it came (`after_ms`), what it hands out (`work`) and whether that is what the lost
+answer did (`same_work`). Once a call's losses are spent, its answers are relayed as usual.
+
+Unset, which is the default and every deployment's setting, no answer is lost.
+
 ### Heartbeats
 
 A `Heartbeat` is forwarded to `POST /runner/heartbeat` as the body a runner posts over HTTPS today: the exact inverse of
@@ -582,7 +598,7 @@ Every metric is served at `/metrics` on `LINK_METRICS_ADDR`, in Prometheus text 
 | `link_handshakes_total` | counter | `result`: ok, unauthenticated, rate_limited, too_many_connections, draining, not_websocket, hello_timeout, protocol_error, upgrade_required, upgrade_failed |
 | `link_handshake_duration_seconds` | histogram | — (from the upgrade request to Welcome written) |
 | `link_token_refusals_total` | counter | `reason`: MISSING, MALFORMED, SIGNATURE, AUDIENCE, EXPIRED, CLAIMS, CELL, REVOKED |
-| `link_disconnects_total` | counter | `reason`: client_closed, connection_lost, superseded, ping_timeout, token_expired, revoked, protocol_error, slow_consumer, drained, shutdown, internal_error |
+| `link_disconnects_total` | counter | `reason`: client_closed, connection_lost, superseded, ping_timeout, token_expired, revoked, protocol_error, slow_consumer, drained, shutdown, internal_error; drill_lost_answer only under `LINK_DRILL_LOSE_ANSWERS` |
 | `link_rtt_seconds` | histogram | — (WebSocket ping round trips) |
 | `link_frames_received_total`, `link_frames_sent_total` | counter | `type`: the frame body |
 | `link_frame_decode_errors_total` | counter | — |
