@@ -2,6 +2,7 @@ package io.orbitd.android.push
 
 import android.app.Activity
 import android.app.Application
+import android.app.Notification
 import android.app.NotificationManager
 import androidx.test.core.app.ApplicationProvider
 import io.orbitd.android.core.auth.*
@@ -81,7 +82,7 @@ class PushControllerTest {
         val first = fixture.data()
         fixture.push.receive(first)
         assertEquals(sid, fixture.push.notice.value?.payload?.sessionId)
-        assertTrue(fixture.active().isEmpty())
+        assertEquals(1, fixture.active().size) // Also kept in the tray, silently.
         fixture.push.dismissNotice()
         fixture.push.receive(first)
         assertNull(fixture.push.notice.value)
@@ -89,6 +90,49 @@ class PushControllerTest {
         fixture.pending = false
         fixture.push.receive(fixture.sync())
         assertNull(fixture.push.notice.value)
+        assertTrue(fixture.active().isEmpty())
+    }
+
+    @Test fun foregroundAlertsStayInTheTraySilentlyAndBackgroundAlertsStillSound() = runBlocking {
+        fixture.signIn()
+        val manager = app.getSystemService(NotificationManager::class.java)
+        val activity = Activity()
+        fixture.push.onActivityStarted(activity)
+        // A headless agent message used to be marked seen and dropped in the foreground.
+        val headless = fixture.data(kind = "agent-message").let { data ->
+            val payload = Wire.json.parseToJsonElement(data.getValue("payload")).jsonObject
+            data + ("payload" to JsonObject(payload - "sessionID").toString()) + ("notificationKey" to UUID.randomUUID().toString())
+        }
+        assertTrue(fixture.push.receive(headless))
+        val silent = manager.activeNotifications.single()
+        assertEquals(PushNotifications.SILENT_GROUP, silent.notification.group)
+        assertEquals(Notification.GROUP_ALERT_SUMMARY, silent.notification.groupAlertBehavior)
+        assertNull(fixture.push.notice.value)
+        fixture.push.onActivityStopped(activity)
+        assertTrue(fixture.push.receive(fixture.data(kind = "finished", sessionId = settled)))
+        val sounding = manager.activeNotifications.single { it.notification.extras.getString(Notification.EXTRA_TITLE) == "Controlled approval" && it.tag != silent.tag }
+        assertNull(sounding.notification.group)
+    }
+
+    @Test fun permissionAnswerIsRecordedInTheBackgroundAndAnUnwritableStoreDoesNotThrow() = runBlocking {
+        val directory = File(app.noBackupFilesDir, "push")
+        fixture.close()
+        directory.deleteRecursively(); directory.writeText("blocked")
+        fixture = Fixture()
+        val uncaught = CopyOnWriteArrayList<Throwable>()
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { _, error -> uncaught += error }
+        try {
+            fixture.push.permissionPromptFinished() // The write fails on an IO thread and is isolated there.
+            delay(300)
+        } finally { Thread.setDefaultUncaughtExceptionHandler(previous) }
+        assertEquals(emptyList<Throwable>(), uncaught)
+        assertTrue(directory.isFile)
+        fixture.close()
+        directory.delete()
+        fixture = Fixture()
+        fixture.push.permissionPromptFinished()
+        withTimeout(5_000) { while (!PushStorage(directory).permissionPrompted()) delay(20) }
     }
 
     @Test fun coldControllerAdoptsPersistedBindingBeforeCheckingMessage() = runBlocking {
@@ -115,6 +159,15 @@ class PushControllerTest {
         fixture.push.receive(fixture.data())
         assertEquals(1, fixture.active().size)
         assertTrue(fixture.requests.any { it.path == listOf("push", "unregister") })
+    }
+
+    @Test fun permissionPromptNeedsSignInConfigurationAndARuntimePermission() = runBlocking {
+        assertFalse(fixture.push.claimPermissionPrompt()) // Signed out.
+        fixture.signIn()
+        // API 29–32 grant notifications at install; there is no runtime request to spend.
+        assertFalse(fixture.push.claimPermissionPrompt())
+        fixture.available = false
+        assertFalse(fixture.push.claimPermissionPrompt())
     }
 
     @Test fun disabledBuildRejectsAPersistedBindingAndBackgroundWorkExpires() = runBlocking {
@@ -181,6 +234,7 @@ class PushControllerTest {
                 path == listOf("sessions", sid, "approvals") -> if (pending) """[{"id":"1","status":"PENDING"}]""" else "[]"
                 path == listOf("sessions", sid) -> """{"id":"$sid","status":"RUNNING","lifecycleState":"OPEN"}"""
                 path == listOf("sessions", settled) -> """{"id":"$settled","status":"SUCCEEDED","lifecycleState":"OPEN"}"""
+                path == listOf("users", "me") -> """{"id":"u1","preferences":{}}"""
                 else -> "[]"
             }
             ApiResponse(200, body.encodeToByteArray())

@@ -30,6 +30,14 @@ class PushAuthorityTest {
         assertNull(sync.link)
     }
 
+    @Test fun deviceTestCorpusIsTheSharedCardsCorpus() {
+        val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
+            .first { File(it, "src/shared/src/interaction-cards.fixture.json").isFile }
+        // The device APK cannot read the repository, so it carries a byte-identical asset copy.
+        assertArrayEquals(File(root, "src/shared/src/interaction-cards.fixture.json").readBytes(),
+            File(root, "src/android/app/src/androidTest/assets/push/interaction-cards.fixture.json").readBytes())
+    }
+
     @Test fun parserRejectsMalformedEnvelopeAndPartialRoutesWithoutRewritingOpaqueBinding() {
         val base = fixtureData()
         assertEquals(base.getValue("registrationKey"), PushMessage.parse(base)!!.registrationKey)
@@ -60,8 +68,9 @@ class PushAuthorityTest {
         assertEquals(rid, OrbitLinks.parse(confirmation.link!!)!!.recordId)
         assertEquals(Destination.WATCH, OrbitLinks.parse(message("watch-matched", "watchID" to wid, "generation" to 3).link!!)!!.destination)
         assertEquals(Destination.RUNNER, OrbitLinks.parse(message("engine-signed-out", "runnerID" to runnerId, "engine" to "codex").link!!)!!.destination)
-        // Existing OrbitLinks has no wiki-space entry; an entry URL would be the wrong object.
-        assertNull(message("wiki-review-mode-manual", "wikiSpaceID" to pid).link)
+        // The space URI handed to A12, never an entry URL (that would be the wrong object). Its parse
+        // branch belongs to A12, so this asserts only the URI this module emits.
+        assertEquals("orbit://wiki/$pid", message("wiki-review-mode-manual", "wikiSpaceID" to pid).link)
         assertNull(message("agent-message").link)
     }
 

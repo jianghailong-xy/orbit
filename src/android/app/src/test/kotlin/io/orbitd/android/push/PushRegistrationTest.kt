@@ -4,6 +4,7 @@ import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
 import java.io.IOException
+import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -225,6 +226,21 @@ class PushRegistrationTest {
         assertEquals(two, reopened.installationId("https://two.example"))
         assertEquals(token, reopened.token())
         assertNull(reopened.binding())
+    }
+
+    @Test fun permissionPromptMarkSurvivesRestartAndAccountChangesAndFailsOnlyLoudlyInStorage() {
+        val directory = temporary.newFolder()
+        val storage = PushStorage(directory)
+        assertFalse(storage.permissionPrompted())
+        storage.setPermissionPrompted()
+        storage.setToken(token)
+        storage.setBinding(null)
+        assertTrue(PushStorage(directory).permissionPrompted())
+        // A file where the directory goes: storage itself throws; PushController isolates it.
+        val blocked = File(temporary.newFolder(), "push").apply { writeText("blocked") }
+        val unwritable = PushStorage(blocked)
+        assertFalse(unwritable.permissionPrompted())
+        assertThrows(IllegalStateException::class.java) { unwritable.setPermissionPrompted() }
     }
 
     private fun session(transport: HttpTransport, dispatcher: CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO,

@@ -25,14 +25,26 @@ class PushNotifications(private val context: Context) {
     private var seen = runCatching { Wire.json.decodeFromString<List<String>>(history.readFully().decodeToString()) }
         .getOrDefault(emptyList()).takeLast(128).toMutableList()
 
+    /** The channel needs-you alerts post to. Android never raises an existing channel's importance,
+     * so 482b132e8's DEFAULT `orbit.needs-you` is replaced by a new HIGH channel (pops up like the iOS
+     * banner) unless its user changed that importance, which then stays theirs. */
+    val needsYou: String = manager.getNotificationChannel(LEGACY_NEEDS_YOU).let { legacy ->
+        if (legacy?.hasUserSetImportance() == true) LEGACY_NEEDS_YOU
+        else { if (legacy != null) manager.deleteNotificationChannel(LEGACY_NEEDS_YOU); NEEDS_YOU }
+    }
+
     init {
-        listOf(NEEDS_YOU to "Needs your reply", SESSIONS to "Sessions", UPDATES to "Project and account updates").forEach { (id, title) ->
-            manager.createNotificationChannel(NotificationChannel(id, title, NotificationManager.IMPORTANCE_DEFAULT))
+        listOfNotNull(Triple(NEEDS_YOU, "Needs your reply", NotificationManager.IMPORTANCE_HIGH).takeIf { needsYou == NEEDS_YOU },
+            Triple(SESSIONS, "Sessions", NotificationManager.IMPORTANCE_DEFAULT),
+            Triple(UPDATES, "Project and account updates", NotificationManager.IMPORTANCE_DEFAULT)).forEach { (id, title, importance) ->
+            manager.createNotificationChannel(NotificationChannel(id, title, importance))
         }
     }
 
-    fun allowed(channel: String? = null): Boolean = manager.areNotificationsEnabled() &&
-        (Build.VERSION.SDK_INT < 33 || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) &&
+    fun permitted(): Boolean = Build.VERSION.SDK_INT < 33 ||
+        context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    fun allowed(channel: String? = null): Boolean = manager.areNotificationsEnabled() && permitted() &&
         (channel == null || manager.getNotificationChannel(channel)?.importance?.let { it != NotificationManager.IMPORTANCE_NONE } == true)
 
     @Synchronized fun hasSeen(message: PushMessage) = "${message.registrationKey}:${message.eventId}" in seen
@@ -45,17 +57,20 @@ class PushNotifications(private val context: Context) {
         catch (error: Exception) { history.failWrite(stream); throw error }
     }
 
-    fun show(message: PushMessage, data: Map<String, String>): Boolean {
+    /** [silent] keeps the entry in the tray without sound, vibration or heads-up: the platform has no
+     * per-post switch, so (as NotificationCompat.setSilent does) it joins a group without a summary
+     * and lets only the summary alert. */
+    fun show(message: PushMessage, data: Map<String, String>, silent: Boolean = false): Boolean {
         val link = message.link
         val channel = channel(message)
         if (!allowed(channel)) return false
         val tag = tag(message)
         // A unique identifier prevents PendingIntent extras from one notification replacing another.
-        val pending = link?.let {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(it), context, MainActivity::class.java)
-                .setIdentifier(tag).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        }
+        // Without an object route (a headless agent message) the tap still opens Orbit, as on iOS.
+        val intent = (link?.let { Intent(Intent.ACTION_VIEW, Uri.parse(it), context, MainActivity::class.java) }
+            ?: Intent(Intent.ACTION_MAIN, null, context, MainActivity::class.java).addCategory(Intent.CATEGORY_LAUNCHER))
+            .setIdentifier(tag).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val pending = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val extras = Bundle().apply { putBundle(DATA, Bundle().apply { data.forEach { (key, value) -> putString(key, value) } }) }
         val notification = Notification.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_notification).setContentTitle(message.payload.title)
@@ -63,7 +78,9 @@ class PushNotifications(private val context: Context) {
             .setContentIntent(pending).setAutoCancel(true).setOnlyAlertOnce(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setCategory(if (message.payload.isReminder) Notification.CATEGORY_REMINDER else Notification.CATEGORY_STATUS)
-            .addExtras(extras).build()
+            .addExtras(extras)
+            .apply { if (silent) setGroup(SILENT_GROUP).setGroupAlertBehavior(Notification.GROUP_ALERT_SUMMARY) }
+            .build()
         return try { manager.notify(tag, 0, notification); true } catch (_: SecurityException) { false }
     }
 
@@ -77,13 +94,15 @@ class PushNotifications(private val context: Context) {
         seen.clear(); history.delete()
     }
     fun channel(message: PushMessage) = when {
-        message.payload.isReminder || message.payload.kind == "confirmation-problems" -> NEEDS_YOU
+        message.payload.isReminder || message.payload.kind == "confirmation-problems" -> needsYou
         message.payload.sessionId != null -> SESSIONS
         else -> UPDATES
     }
     private fun tag(message: PushMessage) = "$PREFIX${message.registrationKey}:${message.notificationKey}"
     companion object {
-        const val NEEDS_YOU = "orbit.needs-you"
+        const val NEEDS_YOU = "orbit.needs-you.alert"
+        const val LEGACY_NEEDS_YOU = "orbit.needs-you"
+        const val SILENT_GROUP = "orbit.silent"
         const val SESSIONS = "orbit.sessions"
         const val UPDATES = "orbit.updates"
         private const val PREFIX = "orbit:"
