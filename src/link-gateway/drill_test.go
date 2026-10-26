@@ -17,11 +17,14 @@ import (
 const drillSession = "0190a0b0-0000-7000-8000-0000000000d1"
 
 // drillBackend answers a claim with drillSession, or with nothing when asked ?empty=1, and an inbox fetch with a turn
-// of the kind ?kind= names, or with none.
+// of the kind ?kind= names, or with none. Asked ?refuse=1, it answers 409 with a body that still names them.
 func drillBackend(t *testing.T) *fakeBackend {
 	return newFakeBackend(t, func(w http.ResponseWriter, r *http.Request, body []byte) {
 		q := r.URL.Query()
 		switch {
+		case q.Get("refuse") == "1":
+			writeJSON(w, http.StatusConflict, map[string]any{"code": "CONFLICT", "retryable": false,
+				"sessionId": drillSession, "turnId": "turn-message", "kind": "message"})
 		case strings.HasSuffix(r.URL.Path, "/claim") && q.Get("empty") == "1":
 			writeJSON(w, http.StatusOK, map[string]any{})
 		case strings.HasSuffix(r.URL.Path, "/claim"):
@@ -86,15 +89,21 @@ func TestADrillLosesTheAnswersItNamesAndTheCallIsAnsweredAgain(t *testing.T) {
 	tc, _ := h.connectLink(runnerA, processA)
 	inbox := "/runner/sessions/" + drillSession + "/inbox?acceptsSteer=1"
 
-	// What hands out no work is relayed: a claim with no session, an inbox with no turn, a control turn, another route.
-	for _, c := range []struct{ id, method, path string }{
-		{"claim-empty", "GET", "/runner/sessions/claim?empty=1"},
-		{"inbox-empty", "GET", inbox},
-		{"inbox-interrupt", "GET", inbox + "&kind=interrupt"},
-		{"inbox-steer", "GET", inbox + "&kind=steer"},
-		{"turn-complete", "POST", "/runner/sessions/" + drillSession + "/turn-complete"},
+	// What hands out no work is relayed: a claim with no session, an inbox with no turn, a control turn, a refusal,
+	// another route.
+	for _, c := range []struct {
+		id, method, path string
+		status           uint32
+	}{
+		{"claim-empty", "GET", "/runner/sessions/claim?empty=1", http.StatusOK},
+		{"inbox-empty", "GET", inbox, http.StatusOK},
+		{"inbox-interrupt", "GET", inbox + "&kind=interrupt", http.StatusOK},
+		{"inbox-steer", "GET", inbox + "&kind=steer", http.StatusOK},
+		{"claim-refused", "GET", "/runner/sessions/claim?refuse=1", http.StatusConflict},
+		{"inbox-refused", "GET", inbox + "&kind=message&refuse=1", http.StatusConflict},
+		{"turn-complete", "POST", "/runner/sessions/" + drillSession + "/turn-complete", http.StatusOK},
 	} {
-		if res := tc.rpc(c.id, c.method, c.path, nil); res.GetTunnel().GetStatus() != http.StatusOK {
+		if res := tc.rpc(c.id, c.method, c.path, nil); res.GetTunnel().GetStatus() != c.status {
 			t.Fatalf("%s: %v", c.id, res)
 		}
 	}
@@ -147,9 +156,10 @@ func TestADrillLosesTheAnswersItNamesAndTheCallIsAnsweredAgain(t *testing.T) {
 	if got := h.g.metrics.disconnects.get("drill_lost_answer"); got != 2 {
 		t.Errorf("link_disconnects_total{reason=\"drill_lost_answer\"} = %v", got)
 	}
-	// The lost answers were the backend's: each lost call reached it twice, once for the answer lost.
-	if n := len(backend.requestsTo("/api/runner/sessions/claim")); n != 4 {
-		t.Errorf("%d claims reached the backend, want 4", n)
+	// The lost answers were the backend's: the lost claim reached it twice, once for the answer lost, beside the empty,
+	// the refused and the next claim.
+	if n := len(backend.requestsTo("/api/runner/sessions/claim")); n != 5 {
+		t.Errorf("%d claims reached the backend, want 5", n)
 	}
 }
 
