@@ -89,6 +89,9 @@ data class SessionState(
     val connection: ConnectionState = ConnectionState.STOPPED,
     val error: RealtimeError? = null,
     val accessDenied: Boolean = false,
+    /** The transcript is the device's own copy from when the session was selected (RealtimeCache), not since re-seeded from
+     * the server's tail: what a reader draws first came off the disk. D09 P02 tells its warm-cache case apart by it. */
+    val seededFromCache: Boolean = false,
 )
 
 data class RealtimeState(

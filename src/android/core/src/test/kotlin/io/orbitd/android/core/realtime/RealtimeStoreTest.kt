@@ -439,6 +439,31 @@ class RealtimeStoreTest {
         assertEquals(listOf(2001L), store.state.value.session!!.transcript.events.map { it.seq })
     }
 
+    /** D09 P02's `source`: a transcript the server's tail seeded is not the cache's; one restored from RealtimeCache is, through
+     * the pages that close its gap, until a resync re-seeds it from the tail. */
+    @Test fun aTranscriptSaysWhetherItsSeedCameFromTheCache() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        assertEquals(listOf(1L), store.state.value.session!!.transcript.events.map { it.seq })
+        assertFalse("the cold open read its tail", store.state.value.session!!.seededFromCache)
+        advanceTimeBy(101); runCurrent()
+        store.close(); runCurrent()
+        rig.rows = rig.rows + rig.row(2)
+        val auth2 = rig.client()
+        auth2.restore()
+        val restored = RealtimeStore(auth2, backgroundScope)
+        runCurrent()
+        assertEquals(listOf(1L), restored.state.value.session!!.transcript.events.map { it.seq })
+        assertTrue("restored from the device", restored.state.value.session!!.seededFromCache)
+        restored.setNetwork(true, "wifi"); restored.setForeground(true); runCurrent()
+        assertEquals(listOf(1L, 2L), restored.state.value.session!!.transcript.events.map { it.seq })
+        assertTrue("the gap's pages leave the seed the cache's", restored.state.value.session!!.seededFromCache)
+        rig.streams.session().emit("""{"type":"resync","seq":0,"payload":{}}""")
+        runCurrent(); advanceTimeBy(1001); runCurrent()
+        assertEquals(listOf(1L, 2L), restored.state.value.session!!.transcript.events.map { it.seq })
+        assertFalse("a resync re-seeds it from the tail", restored.state.value.session!!.seededFromCache)
+    }
+
     @Test fun openingPingCannotResetRepeatedResyncBackoff() = runTest {
         val rig = Rig(this)
         rig.start()
