@@ -169,7 +169,9 @@ scripts/runner-link/staging-down.sh
 How a round is judged:
 
 - **Within the bound**: the gateway logs how long after the cut the same call, under the same request_id, got its next
-  answer (`after_ms`). It measures until that answer is written to the runner's new connection.
+  answer (`after_ms`). It measures until that answer is written to the runner's new connection. The database agrees
+  for a message: each time its turn is handed out, its lease deadline moves to 300 s on, and the timeline shows how
+  soon after the lost lease the turn was handed out again.
 - **The same work**: that answer hands out the session or the turn the lost one did (`same_work=true`).
 - **Once**:
   - The message reached the scripted claude's stdin once, as a user message (`stdin.jsonl`). The runner's request for

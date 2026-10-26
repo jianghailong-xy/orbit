@@ -376,10 +376,13 @@ inbox_round() {
     sleep 0.5
   done
   ran="$(executions "$turn" "$marker")"
-  timing="$(psql_value "SELECT round(extract(epoch FROM delivery_acknowledged_at - delivered_at) * 1000) || ' ms to its engine, ' ||
-    round(extract(epoch FROM answered_at - delivered_at) * 1000) || ' ms to its answer' FROM conversation_turn WHERE id = '$turn'")"
+  # delivered_at is the lease whose answer was lost, kept when the same lease generation is handed the turn again; each
+  # hand-out sets lease_deadline_at to 300 s on, so the last one was that less 300 s.
+  timing="$(psql_value "SELECT 'handed out again ' || round(extract(epoch FROM lease_deadline_at - interval '300 seconds' - delivered_at) * 1000) ||
+    ' ms after the lost lease, answered ' || round(extract(epoch FROM answered_at - delivered_at) * 1000) || ' ms after it'
+    FROM conversation_turn WHERE id = '$turn'")"
   while IFS= read -r line; do say "inbox $n: runner log: $line"; done < <(connection_lines "$from")
-  say "inbox $n: the message ran as \"$ran\" (stdin, user, written, acknowledged, turn_end); from its first lease: $timing"
+  say "inbox $n: the message ran as \"$ran\" (stdin, user, written, acknowledged, turn_end); its turn was $timing"
   verdict="$(round_verdict "inbox $n" "$after_ms" "$answer" "$same" "$ran")"
   printf 'inbox\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$n" "$base_uuid" "$turn" "$request" "$(field time "$loss")" \
     "$after_ms" "$answer" "$same" "-" "-" "$ran" "$verdict" >> "$table"
