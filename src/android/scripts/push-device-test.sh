@@ -211,7 +211,8 @@ tray_tap() { # Host-driven: a production process posts one entry, dies, and Syst
   adbx -s "$serial" shell dumpsys activity activities > "$output/tray-activities.txt"
   adbx -s "$serial" exec-out screencap -p > "$output/tray-cold-card.png"
   python3 "$scripts/push-host-ui.py" tap "$serial" 'Allow' "$output/tray-allow.xml" --timeout 10 >> "$output/tray.txt" 9>&-
-  python3 "$scripts/push-host-ui.py" wait "$serial" 'Allowed · recorded by the server' "$output/tray-recorded.xml" --timeout 20 --contains >> "$output/tray.txt" 9>&-
+  # The answer is the card's last line, under the fold on a 360 dp phone.
+  python3 "$scripts/push-host-ui.py" wait "$serial" 'Allowed · recorded by the server' "$output/tray-recorded.xml" --timeout 20 --contains --scroll >> "$output/tray.txt" 9>&-
   adbx -s "$serial" exec-out screencap -p > "$output/tray-cold-recorded.png"
   curl --fail --silent "http://127.0.0.1:$port/__stats" > "$output/tray-stats.json"
   printf 'old_pid=%s\nnew_pid=%s\n' "$old_pid" "$new_pid" >> "$output/tray.txt"
