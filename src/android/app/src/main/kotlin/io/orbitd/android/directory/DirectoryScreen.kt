@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
@@ -235,7 +236,9 @@ fun SessionRow(session: DirectorySession, onOpen: () -> Unit, onOptions: () -> U
  *
  * The Activity's FullyDrawnReporter calls reportFullyDrawn once per Activity, from the draw of the frame showing those rows.
  * Nothing holds it before then, so a list that leaves before it is ready reports nothing. With `log.tag.OrbitPerf` at D the
- * report also logs where the rows came from and how many [isRow] items were on screen, for A15's collector.
+ * report also logs where the rows came from and how many [isRow] items were on screen, for A15's collector. That line waits
+ * for the frame to finish: the report runs from the window's draw callback, before AndroidComposeView lays the new rows out
+ * in its own dispatchDraw, so counted there they are not on screen yet.
  */
 @Composable
 internal fun ReportDirectoryDrawn(data: DirectoryData, list: LazyListState, isRow: (LazyListItemInfo) -> Boolean) {
@@ -243,8 +246,11 @@ internal fun ReportDirectoryDrawn(data: DirectoryData, list: LazyListState, isRo
     if (!data.ready || reporter == null || reporter.isFullyDrawnReported) return
     if (OrbitPerf.enabled) {
         val source = if (data.cached) "cache" else "network"
+        val view = LocalView.current
         DisposableEffect(reporter) {
-            val line = { OrbitPerf.emit("p01_fully_drawn", "source=$source rows=${list.layoutInfo.visibleItemsInfo.count(isRow)}") }
+            val line: () -> Unit = {
+                view.post { OrbitPerf.emit("p01_fully_drawn", "source=$source rows=${list.layoutInfo.visibleItemsInfo.count(isRow)}") }
+            }
             reporter.addOnReportDrawnListener(line)
             onDispose { reporter.removeOnReportDrawnListener(line) }
         }

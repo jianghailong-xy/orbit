@@ -62,7 +62,10 @@ class DirectoryFullyDrawnTest {
         ColdStart.cache = ColdStart.CACHED
         launch()
         await { rows(ColdStart.ALPHA) }
-        frame()
+        draw()
+        // The line waits for the frame to finish: on a device the report runs before Compose lays the new rows out.
+        assertEquals(emptyList<String>(), perf())
+        compose.waitForIdle()
         assertTrue(reported())
         assertEquals(listOf("v=1 ev=p01_fully_drawn source=cache rows=3"), perf())
         // The directory's read is on the wire, and nothing the server could answer has landed.
@@ -147,9 +150,15 @@ class DirectoryFullyDrawnTest {
         scenario = ActivityScenario.launch(MainActivity::class.java)
     }
     /** Robolectric runs no draw pass, so this dispatches the draw callbacks a device's frame runs — where the Activity's
-     * FullyDrawnReporter calls reportFullyDrawn from. */
+     * FullyDrawnReporter calls reportFullyDrawn from — on this, the main thread, and runs nothing posted after them. */
+    private fun draw() {
+        lateinit var activity: MainActivity
+        scenario.onActivity { activity = it }
+        activity.window.decorView.viewTreeObserver.dispatchOnDraw()
+    }
+    /** A frame drawn and finished. */
     private fun frame() {
-        scenario.onActivity { it.window.decorView.viewTreeObserver.dispatchOnDraw() }
+        draw()
         compose.waitForIdle()
     }
     private fun await(condition: () -> Boolean) = compose.waitUntil(60_000, condition)
