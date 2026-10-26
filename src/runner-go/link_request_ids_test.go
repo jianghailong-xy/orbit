@@ -21,9 +21,10 @@ import (
 // with the session or the turn the lost answer carried. Any answer, a session or a turn, nothing, a refusal, moves the
 // next one to a new id.
 
-// linkOutageForTest is how long a test keeps the link down after an answer is lost: past the claim and inbox calls'
-// deadline (longPollCallTimeout), so that the call whose answer was lost has given up before the link is back. 3 s
-// past a deadline shortened to 1 s; with ORBIT_TEST_LINK_OUTAGE set, say to 2m, that long past the real 35 s one.
+// linkOutageForTest is how long a test keeps the link down after an answer is lost: longer than the claim and inbox
+// calls' deadline (longPollCallTimeout), so that the call whose answer was lost has given up before the link is back.
+// 1.5 s against a deadline shortened to 1 s, which keeps the suite inside go test's 10 minutes; with
+// ORBIT_TEST_LINK_OUTAGE set, say to 2m, that long against the real 35 s one.
 func linkOutageForTest(t *testing.T) time.Duration {
 	t.Helper()
 	if v := os.Getenv("ORBIT_TEST_LINK_OUTAGE"); v != "" {
@@ -36,7 +37,7 @@ func linkOutageForTest(t *testing.T) time.Duration {
 	old := longPollCallTimeout
 	longPollCallTimeout = time.Second
 	t.Cleanup(func() { longPollCallTimeout = old })
-	return 3 * time.Second
+	return 1500 * time.Millisecond
 }
 
 // linkDownUntil has g refuse the runner's connections until until.
