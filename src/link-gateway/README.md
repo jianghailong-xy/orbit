@@ -358,7 +358,8 @@ then. In its place the gateway cuts the runner's connection, with no Close frame
 `drill_lost_answer`), and logs `drill: an answer is lost`. The runner reconnects and sends the call again under the same
 request_id; the gateway logs the answer that call gets next as `drill: the call whose answer was lost is answered
 again`, with how long after the loss it came (`after_ms`), what it hands out (`work`) and whether that is what the lost
-answer did (`same_work`). Once a call's losses are spent, its answers are relayed as usual.
+answer did (`same_work`). A call's answer is lost once: the same call sent again is answered, whatever losses are left
+for the next calls. Once a call's losses are spent, its answers are relayed as usual.
 
 Unset, which is the default and every deployment's setting, no answer is lost.
 

@@ -43,10 +43,13 @@ var drillCalls = map[string]drillCall{
 		kinds: []string{"message", "shell"}},
 }
 
-// handsOut is what an answer of the call hands out, "" when it hands out nothing.
-func (d drillCall) handsOut(body []byte) string {
+// handsOut is what an answer of the call hands out, "" when it hands out nothing, as a refusal never does.
+func (d drillCall) handsOut(t *linkpb.TunnelResponse) string {
+	if t.GetStatus()/100 != 2 {
+		return ""
+	}
 	var answer map[string]any
-	if json.Unmarshal(body, &answer) != nil {
+	if json.Unmarshal(t.GetJsonBody(), &answer) != nil {
 		return ""
 	}
 	work, _ := answer[d.work].(string)
@@ -86,20 +89,21 @@ func parseDrillLoseAnswers(v string) (map[string]int, error) {
 	return counts, nil
 }
 
-// drillFaults is what LINK_DRILL_LOSE_ANSWERS armed, and the answers lost until their calls are answered again.
+// drillFaults is what LINK_DRILL_LOSE_ANSWERS armed, and the calls whose answers it lost.
 type drillFaults struct {
 	mu   sync.Mutex
-	left map[string]int        // by call: answers still to lose
-	lost map[string]lostAnswer // by runner and request_id
+	left map[string]int         // by call: answers still to lose
+	lost map[string]*lostAnswer // by runner and request_id: no more of them than were armed
 }
 
 type lostAnswer struct {
 	call, work string
 	at         time.Time
+	answered   bool // the call has been answered again since
 }
 
 func newDrillFaults(counts map[string]int) *drillFaults {
-	d := &drillFaults{left: map[string]int{}, lost: map[string]lostAnswer{}}
+	d := &drillFaults{left: map[string]int{}, lost: map[string]*lostAnswer{}}
 	for name, n := range counts {
 		d.left[name] = n
 	}
@@ -119,31 +123,29 @@ func (d *drillFaults) String() string {
 }
 
 // lose decides whether result, the answer to rpc, is lost on its way to c's runner. When it is, the connection is cut
-// in its place, and lose reports true: the caller relays nothing.
+// in its place, and lose reports true: the caller relays nothing. A call's answer is lost once: the call sent again
+// under the same request_id is answered, whatever is left to lose.
 func (d *drillFaults) lose(c *conn, rpc *linkpb.Rpc, result *linkpb.RpcResult) bool {
 	if d == nil {
-		return false
-	}
-	answer := result.GetTunnel()
-	if answer == nil || answer.GetStatus()/100 != 2 {
 		return false
 	}
 	name, call, ok := drillCallOf(rpc.GetTunnel())
 	if !ok {
 		return false
 	}
-	work := call.handsOut(answer.GetJsonBody())
+	work := call.handsOut(result.GetTunnel())
 	if work == "" {
 		return false
 	}
+	key := c.claims.RunnerID + " " + rpc.GetRequestId()
 	d.mu.Lock()
-	if d.left[name] == 0 {
+	if _, again := d.lost[key]; again || d.left[name] == 0 {
 		d.mu.Unlock()
 		return false
 	}
 	d.left[name]--
 	left := d.left[name]
-	d.lost[c.claims.RunnerID+" "+rpc.GetRequestId()] = lostAnswer{call: name, work: work, at: time.Now()}
+	d.lost[key] = &lostAnswer{call: name, work: work, at: time.Now()}
 	d.mu.Unlock()
 	c.log.Warn("drill: an answer is lost on its way to the runner; the connection is cut",
 		"call", name, "request", rpc.GetRequestId(), "work", work, "left", left)
@@ -152,8 +154,8 @@ func (d *drillFaults) lose(c *conn, rpc *linkpb.Rpc, result *linkpb.RpcResult) b
 	return true
 }
 
-// relayed notes a frame written to c's runner: an RpcResult for a call whose answer was lost is that call answered
-// again, on whichever connection the runner sent it on.
+// relayed notes a frame written to c's runner: the first RpcResult for a call whose answer was lost is that call
+// answered again, on whichever connection the runner sent it on.
 func (d *drillFaults) relayed(c *conn, f *linkpb.Frame) {
 	if d == nil {
 		return
@@ -162,17 +164,19 @@ func (d *drillFaults) relayed(c *conn, f *linkpb.Frame) {
 	if res == nil {
 		return
 	}
-	key := c.claims.RunnerID + " " + res.GetRequestId()
 	d.mu.Lock()
-	lost, ok := d.lost[key]
-	delete(d.lost, key)
+	lost := d.lost[c.claims.RunnerID+" "+res.GetRequestId()]
+	first := lost != nil && !lost.answered
+	if first {
+		lost.answered = true
+	}
 	d.mu.Unlock()
-	if !ok {
+	if !first {
 		return
 	}
-	work, outcome := "", res.GetFailure().GetCode()
+	work, outcome := drillCalls[lost.call].handsOut(res.GetTunnel()), res.GetFailure().GetCode()
 	if t := res.GetTunnel(); t != nil {
-		work, outcome = drillCalls[lost.call].handsOut(t.GetJsonBody()), strconv.Itoa(int(t.GetStatus()))
+		outcome = strconv.Itoa(int(t.GetStatus()))
 	}
 	c.log.Warn("drill: the call whose answer was lost is answered again",
 		"call", lost.call, "request", res.GetRequestId(), "after_ms", time.Since(lost.at).Milliseconds(),

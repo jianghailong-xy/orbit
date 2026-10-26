@@ -84,10 +84,13 @@ func (tc *testConn) expectCut(request, method, path string) {
 func TestADrillLosesTheAnswersItNamesAndTheCallIsAnsweredAgain(t *testing.T) {
 	backend := drillBackend(t)
 	h := newLinkHarness(t, []*fakeBackend{backend}, func(c *config) {
-		c.DrillLoseAnswers = map[string]int{"claim": 1, "inbox": 1}
+		c.DrillLoseAnswers = map[string]int{"claim": 2, "inbox": 1}
 	})
 	tc, _ := h.connectLink(runnerA, processA)
 	inbox := "/runner/sessions/" + drillSession + "/inbox?acceptsSteer=1"
+	session := func(res *linkpb.RpcResult) bool {
+		return strings.Contains(string(res.GetTunnel().GetJsonBody()), drillSession)
+	}
 
 	// What hands out no work is relayed: a claim with no session, an inbox with no turn, a control turn, a refusal,
 	// another route.
@@ -109,18 +112,24 @@ func TestADrillLosesTheAnswersItNamesAndTheCallIsAnsweredAgain(t *testing.T) {
 	}
 
 	// A claim that hands out a session: the answer is lost and the connection cut. The runner connects again and sends the
-	// call again under its request_id, and that answer is relayed.
+	// call again under its request_id. A call's answer is lost once: what it gets from then on is relayed, here a refusal
+	// first and then the session, though a loss is left.
 	tc.expectCut("claim-1", "GET", "/runner/sessions/claim?wait=0")
 	eventually(t, 5*time.Second, "the cut counted", func() bool { return h.g.metrics.disconnects.get("drill_lost_answer") == 1 })
 	tc, _ = h.connectLink(runnerA, processA)
-	if res := tc.rpc("claim-1", "GET", "/runner/sessions/claim?wait=0", nil); !strings.Contains(string(res.GetTunnel().GetJsonBody()), drillSession) {
+	if res := tc.rpc("claim-1", "GET", "/runner/sessions/claim?refuse=1", nil); res.GetTunnel().GetStatus() != http.StatusConflict {
 		t.Fatalf("the claim sent again: %v", res)
 	}
-	eventually(t, 5*time.Second, "the answer again logged", func() bool {
-		return strings.Contains(h.logs.String(), `call=claim request=claim-1 after_ms=`)
-	})
-	// One loss was armed for the claim: the next is relayed.
-	if res := tc.rpc("claim-2", "GET", "/runner/sessions/claim?wait=0", nil); !strings.Contains(string(res.GetTunnel().GetJsonBody()), drillSession) {
+	if res := tc.rpc("claim-1", "GET", "/runner/sessions/claim?wait=0", nil); !session(res) {
+		t.Fatalf("the claim sent once more: %v", res)
+	}
+	// The next claim's answer is the second loss armed, and the one after it is relayed.
+	tc.expectCut("claim-2", "GET", "/runner/sessions/claim?wait=0")
+	tc, _ = h.connectLink(runnerA, processA)
+	if res := tc.rpc("claim-2", "GET", "/runner/sessions/claim?wait=0", nil); !session(res) {
+		t.Fatalf("the claim sent again: %v", res)
+	}
+	if res := tc.rpc("claim-3", "GET", "/runner/sessions/claim?wait=0", nil); !session(res) {
 		t.Fatalf("the next claim: %v", res)
 	}
 
@@ -141,8 +150,11 @@ func TestADrillLosesTheAnswersItNamesAndTheCallIsAnsweredAgain(t *testing.T) {
 	for _, want := range []string{
 		`msg="drill: an answer is lost on its way to the runner; the connection is cut" conn=`,
 		`msg="drill: the call whose answer was lost is answered again" conn=`,
-		`call=claim request=claim-1 work=` + drillSession + ` left=0`,
+		`call=claim request=claim-1 work=` + drillSession + ` left=1`,
+		`call=claim request=claim-2 work=` + drillSession + ` left=0`,
 		`call=inbox request=inbox-1 work=turn-message left=0`,
+		// The first answer after a loss is the one logged: claim-1's was the refusal.
+		`answer=409 work="" same_work=false`,
 		`answer=200 work=` + drillSession + ` same_work=true`,
 		`answer=200 work=turn-message same_work=true`,
 	} {
@@ -150,16 +162,19 @@ func TestADrillLosesTheAnswersItNamesAndTheCallIsAnsweredAgain(t *testing.T) {
 			t.Errorf("the log does not say %q", want)
 		}
 	}
-	if n := strings.Count(logs, "drill: an answer is lost"); n != 2 {
-		t.Errorf("%d answers lost, want 2", n)
+	if n := strings.Count(logs, "drill: an answer is lost"); n != 3 {
+		t.Errorf("%d answers lost, want 3", n)
 	}
-	if got := h.g.metrics.disconnects.get("drill_lost_answer"); got != 2 {
+	if n := strings.Count(logs, "is answered again"); n != 3 {
+		t.Errorf("%d calls answered again, want 3", n)
+	}
+	if got := h.g.metrics.disconnects.get("drill_lost_answer"); got != 3 {
 		t.Errorf("link_disconnects_total{reason=\"drill_lost_answer\"} = %v", got)
 	}
-	// The lost answers were the backend's: the lost claim reached it twice, once for the answer lost, beside the empty,
-	// the refused and the next claim.
-	if n := len(backend.requestsTo("/api/runner/sessions/claim")); n != 5 {
-		t.Errorf("%d claims reached the backend, want 5", n)
+	// The lost answers were the backend's: claim-1 reached it three times and claim-2 twice, beside the empty, the
+	// refused and the last claim.
+	if n := len(backend.requestsTo("/api/runner/sessions/claim")); n != 8 {
+		t.Errorf("%d claims reached the backend, want 8", n)
 	}
 }
 
