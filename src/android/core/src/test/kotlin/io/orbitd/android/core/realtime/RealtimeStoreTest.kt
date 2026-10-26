@@ -100,12 +100,12 @@ class RealtimeStoreTest {
             }
         }, credentials, instances, data, "test", dispatcher = dispatcher, eventTransport = streams)
 
-        suspend fun start(): Pair<AuthSession, RealtimeStore> {
+        suspend fun start(witness: RealtimeWitness? = null): Pair<AuthSession, RealtimeStore> {
             credentials.value = StoredSession(serverA.value, tokens())
             instances.value = serverA.value
             val auth = client()
             auth.restore()
-            val store = RealtimeStore(auth, scope.backgroundScope)
+            val store = RealtimeStore(auth, scope.backgroundScope, witness = witness)
             store.selectSession("s1")
             store.setNetwork(true, "wifi")
             store.setForeground(true)
@@ -638,6 +638,35 @@ class RealtimeStoreTest {
         assertSame(next, store.state.value.handle)
         assertEquals("s2", store.state.value.session?.id)
         assertEquals("s2", RealtimeCache.read(auth, next).lastSessionId)
+    }
+
+    /** D09 P06's witness (A15): each durable event the window took in, by frame or page, says whether the window held it already;
+     * live deltas and pings say nothing; each account event is told; and while the witness is off the store asks nothing more. */
+    @Test fun theWitnessIsToldEachDurableEventWithItsDuplicateFlagAndEachAccountEvent() = runTest {
+        class Recorded(override val enabled: Boolean) : RealtimeWitness {
+            val lines = mutableListOf<String>()
+            override fun durable(sessionId: String, seq: Long, duplicate: Boolean, via: String) { lines += "$sessionId $seq $duplicate $via" }
+            override fun account(type: String, sessionId: String) { lines += "account $type $sessionId" }
+        }
+        for (on in listOf(true, false)) {
+            val rig = Rig(this)
+            val witness = Recorded(on)
+            val (_, store) = rig.start(witness)
+            val first = rig.streams.session()
+            first.emit(rig.row(2)); first.emit(rig.row(2))
+            first.emit("""{"seq":0,"type":"text_delta","payload":{"delta":"live only"}}""")
+            runCurrent()
+            rig.streams.control().emit("""{"type":"session.updated","sessionId":"s1","data":{}}""")
+            rig.streams.control().emit("""{"type":"ping","sessionId":"","data":{}}""")
+            runCurrent()
+            rig.rows = rig.rows + (2L..5L).map { rig.row(it) }
+            first.frames.close(NetworkException())
+            runCurrent(); advanceTimeBy(1_001); runCurrent()
+            assertEquals((1L..5L).toList(), store.state.value.session!!.transcript.events.map { it.seq })
+            assertEquals(if (!on) emptyList() else listOf("s1 1 false tail", "s1 2 false sse", "s1 2 true sse",
+                "account session.updated s1", "s1 2 true page", "s1 3 false page", "s1 4 false page", "s1 5 false page"), witness.lines)
+            store.close(); runCurrent()
+        }
     }
 
     @Test fun corruptOrVersionedCacheRestoresAsColdOpen() = runTest {
