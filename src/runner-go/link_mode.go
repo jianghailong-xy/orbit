@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -36,7 +37,9 @@ import (
 // and the control plane answers a repeated claim with the session the first one claimed (task B2).
 //
 // The long polls do not hang on the server in link mode (§5.6): a claim, an inbox fetch or the wake is asked only
-// once a hint says something waits, or the HeartbeatAck's HintState does (link_hints.go).
+// once a hint says something waits, or the HeartbeatAck's HintState does (link_hints.go); a session's inbox poller
+// decides when its own fetches go (inbox_poller.go). Every inbox fetch over the link says which turn this process is
+// running in the session (runningTurnId).
 
 const (
 	// linkModeEnv set to off (or 0, false, no) keeps every daemon call on HTTPS, whatever the control plane says. So
@@ -55,7 +58,8 @@ const (
 // Variables only so that tests can shorten them.
 var (
 	// linkLongPoll is how long a long poll waits for its hint in link mode before it answers that nothing came: the
-	// window of the HTTP long polls (LONG_POLL_MS in runner-api.controller.ts), so their callers keep their pace.
+	// window of the HTTP long polls (LONG_POLL_MS in runner-api.controller.ts), so their callers keep their pace. An
+	// inbox poller waits it out without fetching, and looks again at whether the link is in use.
 	linkLongPoll = 25 * time.Second
 	// linkApprovalRecheck is how often a pending approval is read again in link mode while no ApprovalHint says it
 	// was decided: the heartbeat's interval. The hint comes milliseconds after the decision commits, a lost one is
@@ -141,7 +145,9 @@ type linkSession struct {
 	// it acknowledged storing. sentRow and storedRow are the same of the events it stores as rows (linkRowEvent).
 	sent, stored       uint64
 	sentRow, storedRow uint64
-	// turn is the message or shell turn the inbox handed this process that no turn completion has ended yet.
+	// turn is the message or shell turn the inbox handed this process that no turn completion, and no end of the
+	// engine generation it was handed to, has ended yet: what a Hello resumes the session with, and what every inbox
+	// fetch over the link says this process is running (runningTurnId).
 	turn    string
 	touched time.Time
 }
@@ -343,6 +349,12 @@ func (m *linkMode) call(ctx context.Context, route, method, path string, body, o
 			"message": fmt.Sprintf("a %d-byte request is more than the runner link carries in one call (%d bytes)", len(payload), linkMaxRequestBytes)})
 		return &transportHTTPError{method: method, path: path, statusCode: http.StatusRequestEntityTooLarge, body: string(refusal)}
 	}
+	if route == linkRouteInbox {
+		// The message or shell turn this process runs in the session, "" for none (§5.6): the control plane hands a
+		// turn of the fetch's lease generation straight back when the fetch does not name it, a fetch whose answer
+		// was lost, rather than when its lease runs out. Every resend of the call says what the first said.
+		path = linkWithQuery(path, "runningTurnId", m.runningTurn(linkPathSegment(path, 2)))
+	}
 	rpc := &linkpb.Rpc{RequestId: m.newRequestID(), Body: &linkpb.Rpc_Tunnel{Tunnel: &linkpb.TunnelRequest{
 		Method: method, Path: path, JsonBody: payload,
 	}}}
@@ -478,8 +490,8 @@ func (m *linkMode) storedEvents(sessionID string, events []RunEvent) {
 	}
 }
 
-// handedTurn records a turn the inbox handed this process: a message or shell turn is what it executes until the
-// turn's completion.
+// handedTurn records a turn the inbox handed this process (inboxPoller.handedOver): a message or shell turn is what it
+// executes until the turn's completion, or the end of the engine generation it was handed to.
 func (m *linkMode) handedTurn(sessionID string, r *RunInboxResponse) {
 	if r == nil || r.TurnID == "" || (r.Kind != "message" && r.Kind != "shell") {
 		return
@@ -489,13 +501,24 @@ func (m *linkMode) handedTurn(sessionID string, r *RunInboxResponse) {
 	m.sessionLocked(sessionID).turn = r.TurnID
 }
 
-// turnDone records a turn completion the control plane took.
+// turnDone records that this process no longer runs a turn: the control plane took its turn completion, or the engine
+// generation it was handed to ended (inboxPoller.close).
 func (m *linkMode) turnDone(sessionID, turnID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if s := m.sessions[sessionID]; s != nil && (s.turn == turnID || turnID == "") {
 		s.turn = ""
 	}
+}
+
+// runningTurn is the message or shell turn this process runs in a session, "" for none.
+func (m *linkMode) runningTurn(sessionID string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if s := m.sessions[sessionID]; s != nil {
+		return s.turn
+	}
+	return ""
 }
 
 // supervising records the sessions a heartbeat names: those a Hello resumes. A session no beat names any more is
@@ -513,7 +536,6 @@ func (m *linkMode) supervising(ids []string) {
 			delete(m.sessions, id)
 		}
 	}
-	m.gates.keepInbox(ids)
 }
 
 // afterSeq is what a call depending on a session's events waits for (after_seq): the highest seq handed to the control
@@ -606,10 +628,11 @@ func (m *linkMode) assignRelease(r *linkpb.AssignedRelease) {
 
 // ── The daemon routes ───────────────────────────────────────────────────────────────────────────
 
-// The routes whose answers the link reads itself.
+// The routes whose answers the link reads itself, and the inbox, whose fetches it adds to.
 const (
 	linkRouteHeartbeat    = "POST /runner/heartbeat"
 	linkRouteTurnComplete = "POST /runner/sessions/:id/turn-complete"
+	linkRouteInbox        = "GET /runner/sessions/:id/inbox"
 )
 
 // linkDaemonRoutes are the daemon routes: the routes of the apiserver's RunnerApiController that take the runner
@@ -644,7 +667,7 @@ var linkDaemonRoutes = []string{
 	"POST /runner/sessions/:id/activate-leases",
 	"POST /runner/sessions/:id/release-leases",
 	"POST /runner/sessions/:id/orchestration-credential",
-	"GET /runner/sessions/:id/inbox",
+	linkRouteInbox,
 	"GET /runner/sessions/:id/attachments/:id",
 	"POST /runner/sessions/:id/attachments",
 	"POST /runner/sessions/:id/artifacts/result",
@@ -707,6 +730,15 @@ func linkDaemonRoute(method, path string) (string, bool) {
 		}
 	}
 	return best, bestLiterals >= 0
+}
+
+// linkWithQuery is path with name=value added to its query.
+func linkWithQuery(path, name, value string) string {
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	return path + sep + name + "=" + url.QueryEscape(value)
 }
 
 // linkPathSegment is segment i of a path, without its query: 2 is the session of /runner/sessions/<id>/....
