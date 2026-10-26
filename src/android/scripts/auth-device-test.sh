@@ -122,14 +122,19 @@ fi
 [[ "$night" =~ ^(yes|no|auto|custom)$ ]] || { echo "Unreadable night mode: $night" >&2; exit 1; }
 for phase in light dark; do
   adb -s "$serial" shell cmd uimode night "$([[ "$phase" == dark ]] && echo yes || echo no)" > /dev/null
-  # The configuration takes the night mode a moment after the command answers: on API 29 the dark phase once started under
-  # the light one. Wait (up to 10 s) until the device's configuration carries this phase's qualifier.
+  # The configuration takes the night mode a moment after the command answers: wait (up to 10 s) until the device's
+  # configuration carries this phase's qualifier. A device that never does is said beside the phase, which then runs (and
+  # fails) under the other mode: the API 29 image locks its night mode (mNightModeLocked=true) and keeps "Night mode: no".
   want="$([[ "$phase" == dark ]] && echo night || echo notnight)"
   for _ in $(seq 1 40); do
     config="$(adb -s "$serial" shell am get-config 2> /dev/null | tr -d '\r' || true)"
     [[ "$config" == *"-$want-"* ]] && break
     sleep 0.25
   done
+  if [[ "$config" != *"-$want-"* ]]; then
+    { adb -s "$serial" shell cmd uimode night; adb -s "$serial" shell dumpsys uimode | grep mNightMode; echo "$config"; } 2>&1 \
+      | tr -d '\r' > "$output/login-page-$phase-night.txt" || true
+  fi
   run_test "login-page-$phase" io.orbitd.android.auth.LoginPageDeviceTest 1 -e a03c_phase "$phase"
 done
 adb -s "$serial" shell cmd uimode night "$night" > /dev/null
