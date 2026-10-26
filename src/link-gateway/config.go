@@ -97,6 +97,10 @@ type config struct {
 	// RPCTimeout bounds one forwarded call to a backend, retries included.
 	RPCTimeout time.Duration
 
+	// DrillLoseAnswers is LINK_DRILL_LOSE_ANSWERS: how many answers of each call a staging drill has the gateway lose
+	// (drill.go). Nil, the default, loses none.
+	DrillLoseAnswers map[string]int
+
 	// The rest is fixed by the design or by this version; fields only so that tests can shorten them.
 	link linkTuning
 }
@@ -338,6 +342,11 @@ func configFromEnv(getenv func(string) string) (config, error) {
 	case "lifecycle", "all", "off":
 	default:
 		problems = append(problems, fmt.Sprintf("LINK_FRAME_LOG=%q is not lifecycle, all or off", c.FrameLog))
+	}
+	if counts, err := parseDrillLoseAnswers(getenv("LINK_DRILL_LOSE_ANSWERS")); err != nil {
+		problems = append(problems, err.Error())
+	} else {
+		c.DrillLoseAnswers = counts
 	}
 	if len(problems) > 0 {
 		return c, errors.New(strings.Join(problems, "\n"))
