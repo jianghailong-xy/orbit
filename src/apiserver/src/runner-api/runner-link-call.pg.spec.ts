@@ -38,8 +38,8 @@
  *       under its request id, and that resend changes nothing; a fetch with no request id, another
  *       process's under the same id, an HTTPS poll and any later fetch are not handed it. The dispatch
  *       pause does not hold the resend; a message's resend does not lease it again; two fetches at once
- *       under one id hand out one turn; a withdraw past its delivery window is not handed out again; and
- *       an HTTPS hand-out records nothing.
+ *       under one id hand out one turn; a withdraw past its delivery window, or a steer settled since, is
+ *       not handed out again; and an HTTPS hand-out records nothing.
  *
  * Every state is read on a second connection, never through the answer that wrote it.
  *
@@ -954,6 +954,14 @@ test('runner link calls: answers lost on the way back are made good, and nothing
         const stale = await send(door.linkPort, 'GET', inboxPath(s, running), viaLink(sameId));
         assert.equal(stale.status, 200, JSON.stringify(stale.body));
         assert.equal(stale.body.turnId, '', 'a withdraw past its delivery window was handed out again');
+      }
+      if (kind === 'steer') {
+        // Only while it is still the one handed out: settled since — as a stop writing it off settles it — it is not
+        // written into the turn again.
+        await sql.query(`UPDATE "conversation_turn" SET status = 'ANSWERED', answered_at = now() WHERE id = $1`, [turnId]);
+        const settled = await send(door.linkPort, 'GET', inboxPath(s, running), viaLink(sameId));
+        assert.equal(settled.status, 200, JSON.stringify(settled.body));
+        assert.equal(settled.body.turnId, '', 'a steer settled since it was handed out was handed out again');
       }
     }
 
