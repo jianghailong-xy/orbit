@@ -55,18 +55,27 @@ data class OrbitNavigation(
     }
     /** [key]'s root page whatever was showing: where a page that sends the reader to a destination lands. */
     fun land(key: String, root: OrbitRoute): OrbitNavigation = copy(section = key, stacks = mapOf(key to listOf(root)))
+    /** A link opens over the page showing. One that [waitsForDirectory] stays [pending], signed in or not, and a later link
+     * replaces it. */
     fun receive(route: OrbitRoute): OrbitNavigation {
         val arrived = route.arrived()
-        return if (account == null) copy(pending = arrived) else push(arrived)
+        return if (account == null || arrived.waitsForDirectory) copy(pending = arrived) else copy(pending = null).push(arrived)
     }
+    /** The [pending] project's sessions page lands at [root], the shell's pick once the directory is read: its project's own
+     * destination, whatever was showing, as the drawer's row lands it. */
+    fun landPending(root: OrbitRoute): OrbitNavigation = copy(pending = null).land(projectDestination(root.id!!), root)
 
     /** No previous account's paths survive logout/switch. Cold-start links survive the login screen. */
     fun bindAccount(key: String?): OrbitNavigation {
         if (key == account) return this
         val next = OrbitNavigation(account = key, pending = if (account == null) pending else null)
-        return if (key != null && next.pending != null) next.copy(pending = null).push(next.pending) else next
+        return if (key != null && next.pending != null && !next.pending.waitsForDirectory) next.copy(pending = null).push(next.pending) else next
     }
 }
+
+/** A project's sessions page from a link (`orbit://project/<id>`, a merge's push) names no workspace to open over: it waits for
+ * the directory, which says which one ([OrbitNavigation.landPending]). */
+val OrbitRoute.waitsForDirectory get() = destination == Destination.PROJECT_SESSIONS && workspaceId == null
 
 /** The destination of a drawer project row: the project's own page (iOS `DrawerDestination.project`). The two
  * spellings of its id are one destination. */
@@ -109,8 +118,9 @@ object ObjectId {
 object OrbitLinks {
     private val references = mapOf("session" to Destination.SESSION, "task" to Destination.TASK,
         "project" to Destination.PROJECT, "wiki" to Destination.WIKI_ENTRY, "list" to Destination.LIST)
+    // `orbit://project/<id>` is a merge push's (A11-9): the project's sessions page. Like `orbit://wiki/<space>`, no iOS DeepLink host.
     private val deepLinks = references.filterKeys { it !in setOf("project", "wiki") } +
-        mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER, "wiki" to Destination.WIKI)
+        mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER, "wiki" to Destination.WIKI, "project" to Destination.PROJECT_SESSIONS)
 
     fun parse(raw: String, server: String? = null, origin: Origin = Origin.LINK): OrbitRoute? { return try {
         val uri = URI(raw)

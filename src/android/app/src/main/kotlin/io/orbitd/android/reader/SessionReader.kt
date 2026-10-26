@@ -26,12 +26,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.perf.OrbitPerf
+import io.orbitd.android.realtime.restoredFields
 import io.orbitd.android.R
 import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.SessionComposer
@@ -172,6 +175,26 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     if (seq != null) model.position(seq, -item.offset, follow)
                 }
             }
+    }
+    // D09 P06 after a reclaim (OrbitPerf, off by default): once per relaunch, the first frame of this page — brought back from saved
+    // state with the process — showing what it restored, as `p06_restored`: the draft in the composer, the list where it stood.
+    val drawnBefore = rememberSaveable { booleanArrayOf(false) }
+    val broughtBack = remember { drawnBefore[0].also { drawnBefore[0] = true } && app.realtimeLifecycle?.relaunched == true }
+    if (broughtBack) {
+        val view = LocalView.current
+        LaunchedEffect(model) {
+            val lifecycle = app.realtimeLifecycle
+            if (lifecycle == null || lifecycle.restoredReported || !OrbitPerf.enabled) return@LaunchedEffect
+            snapshotFlow { placed && !positioning && state.ready && !state.loading &&
+                (composerState.loaded || !composerState.busy && composerState.error != null) }.first { it }
+            // The composer copies a draft it read back into its box a frame later: two frames on, the next frame shows both.
+            withFrameNanos { }; withFrameNanos { }
+            if (lifecycle.restoredReported) return@LaunchedEffect
+            lifecycle.restoredReported = true
+            val shown = list.layoutInfo.visibleItemsInfo.firstOrNull { it.key.toString().startsWith("event:") }
+            OrbitPerf.emitOnFrame(view, "p06_restored", restoredFields(route.id!!, composerState.loaded, composerState.draft.text,
+                model.restored, shown?.key?.toString()?.substringAfter(':')?.toLongOrNull(), -(shown?.offset ?: 0), !list.canScrollForward))
+        }
     }
     val transcript = state.session?.transcript
     val snapshotDetail = state.session?.snapshot?.detail

@@ -31,6 +31,7 @@ file under `app/realtime`; it does not replace those entrypoints.
 | `handle` | Captured A03 identity. A consumer must match it with the current `AuthState.SignedIn.handle` by identity before showing account data. |
 | `directory` | Nullable full REST snapshot; non-null cached rows may be shown while stale. |
 | `directoryRefreshing`, `directoryFresh`, `directoryError` | REST progress, freshness and failure. Failure retains old rows. |
+| `directoryCached` | `directory` is the copy restored from the device cache, not yet replaced by a REST read. P01's fully-drawn line reports it as `source=cache`. |
 | `controlConnection`, `controlError` | Account SSE status, separate from REST success. |
 | `session` | Selected session's transcript, pending-state snapshot, freshness, connection and error. |
 | `invalidationRevision` | Increments on control reconnect and every non-ping control event, including an empty `sessionId`. Other pages use it to reload their authority. |
@@ -165,6 +166,64 @@ body read. Failed connections use jittered 1/2/4/8/15-second bounded backoff;
 clean EOF uses 300 ms. A ping preceding repeated resync does not reset that
 failure ramp. REST reconciliation has its own retry state, so a directory
 403/network error is visible even while SSE remains connected.
+
+## Recovery timing lines (D09 P06)
+
+A15 times P06 (a01-errata-v2 §5) from logcat lines in the format it fixed for
+every D09 collection point (A06g comment 34mPWCRYn3Shl96g3IQwZ, `perf/OrbitPerf.kt`).
+They are in release builds and off by default: each point first asks
+`Log.isLoggable("OrbitPerf", Log.DEBUG)`, and while that is false nothing is
+built, registered or watched. They change nothing in recovery.
+
+```sh
+adb shell setprop log.tag.OrbitPerf D   # on, no restart; INFO turns it off
+adb logcat -c && adb logcat -v epoch -s OrbitPerf:D > perf.log
+```
+
+Each line is `v=1 ev=<event> key=value … rt=<elapsedRealtimeNanos> mono=<nanoTime>`,
+a session is `sid8` (SHA-256 of its canonical UUID, first 8 hex), never text.
+
+- `p06_net_lost net= netId=`: the default network that had INTERNET+VALIDATED
+  loses either, or is lost. `p06_net_validated net= netId=` (t0 after a network
+  loss or switch): a network first has both, in the callback's own capabilities.
+- `p06_start_cb` and `p06_foreground activity=` (t0 back in front): onStart and
+  onResume of an Activity.
+- `p06_process_start procStartRt=`: Application.onCreate, with the process start
+  on the rt clock. The tester takes the relaunch's t0 itself, at its launch intent.
+- `p06_restored sid8= draft= anchor=` (t1 of the 4 s gate), once per relaunch: the
+  first frame of the session page the system brought back with its saved state,
+  once the page is placed and the composer has read its draft. A relaunch is a
+  process whose first Activity is created with saved state. `draft=1`: the composer
+  holds a non-empty draft it read back, in an enabled box. `anchor=1`: the list
+  stands where the restored bookmark says, on its first event row at its offset,
+  or at the end for a bookmark that followed the tail.
+- `p06_consistent cause=net|foreground|relaunch sid8= acct= sess= snap= pend= tailSeq=`
+  (t1 for network and foreground, the relaunch's reconciliation), once per round:
+  the first frame after the account stream reconnected and a directory read since
+  then landed, and the selected session's stream reconnected (its gap closed over
+  pages or its window reseeded, the page verifying its cursor landed) and its
+  snapshot (detail, PENDING approvals, active turns, background jobs, evidence and
+  owner decisions) was read again since. The cards and the composer draw that
+  snapshot (`pend`). With no session open, `sess`, `snap` and `pend` are `na`.
+  `relaunch` starts at process start, `foreground` at onStart after a real stop
+  (not a configuration change), and `net` at a validation after an earlier one. A
+  newer trigger replaces an unfinished round, except a network arriving while a
+  relaunch round is open, which it leaves to the relaunch.
+- `rt_durable stream=session sid8= seq= dup= via=sse|page|tail`: each durable event
+  a frame or a REST page brought; `dup=1` the window already held it (`tail` is a
+  fresh window). `rt_durable stream=account sid8= seq=na dup=0 type=`: each account
+  event, which has no sequence.
+
+The two frame lines end with `frameVsyncMono` (INTENDED_VSYNC), `frameEndMono`
+(INTENDED_VSYNC + TOTAL_DURATION), `frameTotalNs` and `dropped`, from the
+FrameMetrics of the Activity window: the first frame whose UI-thread work ends at
+or after the mark is armed. The page draws what the store and the disk hold a
+frame later, so both marks arm two frames after their condition is seen. The
+frame reported is never earlier than the first one that shows the state, and can
+be one frame later. Without an Activity in front the four values are `na`. The
+tester owns the rest of §5: the launch intent and physical network restore times
+(`/proc/uptime` is the rt clock, at 10 ms), a reclaim by `am kill` of a background
+process rather than force-stop, and the consistency checklist against the server.
 
 ## Reproducible verification
 
