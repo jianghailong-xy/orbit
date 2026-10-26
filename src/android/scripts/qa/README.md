@@ -9,6 +9,7 @@ Android both use. DS3, DS4 and DS5 are served by `../transcript-fixture.py`. Thi
 | `images.py` | the PNG, JPEG and WebP writers behind DS6's pictures (pure Python, so their bytes never depend on a library) |
 | `datasets.sha256` | the SHA-256 of every generated file, as this commit generates them |
 | `dataset-server.py` | serves one generated dataset over HTTP on 127.0.0.1, for `adb reverse` to a device |
+| `stack.py`, `stack_runner.py` | seed a real Orbit server (the QA stack) with DS1, DS3 and the QA cards; see "Seeding a real stack" |
 
 None of it is part of the app: Gradle never reads `scripts/`.
 
@@ -205,12 +206,111 @@ results were byte for byte the same. The base62 ids match `@orbit/shared` `uuidT
 
 ## Limits
 
-- **iOS.** The server listens on 127.0.0.1, which an iPhone does not reach. How iOS gets the same data (for example
-  the same server on a host the phone can reach) is for the coordinator and the owner to decide. The datasets
-  themselves are not tied to Android.
+- **iOS.** The server listens on 127.0.0.1, which an iPhone does not reach. For the same data on both platforms,
+  "Seeding a real stack" below puts DS1 and DS3 on a real server that both reach.
 - **Writes.** Uploads, sends and the admin user list change what the server answers. Other writes (rename, pin,
   move, task and project actions) are recorded in `/__stats` and answered as accepted, but the lists do not change.
 - **Not modelled.** Approval and question cards, landings and merges, worktree bars and Markdown documents in the
   wiki are not in these datasets. The A08, A11 and A12 fixtures and stacks cover them.
 - **Time.** The data is fixed at the anchor. Runner heartbeats, last-active times and recency groups age as real
   time passes, except the watch evaluation clock described above.
+
+## Seeding a real stack (A02d)
+
+`dataset-server.py` is a fixture. A real Orbit server stores a session's events only when a runner posts them, so
+the same data on a real server, which both iOS and Android reach, needs a runner. `stack.py` is that seeding tool.
+It works through the server's HTTP API only. Owner calls use the seeded ADMIN's login. Runner calls use three fake
+runners (`stack_runner.py`) that speak the runner's door like the Go runner does, with no engine behind them. The
+server writes every row itself; nothing touches its database. The target is the isolated QA stack,
+`http://217.216.108.220:2087` (server 9a4bf087f, rehearsed on a local stack of the same source). The tool refuses
+`orbitd.io` and the production port 2086. It configures no push.
+
+What one `seed` makes, from an empty database (about 4 minutes locally):
+
+- **Accounts.** `owner@ds1.orbit.test` (ADMIN, DS1's account) holds everything below. `member@ds0.orbit.test`
+  (MEMBER) stays empty, as in DS0. Their passwords are made at seed time and written only to
+  `<state>/accounts.json` (mode 600, in a mode-700 directory, default `/root/orbit-qa`). Nothing prints them.
+- **DS1**, from `datasets.ds1_world()` (the generator's own code, so the content is the manifest's):
+  - 3 runners (old-laptop offline) and 20 workspaces.
+  - 11 tags, 6 folders and 3 task lists.
+  - 200 sessions with each one's 200 events: same seq, type and payload as `DS1/api/events.jsonl`.
+  - 100 tasks, 20 projects (14 coordinated), 2 wiki spaces with 100 entries, and 20 watches.
+- **DS3**: A06's 10,000-event "Long conversation" (`../transcript-fixture.py`, one turn per 20 events) in the
+  workspace "DS3 · Reader fixture". Its image is uploaded. Its task, session and record links point at the stack's ids.
+- **QA cards**: the workspace "QA · cards", the session "QA · cards (B01 B02 B03)" and the project "QA · coordinator
+  questions (B15)" with its coordinator. These are tooling, not DS1.
+
+`<state>/map.json` and `map.tsv` are the DS id → stack id table. For every object they give the manifest id, the
+stack id, what the seed expected, what `verify` read back, and why the two differ from the manifest where they
+must. Ids change with every reset, so the table is written by the tool rather than kept here.
+
+### Commands
+
+```bash
+Q=src/android/scripts/qa/stack.py
+python3 $Q rebuild --server http://217.216.108.220:2087  # after a reset: service stop, seed, verify, service start
+python3 $Q seed --server http://217.216.108.220:2087     # the seed alone (the service must be stopped)
+python3 $Q service start|stop|status   # the fake runner as transient systemd unit orbit-qa-fake-runner
+python3 $Q card B01                    # tool permission card in "QA · cards (B01 B02 B03)" (--session ID for another)
+python3 $Q card B02                    # question card; B03: plan card
+python3 $Q card B15                    # coordinator question to the owner (--project ID for another project)
+python3 $Q verify                      # re-read the stack, rewrite map.json/map.tsv; exit 1 if anything moved
+python3 $Q status                      # health, accounts, session counts, runners, service (no password)
+```
+
+`--state DIR` (before the command) picks another state directory. Without one, the default holds the QA stack's.
+
+- **Service.** It answers whatever reaches the fake runners after seeding:
+  - It keeps DS1's 14 RUNNING sessions running. Stop interrupts one.
+  - It raises a card when a message says `qa card B01`, `qa card B02` or `qa card B03`, in any session. It clears
+    the session's workspace "always allow git push" first, so B01 is asked every time.
+  - It acknowledges the owner's answer to a B15 question.
+  - It answers any other message with an echo.
+  - It runs from copies in `<state>/bin`; logs: `journalctl -u orbit-qa-fake-runner -f`.
+- **B15** needs no service to be asked. The owner's answer reaches the coordinator as a turn, which the service
+  acknowledges.
+
+### Reset and clean-up
+
+The database lives on the stack's host, so the reset runs there; on wikova the orbit-prod operator runs:
+
+```bash
+cd /root/orbit-qa && env -i PATH="$PATH" HOME="$HOME" docker compose -p orbit-qa down -v \
+  && env -i PATH="$PATH" HOME="$HOME" docker compose -p orbit-qa up -d
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:2087/api/health   # 200 once it is up
+```
+
+Then one command, where the tool lives, rebuilds everything from the empty database:
+`python3 src/android/scripts/qa/stack.py rebuild --server http://217.216.108.220:2087`.
+
+To clean up the tool side, run `python3 stack.py service stop` and remove the state directory. Its passwords and
+runner tokens are only for that database, which the reset discards.
+
+### What a real server cannot hold
+
+Each of these is written into the map row of the object it concerns.
+
+| manifest | on the stack | why |
+| --- | --- | --- |
+| 3 sessions PENDING (queued at runner capacity) | AWAITING_INPUT | holding a queue means filling the runner, which would queue every session on it |
+| 6 sessions INTERRUPTED | AWAITING_INPUT | a legacy status; an interrupted turn leaves AWAITING_INPUT today |
+| 11 completed sessions AWAITING_INPUT | CANCELLED, completed | Complete ends a live session |
+| session recaps | none | the server writes them with a model this stack does not have |
+| branch names | the server's, from the title | only the server names a branch; sessions without one in the manifest have none |
+| times | the seeding's, in the manifest's order | the server stamps sessions; the last activity follows the manifest's order |
+| workspace model | none | the server no longer stores one |
+| old-laptop position | 2 | a runner reorder places every runner |
+| projects started with Automatic on | Automatic off | on, the server messages the coordinator about every task, adding turns to its DS1 transcript |
+| PROJECT_BRANCH line | MAIN, no merge check | a project branch needs a repository the stack does not have |
+| a coordinator's first message | the server's brief | the server writes it; the transcript's `user` event is still the manifest's |
+| tasks DONE under EXECUTABLE or EVIDENCE_JUDGMENT with no run | DONE by owner confirmation, then the criterion | DONE is written by a confirmation or an evidence decision only; those with a run reach DONE through evidence and a decision |
+| 4 of those outside projects | criterion OWNER_CONFIRMED | EVIDENCE_JUDGMENT outside a project needs a run to cite |
+| EVIDENCE_JUDGMENT tasks outside projects | creator AGENT, filed from "QA · cards (B01 B02 B03)" | only a session may file them, and it decides their evidence |
+| OPEN project tasks with autoRunWhenReady | off | on, the server would start them at once |
+| task comment counts | no comments | the manifest gives counts, not comments |
+| wiki: pinned, declared topic titles | not pinned; titles from the slug | no route writes either |
+| wiki trust: principles not owner's; auto on recipe, pitfall, concept | owner; unreviewed | only the owner writes a principle; only a decision or convention quoting the owner reaches auto |
+| wiki: the entry that supersedes another | trust owner | the owner's supersede writes it |
+| watches whose condition already holds, or never can | MATCHED, or ACTIVE | a watch's state follows its targets; one that matches at once notifies instead of waking its observer |
+| DS1 load failures (500) | load normally | a real server has no failure switch |
+| DS3 `?at=` record | the turn holding seq 4900 (lands on 4881) | the API names no event by id |
