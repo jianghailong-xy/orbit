@@ -170,6 +170,38 @@ class OrbitNavigationTest {
         assertNull(OrbitLinks.parse("orbit://session/$publicId?at=bad!", null)!!.recordId)
     }
 
+    /** DL-1 (A05h): a bare `orbit://` opens the workspaces home, as iOS's DeepLink does (`case "active", ""`), and each variant
+     * goes where iOS sends it. The two lists are what OrbitKit's own DeepLink.parse answered for these links over Foundation's
+     * URL(string:) (swift-foundation, Swift 6.1.3): a blank inside the host is no URL there, so nothing opens; one after it is
+     * percent-encoded and never read. Text that is no `orbit:` link stays no link, and the object links keep their pages. */
+    @Test fun aBareOrbitLinkAndEachOfItsVariantsGoWhereIosDeepLinkSendsThem() {
+        val home = OrbitRoute(Destination.WORKSPACES, origin = Origin.EXTERNAL)
+        listOf("orbit://", "orbit:///", "ORBIT://", "Orbit://", "ORBIT:///", "orbit:/// ", "orbit:///\n", "orbit://?x=1", "orbit://#top",
+            "orbit:", "orbit:/", "orbit: ", "orbit:active", "orbit://active", "orbit://ACTIVE", "ORBIT://Active/", "orbit://active/x",
+            "orbit://active/ ", "orbit:///x", "orbit:///session/$publicId", "orbit://u@active", "orbit://u:p@active:5/", "orbit://%61ctive",
+            "orbit://@", "orbit://:5").forEach { assertEquals(it, home, OrbitLinks.parse(it, "https://orbitd.io", Origin.EXTERNAL)) }
+        listOf("orbit:// ", "orbit://\n", "orbit://\t", "orbit://\r\n", " orbit://", "orbit://　", "orbit:// ", "orbit://%20",
+            "orbit://active ", "orbit://active%20", "orbit://a_b", "orbit://a+b", "orbit://%zz", "orbit://[::1]", "orbit://é",
+            "orbit://auth/google", "active", "orbit", "//", "://", "orbit//", "", "home").forEach {
+            assertNull(it, OrbitLinks.parse(it, "https://orbitd.io", Origin.EXTERNAL))
+        }
+        assertEquals(OrbitRoute(Destination.SESSION, uuid, origin = Origin.EXTERNAL), OrbitLinks.parse("ORBIT://SESSION/$publicId", origin = Origin.EXTERNAL))
+        assertEquals(OrbitRoute(Destination.TASK, uuid, origin = Origin.LINK), OrbitLinks.parse("orbit://task/$publicId"))
+        assertEquals(OrbitRoute(Destination.WORKSPACES, origin = Origin.LINK), OrbitLinks.parse("orbit://"))
+
+        // Over a workspace the home is pushed, and Back returns to the workspace.
+        val workspace = OrbitRoute(Destination.WORKSPACE, "w1", "w1")
+        val over = OrbitNavigation().bindAccount("server|user").land("w1", workspace).receive(OrbitLinks.parse("orbit://", origin = Origin.EXTERNAL)!!)
+        assertEquals(home, over.current)
+        assertEquals(workspace, over.back().current)
+        // Before sign-in it waits, and signing in lands on the home.
+        val cold = OrbitNavigation().receive(OrbitLinks.parse("ORBIT://", origin = Origin.EXTERNAL)!!)
+        assertEquals(home, cold.pending)
+        val signedIn = cold.bindAccount("server|user")
+        assertEquals(Destination.WORKSPACES, signedIn.current.destination)
+        assertNull(signedIn.pending)
+    }
+
     @Test fun objectLinksConsumeExistingCrossPlatformGoldenTargets() {
         val fixture = File("../../shared/src/orbit-link.fixture.json").takeIf { it.exists() }
             ?: File("../src/shared/src/orbit-link.fixture.json")
