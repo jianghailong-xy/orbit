@@ -362,7 +362,10 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
 
 @Composable
 private fun WorkspaceHome(data: DirectoryData, open: (DirectoryWorkspace) -> Unit, refresh: () -> Unit) {
-    androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize()) {
+    // A launcher's cold start lands here. Its rows are the workspaces, after the status item; "No workspaces" is not one.
+    val list = androidx.compose.foundation.lazy.rememberLazyListState()
+    ReportDirectoryDrawn(data, list) { it.index in 1..data.workspaces.size }
+    androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize(), state = list) {
         item { DirectoryStatus(data, refresh) }
         if (data.ready && data.workspaces.isEmpty()) item { StatusMessage("No workspaces", "Add a workspace to start a session.") }
         val workspaces = orderedWorkspaces(data.workspaces)

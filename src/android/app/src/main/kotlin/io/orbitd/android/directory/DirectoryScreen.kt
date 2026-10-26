@@ -1,9 +1,13 @@
 package io.orbitd.android.directory
 
+import androidx.activity.compose.LocalFullyDrawnReporterOwner
+import androidx.activity.compose.ReportDrawn
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListItemInfo
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -21,6 +25,7 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.management.LocalSessionRecaps
 import io.orbitd.android.navigation.*
+import io.orbitd.android.perf.OrbitPerf
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.watch.WatchSessionSummary
 import kotlinx.coroutines.CancellationException
@@ -73,7 +78,10 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                 ObjectId.same(f.workspaceId, workspace) && (view == SessionView.OPEN && tag == null ||
                     counted.any { ObjectId.same(it.folderId, f.id) && (tag == null || it.tags.any { t -> ObjectId.same(t.id, tag) }) })
             }.sortedBy { it.name.lowercase() }
-            LazyColumn(Modifier.fillMaxSize().testTag("directory-list"), state = rememberLazyListState(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            val list = rememberLazyListState()
+            // Its rows are the folders and the session and project rows, keyed by id; not the chips, status, buttons or headings.
+            ReportDirectoryDrawn(data, list) { (it.key as? String)?.startsWith("heading:") == false }
+            LazyColumn(Modifier.fillMaxSize().testTag("directory-list"), state = list, contentPadding = PaddingValues(bottom = 24.dp)) {
                 item {
                     Column {
                         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
@@ -216,6 +224,32 @@ fun SessionRow(session: DirectorySession, onOpen: () -> Unit, onOptions: () -> U
         }
     }, trailingContent = { IconButton(onOptions) { Icon(painterResource(R.drawable.ic_more), "Options for ${session.name}") } },
         modifier = Modifier.clickable(role = Role.Button, onClick = onOpen))
+}
+
+/**
+ * P01 TTFD (A01 D09 v2): the launch is fully drawn once the directory list on screen shows real rows from a valid snapshot —
+ * [DirectoryData.ready]: the account's snapshot is published and every row of it decoded — rows a tap opens. Never the loading,
+ * waiting or error states before that, which show no rows. The copy this device's cache restored is published before the
+ * first read from the server leaves (RealtimeStore.account), so with one this does not wait for the network; without one (a
+ * first sign-in, a cache that did not restore) it is that first read.
+ *
+ * The Activity's FullyDrawnReporter calls reportFullyDrawn once per Activity, from the draw of the frame showing those rows.
+ * Nothing holds it before then, so a list that leaves before it is ready reports nothing. With `log.tag.OrbitPerf` at D the
+ * report also logs where the rows came from and how many [isRow] items were on screen, for A15's collector.
+ */
+@Composable
+internal fun ReportDirectoryDrawn(data: DirectoryData, list: LazyListState, isRow: (LazyListItemInfo) -> Boolean) {
+    val reporter = LocalFullyDrawnReporterOwner.current?.fullyDrawnReporter
+    if (!data.ready || reporter == null || reporter.isFullyDrawnReported) return
+    if (OrbitPerf.enabled) {
+        val source = if (data.cached) "cache" else "network"
+        DisposableEffect(reporter) {
+            val line = { OrbitPerf.emit("p01_fully_drawn", "source=$source rows=${list.layoutInfo.visibleItemsInfo.count(isRow)}") }
+            reporter.addOnReportDrawnListener(line)
+            onDispose { reporter.removeOnReportDrawnListener(line) }
+        }
+    }
+    ReportDrawn()
 }
 
 @Composable
