@@ -3,16 +3,19 @@ package io.orbitd.android.directory
 import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
-import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.core.net.ServerAddress
+import io.orbitd.android.projects.StartSheetLoad
 import java.io.File
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
@@ -31,7 +34,8 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class ProjectSessionsDeviceTest {
-    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    @get:Rule val compose = createEmptyComposeRule()
+    private lateinit var scenario: ActivityScenario<MainActivity>
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val app get() = instrumentation.targetContext.applicationContext as OrbitApplication
     private val theme = InstrumentationRegistry.getArguments().getString("a05d_theme") ?: "light"
@@ -46,16 +50,20 @@ class ProjectSessionsDeviceTest {
 
     @Test fun projectRowsAndTheProjectSessionsPage() {
         instrumentation.sendStatus(0, android.os.Bundle().apply { putString("a05d_pid", android.os.Process.myPid().toString()) })
+        // No Activity has started to restore the stored session, as one does on launch: restored here, as a process without one does.
+        runBlocking { app.session.restore() }
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
         assertTrue("Requires a dedicated signed-out debug installation", app.session.state.value is AuthState.SignedOut)
         evidence.listFiles()?.forEach { it.delete() }
         MockWebServer().use { server ->
             server.dispatcher = fixture()
             try {
-                compose.chooseServer(server.url("/").toString())
-                compose.onNodeWithText("Email").performTextReplacement("a05d@example.test")
-                compose.onNodeWithText("Password").performTextReplacement("a05d-fixture-password")
-                compose.onNodeWithText("Sign In").performScrollTo().performClick()
+                // Signed in before the Activity starts. Under the test rule the composition's effects run on an unconfined test
+                // dispatcher, so a sign-in pressed on the login page resumes on OkHttp's thread and runs a Recomposer frame there
+                // beside the main thread's (A05i: F-19's "pending composition has not been applied"). The login page is
+                // AuthFlowDeviceTest's journey.
+                runBlocking { app.session.login(ServerAddress.parse(server.url("/").toString(), true), "a05d@example.test", "a05d-fixture-password") }
+                scenario = ActivityScenario.launch(MainActivity::class.java)
                 compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
 
                 // A05-6 · Alpha's list: the project's sessions as one row in its coordinator's place, in their words.
@@ -76,12 +84,13 @@ class ProjectSessionsDeviceTest {
 
                 // A05-7 · the row opens the project's sessions over the list.
                 compose.onNodeWithTag("project-row:$launch").performClick()
-                await { exists(hasTestTag("project-sessions")) && exists(hasText("Shipped docs")) && exists(hasTestTag("landing-card")) }
+                await { exists(hasTestTag("project-sessions")) && exists(hasTestTag("landing-card")) }
+                compose.awaitListed(hasText("Shipped docs"))
                 await { exists(hasText("Launch") and hasText("Project · 4 sessions")) }
                 compose.onNodeWithContentDescription("Back").assertExists()
                 compose.onNodeWithContentDescription("Open Project").assertExists()
-                assertTrue(exists(hasTestTag("project-sessions-progress-line") and hasText("3/8 done · 1 running")))
                 assertEquals(listOf("Coordinator", "Coordinate launch", "Today", "Wire tests", "Quota retry", "2–7 days ago", "Shipped docs"), pageLines())
+                assertTrue(compose.listed(hasTestTag("project-sessions-progress-line") and hasText("3/8 done · 1 running")))
                 capture("03-project-sessions")
                 compose.onNodeWithContentDescription("Back").performClick(); settle()
                 await { exists(hasTestTag("project-row:$launch")) }
@@ -92,7 +101,8 @@ class ProjectSessionsDeviceTest {
                 openDrawer(); await { exists(drawerRow("Launch")) }
                 capture("05-drawer")
                 compose.onNode(drawerRow("Launch")).performClick(); settle()
-                await { exists(hasTestTag("project-sessions")) && exists(hasText("Shipped docs")) }
+                await { exists(hasTestTag("project-sessions")) }
+                compose.awaitListed(hasText("Shipped docs"))
                 compose.onNodeWithContentDescription("Back").assertDoesNotExist()
                 capture("06-drawer-root")
                 compose.onNodeWithContentDescription("Open Project").performClick(); settle()
@@ -108,7 +118,7 @@ class ProjectSessionsDeviceTest {
                 await { exists(hasTestTag("project-sessions-review-start")) && exists(hasText("Not started · 8 tasks")) }
                 capture("07-not-started-asked")
                 compose.onNodeWithTag("project-sessions-review-start").performClick()
-                await { exists(hasTestTag("project-start-request-sheet")) && exists(hasTestTag("project-start-request")) }
+                awaitStartCard()
                 capture("08-start-card")
                 compose.onNodeWithTag("project-start-request-cancel").performClick(); settle()
                 File(evidence, "result.txt").writeText("PASS\n")
@@ -118,6 +128,7 @@ class ProjectSessionsDeviceTest {
                 throw failure
             } finally {
                 runBlocking { app.session.logout() }
+                if (::scenario.isInitialized) scenario.close()
                 app.realtime.selectSession(null)
                 File(evidence, "requests.txt").writeText(calls.joinToString("\n"))
             }
@@ -192,14 +203,49 @@ class ProjectSessionsDeviceTest {
         .setChunkedBody(": connected\n\n".repeat(240), 13)
         .throttleBody(13, 1, java.util.concurrent.TimeUnit.SECONDS)
 
-    private fun pageLines(): List<String> = compose.onAllNodes(hasAnyAncestor(hasTestTag("project-sessions"))).fetchSemanticsNodes()
-        .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
-        .filter { it in setOf("Coordinator", "Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older", "Coordinate launch", "Wire tests", "Quota retry", "Shipped docs") }
+    /** The page's lines top to bottom, read as a person scrolls them: on a 360×640 dp phone the list composes only the rows on screen.
+     * Each step scrolls by most of the list's height and keeps the lines of the nodes it had not seen. */
+    private fun pageLines(): List<String> {
+        val list = compose.onNodeWithTag("project-sessions-list")
+        list.performScrollToIndex(0); settle()
+        val seen = mutableSetOf<Int>()
+        val lines = mutableListOf<String>()
+        repeat(30) {
+            compose.onAllNodes(hasAnyAncestor(hasTestTag("project-sessions"))).fetchSemanticsNodes().forEach { node ->
+                val text = node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text
+                if (seen.add(node.id) && text in setOf("Coordinator", "Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older", "Coordinate launch",
+                        "Wire tests", "Quota retry", "Shipped docs")) lines += text!!
+            }
+            val node = list.fetchSemanticsNode()
+            val range = node.config[SemanticsProperties.VerticalScrollAxisRange]
+            if (range.value() >= range.maxValue()) return lines
+            // The action runs on the main thread, where the test may not read the tree: the step is measured first.
+            val step = node.size.height * 0.7f
+            list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, step) }
+            settle()
+        }
+        throw AssertionError("The project's sessions page did not reach its end")
+    }
     private fun dialogButtons(): List<String> = compose.onAllNodes(hasAnyAncestor(isDialog()) and hasClickAction()).fetchSemanticsNodes()
         .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
     private fun drawerRow(text: String) = hasText(text) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
     private fun exists(matcher: SemanticsMatcher, unmerged: Boolean = false) = compose.onAllNodes(matcher, unmerged).fetchSemanticsNodes().isNotEmpty()
     private fun await(condition: () -> Boolean) = compose.waitUntil(30_000, condition)
+    /**
+     * The start sheet's card. When it has not come in 30 s, the failure record says what the sheet showed instead: its card, its
+     * error with Retry, or its spinner. A spinner over reads the fixture answered is the harness's (A15 F-25 at c17b6ae4c: the
+     * rule's unconfined effects resume on OkHttp's thread), an error is the app's; this records which, it does not retry.
+     */
+    private fun awaitStartCard() {
+        try { await { exists(hasTestTag("project-start-request-sheet")) && exists(hasTestTag("project-start-request")) } }
+        catch (timeout: ComposeTimeoutException) {
+            val sheet = hasAnyAncestor(hasTestTag("project-start-request-sheet"))
+            val shows = "card=${exists(hasTestTag("project-start-request"))} error=${exists(hasText(StartSheetLoad.couldNotLoad, substring = true) and sheet)} " +
+                "spinner=${exists(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo) and sheet)}"
+            File(evidence, "start-sheet.txt").writeText("after 30 s the start sheet showed $shows\n")
+            throw AssertionError("The start sheet's card did not come in 30 s; the sheet showed $shows", timeout)
+        }
+    }
     private fun openDrawer() {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         settle()

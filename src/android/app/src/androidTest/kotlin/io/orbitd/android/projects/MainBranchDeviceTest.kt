@@ -9,14 +9,15 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.BuildConfig
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
-import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.core.net.ServerAddress
 import io.orbitd.android.navigation.ObjectId
 import java.io.File
 import java.time.Instant
@@ -39,7 +40,8 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class MainBranchDeviceTest {
-    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    @get:Rule val compose = createEmptyComposeRule()
+    private lateinit var scenario: ActivityScenario<MainActivity>
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val app get() = instrumentation.targetContext.applicationContext as OrbitApplication
     private val theme = InstrumentationRegistry.getArguments().getString("main_branch_theme") ?: "light"
@@ -57,6 +59,8 @@ class MainBranchDeviceTest {
 
     @Test fun theMainBranchRowOnEveryPathTheOwnerMeetsIt() {
         instrumentation.sendStatus(0, android.os.Bundle().apply { putString("main_branch_pid", android.os.Process.myPid().toString()) })
+        // No Activity has started to restore the stored session, as one does on launch: restored here, as a process without one does.
+        runBlocking { app.session.restore() }
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
         assertTrue("Requires a dedicated signed-out debug installation", app.session.state.value is AuthState.SignedOut)
         evidence.listFiles()?.forEach { it.delete() }
@@ -65,10 +69,11 @@ class MainBranchDeviceTest {
         MockWebServer().use { server ->
             server.dispatcher = fixture()
             try {
-                compose.chooseServer(server.url("/").toString())
-                compose.onNodeWithText("Email").performTextReplacement("main-branch@example.test")
-                compose.onNodeWithText("Password").performTextReplacement("main-branch-fixture-password")
-                compose.onNodeWithText("Sign In").performScrollTo().performClick()
+                // Signed in before the Activity starts. Through the login page, the sign-in's answer lands on an IO worker while the page
+                // and its Server dialog are composed, and under the test rule that can recompose off the main thread ("removeObserver
+                // must be called on the main thread" from the dialog's disposal, A15). The login page is AuthFlowDeviceTest's journey.
+                runBlocking { app.session.login(ServerAddress.parse(server.url("/").toString(), true), "main-branch@example.test", "main-branch-fixture-password") }
+                scenario = ActivityScenario.launch(MainActivity::class.java)
                 compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
 
                 // ① The coordinator's request, from the project's sessions page: Main branch under Tasks land on, on what it suggests.
@@ -178,6 +183,7 @@ class MainBranchDeviceTest {
                 throw failure
             } finally {
                 runBlocking { app.session.logout() }
+                if (::scenario.isInitialized) scenario.close()
                 File(evidence, "requests.txt").writeText(calls.joinToString("\n"))
                 File(evidence, "writes.txt").writeText(writes.joinToString("\n") { "${it.first} ${it.second}" })
             }
@@ -319,7 +325,7 @@ class MainBranchDeviceTest {
         settle()
     }
     /** A warm link delivered to the running activity, as the other journeys open theirs. */
-    private fun open(uri: String) = compose.activityRule.scenario.onActivity { activity ->
+    private fun open(uri: String) = scenario.onActivity { activity ->
         val original = activity.intent
         MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java).apply { isAccessible = true }
             .invoke(activity, Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setClass(activity, MainActivity::class.java))

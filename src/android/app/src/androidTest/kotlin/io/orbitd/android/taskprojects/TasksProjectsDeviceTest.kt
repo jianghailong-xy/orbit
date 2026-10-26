@@ -10,14 +10,15 @@ import android.os.SystemClock
 import android.view.KeyEvent
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.unit.dp
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.*
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.core.net.ServerAddress
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.projects.ProjectDone
 import io.orbitd.android.projects.ProjectPage
@@ -41,7 +42,8 @@ import java.net.URL
  * record (`/__stats`), not only what the screen shows. */
 @RunWith(AndroidJUnit4::class)
 class TasksProjectsDeviceTest {
-    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    @get:Rule val compose = createEmptyComposeRule()
+    private lateinit var scenario: ActivityScenario<MainActivity>
     private val instrument get() = InstrumentationRegistry.getInstrumentation()
     private val app get() = instrument.targetContext.applicationContext as OrbitApplication
     private val server = "http://127.0.0.1:18771"
@@ -101,7 +103,7 @@ class TasksProjectsDeviceTest {
     }
     /** A warm link delivered to the running activity, as A06's TranscriptDeviceTest does: a second
      * MainActivity instance would leave the rule's own activity paused under it. */
-    private fun open(uri: String) = compose.activityRule.scenario.onActivity { activity ->
+    private fun open(uri: String) = scenario.onActivity { activity ->
         val original = activity.intent
         MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java).apply { isAccessible = true }
             .invoke(activity, Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setClass(activity, MainActivity::class.java))
@@ -125,7 +127,7 @@ class TasksProjectsDeviceTest {
     }
     private fun back() = compose.onNodeWithContentDescription("Back").performClick()
     /** Closes the keyboard without a Back key: on API 29 an injected Back reaches the page, not the keyboard. */
-    private fun hideKeyboard() = compose.activityRule.scenario.onActivity { activity ->
+    private fun hideKeyboard() = scenario.onActivity { activity ->
         androidx.core.view.WindowCompat.getInsetsController(activity.window, activity.window.decorView).hide(androidx.core.view.WindowInsetsCompat.Type.ime())
     }
     private fun login(case: String = "normal", mode: String = "") {
@@ -134,13 +136,14 @@ class TasksProjectsDeviceTest {
         // The Tasks filter is remembered across launches (as iOS's); each journey starts from the default one.
         app.getSharedPreferences("orbit.tasks", Context.MODE_PRIVATE).edit().clear().commit()
         http("/__control", """{"reset":true,"case":"$case","mode":"$mode"}""")
+        // No Activity has started to restore the stored session, as one does on launch: restored here, as a process without one does.
+        runBlocking { app.session.restore() }
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
         if (app.session.state.value is AuthState.SignedIn) runBlocking { app.session.logout() }
-        awaitText("Welcome back")
-        compose.chooseServer(server)
-        compose.onNodeWithText("Email").performTextReplacement("a08@example.test")
-        compose.onNodeWithText("Password").performTextReplacement("a08-fixture-password")
-        compose.onNodeWithText("Sign In").performScrollTo().performClick()
+        // Signed in before the Activity starts, as ProjectSessionsDeviceTest is: a sign-in pressed on the login page resumes on
+        // OkHttp's thread under the test rule and runs a Recomposer frame there (A05i, F-19). The login page is AuthFlowDeviceTest's.
+        runBlocking { app.session.login(ServerAddress.parse(server, true), "a08@example.test", "a08-fixture-password") }
+        scenario = ActivityScenario.launch(MainActivity::class.java)
         compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
     }
     private fun journey(name: String, block: () -> Unit) {
@@ -153,6 +156,7 @@ class TasksProjectsDeviceTest {
         finally {
             runCatching { http("/__control", """{"streamDown":false}""") }
             File(output, "$name-journal.json").writeText(http("/__stats").toString()); runBlocking { app.session.logout() }
+            if (::scenario.isInitialized) scenario.close()
         }
     }
 
@@ -162,13 +166,15 @@ class TasksProjectsDeviceTest {
         login(); open("orbit-session:$sessionId"); awaitTag("composer-input")
         compose.onNodeWithTag("composer-input").performTextInput("A11 return draft")
         instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-        scrollTo("transcript-list", hasText("Open A11 task"))
+        // The composer can be up before the conversation's messages are read (A15 F-21: the list held only its cards): the link is
+        // scrolled to once a read draws it.
+        awaitScrollTo("transcript-list", hasText("Open A11 task"))
         compose.onNodeWithText("Open A11 task").performTouchInput { click() }
         awaitIn("task-detail", "A11 task checklist"); capture("task-from-conversation")
-        compose.activityRule.scenario.recreate(); awaitIn("task-detail", "A11 task checklist")
+        scenario.recreate(); awaitIn("task-detail", "A11 task checklist")
         back(); awaitTag("composer-input")
         compose.onNodeWithTag("composer-input").assertTextContains("A11 return draft")
-        scrollTo("transcript-list", hasText("Open A11 project"))
+        awaitScrollTo("transcript-list", hasText("Open A11 project"))
         compose.onNodeWithText("Open A11 project").performTouchInput { click() }
         awaitIn("project-detail", "A11 Android launch"); capture("project-from-conversation")
         back(); awaitTag("composer-input")
@@ -185,7 +191,7 @@ class TasksProjectsDeviceTest {
         instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         tap("tasks-options"); compose.onNodeWithText(TaskListCopy.filterByLabel).performClick()
         awaitTag("task-labels"); tap("task-label:Sprint, one", "task-labels"); tap("task-labels-done")
-        compose.activityRule.scenario.recreate(); awaitTag("task-search")
+        scenario.recreate(); awaitTag("task-search")
         compose.onNodeWithTag("task-search").assertTextContains("checklist")
         awaitText("A11 task checklist"); capture("tasks-filter-restored")
         compose.waitUntil(20_000) { journal().any { row ->
@@ -271,6 +277,11 @@ class TasksProjectsDeviceTest {
         assertEquals("1", limit.obj("body")?.text("expectedConfigRevision")); assertEquals(3, limit.obj("body")?.number("maxConcurrentTasks"))
         // Automatic writes `automatic`, never `coordinatorEnabled`.
         compose.waitUntil(20_000) { compose.onAllNodesWithText("3 ${RunSettings.tasksAtATime(3)}").fetchSemanticsNodes().isNotEmpty() }
+        // Its write goes out under the revision the page has read, and the page reads the project again only after the write above:
+        // a press before that read lands is refused as stale (A15 F-22: PATCH 409 under revision 1). The press waits for the read.
+        val written = journal().indexOfLast { it.text("method") == "PATCH" && it.text("path") == "/api/projects/$projectId" }
+        compose.waitUntil(20_000) { journal().drop(written + 1).any { it.text("method") == "GET" && it.text("path") == "/api/projects/$projectId" } }
+        SystemClock.sleep(500); compose.waitForIdle()
         tap("project-automatic", "project-detail")
         compose.waitUntil(20_000) { http("/__stats").obj("project")?.flag("coordinatorEnabled") == false }
         val automatic = journal().last { it.text("method") == "PATCH" && it.text("path") == "/api/projects/$projectId" }.obj("body")!!
@@ -340,6 +351,16 @@ class TasksProjectsDeviceTest {
 
     // MARK: the start card (A11b: main's redesigned card, both ways it is drawn; run again under dark mode)
 
+    /** The fixture's plan (tasks-projects-fixture.py PLAN): A, then B and C, D after B, E after C and D. */
+    private val planTasks = listOf("A", "B", "C", "D", "E").map { "34ZaIKb2sLBtndX7DqxP$it" }
+
+    /** The plan as the card draws it since A11-13: the task graph — what waits on what, task by task — while the whole of it fits the
+     * card, as this five-task plan does on a phone; by level only when it does not (StartProjectCardTest's cases). */
+    private fun assertPlanGraph(tag: String) {
+        compose.onNodeWithTag("$tag-plan-graph").performScrollTo().assertIsDisplayed()
+        planTasks.forEach { compose.onNode(hasTestTag("graph-mark:$it") and hasAnyAncestor(hasTestTag("$tag-plan-graph"))).assertExists() }
+    }
+
     /** None of the card's old lines: the meta line ("asked by the coordinator"), the plan's order line ("A starts now"), the ready
      * check's line and the generic settings form the coordinator's card used to be. */
     private fun assertNoOldStartLines() {
@@ -362,9 +383,7 @@ class TasksProjectsDeviceTest {
         compose.onNodeWithText("E · 上线 · you confirm it").assertIsDisplayed(); compose.onNodeWithText("Problems it can’t resolve within 1 h").assertIsDisplayed()
         compose.onNodeWithTag("project-start-note").performScrollTo().assertTextEquals(StartProjectCopy.howItRunsNote(asked = false, suggestedOff = false))
         capture("start-own-2-how-it-runs")
-        compose.onNodeWithTag("project-start-level:1").performScrollTo().assertTextContains("A").assertTextContains(StartProjectCopy.now)
-        compose.onNodeWithTag("project-start-level:2").assertTextContains("B · C").assertTextContains(StartProjectCopy.inParallel(2))
-        compose.onNodeWithTag("project-start-level:4").assertTextContains("E").assertTextContains(StartProjectCopy.you)
+        assertPlanGraph("project-start")
         compose.onNodeWithTag("project-start-caption").performScrollTo().assertTextEquals("Opens a coordinator · starts A now · confirms this criterion")
         compose.onNodeWithTag("project-start-sheet").performTouchInput { swipeUp() }
         capture("start-own-3-plan-and-start")
@@ -395,7 +414,8 @@ class TasksProjectsDeviceTest {
         tap("start:start1:preview"); awaitTag("card-review")
         compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("start:start1:START") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("start:start1-asked").assertTextContains("${StartProjectCopy.coordinatorAsked} ", substring = true)
-        compose.onNodeWithText("The plan is ready.").assertExists(); compose.onNodeWithTag("start:start1-why").assertTextEquals(StartProjectCopy.more)
+        // The coordinator's words whole: More is drawn only while the clamp hides some since A11-13, and these hide none.
+        compose.onNodeWithTag("start:start1-why-text").assertTextEquals("The plan is ready."); compose.onNodeWithTag("start:start1-why").assertDoesNotExist()
         capture("start-asked-1-top")
         compose.onNodeWithTag("start:start1-comes-to-you").performScrollTo()
         compose.onNodeWithText("E · 上线 · you confirm it").assertIsDisplayed(); compose.onNodeWithText("Problems it can’t resolve within 1 h").assertIsDisplayed()
@@ -403,7 +423,7 @@ class TasksProjectsDeviceTest {
         capture("start-asked-2-how-it-runs")
         compose.onNodeWithTag("start:start1-note").performScrollTo().assertTextEquals(StartProjectCopy.howItRunsNote(asked = true, suggestedOff = false))
         capture("start-asked-2b-settings")
-        compose.onNodeWithTag("start:start1-level:2").performScrollTo().assertTextContains("B · C").assertTextContains(StartProjectCopy.inParallel(2))
+        assertPlanGraph("start:start1")
         compose.onNodeWithTag("start:start1-caption").performScrollTo().assertTextEquals("Starts A now · confirms this criterion · seal seal1")
         capture("start-asked-3-plan-and-start")
         assertNoOldStartLines()
@@ -478,7 +498,7 @@ class TasksProjectsDeviceTest {
         open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
         tap("blocker:blk1:resolve", "project-detail"); awaitTag("blocker-reason")
         compose.onNodeWithTag("blocker-reason").performTextInput("Meant for the scope blocker only")
-        compose.activityRule.scenario.recreate()
+        scenario.recreate()
         awaitIn("project-detail", "A11 Android launch")
         tap("blocker:blk2:resolve", "project-detail"); awaitTag("blocker-reason")
         capture("p2-2-second-dialog")
@@ -716,7 +736,7 @@ class TasksProjectsDeviceTest {
         val mark = journal().size
         compose.onNodeWithTag("task-comment").performTextInput("Sent once only")
         tap("task-post-comment")
-        compose.activityRule.scenario.recreate(); awaitIn("task-detail", "A11 task checklist")
+        scenario.recreate(); awaitIn("task-detail", "A11 task checklist")
         compose.waitUntil(20_000) { journal().drop(mark).any { it.text("path") == "/api/tasks/$taskId/comments" && it["status"]?.toString() == "200" } }
         SystemClock.sleep(1_000); capture("p3-comment-box-after-it-was-taken")
         compose.onNodeWithTag("task-comment").assert(hasText("Sent once only", substring = true).not())
@@ -731,7 +751,7 @@ class TasksProjectsDeviceTest {
         tap("task:$taskId", "tasks-list")
         compose.onNode(hasText(TaskListCopy.delete) and hasAnyAncestor(hasTestTag("tasks-bulk-bar"))).performClick()
         awaitTag("tasks-bulk-confirm"); tap("tasks-bulk-confirm")
-        compose.activityRule.scenario.recreate(); awaitTag("tasks-list")
+        scenario.recreate(); awaitTag("tasks-list")
         compose.waitUntil(20_000) { journal().drop(mark).any { it.text("path") == "/api/tasks/batch-delete" && it["status"]?.toString() == "200" } }
         SystemClock.sleep(1_000); capture("p3-tasks-after-bulk")
         compose.onAllNodesWithTag("tasks-bulk-bar").assertCountEquals(0)
@@ -924,7 +944,7 @@ class TasksProjectsDeviceTest {
         // The account's switch off: the same run's chip is the model alone.
         http("/__control", """{"modelRouting":false}""")
         val reads = journal().size
-        compose.activityRule.scenario.recreate(); awaitTag("composer-input")
+        scenario.recreate(); awaitTag("composer-input")
         compose.waitUntil(20_000) { journal().drop(reads).any { it.text("path") == "/api/users/me" } }
         // The recreated reader reads its session again: the chip is the bare "Model" until then.
         compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("composer-model") and hasContentDescription("Model claude-opus-5-5, effort High")).fetchSemanticsNodes().isNotEmpty() }

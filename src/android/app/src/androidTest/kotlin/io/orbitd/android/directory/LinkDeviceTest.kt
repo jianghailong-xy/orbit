@@ -70,6 +70,19 @@ class LinkDeviceTest {
                     return MockResponse().setHeader("Content-Type", "application/json").setBody(body)
                 }
             }
+            /** The session page [id] is up, named [title]: since A06-18 its bar names no session, so the name is read where the page
+             * keeps it now, in Session details under its ⋯ — opened and closed again. */
+            fun awaitSessionPage(id: String, title: String) {
+                compose.waitUntil(10_000) {
+                    app.realtime.state.value.session?.id == id &&
+                        compose.onAllNodes(hasContentDescription("Session actions") and isEnabled()).fetchSemanticsNodes().isNotEmpty()
+                }
+                compose.onNodeWithContentDescription("Session actions").performClick()
+                compose.onNode(hasText("Session details") and hasAnyAncestor(isPopup()) and hasClickAction()).performClick()
+                compose.waitUntil(10_000) { compose.onAllNodes(hasText(title) and hasAnyAncestor(hasTestTag("session-details"))).fetchSemanticsNodes().isNotEmpty() }
+                compose.onNodeWithText("Close session details").performClick()
+                compose.waitUntil(5_000) { compose.onAllNodesWithTag("session-details").fetchSemanticsNodes().isEmpty() }
+            }
             val launchIntent = intent("orbit-$coldKind:34TcwNgAIo6tGUiIKjqnQ")
             ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
                 try {
@@ -79,9 +92,11 @@ class LinkDeviceTest {
                     compose.onNodeWithText("Email").performTextReplacement("a05@example.test")
                     compose.onNodeWithText("Password").performTextReplacement("a05-fixture-password")
                     compose.onNodeWithText("Sign In").performScrollTo().performClick()
-                    compose.waitUntil(10_000) { compose.onAllNodesWithText(coldTitle).fetchSemanticsNodes().isNotEmpty() }
-                    compose.onNodeWithText(coldTitle).assertIsDisplayed()
-                    if (coldKind == "session") compose.waitUntil(10_000) { app.realtime.state.value.session?.id == firstId }
+                    if (coldKind == "session") awaitSessionPage(firstId, coldTitle)
+                    else {
+                        compose.waitUntil(10_000) { compose.onAllNodesWithText(coldTitle).fetchSemanticsNodes().isNotEmpty() }
+                        compose.onNodeWithText(coldTitle).assertIsDisplayed()
+                    }
                     fun back() {
                         var focused = false
                         compose.waitUntil(5_000) {
@@ -105,6 +120,7 @@ class LinkDeviceTest {
                     compose.onNodeWithContentDescription("Back").assertIsDisplayed()
                     back()
                     compose.onNodeWithText(coldTitle).assertDoesNotExist()
+                    compose.onNodeWithContentDescription("Session actions").assertDoesNotExist()
                     compose.onNodeWithContentDescription("Back").assertDoesNotExist()
                     compose.onNodeWithContentDescription("Open navigation").assertIsDisplayed()
                     app.startActivity(intent("orbit-wiki:34TcwNgAIo6tGUiIKjqnQ"))
@@ -124,14 +140,15 @@ class LinkDeviceTest {
                     } }
                     val secondHandle = (app.session.state.value as AuthState.SignedIn).handle
                     compose.waitUntil(10_000) { app.realtime.state.value.handle === secondHandle && app.realtime.state.value.directoryFresh }
-                    compose.onNodeWithText("Linked session").assertDoesNotExist()
+                    // A's session page is gone with A's route: no session page, no Back.
+                    compose.onNodeWithContentDescription("Session actions").assertDoesNotExist()
                     compose.onNodeWithContentDescription("Back").assertDoesNotExist()
                     assertNull(app.realtime.state.value.session)
                     app.startActivity(intent("orbit-session:34Tcl0kralZrY8opuLJU4"))
-                    compose.waitUntil(10_000) { app.realtime.state.value.session?.id == secondId && compose.onAllNodesWithText("Second session").fetchSemanticsNodes().isNotEmpty() }
+                    awaitSessionPage(secondId, "Second session")
                     assertFalse("Old selection must never issue a request under the new account", requests.any { it.first == "Bearer a05-fixture-access-2" && it.second.contains(firstId) })
                     back()
-                    compose.onNodeWithText("Second session").assertDoesNotExist()
+                    compose.onNodeWithContentDescription("Session actions").assertDoesNotExist()
                     outage.set(true)
                     compose.onNodeWithContentDescription("Refresh directory").performClick()
                     compose.waitUntil(15_000) { app.realtime.state.value.directoryError?.reason == FailureReason.NETWORK }

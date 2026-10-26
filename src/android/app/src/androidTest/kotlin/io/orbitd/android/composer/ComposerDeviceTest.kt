@@ -125,14 +125,29 @@ class ComposerDeviceTest {
         compose.onNode(expired).performScrollTo().assertIsEnabled()
         compose.onNodeWithText("Close").performClick()
         control("""{"status":"RUNNING"}"""); compose.runOnIdle { app.realtime.refreshSession() }; awaitText("Stop")
-        clickSendWhenEnabled(); awaitText("Stop requested.")
+        // Queued for the next turn while this one runs — Send held offers it — the message waits in the tray above the composer
+        // (A07-22/23, b0f32ebbd), no longer in the + menu's "Queued messages"; withdrawn there, its words come back to the composer.
         compose.onNodeWithTag("composer-input").performTextInput("queued message")
-        clickSendWhenEnabled()
+        compose.waitUntil(10000) { compose.onAllNodes(hasTestTag("composer-send") and isEnabled() and hasText("Send")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("composer-send").performTouchInput { longClick() }
+        compose.waitUntil(10000) { compose.onAllNodesWithTag("composer-queue-next-turn").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("composer-queue-next-turn").performClick()
         compose.waitUntil(10000) { model.state.value.draft.pending==null && !model.state.value.busy && !model.state.value.waiting }
-        compose.onNodeWithText("+").performClick(); awaitText("Queued messages (1)")
-        compose.onNodeWithText("Queued messages (1)").performClick(); appClick("Withdraw")
-        compose.waitUntil(5000) { stats()["controls"]!!.jsonArray.any { it.jsonObject["action"]?.jsonPrimitive?.content=="withdraw" } }
-        compose.onNodeWithText("Close").performClick()
+        assertEquals("NEXT_TURN", stats()["turns"]!!.jsonObject.values.single().jsonObject["request"]!!.jsonObject["intent"]!!.jsonPrimitive.content)
+        val tray = hasAnyAncestor(hasTestTag("pending-tray"))
+        compose.waitUntil(15000) { compose.onAllNodes(hasText("queued message") and tray).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Queued for next turn") and tray).assertExists()
+        capture("queued-tray")
+        // Pressed through its click action once enabled, as the account row above is: on API 29 a touch on the tray's trash icon
+        // once reached nothing (no withdraw sent, the row still there 5 s on, A15b's API 29 round).
+        val withdraw = hasTestTag("pending-tray-withdraw") and isEnabled()
+        compose.waitUntil(10000) { compose.onAllNodes(withdraw).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(withdraw).performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitUntil(10000) { stats()["controls"]!!.jsonArray.any { it.jsonObject["action"]?.jsonPrimitive?.content=="withdraw" } }
+        compose.waitUntil(10000) { model.state.value.draft.text=="queued message" && compose.onAllNodesWithTag("pending-tray").fetchSemanticsNodes().isEmpty() }
+        // With nothing typed, Send is Stop.
+        compose.onNodeWithTag("composer-input").performTextClearance()
+        clickSendWhenEnabled(); awaitText("Stop requested.")
         control("""{"expired":true}""")
         compose.onNodeWithTag("composer-input").performTextInput("after refresh")
         clickSendWhenEnabled()
@@ -158,10 +173,20 @@ class ComposerDeviceTest {
         compose.waitUntil(10000) { compose.onAllNodesWithTag("card-review").fetchSemanticsNodes().isEmpty() }
         // A08i: the composer asks for the focus once the page's window has it back from the review's sheet, and its keyboard comes up
         // with it. Asked for in the step that closed the review, both were lost while the sheet still held the window (A15b, API 36).
-        compose.waitUntil(10000) {
-            compose.onAllNodes(hasTestTag("composer-input") and isFocused()).fetchSemanticsNodes().isNotEmpty() &&
-                ViewCompat.getRootWindowInsets(compose.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
-        }
+        compose.waitUntil(10000) { compose.onAllNodes(hasTestTag("composer-input") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+        // Whether the soft keyboard shows is the device's call: with a hardware keyboard exposed (the API 36 AVD's "qwerty,
+        // keysexposed") Android may keep it down, so there its state is recorded and not asserted; without one it must come up
+        // (the coordinator's ruling on A15b's 360x640 round). The request itself is CardDiscussionFocusTest's to pin.
+        fun keyboardShown() = ViewCompat.getRootWindowInsets(compose.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        val config = compose.activity.resources.configuration
+        if (config.keyboard != android.content.res.Configuration.KEYBOARD_NOKEYS &&
+            config.hardKeyboardHidden == android.content.res.Configuration.HARDKEYBOARDHIDDEN_NO) {
+            val shown = runCatching { compose.waitUntil(10000) { keyboardShown() }; true }.getOrDefault(false)
+            capture("card-discussion-keyboard")
+            File(evidence, "card-discussion-keyboard.txt").writeText("hardware keyboard: yes (keyboard=${config.keyboard}, " +
+                "hardKeyboardHidden=${config.hardKeyboardHidden}); show_ime_with_hard_keyboard=" +
+                "${String(shellBytes("settings get secure show_ime_with_hard_keyboard")).trim()}; soft keyboard shown within 10 s: $shown\n")
+        } else compose.waitUntil(10000) { keyboardShown() }
         compose.onNodeWithTag("composer-input").assertIsFocused()
         compose.waitUntil(5000) { model.state.value.draft.text.contains("fixture-criteria-seal") }
         val text = model.state.value.draft.text
@@ -381,6 +406,9 @@ class ComposerDeviceTest {
         compose.onNodeWithTag("composer-input").performTextInput("新会话的首条消息")
         compose.activityRule.scenario.recreate()
         compose.onNodeWithTag("composer-input").assertTextContains("新会话的首条消息")
+        // The recreated page names the workspace's model, and lets the chip be pressed, once it is connected again: until then the
+        // chip says "Model" and the box "Reconnect to send" (A15 F-20: pressed at once, 3 of 5 API 36 runs found nothing to press).
+        compose.waitUntil(15000) { compose.onAllNodes(hasText("fixture-model") and hasClickAction() and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         appClick("fixture-model"); awaitText("Automatic")
         compose.onAllNodesWithText("Automatic").onLast().performScrollTo().performClick()
         compose.onNodeWithText("Close").performClick()
@@ -574,7 +602,9 @@ class ComposerDeviceTest {
         capture("a07c-draft-antigravity-sign-in")
         compose.onNodeWithText("Close").performClick()
         engineList(); compose.onNodeWithTag("engine:opencode").performClick(); awaitText("OpenCode ⌄")
-        compose.onNodeWithTag("composer-model").performClick(); awaitText("OpenCode's own sign-in")
+        // The Provider row says "Own sign-in" for OpenCode's own configuration since A07-19 (d) (A07e, d66ddbc8e); the row under
+        // "On Fixture runner" keeps the full name.
+        compose.onNodeWithTag("composer-model").performClick(); awaitText("Own sign-in")
         val all = dialogTexts()
         File(evidence,"a07c-draft-menu.txt").writeText(all.joinToString("\n"))
         // OpenCode's Provider section: its own sign-in, then the keys it runs — the DeepSeek key, by its own name.
