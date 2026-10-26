@@ -131,7 +131,7 @@ class RealtimeStore(
         if (!current(handle)) throw SessionChanged()
         val cache = MutableStateFlow(loaded)
         val writes = Channel<Unit>(Channel.CONFLATED)
-        publish(handle) { it.copy(directory = loaded.directory) }
+        publish(handle) { it.copy(directory = loaded.directory, directoryCached = loaded.directory != null) }
         // Explicit navigation (including selecting the directory) wins over cold-start restoration.
         selection.update {
             // StateFlow may conflate SignedOut during a fast login. Selection ownership, not
@@ -194,7 +194,7 @@ class RealtimeStore(
                     currentCoroutineContext().ensureActive()
                     if (!active(handle, path)) return@launch
                     if (directoryRevision.value != revision) { refresh.trySend(Unit); continue }
-                    publish(handle) { it.copy(directory = snapshot, directoryRefreshing = false,
+                    publish(handle) { it.copy(directory = snapshot, directoryCached = false, directoryRefreshing = false,
                         directoryFresh = true, directoryError = null) }
                     directoryLanded.update { maxOf(it, revision) }
                     cache.update { it.copy(directory = snapshot) }

@@ -96,6 +96,8 @@ data class RealtimeState(
     val directory: DirectorySnapshot? = null,
     val directoryRefreshing: Boolean = false,
     val directoryFresh: Boolean = false,
+    /** [directory] is the copy this device's cache restored, and no read from the server has replaced it yet. */
+    val directoryCached: Boolean = false,
     val directoryError: RealtimeError? = null,
     val session: SessionState? = null,
     val controlConnection: ConnectionState = ConnectionState.STOPPED,

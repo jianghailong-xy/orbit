@@ -343,6 +343,30 @@ class RealtimeStoreTest {
         assertEquals(3, restored.state.value.session!!.transcript.events.size)
     }
 
+    /** P01's fully-drawn report names where the directory's rows came from: the copy the cache restored, until a read from the
+     * server replaces it — not while one is still on the wire. */
+    @Test fun aRestoredDirectoryIsCachedUntilAServerReadReplacesIt() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        assertTrue(store.state.value.directoryFresh)
+        assertFalse(store.state.value.directoryCached)
+        advanceTimeBy(101); runCurrent()
+        store.close(); runCurrent()
+        val auth = rig.client()
+        auth.restore()
+        val restored = RealtimeStore(auth, backgroundScope)
+        runCurrent()
+        assertNotNull(restored.state.value.directory)
+        assertTrue(restored.state.value.directoryCached)
+        rig.heldDirectory = CompletableDeferred()
+        restored.setNetwork(true, "wifi"); restored.setForeground(true); runCurrent()
+        assertTrue(restored.state.value.directoryRefreshing)
+        assertTrue(restored.state.value.directoryCached)
+        rig.heldDirectory!!.complete(Unit); runCurrent()
+        assertTrue(restored.state.value.directoryFresh)
+        assertFalse(restored.state.value.directoryCached)
+    }
+
     /** Live frames never move the REST frontier, so the next connect after a drop or a clean close would replay all
      * they carried over the uncompressed stream. It closes that gap over REST pages first and resumes past it. */
     @Test fun aDroppedOrClosedStreamClosesItsGapOverRestBeforeReconnecting() = runTest {

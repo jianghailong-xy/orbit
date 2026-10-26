@@ -69,4 +69,6 @@ data class DirectoryData(
     val sessions: Map<String, List<DirectorySession>> = emptyMap(), val folders: List<Folder> = emptyList(),
     val tags: List<Tag> = emptyList(), val ready: Boolean = false, val fresh: Boolean = false, val refreshing: Boolean = false,
     val error: String? = null, val waitingForConnection: Boolean = false,
+    /** The rows are the copy this device's cache restored, not yet replaced by a read from the server. */
+    val cached: Boolean = false,
 )
