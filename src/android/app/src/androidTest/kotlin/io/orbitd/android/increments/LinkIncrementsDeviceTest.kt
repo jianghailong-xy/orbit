@@ -104,15 +104,15 @@ class LinkIncrementsDeviceTest : IncrementDeviceTest() {
         capture("04-back-to-the-workspace")
     }
 
-    /** DL-1, its other half: a bare `orbit://` delivered to the app opens the workspaces home, as iOS's DeepLink does
-     * (`case "active", ""`). From another app no filter takes it: the `orbit` filter names its hosts so `orbit://auth/google` is not
-     * offered to MainActivity as well (the D1 merge's choice), which is recorded here, not asserted. */
+    /** DL-1, its other half: a bare `orbit://` from another app opens the workspaces home, as iOS's DeepLink does
+     * (`case "active", ""`). The `orbit` filter takes its empty host (A05h) and still names the others, so `orbit://auth/google` is
+     * not offered to MainActivity as well (the D1 merge's choice). */
     @Test fun aBareOrbitLinkOpensTheWorkspacesHome() = journey {
         signIn()
         awaitTag("workspace:$workspace")
         compose.onNodeWithTag("workspace:$workspace").performClick()
         awaitTag("directory-list")
-        note("orbit:// resolves to the app from another app: ${resolves("orbit://")} (the manifest's orbit filter names hosts: active, session, task, list, runner, watch)")
+        verify("the manifest resolves orbit:// to the app", resolves("orbit://"))
         deliver("orbit://")
         val home = runCatching { compose.waitUntil(10_000) { onWorkspacesHome() }; true }.getOrDefault(false)
         capture("01-after-a-bare-link")
