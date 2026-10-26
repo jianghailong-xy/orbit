@@ -107,6 +107,11 @@ func TestWithdrawDropsASteerTheEngineHasNotReadYet(t *testing.T) {
 	if w == nil || w.Status != stSucceeded || w.Subtype != subtypeSteerWithdraw || w.Result != withdrawWithdrawn {
 		t.Fatalf("the withdraw turn settled as %+v, want a %s completion saying %s", w, subtypeSteerWithdraw, withdrawWithdrawn)
 	}
+	// Settled against the session it was aimed at: the completion names the conversation the steer
+	// was written into, whichever side of the turn's result it was read on.
+	if w.RuntimeSessionID != run.job.SessionUUID {
+		t.Errorf("the withdraw turn settled under runtime session %q, want this session's %q", w.RuntimeSessionID, run.job.SessionUUID)
+	}
 	// The steer's own row is the control plane's to remove: nothing settles it here.
 	if s := run.turnResult("steer-1"); s != nil {
 		t.Errorf("a withdrawn steer was settled as %+v", s)
