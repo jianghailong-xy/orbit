@@ -91,6 +91,9 @@ class CardsDeviceTest {
         compose.onNodeWithTag("transcript-list").performTouchInput { swipeDown() }
         compose.onNodeWithTag("transcript-list").performScrollToNode(matcher)
     }
+    /** [scrollTranscriptTo] once the transcript holds [matcher]: a conversation just opened reads its events after its page draws. */
+    private fun awaitInTranscript(matcher: SemanticsMatcher) =
+        compose.waitUntil(15_000) { try { scrollTranscriptTo(matcher); true } catch (_: AssertionError) { false } }
     private fun journey(name: String, block: () -> Unit) {
         try { block(); File(output,"$name-result.txt").writeText("PASS\n") }
         catch (error: Throwable) { capture("$name-failed"); runCatching { semantics("$name-failed") }; throw error }
@@ -341,7 +344,7 @@ class CardsDeviceTest {
         compose.onNodeWithTag("needs-you-bar").performClick()
         compose.waitUntil(15_000) { ObjectId.same(app.realtime.state.value.session?.id, second.text("id")) }
         // The page names no session in its bar since A06-18: the session opened is read off its own transcript.
-        scrollTranscriptTo(hasText("The second session waits on you."))
+        awaitInTranscript(hasText("The second session waits on you."))
         compose.onNodeWithTag("approval:b1:ALLOW").performScrollTo().assertIsDisplayed()
         // The session it opened is the one waiting; nothing else waits elsewhere now, so the bar has nothing to say.
         assertFalse(exists("needs-you-bar"))
