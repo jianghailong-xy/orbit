@@ -160,13 +160,15 @@ class TasksProjectsDeviceTest {
         login(); open("orbit-session:$sessionId"); awaitTag("composer-input")
         compose.onNodeWithTag("composer-input").performTextInput("A11 return draft")
         instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-        scrollTo("transcript-list", hasText("Open A11 task"))
+        // The composer can be up before the conversation's messages are read (A15 F-21: the list held only its cards): the link is
+        // scrolled to once a read draws it.
+        awaitScrollTo("transcript-list", hasText("Open A11 task"))
         compose.onNodeWithText("Open A11 task").performTouchInput { click() }
         awaitIn("task-detail", "A11 task checklist"); capture("task-from-conversation")
         compose.activityRule.scenario.recreate(); awaitIn("task-detail", "A11 task checklist")
         back(); awaitTag("composer-input")
         compose.onNodeWithTag("composer-input").assertTextContains("A11 return draft")
-        scrollTo("transcript-list", hasText("Open A11 project"))
+        awaitScrollTo("transcript-list", hasText("Open A11 project"))
         compose.onNodeWithText("Open A11 project").performTouchInput { click() }
         awaitIn("project-detail", "A11 Android launch"); capture("project-from-conversation")
         back(); awaitTag("composer-input")
@@ -268,6 +270,11 @@ class TasksProjectsDeviceTest {
         assertEquals("1", limit.obj("body")?.text("expectedConfigRevision")); assertEquals(3, limit.obj("body")?.number("maxConcurrentTasks"))
         // Automatic writes `automatic`, never `coordinatorEnabled`.
         compose.waitUntil(20_000) { compose.onAllNodesWithText("3 ${RunSettings.tasksAtATime(3)}").fetchSemanticsNodes().isNotEmpty() }
+        // Its write goes out under the revision the page has read, and the page reads the project again only after the write above:
+        // a press before that read lands is refused as stale (A15 F-22: PATCH 409 under revision 1). The press waits for the read.
+        val written = journal().indexOfLast { it.text("method") == "PATCH" && it.text("path") == "/api/projects/$projectId" }
+        compose.waitUntil(20_000) { journal().drop(written + 1).any { it.text("method") == "GET" && it.text("path") == "/api/projects/$projectId" } }
+        SystemClock.sleep(500); compose.waitForIdle()
         tap("project-automatic", "project-detail")
         compose.waitUntil(20_000) { http("/__stats").obj("project")?.flag("coordinatorEnabled") == false }
         val automatic = journal().last { it.text("method") == "PATCH" && it.text("path") == "/api/projects/$projectId" }.obj("body")!!

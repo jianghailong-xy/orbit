@@ -384,6 +384,9 @@ class ComposerDeviceTest {
         compose.onNodeWithTag("composer-input").performTextInput("新会话的首条消息")
         compose.activityRule.scenario.recreate()
         compose.onNodeWithTag("composer-input").assertTextContains("新会话的首条消息")
+        // The recreated page names the workspace's model, and lets the chip be pressed, once it is connected again: until then the
+        // chip says "Model" and the box "Reconnect to send" (A15 F-20: pressed at once, 3 of 5 API 36 runs found nothing to press).
+        compose.waitUntil(15000) { compose.onAllNodes(hasText("fixture-model") and hasClickAction() and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         appClick("fixture-model"); awaitText("Automatic")
         compose.onAllNodesWithText("Automatic").onLast().performScrollTo().performClick()
         compose.onNodeWithText("Close").performClick()

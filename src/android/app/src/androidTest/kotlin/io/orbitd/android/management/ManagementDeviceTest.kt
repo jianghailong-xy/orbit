@@ -918,33 +918,42 @@ class ManagementDeviceTest {
      */
     private fun activate(words: String, shot: String, report: StringBuilder, problems: MutableList<String>) {
         val named = hasText(words, substring = true) or hasContentDescription(words, substring = true)
-        try { compose.onAllNodes(named).onFirst().performScrollTo() } catch (_: AssertionError) { }
-        // On screen is not enough: near the bottom the system's gesture bar takes the touch. Bring it to the middle.
-        try {
-            val y = compose.onAllNodes(named).onFirst().fetchSemanticsNode().boundsInRoot.center.y
-            val middle = (appRoot()?.let { Rect().also(it::getBoundsInScreen).height() } ?: 0) / 2f
-            compose.onAllNodes(hasScrollAction() and hasAnyDescendant(named)).onFirst()
-                .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, y - middle) }
-        } catch (_: AssertionError) { } catch (_: IllegalStateException) { }
-        compose.waitForIdle(); SystemClock.sleep(500)
-        // The words as drawn, and the control a finger on them presses (Compose keeps a row's words on its children).
-        val label = appRoot()?.let(::nodes)?.firstOrNull { node -> node.isVisibleToUser && words(node).any { it.contains(words) } }
-        var target = label
-        while (target != null && !target.isClickable) target = target.parent
-        target = target ?: label
-        if (target == null) { capture("$shot-missing"); problem(report, problems, "$shot: nothing on screen is named \"$words\""); return }
-        val at = Rect().also(target::getBoundsInScreen)
-        report.appendLine("touch \"$words\" at $at")
-        tap(at.exactCenterX(), at.exactCenterY())
-        // TalkBack moves its focus a moment after the touch ends (it first waits to see whether a second tap follows).
-        val until = SystemClock.uptimeMillis() + 3_000
-        var focus = focused()
-        while (focus?.let(::spoken)?.contains(words, ignoreCase = true) != true && SystemClock.uptimeMillis() < until) { SystemClock.sleep(200); focus = focused() }
-        val said = focus?.let(::spoken).orEmpty()
-        report.appendLine("touch \"$words\" -> TalkBack's focus on ${focus?.className?.toString()?.substringAfterLast('.')} \"$said\"")
+        var target: AccessibilityNodeInfo? = null
+        var focus: AccessibilityNodeInfo? = null
+        var said = ""
+        // A touch aimed from a page still moving (a scroll settling, a page coming back) lands on whatever is there by then, and on
+        // a loaded host that is another row (A15 F-23: TalkBack's focus on "Session recaps", on "Back"). TalkBack's focus says where
+        // it landed: the control is measured and touched again, up to three times, each touch in the report.
+        for (attempt in 1..3) {
+            try { compose.onAllNodes(named).onFirst().performScrollTo() } catch (_: AssertionError) { }
+            // On screen is not enough: near the bottom the system's gesture bar takes the touch. Bring it to the middle.
+            try {
+                val y = compose.onAllNodes(named).onFirst().fetchSemanticsNode().boundsInRoot.center.y
+                val middle = (appRoot()?.let { Rect().also(it::getBoundsInScreen).height() } ?: 0) / 2f
+                compose.onAllNodes(hasScrollAction() and hasAnyDescendant(named)).onFirst()
+                    .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, y - middle) }
+            } catch (_: AssertionError) { } catch (_: IllegalStateException) { }
+            compose.waitForIdle(); SystemClock.sleep(500)
+            // The words as drawn, and the control a finger on them presses (Compose keeps a row's words on its children).
+            val label = appRoot()?.let(::nodes)?.firstOrNull { node -> node.isVisibleToUser && words(node).any { it.contains(words) } }
+            target = label
+            while (target != null && !target.isClickable) target = target.parent
+            target = target ?: label
+            if (target == null) { capture("$shot-missing"); problem(report, problems, "$shot: nothing on screen is named \"$words\""); return }
+            val at = Rect().also(target::getBoundsInScreen)
+            report.appendLine("touch \"$words\" at $at" + if (attempt > 1) " (touch $attempt)" else "")
+            tap(at.exactCenterX(), at.exactCenterY())
+            // TalkBack moves its focus a moment after the touch ends (it first waits to see whether a second tap follows).
+            val until = SystemClock.uptimeMillis() + 3_000
+            focus = focused()
+            while (focus?.let(::spoken)?.contains(words, ignoreCase = true) != true && SystemClock.uptimeMillis() < until) { SystemClock.sleep(200); focus = focused() }
+            said = focus?.let(::spoken).orEmpty()
+            report.appendLine("touch \"$words\" -> TalkBack's focus on ${focus?.className?.toString()?.substringAfterLast('.')} \"$said\"")
+            if (focus != null && said.contains(words, ignoreCase = true)) break
+        }
         if (focus == null || !said.contains(words, ignoreCase = true)) problem(report, problems, "$shot: TalkBack's focus is on \"$said\", not \"$words\"")
         capture(shot)
-        val on = Rect().also { (focus ?: target).getBoundsInScreen(it) }
+        val on = Rect().also { (focus ?: target!!).getBoundsInScreen(it) }
         doubleTap(on.exactCenterX(), on.exactCenterY())
     }
 
