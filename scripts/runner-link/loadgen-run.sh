@@ -67,7 +67,9 @@ mkdir -p "$out/logs"
 
 pg="$project-postgres"
 services=(postgres apiserver link-gateway gateway nats)
-[ "$(setting STAGING_BACKENDS 1)" = 2 ] && services+=(apiserver-b)
+# Every apiserver of the stack past the first, as it runs: apiserver-b and on (ORBIT_LINK_STAGING_BACKENDS), or the
+# replicas a deployment's override file adds (apiserver-2 and on, docs/self-hosting.md "Several apiservers").
+mapfile -t -O "${#services[@]}" services < <(docker ps --format '{{.Names}}' | sed -n "s/^$project-\(apiserver-[a-z0-9]*\)$/\1/p" | sort)
 declare -A cgroup
 for svc in "${services[@]}"; do
   id="$(docker inspect -f '{{.Id}}' "$project-$svc")" || die "$project-$svc is not running"

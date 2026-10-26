@@ -25,8 +25,8 @@
 // With --live, a run like the second (the same fleet and event rate) with watchers and live deltas besides
 // (loadgen-run.sh --watch N, loadgen -live-rate; task O3): what one forwarded delta costs, as what that run adds to the
 // second over the deltas the watchers received a second. The watchers' streams themselves (their pings, and the durable
-// events they are sent too) are in it, so it is an upper bound per delta. On a stack of two apiservers, "apiserver" is
-// the two together.
+// events they are sent too) are in it, so it is an upper bound per delta. On a stack of several apiservers, "apiserver"
+// is all of them together.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -86,8 +86,11 @@ for (const r of [hb, full].filter(Boolean)) {
   if (r.steady.counters.batchesAcked !== 0) throw new Error(`${r.dir} sent events: run it with -event-rate 0`);
 }
 const round = (v, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
-// A stack of two apiservers (ORBIT_LINK_STAGING_BACKENDS=2) is one apiserver's worth of work in two processes.
-const cores = (r, svc) => (r.report.components[svc]?.meanCores ?? 0) + (svc === 'apiserver' ? r.report.components['apiserver-b']?.meanCores ?? 0 : 0);
+// A stack of several apiservers (ORBIT_LINK_STAGING_BACKENDS) is one apiserver's worth of work in several processes:
+// "apiserver" is all of them together.
+const cores = (r, svc) => (svc === 'apiserver'
+  ? Object.entries(r.report.components).filter(([k]) => /^apiserver(-[a-z0-9]+)?$/.test(k)).reduce((n, [, c]) => n + (c.meanCores ?? 0), 0)
+  : r.report.components[svc]?.meanCores ?? 0);
 // A host swapping during a run inflates its CPU figures: on 2026-10-25 a heartbeats-only run swapping in about 1,100
 // pages/s measured 12% more database CPU than its repeat at 2 pages/s. Each run's swap-in over its steady window is
 // reported, and a run past HEAVY_SWAP_IN pages/s is to be run again rather than compared.

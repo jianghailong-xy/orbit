@@ -39,7 +39,10 @@ const steadyFrom = Date.parse(summary.steadyStartedAt ?? summary.startedAt);
 const steadyTo = Date.parse(summary.steadyEndedAt ?? summary.endedAt);
 const inSteady = (t) => t >= steadyFrom && t <= steadyTo;
 const round = (v, d = 1) => (v == null || Number.isNaN(v) ? null : Math.round(v * 10 ** d) / 10 ** d);
-const STACK = ['postgres', 'apiserver', 'apiserver-b', 'link-gateway', 'gateway', 'nats'];
+// The other apiservers the run sampled come after apiserver-b: apiserver-c and on (ORBIT_LINK_STAGING_BACKENDS of 3 or
+// more), or a deployment override's replicas, apiserver-2 and on.
+const moreApiservers = [...new Set(samples.flatMap((s) => Object.keys(s)).filter((k) => /^apiserver-[a-z0-9]+$/.test(k) && k !== 'apiserver-b'))].sort();
+const STACK = ['postgres', 'apiserver', 'apiserver-b', ...moreApiservers, 'link-gateway', 'gateway', 'nats'];
 
 // --- CPU from the 5 s samples. -----------------------------------------------------------------------------------------
 // Samples at the window's edges are included one interval out, so every second of the window is covered. A mean counts
@@ -271,9 +274,10 @@ gw.mergeCall = histogram('link_event_merge_call_duration_seconds');
 // without them is what it was before.
 let live = null;
 if ((summary.config.liveRate ?? 0) > 0 || existsSync(join(dir, 'watch.jsonl'))) {
-  // A watch line covers the 10 s before its time: the lines whose interval lies mostly inside the window.
-  const lines = jsonl('watch.jsonl').filter((l) => l.t > steadyFrom + 5000 && l.t <= steadyTo + 5000);
-  const secs = lines.length * 10;
+  // A watch line covers its interval, from..t, every 10 s: the lines whose interval lies inside the window (to a second),
+  // and not the last one, written as the watchers stopped.
+  const lines = jsonl('watch.jsonl').filter((l) => !l.final && l.from >= steadyFrom - 1000 && l.t <= steadyTo + 1000);
+  const secs = lines.reduce((n, l) => n + (l.t - l.from) / 1000, 0);
   const delay = {};
   const messages = {};
   const errors = {};
@@ -307,15 +311,16 @@ if ((summary.config.liveRate ?? 0) > 0 || existsSync(join(dir, 'watch.jsonl'))) 
     gateway: { liveEvents: counterFamily('link_live_events_total'), turnPrefixRequests: counterFamily('link_turn_prefix_requests_total'),
       watchedSessions: { min: steadyScrapes.length ? Math.min(...steadyScrapes.map((x) => x.values.get('link_watched_sessions') ?? 0)) : null,
         max: steadyScrapes.length ? Math.max(...steadyScrapes.map((x) => x.values.get('link_watched_sessions') ?? 0)) : null } },
-    watchers: { sessions: watch?.sessions ?? null, seconds: secs, open: { min: lines.length ? Math.min(...lines.map((l) => l.open)) : null },
+    watchers: { sessions: watch?.sessions ?? null, seconds: round(secs, 1), open: { min: lines.length ? Math.min(...lines.map((l) => l.open)) : null },
       deltas, deltasPerSecond: secs ? round(deltas / secs, 1) : null,
       messagesPerSecond: Object.fromEntries(Object.entries(messages).map(([k, n]) => [k, secs ? round(n / secs, 1) : null])),
       deltasPerTextMessage: messages.text_delta ? round(deltas / messages.text_delta, 2) : null,
       delayMs: { p50: quantile(0.5), p90: quantile(0.9), p99: quantile(0.99), p999: quantile(0.999), max: sorted.at(-1)?.[0] ?? null },
       errors, openMs: { count: openMs.length, p50: openMs[Math.floor(openMs.length * 0.5)] ?? null, p99: openMs[Math.floor(openMs.length * 0.99)] ?? null } },
   };
-  // Of the deltas the loadgen sent over the window, the share the watchers received.
-  live.watchers.receivedShare = live.loadgen.sent ? round(deltas / live.loadgen.sent, 3) : null;
+  // Of the deltas the loadgen sent a second over the window, the share the watchers received.
+  live.watchers.receivedShare = live.loadgen.sentPerSecond && live.watchers.deltasPerSecond !== null
+    ? round(live.watchers.deltasPerSecond / live.loadgen.sentPerSecond, 3) : null;
 }
 
 // The gateway counters that are errors when they move.
@@ -364,7 +369,7 @@ function tally(lines, timeOf, levelOf) {
   return { byLevel, samples: samplesBy };
 }
 const logs = {};
-for (const svc of ['apiserver', 'apiserver-b']) {
+for (const svc of ['apiserver', 'apiserver-b', ...moreApiservers]) {
   const lines = logLines(svc);
   if (lines.length === 0) continue;
   logs[svc] = tally(lines, nestTime, (l) => /\s(LOG|WARN|ERROR|FATAL|DEBUG|VERBOSE)\s\[/.exec(l)?.[1] ?? null);

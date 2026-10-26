@@ -21,7 +21,7 @@
 #   ORBIT_LINK_STAGING_NATS_PORT     NATS's client port, on the bind address      14222
 #   ORBIT_LINK_STAGING_NATS_MONITOR_PORT  NATS's monitoring, on 127.0.0.1         18222
 #   ORBIT_LINK_STAGING_MODE          http (shadow) or link (forwarding)           http
-#   ORBIT_LINK_STAGING_BACKENDS      apiservers the gateway forwards to: 1 or 2   1
+#   ORBIT_LINK_STAGING_BACKENDS      apiservers the gateway forwards to: 1 to 16  1
 #   ORBIT_LINK_STAGING_LOADGEN       1: the load test's settings (staging.loadgen.compose.yml)   0
 #   ORBIT_LINK_STAGING_DB_CPUS       with LOADGEN=1, the database's CPU allocation; 0 is unlimited   0
 #   ORBIT_LINK_STAGING_MERGE_WINDOW  the link gateway's LINK_EVENT_MERGE_WINDOW: 0 forwards each event
@@ -67,8 +67,13 @@ case "$loadgen" in 0|1) ;; *) die "ORBIT_LINK_STAGING_LOADGEN must be 0 or 1, no
 [[ "$merge_window" =~ ^(default|0|[0-9]+ms)$ ]] || die "ORBIT_LINK_STAGING_MERGE_WINDOW must be default, 0 or a window such as 100ms, not $merge_window"
 gateway_merge_window="$merge_window"
 [ "$merge_window" = default ] && gateway_merge_window=""
-case "$backends" in 1) backend_urls="http://apiserver:3001" ;; 2) backend_urls="http://apiserver:3001,http://apiserver-b:3001" ;;
-  *) die "ORBIT_LINK_STAGING_BACKENDS must be 1 or 2, not $backends" ;; esac
+[[ "$backends" =~ ^([1-9]|1[0-6])$ ]] || die "ORBIT_LINK_STAGING_BACKENDS must be 1 to 16, not $backends"
+# The first apiserver, then apiserver-b, apiserver-c and on (extra_backends), each the first one's whole definition on
+# the same database; the link gateway forwards to all of them, round robin.
+extras=()
+mapfile -t extras < <(extra_backends "$backends")
+backend_urls="http://apiserver:3001"
+for b in "${extras[@]}"; do backend_urls+=",http://$b:3001"; done
 
 # --- Secrets: made once and kept, so a rerun keeps the database's tokens valid. -----------------------------------
 secrets="$state/secrets"
@@ -209,9 +214,9 @@ write_env
 profiles=(--profile runner-link)
 services=(postgres apiserver web gateway link-gateway nats)
 [ "$tls_mode" = acme ] && services+=(pebble)
-if [ "$backends" = 2 ]; then
+if [ "$backends" -ge 2 ]; then
   profiles+=(--profile staging-backend-b)
-  services+=(apiserver-b)
+  services+=("${extras[@]}")
 fi
 if [ "$build" = 1 ]; then
   log "building the apiserver, web and link gateway images from $(git -C "$repo" rev-parse --short HEAD)"
@@ -223,9 +228,32 @@ if ! nats_key apiserver || ! nats_key gateway; then
   make_nats_keys
   write_env
 fi
-if [ "$backends" = 1 ]; then
-  # A second apiserver left from a run with two is stopped: the gateway no longer names it.
-  compose --profile staging-backend-b rm -sf apiserver-b >/dev/null 2>&1 || true
+# Apiservers left from a run with more are stopped, while their definitions are still read: the gateway no longer names
+# them. Then the third and later ones are written (compose_files reads the file).
+stale=()
+while read -r b; do
+  [[ " ${extras[*]} " == *" $b "* ]] || stale+=("$b")
+done < <(docker ps -a --format '{{.Names}}' | sed -n "s/^$project-\(apiserver-[b-p]\)$/\1/p")
+if [ ${#stale[@]} -gt 0 ]; then
+  compose --profile staging-backend-b rm -sf "${stale[@]}" >/dev/null 2>&1 || true
+fi
+generated="$state/backends.compose.yml"
+if [ "$backends" -gt 2 ]; then
+  {
+    echo "# Written by staging-up.sh for ORBIT_LINK_STAGING_BACKENDS=$backends: the apiservers past apiserver-b, each defined as"
+    echo "# apiserver-b is in staging.compose.yml."
+    echo "services:"
+    for b in "${extras[@]:1}"; do
+      printf '  %s:\n    profiles: [staging-backend-b]\n    extends:\n      file: ${STAGING_REPO}/docker-compose.yml\n' "$b"
+      printf '      service: apiserver\n    build: !reset null\n    image: ${STAGING_PROJECT}-apiserver:local\n'
+      printf '    container_name: ${STAGING_PROJECT}-%s\n    depends_on:\n      postgres:\n        condition: service_healthy\n' "$b"
+      printf '      apiserver:\n        condition: service_healthy\n'
+      if [ "$loadgen" = 1 ]; then printf '    mem_limit: 3g\n'; fi
+    done
+  } > "$generated.new"
+  mv -f "$generated.new" "$generated"
+else
+  rm -f "$generated"
 fi
 log "starting ${services[*]} as project $project, the link gateway in MODE_${mode^^} over $backends backend(s), merge window $merge_window"
 compose "${profiles[@]}" up -d --wait --wait-timeout 1500 "${services[@]}"
@@ -256,7 +284,7 @@ done
 grep -q 'connected to NATS at ' <(docker logs "$project-apiserver" 2>&1) ||
   die "the apiserver is not connected to NATS (docker logs $project-apiserver | grep RunnerHints)"
 # The listener the gateway forwards runner calls to.
-for name in "$project-apiserver" $([ "$backends" = 2 ] && echo "$project-apiserver-b"); do
+for name in "$project-apiserver" "${extras[@]/#/$project-}"; do
   for _ in $(seq 1 30); do
     grep -q 'runner link calls are served on 0.0.0.0:3001' <(docker logs "$name" 2>&1) && break
     sleep 1

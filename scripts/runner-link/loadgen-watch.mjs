@@ -14,8 +14,9 @@
 //   node scripts/runner-link/loadgen-watch.mjs <state dir> <api origin> <sessions file> <out dir>
 //
 // The sessions file has a line per session: its id, its owner's id and its owner's email, separated by spaces. It runs
-// until SIGTERM or SIGINT, then writes watch.json. Every 10 s it adds a line to watch.jsonl: the interval's messages by
-// type, deltas, their delay as a histogram of whole milliseconds, streams open, opened and ended, and errors by kind.
+// until SIGTERM or SIGINT, then writes watch.json. Every 10 s it adds a line to watch.jsonl: the interval (from, t), its
+// messages by type, deltas, their delay as a histogram of whole milliseconds, streams open, opened and ended, and errors
+// by kind; the last line, written as it stops (final), covers what came after the last interval.
 // watch.json has the same over the whole run, and how long each stream took to open (its response headers).
 import { createHmac } from 'node:crypto';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
@@ -136,8 +137,11 @@ async function watch(id, userId, email) {
 
 const series = join(outDir, 'watch.jsonl');
 writeFileSync(series, '');
-const flush = () => {
-  appendFileSync(series, JSON.stringify({ t: Date.now(), open, ...cur }) + '\n');
+let from = Date.now();
+const flush = (final = false) => {
+  const t = Date.now();
+  appendFileSync(series, JSON.stringify({ from, t, open, ...cur, ...(final ? { final: true } : {}) }) + '\n');
+  from = t;
   cur = newInterval();
 };
 const timer = setInterval(flush, 10_000);
@@ -151,7 +155,7 @@ async function stop() {
   clearInterval(timer);
   for (const ctl of controllers) ctl.abort();
   await Promise.allSettled(watchers);
-  flush();
+  flush(true);
   writeFileSync(join(outDir, 'watch.json'), JSON.stringify({
     project, api, sessions: sessions.length, startedAt, endedAt: new Date().toISOString(),
     streams: { opened: total.opened, ended: total.ended }, messages: total.messages, deltas: total.deltas,
