@@ -83,6 +83,8 @@ class TasksProjectsDeviceTest {
     }
     private fun tap(tag: String, list: String? = null) {
         if (list != null) scrollTo(list, hasTestTag(tag))
+        // A write holds its page until the page has read it back (A11j): a press waits for its control to come back, as a person does.
+        compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag(tag) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         // A loaded shared emulator sometimes refuses one injected touch; the press itself is what is tested.
         try { compose.onNodeWithTag(tag).performClick() }
         catch (refused: AssertionError) {

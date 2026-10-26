@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -65,6 +66,7 @@ import io.orbitd.android.reader.queuedTail
 import io.orbitd.android.tasks.TaskDetailCopy
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.ui.typingFold
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.*
 
 /** [unreadSteers]: the reader's steers nothing has read yet, which the conversation leaves to the tray above this box
@@ -81,8 +83,11 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     var field by remember(model) { mutableStateOf(TextFieldValue()) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val window = LocalWindowInfo.current
+    // A hand-off from a sheet ("Chat about this" in a card's review) comes while the sheet's window still has the focus, and a
+    // focus or keyboard asked for then is lost with nothing to ask again (A08i): it is asked for once this window has it back.
     LaunchedEffect(focusRequest) {
-        if (focusRequest > 0) { focus.requestFocus(); keyboard?.show() }
+        if (focusRequest > 0) { snapshotFlow { window.isWindowFocused }.first { it }; focus.requestFocus(); keyboard?.show() }
     }
     // Keep TextFieldValue's composing range during IME updates. Disk stores committed text/cursor,
     // never an IME's stale composing range after a new input connection or process.

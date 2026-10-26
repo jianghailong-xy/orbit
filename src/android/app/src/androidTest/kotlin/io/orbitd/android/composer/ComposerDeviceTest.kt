@@ -14,6 +14,8 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.auth.chooseServer
@@ -165,6 +167,12 @@ class ComposerDeviceTest {
         compose.waitUntil(10000) { compose.onAllNodesWithTag("card-review").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Chat about this").performScrollTo().performClick()
         compose.waitUntil(10000) { compose.onAllNodesWithTag("card-review").fetchSemanticsNodes().isEmpty() }
+        // A08i: the composer asks for the focus once the page's window has it back from the review's sheet, and its keyboard comes up
+        // with it. Asked for in the step that closed the review, both were lost while the sheet still held the window (A15b, API 36).
+        compose.waitUntil(10000) {
+            compose.onAllNodes(hasTestTag("composer-input") and isFocused()).fetchSemanticsNodes().isNotEmpty() &&
+                ViewCompat.getRootWindowInsets(compose.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        }
         compose.onNodeWithTag("composer-input").assertIsFocused()
         compose.waitUntil(5000) { model.state.value.draft.text.contains("fixture-criteria-seal") }
         val text = model.state.value.draft.text
