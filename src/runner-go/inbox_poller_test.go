@@ -28,7 +28,8 @@ import (
 // in the order they were queued; a message or shell turn leased IN_FLIGHT under the fetch's lease generation until its
 // turn completion, and meanwhile handed straight back to a fetch of that generation that names another running turn,
 // or none; every other kind answered as it is handed out. A fetch sent again under the request id of one that handed a
-// turn out is answered with that turn, whatever its kind (task B2b). serve is a fakeWorkGateway backend.
+// turn out is answered with that turn, whatever its kind, a withdraw only within its delivery window (task B2b). serve
+// is a fakeWorkGateway backend.
 type fakeLinkInbox struct {
 	mu       sync.Mutex
 	queued   map[string][]RunInboxResponse // by session
@@ -52,11 +53,16 @@ type fakeLinkLease struct {
 	generation string
 }
 
-// fakeLinkHandOut is a turn a fetch handed out, and the session and lease generation it was handed out to.
+// fakeLinkHandOut is a turn a fetch handed out, the session and lease generation it was handed out to, and when.
 type fakeLinkHandOut struct {
 	session, generation string
 	turn                RunInboxResponse
+	at                  time.Time
 }
+
+// fakeWithdrawWindow is how long a withdraw is handed out at all: STEER_WITHDRAW_DELIVERY_WINDOW_MS
+// (src/apiserver/src/sessions/steer-withdraw.ts), counted here from its first hand-out.
+const fakeWithdrawWindow = 8 * time.Second
 
 // fakeLinkFetch is one inbox fetch the control plane served.
 type fakeLinkFetch struct {
@@ -152,7 +158,8 @@ func (in *fakeLinkInbox) fetch(c *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResu
 	in.mu.Lock()
 	var turn *RunInboxResponse
 	lease := in.inFlight[f.session]
-	if prior, ok := in.handedBy[f.requestID]; ok && prior.session == f.session && prior.generation == f.generation {
+	if prior, ok := in.handedBy[f.requestID]; ok && prior.session == f.session && prior.generation == f.generation &&
+		(prior.turn.Kind != "withdraw" || time.Since(prior.at) < fakeWithdrawWindow) {
 		picked := prior.turn // the same fetch sent again: the turn it handed out
 		turn = &picked
 	} else if lease != nil && f.stated && lease.generation == f.generation && lease.turn.TurnID != f.running {
@@ -176,7 +183,9 @@ func (in *fakeLinkInbox) fetch(c *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResu
 	}
 	if turn != nil {
 		f.handed = turn.TurnID
-		in.handedBy[f.requestID] = fakeLinkHandOut{session: f.session, generation: f.generation, turn: *turn}
+		if prior, ok := in.handedBy[f.requestID]; !ok || prior.turn.TurnID != turn.TurnID {
+			in.handedBy[f.requestID] = fakeLinkHandOut{session: f.session, generation: f.generation, turn: *turn, at: f.at}
+		}
 	}
 	in.fetches = append(in.fetches, f)
 	lose, fail := in.lose, in.fail

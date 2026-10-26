@@ -444,17 +444,27 @@ func (t *Transport) me() (*MeResponse, error) {
 	return &r, nil
 }
 
+// longPollCallTimeout bounds one claim or inbox fetch: the server's 25 s long poll, and room to spare. A variable only
+// so that tests can shorten it.
+var longPollCallTimeout = 35 * time.Second
+
 // claimSession long-polls; returns nil when the server holds then yields nothing. In link mode the
 // claim does not hang on the server: it is asked once a hint says a session waits (link_hints.go),
-// and nil is the hint not coming.
-func (t *Transport) claimSession(ctx context.Context) (*ClaimedSession, error) {
+// and nil is the hint not coming. ids is the claim loop's request id over the link (linkRequestIDs):
+// a claim that got no answer goes again under it, as soon as the loop asks again.
+func (t *Transport) claimSession(ctx context.Context, ids *linkRequestIDs) (*ClaimedSession, error) {
 	if t.link != nil && t.link.inUse() {
 		if due, err := t.link.gates.takeClaim(ctx, linkLongPoll); !due {
 			return nil, err
 		}
 	}
 	var r ClaimedSession
-	if err := t.do(ctx, "GET", "/runner/sessions/claim", nil, &r, 35*time.Second); err != nil {
+	err := t.do(ids.with(ctx), "GET", "/runner/sessions/claim", nil, &r, longPollCallTimeout)
+	ids.settle(err)
+	if ids.kept() {
+		t.link.gates.markClaim() // the question the claim asked is still open, which no hint may say
+	}
+	if err != nil {
 		return nil, err
 	}
 	if r.SessionID == "" {
@@ -608,7 +618,7 @@ func (t *Transport) inbox(ctx context.Context, sessionID, leaseGeneration string
 	if leaseGeneration != "" {
 		path += "&leaseGeneration=" + url.QueryEscape(leaseGeneration)
 	}
-	if err := t.do(ctx, "GET", path, nil, &r, 35*time.Second); err != nil {
+	if err := t.do(ctx, "GET", path, nil, &r, longPollCallTimeout); err != nil {
 		return nil, err
 	}
 	if r.TurnID == "" {

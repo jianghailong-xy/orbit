@@ -397,7 +397,7 @@ func TestALostClaimAnswerIsSentAgainUnderItsRequestIDForTheSameSession(t *testin
 				return fakeWorkAnswer(rpc, 200, fmt.Sprintf(`{"sessionId":%q,"title":"t"}`, session))
 			}
 			r.useLink(t)
-			job, err := r.t.claimSession(context.Background())
+			job, err := r.t.claimSession(context.Background(), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -785,11 +785,11 @@ func TestLinkLongPollsWaitForHints(t *testing.T) {
 	ctx := context.Background()
 
 	// The claim: once for the new connection, then only on a hint.
-	if job, err := r.t.claimSession(ctx); err != nil || job != nil {
+	if job, err := r.t.claimSession(ctx, nil); err != nil || job != nil {
 		t.Fatalf("first claim: %+v %v", job, err)
 	}
 	began := time.Now()
-	if job, err := r.t.claimSession(ctx); err != nil || job != nil || time.Since(began) < 250*time.Millisecond {
+	if job, err := r.t.claimSession(ctx, nil); err != nil || job != nil || time.Since(began) < 250*time.Millisecond {
 		t.Fatalf("an unhinted claim: %+v %v after %s", job, err, time.Since(began))
 	}
 	if n := len(r.g.rpcsTo("/runner/sessions/claim")); n != 1 {
@@ -800,7 +800,7 @@ func TestLinkLongPollsWaitForHints(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 		conn.send(&linkpb.Frame{Body: &linkpb.Frame_Hint{Hint: &linkpb.Hint{Kind: &linkpb.Hint_Claim{Claim: &linkpb.ClaimHint{}}}}})
 	}()
-	if job, err := r.t.claimSession(ctx); err != nil || job == nil || job.SessionID != "session-c" {
+	if job, err := r.t.claimSession(ctx, nil); err != nil || job == nil || job.SessionID != "session-c" {
 		t.Fatalf("a hinted claim: %+v %v", job, err)
 	}
 

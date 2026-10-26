@@ -500,7 +500,7 @@ func TestAmbiguousClaimCanBeRecoveredFromAuthoritativeReclaim(t *testing.T) {
 	defer srv.Close()
 
 	transport := NewTransport(srv.URL, "token")
-	if job, err := transport.claimSession(context.Background()); err == nil || job != nil {
+	if job, err := transport.claimSession(context.Background(), nil); err == nil || job != nil {
 		t.Fatalf("ambiguous claim = (%#v, %v), want a response-loss error", job, err)
 	}
 	pool := newSessionPool(1)

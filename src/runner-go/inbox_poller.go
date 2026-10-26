@@ -41,7 +41,8 @@ import (
 // once. The control plane answers a control turn as it hands it out and never leases a steer again, and over the link
 // hands either out again only to a fetch sent again under the request id that handed it out, whose answer never
 // arrived (§5.6, task B2b); a second copy that arrives all the same is dropped here, so that it cannot interrupt,
-// reconfigure or steer the engine a second time.
+// reconfigure or steer the engine a second time. A fetch over the link that got no answer at all is therefore
+// followed by one under its request id, however long the link stays down, until one is answered (linkRequestIDs).
 //
 // A fetch refused for the lease (isLeaseOwnershipError: 409, 403, 404) ends the poller: the generation never owns the
 // inbox again. Nor does a poller whose context has ended, or that has been closed, ever fetch again, in either mode: the
@@ -70,6 +71,8 @@ type inboxPoller struct {
 	gate *linkGate
 	// failures counts the fetches in a row that failed, for the link's backoff.
 	failures int
+	// ids is the request id its fetches go under over the link, kept while one gets no answer.
+	ids linkRequestIDs
 
 	mu     sync.Mutex
 	closed bool
@@ -113,7 +116,8 @@ func (p *inboxPoller) next(ctx context.Context) (*RunInboxResponse, error) {
 				return nil, err
 			}
 		}
-		resp, err := p.t.inbox(ctx, p.sessionID, p.leaseGeneration)
+		resp, err := p.t.inbox(p.ids.with(ctx), p.sessionID, p.leaseGeneration)
+		p.ids.settle(err)
 		if err != nil {
 			if err := p.stopped(ctx); err != nil {
 				return nil, err
