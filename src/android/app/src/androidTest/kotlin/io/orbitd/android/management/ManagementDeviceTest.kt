@@ -4,9 +4,12 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.UiAutomation
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Point
 import android.graphics.Rect
+import android.hardware.display.DisplayManager
 import android.net.Uri
 import android.os.SystemClock
+import android.view.Display
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
@@ -922,7 +925,7 @@ class ManagementDeviceTest {
         var focus: AccessibilityNodeInfo? = null
         var said = ""
         // A touch aimed from a page still moving (a scroll settling, a page coming back) lands on whatever is there by then, and on
-        // a loaded host that is another row (A15 F-23: TalkBack's focus on "Session recaps", on "Back"). TalkBack's focus says where
+        // a loaded host that is another row (A15 F-23: TalkBack's focus on "Back" for "Edit profile"). TalkBack's focus says where
         // it landed: the control is measured and touched again, up to three times, each touch in the report.
         for (attempt in 1..3) {
             try { compose.onAllNodes(named).onFirst().performScrollTo() } catch (_: AssertionError) { }
@@ -983,12 +986,26 @@ class ManagementDeviceTest {
         fun close() { runCatching { writer.write("quit\n"); writer.flush() }; runCatching { socket.close() } }
     }
     private var console: Console? = null
+    /**
+     * Where the screen lies on the console's touchscreen, which is the panel itself: a screen resized by `wm size` (the
+     * 360×640 dp rounds) is drawn scaled onto the panel and letterboxed, as Android's LogicalDisplay places it. A touch sent
+     * at the screen's own coordinates lands elsewhere: aimed at "Machines & models", on "Session recaps" (A15 F-23, 360×640).
+     */
+    private val panel: Pair<Rect, Point> by lazy {
+        val display = app.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
+        val screen = Point().also { @Suppress("DEPRECATION") display.getRealSize(it) }
+        val pw = display.mode.physicalWidth; val ph = display.mode.physicalHeight
+        val (w, h) = if (pw.toLong() * screen.y < ph.toLong() * screen.x) pw to screen.y * pw / screen.x else screen.x * ph / screen.y to ph
+        val left = (pw - w) / 2; val top = (ph - h) / 2
+        Rect(left, top, left + w, top + h) to screen
+    }
     private fun finger(x: Int, y: Int, down: Boolean) {
         val open = console ?: InstrumentationRegistry.getArguments().let { args ->
             Console(args.getString("a13ConsolePort")?.toIntOrNull() ?: error("TalkBack takes touches from the screen only: needs a13ConsolePort"),
                 args.getString("a13ConsoleToken") ?: error("needs a13ConsoleToken"))
         }.also { console = it }
-        open.send("event mouse $x $y 0 ${if (down) 1 else 0}")
+        val (frame, screen) = panel
+        open.send("event mouse ${frame.left + x * frame.width() / screen.x} ${frame.top + y * frame.height() / screen.y} 0 ${if (down) 1 else 0}")
     }
     /** One finger on [x], [y] (explore by touch): TalkBack's focus goes to what is there, which it reads. */
     private fun tap(x: Float, y: Float) { finger(x.toInt(), y.toInt(), true); SystemClock.sleep(40); finger(x.toInt(), y.toInt(), false) }
