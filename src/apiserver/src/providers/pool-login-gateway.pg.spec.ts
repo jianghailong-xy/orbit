@@ -65,6 +65,7 @@ import { RunEventType, type ClaimedSession, type TurnCompleteRequest } from '@or
 import { json, urlencoded } from 'express';
 import { Client } from 'pg';
 
+import { DisabledAccounts } from '../auth/disabled-accounts';
 import { PublicIdExceptionFilter } from '../common/public-id.filter';
 import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { TransientDbConflictFilter } from '../common/transient-db-conflict.filter';
@@ -296,9 +297,10 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
   const recorder = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
   const gateway = new PoolLoginGatewayService(
     gatewayDb as unknown as PrismaService, logins, ledger, realtime, `${recorder}/backend-api/codex`, `${recorder}/oauth/token`,
+    new DisabledAccounts(prisma),
   );
   // A shared pool's token, or none at all, is the other gateway's: present, and never reached here.
-  const sharedGateway = new PoolGatewayService(prisma, pools, new PoolUsageLedger(prisma), `${recorder}/v1`);
+  const sharedGateway = new PoolGatewayService(prisma, pools, new PoolUsageLedger(prisma), `${recorder}/v1`, new DisabledAccounts(prisma));
 
   @Module({
     controllers: [PoolGatewayController],

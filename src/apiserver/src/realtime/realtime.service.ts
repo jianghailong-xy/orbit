@@ -59,7 +59,7 @@ import {
   errorPayloadOf,
   isUserScopedType,
 } from './control-events';
-import { RUNNER_BEATS } from '../runners/runner-presence';
+import { markRunnersChanged, RUNNER_BEATS } from '../runners/runner-presence';
 
 const EVENT_CHANNEL = 'orbit_event';
 const INBOX_CHANNEL = 'orbit_inbox';
@@ -67,6 +67,8 @@ const INBOX_CHANNEL = 'orbit_inbox';
 const RUNNER_WAKE_HOLD_MS = 30_000;
 const MAX_NOTIFY_BYTES = 7000; // Postgres NOTIFY payload limit is 8000 bytes; stay under.
 const CANCEL_MAX_AGE_MS = 60 * 60_000; // stop redelivering a cancel after an hour
+/** How often a runner change that could not be marked is reported (markRunnerChanged): once a minute, never per mark. */
+const UNMARKED_REPORT_MS = 60_000;
 
 /**
  * Cap on the mid-turn text one session holds for a client that connects while it is streaming (see
@@ -232,6 +234,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   private readonly runnerWake = new EventEmitter(); // event name = runnerId
   /** runnerId → when a wake was asked for that no parked poll has taken yet. */
   private readonly runnerWakeOwed = new Map<string, number>();
+  /** Runner changes markRunnerChanged could not mark since the last report, and when that report was. */
+  private unmarked = 0;
+  private unmarkedReportedAt = 0;
   private listener?: Client;
   private connecting = false;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
@@ -349,9 +354,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     if (channel === RUNNER_WAKE_CHANNEL) {
       this.wakeRunnerLocally(m.r);
       // A wake written inside a transaction (notifyRunnerWakeOnCommit) arrives here, at its commit, on every
-      // replica, and none has hinted it yet, so each one does: the spare ones cost one extra heartbeat, as the held
-      // wake above does. Any other wake was hinted by the replica that emitted it.
-      if (m.c) this.hints?.commands(m.r);
+      // replica, and none has marked or hinted it yet, so each one does: the spare marks move the runner's change
+      // count once more, and the spare hints cost one extra heartbeat, as the held wake above does. Any other wake
+      // was marked and hinted by the replica that emitted it.
+      if (m.c) this.markRunnerChanged(m.r);
       return;
     }
     if (channel === EVENT_CHANNEL) {
@@ -453,13 +459,66 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * spinner. The runner parks in GET /runner/wake (waitForRunnerWake) and beats when it returns.
    *
    * Only a nudge: the work itself stays in the row and is delivered by the heartbeat, so a wake that
-   * is lost costs the old half-minute and nothing else. Over the runner link the same wake is also a
-   * hint (runner-hints.ts), which has the runner send its heartbeat at once.
+   * is lost costs the old half-minute and nothing else. Over the runner link the same wake marks the
+   * runner changed and hints it (markRunnerChanged), which has the runner send its heartbeat at once.
    */
   notifyRunnerWake(runnerId: string): void {
     this.wakeRunnerLocally(runnerId);
     this.notifyRaw(RUNNER_WAKE_CHANNEL, JSON.stringify({ i: this.instanceId, r: runnerId }));
-    this.hints?.commands(runnerId);
+    this.markRunnerChanged(runnerId);
+  }
+
+  /**
+   * Something a heartbeat delivers to these runners changed, and the change has committed: a command queued for
+   * one, a cancellation, its settings, its workspaces' directories. A heartbeat over the runner link answers from
+   * the runner's presence row unless that row says something changed (runner-api/link-heartbeat.ts), so this moves
+   * the row's change count (migration 0447) and only then hints each runner (runner-hints.ts): a hint that overtook
+   * the count would bring a beat that still found nothing to reconcile. The beat the hint brings reconciles in full
+   * and delivers the change, under its own contract, as an HTTPS beat would.
+   *
+   * Best effort, like the hint, and never awaited. A count that cannot be moved costs the change its prompt delivery:
+   * the runner's next full reconcile, at most five minutes away, delivers it. Those are counted and reported once a
+   * minute. Nothing here touches an HTTPS runner's long polls (notifyRunnerWake's wake does that, for the changes it
+   * is called for), and a control plane without the runner link writes nothing.
+   */
+  markRunnerChanged(runnerIds: string | readonly string[]): void {
+    if (!this.hints?.linkConfigured) return;
+    const ids = [...new Set(typeof runnerIds === 'string' ? [runnerIds] : runnerIds)];
+    if (ids.length === 0) return;
+    void markRunnersChanged(this.prisma, ids).then(
+      () => {
+        for (const id of ids) this.hints?.commands(id);
+      },
+      (error) => this.reportUnmarked(ids.length, error),
+    );
+  }
+
+  /**
+   * markRunnerChanged for the runner a session is assigned to, read now: for a writer that queues something a
+   * heartbeat delivers for a session (an artifact request) and does not hold its runner. Reads nothing without the
+   * runner link.
+   */
+  markSessionRunnerChanged(sessionId: string): void {
+    if (!this.hints?.linkConfigured) return;
+    void this.prisma.session
+      .findUnique({ where: { id: sessionId }, select: { assignedRunnerId: true } })
+      .then(
+        (row) => {
+          if (row?.assignedRunnerId) this.markRunnerChanged(row.assignedRunnerId);
+        },
+        (error) => this.reportUnmarked(1, error),
+      );
+  }
+
+  private reportUnmarked(count: number, error: unknown): void {
+    this.unmarked += count;
+    const now = Date.now();
+    if (now - this.unmarkedReportedAt < UNMARKED_REPORT_MS) return;
+    this.unmarkedReportedAt = now;
+    this.log.warn(
+      `${this.unmarked} runner change(s) were not marked in runner_presence; those runners learn of them at their next full reconcile, at most five minutes away (${(error as { code?: string })?.code ?? (error as Error)?.message ?? error})`,
+    );
+    this.unmarked = 0;
   }
 
   /** A wake with nobody parked is held for the next poll, so one asked for in the moment between
@@ -1291,12 +1350,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   // ── cancellation (durable, cross-replica) ───────────────────────────────
 
   /**
-   * No-op: cancellation intent is persisted on TaskRun.cancelRequestedAt by the
-   * caller and drained from the DB on heartbeat, so it works across replicas and
-   * survives a restart. Kept for call-site compatibility.
+   * A cancellation the caller has committed (session.cancelRequestedAt). It is drained from the database by the
+   * runner's heartbeat, so it works across replicas and survives a restart; over the runner link that heartbeat
+   * reconciles in full only when told something changed, which this tells it (markRunnerChanged). An HTTPS runner
+   * is not woken: it learns of it at its next beat, as it always has.
    */
-  requestCancel(_runnerId: string, _runId: string): void {
-    // intentionally empty
+  requestCancel(runnerId: string, _runId: string): void {
+    this.markRunnerChanged(runnerId);
   }
 
   /**

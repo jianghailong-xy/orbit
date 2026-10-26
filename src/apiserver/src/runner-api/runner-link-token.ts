@@ -204,11 +204,53 @@ export class RunnerLinkTokenRefused extends Error {
 }
 
 /**
+ * The link tokens whose signature this process has checked, by the key that checked them. A token is presented on every
+ * call of its connection, about an hour of calls, and its Ed25519 check took a heartbeat 0.16 ms of the API server's
+ * main thread (task O1). What the check decides is a function of the token's bytes and the key alone, so a token that
+ * passed it stays passed; its expiry is still read against the clock on every call. Only tokens that passed every
+ * check are kept, at most `limit` of them: when full, the expired go first, then the oldest.
+ */
+export class CheckedRunnerLinkTokens {
+  private readonly byKey = new WeakMap<KeyObject, Map<string, Readonly<RunnerLinkClaims>>>();
+
+  constructor(private readonly limit: number) {}
+
+  get(token: string, publicKey: KeyObject): Readonly<RunnerLinkClaims> | undefined {
+    return this.byKey.get(publicKey)?.get(token);
+  }
+
+  remember(token: string, publicKey: KeyObject, claims: RunnerLinkClaims, now: Date): void {
+    let tokens = this.byKey.get(publicKey);
+    if (!tokens) {
+      tokens = new Map();
+      this.byKey.set(publicKey, tokens);
+    }
+    if (tokens.size >= this.limit) {
+      for (const [held, heldClaims] of tokens) if (now.getTime() >= heldClaims.exp * 1000) tokens.delete(held);
+      for (const held of tokens.keys()) {
+        if (tokens.size < this.limit) break;
+        tokens.delete(held);
+      }
+    }
+    tokens.set(token, Object.freeze(claims));
+  }
+}
+
+/** A cell's connections and their renewals, with room: about 17,000 live tokens for 15,000 runners (design §9). */
+const checkedRunnerLinkTokens = new CheckedRunnerLinkTokens(20_000);
+
+/**
  * What the gateway does with a token before it upgrades the connection, in TypeScript: the specs
  * hold the signer to it, and the gateway's own verifier accepts and refuses exactly the same tokens.
- * Only `EdDSA` is taken, whatever else a header names. Revocation is the separate check above.
+ * Only `EdDSA` is taken, whatever else a header names. Revocation is the separate check above. A
+ * token this process has checked before is not checked again (CheckedRunnerLinkTokens), only its expiry.
  */
 export function verifyRunnerLinkToken(token: string, publicKey: KeyObject, now: Date): RunnerLinkClaims {
+  const checked = checkedRunnerLinkTokens.get(token, publicKey);
+  if (checked) {
+    if (now.getTime() >= checked.exp * 1000) throw new RunnerLinkTokenRefused('EXPIRED');
+    return checked;
+  }
   const parts = token.split('.');
   if (parts.length !== 3) throw new RunnerLinkTokenRefused('MALFORMED');
   const [header, payload, signature] = parts;
@@ -232,6 +274,7 @@ export function verifyRunnerLinkToken(token: string, publicKey: KeyObject, now: 
   if (typeof claims.exp !== 'number' || now.getTime() >= claims.exp * 1000) {
     throw new RunnerLinkTokenRefused('EXPIRED');
   }
+  checkedRunnerLinkTokens.remember(token, publicKey, claims, now);
   return claims;
 }
 

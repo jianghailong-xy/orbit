@@ -110,14 +110,17 @@ type counters struct {
 	TokensMinted   int64 `json:"tokensMinted"`
 	HeartbeatsSent int64 `json:"heartbeatsSent"`
 	HeartbeatAcks  int64 `json:"heartbeatAcks"`
-	BatchesSent    int64 `json:"batchesSent"`
-	BatchesAcked   int64 `json:"batchesAcked"`
-	EventsProduced int64 `json:"eventsProduced"`
-	EventsSent     int64 `json:"eventsSent"`
-	EventsResent   int64 `json:"eventsResent"`
-	EventsAcked    int64 `json:"eventsAcked"`
-	PayloadBytes   int64 `json:"payloadBytes"`
-	Hints          int64 `json:"hints"`
+	// HeartbeatsReconciled are the acknowledged beats whose answer was a full reconcile: it names the directories to
+	// scan (agentDirs), which an answer from runner_presence alone never does (task O1).
+	HeartbeatsReconciled int64 `json:"heartbeatsReconciled"`
+	BatchesSent          int64 `json:"batchesSent"`
+	BatchesAcked         int64 `json:"batchesAcked"`
+	EventsProduced       int64 `json:"eventsProduced"`
+	EventsSent           int64 `json:"eventsSent"`
+	EventsResent         int64 `json:"eventsResent"`
+	EventsAcked          int64 `json:"eventsAcked"`
+	PayloadBytes         int64 `json:"payloadBytes"`
+	Hints                int64 `json:"hints"`
 }
 
 func (c *counters) add(o *counters) {
@@ -127,6 +130,7 @@ func (c *counters) add(o *counters) {
 	c.TokensMinted += o.TokensMinted
 	c.HeartbeatsSent += o.HeartbeatsSent
 	c.HeartbeatAcks += o.HeartbeatAcks
+	c.HeartbeatsReconciled += o.HeartbeatsReconciled
 	c.BatchesSent += o.BatchesSent
 	c.BatchesAcked += o.BatchesAcked
 	c.EventsProduced += o.EventsProduced

@@ -5,11 +5,13 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma, ProjectIdentitySource, ProjectStatus } from '@prisma/client';
 import type { WorkspacePermissionRuleInfo } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { lastProviderByWorkspace, withProviderSeed } from './workspace-provider';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
@@ -38,6 +40,13 @@ export class WorkspacesService {
     // so the specs that construct this service by hand to exercise another path do not each have to
     // stub a session service they never reach; Nest injects the real one by type, not by position.
     private readonly sessions: SessionsService = undefined as unknown as SessionsService,
+    /**
+     * Told when a workspace's directory or machine changes, or a clean-up of its checkout is asked for: the
+     * runner's heartbeat hands both over (agentDirs, repoCleanupRequest), and over the runner link it reconciles in
+     * full only when told something changed (RealtimeService.markRunnerChanged). Optional, like `sessions`, for the
+     * specs that build this service by hand.
+     */
+    @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
   /** Resolve each machine on the server so changing the chosen runner never guesses at credentials. */
@@ -115,6 +124,7 @@ export class WorkspacesService {
         modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders) ?? [],
       },
     });
+    if (workspace.workDir && workspace.runnerId) this.realtime?.markRunnerChanged(workspace.runnerId);
     // Brand-new: no sessions yet, so the seed is the floor. Shaped like every other read.
     return (await this.withAntigravityKeys(ownerId, withProviderSeed([workspace], new Map())))[0];
   }
@@ -282,6 +292,7 @@ export class WorkspacesService {
         repoCleanupAt: new Date(),
       },
     });
+    this.realtime?.markRunnerChanged(workspace.runnerId);
     return this.get(ownerId, id);
   }
 
@@ -327,6 +338,10 @@ export class WorkspacesService {
       data.runner = dto.runnerId ? { connect: { id: dto.runnerId } } : { disconnect: true };
     }
     const workspace = await this.prisma.workspace.update({ where: { id }, data });
+    // The runner whose heartbeat lists this directory, before and after: both lists changed.
+    if (workspace.workDir !== current.workDir || workspace.runnerId !== current.runnerId) {
+      this.realtime?.markRunnerChanged([current.runnerId, workspace.runnerId].filter((runner): runner is string => !!runner));
+    }
     return (await this.withAntigravityKeys(ownerId, withProviderSeed([workspace], await lastProviderByWorkspace(this.prisma, [id]))))[0];
   }
 
@@ -357,7 +372,7 @@ export class WorkspacesService {
    * that one (project first, then agent).
    */
   async remove(ownerId: string, id: string) {
-    await this.get(ownerId, id);
+    const removed = await this.get(ownerId, id);
     // Soft delete: stamp `deletedAt` rather than dropping the row. The workspace's sessions and
     // tasks stay linked (no FK SET NULL orphaning) and it stays restorable; every user-facing
     // listing filters on `deletedAt: null`, while runtime lookups by a live session's workspaceId
@@ -391,6 +406,7 @@ export class WorkspacesService {
       }
       await tx.workspace.update({ where: { id }, data: { deletedAt: new Date() } });
     }, loggedRetry(this.logger, 'workspaces.remove'));
+    if (removed.workDir && removed.runnerId) this.realtime?.markRunnerChanged(removed.runnerId);
     await this.endCoordinatorsIn(ownerId, id);
     return { ok: true };
   }

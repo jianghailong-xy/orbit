@@ -20,6 +20,7 @@ be taken for a deployment's.
 | `nats-auth-check.sh` | Check `src/link-gateway/nats.conf` on a throwaway nats-server with fresh keys: it refuses to start without both public keys, and admits each user to what it does alone. |
 | `gen-hint-fixtures.mjs` | Regenerate `src/link-gateway/testdata/b1-hints.json` from the apiserver's hint encoder. |
 | `gen-token-fixtures.mjs` | Regenerate `src/link-gateway/testdata/a3-tokens.json` from the apiserver's token code. |
+| `gen-event-kind-fixtures.mjs` | Regenerate `src/runner-go/testdata/b8-link-events.json` from the apiserver's event rules: `isNoiseSystemEvent`, the live-only types and the coordinator-context boundary subtypes, which the runner's link event stream mirrors. |
 | `loadgen-seed.sh` | The load test's fleet in the stack's database: `seed` (owners, runners, a workspace each, idle sessions), `arm` before each run (fresh running sessions, presence, the fleet file `<state>/loadgen/fleet.jsonl`), `disarm` after it, `remove`. See [Load test](#load-test). |
 | `loadgen-run.sh` | One load test run: `src/link-gateway/cmd/loadgen` against the stack, with the stack's CPU, memory, metrics, database and logs collected beside it, then the report. |
 | `loadgen-report.mjs` | A run's report: each criterion with the figure it rests on (`report.md`, `report.json`). |
@@ -132,14 +133,20 @@ scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 20
 - **On a shared host**, the loadgen runs in a scope of its own (`systemd-run`), and the run stops itself when the
   host's available memory stays under `LOADGEN_MIN_AVAILABLE_MB` (800) for 15 s. The report's host section says what
   else used the CPUs and how long the stack's containers waited for one (CPU pressure).
+- **One load test at a time on HPC**, whichever stack it is for. Wrap each run, its `arm` included, in the host's lock,
+  so a second run waits until the first ends:
+  `flock /var/tmp/orbit-loadgen.lock sh -c 'scripts/runner-link/loadgen-seed.sh arm && scripts/runner-link/loadgen-run.sh --name <run> -- <args>'`.
+  `run.json`'s `loadTestLock` and the report's first line say whether a run held it. Two runs that overlap spoil each
+  other's per-operation figures, and on HPC they swap, which slows the production wiki model's vLLM workers there.
 
 ### Knobs
 
 | Where | Knob | Default |
 | --- | --- | --- |
 | `loadgen-seed.sh` | `LOADGEN_OWNERS`, `LOADGEN_RUNNERS`, `LOADGEN_SESSIONS`, `LOADGEN_ACTIVE`: owners, runners, open sessions, running sessions | 10000, 15000, 40000, 5000 |
-| `loadgen-run.sh -- …` | `-duration` (steady window), `-settle` (from the fleet connected to the window), `-event-rate` (events/s across the fleet), `-ramp-rate` (first connections/s), `-flush-min`/`-flush-max`/`-max-batch` (batching), `-runners` (play the first N), `-spread-renewals`; all of them in [src/link-gateway/cmd/loadgen](../../src/link-gateway/cmd/loadgen/README.md) | 1h, 30s, 2000, 150, 1s/3s/100, all, true |
+| `loadgen-run.sh -- …` | `-duration` (steady window), `-settle` (from the fleet connected to the window), `-event-rate` (events/s across the fleet), `-ramp-rate` (first connections/s), `-flush-min`/`-flush-max`/`-max-batch` (batching), `-runners` (play the first N), `-spread-renewals`, `-volatile`/`-volatile-edits` (the reports that move in production); all of them in [src/link-gateway/cmd/loadgen](../../src/link-gateway/cmd/loadgen/README.md) | 1h, 30s, 2000, 150, 1s/3s/100, all, true, off/0.5 |
 | `loadgen-run.sh` | `LOADGEN_MIN_AVAILABLE_MB`: the host memory floor that stops a run | 800 |
+| `loadgen-run.sh` | `--mark-every <seconds>`: move every runner's change count this often, so each beat reconciles in full (see [the heartbeat after task O1](#the-heartbeat-after-task-o1)) | off |
 | `staging-up.sh` | `ORBIT_LINK_STAGING_BACKENDS` (apiservers behind the gateway), `ORBIT_LINK_STAGING_DB_CPUS` (the database's CPU allocation) | 1, unlimited |
 
 `node scripts/runner-link/loadgen-report.mjs <run>` writes a run's report again from what it collected.
@@ -199,6 +206,74 @@ statements, and the batch at 2.20 / 2.69 / 0.16 ms and 13.6 statements.
   events), these costs come to about 5 apiserver cores (7 or more Node processes at 75%) and about 7.7 database cores
   on average, 11 to 12 at 10-second peaks.
 
+### The heartbeat after task O1
+
+Since task O1 a heartbeat the link gateway forwards is answered from `runner_presence`
+([link-heartbeat.ts](../../src/apiserver/src/runner-api/link-heartbeat.ts)). One statement does three things: it admits
+the caller, records the beat and reads what the answer needs. It goes to the database as a named prepared statement.
+
+A beat reconciles in full only when one of these holds:
+
+- something it delivers was marked;
+- its inputs changed;
+- a lease was lost;
+- there is no record;
+- the runner's five-minute period turned over.
+
+A beat whose reports alone moved writes them in one more statement. Every beat is therefore either unflagged or
+reconciled in full. A third heartbeats-only run tells the two apart: `--mark-every 5` moves every runner's change count
+every 5 s, so every beat of that run reconciles in full. `loadgen-baseline.mjs --full` then splits each figure by kind:
+
+```bash
+run() { flock /var/tmp/orbit-loadgen.lock sh -c "scripts/runner-link/loadgen-seed.sh arm && scripts/runner-link/loadgen-run.sh $*"; }
+run --name cost-hb -- -duration 2m -event-rate 0
+run --name cost-hb-full --mark-every 5 -- -duration 2m -event-rate 0
+run --name cost-ev150 -- -duration 2m -event-rate 150
+node scripts/runner-link/loadgen-baseline.mjs <state>/loadgen/runs/cost-hb <state>/loadgen/runs/cost-ev150 --full <state>/loadgen/runs/cost-hb-full
+```
+
+To move the runners' reports as production moves them, add `-volatile` to the loadgen arguments of all three runs.
+
+HPC has 8 P-cores (CPUs 0–7) and 16 E-cores, under the `powersave` governor. A light run's CPU time per operation depends
+on which kind of core its containers land on: the same Ed25519 check takes 45 µs on a P-core and 64 µs on an E-core.
+Unpinned, the same code measured an unflagged beat at 0.90 ms and at 1.58 ms of apiserver CPU, an hour apart, while its
+full and event runs cost the same both times. For comparable figures, pin the containers:
+
+```bash
+docker update --cpuset-cpus 0-7 <project>-apiserver <project>-postgres <project>-link-gateway <project>-gateway <project>-nats
+```
+
+Unpin them afterwards with `--cpuset-cpus 0-23`. `run.json` keeps each container's cpuset.
+
+Measured on 2026-10-26 at commit 777a01d38. The stack was the private `orbit-link-o1`, with one apiserver and its
+containers on CPUs 0–7. Every run held the host's load test lock. Statements and commits are over the steady window:
+
+| Per heartbeat | apiserver CPU ms | database CPU ms | SQL statements | commits |
+| --- | --- | --- | --- | --- |
+| unflagged | 0.53 | 0.34 | 1.07 | 1.08 |
+| unflagged, reports moving (`-volatile`) | 0.59 | 0.63 | 1.38 | 1.38 |
+| reconciled in full | 2.19 | 5.97 | 23.5 | 23.5 |
+| reconciled in full, reports moving | 2.39 | 6.37 | 25.2 | 25.2 |
+| every beat (9.9% reconciled in full) | 0.70 | 0.90 | 3.29 | 3.30 |
+| every beat, reports moving (11.5% reconciled in full) | 0.80 | 1.29 | 4.12 | 4.13 |
+
+Before O1 every beat reconciled in full: 3.80 ms and 8.08 ms (the baseline above, unpinned). An event batch of 1.22
+events cost 1.87 ms of apiserver CPU, 2.03 ms of database CPU, 13.7 statements and 6.3 commits.
+
+- **An unflagged beat** is one statement and one commit (`link-heartbeat.pg.spec.ts`, case 1). The figures also carry
+  the window's renewals, the reaper's sweeps and the stack's idle use: 0.019 apiserver cores and 0.008 database cores,
+  0.18 ms and 0.08 ms of each beat at 100 beats/s.
+- **A beat whose reports alone moved** writes them in one more statement and commit. With `-volatile`, about a third
+  of the unflagged beats did. That statement's text varies with what moved, so it goes unnamed.
+- **The beat statement goes as a named prepared statement.** Unnamed, PostgreSQL parsed and planned it on every beat:
+  1.58 ms of database CPU a beat, against 0.21 ms named (pgbench, one client).
+- **The guard checks a link token's signature once per token**, not on every call. Before, the check took 0.16 ms of
+  the apiserver's main thread a beat.
+- **At the cell's 500 beats/s**, every beat at 0.70 ms and 0.90 ms comes to 0.35 apiserver cores and 0.45 database
+  cores; with reports moving, 0.40 and 0.65. The loadgen's runners get no commands, and a fleet's do: a command, and
+  everything still settling after it, keeps a runner reconciling in full. Each percent of beats reconciled in full adds
+  about 0.008 apiserver cores and 0.028 database cores at 500 beats/s.
+
 ### Merged event calls
 
 Since task O2 the link gateway merges the event batches of all its connections into calls of up to 64 batches, and the
@@ -247,4 +322,3 @@ against the heartbeats-only runs before and after it, the host's other work at 5
   protocol: the Prisma adapter sends every statement unnamed (task O1's finding).
 - Statement counts come from `pgss-totals.json` since b47a66768. Before it, a merged run counted only the 60 statements
   with the most time, and the one insert's row-count variants pushed the approval writes off that list.
-

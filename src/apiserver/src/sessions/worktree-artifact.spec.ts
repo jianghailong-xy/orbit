@@ -88,10 +88,17 @@ function fixture() {
     }
   };
   const api = new RunnerApiController(db as never, {} as never, {} as never, {} as never, {} as never, {} as never);
-  const service = new SessionsService(db as never, {} as never, {} as never);
+  // The sessions whose runner a request was marked for (RealtimeService.markSessionRunnerChanged): the runner's
+  // heartbeat hands the request over, and over the runner link it is told so.
+  const marked: string[] = [];
+  const service = new SessionsService(
+    db as never,
+    {} as never,
+    { markSessionRunnerChanged: (sessionId: string) => void marked.push(sessionId) } as never,
+  );
   const realtime = new RealtimeService(db as never, {} as never);
   return {
-    service, realtime, session,
+    service, realtime, session, marked,
     turns: () => turns, attachments: () => attachments,
     onRead: (callback: typeof onRead) => { onRead = callback; },
     addTurn: (content: string, overrides: Row = {}) => {
@@ -149,6 +156,7 @@ test('same-basename files and repeated previews fetch fresh request-scoped bytes
   assert.equal(new Set(f.turns().map((turn) => turn.clientTurnId)).size, 3);
   assert.equal(f.turns().every((turn) => turn.status === 'ANSWERED'), true);
   assert.deepEqual(f.attachments().map((row) => row.id), [transcriptImage.id]);
+  assert.deepEqual(f.marked, [SESSION, SESSION, SESSION], 'each request is marked for the session\'s runner');
 });
 
 test('runner callbacks refuse cross-owner, cross-session, already-linked and older uploads atomically', async () => {

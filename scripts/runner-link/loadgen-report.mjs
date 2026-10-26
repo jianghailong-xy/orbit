@@ -414,7 +414,7 @@ const criteria = [
 const verdict = criteria.every((c) => c.pass === true);
 
 const report = {
-  run: run.name, sha: run.sha, dirty: run.dirty, verdict, criteria, errorCounts, gatewayErrors, steadyFrom: summary.steadyStartedAt,
+  run: run.name, sha: run.sha, dirty: run.dirty, loadTestLock: run.loadTestLock ?? null, verdict, criteria, errorCounts, gatewayErrors, steadyFrom: summary.steadyStartedAt,
   steadyTo: summary.steadyEndedAt, loadgen: { steady, whole: summary.whole, notes: summary.notes, unacknowledgedEvents: summary.unacknowledgedEvents,
     errorSamples: summary.errorSamples, config: summary.config }, components, host, others: others.slice(0, 15), gateway: gw, nginx, logs, db,
   dbAllocation: allocation, dbPeak10sPct: dbPeakPct, dbPeak60sPct: dbPeak60Pct, backends: run.backends, memory,
@@ -425,7 +425,12 @@ writeFileSync(join(dir, 'report.json'), JSON.stringify(report, null, 2) + '\n');
 const md = [];
 const row = (...cells) => md.push(`| ${cells.join(' | ')} |`);
 md.push(`# Load test ${run.name}`, '');
-md.push(`Commit \`${run.sha.slice(0, 12)}\`${run.dirty ? ' (with uncommitted changes)' : ''}, ${run.backends} apiserver backend(s), database CPU allocation ${allocation ?? 'unlimited'}, host ${run.hostCpus} CPUs, the gateway's merge window ${run.mergeWindow ?? 'default'}.`);
+// The CPUs a container was confined to (docker update --cpuset-cpus): on a host of two kinds of core, what decides a
+// light run's CPU time per operation.
+const pinned = Object.entries(run.containers ?? {}).filter(([, c]) => c.cpuset).map(([svc, c]) => `${svc} ${c.cpuset}`);
+md.push(`Commit \`${run.sha.slice(0, 12)}\`${run.dirty ? ' (with uncommitted changes)' : ''}, ${run.backends} apiserver backend(s), database CPU allocation ${allocation ?? 'unlimited'}, host ${run.hostCpus} CPUs, the gateway's merge window ${run.mergeWindow ?? 'default'}` +
+  (run.loadTestLock === undefined ? '.' : run.loadTestLock ? ", under the host's load test lock." : ", **not** under the host's load test lock.") +
+  (pinned.length > 0 ? ` Containers pinned to CPUs: ${pinned.join(', ')}.` : ''));
 md.push(summary.steady
   ? `Steady window ${summary.steadyStartedAt} → ${summary.steadyEndedAt} (${round(steady.seconds / 60, 1)} min), after a ramp of ${summary.rampSeconds} s.`
   : `No steady window: the run ended after ${summary.rampSeconds} s of ramp, before every runner was connected. Every figure is over the whole run (${summary.startedAt} → ${summary.endedAt}).`, '');
