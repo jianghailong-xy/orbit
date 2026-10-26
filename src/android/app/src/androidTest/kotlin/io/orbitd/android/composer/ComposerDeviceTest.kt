@@ -123,14 +123,25 @@ class ComposerDeviceTest {
         compose.onNode(expired).performScrollTo().assertIsEnabled()
         compose.onNodeWithText("Close").performClick()
         control("""{"status":"RUNNING"}"""); compose.runOnIdle { app.realtime.refreshSession() }; awaitText("Stop")
-        clickSendWhenEnabled(); awaitText("Stop requested.")
+        // Queued for the next turn while this one runs — Send held offers it — the message waits in the tray above the composer
+        // (A07-22/23, b0f32ebbd), no longer in the + menu's "Queued messages"; withdrawn there, its words come back to the composer.
         compose.onNodeWithTag("composer-input").performTextInput("queued message")
-        clickSendWhenEnabled()
+        compose.waitUntil(10000) { compose.onAllNodes(hasTestTag("composer-send") and isEnabled() and hasText("Send")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("composer-send").performTouchInput { longClick() }
+        compose.waitUntil(10000) { compose.onAllNodesWithTag("composer-queue-next-turn").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("composer-queue-next-turn").performClick()
         compose.waitUntil(10000) { model.state.value.draft.pending==null && !model.state.value.busy && !model.state.value.waiting }
-        compose.onNodeWithText("+").performClick(); awaitText("Queued messages (1)")
-        compose.onNodeWithText("Queued messages (1)").performClick(); appClick("Withdraw")
+        assertEquals("NEXT_TURN", stats()["turns"]!!.jsonObject.values.single().jsonObject["request"]!!.jsonObject["intent"]!!.jsonPrimitive.content)
+        val tray = hasAnyAncestor(hasTestTag("pending-tray"))
+        compose.waitUntil(15000) { compose.onAllNodes(hasText("queued message") and tray).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Queued for next turn") and tray).assertExists()
+        capture("queued-tray")
+        compose.onNodeWithTag("pending-tray-withdraw").performClick()
         compose.waitUntil(5000) { stats()["controls"]!!.jsonArray.any { it.jsonObject["action"]?.jsonPrimitive?.content=="withdraw" } }
-        compose.onNodeWithText("Close").performClick()
+        compose.waitUntil(10000) { model.state.value.draft.text=="queued message" && compose.onAllNodesWithTag("pending-tray").fetchSemanticsNodes().isEmpty() }
+        // With nothing typed, Send is Stop.
+        compose.onNodeWithTag("composer-input").performTextClearance()
+        clickSendWhenEnabled(); awaitText("Stop requested.")
         control("""{"expired":true}""")
         compose.onNodeWithTag("composer-input").performTextInput("after refresh")
         clickSendWhenEnabled()
@@ -566,7 +577,9 @@ class ComposerDeviceTest {
         capture("a07c-draft-antigravity-sign-in")
         compose.onNodeWithText("Close").performClick()
         engineList(); compose.onNodeWithTag("engine:opencode").performClick(); awaitText("OpenCode ⌄")
-        compose.onNodeWithTag("composer-model").performClick(); awaitText("OpenCode's own sign-in")
+        // The Provider row says "Own sign-in" for OpenCode's own configuration since A07-19 (d) (A07e, d66ddbc8e); the row under
+        // "On Fixture runner" keeps the full name.
+        compose.onNodeWithTag("composer-model").performClick(); awaitText("Own sign-in")
         val all = dialogTexts()
         File(evidence,"a07c-draft-menu.txt").writeText(all.joinToString("\n"))
         // OpenCode's Provider section: its own sign-in, then the keys it runs — the DeepSeek key, by its own name.

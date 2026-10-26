@@ -79,6 +79,8 @@ grep -F "package: name='$package'" "$output/apk-badging.txt" >/dev/null
 "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk" > "$output/signature.txt"
 adb -s "$serial" install -r "$apk" > "$output/install-app.txt"
 adb -s "$serial" install -r "$tests" > "$output/install-tests.txt"
+# Captures an earlier run left in this installation must not count for this one.
+adb -s "$serial" shell run-as "$package" rm -rf files/a03-auth files/a03c-login files/a03-captures.tar
 adb -s "$serial" shell input keyevent KEYCODE_WAKEUP
 adb -s "$serial" shell wm dismiss-keyguard
 
@@ -123,8 +125,13 @@ for phase in light dark; do
   run_test "login-page-$phase" io.orbitd.android.auth.LoginPageDeviceTest 1 -e a03c_phase "$phase"
 done
 adb -s "$serial" shell cmd uimode night "$night" > /dev/null
-adb -s "$serial" pull "/sdcard/Android/data/$package/files/a03-auth" "$output/screenshots" > "$output/pull.txt" 2>&1
-adb -s "$serial" pull "/sdcard/Android/data/$package/files/a03c-login" "$output/login-screenshots" >> "$output/pull.txt" 2>&1
+# The tests keep their captures in the app's own files, taken out with run-as: Android 11 lets adb read none of
+# /sdcard/Android/data, neither with pull nor through run-as.
+adb -s "$serial" shell run-as "$package" tar -cf files/a03-captures.tar -C files a03-auth a03c-login > "$output/capture-create.txt" 2>&1
+adb -s "$serial" exec-out run-as "$package" cat files/a03-captures.tar > "$output/captures.tar"
+tar --no-same-owner -xf "$output/captures.tar" -C "$output"
+mv "$output/a03-auth" "$output/screenshots"
+mv "$output/a03c-login" "$output/login-screenshots"
 python3 - "$output" <<'PY'
 import pathlib
 import re

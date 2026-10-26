@@ -337,6 +337,16 @@ class TasksProjectsDeviceTest {
 
     // MARK: the start card (A11b: main's redesigned card, both ways it is drawn; run again under dark mode)
 
+    /** The fixture's plan (tasks-projects-fixture.py PLAN): A, then B and C, D after B, E after C and D. */
+    private val planTasks = listOf("A", "B", "C", "D", "E").map { "34ZaIKb2sLBtndX7DqxP$it" }
+
+    /** The plan as the card draws it since A11-13: the task graph — what waits on what, task by task — while the whole of it fits the
+     * card, as this five-task plan does on a phone; by level only when it does not (StartProjectCardTest's cases). */
+    private fun assertPlanGraph(tag: String) {
+        compose.onNodeWithTag("$tag-plan-graph").performScrollTo().assertIsDisplayed()
+        planTasks.forEach { compose.onNode(hasTestTag("graph-mark:$it") and hasAnyAncestor(hasTestTag("$tag-plan-graph"))).assertExists() }
+    }
+
     /** None of the card's old lines: the meta line ("asked by the coordinator"), the plan's order line ("A starts now"), the ready
      * check's line and the generic settings form the coordinator's card used to be. */
     private fun assertNoOldStartLines() {
@@ -359,9 +369,7 @@ class TasksProjectsDeviceTest {
         compose.onNodeWithText("E · 上线 · you confirm it").assertIsDisplayed(); compose.onNodeWithText("Problems it can’t resolve within 1 h").assertIsDisplayed()
         compose.onNodeWithTag("project-start-note").performScrollTo().assertTextEquals(StartProjectCopy.howItRunsNote(asked = false, suggestedOff = false))
         capture("start-own-2-how-it-runs")
-        compose.onNodeWithTag("project-start-level:1").performScrollTo().assertTextContains("A").assertTextContains(StartProjectCopy.now)
-        compose.onNodeWithTag("project-start-level:2").assertTextContains("B · C").assertTextContains(StartProjectCopy.inParallel(2))
-        compose.onNodeWithTag("project-start-level:4").assertTextContains("E").assertTextContains(StartProjectCopy.you)
+        assertPlanGraph("project-start")
         compose.onNodeWithTag("project-start-caption").performScrollTo().assertTextEquals("Opens a coordinator · starts A now · confirms this criterion")
         compose.onNodeWithTag("project-start-sheet").performTouchInput { swipeUp() }
         capture("start-own-3-plan-and-start")
@@ -392,7 +400,8 @@ class TasksProjectsDeviceTest {
         tap("start:start1:preview"); awaitTag("card-review")
         compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("start:start1:START") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("start:start1-asked").assertTextContains("${StartProjectCopy.coordinatorAsked} ", substring = true)
-        compose.onNodeWithText("The plan is ready.").assertExists(); compose.onNodeWithTag("start:start1-why").assertTextEquals(StartProjectCopy.more)
+        // The coordinator's words whole: More is drawn only while the clamp hides some since A11-13, and these hide none.
+        compose.onNodeWithTag("start:start1-why-text").assertTextEquals("The plan is ready."); compose.onNodeWithTag("start:start1-why").assertDoesNotExist()
         capture("start-asked-1-top")
         compose.onNodeWithTag("start:start1-comes-to-you").performScrollTo()
         compose.onNodeWithText("E · 上线 · you confirm it").assertIsDisplayed(); compose.onNodeWithText("Problems it can’t resolve within 1 h").assertIsDisplayed()
@@ -400,7 +409,7 @@ class TasksProjectsDeviceTest {
         capture("start-asked-2-how-it-runs")
         compose.onNodeWithTag("start:start1-note").performScrollTo().assertTextEquals(StartProjectCopy.howItRunsNote(asked = true, suggestedOff = false))
         capture("start-asked-2b-settings")
-        compose.onNodeWithTag("start:start1-level:2").performScrollTo().assertTextContains("B · C").assertTextContains(StartProjectCopy.inParallel(2))
+        assertPlanGraph("start:start1")
         compose.onNodeWithTag("start:start1-caption").performScrollTo().assertTextEquals("Starts A now · confirms this criterion · seal seal1")
         capture("start-asked-3-plan-and-start")
         assertNoOldStartLines()

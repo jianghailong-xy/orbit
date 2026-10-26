@@ -3,6 +3,7 @@ package io.orbitd.android.directory
 import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
@@ -76,12 +77,13 @@ class ProjectSessionsDeviceTest {
 
                 // A05-7 · the row opens the project's sessions over the list.
                 compose.onNodeWithTag("project-row:$launch").performClick()
-                await { exists(hasTestTag("project-sessions")) && exists(hasText("Shipped docs")) && exists(hasTestTag("landing-card")) }
+                await { exists(hasTestTag("project-sessions")) && exists(hasTestTag("landing-card")) }
+                compose.awaitListed(hasText("Shipped docs"))
                 await { exists(hasText("Launch") and hasText("Project · 4 sessions")) }
                 compose.onNodeWithContentDescription("Back").assertExists()
                 compose.onNodeWithContentDescription("Open Project").assertExists()
-                assertTrue(exists(hasTestTag("project-sessions-progress-line") and hasText("3/8 done · 1 running")))
                 assertEquals(listOf("Coordinator", "Coordinate launch", "Today", "Wire tests", "Quota retry", "2–7 days ago", "Shipped docs"), pageLines())
+                assertTrue(compose.listed(hasTestTag("project-sessions-progress-line") and hasText("3/8 done · 1 running")))
                 capture("03-project-sessions")
                 compose.onNodeWithContentDescription("Back").performClick(); settle()
                 await { exists(hasTestTag("project-row:$launch")) }
@@ -92,7 +94,8 @@ class ProjectSessionsDeviceTest {
                 openDrawer(); await { exists(drawerRow("Launch")) }
                 capture("05-drawer")
                 compose.onNode(drawerRow("Launch")).performClick(); settle()
-                await { exists(hasTestTag("project-sessions")) && exists(hasText("Shipped docs")) }
+                await { exists(hasTestTag("project-sessions")) }
+                compose.awaitListed(hasText("Shipped docs"))
                 compose.onNodeWithContentDescription("Back").assertDoesNotExist()
                 capture("06-drawer-root")
                 compose.onNodeWithContentDescription("Open Project").performClick(); settle()
@@ -192,9 +195,26 @@ class ProjectSessionsDeviceTest {
         .setChunkedBody(": connected\n\n".repeat(240), 13)
         .throttleBody(13, 1, java.util.concurrent.TimeUnit.SECONDS)
 
-    private fun pageLines(): List<String> = compose.onAllNodes(hasAnyAncestor(hasTestTag("project-sessions"))).fetchSemanticsNodes()
-        .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
-        .filter { it in setOf("Coordinator", "Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older", "Coordinate launch", "Wire tests", "Quota retry", "Shipped docs") }
+    /** The page's lines top to bottom, read as a person scrolls them: on a 360×640 dp phone the list composes only the rows on screen.
+     * Each step scrolls by most of the list's height and keeps the lines of the nodes it had not seen. */
+    private fun pageLines(): List<String> {
+        val list = compose.onNodeWithTag("project-sessions-list")
+        list.performScrollToIndex(0); settle()
+        val seen = mutableSetOf<Int>()
+        val lines = mutableListOf<String>()
+        repeat(30) {
+            compose.onAllNodes(hasAnyAncestor(hasTestTag("project-sessions"))).fetchSemanticsNodes().forEach { node ->
+                val text = node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text
+                if (seen.add(node.id) && text in setOf("Coordinator", "Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older", "Coordinate launch",
+                        "Wire tests", "Quota retry", "Shipped docs")) lines += text!!
+            }
+            val range = list.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
+            if (range.value() >= range.maxValue()) return lines
+            list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, list.fetchSemanticsNode().size.height * 0.7f) }
+            settle()
+        }
+        throw AssertionError("The project's sessions page did not reach its end")
+    }
     private fun dialogButtons(): List<String> = compose.onAllNodes(hasAnyAncestor(isDialog()) and hasClickAction()).fetchSemanticsNodes()
         .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
     private fun drawerRow(text: String) = hasText(text) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)

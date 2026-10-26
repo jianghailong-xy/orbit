@@ -102,12 +102,16 @@ class Handler(BaseHTTPRequestHandler):
                     if state.rejectTurnStatus==409: state.status='FAILED'
                     return self.reply({'message':'the session has ended' if state.rejectTurnStatus==409 else 'request entity too large'},state.rejectTurnStatus)
                 if key not in state.turns:
-                    turn=str(uuid.uuid4()); state.turns[key]={'turnId':turn,'request':body,'endpoint':path,'kind':'steer' if state.status=='RUNNING' else 'message'}
+                    # Queued for the next turn while one runs (Send held, intent NEXT_TURN): it waits on the queue unread, with no
+                    # echo, until it is withdrawn.
+                    queued=state.status=='RUNNING' and body.get('intent')=='NEXT_TURN'
+                    turn=str(uuid.uuid4()); state.turns[key]={'turnId':turn,'request':body,'endpoint':path,
+                        'kind':'steer' if state.status=='RUNNING' and not queued else 'message'}
                     atts=[]
                     for aid in body.get('attachmentIds',[]):
                         att=state.attachments[aid]; att['references'].append(turn)
                         atts.append({'id':aid,'name':att['name'],'mime':att['mime']})
-                    state.rows.append({'seq':len(state.rows)+1,'type':'user','turnId':turn,'payload':{'text':body['content'],'attachments':atts}})
+                    if not queued: state.rows.append({'seq':len(state.rows)+1,'type':'user','turnId':turn,'payload':{'text':body['content'],'attachments':atts}})
                 answer=state.turns[key]
                 if state.attempts[key]<=state.losses:
                     self.close_connection=True

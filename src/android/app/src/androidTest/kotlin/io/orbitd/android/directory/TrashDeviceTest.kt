@@ -84,21 +84,25 @@ class TrashDeviceTest {
                 // The card goes by itself; nothing the next press aims at is under it then.
                 await { !toastShows("Moved to Trash") }
 
-                // The project's sessions page: a member goes on the press too; refused, it is back at once and the toast says why.
+                // The project's sessions page: a member goes on the press too; refused, it is back at once and the toast says why. The
+                // page's list is scrolled to its rows: on a 360×640 dp phone the ones below the fold are not composed until then.
                 compose.onNodeWithTag("project-row:$launch").performClick(); settle()
-                await { exists(hasTestTag("project-sessions")) && exists(hasContentDescription("Options for Shipped docs")) }
+                await { exists(hasTestTag("project-sessions")) }
+                compose.awaitListed(hasContentDescription("Options for Shipped docs"))
                 rowAction("Shipped docs")
                 await { calls.any { it == "DELETE /api/sessions/$done" } }
-                assertFalse(exists(hasContentDescription("Options for Shipped docs")))
+                assertFalse(compose.listed(hasContentDescription("Options for Shipped docs")))
                 capture("05-member-pressed")
                 answers.put(409)
-                await { toastShows("Couldn't move to Trash") && exists(hasContentDescription("Options for Shipped docs")) }
+                await { toastShows("Couldn't move to Trash") }
+                compose.awaitListed(hasContentDescription("Options for Shipped docs"))
                 capture("06-refused-back")
                 // A failure stays pinned until it is dealt with: dismiss it.
                 dismissPinned("Couldn't move to Trash")
 
                 // The session page: Move to Trash takes the page away on the press.
-                compose.onNode(hasText("Wire tests") and hasClickAction()).performScrollTo().performClick(); settle()
+                compose.awaitListed(hasText("Wire tests") and hasClickAction())
+                compose.onNode(hasText("Wire tests") and hasClickAction()).performClick(); settle()
                 await { exists(hasContentDescription("Session actions") and isEnabled()) && app.realtime.state.value.session?.fresh == true }
                 compose.onNodeWithContentDescription("Session actions").performClick(); settle()
                 val trash = hasText("Move to Trash") and hasAnyAncestor(isPopup()) and hasClickAction()
@@ -107,13 +111,13 @@ class TrashDeviceTest {
                 compose.onNode(trash).performClick()
                 await { calls.any { it == "DELETE /api/sessions/$worker" } }
                 await { exists(hasTestTag("project-sessions")) && !exists(hasTestTag("transcript-list")) }
-                assertFalse(exists(hasContentDescription("Options for Wire tests")))
+                assertFalse(compose.listed(hasContentDescription("Options for Wire tests")))
                 assertFalse(toastShows("Moved to Trash"))
                 capture("08-page-left-on-press")
                 answers.put(200)
                 await { toastShows("Moved to Trash") }
                 await { app.trashing.ids.value.isEmpty() }
-                assertFalse(exists(hasContentDescription("Options for Wire tests")))
+                assertFalse(compose.listed(hasContentDescription("Options for Wire tests")))
                 capture("09-member-taken")
                 File(evidence, "result.txt").writeText("PASS\n")
             } catch (failure: Throwable) {

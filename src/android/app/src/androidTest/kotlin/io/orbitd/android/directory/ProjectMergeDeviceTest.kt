@@ -74,14 +74,15 @@ class ProjectMergeDeviceTest {
                 assertTrue(inCard("Merge into main?")); assertTrue(inCard("Needs you")); assertTrue(inCard("project/launch · 7 commits ahead of main"))
                 assertTrue(inCard("4 tasks · 10 files")); assertTrue(inCard("+1 more")); assertTrue(inCard("✓ Checks passed · no conflicts"))
                 capture("01-asking")
-                compose.onNodeWithTag("project-merge-card:details").performClick()
+                // The card's presses are scrolled to first: on a 360×640 dp phone they are under the fold, and a press there lands nowhere.
+                compose.onNodeWithTag("project-merge-card:details").performScrollTo().performClick()
                 await { exists(hasTestTag("project-merge-review")) && exists(hasText("P7 rehearsal") and hasAnyAncestor(hasTestTag("project-merge-review"))) }
                 capture("02-review")
                 compose.onNodeWithTag("project-merge-review:close").performClick(); settle()
                 await { !exists(hasTestTag("project-merge-review")) }
 
                 // B · Merge to main, pressed on the card with the candidate's SHA; the card follows its job.
-                compose.onNodeWithTag("project-merge-card:confirm").performClick()
+                compose.onNodeWithTag("project-merge-card:confirm").performScrollTo().performClick()
                 await { exists(hasTestTag("project-merge-card:merging")) && inCard("confirmed — fetching the branches") }
                 assertEquals("""{"sourceSha":"5e5bfca23aa1"}""", bodies["POST /api/projects/$launch/promotions/pr-1/confirm"])
                 await { exists(hasText("Merge to main", substring = true) and hasAnyAncestor(hasTestTag("landing-head")), unmerged = true) }
@@ -105,7 +106,8 @@ class ProjectMergeDeviceTest {
                 val made = """{"sha":"8d5a868e90df","at":"${ago(7)}","automatic":false,"revert":null}"""
                 merged = "[${candidate("MERGED", merged = made)}]"
                 promotion = candidate("MERGED", merged = made)
-                await { !exists(hasTestTag("project-merge-card:checking")) && exists(hasTestTag("project-merge-row:pr-1")) }
+                await { !exists(hasTestTag("project-merge-card:checking")) }
+                compose.awaitListed(hasTestTag("project-merge-row:pr-1"))
                 capture("06-timeline")
                 compose.onNodeWithTag("project-merge-row:pr-1").performClick()
                 await { exists(hasTestTag("promotion-receipt")) && exists(hasText("Fix D1") and hasAnyAncestor(hasTestTag("promotion-receipt"))) }
@@ -115,24 +117,25 @@ class ProjectMergeDeviceTest {
 
                 // A press the server refuses says why under the card.
                 promotion = candidate("READY", id = "pr-2"); refuse = true
-                await { exists(hasTestTag("project-merge-card:asking")) }
-                compose.onNodeWithTag("project-merge-card:confirm").performClick()
+                compose.awaitListed(hasTestTag("project-merge-card:asking"))
+                compose.onNodeWithTag("project-merge-card:confirm").performScrollTo().performClick()
                 await { exists(hasTestTag("project-merge-card:error")) }
-                compose.onNodeWithTag("project-merge-card:error").assert(hasText("That merge was not confirmed — The candidate moved on."))
+                compose.onNodeWithTag("project-merge-card:error").performScrollTo().assert(hasText("That merge was not confirmed — The candidate moved on."))
                 capture("08-refused")
                 refuse = false
 
                 // The coordinator conversation: one line for the candidate and one for the merge made, each opening its sheet.
+                compose.awaitListed(hasText("Coordinate launch") and hasClickAction())
                 compose.onNode(hasText("Coordinate launch") and hasClickAction()).performClick()
                 await { exists(hasTestTag("promotion:pr-2:preview")) && exists(hasTestTag("merge:pr-1:line")) }
                 compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("merge:pr-1:line"))
                 capture("09-conversation-lines")
-                compose.onNodeWithTag("promotion:pr-2:preview").performClick()
+                compose.onNodeWithTag("promotion:pr-2:preview").performScrollTo().performClick()
                 await { exists(hasTestTag("card-review")) && exists(hasTestTag("promotion:pr-2:CONFIRM_MERGE")) }
                 capture("10-conversation-review")
                 compose.onNodeWithTag("card-review:close").performClick(); settle()
                 await { !exists(hasTestTag("card-review")) }
-                compose.onNodeWithTag("merge:pr-1:line").performClick()
+                compose.onNodeWithTag("merge:pr-1:line").performScrollTo().performClick()
                 await { exists(hasTestTag("promotion-receipt")) }
                 capture("11-conversation-receipt")
                 compose.onNodeWithTag("promotion-receipt:close").performClick(); settle()

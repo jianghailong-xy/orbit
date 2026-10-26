@@ -332,10 +332,15 @@ class CardsDeviceTest {
     @Test fun needsYouBarOpensTheSessionWaitingElsewhere() = journey("needs-you-elsewhere") {
         login("a1", "elsewhere")
         val second = http("/__a08c").obj("secondSession")!!
-        await("${second.obj("agent")!!.text("name")} needs you"); capture("needs-you-elsewhere-bar")
+        // The capsule (A08-21) says what waits and, on its second line, the conversation a press opens.
+        await("${second.obj("agent")!!.text("name")} needs you")
+        compose.waitUntil(15_000) {
+            compose.onAllNodes(hasText(second.text("title")!!) and hasAnyAncestor(hasTestTag("needs-you-bar"))).fetchSemanticsNodes().isNotEmpty()
+        }
+        capture("needs-you-elsewhere-bar")
         compose.onNodeWithTag("needs-you-bar").performClick()
         compose.waitUntil(15_000) { ObjectId.same(app.realtime.state.value.session?.id, second.text("id")) }
-        await(second.text("title")!!)
+        // The page names no session in its bar since A06-18: the session opened is read off its own transcript.
         scrollTranscriptTo(hasText("The second session waits on you."))
         compose.onNodeWithTag("approval:b1:ALLOW").performScrollTo().assertIsDisplayed()
         // The session it opened is the one waiting; nothing else waits elsewhere now, so the bar has nothing to say.
@@ -393,23 +398,33 @@ class CardsDeviceTest {
         val queue = http("/__a08c").objects("queue")
         fun tag(turn: JsonObject) = "queued:" + turn.text("turnId")!!.let { ObjectId.canonical(it) ?: it }
         compose.waitUntil(15_000) { app.realtime.state.value.session?.let { it.fresh && it.snapshot?.queuedTurns?.size == queue.size } == true }
-        // The list composes only what is on screen: each queued turn is scrolled to before it is read.
-        fun show(turn: JsonObject) = scrollTranscriptTo(hasTestTag(tag(turn)))
+        // The reader's own words still waiting — a message queued for the next turn, a steer no runner has taken — are the tray's
+        // above the composer since A07-23 (b0f32ebbd), each with its Withdraw; what Orbit queued, the session's reply, keeps its card
+        // at the transcript's end with the queue's Cancel.
+        fun inTray(turn: JsonObject) = hasAnyAncestor(hasTestTag("pending-tray:" + turn.text("turnId")!!))
+        fun shows(matcher: SemanticsMatcher) = compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
+        compose.waitUntil(15_000) { shows(hasText(queue[0].text("content")!!) and inTray(queue[0])) && shows(hasText(queue[1].text("content")!!) and inTray(queue[1])) }
+        compose.onNode(hasText("Queued for next turn") and inTray(queue[0])).assertExists()
+        compose.onNode(hasText("Sending…") and inTray(queue[1])).assertExists()
+        compose.onNode(hasTestTag("pending-tray-withdraw") and inTray(queue[0])).assertExists()
+        compose.onNode(hasTestTag("pending-tray-withdraw") and inTray(queue[1])).assertExists()
+        capture("queued-tray")
+        // The list composes only what is on screen: the queued turn is scrolled to before it is read.
         fun cancel(turn: JsonObject) = compose.onNode(hasTestTag("queued-foot:cancel") and hasAnyAncestor(hasTestTag(tag(turn))))
-        show(queue[0]); await(queue[0].text("content")!!); cancel(queue[0]).assertExists()
-        capture("queued-tail")
-        show(queue[1]); compose.onNode(hasTestTag("queued-steer") and hasAnyAncestor(hasTestTag(tag(queue[1])))).assertExists()
-        cancel(queue[1]).assertDoesNotExist()
-        show(queue[2]); cancel(queue[2]).performScrollTo().assertExists()
+        scrollTranscriptTo(hasTestTag(tag(queue[2]))); cancel(queue[2]).performScrollTo().assertExists()
+        assertFalse("the tray's, not the tail's", exists(tag(queue[0])) || exists(tag(queue[1])))
         capture("queued-reply")
-        show(queue[0]); cancel(queue[0]).performScrollTo().performClick()
+        compose.onNode(hasTestTag("pending-tray-withdraw") and inTray(queue[0])).performClick()
         compose.waitUntil(15_000) { http("/__stats").objects("journal").any { it.text("method") == "DELETE" } }
         val row = http("/__stats").objects("journal").single { it.text("method") == "DELETE" }
         assertEquals("/api/sessions/${http("/__corpus").text("sessionId")}/turns/${queue[0].text("turnId")}", row.text("path"))
         assertEquals(200, row.number("status"))
-        // The server's queue no longer lists it, and neither does the transcript's end.
+        // The server's queue no longer lists it, nor does the tray; its words are back in the composer.
         compose.waitUntil(15_000) { app.realtime.state.value.session?.snapshot?.queuedTurns?.size == queue.size - 1 }
-        show(queue[1]); assertFalse(exists(tag(queue[0]))); capture("queued-cancelled")
+        compose.waitUntil(15_000) { !shows(hasAnyAncestor(hasTestTag("pending-tray:" + queue[0].text("turnId")!!))) }
+        compose.onNode(hasText(queue[1].text("content")!!) and inTray(queue[1])).assertExists()
+        compose.waitUntil(15_000) { shows(hasTestTag("composer-input") and hasText(queue[0].text("content")!!)) }
+        capture("queued-cancelled")
     }
 
     /** A08-5: a run that never started says why, and "Start it again" is a new run of the task the server records. */
