@@ -175,7 +175,8 @@ try:
                 found = []
                 for n in ET.fromstring(raw[start:end + len('</hierarchy>')]).iter('node'):
                     b = list(map(int, re.findall(r'\d+', n.get('bounds', ''))))
-                    if len(b) == 4:
+                    # On screen only: the closed drawer is composed off its left edge.
+                    if len(b) == 4 and b[0] >= 0 and b[2] > b[0] and b[3] > b[1]:
                         found.append(dict(text=n.get('text', ''), desc=n.get('content-desc', ''), pkg=n.get('package', ''), bounds=b))
                 return found
             time.sleep(1)
@@ -291,12 +292,12 @@ try:
 
     # P02: the same session opened twice from its list, first with nothing cached, then from the device's copy.
     for entry in (1, 2):
-        tap('^Long conversation', 60)
+        tap('Long conversation', 60)
         wait_line('p02_ready', entry)
         capture(f'p02-entry{entry}')
         if entry == 1:
             shell('input keyevent KEYCODE_BACK')
-            wait('^Long conversation', 30)
+            wait('Long conversation', 30)
 
     # P03: a reading journey in MainActivity's window, then the session's menu (a popup) and its details (a dialog).
     for direction in ('down', 'down', 'down', 'up', 'up', 'up'):
