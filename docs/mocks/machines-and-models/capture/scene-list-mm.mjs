@@ -115,6 +115,12 @@ const phoneSettings = (tree) => ({
 });
 
 export const SCENES = {
+  // The build as it landed (mm-impl = a copy of the worktree's src/web + src/shared).
+  'i-settings': settingsDesk('mm-impl', { work: topRows(WORK), card: card('Machines & models') }),
+  'i-menu': accountMenu('mm-impl', { row: menuRow('Machines & models') }),
+  'i-head': pageHead('mm-impl', { back: '.provider-back', work: topRows(WORK) }),
+  'i-drawer': { ...drawer('mm-impl', 'Wiki'), boxes: { work: topRows(WORK) } },
+  'i-psettings': phoneSettings('mm-impl'),
   's-settings-B': settingsDesk('mm-new', { nav: navRow('Machines & models') }),
   's-settings-A': settingsDesk('mm-set', { work: topRows(WORK), card: card('Machines & models') }),
   's-menu-B': accountMenu('mm-new', { settings: menuRow('Settings') }),
