@@ -173,6 +173,10 @@ type runner struct {
 	facts      []*linkpb.Fact
 	digests    []*linkpb.Fact
 	rng        *rand.Rand
+	// vol moves the parts that move in production (-volatile, volatile.go); sent is each part's digest as this
+	// connection last carried it whole, for a runner whose parts move.
+	vol  *volatile
+	sent map[string]string
 
 	token    string
 	tokenExp time.Time
@@ -212,6 +216,9 @@ func newRunner(g *loadgen, n int, fr fleetRunner) *runner {
 		s := &session{id: a.ID, seq: a.Seq, durable: a.Seq}
 		r.active = append(r.active, s)
 		r.byID[a.ID] = s
+	}
+	if g.o.volatile {
+		r.vol = newVolatile(r.rng, time.Now(), len(r.active) > 0)
 	}
 	return r
 }
@@ -703,6 +710,9 @@ func (r *runner) beat(now time.Time) {
 	if r.beatWhole {
 		facts = r.facts
 	}
+	if r.vol != nil {
+		facts = r.volatileFacts(now)
+	}
 	hb := &linkpb.Heartbeat{
 		ProcessId: r.process, IdleCapacity: uint32(max(0, 2-len(r.active))), SessionIds: r.sessionIDs,
 		SupportedProviders: supportedProviders, Facts: facts,
@@ -810,6 +820,12 @@ func (r *runner) onFrame(c *rconn, f *linkpb.Frame, now time.Time) {
 				g.stats.fail("heartbeat_reconcile_unreadable", fmt.Sprintf("runner %s: %v", r.id, err))
 			} else if len(answer.Cancel)+len(answer.LeaseLost) > 0 {
 				g.stats.fail("heartbeat_sessions_lost", fmt.Sprintf("runner %s: cancel %v, lease lost %v", r.id, answer.Cancel, answer.LeaseLost))
+			}
+			if bytes.Contains(ack.GetReconcileJson(), []byte(`"agentDirs"`)) {
+				g.stats.with(func(w *window) { w.HeartbeatsReconciled++ })
+			}
+			if r.vol != nil {
+				r.vol.onAnswer(ack.GetReconcileJson())
 			}
 		}
 	case *linkpb.Frame_EventAck:

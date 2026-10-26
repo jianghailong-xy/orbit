@@ -1,0 +1,37 @@
+-- 0447 — what a link heartbeat needs to answer from runner_presence alone (docs/runner-link-design.md §5.7, §6.5).
+--
+-- Until now every heartbeat reconciled in full: it rewrote the runner row and ran some twenty reads and conditional
+-- updates for the commands it might deliver, on every beat. From here on a heartbeat the link gateway forwarded is
+-- answered from one statement (runner-api/link-heartbeat.ts): it upserts the runner's presence row, and reconciles in
+-- full only when something it delivers changed, when the runner says something that changes what it is handed, or
+-- once in each five minutes. An HTTPS heartbeat reconciles in full on every beat, as before.
+--
+-- WHAT IT ADDS
+-- ============
+-- Two columns on runner_presence (migration 0444):
+--   * `changes` — how many times something a heartbeat delivers to this runner has changed: a command queued for it,
+--     a cancellation, its settings, its workspaces' directories. Every writer of one adds one after its commit
+--     (RealtimeService.markRunnerChanged), then hints the runner to beat at once. A full reconcile records the count it
+--     saw; a beat that finds the count moved since reconciles in full again. A writer that raced a reconcile has moved
+--     the count past what the reconcile recorded, so no change is lost.
+--   * `reconciled_at` — when the last full reconcile that left nothing pending ran. NULL until one has, which is a
+--     reconcile owed.
+--
+-- WHY NOT THE COLUMNS 0444 ALREADY HAS
+-- ====================================
+-- `facts_hash` and `reconcile_hash` keep what 0444 made them for: what the runner reported, kind by kind, and what the
+-- last full reconcile compared. Neither can serve as the "something changed" flag. A writer that queues a merge cannot
+-- recompute a hash of what the runner reported, and clearing a hash to mean "changed" would let a reconcile that ran
+-- across the write put its own hash back and lose the change. A count only moves forwards. Nor can the five-minute
+-- rule read another column: `last_beat_at` moves on every beat, and `runner.last_heartbeat_at` is on the logged
+-- runner row, which a beat answered from this table must not read or write.
+--
+-- UNLOGGED, as the table is. A crash or a failover empties it, and an empty table loses nothing here either: a beat
+-- that finds no row, or a row with no `reconciled_at`, reconciles in full.
+--
+-- 0447: the next number free on main, on every branch of origin, in every commit of `git log --all` and in every
+-- worktree on this host (2026-10-26); 0446 is task D0's. Both statements can run twice (IF NOT EXISTS). Adding a column
+-- with a constant default rewrites nothing. No function, trigger or type is created, and no row is written.
+
+ALTER TABLE "runner_presence" ADD COLUMN IF NOT EXISTS "changes" BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE "runner_presence" ADD COLUMN IF NOT EXISTS "reconciled_at" TIMESTAMP(3);

@@ -15,28 +15,39 @@
 #                            CPU, load, memory and swap
 #   slices.jsonl             every 15 s: CPU of every service and container on the host, for what else ran
 #   metrics.prom             every 15 s: the link gateway's /metrics, each scrape after a "# scrape <ms>" line
-#   db.jsonl                 every 15 s: the database's sessions by state, transactions, rows and WAL position
+#   db.jsonl                 every 15 s: the database's sessions by state, transactions, statements, rows and WAL
+#                            position
 #   pgss.json, db-before.json, db-after.json, sizes.txt, logs/   the database's statements, totals and the containers' logs
 #
 # The loadgen runs in a scope of its own (systemd-run), so an OOM kill takes it and not the runner service whose
 # sessions share this host. On a shared host the run also stops itself when the host runs short of memory: after three
 # samples in a row (15 s) below LOADGEN_MIN_AVAILABLE_MB (800) of MemAvailable, the loadgen is sent SIGINT, writes its
 # summary and exits, and run.json's `stoppedForMemory` says so.
+#
+# --mark-every <seconds> moves every runner's change count that often during the run (runner_presence.changes, task
+# O1), as a writer of something a heartbeat delivers does: each beat then reconciles in full. loadgen-baseline.mjs
+# --full takes such a run to tell an unflagged beat's cost from a full reconcile's.
+#
+# On a shared host one load test runs at a time: each run, arm included, is wrapped in
+# `flock /var/tmp/orbit-loadgen.lock`. run.json's `loadTestLock` says whether this run held that lock.
 set -euo pipefail
 # shellcheck source=staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/staging-lib.sh"
 
 name="$(date -u +%Y%m%dT%H%M%SZ)"
+mark_every=""
 args=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --name) name="$2"; shift 2 ;;
     --) shift; args=("$@"); break ;;
-    -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
+    --mark-every) mark_every="$2"; shift 2 ;;
+    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
     *) die "unknown option $1 (see --help)" ;;
   esac
 done
 [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] || die "--name is letters, digits, dots, underscores and hyphens"
+[ -z "$mark_every" ] || [[ "$mark_every" =~ ^[1-9][0-9]*$ ]] || die "--mark-every is a whole number of seconds"
 [ -f "$env_file" ] || die "no staging stack in $state: run staging-up.sh first"
 [ "$(setting STAGING_MODE http)" = link ] || die "the stack is not in MODE_LINK: staging-up.sh with ORBIT_LINK_STAGING_MODE=link"
 [ "$(setting STAGING_LOADGEN 0)" = 1 ] || die "the stack lacks the load test's settings: staging-up.sh with ORBIT_LINK_STAGING_LOADGEN=1"
@@ -69,6 +80,7 @@ db_totals() {
   psql_at -c "SELECT json_build_object(
     't', (extract(epoch FROM clock_timestamp()) * 1000)::bigint,
     'xactCommit', xact_commit, 'xactRollback', xact_rollback, 'blksRead', blks_read, 'blksHit', blks_hit,
+    'statements', (SELECT sum(calls) FROM pg_stat_statements),
     'tupInserted', tup_inserted, 'tupUpdated', tup_updated, 'tupDeleted', tup_deleted, 'tempBytes', temp_bytes,
     'deadlocks', deadlocks, 'conflicts', conflicts,
     'walBytes', pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0'),
@@ -79,19 +91,33 @@ db_totals() {
 }
 
 # --- The run's configuration. ------------------------------------------------------------------------------------------
+# Whether this run holds the host's load test lock: a flock on the lock file held by this script or one of its
+# ancestors (the `flock` wrapped around it).
+holds_lock() {
+  local file=/var/tmp/orbit-loadgen.lock holders p
+  [ -e "$file" ] || return 1
+  holders=" $(awk -v ino="$(stat -c %i "$file")" '$2 == "FLOCK" && $6 ~ (":" ino "$") { printf "%s ", $5 }' /proc/locks)"
+  p=$$
+  while [ -n "$p" ] && [ "$p" -gt 1 ]; do
+    [[ "$holders" == *" $p "* ]] && return 0
+    p="$(ps -o ppid= -p "$p" | tr -d ' ')"
+  done
+  return 1
+}
 {
   printf '{"name":"%s","project":"%s","sha":"%s","dirty":%s,"dbCpus":"%s","backends":"%s","hostCpus":%s,"hostMemKb":%s,' \
     "$name" "$project" "$(git -C "$repo" rev-parse HEAD)" \
     "$([ -n "$(git -C "$repo" status --porcelain -- src scripts)" ] && echo true || echo false)" \
     "$(setting STAGING_DB_CPUS 0)" "$(setting STAGING_BACKENDS 1)" "$(nproc)" "$(awk '/^MemTotal/{print $2}' /proc/meminfo)"
+  printf '"markEverySeconds":%s,"loadTestLock":%s,' "${mark_every:-null}" "$(holds_lock && echo true || echo false)"
   if [ ${#args[@]} -gt 0 ]; then printf '"loadgenArgs":%s,' "$(printf '%s\n' "${args[@]}" | jq -R . | jq -cs .)"; else printf '"loadgenArgs":[],'; fi
   printf '"containers":{'
   first=1
   for svc in "${services[@]}"; do
     [ "$first" = 1 ] || printf ','
     first=0
-    printf '"%s":{"image":"%s","cgroup":"%s","cpuMax":"%s","memoryMax":"%s"}' "$svc" "$(docker inspect -f '{{.Config.Image}}' "$project-$svc")" \
-      "$(basename "${cgroup[$svc]}")" "$(cat "${cgroup[$svc]}/cpu.max")" "$(cat "${cgroup[$svc]}/memory.max")"
+    printf '"%s":{"image":"%s","cgroup":"%s","cpuMax":"%s","memoryMax":"%s","cpuset":"%s"}' "$svc" "$(docker inspect -f '{{.Config.Image}}' "$project-$svc")" \
+      "$(basename "${cgroup[$svc]}")" "$(cat "${cgroup[$svc]}/cpu.max")" "$(cat "${cgroup[$svc]}/memory.max")" "$(cat "${cgroup[$svc]}/cpuset.cpus")"
   done
   printf '}}\n'
 } > "$out/run.json"
@@ -158,6 +184,12 @@ sample_db() {
     sleep 15
   done
 }
+mark_runners() {
+  while :; do
+    psql_at -c 'UPDATE "runner_presence" SET "changes" = "changes" + 1' > /dev/null 2>> "$out/db.err" || true
+    sleep "$mark_every"
+  done
+}
 pids=()
 stop_samplers() {
   local p
@@ -174,6 +206,7 @@ sample_cgroups & pids+=($!)
 sample_slices & pids+=($!)
 sample_metrics & pids+=($!)
 sample_db & pids+=($!)
+if [ -n "$mark_every" ]; then mark_runners & pids+=($!); fi
 
 # --- The run. ---------------------------------------------------------------------------------------------------------
 started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

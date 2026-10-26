@@ -242,17 +242,24 @@ function realtimeWithHints() {
   const table = sessionsTable();
   const { hints } = hintsOver(bus, table.prisma);
   const notified: Array<[string, string]> = [];
+  // The runners whose change count markRunnerChanged moved (runner_presence, migration 0447), each when the bus had
+  // published how many hints: the count moves first.
+  const marked: Array<{ runners: string[]; hintsBefore: number }> = [];
   const prisma = {
     ...table.prisma,
     $executeRawUnsafe: async (_sql: string, channel: string, payload: string) => {
       notified.push([channel, payload]);
       return 0;
     },
+    $executeRaw: async (_strings: TemplateStringsArray, ...values: unknown[]) => {
+      marked.push({ runners: values[0] as string[], hintsBefore: bus.sent.length });
+      return 1;
+    },
   };
   const realtime = new RealtimeService(prisma as never, {} as never, hints);
   const deliver = (channel: string, payload: unknown) =>
     (realtime as unknown as { onNotify(channel: string, payload: string): void }).onNotify(channel, JSON.stringify(payload));
-  return { realtime, hints, bus, notified, table, deliver };
+  return { realtime, hints, bus, notified, marked, table, deliver };
 }
 
 test('notifyInbox still wakes the parked inbox poll and the other replicas, and hints the session\'s runner', async () => {
@@ -267,23 +274,27 @@ test('notifyInbox still wakes the parked inbox poll and the other replicas, and 
 });
 
 test('notifyRunnerWake still wakes the parked wake poll and the other replicas, and hints that runner', async () => {
-  const { realtime, hints, bus, notified } = realtimeWithHints();
+  const { realtime, hints, bus, notified, marked } = realtimeWithHints();
   const parked = realtime.waitForRunnerWake(RUNNER_B, 5_000);
   realtime.notifyRunnerWake(RUNNER_B);
   assert.equal(await parked, true);
+  await settle();
   assert.deepEqual(notified.map(([channel]) => channel), ['orbit_runner_wake']);
+  // Over the link the runner's change count moves first (markRunnerChanged), and then it is hinted.
+  assert.deepEqual(marked, [{ runners: [RUNNER_B], hintsBefore: 0 }]);
   assert.deepEqual(bus.sent, [[`rnr.${RUNNER_B}`, '{"hint":{"commands":{}}}']]);
   await hints.onModuleDestroy();
 });
 
 test('a wake committed inside a transaction is hinted when its NOTIFY arrives; one another replica emitted is not hinted twice', async () => {
-  const { realtime, hints, bus, deliver } = realtimeWithHints();
+  const { realtime, hints, bus, marked, deliver } = realtimeWithHints();
   deliver('orbit_runner_wake', { r: RUNNER_A, c: true });
   deliver('orbit_runner_wake', { i: 'another-replica', r: RUNNER_B });
   deliver('orbit_inbox', { i: 'another-replica', r: SESSION_ON_B });
   await settle();
   assert.deepEqual(bus.sent, [[`rnr.${RUNNER_A}`, '{"hint":{"commands":{}}}']],
     'the replica that emitted a wake or an inbox notice hinted it already');
+  assert.deepEqual(marked, [{ runners: [RUNNER_A], hintsBefore: 0 }], 'and marked it changed, before the hint');
   // The NOTIFY bridge still does what it did: B's wake is held for its next poll.
   assert.equal(await realtime.waitForRunnerWake(RUNNER_B, 5_000), true);
   await hints.onModuleDestroy();

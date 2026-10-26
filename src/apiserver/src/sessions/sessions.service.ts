@@ -4685,6 +4685,8 @@ export class SessionsService {
     const turn = await this.insertTurn(id, {
       kind: 'artifact', content: JSON.stringify(content), clientTurnId: `worktree-file-${randomUUID()}`,
     });
+    // The runner's heartbeat hands the request over: over the runner link, the next one is told so.
+    this.realtime.markSessionRunnerChanged(id);
     const deadline = Date.now() + 40_000;
     while (true) {
       const result = await this.prisma.conversationTurn.findFirst({
@@ -4824,6 +4826,7 @@ export class SessionsService {
         data: { status: 'PENDING', answeredAt: null, deliveredAt: null, leaseDeadlineAt: null },
       });
     }
+    this.realtime.markSessionRunnerChanged(sessionId);
   }
 
   private async resolveLegacyArtifactPath(

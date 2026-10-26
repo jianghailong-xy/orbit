@@ -46,6 +46,10 @@ type options struct {
 	renewBefore                               time.Duration
 	spreadRenewals                            bool
 	seed                                      uint64
+	// volatile moves the reports that move in production (volatile.go); volatileEdits is the share of a running
+	// session's beats on which its worktree snapshot moved.
+	volatile      bool
+	volatileEdits float64
 }
 
 // fleetRunner is one line of the fleet file (loadgen-seed.sh): a runner, the credential and process it connects with,
@@ -101,6 +105,8 @@ func run(args []string) int {
 	fs.IntVar(&o.maxBatch, "max-batch", 100, "the most events one batch carries")
 	fs.DurationVar(&o.renewBefore, "renew-before", 5*time.Minute, "a connection is replaced this long before its link token expires (linkRenewBefore)")
 	fs.BoolVar(&o.spreadRenewals, "spread-renewals", true, "renew each runner's first connection at a random point of its token's life, as a fleet that has run for a while does")
+	fs.BoolVar(&o.volatile, "volatile", false, "move the reports that move in production at the runner's own rates: plan usage, directory probes, running sessions' worktrees, engine checks (volatile.go)")
+	fs.Float64Var(&o.volatileEdits, "volatile-edits", 0.5, "with -volatile, the share of a running session's beats on which its worktree snapshot moved")
 	fs.Uint64Var(&o.seed, "seed", 1, "the random seed")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -380,6 +386,7 @@ func (g *loadgen) run(ctx context.Context) (*summary, int) {
 			RampRate: o.rampRate, Duration: o.duration.String(), Settle: o.settle.String(), FlushMin: o.flushMin.String(), FlushMax: o.flushMax.String(),
 			MaxBatch: o.maxBatch, RenewBefore: o.renewBefore.String(), SpreadRenewals: o.spreadRenewals, API: o.api,
 			LinkURL: o.linkURL, Connect: o.connect, Seed: o.seed, EventCycle: cycle, BoundaryEvent: "tool_result",
+			Volatile: o.volatile, VolatileEdits: o.volatileEdits,
 		},
 		StartedAt: started.UTC().Format(time.RFC3339Nano), EndedAt: ended.UTC().Format(time.RFC3339Nano),
 		RampSeconds: round1(rampSeconds), EverConnected: everConnected,
@@ -438,6 +445,8 @@ type summaryConfig struct {
 	Seed           uint64   `json:"seed"`
 	EventCycle     []string `json:"eventCycle"`
 	BoundaryEvent  string   `json:"boundaryEvent"`
+	Volatile       bool     `json:"volatile"`
+	VolatileEdits  float64  `json:"volatileEdits"`
 }
 
 type summary struct {
