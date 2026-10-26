@@ -133,7 +133,7 @@ describe('the DeepSeek account balance', () => {
   };
   const balanceRequests = () => apiMock.mock.calls.map(([path]) => path as string).filter((path) => path.includes('/balance'));
 
-  describe('the line under a DeepSeek row on Infrastructure’s API keys', () => {
+  describe('the line under a DeepSeek row on the Machines & models page’s API keys', () => {
     it('says it is checking until the server answers — with no number in the meantime', async () => {
       await show(<DeepSeekBalanceLine row={row()} />);
       expect(text()).toBe('Checking account balance…');
@@ -317,8 +317,8 @@ describe('the DeepSeek account balance', () => {
       client.setQueryData(['providers', 'shared-pools'], []);
       await show(<InfrastructurePage />);
       const lineOf = (name: string) =>
-        [...container.querySelectorAll('tr')]
-          .find((tr) => tr.querySelector('.prov-cell-name')?.textContent === name)
+        [...container.querySelectorAll('.vk-row')]
+          .find((key) => key.querySelector('.vk-name')?.textContent === name)
           ?.querySelector('[data-testid="deepseek-balance-line"]')
           ?.textContent?.replace(/\s+/g, ' ')
           .trim();

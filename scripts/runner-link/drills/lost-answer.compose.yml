@@ -1,0 +1,7 @@
+# The link gateway with a drill's fault set (lost-answer-drill.sh): LINK_DRILL_LOSE_ANSWERS, from the drill's
+# DRILL_LOSE_ANSWERS (src/link-gateway/README.md, "Lost answers"). Only that script lays this file over the staging
+# stack's own; without it, as every deployment runs, the gateway loses no answer.
+services:
+  link-gateway:
+    environment:
+      LINK_DRILL_LOSE_ANSWERS: ${DRILL_LOSE_ANSWERS:?the drill names the answers to lose}

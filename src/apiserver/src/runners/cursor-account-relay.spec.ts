@@ -72,6 +72,7 @@ function harness() {
     },
   };
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: runnerModel,
     workspace: { findMany: async () => [] },
     codexRateLimitResetOperation: { findMany: async () => [] },

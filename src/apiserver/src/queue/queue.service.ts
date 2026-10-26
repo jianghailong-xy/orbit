@@ -77,6 +77,7 @@ import {
 import {
   ADMIN_ONLY_PROVIDER_ERROR,
   ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
+  CURSOR_NOT_INSTALLED_ERROR,
   CURSOR_RUNNER_UPGRADE_ERROR,
   DSH_NOT_INSTALLED_ERROR,
   DSH_PLATFORM_UNSUPPORTED_ERROR,
@@ -96,12 +97,14 @@ import {
   withTransactionRetry,
 } from '../common/transaction-retry';
 import { RealtimeService } from '../realtime/realtime.service';
+import { RunnerHints } from '../realtime/runner-hints';
 import { sessionSourceSnapshot } from '../projects/session-source';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 import { branchName } from '../projects/project-criterion-landing';
 import { managedRunnerInstanceClaimable, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
+import { DISPATCH_PAUSED } from './dispatch-pause';
 
 /** The runner asking for work, as the claim route knows it. */
 export interface ClaimingRunner {
@@ -110,6 +113,12 @@ export interface ClaimingRunner {
   dshUnavailable?: string | null;
   /** The managed runner instance the runner guard authorized; absent for a self-managed runner. */
   managedInstance?: ManagedRunnerInstance;
+  /**
+   * The request id of a claim made over the runner link (runner-api/runner-link-call.ts). A claim sent
+   * again under it is answered with the session the first one claimed, while that claim stands, and
+   * claims no other (trySessionClaim). Absent over HTTPS.
+   */
+  claimRequestId?: string;
 }
 
 /**
@@ -135,13 +144,20 @@ export class QueueService {
     private readonly planUsage?: ProviderPlanUsageService,
     /** The managed runner switch: while it is off a managed runner's drain does not hold its claims back. */
     @Optional() @Inject(MANAGED_RUNNER_GATE) private readonly managedGate?: ManagedRunnerGate,
+    /** The runner link's hints (realtime/runner-hints.ts); absent in the specs that build this service by hand. */
+    @Optional() private readonly hints?: RunnerHints,
   ) {
     this.signal.setMaxListeners(0);
   }
 
-  /** Wake long-poll waiters after a session transitions to PENDING. */
-  notifySessionQueued(): void {
+  /**
+   * After a session transitions to PENDING, or a slot it waits for frees up: wake this process's claim long polls, every
+   * one of them as before, and hint the runner the session is queued for over the runner link (one claim hint per
+   * runner named; null names none). Called after the commit, like every wake.
+   */
+  notifySessionQueued(runners: string | readonly string[] | null): void {
     this.signal.emit('queued');
+    for (const runnerId of typeof runners === 'string' ? [runners] : runners ?? []) this.hints?.claim(runnerId);
   }
 
   private waitForSignal(timeoutMs: number, hungUp?: AbortSignal): Promise<void> {
@@ -370,6 +386,24 @@ export class QueueService {
         // the long poll began; this answers at the claim itself. FOR SHARE: a fencing or generation
         // advance that committed first is seen here, and one that comes later waits for this claim.
         if (runner.managedInstance && !(await this.managedInstanceClaimable(tx, runner.managedInstance))) return [];
+        // A link claim sent again under the request id of one that claimed — its answer lost, or a
+        // gateway retrying it on another replica — is answered with that claim's session while the
+        // claim stands, the session still RUNNING under the id it recorded, and claims no other.
+        // Read under the claim lock, so a first attempt and its repeat running at once claim one
+        // session between them. The dispatch pause does not hold it: that session was handed out
+        // before the pause took effect, and a cut-over waits for what it runs.
+        if (runner.claimRequestId) {
+          const replayed = await tx.$queryRaw<Array<{
+            id: string; engine: string | null; provider: string; providerBuiltin: boolean; ownerId: string;
+          }>>`
+            SELECT id, engine, provider, provider_builtin AS "providerBuiltin", owner_id::text AS "ownerId"
+            FROM "session"
+            WHERE "assigned_runner_id" = ${runner.id}::uuid
+              AND "claim_request_id" = ${runner.claimRequestId}
+              AND status = 'RUNNING'
+          `;
+          if (replayed.length > 0) return replayed;
+        }
         // Prisma.sql rather than a bare tagged template so the cap fragments below are the
         // SAME SQL the session list uses to explain a queued row. Written twice they drift,
         // and a UI that names the wrong gate is worse than one that names none.
@@ -389,6 +423,7 @@ export class QueueService {
               ${ANTIGRAVITY_RUNNER_UPGRADE_ERROR},
               ${DSH_RUNNER_UPGRADE_ERROR},
               ${CURSOR_RUNNER_UPGRADE_ERROR},
+              ${CURSOR_NOT_INSTALLED_ERROR},
               ${DSH_NOT_INSTALLED_ERROR},
               ${DSH_PLATFORM_UNSUPPORTED_ERROR},
               ${DSH_VERSION_INCOMPATIBLE_ERROR},
@@ -414,12 +449,19 @@ export class QueueService {
           -- The wait this claim starts is measured from here (0254). Unlike last_turn_at, which
           -- ingest moves on every event carrying a turn id, nothing else writes it.
           "run_claimed_at" = now(),
+          -- Which link request made this claim (the replay above); NULL for one made over HTTPS, so a
+          -- request id an earlier claim of this session recorded can never answer for this one.
+          "claim_request_id" = ${runner.claimRequestId ?? null},
           "engine_phase_since" = NULL,
           "updated_at" = now()
         WHERE id = (
           SELECT s.id FROM "session" s
           WHERE s.status = 'PENDING'
             AND s."kind" = 'CONVERSATION'
+            -- The runner dispatch pause (dispatch-pause.ts): while an administrator holds it, nothing is
+            -- claimed. Read after the claim lock above, which the switch takes too, so a pause that has
+            -- been answered is one every later claim sees.
+            AND NOT ${DISPATCH_PAUSED}
             AND NOT (s.id = ANY(${paused}::uuid[]))
             AND s."cancel_requested_at" IS NULL
             AND s."assigned_runner_id" = ${runnerId}

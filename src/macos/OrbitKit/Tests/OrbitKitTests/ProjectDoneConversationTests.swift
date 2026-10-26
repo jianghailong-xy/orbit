@@ -10,11 +10,12 @@ import XCTest
 /// task in flight, none started, no criteria stated, a read without counts. The gaps, and the
 /// entries that act on them, are the project page's Open items row and the Needs you hint.
 ///
-/// Three drawings stay, and each is asserted here with the words it puts on screen:
+/// Two drawings stay, and each is asserted here with the words it puts on screen:
 ///   • a DONE_REQUEST (or the row's Record as done…, or this conversation's own press) → "Is this
 ///     project done?", whose press records the project and leaves its receipt;
-///   • status DONE recorded by Orbit → "This project is done · recorded by Orbit";
 ///   • status DONE recorded by the owner → "You recorded this project done".
+/// A DONE Orbit recorded itself drew "This project is done · recorded by Orbit" here until the
+/// owner's ruling of 2026-10-25; it draws nothing now — the project page draws the ending.
 ///
 /// The browser holds the same rule in `ProjectDoneConversation.test.tsx` (which draws the same
 /// states), and `ProjectDoneCopyParityTests` reads that file's source against this client's words.
@@ -92,17 +93,18 @@ final class ProjectDoneConversationTests: XCTestCase {
         let open = project()
         XCTAssertFalse(ProjectDone.recorded(open, record: nil))
         XCTAssertEqual(slot(open), .none)
-        // The terminal state is the one drawing that still holds those words' view — and it is a
-        // DONE project, which nothing asks a question about.
+        // The terminal state is the one drawing that still holds those words' view — the project
+        // page's ending for a DONE project, which nothing asks a question about; since 2026-10-25
+        // the conversation draws nothing for it.
         let terminal = project(status: "DONE", done: true, doneBy: .derived)
-        XCTAssertEqual(slot(terminal), .notDone)
+        XCTAssertEqual(slot(terminal), .none)
         XCTAssertTrue(ProjectDone.recorded(terminal, record: nil))
         XCTAssertTrue(ProjectDone.WhyNotDone(subject: terminal, withCoordinator: 0, requested: false)
                         .settled(terminal),
                       "the terminal drawing is the settled card, never the question")
     }
 
-    // MARK: the three drawings that stay
+    // MARK: the two drawings that stay
 
     func testARequestDrawsTheOwnerCardWhosePressLeavesItsReceipt() {
         let asked = slot(project(), request: row(), waitingKind: .doneRequest)
@@ -135,15 +137,17 @@ final class ProjectDoneConversationTests: XCTestCase {
         XCTAssertEqual(ProjectDone.recordLabel(nil), ProjectDone.recordAsDone)
     }
 
-    func testOrbitsDoneDrawsTheTerminalCardAndTheOwnersDoneItsReceipt() {
+    func testOrbitsDoneDrawsNothingAndTheOwnersDoneItsReceipt() {
         let orbitDone = project(status: "DONE", done: true, doneBy: .derived,
                                 doneAt: "2026-10-07T05:00:00.000Z")
-        XCTAssertEqual(slot(orbitDone), .notDone)
+        XCTAssertEqual(slot(orbitDone), .none,
+                       "Orbit's DONE draws nothing in a conversation since 2026-10-25: the page draws the ending")
+        // The words the page and the dialog keep for it, unchanged.
         XCTAssertEqual(ProjectDone.receiptLine(orbitDone, record: nil, timeZone: utc),
                        "This project is done · recorded by Orbit")
         XCTAssertEqual(ProjectDone.settledBadge(orbitDone.doneBy), ProjectDone.recordedByOrbit)
         let unrecorded = project(status: "DONE", done: true)
-        XCTAssertEqual(slot(unrecorded), .notDone, "a server that does not say who is not the owner")
+        XCTAssertEqual(slot(unrecorded), .none, "a server that does not say who is not the owner: nothing either")
         XCTAssertEqual(ProjectDone.receiptLine(unrecorded, record: nil, timeZone: utc),
                        "This project is done · recorded by Orbit")
 

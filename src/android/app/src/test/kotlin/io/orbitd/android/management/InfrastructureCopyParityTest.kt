@@ -38,7 +38,9 @@ class InfrastructureCopyParityTest {
             "\"Engines not reported\"", "\"1 engine not updating\"", "\"All signed in\"", " of \\(engines.count) signed in\"",
             "\"Install \\(RunnerPageFormat.engineName(engine))\"").forEach { assertTrue("$it is not in the Swift sources", source.contains(it)) }
         val settings = read("${kit}SettingsHome.swift")
-        listOf("\"1 needs you\"", " need you\"", "\"Machines & models\"").forEach { assertTrue("$it is not in SettingsHome.swift", settings.contains(it)) }
+        listOf("\"1 needs you\"", " need you\"").forEach { assertTrue("$it is not in SettingsHome.swift", settings.contains(it)) }
+        // Settings' Machines & models group has no header, as on iOS: its one row says the name.
+        assertTrue("iOS heads Machines & models", settings.contains("case .machines:    return nil"))
         assertTrue(read("${views}SkillsRunnersView.swift").contains("failedTitle: \"Machines couldn't be loaded\""))
     }
 
@@ -60,15 +62,15 @@ class InfrastructureCopyParityTest {
         listOf(AntigravityRepair.NEEDS_KEY.body("wikova", "0.1.230"), AntigravityRepair.NOT_INSTALLED.body("wikova", null)).forEach {
             assertTrue("\"$it\" is not in EngineAuth.swift", engineAuth.contains("\"$it\""))
         }
-        assertTrue("the card's way to the engine page", read("${views}RunnerSignInView.swift").contains("Button(\"Open in Infrastructure\")"))
+        assertTrue("the card's way to the engine page", read("${views}RunnerSignInView.swift").contains("Button(\"Open in Machines & models\")"))
     }
 
     @Test fun aSharedPoolsPeopleSeeItOnTheirInfrastructurePage() {
         val source = read("${kit}WhoCanUseIt.swift")
         val pool = Json.parseToJsonElement("""{"id":"p","label":"Team Codex","keys":[],
             "people":[{"userId":"a","name":"Me","creator":true,"you":true},{"userId":"b","name":"Bo"}]}""").jsonObject
-        assertEquals("They see Team Codex on their Infrastructure page and in the session picker.", WhoCanUseIt(pool, 0).modeHint)
-        assertTrue(source.contains("\"They see \\(label) on their Infrastructure page and in the session picker.\""))
+        assertEquals("They see Team Codex on their Machines & models page and in the session picker.", WhoCanUseIt(pool, 0).modeHint)
+        assertTrue(source.contains("\"They see \\(label) on their Machines & models page and in the session picker.\""))
         val seen = SharePool.facts(pool, 0).first()
         assertEquals("They see Team Codex", seen.lead)
         assertTrue("\"${seen.rest}\" is not in WhoCanUseIt.swift", source.contains("rest: \"${seen.rest}\""))

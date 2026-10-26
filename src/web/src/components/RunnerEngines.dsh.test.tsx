@@ -181,7 +181,7 @@ describe('DeepSeek Harness on a machine’s card', () => {
     const row = said(harness(page));
     expect(row.status).toBe('Unsupported version');
     expect(row.buttons).toEqual(['Install']);
-    expect(row.hint).toBe('This runner has a DeepSeek Harness version Orbit does not support. Reinstall it from Infrastructure.');
+    expect(row.hint).toBe('This runner has a DeepSeek Harness version Orbit does not support. Reinstall it from the Machines & models page.');
   });
 
   it('says an install is under way, and what a failed one said', () => {

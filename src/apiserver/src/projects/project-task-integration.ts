@@ -9,7 +9,7 @@ import type {
   TaskIntegrationView,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { SESSION_RUNNER_OFFLINE_AFTER_MS } from '../sessions/session-state';
+import { runnerOfflineSql } from '../runners/runner-presence';
 import { branchNameSql, isCodeTaskSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
 import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
 
@@ -477,10 +477,7 @@ export async function readTaskIntegrationViews(
       LEFT JOIN LATERAL (
         SELECT CASE
                  WHEN runner."id" IS NULL THEN 'NO_RUNNER'
-                 WHEN runner."status" = 'OFFLINE' OR runner."last_heartbeat_at" IS NULL
-                   OR runner."last_heartbeat_at"
-                      < now() - (${SESSION_RUNNER_OFFLINE_AFTER_MS} * interval '1 millisecond')
-                   THEN 'OFFLINE'
+                 WHEN ${runnerOfflineSql('runner')} THEN 'OFFLINE'
                  WHEN runner."status" = 'DRAINING' OR runner."heartbeat_draining" = true THEN 'DRAINING'
                  WHEN runner."heartbeat_lease_owner" IS NULL
                    OR NOT (${INTEGRATION_JOB_CLAIM} = ANY(runner."capabilities")) THEN 'OUTDATED'

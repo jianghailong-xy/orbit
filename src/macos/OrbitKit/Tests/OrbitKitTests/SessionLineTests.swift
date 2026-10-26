@@ -143,44 +143,31 @@ final class SessionLineTests: XCTestCase {
                        .init(text: "All done.", tone: .preview))
     }
 
-    /// The rolling recap (0418) takes the place of the raw last reply — and only that place. Ports
-    /// the web `sessionLine` cases of the same name (`WorkspaceView.sessionLine.test.tsx`).
+    /// The rolling recap (0418) takes the place of the raw last reply — and only that place — and the
+    /// whole line is the sentence (the owner, 2026-10-22): when it was written is the Recap card's to
+    /// say (`RecapCardTests`). Ports the web `sessionLine` cases of the same name
+    /// (`WorkspaceView.sessionLine.test.tsx`).
     func testRecapTakesThePlaceOfTheReplyPreview() {
-        let written = Date()
-        let parked = session(status: .awaitingInput, lastAssistantText: "Committed the row change.",
-                             recapText: "Moved the recap onto the list row; the three states are covered by tests.",
-                             recapAt: ISO8601DateFormatter().string(from: written))
-        let clock = DateFormatter(); clock.timeStyle = .short
-        XCTAssertEqual(SessionLine.make(for: parked, live: true, now: written),
-                       .init(text: "Moved the recap onto the list row; the three states are covered by tests.",
-                             tone: .preview, label: "Recap · \(clock.string(from: written))"))
-
-        // Another day's recap wears the date too: a bare "5:38 PM" on a row from yesterday misleads.
-        let old = Date(timeIntervalSinceNow: -3 * 86_400)
-        let day = DateFormatter(); day.dateFormat = "EEE, MMM d"
-        let dated = session(status: .awaitingInput, lastAssistantText: "Committed the row change.",
-                            recapText: "Shipped the drawer fix.", recapAt: ISO8601DateFormatter().string(from: old))
-        XCTAssertEqual(SessionLine.make(for: dated, live: true, now: written),
-                       .init(text: "Shipped the drawer fix.", tone: .preview,
-                             label: "Recap · \(day.string(from: old)), \(clock.string(from: old))"))
-
-        // A payload from a control plane that wrote the recap text without a time keeps the word.
-        let timeless = session(status: .awaitingInput, lastAssistantText: "Committed the row change.",
-                               recapText: "Shipped the drawer fix.", recapAt: nil)
-        XCTAssertEqual(SessionLine.make(for: timeless, live: true, now: written),
-                       .init(text: "Shipped the drawer fix.", tone: .preview, label: "Recap"))
+        let recap = "Moved the recap onto the list row; the three states are covered by tests."
+        let line = SessionLine(text: recap, tone: .preview)
+        // Written now, on another day, or with no time on it: the line reads the same.
+        for recapAt in [ISO8601DateFormatter().string(from: Date()),
+                        ISO8601DateFormatter().string(from: Date(timeIntervalSinceNow: -3 * 86_400)),
+                        nil] as [String?] {
+            let parked = session(status: .awaitingInput, lastAssistantText: "Committed the row change.",
+                                 recapText: recap, recapAt: recapAt)
+            XCTAssertEqual(SessionLine.make(for: parked, live: true), line)
+            // Trash keeps it too: nothing live is left to outrank it there.
+            XCTAssertEqual(SessionLine.make(for: parked, live: false), line)
+        }
 
         // No recap at all (and a blank one, which the server never stores): the reply preview the
-        // row always had, with no label in front of it.
+        // row always had.
         XCTAssertEqual(SessionLine.make(for: session(status: .awaitingInput, lastAssistantText: "All done."), live: true),
                        .init(text: "All done.", tone: .preview))
         XCTAssertEqual(SessionLine.make(for: session(status: .awaitingInput, lastAssistantText: "All done.",
                                                      recapText: "   ", recapAt: nil), live: true),
                        .init(text: "All done.", tone: .preview))
-
-        // Trash keeps it too: nothing live is left to outrank it there.
-        XCTAssertEqual(SessionLine.make(for: parked, live: false, now: written).label,
-                       "Recap · \(clock.string(from: written))")
     }
 
     /// The account's Session recaps switch (Settings): off, the same row falls through to the reply
@@ -190,9 +177,9 @@ final class SessionLineTests: XCTestCase {
                              recapText: "Moved the recap onto the list row.", recapAt: nil)
         XCTAssertEqual(SessionLine.make(for: parked, live: true, recaps: false),
                        .init(text: "Committed the row change.", tone: .preview))
-        // On (the default, and what an absent preference means): the recap, with its label.
+        // On (the default, and what an absent preference means): the recap.
         XCTAssertEqual(SessionLine.make(for: parked, live: true, recaps: true),
-                       .init(text: "Moved the recap onto the list row.", tone: .preview, label: "Recap"))
+                       .init(text: "Moved the recap onto the list row.", tone: .preview))
     }
 
     /// Every live line still outranks the recap: it is newer work, not older prose. (The web's

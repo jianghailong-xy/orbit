@@ -25,9 +25,9 @@ import (
 // fakeCursorLogin is `NO_OPEN_BROWSER=1 agent login` (contract §9): its three lines and a link of its own at
 // once, then the wait for someone to sign in with that link, which the fake's login-outcome file decides —
 // one sign-in each, as the fake takes the file away when it acts on it. approve saves login-token as the
-// login where XDG_CONFIG_HOME puts it — unless credentials are kept in memory — and exits 0; expire is the
-// CLI giving up on its link and exits 1; fail is a login error and exits 1. With none it waits until it is
-// killed.
+// login where the pinned build would (fakeCursorSaveCredential: under XDG_CONFIG_HOME on Linux, under HOME
+// on macOS, nowhere in memory, the Keychain for macOS's default store) and exits 0; expire is the CLI giving
+// up on its link and exits 1; fail is a login error and exits 1. With none it waits until it is killed.
 func fakeCursorLogin(dir string) int {
 	n := time.Now().UnixNano()
 	fmt.Println("Starting login process...")
@@ -43,15 +43,8 @@ func fakeCursorLogin(dir string) int {
 		switch strings.TrimSpace(string(outcome)) {
 		case "approve":
 			token, _ := os.ReadFile(filepath.Join(dir, "login-token"))
-			if os.Getenv("AGENT_CLI_CREDENTIAL_STORE") != "memory" {
-				xdg := os.Getenv("XDG_CONFIG_HOME")
-				if xdg == "" {
-					xdg = filepath.Join(os.Getenv("HOME"), ".config")
-				}
-				_ = os.MkdirAll(filepath.Join(xdg, "cursor"), 0o700)
-				login, _ := json.Marshal(map[string]string{"accessToken": string(token), "refreshToken": string(token)})
-				_ = os.WriteFile(filepath.Join(xdg, "cursor", "auth.json"), login, 0o600)
-			}
+			login, _ := json.Marshal(map[string]string{"accessToken": string(token), "refreshToken": string(token)})
+			fakeCursorSaveCredential(dir, login)
 			fmt.Println("Authentication tokens stored securely.")
 			return 0
 		case "expire":
@@ -72,15 +65,17 @@ func cursorAccountsRunner(t *testing.T) (string, *fakeCursorRelease) {
 	home := useCursorRealHome(t)
 	r := newFakeCursorRelease(t)
 	installFakeCursor(t)
-	useCursorAccountsOS(t, "linux")
+	useCursorPlatform(t, "linux", "amd64")
 	return home, r
 }
 
-func useCursorAccountsOS(t *testing.T, goos string) {
+// useCursorPlatform has the runner run Cursor CLI by goos/arch's rules for the test's duration (cursorOS,
+// cursorArch): the pinned build it installs, the accounts it keeps, and where it finds a login.
+func useCursorPlatform(t *testing.T, goos, arch string) {
 	t.Helper()
-	previous := cursorAccountsOS
-	cursorAccountsOS = goos
-	t.Cleanup(func() { cursorAccountsOS = previous })
+	previousOS, previousArch := cursorOS, cursorArch
+	cursorOS, cursorArch = goos, arch
+	t.Cleanup(func() { cursorOS, cursorArch = previousOS, previousArch })
 }
 
 // signInCursorAccount saves token as the login of the account at dir, where `agent login` would.
@@ -971,19 +966,23 @@ func TestCursorDefaultAccountDirectoryIsUnchanged(t *testing.T) {
 	assertNoCursorStateIn(t, home)
 }
 
-// Accounts beside Default are kept only on Linux, where approach A of D4 was measured (§8.4). Anywhere else
-// the runner keeps Default alone (approach D): it declares neither account capability, adds no account and
-// signs none in, and runs no session on one — while Default still signs in.
-func TestCursorAccountsAreKeptOnlyOnLinux(t *testing.T) {
+// Accounts beside Default are kept on Linux and macOS, where approach A of D4 was measured (§8.4, §18.7): a
+// runner on either declares both account capabilities. Anywhere else the runner keeps Default alone (approach
+// D): it declares neither, adds no account and signs none in, and runs no session on one — while Default
+// still signs in.
+func TestCursorAccountsAreKeptOnLinuxAndMacOS(t *testing.T) {
 	_, r := cursorAccountsRunner(t)
 	declared := "," + runnerCapabilitiesV1 + ","
 	for _, capability := range []string{"cursor-account-login/v1", "cursor-account-remove/v1"} {
-		if want := runtime.GOOS == "linux"; strings.Contains(declared, ","+capability+",") != want {
+		if want := runtime.GOOS == "linux" || runtime.GOOS == "darwin"; strings.Contains(declared, ","+capability+",") != want {
 			t.Fatalf("this %s runner declares %s: %v, want %v (%q)", runtime.GOOS, capability, !want, want, runnerCapabilitiesV1)
 		}
 	}
-	if got := cursorAccountCapabilities(); !reflect.DeepEqual(got, []string{cursorAccountLoginCapabilityV1, cursorAccountRemoveCapabilityV1}) {
-		t.Fatalf("a Linux runner declares %v", got)
+	for _, platform := range [][2]string{{"darwin", "arm64"}, {"linux", "amd64"}} {
+		useCursorPlatform(t, platform[0], platform[1])
+		if got := cursorAccountCapabilities(); !reflect.DeepEqual(got, []string{cursorAccountLoginCapabilityV1, cursorAccountRemoveCapabilityV1}) {
+			t.Fatalf("a %s/%s runner declares %v", platform[0], platform[1], got)
+		}
 	}
 	work, err := cursorAccountKind.create("Work")
 	if err != nil {
@@ -991,9 +990,11 @@ func TestCursorAccountsAreKeptOnlyOnLinux(t *testing.T) {
 	}
 	signInCursorAccount(t, work.Dir, cursorTestToken(t, time.Now().Add(24*time.Hour)))
 
-	useCursorAccountsOS(t, "darwin")
+	// A platform with a pinned build but no measurement of D4: Default alone.
+	cursorArtifacts["freebsd/amd64"] = cursorArtifacts[runtime.GOOS+"/"+runtime.GOARCH]
+	useCursorPlatform(t, "freebsd", "amd64")
 	if got := cursorAccountCapabilities(); len(got) != 0 {
-		t.Fatalf("a macOS runner declares %v", got)
+		t.Fatalf("a FreeBSD runner declares %v", got)
 	}
 	relay := newCursorRelay(t)
 	for attempt, lr := range map[string]LoginCommand{
@@ -1004,23 +1005,23 @@ func TestCursorAccountsAreKeptOnlyOnLinux(t *testing.T) {
 		relay.start(lr)
 		got := relay.outcome(t, attempt)
 		if len(got) != 1 || got[0].Status != loginFailed || got[0].Message != cursorAccountsUnsupportedMessage() {
-			t.Fatalf("on macOS, %+v = %+v, want it refused", lr, got)
+			t.Fatalf("on FreeBSD, %+v = %+v, want it refused", lr, got)
 		}
 	}
 	if added := addedCursorSlots(t); len(added) != 1 || added[0].ID != work.ID {
-		t.Fatalf("on macOS the accounts are %v", added)
+		t.Fatalf("on FreeBSD the accounts are %v", added)
 	}
 	if n := len(cursorLoginCalls(t, r)); n != 0 {
-		t.Fatalf("on macOS `agent login` ran %d times for another account", n)
+		t.Fatalf("on FreeBSD `agent login` ran %d times for another account", n)
 	}
 	msg := engineAuthPreflight(providerCursor, map[string]string{cursorAccountDirVar: work.Dir})
 	if !isAuthError(msg) || !strings.Contains(msg, cursorAccountsUnsupportedMessage()) {
-		t.Fatalf("on macOS a session on another account = %q", msg)
+		t.Fatalf("on FreeBSD a session on another account = %q", msg)
 	}
 	r.behave(t, "login-token", cursorTestToken(t, time.Now().Add(24*time.Hour)))
 	const def = "2026-10-17T04:42:00.000Z"
 	if got := relay.signInWith(t, r, LoginCommand{Attempt: def}, "approve"); got[len(got)-1].Status != loginDone {
-		t.Fatalf("on macOS Default's sign-in = %+v", got)
+		t.Fatalf("on FreeBSD Default's sign-in = %+v", got)
 	}
 }
 

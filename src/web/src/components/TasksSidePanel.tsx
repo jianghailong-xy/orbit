@@ -3,6 +3,7 @@ import {
   CaretDownOutlined,
   CheckOutlined,
   CodeOutlined,
+  DeleteOutlined,
   DisconnectOutlined,
   FolderOutlined,
   HolderOutlined,
@@ -10,6 +11,7 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  MoreOutlined,
   SettingOutlined,
   TeamOutlined,
   UserOutlined,
@@ -70,7 +72,8 @@ import { wikiShown, wikiWaitingOnYou } from '../lib/wiki';
 import { wikiWaiting, writeWikiFromWorkspace } from '../lib/wikiSpace';
 import { SidebarNavIcon } from './SidebarNavIcon';
 import { Avatar } from './ui/Avatar';
-import { Menu } from './ui/Menu';
+import { useConfirm } from './ui/ConfirmDialog';
+import { Menu, type MenuItem } from './ui/Menu';
 import { Tooltip } from './ui/Tooltip';
 
 const IS_MAC_PLATFORM =
@@ -126,9 +129,9 @@ interface TopNavItem {
   shortcut?: string;
 }
 
-// Fixed product destinations, the same for every account: Admin is a row of the account menu at the
-// panel's foot, not one of these. Individual Workspace rows are primary destinations in their own
-// right, so there is no proxy Workspaces parent here.
+// Fixed product destinations, the same for every account: Machines & models and Admin are rows of the
+// account menu at the panel's foot, not among these. Individual Workspace rows are primary destinations
+// in their own right, so there is no proxy Workspaces parent here.
 const TOP: TopNavItem[] = [
   {
     key: 'projects',
@@ -146,12 +149,9 @@ const TOP: TopNavItem[] = [
   { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
-  // Infrastructure is where agents run and whose quota they spend — what the Runners and Providers
-  // rows used to split between them: the user's own machines and API keys, and the account pools
-  // they own or were added to. Shared providers (those with no owner) are not on it, an admin's
-  // included: admins manage them through /api/admin/providers alone, and the UI manages only each
-  // user's own (PROVIDERS_BASE).
-  { key: 'infrastructure', icon: <SidebarNavIcon name="runners" />, label: 'Infrastructure' },
+  // No Machines & models either (docs/mocks/machines-and-models, 02): where agents run and whose quota
+  // they spend is set up once and fixed when something says so — every card that needs it fixed links
+  // there — so it is reached as the phone reaches it, from Settings, and from the account menu.
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
@@ -163,13 +163,6 @@ const MIN_SIDEBAR_WIDTH = 200;
 const MAX_SIDEBAR_WIDTH = 480;
 const clampWidth = (w: number): number =>
   Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w));
-
-/** Infrastructure's own page, and the pages under the Runners and Providers addresses it took over. */
-export function isInfrastructureRoute(pathname: string): boolean {
-  return ['/infrastructure', '/runners', '/providers'].some(
-    (root) => pathname === root || pathname.startsWith(`${root}/`),
-  );
-}
 
 /** The first nine Workspace rows own the matching global Cmd/Ctrl + number shortcut. */
 export function workspaceShortcutLabel(index: number, isMac = IS_MAC_PLATFORM): string | null {
@@ -410,8 +403,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   }, [onWiki, hereWorkspaceId]);
 
   // Workspace/session routes have no proxy parent in TOP: a resolved Workspace highlights its own
-  // row, while an unresolved deep link briefly leaves the fixed nav unselected. A machine's page, a
-  // key's and a pool's are Infrastructure's, under the addresses Runners and Providers gave them.
+  // row, while an unresolved deep link briefly leaves the fixed nav unselected. Machines & models and
+  // the pages under it (a machine's, a key's, a pool's) light nothing, as Settings lights nothing.
   const routeKey = projectPageKey
     ? projectPageKey
     : activeWorkspaceId
@@ -420,9 +413,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
         loc.pathname.startsWith('/sessions/') ||
         loc.pathname.startsWith('/agents/')
       ? ''
-      : isInfrastructureRoute(loc.pathname)
-        ? 'infrastructure'
-        : loc.pathname.startsWith('/projects/')
+      : loc.pathname.startsWith('/projects/')
           ? (projectRowKey ?? 'projects')
           // Every wiki route — a space, a topic, an entry's drawer, Review — is the Wiki's own
           // destination, so the row stays lit across all of them.
@@ -551,6 +542,49 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     onSuccess: (data) => qc.setQueryData(['workspaces'], data),
     onSettled: () => void qc.invalidateQueries({ queryKey: ['workspaces'] }),
   });
+  // A row's own actions (its ⋯, or a right-click): Configure opens it in its machine's Workspaces
+  // section, Delete is that section's Delete with the same confirmation. A refusal (a project it
+  // still coordinates) is shown in the dialog, which stays open.
+  const [confirm, confirmation] = useConfirm();
+  const workspaceMenu = (a: Workspace): MenuItem[] => {
+    const runnerId = workspaceRunnerId(a);
+    return [
+      ...(runnerId
+        ? [
+            {
+              key: 'configure',
+              icon: <SettingOutlined />,
+              label: 'Configure',
+              onSelect: () => {
+                onNavigate?.();
+                navigate(`/runners/${encodeId(runnerId)}?workspace=${encodeId(a.id)}`);
+              },
+            },
+            { type: 'separator' as const, key: 'divider' },
+          ]
+        : []),
+      {
+        key: 'delete',
+        icon: <DeleteOutlined />,
+        label: 'Delete workspace…',
+        danger: true,
+        onSelect: () =>
+          void confirm({
+            title: `Delete workspace “${a.name}”?`,
+            description:
+              'The workspace leaves your list but is not erased — its sessions and tasks are kept and stay linked to it. To park one you still use, disable it instead.',
+            confirmText: 'Delete',
+            danger: true,
+            cancelText: 'Cancel',
+            onConfirm: async () => {
+              await api(`/workspaces/${a.id}`, { method: 'DELETE' });
+              if (a.id === litWorkspaceId) navigate('/');
+              await qc.invalidateQueries({ queryKey: ['workspaces'] });
+            },
+          }),
+      },
+    ];
+  };
   const workspaceSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -875,6 +909,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                       needsYou={workspaceNeedsYou.get(a.id) ?? 0}
                       shortcutLabel={workspaceShortcutLabel(dragPreviewIds?.indexOf(a.id) ?? index)}
                       onOpen={openWorkspace}
+                      menu={workspaceMenu(a)}
                       dragHandle={dragHandle}
                     />
                   );
@@ -892,6 +927,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 })}
             </SortableContext>
           </DndContext>
+          {confirmation}
         </div>
 
         {orderedWorkspaces.length > 0 && openProjects.length > 0 && <div className="tp-divider" />}
@@ -982,6 +1018,15 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   if (mode !== it.key) setMode(it.key);
                 },
               })),
+            },
+            // Where agents run and whose quota they spend, two clicks away as the phone has it (Settings, then
+            // its row) — the page left the sidebar's fixed rows for here and Settings
+            // (docs/mocks/machines-and-models, 02).
+            {
+              key: 'machines',
+              icon: <SidebarNavIcon name="runners" />,
+              label: 'Machines & models',
+              onSelect: () => navigate('/infrastructure'),
             },
             {
               key: 'settings',
@@ -1180,6 +1225,7 @@ export function WorkspaceRow({
   needsYou,
   shortcutLabel,
   onOpen,
+  menu,
   dragHandle,
 }: {
   workspace: Workspace;
@@ -1191,6 +1237,8 @@ export function WorkspaceRow({
   needsYou: number;
   shortcutLabel?: string | null;
   onOpen: (a: Workspace) => void;
+  /** The row's ⋯ menu, also opened by a right-click on the row. */
+  menu: MenuItem[];
   /** Set while the list is being arranged (Edit): see the branch below. */
   dragHandle?: ReactNode;
 }) {
@@ -1205,6 +1253,7 @@ export function WorkspaceRow({
       </span>
     </span>
   );
+  const [menuOpen, setMenuOpen] = useState(false);
   const shortcut = shortcutLabel && (
     <kbd
       className="tp-count tp-workspace-shortcut"
@@ -1235,8 +1284,12 @@ export function WorkspaceRow({
   const showJobsDot = jobs > 0 && !running && !offline;
   return (
     <div
-      className={`tp-item ${active ? 'active' : ''}`}
+      className={`tp-item ${active ? 'active' : ''}${menuOpen ? ' menu-open' : ''}`}
       onClick={() => onOpen(workspace)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenuOpen(true);
+      }}
     >
       <span
         className="tp-ico tp-workspace-icon"
@@ -1277,6 +1330,20 @@ export function WorkspaceRow({
         needsYou={needsYou}
         runnerLabel={runnerLabel}
       />
+      <span className="tp-workspace-actions" onClick={(e) => e.stopPropagation()}>
+        <Menu
+          side="bottom"
+          align="end"
+          items={menu}
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          trigger={
+            <button type="button" className="tp-workspace-more" aria-label={`${workspace.name} actions`} title="Actions">
+              <MoreOutlined />
+            </button>
+          }
+        />
+      </span>
     </div>
   );
 }

@@ -15,8 +15,9 @@ import {
 } from '../lib/queries';
 import { workspaceRunnerId, firstOpenableWorkspace } from '../lib/workspaceOrder';
 
-// Routes that render their own loaders and have no first-screen data to wait on.
-const BYPASS = ['/login', '/enroll', '/setup'];
+// Routes that render their own loaders and have no first-screen data to wait on. The privacy policy
+// has no data at all, and opens on any deployment — even one still waiting for its first-run setup.
+const BYPASS = ['/login', '/enroll', '/setup', '/privacy'];
 // The public share page (/s/<token>) is signed-out and self-loading — never gate it behind
 // the splash or the setup-status check.
 const isBypass = (pathname: string) => BYPASS.includes(pathname) || pathname.startsWith('/s/');
@@ -85,8 +86,12 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   // Signed-out: the only thing the splash waits on is whether this is a zero-user system.
   const setupStatus = useQuery({ ...setupStatusQuery(), enabled: needsSetupCheck });
   // Business pre-warm is for the signed-in app only; firing these while signed out would
-  // 401 (and bounce to /login), so they gate on `warm`, not `gated`.
-  const warm = gated && hasToken;
+  // 401 (and bounce to /login), so they gate on `warm`, not `gated`. It ends with the splash: the
+  // page's own reads take over, and a pre-warm read left on would be refreshed by the control-plane
+  // stream on every event. The scoped Open list below is the page's only while the workspace shows
+  // neither projects nor folders (WorkspaceView reads the whole list then), so on a large account it
+  // was a second full Open-list read per event, each one computing the account's list version.
+  const warm = gated && hasToken && !booted;
 
   // Every query below reuses the shared factory keys (lib/queries) so the data the splash
   // pre-warms lands under the exact keys the page/console then read from cache.

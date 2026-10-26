@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
+import { LOCK_LINK_CALL_SESSIONS } from '../deadlock/lock-order-fixture';
 import { LOCK_ORDER, LOCK_ORDER_COMPATIBLE, LOCK_ORDER_EXCEPTIONS, orderedIds } from './lock-order';
 
 const read = (rel: string) => readFileSync(path.resolve(__dirname, '../..', rel), 'utf8');
@@ -329,7 +330,8 @@ test('each inventory entry holds what it says it holds', () => {
  */
 const SESSION_WRITERS: ReadonlyArray<{ method: string; statements: number; note: string }> = [
   {
-    method: 'events',
+    // The events route's transaction, which the runner link's batches run too (one per part of a batch).
+    method: 'ingestEvents',
     statements: 1,
     note:
       'One, literally. It used to be up to eight — a telemetry write, a runtime-id fill, the ' +
@@ -351,7 +353,7 @@ const SESSION_WRITERS: ReadonlyArray<{ method: string; statements: number; note:
 test('the runner Session writers issue one write per row', () => {
   const SESSION_WRITE = /\btx\.session\.(update|updateMany)\b|UPDATE\s+"session"/g;
   for (const writer of SESSION_WRITERS) {
-    const start = runnerApi.indexOf(`  async ${writer.method}(`);
+    const start = runnerApi.search(new RegExp(`\\n {2}(?:private )?async ${writer.method}\\(`));
     assert.ok(start > 0, `${writer.method} is gone`);
     // Up to the next method declaration at class-body indentation.
     const rest = runnerApi.slice(start + 10);
@@ -364,6 +366,28 @@ test('the runner Session writers issue one write per row', () => {
         'one-write invariant (common/lock-order.ts, I3) before updating this number',
     );
   }
+});
+
+/**
+ * A merged link call (RunnerApiController.ingestLinkEventCall) holds many Sessions: it takes them in ONE statement,
+ * sorted by id — so no two transactions take a pair of them in opposite orders — and SKIP LOCKED, so it waits for no
+ * Session at all. `lock-order.pg.spec.ts` replays the statement against a turn completion and a second call; this keeps
+ * what it replays the statement the controller issues.
+ */
+test('a merged link call takes its sessions in one ordered statement, the one the regression replays', () => {
+  const start = runnerApi.indexOf('  private async lockLinkCallSessions(');
+  assert.ok(start > 0, 'lockLinkCallSessions is gone');
+  const body = runnerApi.slice(start, runnerApi.indexOf('\n  }\n', start));
+  assert.equal(body.match(/\$queryRaw/g)?.length, 1, 'one statement takes every session of the call');
+  const sql = body.slice(body.indexOf('`') + 1, body.indexOf('`', body.indexOf('`') + 1));
+  let parameter = 0;
+  const shape = (text: string) => text.replace(/\s+/g, ' ').trim();
+  assert.equal(
+    shape(sql.replace(/\$\{[^}]*\}/g, () => `$${(parameter += 1)}`)),
+    shape(LOCK_LINK_CALL_SESSIONS),
+    'the statement lock-order.pg.spec.ts replays is not the one lockLinkCallSessions issues',
+  );
+  assert.match(sql, /ORDER BY s\."id"\s+FOR UPDATE OF s SKIP LOCKED/);
 });
 
 test('the declared order is a strict ranking with argued gaps', () => {

@@ -1,0 +1,83 @@
+# The runner link staging stack (staging-up.sh beside this file): the root docker-compose.yml under a Compose project of
+# its own, with this file on top. It renames every container, moves every host port onto the staging bind address and
+# every data directory into the staging state directory, and tags every image it builds with the project's name, so
+# nothing it runs, writes or builds can be taken for a deployment's. The values come from the env file staging-up.sh
+# writes into the state directory.
+services:
+  postgres:
+    container_name: ${STAGING_PROJECT}-postgres
+    volumes:
+      - ${STAGING_DIR}/postgres:/var/lib/postgresql/data
+      - ${STAGING_DIR}/pg-archive:/archive
+
+  apiserver:
+    image: ${STAGING_PROJECT}-apiserver:local
+    container_name: ${STAGING_PROJECT}-apiserver
+    healthcheck:
+      # A new database applies every migration before the server listens.
+      start_period: 15m
+
+  web:
+    container_name: ${STAGING_PROJECT}-web
+    # The web gateway addresses this container by its production name, orbit-web (gateway/nginx.conf says why): within
+    # the project's network the renamed container answers to it too, so the stack serves the web and /dl.
+    networks:
+      default:
+        aliases: [orbit-web]
+
+  gateway:
+    container_name: ${STAGING_PROJECT}-gateway
+    ports: !override
+      - ${STAGING_BIND}:${STAGING_HTTP_PORT}:80
+
+  link-gateway:
+    image: ${STAGING_PROJECT}-link-gateway:local
+    container_name: ${STAGING_PROJECT}-link-gateway
+    environment:
+      # Every frame is summarized in the log: staging is where frames are read.
+      LINK_FRAME_LOG: all
+      # http (the shadow period, staging-check.sh) or link (forwarding, staging-check-link.sh), as ORBIT_LINK_STAGING_MODE
+      # says; a deployment's gateway is http until the server's switch decides it (task D0).
+      LINK_MODE: ${STAGING_MODE}
+      # The apiserver's listener for runner link calls, and the second apiserver's beside it when there are two.
+      LINK_INTERNAL_API_URLS: ${STAGING_BACKEND_URLS}
+      # How long an event batch waits for others to go with it in one merged call (src/link-gateway/events_merge.go), as
+      # ORBIT_LINK_STAGING_MERGE_WINDOW says: empty is the gateway's own default, 0 forwards every batch alone.
+      LINK_EVENT_MERGE_WINDOW: ${STAGING_MERGE_WINDOW:-}
+    ports: !override
+      - ${STAGING_BIND}:${STAGING_LINK_PORT}:8443
+      - 127.0.0.1:${STAGING_METRICS_PORT}:9464
+
+  # A second apiserver, for the drills that stop a backend under the link gateway (staging-check-link.sh, ORBIT_LINK_STAGING_
+  # BACKENDS=2): the first one's whole definition, image and database, with no port of its own and no build. It starts
+  # once the first one is healthy, so the migrations run once.
+  apiserver-b:
+    profiles: [staging-backend-b]
+    extends:
+      file: ${STAGING_REPO}/docker-compose.yml
+      service: apiserver
+    build: !reset null
+    image: ${STAGING_PROJECT}-apiserver:local
+    container_name: ${STAGING_PROJECT}-apiserver-b
+    depends_on:
+      postgres:
+        condition: service_healthy
+      apiserver:
+        condition: service_healthy
+
+  # Never started by staging-up.sh; renamed so that a `docker compose up` naming them by mistake cannot take a
+  # deployment's container names or image tag.
+  pgbackup:
+    container_name: ${STAGING_PROJECT}-pgbackup
+  wiki-worker:
+    image: ${STAGING_PROJECT}-apiserver:local
+    container_name: ${STAGING_PROJECT}-wiki-worker
+
+  # NATS, where the apiserver publishes runner hints and the link gateway subscribes (docs/runner-link-design.md §6.3):
+  # root Compose's service, with its client port on the staging bind address and its monitoring on this host's loopback,
+  # for drills. staging-check.sh step 6 reads its subscriptions and message counts there.
+  nats:
+    container_name: ${STAGING_PROJECT}-nats
+    ports:
+      - ${STAGING_BIND}:${STAGING_NATS_PORT}:4222
+      - 127.0.0.1:${STAGING_NATS_MONITOR_PORT}:8222

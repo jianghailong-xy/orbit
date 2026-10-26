@@ -12,7 +12,7 @@ import { isLoginEngine, usedRunnerEngines } from '../common/runner-engines';
 import { accountDir, isAccountEngine } from '@orbit/shared';
 import { ACCOUNT_CHOICE, DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner, type AccountRunner } from '../providers/account';
 import type { WorkspaceAccountChoices } from '../providers/plan-usage-accounts';
-import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
+import { runnerIsOnline, type RunnerBeats } from '../runners/runner-presence';
 import { antigravityGoogleLogin } from '../common/antigravity-readiness';
 
 /** Engine names as the user sees them elsewhere in Orbit (matches the web's RunnerSignIn). */
@@ -55,11 +55,10 @@ const CREDENTIAL_ENV_KEYS: Record<LoginEngine, { any: string[] } | { all: string
 
 /** The runner fields this reads — a subset of the Prisma row. Its accounts are judged as Orbit uses them
  *  (AccountRunner): a Default its owner removed from Orbit is never the one judged. */
-export interface EnginePreflightRunner extends AccountRunner {
+export interface EnginePreflightRunner extends AccountRunner, RunnerBeats {
   name?: string | null;
   displayName?: string | null;
   status: string;
-  lastHeartbeatAt: Date | null;
   /** Heartbeat-reported per-engine health, stored as sent (RunnerEngineHealth[]). */
   engines: unknown;
   /** The names its accounts were given in Orbit (Runner.accountNames), which a refusal names them by. */
@@ -224,12 +223,7 @@ export function signedOutEngineRefusal(args: {
   if (bringsOwnEnvCredential(runtime, args.workspaceEnv)) return null;
 
   const now = new Date(args.nowMs ?? Date.now());
-  const heartbeatMs = args.runner.lastHeartbeatAt?.getTime() ?? NaN;
-  const online =
-    args.runner.status !== 'OFFLINE' &&
-    Number.isFinite(heartbeatMs) &&
-    heartbeatMs >= now.getTime() - SESSION_RUNNER_OFFLINE_AFTER_MS;
-  if (!online) return null;
+  if (!runnerIsOnline(args.runner, now.getTime())) return null;
 
   // Named as Infrastructure names them: with what each account was called in Orbit, and as Orbit uses
   // them — without a Default its owner removed from Orbit.
@@ -248,7 +242,7 @@ export function signedOutEngineRefusal(args: {
     if (slot) {
       return slot.auth === 'no'
         ? `Antigravity account ${accountName(runtime, slot, engines)} is signed out on runner "${machine}" — every session run on that account fails immediately. ` +
-          'Sign it in from Infrastructure, then start this session again.'
+          'Sign it in from the Machines & models page, then start this session again.'
         : null;
     }
     return health.auth === 'no' ? antigravityRefusal(health, args.runner, machine) : null;
@@ -272,18 +266,18 @@ export function signedOutEngineRefusal(args: {
         : LOGIN_COMMANDS[runtime];
     return (
       `${label} account ${login.name} is signed out on runner "${machine}" — every session run on that account fails immediately. ` +
-      `Sign it in from Infrastructure, or run \`${command}\` on that machine, then start this session again.`
+      `Sign it in from the Machines & models page, or run \`${command}\` on that machine, then start this session again.`
     );
   }
   return (
     `${label} is signed out on runner "${machine}" — every session started there fails immediately. ` +
-    `Sign in from Infrastructure, or run \`${LOGIN_COMMANDS[runtime]}\` on that machine, then start this session again.`
+    `Sign in from the Machines & models page, or run \`${LOGIN_COMMANDS[runtime]}\` on that machine, then start this session again.`
   );
 }
 
 /** The Gemini key, the way out of an Antigravity refusal on any runner. */
 const GEMINI_KEY_WAY_OUT =
-  'connect Gemini under API keys on Infrastructure (/providers/new/gemini) — Orbit stores the key encrypted — and start this session on Gemini';
+  'connect Gemini under API keys on the Machines & models page (/providers/new/gemini) — Orbit stores the key encrypted — and start this session on Gemini';
 
 /**
  * Built-in Antigravity has no credential of its own on that runner: no Google sign-in that answers,
@@ -298,7 +292,7 @@ function antigravityRefusal(health: RunnerEngineHealth, runner: EnginePreflightR
       : `Antigravity has no Google sign-in or Gemini API key on runner "${machine}".`;
   switch (antigravityGoogleLogin(runner)) {
     case 'available':
-      return `${head} Sign in with Google from Infrastructure, or ${GEMINI_KEY_WAY_OUT}.`;
+      return `${head} Sign in with Google from the Machines & models page, or ${GEMINI_KEY_WAY_OUT}.`;
     case 'unsupported_platform':
       return `${head} Signing in with Google works on Linux runners only for now, so ${GEMINI_KEY_WAY_OUT}.`;
     default:

@@ -1071,9 +1071,12 @@ export interface RunnerHeartbeatResponse {
    *  branch onto its project's integration line
    *  (docs/project-integration-line-contract.md §2.3 J-T2). Sent only to a process that declared
    *  `integration-job/v1`, heartbeats with a leaseOwner and is not draining. At most
-   *  two per beat with distinct serial keys, because the claim is what serialises them — a job
-   *  named here is already RUNNING in the database and is nobody else's to take. Answered via
-   *  POST /runner/integration-jobs/:jobId/{progress,result}. Absent on older control planes. */
+   *  two new claims per beat with distinct serial keys, because the claim is what serialises them
+   *  — a job named here is already RUNNING in the database and is nobody else's to take. Before
+   *  them come the claims this process already holds and has not reported on for longer than the
+   *  lease, handed to it again under the same claim (§2.3 J-T3a): the runner starts one it is not
+   *  running and skips one it is. Answered via POST /runner/integration-jobs/:jobId/{progress,result}.
+   *  Absent on older control planes. */
   integrationJobs?: IntegrationJobCommand[];
   /** Repository operations this runner has just claimed (contract `repoOps`, design §7): the wiki's
    *  pipelines run on the server, which holds no repository, so a step that needs to know what the

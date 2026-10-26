@@ -357,6 +357,9 @@ model User {
   /// The account's one managed runner mapping, when it has one (migration 0399).
   managedRunner    ManagedRunner?
 
+  /// The cell serving this account's runners, once one asked for a link token (migration 0443).
+  tenantCell       TenantCell?
+
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
 }
@@ -490,6 +493,39 @@ model SignInProvider {
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("sign_in_provider")
+}
+
+/// The runner dispatch pause (docs/runner-link-design.md §11.1, §11.3, D8; migration 0442): at most one
+/// row, id 1, written only by an administrator through PUT /api/admin/dispatch-pause
+/// (queue/dispatch-pause.ts). While `paused`, no runner is handed new work — no session is claimed, the
+/// inbox hands out no message, shell or reload, and no queued integration job is claimed — and the work
+/// already running carries on. No row is the same as a row that is off. `dispatch_pause_one_row_chk`
+/// (`id` = 1) lives only in the migration.
+model DispatchPause {
+  id          Int      @id @default(1) @db.SmallInt
+  paused      Boolean
+  /// When `paused` was last switched. A request for the state it is already in writes nothing.
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+  /// The administrator who switched it. An id rather than a relation, so deleting them writes nothing here.
+  updatedById String?  @map("updated_by_id") @db.Uuid
+
+  @@map("dispatch_pause")
+}
+
+/// The runner link's cut-over switch, RUNNER_LINK_REQUIRED (docs/runner-link-design.md §11.3, §11.4, D15;
+/// migration 0446): at most one row, id 1, written only by an administrator through
+/// PUT /api/admin/runner-link-required (runner-api/runner-link-required.ts). While `required`, the runner
+/// daemon's routes answer HTTPS 426 UPGRADE_REQUIRED and the link gateway tells runners MODE_LINK. No row is
+/// the same as a row that is off. `runner_link_switch_one_row_chk` (`id` = 1) lives only in the migration.
+model RunnerLinkSwitch {
+  id          Int      @id @default(1) @db.SmallInt
+  required    Boolean
+  /// When `required` was last switched. A request for the state it is already in writes nothing.
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+  /// The administrator who switched it. An id rather than a relation, so deleting them writes nothing here.
+  updatedById String?  @map("updated_by_id") @db.Uuid
+
+  @@map("runner_link_switch")
 }
 
 /// The Google account an Orbit account signs in with (docs/google-sign-in-design.md §5.1, migration
@@ -634,6 +670,10 @@ model Runner {
   minFreeDiskMb     Int?         @map("min_free_disk_mb")
   version           String?
   tokenHash         String       @map("token_hash") // hash of the long-lived runner credential
+  // The runner's own low-frequency record of its heartbeats: written at registration, and by a
+  // heartbeat at most every five minutes (runners/runner-presence.ts RUNNER_DURABLE_BEAT_EVERY_MS).
+  // Every beat lands in `presence`. Never read this column for liveness — runner-presence.ts reads
+  // both and takes the later.
   lastHeartbeatAt   DateTime?    @map("last_heartbeat_at")
   enrolledAt        DateTime     @default(now()) @map("enrolled_at")
   // User-defined display order shared by the sidebar and Runners page. NULL keeps
@@ -847,6 +887,9 @@ model Runner {
   /// codebase authority above: deleting the row would cascade to its workspaces and lose the
   /// mapping's storage record, so compute removal never deletes it.
   managedRunner ManagedRunner?
+  /// When it was last heard from, upserted by every heartbeat (migration 0444). Read it only
+  /// through runners/runner-presence.ts.
+  presence      RunnerPresence?
 
   @@index([ownerId])
   /// The tenancy fence `project_codebase` hangs off: naming BOTH the runner and the owner in one
@@ -854,6 +897,45 @@ model Runner {
   /// The same device `task_id_owner_id_key` already carries for its five child tables.
   @@unique([id, ownerId], map: "runner_id_owner_id_key")
   @@map("runner")
+}
+
+/// A runner's presence: its latest heartbeat, and what carried it (docs/runner-link-design.md §5.7,
+/// §6.5). One row per runner, upserted by every heartbeat — the HTTP heartbeat now, the link
+/// gateway's later — so saying "still here" no longer rewrites the `runner` row.
+///
+/// UNLOGGED (migration 0444): never in the WAL, so a beat is cheap, and EMPTIED by PostgreSQL after a
+/// crash or a failover. Every live runner writes its row again within one heartbeat interval, and
+/// nothing may take an empty table for a dead fleet: readings fall back to `runner.lastHeartbeatAt`
+/// (runners/runner-presence.ts), and the reaper holds off while the evidence is this thin
+/// (realtime/reaper.service.ts).
+model RunnerPresence {
+  runnerId      String   @id @map("runner_id") @db.Uuid
+  runner        Runner   @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  /// The process that beat: its lease owner (the heartbeat's `leaseOwner`, one per runner process).
+  /// Null for a runner too old to send one.
+  processId     String?  @map("process_id") @db.Uuid
+  /// The link gateway node holding the runner's connection. Null over HTTP.
+  gatewayId     String?  @map("gateway_id")
+  lastBeatAt    DateTime @map("last_beat_at")
+  /// What carried the beat: 'HTTP' (POST /api/runner/heartbeat) or 'LINK' (the link gateway).
+  linkState     String   @map("link_state")
+  /// The runner's hash of the facts it reports (model catalogue, skills, engine state, repository
+  /// health), against which a link heartbeat can say "unchanged": a JSON object of one digest per kind,
+  /// as the last full reconcile or report write stored them (runner-api/link-heartbeat.ts). Null over
+  /// HTTP, which sends them all.
+  factsHash     String?  @map("facts_hash")
+  /// The hash of what the last full reconciliation compared: what the beat said that decides what it is
+  /// handed, and the `changes` count it covered. Null over HTTP, which reconciles fully on every beat.
+  reconcileHash String?  @map("reconcile_hash")
+  /// How many times something a heartbeat delivers to this runner has changed. Every writer of one adds
+  /// one after its commit (RealtimeService.markRunnerChanged); a link heartbeat whose last full reconcile
+  /// covered a smaller count reconciles in full again (migration 0447).
+  changes       BigInt   @default(0)
+  /// When the last full reconcile that left nothing pending ran; null until one has, which is a reconcile
+  /// owed. A link heartbeat reconciles in full at least once in each five minutes (migration 0447).
+  reconciledAt  DateTime? @map("reconciled_at")
+
+  @@map("runner_presence")
 }
 
 // A long-lived credential for a HEADLESS process on one machine — a launchd/cron bridge that
@@ -906,6 +988,37 @@ model EnrollmentToken {
   createdAt DateTime  @default(now()) @map("created_at")
 
   @@map("enrollment_token")
+}
+
+/// The runner link's cell directory (docs/runner-link-design.md §6.2, migration 0443): which cell
+/// serves a tenant's runners. A tenant is placed on its runners' first link-token request and stays
+/// where it was placed. `cell-1` is the only cell; a CHECK in 0443 holds it.
+model TenantCell {
+  ownerId    String   @id @map("owner_id") @db.Uuid
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  cellId     String   @map("cell_id")
+  assignedAt DateTime @default(now()) @map("assigned_at") @db.Timestamptz(3)
+
+  @@map("tenant_cell")
+}
+
+/// A runner credential that stopped vouching for connection tokens (migration 0443): the runner was
+/// deleted, or its credential replaced. Written only by the `runner_link_credential_revoke` trigger on
+/// `runner`, read by the link gateway through GET /api/runner/link-token/revocations, and purged by
+/// the reaper once older than a token's lifetime. No foreign keys: a revocation outlives its runner.
+model RunnerLinkRevocation {
+  id         BigInt   @id @default(autoincrement())
+  /// `runnerLinkCredential(token_hash)` (runner-api/runner-link-token.ts) of the credential that stopped.
+  credential String
+  runnerId   String   @map("runner_id") @db.Uuid
+  ownerId    String   @map("owner_id") @db.Uuid
+  /// `RUNNER_DELETED` | `CREDENTIAL_REPLACED` (a CHECK in 0443).
+  reason     String
+  revokedAt  DateTime @default(now()) @map("revoked_at") @db.Timestamptz(3)
+
+  @@index([revokedAt])
+  @@index([credential])
+  @@map("runner_link_revocation")
 }
 
 // A pending `orbit register` device-login session (RFC 8628-style browser flow).
@@ -1666,6 +1779,10 @@ model Session {
   // measured from it. lastTurnAt cannot serve: ingest moves it on any event carrying a turn id, and
   // Claude re-sends its compaction status every 30s while compacting (0254).
   runClaimedAt         DateTime? @map("run_claimed_at")
+  // The runner link request id (Rpc.request_id) the current run was claimed under, so the same claim
+  // sent again is answered with this session rather than another (QueueService.trySessionClaim). Written
+  // by every claim — NULL by one made over HTTPS — and read only while the session is RUNNING (0445).
+  claimRequestId       String?   @map("claim_request_id")
   // When enginePhase entered the phase it holds — written only on a change of phase, so a keepalive
   // that re-announces it keeps the original start. Null whenever enginePhase is (0254).
   enginePhaseSince     DateTime? @map("engine_phase_since")
@@ -3379,6 +3496,25 @@ model ProjectTaskStatusCount {
   /// status, so a project's whole tally is one index range.
   @@id([projectId, status], map: "project_task_status_count_pkey")
   @@map("project_task_status_count")
+}
+
+/// The project tasks `GET /projects` has to classify itself (migration 0441): a SUPERSET of the ones
+/// that are OPEN and pass the READY guard, or are live verification gate rows. Every other task's
+/// lane follows from its status, which `ProjectTaskStatusCount` already counts.
+///
+/// Appended by triggers on `task` and `task_dependency` whenever a write can make a task qualify,
+/// and never trimmed by them: a stale row is classified into its real lane and changes no count,
+/// while a missing one would. `rebuildProjectRollupCandidates` replaces the whole table with the
+/// exact set every ten minutes, and sooner after a bulk import. No unique key and no foreign key, so
+/// an append never waits on another transaction; duplicates are folded by the read.
+model ProjectRollupCandidate {
+  id      BigInt @id @default(autoincrement())
+  ownerId String @map("owner_id") @db.Uuid
+  taskId  String @map("task_id") @db.Uuid
+
+  /// The read's one access path: this owner's candidates.
+  @@index([ownerId, taskId], map: "project_rollup_candidate_owner_task_idx")
+  @@map("project_rollup_candidate")
 }
 
 /// An exception somebody has to act on (docs/project-integration-line-contract.md §4.1, migration

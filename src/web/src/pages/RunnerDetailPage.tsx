@@ -26,7 +26,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentProvider, ENGINE_CLI_NAMES, type LoginEngine, type RunnerRepoHealth } from '@orbit/shared';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   api,
   askClaudeHistory,
@@ -635,6 +635,34 @@ export function RunnerDetailPage() {
   };
   const openCreate = () => resetForm(null);
   const openEdit = (a: Workspace) => resetForm(a);
+  // A sidebar row's Configure lands here as ?workspace=<id>: that workspace's editor opens on its row
+  // once the row is drawn (rows draw once the runner is known), and the parameter goes, so a reload
+  // or Back does not open it again.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const configureParam = searchParams.get('workspace');
+  const configureTarget = runner && configureParam ? workspaces.find((a) => a.id === routeId(configureParam)) : undefined;
+  const scrollToEditor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!configureTarget) return;
+    scrollToEditor.current = configureTarget.id;
+    openEdit(configureTarget);
+    setSearchParams((params) => {
+      params.delete('workspace');
+      return params;
+    }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configureTarget?.id]);
+  // Brought to the top once its editor has opened under it: the editor grows in (rd-form-expand), and
+  // until it has, the page may be too short to scroll the row anywhere.
+  useEffect(() => {
+    if (!editing || scrollToEditor.current !== editing.id) return;
+    scrollToEditor.current = null;
+    const row = document.querySelector(`[data-workspace-id="${editing.id}"]`);
+    const scroll = () => row?.scrollIntoView?.({ block: 'start' });
+    const growing = row?.nextElementSibling?.getAnimations?.() ?? [];
+    if (growing.length > 0) void Promise.all(growing.map((a) => a.finished)).then(scroll, scroll);
+    else scroll();
+  }, [editing]);
   const submitWorkspace = () => {
     if (fName.trim()) saveMut.mutate();
   };
@@ -1095,6 +1123,7 @@ export function RunnerDetailPage() {
     return (
     <div
       key={a.id}
+      data-workspace-id={a.id}
       className={`rd-workspace-row${isOpen ? ' is-open' : ''}${a.enabled === false ? ' is-disabled' : ''}`}
       onClick={() => (isOpen ? closeForm() : switchTo(() => openEdit(a)))}
     >
@@ -1190,7 +1219,7 @@ export function RunnerDetailPage() {
       <div className="runners-empty">
         Runner not found —{' '}
         <span className="rd-link" onClick={() => navigate('/infrastructure')}>
-          back to Infrastructure
+          back to Machines & models
         </span>
         .
       </div>
@@ -1399,7 +1428,7 @@ export function RunnerDetailPage() {
       <div className="rd-page">
       <div className="rd-head">
         <span className="rd-back" onClick={() => navigate('/infrastructure')}>
-          <ArrowLeftOutlined /> Infrastructure
+          <ArrowLeftOutlined /> Machines & models
         </span>
       </div>
 

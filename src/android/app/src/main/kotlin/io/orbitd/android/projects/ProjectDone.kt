@@ -243,16 +243,17 @@ object ProjectDone {
         ProjectTime.parse(iso)?.atZone(zone)?.let { DateTimeFormatter.ofPattern("MMM d, HH:mm", Locale.US).format(it) }
 
     /** The one closing card a coordinator conversation draws for its project (`ProjectDone.slot`, web's
-     * `SessionProjectSettlementCard`): nothing — a read that has not answered, a server whose projection carries no counts, or a
-     * project nobody has asked about and nothing has recorded; "Is this project done?" while the coordinator's request stands, the
-     * row says Record as done… or a press here recorded it — or its receipt once it is recorded; and, for a DONE Orbit recorded
-     * itself, the old question's terminal state, "This project is done · recorded by Orbit". Nothing asks "Why is this project not
-     * done?" in a conversation (21090b959). */
-    sealed interface Slot { data object None : Slot; data object NotDone : Slot; data class Done(val requestId: String?) : Slot }
+     * `SessionProjectSettlementCard`): nothing — a read that has not answered, a server whose projection carries no counts, a
+     * project nobody has asked about and nothing has recorded, or a DONE Orbit recorded itself, whose ending is the project page's
+     * card and no longer the conversation's (the owner's ruling of 2026-10-25; until then the old question's terminal state, "This
+     * project is done · recorded by Orbit"); "Is this project done?" while the coordinator's request stands, the row says Record as
+     * done… or a press here recorded it — or its receipt once it is recorded. Nothing asks "Why is this project not done?" in a
+     * conversation (21090b959). */
+    sealed interface Slot { data object None : Slot; data class Done(val requestId: String?) : Slot }
     fun slot(doc: JsonObject?, request: JsonObject?, waitingKind: String?, record: JsonObject?): Slot {
         if (doc == null || counts(doc) == null) return Slot.None
         if (request != null || waitingKind == "RECORD_AS_DONE" || record != null) return Slot.Done(request?.text("itemId"))
-        if (ProjectDoc.status(doc) == "DONE") return if (doc.text("doneBy") == "OWNER") Slot.Done(null) else Slot.NotDone
+        if (ProjectDoc.status(doc) == "DONE" && doc.text("doneBy") == "OWNER") return Slot.Done(null)
         return Slot.None
     }
 }

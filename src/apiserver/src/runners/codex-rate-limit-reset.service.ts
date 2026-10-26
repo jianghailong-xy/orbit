@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import {
@@ -29,11 +30,12 @@ import {
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { DEFAULT_AGENT_PROVIDER, lastProviderByWorkspace } from '../workspaces/workspace-provider';
 import { codexResetLogLine } from './codex-reset-log';
 import { countCodexResetAdmission } from './codex-reset-metrics';
 import { CodexRateLimitResetRepository } from './codex-rate-limit-reset.repository';
-import { isRunnerOnline } from './runners.service';
+import { RUNNER_BEATS, runnerIsOnline } from './runner-presence';
 
 /**
  * How many times one confirmation re-reads after losing an insert. One is what a single concurrent
@@ -57,6 +59,12 @@ export class CodexRateLimitResetService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly operations: CodexRateLimitResetRepository,
+    /**
+     * Told when an operation is created: the runner's heartbeat claims it, and over the runner link it reconciles in
+     * full only when told something changed (RealtimeService.markRunnerChanged). Optional for the specs that build this
+     * service by hand.
+     */
+    @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
   /**
@@ -88,7 +96,7 @@ export class CodexRateLimitResetService {
           where: { id: runnerId, ownerId },
           select: {
             status: true,
-            lastHeartbeatAt: true,
+            ...RUNNER_BEATS,
             capabilities: true,
             heartbeatLeaseOwner: true,
             heartbeatDraining: true,
@@ -111,7 +119,7 @@ export class CodexRateLimitResetService {
             accountOverride:
               request.workspaceId !== undefined && (await accountOverride(tx, ownerId, runnerId, request.workspaceId)),
             activeOperation: active !== null,
-            runnerOnline: isRunnerOnline(runner, now.getTime()),
+            runnerOnline: runnerIsOnline(runner, now.getTime()),
             runnerCapabilities: runner.capabilities,
             heartbeatLeaseOwner: runner.heartbeatLeaseOwner,
             runnerDraining: runner.heartbeatDraining === true,
@@ -146,6 +154,7 @@ export class CodexRateLimitResetService {
       throw error;
     });
     const event = created.replayed ? 'replayed' : 'created';
+    if (!created.replayed) this.realtime?.markRunnerChanged(runnerId);
     countCodexResetAdmission(event);
     this.logger.log(
       codexResetLogLine(

@@ -40,7 +40,7 @@ import {
   reportedLandingAuthority,
 } from '../projects/task-checkpoint.service';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, Prisma, RunStatus, TaskStatus, type Runner } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
@@ -153,6 +153,8 @@ import {
   isAccountEngine,
   withEnginePlanUsage,
   type AccountEngine,
+  type NormalizedRunEvent,
+  toUuid,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
@@ -163,6 +165,7 @@ import {
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
 import { assertValidUpload, MAX_UPLOAD_BYTES, toBytes, UploadedFile } from '../attachments/attachments.media';
 import {
+  classifyTransactionFault,
   loggedRetry,
   RUNNER_POLL_TRANSACTION_MAX_WAIT_MS,
   withTransactionRetry,
@@ -180,12 +183,13 @@ import {
   wrapCoordinatorDeliveryContext,
 } from '../projects/coordinator-opening';
 import { modelRoutingEnabled } from '../common/model-routing-switch';
+import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
 import { QueueService } from '../queue/queue.service';
-import { RealtimeService } from '../realtime/realtime.service';
+import { RealtimeService, runEventBatchNotice } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { CreateTaskBatchItemDto } from '../tasks/dto';
 import { TASK_CRITERION_SHAPE_ADVICE_CODE } from '../tasks/task-criterion-shape-advice';
-import { enqueueRecap, recapDue } from '../sessions/recap';
+import { recapAfterSettle } from '../sessions/recap';
 import { enqueueTurnSuggestion } from '../sessions/turn-suggestion';
 import { normalizeStoredRememberRules } from '../sessions/remember-rules';
 import {
@@ -271,6 +275,7 @@ import { SessionNotSendable, SessionsService } from '../sessions/sessions.servic
 import {
   assertEngineSession as assertEngineSessionRow,
   assertEngineSessionById as assertEngineSessionRowById,
+  SESSION_KIND_LANDING,
 } from '../sessions/engine-session';
 import { appendSessionMessageContext } from '../sessions/session-message';
 import { SessionRequestService } from '../sessions/session-request.service';
@@ -332,6 +337,23 @@ import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
 import { SessionNamingDto } from './session-naming';
 import { normalizeToolOutputEvent } from './tool-output';
+import type { KeyObject } from 'node:crypto';
+import {
+  admitLinkCallConnections,
+  linkCallCutShort,
+  readLinkEventBatch,
+  refusedValueState,
+  rejectionOf,
+  storedLinkCallSeqs,
+  tombstoneRow,
+  unstorableTombstone,
+  type LinkEventBatch,
+  type LinkEventCall,
+  type LinkEventCallAnswer,
+  type LinkEventCallResult,
+  type LinkEventsAnswer,
+  type LinkTombstone,
+} from './link-events';
 import {
   deriveTaskCompletionStatus,
   type TaskCompletionCriterionValue,
@@ -342,7 +364,28 @@ import {
   normalizeCompletionEvidence,
   type CompletionCriterionSnapshotInput,
 } from '../tasks/task-completion-evidence.service';
-import { RunnerAuthGuard } from './runner-auth.guard';
+import { AdmitsLinkCallItself, readAdmittedLinkRunner, RunnerAuthGuard, runnerLinkTokenRevoked } from './runner-auth.guard';
+import { CurrentRunnerLink, type RunnerLinkContext } from './runner-link-call';
+import { RunnerLinkRequiredInterceptor, StaysOnHttps } from './runner-link-required';
+import { readRunnerLinkHints, runnerLinkHintsOf, type RunnerLinkHints } from './runner-link-hints';
+import {
+  heartbeatAnswerHandsOut,
+  LinkReportUnwritable,
+  linkBeatDigests,
+  linkBeatVerdict,
+  quietHeartbeatAnswer,
+  readFactsHash,
+  readLinkBeat,
+  readLinkReconcilePending,
+  reconcileHashOf,
+  recordLinkReconcile,
+  RUNNER_ROW_FACTS,
+  writeLinkBeatReports,
+  type HeartbeatFactKind,
+  type LinkBeatDigests,
+  type LinkBeatRow,
+} from './link-heartbeat';
+import { RunnerReleaseFeed } from './runner-release-feed';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { ListEventsService } from '../task-lists/list-events.service';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
@@ -350,6 +393,7 @@ import {
   isNoiseSystemEvent,
   NON_REPLAYABLE_EVENT_TYPES,
   replayableEventSql,
+  TOMBSTONE_EVENT_TYPE,
 } from '../common/system-noise';
 import { isInstallEngine, isKimiRegion, isLoginEngine, sanitizeRunnerEngines, usedRunnerEngines } from '../common/runner-engines';
 import { antigravityGoogleLoginRefusal, antigravitySignInUnderWay } from '../common/antigravity-readiness';
@@ -380,6 +424,7 @@ import {
   PROVIDER_UNAVAILABLE_ERROR,
   SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
   advertisedRunnerProviders,
+  cursorRunnerRefusal,
   dshRuntimeUnavailable,
   runnerAdvertisesProvider,
   runnerKnowsCursor,
@@ -394,6 +439,7 @@ import {
 import { providerDispatchWhereOn } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
 import { CURSOR_KEY_CHECK_V1, cursorKeyCheckRelay } from '../providers/cursor-key-check-relay';
+import { accountDisabled } from '../auth/disabled-accounts';
 import {
   recordedEngine,
   SESSION_ENGINE_UNKNOWN_MESSAGE,
@@ -401,7 +447,7 @@ import {
   type SessionEngineFacts,
 } from '../providers/session-engine';
 import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
-import { reauthorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
+import { authorizeManagedRunnerInstance, reauthorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import {
   managedRunnerHeartbeat,
@@ -409,6 +455,13 @@ import {
   storedWorkloadFor,
   type ManagedHeartbeatAnswer,
 } from '../managed-runners/managed-runner-sleep';
+import {
+  RUNNER_OFFLINE_AFTER_MS,
+  RunnerPresenceService,
+  durableBeatDue,
+  recordRunnerBeat,
+  runnerLastBeatAt,
+} from '../runners/runner-presence';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -450,6 +503,98 @@ const REPO_CLEANUP_TIMEOUT_MS = 3 * 60_000;
 // itself. maxWait uses the same value: a batch that already burned its compile should queue for
 // a pool slot instead of failing fast and paying the compile again.
 const EVENTS_INGEST_TRANSACTION_TIMEOUT_MS = 120_000;
+/**
+ * What the events transaction reads of its Session under the row's lock (ingestEvents): read for each batch, or for
+ * every session of a merged link call at once (ingestLinkEventCall).
+ */
+const INGEST_SESSION_SELECT = {
+  // Whose rows a control-plane turn's card may be read from (project-started.ts).
+  ownerId: true,
+  status: true,
+  runtimeSessionId: true,
+  // Read under the row lock so the three conditional writes this transaction used to
+  // issue as separate guarded statements can be decided here instead. Nothing can move
+  // them between this read and the single write ingestEvents makes: the row is held FOR UPDATE.
+  cancelRequestedAt: true,
+  runningBgShells: true,
+  runningBgJobs: true,
+  runningBgJobActivity: true,
+  runningSubagents: true,
+  coordinatorContextEpoch: true,
+  // Same one-shot-per-run reason as runtimeSessionId: the stamp ingestEvents takes is only taken
+  // while this is still null, and the row is held FOR UPDATE across that decision.
+  engineStartedAt: true,
+  enginePhase: true,
+  // Which task this run executes and which door created it — read only when a user turn in
+  // this batch is the one that delivers the task's brief (`readTurnCards`).
+  taskId: true,
+  runSource: true,
+  // The line an account-pool member switch owes the transcript, taken by the first
+  // engine start a batch carries (QueueService.resolvePoolMember writes it).
+  poolSwitchNotice: true,
+} satisfies Prisma.SessionSelect;
+type IngestSessionRow = Prisma.SessionGetPayload<{ select: typeof INGEST_SESSION_SELECT }>;
+/** What one batch's ingest committed, and what is announced of it after the commit (announceIngest). */
+interface IngestOutcome {
+  session: IngestSessionRow;
+  currentWorkAcknowledged: number;
+  abandonedApprovals: string[];
+  accountReload: boolean;
+  events: NormalizedRunEvent[];
+  durable: NormalizedRunEvent[];
+  alreadyStored: number;
+}
+/**
+ * A merged link call's own transaction, as each of its batches' ingest runs inside it (ingestLinkEventCall): the
+ * session's row and stored seqs, read for every session of the call at once under the locks the call took, and the
+ * call's run_event rows, which the ingest adds its own to rather than inserting them, for the call to insert every
+ * session's in one statement once all are derived. Absent, it inserts them itself.
+ */
+interface MergedIngest {
+  tx: Prisma.TransactionClient;
+  session: IngestSessionRow;
+  stored: Set<number>;
+  runEvents?: Prisma.RunEventCreateManyInput[];
+}
+// A merged link call's transaction is run again without a batch whose ingest failed, at most this many times: past
+// that, every batch it still holds is sent alone. So a call of many batches the database refuses values of costs three
+// runs of it, never one per batch. A failure of its one run_event insert, which names no batch, spends one of them.
+const LINK_CALL_RERUNS = 2;
+// The merged transaction waits for no session another writer holds (SKIP LOCKED: that batch is sent alone and waits
+// there). Anything else it would wait on, and any statement of it that runs long, is cut short, and every batch it
+// holds is sent alone instead, so no session's other writers wait behind the call for longer than this.
+const LINK_CALL_LOCK_TIMEOUT_MS = 1_000;
+const LINK_CALL_STATEMENT_TIMEOUT_MS = 5_000;
+// Its whole transaction, and its wait for a pool connection: a call is a few hundred milliseconds even at its largest
+// (MAX_LINK_CALL_BATCHES), so a call past this is not going to commit.
+const LINK_CALL_TRANSACTION_TIMEOUT_MS = 15_000;
+/** A batch of a merged link call, read as linkEvents reads one (ingestLinkEventCall). */
+interface LinkCallBatch {
+  /** Where it is in the call, and so where its result goes. */
+  index: number;
+  connection: number;
+  sessionId: string;
+  read: LinkEventBatch;
+}
+/** The database failing, or a merged link call's transaction cut short: the call's failure, every batch's alike. */
+function linkCallFault(error: unknown): boolean {
+  const { family } = classifyTransactionFault(error);
+  return family === 'TRANSIENT' || family === 'RESOURCE' || linkCallCutShort(error);
+}
+/**
+ * A batch of a merged link call whose ingest failed: the call's transaction is run again without it. With no batch, the
+ * call's one run_event insert failed, which cannot say whose rows it refused: the call is run again with each batch
+ * inserting its own, so that the one that fails is found.
+ */
+class LinkCallBatchFailed extends Error {
+  constructor(
+    readonly batch: LinkCallBatch | null,
+    /** The failure, kept apart from `cause` so that no retry reads it as the transaction's. */
+    readonly failure: unknown,
+  ) {
+    super('a batch of a merged link call failed');
+  }
+}
 // A first integration back-fills every other finished code task in the same transaction as the
 // turn that starts the line. That work is proportional to the project's completed tasks, so the
 // interactive 5s default expires before a large project's queue can commit. Keep the atomic
@@ -473,8 +618,6 @@ async function chunkedCreateMany(
 const LONG_POLL_MS = 25_000;
 const DEVICE_TTL_MS = 10 * 60 * 1000;
 const DEVICE_POLL_INTERVAL_S = 3;
-// Three missed 30s heartbeats — must match RunnersService's offline window.
-const OFFLINE_AFTER_MS = 90_000;
 // Interactive sessions (Route B): per-session input long-poll + at-least-once lease.
 const INBOX_LONG_POLL_MS = 25_000;
 const INBOX_LEASE_MS = 300_000;
@@ -738,6 +881,16 @@ async function persistedDshRefusal(db: Prisma.TransactionClient, runnerId: strin
 }
 
 /**
+ * The notice Cursor CLI sessions wait with on a runner that has not declared Cursor CLI, by what its
+ * persisted heartbeat says it knows (cursorRunnerRefusal): the CLI to install there, or a newer release.
+ */
+async function persistedCursorRefusal(db: Prisma.TransactionClient, runnerId: string): Promise<string> {
+  return cursorRunnerRefusal(await db.runner.findUnique({
+    where: { id: runnerId }, select: { capabilities: true, capabilitiesReportedAt: true, engines: true },
+  }));
+}
+
+/**
  * Whether the session runs on DeepSeek Harness or Cursor CLI — by its recorded engine, whatever
  * credential it spends — which a runner may only lease when both its request and its persisted
  * heartbeat declare that engine (migrations 0377 and 0426); that declaration is made here for the lease
@@ -826,12 +979,22 @@ export function parseRunnerCapabilities(
     .slice(0, 128);
 }
 
-function parseLeaseGeneration(value?: string, field = 'leaseGeneration'): string | null {
+export function parseLeaseGeneration(value?: string, field = 'leaseGeneration'): string | null {
   if (value == null || value === '') return null;
   if (!LEASE_GENERATION_RE.test(value)) {
     throw new BadRequestException(`${field} must be a UUID`);
   }
   return value.toLowerCase();
+}
+
+/** The inbox's `runningTurnId`: a conversation-turn id in either spelling, and empty for none. */
+function parseRunningTurnId(value: string): string | null {
+  if (value === '') return null;
+  try {
+    return toUuid(value);
+  } catch {
+    throw new BadRequestException('runningTurnId must be a turn id, or empty for none');
+  }
 }
 
 /**
@@ -950,7 +1113,10 @@ export type RetryPlanTransaction = TransactionSurface<{ session: ['findUnique'] 
 /** A Codex or Kimi usage limit reads the workspace too: whether it leaves the account to Orbit. */
 export type UsageLimitTransaction = TransactionSurface<{ workspace: ['findUnique'] }> & QuotaRetryTransaction;
 
+// The runner daemon's protocol. While RUNNER_LINK_REQUIRED is on, a call to any of these routes that comes over HTTPS is
+// answered 426 UPGRADE_REQUIRED, but for the five marked StaysOnHttps (runner-link-required.ts).
 @MachineProtocol()
+@UseInterceptors(RunnerLinkRequiredInterceptor)
 @Controller('runner')
 export class RunnerApiController {
   private readonly logger = new Logger(RunnerApiController.name);
@@ -1059,9 +1225,23 @@ export class RunnerApiController {
      * next turn end, and on the task service's tick.
      */
     @Optional() private readonly evidenceQueue?: CoordinatorEvidenceQueueService,
+    /**
+     * Told when a heartbeat's writes fail, so the reaper — which reads the same instance — does not
+     * take that runner's silence for its death (runners/runner-presence.ts). `@Optional()` for the
+     * same reason as the rest of this list; the presence row is written either way, and only the
+     * reaper of a control plane built without it cannot hear about a failed one.
+     */
+    @Optional() private readonly presence?: RunnerPresenceService,
+    /**
+     * What /dl publishes, for the release a link heartbeat's answer states (runner-release-feed.ts). `@Optional()` for
+     * the same reason as the rest of this list: without it, a link heartbeat states no release, and the runner asks
+     * GET /runner/release over HTTPS as it always has.
+     */
+    @Optional() private readonly releases?: RunnerReleaseFeed,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
+  @StaysOnHttps()
   @Post('register')
   async register(@Body() dto: RunnerRegisterRequest): Promise<RunnerRegisterResponse> {
     if (!dto?.enrollmentToken || !dto?.name) {
@@ -1113,6 +1293,7 @@ export class RunnerApiController {
   }
 
   /** `orbit register` (no token) — open a device-login session for browser approval. */
+  @StaysOnHttps()
   @Post('device/start')
   async deviceStart(@Body() dto: DeviceStartRequest): Promise<DeviceStartResponse> {
     if (!dto?.name) throw new BadRequestException('name is required');
@@ -1127,6 +1308,7 @@ export class RunnerApiController {
   }
 
   /** The CLI polls this until the user approves the session in the browser. */
+  @StaysOnHttps()
   @Post('device/poll')
   @HttpCode(200)
   async devicePoll(@Body() dto: DevicePollRequest): Promise<DevicePollResponse> {
@@ -1197,7 +1379,15 @@ export class RunnerApiController {
       maxConcurrent: number;
     },
   ) {
-    const fresh = !!runner.lastHeartbeatAt && Date.now() - runner.lastHeartbeatAt.getTime() < OFFLINE_AFTER_MS;
+    // The guard read the runner's own record; its latest beat is in its presence row.
+    const lastBeatAt = runnerLastBeatAt({
+      lastHeartbeatAt: runner.lastHeartbeatAt,
+      presence: await this.prisma.runnerPresence.findUnique({
+        where: { runnerId: runner.id },
+        select: { lastBeatAt: true },
+      }),
+    });
+    const fresh = !!lastBeatAt && Date.now() - lastBeatAt.getTime() < RUNNER_OFFLINE_AFTER_MS;
     const workspaces = await this.prisma.workspace.findMany({
       where: { runnerId: runner.id, deletedAt: null },
       select: {
@@ -1220,7 +1410,7 @@ export class RunnerApiController {
       name: runner.name,
       status: runner.status,
       online: runner.status !== 'OFFLINE' && fresh,
-      lastHeartbeatAt: runner.lastHeartbeatAt,
+      lastHeartbeatAt: lastBeatAt,
       version: runner.version,
       labels: runner.labels,
       maxConcurrent: runner.maxConcurrent,
@@ -1244,17 +1434,146 @@ export class RunnerApiController {
     return { ok: true };
   }
 
+  // A beat the link gateway forwarded is admitted in the statement that answers it (linkHeartbeat).
   @UseGuards(RunnerAuthGuard)
+  @AdmitsLinkCallItself()
   @Post('heartbeat')
   async heartbeat(
-    @CurrentRunner() runner: { id: string; version: string | null },
+    // `lastHeartbeatAt` is the runner's own record of its beats, as the guard read the row: what
+    // decides whether this beat rewrites it (durableBeatDue).
+    @CurrentRunner() runner: { id: string; version: string | null; lastHeartbeatAt?: Date | null },
     @Body() dto: RunnerHeartbeatRequest,
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
     @Headers(RUNNER_OS_HEADER) osHeader?: string,
     /** A managed runner's authorized instance: its workload is stored and its sleep is negotiated here. */
     @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
-  ): Promise<RunnerHeartbeatResponse> {
+    /** Set when the link gateway forwarded this beat (runner-link-call.ts): presence records it as LINK. */
+    @CurrentRunnerLink() link?: RunnerLinkContext,
+    /** The headers a process declares, as the link gateway forwards them from its Hello. */
+    @Headers() headers?: Record<string, string | string[] | undefined>,
+  ): Promise<RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints }> {
+    if (link?.admission) {
+      return this.linkHeartbeat(runner.id, dto, { capabilities, providerHeader, osHeader, all: headers ?? {} }, link, link.admission);
+    }
+    return this.reconcileHeartbeat(runner, dto, capabilities, providerHeader, osHeader, managedInstance, link);
+  }
+
+  /**
+   * A heartbeat the link gateway forwarded, which RunnerAuthGuard left to this route to admit (AdmitsLinkCallItself):
+   * admitted, recorded in runner_presence and read in one statement, then answered from that statement unless
+   * something says the beat must reconcile in full (link-heartbeat.ts). The body's own refusals come first, as the
+   * full reconcile makes them, so a refused body writes nothing.
+   */
+  private async linkHeartbeat(
+    runnerId: string,
+    dto: RunnerHeartbeatRequest,
+    headers: { capabilities?: string | string[]; providerHeader?: string; osHeader?: string; all: Record<string, string | string[] | undefined> },
+    link: RunnerLinkContext,
+    admission: NonNullable<RunnerLinkContext['admission']>,
+  ): Promise<RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints }> {
+    const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
+    if ((dto?.supervisedSessionIds?.length ?? 0) > 10_000) {
+      throw new BadRequestException('too many supervised session IDs');
+    }
+    const supervised = leaseOwner
+      ? [...new Set((dto?.supervisedSessionIds ?? []).map((id) => parseSupervisedSessionId(id)))]
+      : [];
+    const named = [
+      ...new Set(
+        [
+          ...(dto?.supervisedSessionIds ?? []),
+          ...(dto?.sessions ?? []).map((s) => s?.sessionId),
+          ...(dto?.expiredCommitErrors ?? []).map((e) => e?.sessionId),
+        ]
+          .filter((id): id is string => typeof id === 'string' && SESSION_ID_RE.test(id))
+          .map((id) => id.toLowerCase()),
+      ),
+    ];
+    const digests = linkBeatDigests(dto, { capabilities: headers.capabilities, providers: headers.providerHeader, os: headers.osHeader });
+    let row: LinkBeatRow | null;
+    try {
+      row = await readLinkBeat(this.prisma, {
+        runnerId,
+        ownerId: admission.ownerId,
+        credential: admission.credential,
+        processId: leaseOwner,
+        gatewayId: link.gatewayId ?? null,
+        namedSessionIds: named,
+        supervisedSessionIds: supervised,
+        planUsageDigest: digests.facts.planUsage ?? null,
+      });
+    } catch (error) {
+      // Nothing recorded this beat: the reaper must not read the silence it leaves as the runner's.
+      this.presence?.beatNotRecorded(error);
+      throw error;
+    }
+    if (!row || !row.credentialHeld) throw runnerLinkTokenRevoked();
+    if (row.ownerDisabled) throw accountDisabled();
+    if (row.managed) {
+      // A managed runner is admitted with its instance, as RunnerAuthGuard admits it, and reconciles in full.
+      const admitted = await readAdmittedLinkRunner(this.prisma, { runnerId, credential: admission.credential });
+      const instance = await authorizeManagedRunnerInstance(this.prisma, admitted.id, headers.all);
+      return this.reconcileHeartbeat(admitted, dto, headers.capabilities, headers.providerHeader, headers.osHeader, instance, link);
+    }
+    if (row.landingNamed) assertEngineSessionRow({ sessionKind: 'LANDING' });
+    let verdict = linkBeatVerdict(runnerId, row, digests, supervised.length);
+    if (verdict.answer === 'REPORT') {
+      try {
+        await writeLinkBeatReports(this.prisma, {
+          runnerId,
+          leaseOwner,
+          dto,
+          reports: verdict.reports,
+          digests,
+          storedFacts: readFactsHash(row.factsHash) ?? {},
+          storedPlanUsage: row.planUsage,
+          now: new Date(),
+        });
+      } catch (error) {
+        if (!(error instanceof LinkReportUnwritable)) throw error;
+        // What one statement cannot write, the full reconcile writes, and refuses, as an HTTPS beat does.
+        verdict = { answer: 'FULL', reason: 'INPUTS' };
+      }
+    }
+    if (verdict.answer !== 'FULL') {
+      const cursorKeyChecks = runnerSupportsCapability(headers.capabilities, CURSOR_KEY_CHECK_V1)
+        ? cursorKeyCheckRelay.take(runnerId)
+        : [];
+      return quietHeartbeatAnswer(row, { cursorKeyChecks, linkHints: this.linkHintsOf(runnerId, row, supervised) });
+    }
+    // The full reconcile reads the runner row the guard would have read; the beat statement admitted it.
+    const current = await this.prisma.runner.findUnique({ where: { id: runnerId } });
+    if (!current) throw runnerLinkTokenRevoked();
+    return this.reconcileHeartbeat(current, dto, headers.capabilities, headers.providerHeader, headers.osHeader, undefined, link, {
+      row,
+      digests,
+    });
+  }
+
+  /** What a link heartbeat's answer says waits for the runner: the beat statement's HintState, and this process's own. */
+  private linkHintsOf(runnerId: string, row: LinkBeatRow, supervised: readonly string[]): RunnerLinkHints {
+    const watchers = this.realtime.linkWatchersOf(supervised);
+    const release = this.releases?.assignedTo(runnerId);
+    return { ...runnerLinkHintsOf(row), ...(watchers ? { watchers } : {}), ...(release ? { release } : {}) };
+  }
+
+  /**
+   * The full reconcile: what every HTTPS heartbeat does, and what a link heartbeat does when linkHeartbeat says so.
+   * With `linkBeat` the beat statement has already admitted the caller, refused a landing session and written its
+   * presence row, so this does neither again; it leaves the runner row as it is when nothing written there changed
+   * (only its own record of the beat, when that is due); and it records what it covered (recordLinkReconcile).
+   */
+  private async reconcileHeartbeat(
+    runner: { id: string; version: string | null; lastHeartbeatAt?: Date | null },
+    dto: RunnerHeartbeatRequest,
+    capabilities?: string | string[],
+    providerHeader?: string,
+    osHeader?: string,
+    managedInstance?: ManagedRunnerInstance,
+    link?: RunnerLinkContext,
+    linkBeat?: { row: LinkBeatRow; digests: LinkBeatDigests },
+  ): Promise<RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints }> {
     const heartbeatLeaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     // Idle sleep (managed-runners/managed-runner-sleep.ts), only for an authorized managed instance
     // while the switch is on. Its report is stored as sent, or as NULL when it sends none: a runner
@@ -1279,11 +1598,15 @@ export class RunnerApiController {
     // runner row and any session row is written, so a body naming one changes nothing at all. The
     // raw field is read rather than the parsed one: a heartbeat without a lease owner ignores the
     // field downstream, but naming a landing in it is still refused.
-    await this.assertNoLandingSessionNamed([
-      ...(dto?.supervisedSessionIds ?? []),
-      ...(dto?.sessions ?? []).map((s) => s?.sessionId),
-      ...(dto?.expiredCommitErrors ?? []).map((e) => e?.sessionId),
-    ], (runner as { ownerId?: string }).ownerId);
+    if (!linkBeat) {
+      await this.assertNoLandingSessionNamed([
+        ...(dto?.supervisedSessionIds ?? []),
+        ...(dto?.sessions ?? []).map((s) => s?.sessionId),
+        ...(dto?.expiredCommitErrors ?? []).map((e) => e?.sessionId),
+      ], (runner as { ownerId?: string }).ownerId);
+    }
+    // The reports a link beat's full reconcile could not write, which it leaves unrecorded for the next beat to write.
+    const unwritten = new Set<HeartbeatFactKind>();
     const reportedEngines = dto?.engines == null ? null : (sanitizeRunnerEngines(dto.engines) ?? []);
     // Whether each engine is signed in, as the runner list says it: an engine whose Default the owner
     // removed from Orbit is signed in or out by the accounts that remain (usedRunnerEngines), so the
@@ -1304,12 +1627,32 @@ export class RunnerApiController {
           )?.engines,
         )
       : null;
-    const updated = await this.prisma.runner.update({
+    // The beat is two writes, in this order: the runner row — what this heartbeat reports, and the
+    // runner's own record of its beats once that is RUNNER_DURABLE_BEAT_EVERY_MS old — then its
+    // presence row (runners/runner-presence.ts), which every reading of "online" asks. Presence
+    // follows the row, so a beat whose report the database refused is not heard, as when the beat was
+    // one column of that one write. Either failing is told to the presence service before the error
+    // reaches the runner: the reaper must not read the silence it leaves as the runner's.
+    // A link beat's presence row was written by the beat statement before any of this: its silence is not in question.
+    const beatLost = (error: unknown): never => {
+      if (!linkBeat) this.presence?.beatNotRecorded(error);
+      throw error;
+    };
+    // A link beat's full reconcile leaves the runner row as it is when nothing the heartbeat writes there changed
+    // since the last write: only the runner's own record of its beats, once that is due (link-heartbeat.ts).
+    const storedFacts = linkBeat ? readFactsHash(linkBeat.row.factsHash) : null;
+    const runnerRowUnchanged = !!linkBeat && !!storedFacts && !managedSleepOn
+      && RUNNER_ROW_FACTS.every((kind) => storedFacts[kind] === linkBeat.digests.facts[kind]);
+    const updated = runnerRowUnchanged
+      ? durableBeatDue(runner.lastHeartbeatAt, beatAt)
+        ? await this.prisma.runner.update({ where: { id: runner.id }, data: { lastHeartbeatAt: beatAt } }).catch(beatLost)
+        : (runner as Runner)
+      : await this.prisma.runner.update({
       where: { id: runner.id },
       data: {
         status: dto?.status ?? 'ONLINE',
         version: dto?.version ?? runner.version ?? undefined,
-        lastHeartbeatAt: beatAt,
+        lastHeartbeatAt: durableBeatDue(runner.lastHeartbeatAt, beatAt) ? beatAt : undefined,
         // Refresh the `/` autocomplete catalog; older runners omit these (leave as-is).
         // Cast: a typed interface[] isn't structurally an InputJsonValue (no index sig).
         // Stripped (see strip-nul): these are read off the machine's disk — a command or skill
@@ -1375,7 +1718,20 @@ export class RunnerApiController {
           }
           : {}),
       },
-    });
+    }).catch(beatLost);
+    // Heard over HTTPS, or forwarded by the link gateway: either way this beat sent its facts in full
+    // above, so none of the hashes a link heartbeat may carry instead. A forwarded beat names the gateway
+    // node holding the connection (X-Orbit-Link-Gateway-Id). A link beat the beat statement recorded is
+    // not recorded twice.
+    if (!linkBeat) {
+      await recordRunnerBeat(this.prisma, {
+        runnerId: runner.id,
+        processId: heartbeatLeaseOwner,
+        gatewayId: link?.gatewayId ?? null,
+        linkState: link ? 'LINK' : 'HTTP',
+        at: beatAt,
+      }).catch(beatLost);
+    }
     // Whether this instance's mapping is draining to sleep, and what it is told about it. Advisory
     // like the relays below: a read that fails hands out this beat's work as usual, and the instance,
     // busy, then declines the sleep it would have been asked for.
@@ -1395,7 +1751,10 @@ export class RunnerApiController {
     // compare-and-set, so the Codex reset block in it only moves forwards: a block relayed by another
     // process, an older read, an old process or a late heartbeat never takes a newer one back.
     let planUsageStored = true;
-    if (dto?.planUsage != null) {
+    // A link beat's full reconcile leaves a plan usage the runner reported unchanged where it is: its compare-and-set
+    // would rewrite the runner row with the value it holds (link-heartbeat.ts).
+    const planUsageUnchanged = !!linkBeat && !!storedFacts && storedFacts.planUsage === linkBeat.digests.facts.planUsage;
+    if (dto?.planUsage != null && !planUsageUnchanged) {
       planUsageStored = false;
       try {
         planUsageStored = await storeHeartbeatPlanUsage(this.prisma, runner.id, dto.planUsage, heartbeatLeaseOwner);
@@ -1406,6 +1765,7 @@ export class RunnerApiController {
         // Advisory telemetry, like the live diffs below: never fail the heartbeat for it.
         this.logger.warn(`runner ${runner.id}: planUsage not stored (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
       }
+      if (!planUsageStored) unwritten.add('planUsage');
     }
     // Codex rate-limit reset (docs/codex-rate-limit-reset-contract.md §6.2, §6.5): this runner's active
     // operations expired, settled, claimed or redelivered for the process THIS heartbeat speaks for —
@@ -1429,8 +1789,9 @@ export class RunnerApiController {
     }
     // The platform's own git work, claimed the same way and for the same reason: the claim is a
     // compare-and-set on a row, so a job named here is already RUNNING and is nobody else's to take
-    // (contract §2.3 J-T2). On its own try, like the relay above — a failure costs this beat's jobs,
-    // which the next beat claims again from the queue.
+    // (contract §2.3 J-T2). On its own try, like the relay above — a failure costs this beat's jobs:
+    // one still queued is claimed by a later beat, and one this beat had already claimed is handed
+    // to this process again once its lease has run out without a report (J-T3a).
     let integrationJobs: RunnerHeartbeatResponse['integrationJobs'];
     try {
       const claimed = (await this.integrationJobs?.dispatch({
@@ -1568,6 +1929,7 @@ export class RunnerApiController {
         );
       } catch {
         // Next heartbeat retries; the status bar tolerates a one-cycle lag.
+        unwritten.add('sessions');
       }
     }
     // Commits this runner reported as failed that no longer fail for the reason they gave: the
@@ -1600,6 +1962,7 @@ export class RunnerApiController {
         );
       } catch {
         // Advisory: the error stays until the next click, as it always did.
+        unwritten.add('expiredCommitErrors');
       }
     }
     // Record what the runner found at each workspace's working directory, so the config form can
@@ -1644,6 +2007,7 @@ export class RunnerApiController {
         );
       } catch {
         // Advisory telemetry — never fail the heartbeat (that would read as offline).
+        unwritten.add('agentDirProbes');
       }
     }
     let cancelSessionIds: string[] = [];
@@ -1721,11 +2085,28 @@ export class RunnerApiController {
     const cursorKeyChecks = runnerSupportsCapability(capabilities, CURSOR_KEY_CHECK_V1)
       ? cursorKeyCheckRelay.take(runner.id)
       : [];
+    // A beat the link gateway forwarded is also answered with what waits for the runner (runner-link-hints.ts), which
+    // the gateway states in HeartbeatAck.hints, and with the release the runner is assigned, which it states in
+    // HeartbeatAck.release. Read last, and only for a link call; a read that fails leaves it out, and the gateway then
+    // states nothing rather than that nothing waits.
+    // A link beat's full reconcile reuses what its beat statement read of them.
+    const linkHints = linkBeat
+      ? this.linkHintsOf(runner.id, linkBeat.row, supervisedSessionIds)
+      : link
+      ? await readRunnerLinkHints(this.prisma, runner.id).then(
+          (waiting): RunnerLinkHints => {
+            const watchers = this.realtime.linkWatchersOf(supervisedSessionIds);
+            const release = this.releases?.assignedTo(runner.id);
+            return { ...waiting, ...(watchers ? { watchers } : {}), ...(release ? { release } : {}) };
+          },
+          () => undefined,
+        )
+      : undefined;
     // Hand back the authoritative max-concurrent (the editable DB value) so the runner
     // syncs its self-gate to a UI/API change without needing a restart. The free-space floor
     // rides along for the same reason: the runner reclaims its own session checkouts under disk
     // pressure, and that has to be the floor the owner set here, not a second number.
-    return {
+    const answer: RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } = {
       cancelSessionIds,
       leaseLostSessionIds: ownershipLostSessionIds,
       maxConcurrent: updated.maxConcurrent,
@@ -1754,7 +2135,38 @@ export class RunnerApiController {
       ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),
       // Present only when this beat hands a key over, for the same reason.
       ...(cursorKeyChecks.length > 0 ? { cursorKeyChecks } : {}),
+      // Only on a link call, which the gateway takes it out of: an HTTPS response keeps its shape.
+      ...(linkHints ? { linkHints } : {}),
     };
+    if (linkBeat) await this.recordLinkBeatReconcile(runner.id, linkBeat, answer, unwritten);
+    return answer;
+  }
+
+  /**
+   * What a link beat's full reconcile covered, in its presence row (recordLinkReconcile): the digests of the reports
+   * it wrote, and — when it handed out nothing and left nothing in flight (readLinkReconcilePending) — the delivery
+   * inputs and change count it reconciled against, which let the next beats answer from the row. A report it could not
+   * write is left out, so the next beat writes it again. A record that cannot be written leaves the last one standing,
+   * and the next beat compares with that: the answer has gone out either way.
+   */
+  private async recordLinkBeatReconcile(
+    runnerId: string,
+    linkBeat: { row: LinkBeatRow; digests: LinkBeatDigests },
+    answer: RunnerHeartbeatResponse,
+    unwritten: ReadonlySet<HeartbeatFactKind>,
+  ): Promise<void> {
+    try {
+      const pending = unwritten.size > 0 || heartbeatAnswerHandsOut(answer) || (await readLinkReconcilePending(this.prisma, runnerId));
+      const facts = { ...linkBeat.digests.facts };
+      for (const kind of unwritten) delete facts[kind];
+      await recordLinkReconcile(this.prisma, {
+        runnerId,
+        facts,
+        reconcileHash: pending ? null : reconcileHashOf(linkBeat.digests.delivery, linkBeat.row.changes ?? '0'),
+      });
+    } catch (error) {
+      this.logger.warn(`runner ${runnerId}: this link heartbeat's reconcile was not recorded; the next one reconciles again (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
   }
 
   /** The queue, or the reason a request about one cannot be answered without it. */
@@ -2645,12 +3057,13 @@ export class RunnerApiController {
    * it (providerDispatchWhereOn): those whose recorded engine it is, and — for a row without one — the
    * built-in slug and the configured rows that borrowed the runtime. The conditional update repeats
    * the scheduling predicates, so a capable claim/cancel racing this check can never have its
-   * now-live/ended row stamped with a stale upgrade error.
+   * now-live/ended row stamped with a stale upgrade error. A notice that has to be read (Cursor CLI's,
+   * persistedCursorRefusal) is read only once there is a row to mark, not on every long poll.
    */
   private async markProviderUpgradeRequired(
     runnerId: string,
     providerWhere: Prisma.SessionWhereInput,
-    upgradeError: string,
+    notice: string | (() => Promise<string>),
     candidates?: Array<{ id: string; error: string | null }>,
   ): Promise<boolean> {
     const pending =
@@ -2666,6 +3079,7 @@ export class RunnerApiController {
         select: { id: true, error: true },
       }));
     if (pending.length === 0) return false;
+    const upgradeError = typeof notice === 'string' ? notice : await notice();
     const unmarked = pending
       .filter((session) => session.error !== upgradeError)
       .map((session) => session.id);
@@ -2738,7 +3152,11 @@ export class RunnerApiController {
 
   // ── Interactive sessions (Route B) ──
 
-  /** Long-poll: returns one claimed session, or null when nothing is available. */
+  /**
+   * Long-poll: returns one claimed session, or null when nothing is available. A link call answers at
+   * once (runner-link-call.ts), and one sent again under the request id of a claim that claimed is
+   * answered with that claim's session (QueueService.trySessionClaim).
+   */
   @UseGuards(RunnerAuthGuard)
   @Get('sessions/claim')
   async claim(
@@ -2748,6 +3166,7 @@ export class RunnerApiController {
     @Res({ passthrough: true }) res?: Response,
     /** A managed runner's authorized instance: the claim re-checks it where work is handed out. */
     @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
+    @CurrentRunnerLink() link?: RunnerLinkContext,
   ): Promise<ClaimedSession | null> {
     // The long poll outlives the request otherwise: a runner that stopped — a self-update re-exec, a
     // restart, its own claim timeout — leaves it waiting here, and the session it claims next is
@@ -2786,7 +3205,8 @@ export class RunnerApiController {
       // migration 0080's and 0367's triggers, 0372's for the borrowed slugs) already keeps them away
       // from a legacy runner, so failing the request would only strand this runner's other work.
       const providerWhere = await providerDispatchWhereOn(this.prisma, runner.ownerId, provider);
-      await this.markProviderUpgradeRequired(runner.id, providerWhere, upgradeError);
+      const notice = provider === AgentProvider.CURSOR ? () => persistedCursorRefusal(this.prisma, runner.id) : upgradeError;
+      await this.markProviderUpgradeRequired(runner.id, providerWhere, notice);
     }
     if (!supportsSourcePin) {
       // Same shape, same reason (SR35): the claim SQL already withholds these rows, and failing the
@@ -2802,8 +3222,9 @@ export class RunnerApiController {
         supportedProviders,
         ...(dshUnavailable ? { dshUnavailable } : {}),
         ...(managedInstance ? { managedInstance } : {}),
+        ...(link?.requestId ? { claimRequestId: link.requestId } : {}),
       },
-      LONG_POLL_MS,
+      link ? 0 : LONG_POLL_MS,
       supportsTerminalHandoff,
       supportsSourcePin,
       hungUp,
@@ -2837,6 +3258,8 @@ export class RunnerApiController {
   async wake(
     @CurrentRunner() runner: { id: string },
     @Res({ passthrough: true }) res?: Response,
+    /** A link call answers at once: whether a wake is owed now (runner-link-call.ts). */
+    @CurrentRunnerLink() link?: RunnerLinkContext,
   ): Promise<{ wake: boolean }> {
     // A runner that stopped polling must not take a wake with it: the next poll is owed that one.
     let hungUp: AbortSignal | undefined;
@@ -2845,7 +3268,7 @@ export class RunnerApiController {
       res.once('close', () => hangUp.abort());
       hungUp = hangUp.signal;
     }
-    return { wake: await this.realtime.waitForRunnerWake(runner.id, LONG_POLL_MS, hungUp) };
+    return { wake: await this.realtime.waitForRunnerWake(runner.id, link ? 0 : LONG_POLL_MS, hungUp) };
   }
 
   /** Retain every open checkout on restart; the payload status tells the runner which is active. */
@@ -2929,7 +3352,7 @@ export class RunnerApiController {
       await this.markProviderUpgradeRequired(
         runner.id,
         await providerDispatchWhereOn(this.prisma, runner.ownerId, provider),
-        upgradeError,
+        provider === AgentProvider.CURSOR ? () => persistedCursorRefusal(this.prisma, runner.id) : upgradeError,
         onProvider
           .filter(
             (session) =>
@@ -3731,10 +4154,20 @@ export class RunnerApiController {
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     /** A managed runner's authorized instance, asked again before every later round of the poll. */
     @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
+    /** On a link call, the message or shell turn this process is running in the session, and empty
+     *  for none: a turn its own generation leased that it is not running is one whose answer was lost,
+     *  and is handed to it again now rather than when the lease runs out (dequeueTurn). Not read over
+     *  HTTPS, where a poller that does not say so may well be running it. */
+    @Query('runningTurnId') runningTurnId?: string,
+    @CurrentRunnerLink() link?: RunnerLinkContext,
   ): Promise<RunInboxResponse> {
     const generation = parseLeaseGeneration(leaseGeneration);
     const declared = parseRunnerCapabilities(capabilities) ?? [];
-    const deadline = Date.now() + INBOX_LONG_POLL_MS;
+    const redelivery = link && runningTurnId !== undefined
+      ? { leaseOwner: link.leaseOwner, runningTurnId: parseRunningTurnId(runningTurnId) }
+      : undefined;
+    // A link call answers at once (wait=0): a hint says when there is something to fetch.
+    const deadline = Date.now() + (link ? 0 : INBOX_LONG_POLL_MS);
     for (let round = 0; ; round += 1) {
       // The guard answered when the poll began; an instance fenced or superseded during it is
       // refused before it is handed a turn (managed-runner-instance.ts).
@@ -3745,6 +4178,7 @@ export class RunnerApiController {
         generation,
         acceptsSteer === '1',
         declared,
+        redelivery,
       );
       if (turn) return turn;
       const remaining = deadline - Date.now();
@@ -3760,6 +4194,7 @@ export class RunnerApiController {
    * runner owns, so a runner can't read another tenant's blobs.
    */
   @UseGuards(RunnerAuthGuard)
+  @StaysOnHttps()
   @Get('sessions/:id/attachments/:attId')
   async attachment(
     @CurrentRunner() runner: { id: string },
@@ -3786,6 +4221,7 @@ export class RunnerApiController {
    * runner uploads bytes here and rewrites the transcript markdown to `orbit-attachment:<id>`.
    */
   @UseGuards(RunnerAuthGuard)
+  @StaysOnHttps()
   @Post('sessions/:id/attachments')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }))
   async uploadAttachment(
@@ -3881,10 +4317,15 @@ export class RunnerApiController {
      *  THIS session's engine. Absent is a runner that declared nothing: claude steers as it
      *  always has, and every gated runtime withholds. */
     declaredCapabilities: readonly string[] = [],
+    /** A link poller's word about what it is running — see the inbox route — and the process the
+     *  link call came from. Absent over HTTPS, where only an expired lease is handed out again. */
+    redelivery?: { leaseOwner: string; runningTurnId: string | null },
   ): Promise<RunInboxResponse | null> {
     let pauseRequeued = false;
     // Requeued because the engine is resident on a Default its owner removed from Orbit, not for a pause.
     let defaultRequeued = false;
+    // Requeued because the runner dispatch pause holds the turn this run would start next.
+    let dispatchRequeued = false;
     // A reload answered without being handed out, its environment one nothing can build any more: the
     // poll goes on to what was queued behind it.
     let reloadRefused = false;
@@ -3896,6 +4337,7 @@ export class RunnerApiController {
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       pauseRequeued = false;
       defaultRequeued = false;
+      dispatchRequeued = false;
       reloadRefused = false;
       // More than one inbox poller can briefly exist around a warm activation or runner
       // restart. Serialize them on the Session row so their NOT EXISTS(in-flight) checks
@@ -3911,12 +4353,14 @@ export class RunnerApiController {
           providerBuiltin: boolean;
           engine: string | null;
           taskId: string | null;
+          /** The runner dispatch pause (queue/dispatch-pause.ts), read with the lock. */
+          dispatchPaused?: boolean;
         }>
       >`
         SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
                "inbox_lease_owner" AS "inboxLeaseOwner", status,
                "owner_id" AS "ownerId", provider, "provider_builtin" AS "providerBuiltin", engine
-               , "task_id" AS "taskId"
+               , "task_id" AS "taskId", ${DISPATCH_PAUSED} AS "dispatchPaused"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runnerId}::uuid
         FOR UPDATE
@@ -3953,6 +4397,17 @@ export class RunnerApiController {
           throw new ConflictException('inbox lease generation is missing or retired');
         }
       }
+      // A link poller of the process that holds this session's inbox lease, polling under the
+      // generation the running turn was leased to, says it is not running that turn: the answer that
+      // carried it was lost on its way (a connection that dropped, a gateway that never relayed it).
+      // It is handed out again now, as an expired lease is to the process that replaced its own,
+      // rather than after INBOX_LEASE_MS. The runner drops a turn it is already running by its id
+      // (src/runner-go/session.go, `inflight`), so a second copy runs nothing twice.
+      const redeliverOwnLease =
+        redelivery != null
+        && leaseGeneration != null
+        && owned[0].inboxLeaseOwner != null
+        && owned[0].inboxLeaseOwner === redelivery.leaseOwner;
       // "Can this poller act on a steer" is not a property of the poller alone: it is this
       // runner's word about the runtime this session actually executes on. A binary that
       // knows the kind but not this engine's mid-turn call refuses every steer it is handed,
@@ -4062,6 +4517,50 @@ export class RunnerApiController {
             return null;
           }
         }
+        // The runner dispatch pause (queue/dispatch-pause.ts) hands out no turn that would start. A run
+        // with nothing in flight and its next message or shell queued — claimed just before the switch,
+        // or holding the slot a finished turn passed to its follow-up — would otherwise sit RUNNING with
+        // no turn, keeping its runner's slot, and an engine that starts its process with the first
+        // message (agy, OpenCode) would be ended by the reaper's startup watchdog. It goes back to the
+        // queue the way the account pause above puts a run back, and a claim hands it out again once the
+        // pause is off. A turn in flight keeps its run, its lease expired or not: an expired one is the
+        // turn a replacement process takes up below.
+        if (owned[0].dispatchPaused) {
+          const held = await tx.$queryRaw<Array<{ id: string }>>`
+            SELECT s.id FROM "session" s
+            WHERE s.id = ${sessionId}::uuid
+              AND s."cancel_requested_at" IS NULL
+              AND EXISTS (SELECT 1 FROM "conversation_turn" t WHERE t."session_id" = s.id
+                AND t.kind IN ('message', 'shell') AND t.status = 'PENDING')
+              AND NOT EXISTS (SELECT 1 FROM "conversation_turn" t WHERE t."session_id" = s.id
+                AND t.kind IN ('message', 'shell') AND t.status = 'IN_FLIGHT')
+          `;
+          if (held.length) {
+            // As above: retire this process under the same lock, then a committed ownership-loss 409.
+            const fence = owned[0].inboxLeaseGeneration ?? randomUUID();
+            await tx.$executeRaw`
+              INSERT INTO "inbox_lease_generation"
+                ("generation", "session_id", "lease_owner", "retired_at")
+              VALUES (${fence}::uuid, ${sessionId}::uuid, ${owned[0].inboxLeaseOwner}::uuid, now())
+              ON CONFLICT ("generation") DO UPDATE
+                SET "retired_at" = COALESCE("inbox_lease_generation"."retired_at", now())
+              WHERE "inbox_lease_generation"."session_id" = EXCLUDED."session_id"
+            `;
+            await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+            await tx.session.update({
+              where: { id: sessionId },
+              data: {
+                status: RunStatus.PENDING,
+                inboxLeaseGeneration: fence,
+                inboxLeaseOwner: null,
+                engineTurnActive: false,
+              },
+            });
+            pauseRequeued = true;
+            dispatchRequeued = true;
+            return null;
+          }
+        }
       }
       const rows = await tx.$queryRaw<Array<{
         id: string;
@@ -4107,12 +4606,13 @@ export class RunnerApiController {
                 AND turn."created_at" > now() - (${STEER_WITHDRAW_DELIVERY_WINDOW_MS} * interval '1 millisecond'))
               -- A reload is ordered between executable turns, but does not itself consume
               -- an active-turn slot. A cold runtime can leave it queued until the next claim.
+              -- It replaces the engine's process, so the runner dispatch pause holds it.
               OR (turn."kind" = 'reload' AND turn."status" = 'PENDING' AND NOT EXISTS (
                 SELECT 1 FROM "conversation_turn" inflight
                 WHERE inflight."session_id" = ${sessionId}::uuid
                   AND inflight."kind" IN ('message', 'shell')
                   AND inflight."status" = 'IN_FLIGHT'
-              ))
+              ) AND NOT ${DISPATCH_PAUSED})
               -- A steer is the mirror image of an executable turn: it is deliverable
               -- BECAUSE one is already running, and it is written into that turn instead of
               -- waiting for its result. It neither occupies the single in-flight slot (the
@@ -4157,12 +4657,20 @@ export class RunnerApiController {
                 )
                 AND (
                   (turn."status" = 'IN_FLIGHT' AND turn."lease_deadline_at" < now())
+                  -- A PENDING one starts a turn, which the runner dispatch pause holds. The expired
+                  -- lease above is a turn already running, handed to the process that replaced its own.
                   OR (turn."status" = 'PENDING' AND NOT EXISTS (
                     SELECT 1 FROM "conversation_turn" inflight
                     WHERE inflight."session_id" = ${sessionId}::uuid
                       AND inflight."kind" IN ('message', 'shell')
                       AND inflight."status" = 'IN_FLIGHT'
-                  ))
+                  ) AND NOT ${DISPATCH_PAUSED})
+                  -- The turn this link poller's own generation leased and it says it is not running
+                  -- (redeliverOwnLease): a turn already running, like the expired lease above, so the
+                  -- dispatch pause does not hold it either — a cut-over waits for it to finish.
+                  OR (${redeliverOwnLease}::boolean AND turn."status" = 'IN_FLIGHT'
+                    AND turn."lease_generation" = ${leaseGeneration}::uuid
+                    AND turn.id IS DISTINCT FROM ${redelivery?.runningTurnId ?? null}::uuid)
                 ))
             )
           ORDER BY (CASE WHEN turn."kind" IN ('interrupt', 'end', 'diff', 'withdraw') THEN 0 WHEN turn."kind" = 'setconfig' THEN 1 WHEN turn."kind" IN ('reload', 'steer') THEN 2 ELSE 3 END), turn."seq" ASC
@@ -4442,16 +4950,18 @@ export class RunnerApiController {
     }));
     if (pauseRequeued) {
       this.realtime.publishSessionUpdated(sessionId);
-      this.queue.notifySessionQueued();
+      this.queue.notifySessionQueued(runnerId);
       // Outside the transaction: throwing before commit would roll back the pause and its fence.
-      throw new ConflictException(defaultRequeued
-        ? 'the account this engine runs on is no longer used by Orbit; inbox lease ownership was released'
-        : 'account is paused; inbox lease ownership was released');
+      throw new ConflictException(dispatchRequeued
+        ? 'runner dispatch is paused; inbox lease ownership was released'
+        : defaultRequeued
+          ? 'the account this engine runs on is no longer used by Orbit; inbox lease ownership was released'
+          : 'account is paused; inbox lease ownership was released');
     }
     if (reloadRefused) {
       this.realtime.publishSessionUpdated(sessionId);
       // What was queued behind it is this poll's to hand out.
-      return this.dequeueTurn(sessionId, runnerId, leaseGeneration, acceptsSteer, declaredCapabilities);
+      return this.dequeueTurn(sessionId, runnerId, leaseGeneration, acceptsSteer, declaredCapabilities, redelivery);
     }
     return outcome ?? null;
   }
@@ -4776,9 +5286,11 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
     @Param('approvalId', PublicIdPipe) approvalId: string,
+    /** A link call reads the decision once and answers (wait=0): a hint says when there is one. */
+    @CurrentRunnerLink() link?: RunnerLinkContext,
   ): Promise<ApprovalDecisionResponse> {
     await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
-    const deadline = Date.now() + APPROVAL_LONG_POLL_MS;
+    const deadline = Date.now() + (link ? 0 : APPROVAL_LONG_POLL_MS);
     for (;;) {
       const a = await this.prisma.approval.findFirst({
         where: { id: approvalId, sessionId },
@@ -6231,8 +6743,9 @@ export class RunnerApiController {
       // And the rolling recap (sessions/recap.ts) may fold the turn that just committed into the
       // session's one-line summary. Off the response path in both halves — the due check is two
       // reads and the pass may wait on a model — because a list line is cosmetic and the runner
-      // is blocked on this reply. A settle the two-minute window skips is what `recapDue` is for;
-      // a session's LAST settle does not come through here at all (RealtimeService.publish).
+      // is blocked on this reply. A settle inside the two-minute window asks again when it closes;
+      // a session's LAST settle does not come through here at all (RealtimeService.publish), and a
+      // turn the engine started itself ends in the event ingest instead (`events`).
       void this.recapAfterTurn(sessionId);
       // And a merge recovery may be owed a check now that this turn has ended — off the response
       // path as well, for the same reason (SessionsService.checkAfterRepairTurn).
@@ -6270,6 +6783,9 @@ export class RunnerApiController {
       // Only announce the terminal status if this call actually finalized the session
       // (a late/duplicate turn-complete for an already-ended session is a no-op).
       if (finalized.applied) {
+        // The failure also asked the runner to tear the process down (cancelRequestedAt), which its heartbeat
+        // hands over: over the runner link, the next one is told so.
+        this.realtime.markRunnerChanged(runner.id);
         this.realtime.publish(sessionId, {
           seq: Number.MAX_SAFE_INTEGER,
           type: RunEventType.STATUS,
@@ -6295,26 +6811,29 @@ export class RunnerApiController {
     this.realtime.notifyInbox(sessionId);
     if (finalized.applied && finalized.status === RunStatus.AWAITING_INPUT) {
       // A runner slot just became available; wake claim long-polls immediately instead
-      // of leaving unrelated PENDING sessions to the periodic retry fallback.
-      this.queue.notifySessionQueued();
+      // of leaving unrelated PENDING sessions to the periodic retry fallback. Over the link only
+      // this runner is hinted: a session elsewhere in a batch or tree this slot also counted
+      // against learns of it at its own runner's next heartbeat.
+      this.queue.notifySessionQueued(runner.id);
     }
     return { ok: true, status: finalized.status };
   }
 
   /**
-   * Ask for a rolling recap after a completed turn, without waiting for one. The due check is read
-   * here rather than left to the pass so a throttled settle never takes a queue slot, and the pass
-   * re-reads both it and the cursor on its own — a race costs one skipped run, never a wrong recap.
-   * NEVER rejects and is never awaited: a recap is cosmetic, and the settle that asked for it has
-   * already answered the runner by the time this runs.
+   * Ask for a rolling recap after a completed turn, without waiting for one: a pass now when one is
+   * due, one when the two-minute window closes when that is all that stands in the way (recap.ts,
+   * recapAfterSettle). A throttled settle never takes a queue slot, and the pass re-reads both the
+   * window and the cursor on its own — a race costs one skipped run, never a wrong recap. NEVER
+   * rejects and is never awaited: a recap is cosmetic, and the settle that asked for it has already
+   * answered the runner by the time this runs.
    */
   private async recapAfterTurn(sessionId: string): Promise<void> {
-    try {
-      if (!(await recapDue({ db: this.prisma, sessionId }))) return;
-      await enqueueRecap({ db: this.prisma, sessionId });
-    } catch {
-      // The generator already swallows every failure of its own; this covers the reads around it.
-    }
+    await recapAfterSettle({
+      db: this.prisma,
+      sessionId,
+      // A pass writes after this settle has already published, so it publishes its own summary.
+      onWritten: () => this.realtime.publishSessionUpdated(sessionId),
+    });
   }
 
   /**
@@ -6341,8 +6860,14 @@ export class RunnerApiController {
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/events')
   @HttpCode(202)
-  async events(@CurrentRunner() runner: { id: string }, @Param('id', PublicIdPipe) sessionId: string, @Body() batch: RunEventBatch) {
+  async events(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Body() batch: RunEventBatch,
+    @CurrentRunnerLink() link?: RunnerLinkContext,
+  ) {
     await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
+    if (link) return this.linkEvents(runner, sessionId, batch, link);
     const leaseOwner = parseLeaseGeneration(batch?.leaseOwner);
     // Sanitized here, at the edge, so nothing downstream can carry a byte Postgres refuses:
     // every write below — run_event.payload, tool_call, the denormalized preview columns — is
@@ -6353,58 +6878,334 @@ export class RunnerApiController {
     // it as payload.snapshotSeq for snapshot ordering). An older client that ignores the unknown
     // event therefore cannot advance its durable resume cursor past an event we never store.
     const events = stripNul(batch?.events ?? []).map(normalizeToolOutputEvent);
+    await this.ingestEvents(runner, sessionId, leaseOwner, events);
+    return { ok: true };
+  }
 
-    // Persist idempotently — RunEvent has @@unique([sessionId, seq]) + skipDuplicates.
-    // text_delta / thinking_delta are streaming-animation increments: broadcast them
-    // live (below) but DON'T persist them — the full reply is durably saved as the
-    // trailing `assistant` / `thinking` event, so replay/refresh still shows complete
-    // text without piling up rows. background_output is the live tail of a background
-    // shell's file, and tool_output is the current output snapshot of an in-flight foreground
-    // shell — same deal (ephemeral animation; their durable records are background_task / the
-    // final tool_result respectively). The shared deny-list also fences control-plane nudges such
-    // as approvals/resync if a newer or misbehaving runner ever sends one through this generic
-    // event ingress; the read paths use the same list for rolling-deployment history compatibility.
-    const durable = events.filter((e) => !NON_REPLAYABLE_EVENT_TYPES.includes(e.type));
+  /**
+   * A batch of durable events over the runner link (docs/runner-link-design.md §5.8, §6.6; link-events.ts), stored by
+   * the ingest HTTPS uses with two differences:
+   *
+   *   - an event the server will not store fails on its own. A tombstone holds its seq and the answer names it in
+   *     `rejected`, while the events after it are stored as usual, so the session's events stay numbered without a
+   *     hole and the answer's `durableSeq` covers the whole batch;
+   *   - it is stored once per seq with everything derived from it, so a batch sent again, or two copies of it on two
+   *     backends, write no row twice (ingestEvents). A batch found stored is answered as it was the first time: the
+   *     same durableSeq, and the same `rejected`, read back from its tombstones.
+   *
+   * The answer is what the gateway's EventAck says. An event is refused for what readLinkEventBatch finds in it, or
+   * because the database refuses one of its values (storeLinkEvents). Any other failure fails the batch as it does over
+   * HTTPS: the session closed, the lease lost, the database unavailable, a fault in the ingest itself. Nothing is
+   * tombstoned for such a failure, because it is not the event's own.
+   */
+  private async linkEvents(
+    runner: { id: string },
+    sessionId: string,
+    batch: unknown,
+    link: RunnerLinkContext,
+  ): Promise<LinkEventsAnswer> {
+    // The process the link token was minted for: the connection is its, whatever the body says.
+    const leaseOwner = parseLeaseGeneration(link.leaseOwner, 'leaseOwner');
+    const { events, tombstones, firstSeq, lastSeq } = readLinkEventBatch(batch);
+    const { unstorable, alreadyStored } = await this.storeLinkEvents(runner, sessionId, leaseOwner, events, tombstones);
+    if (alreadyStored === 0 && tombstones.length + unstorable.length === 0) return { ok: true, durableSeq: lastSeq, rejected: [] };
+    // What the session's tombstones say of the batch's seqs, whichever delivery wrote them.
+    const rejected = (await this.prisma.runEvent.findMany({
+      where: { sessionId, seq: { gte: firstSeq, lte: lastSeq }, type: TOMBSTONE_EVENT_TYPE },
+      orderBy: { seq: 'asc' },
+      select: { seq: true, payload: true },
+    })).map(rejectionOf);
+    if (alreadyStored === 0) {
+      this.logger.warn(`session ${sessionId}: ${rejected.length} event(s) refused over the runner link and held by tombstones: `
+        + rejected.slice(0, 10).map((r) => `seq ${r.seq} ${r.code}`).join(', ')
+        + (rejected.length > 10 ? ', …' : ''));
+    }
+    return { ok: true, durableSeq: lastSeq, rejected };
+  }
+
+  /**
+   * Stores link events with the tombstones of those already refused. When the database refuses a value of one of them,
+   * the events are stored in halves, and those halves in halves, until the one it refuses is found and tombstoned
+   * (EVENT_UNSTORABLE). Storing a batch in parts is what a runner does anyway when it flushes a batch in pieces, and
+   * every part is the same ingest, stored once per seq. Returns the events tombstoned that way, and how many of the
+   * batch's seqs were found already stored.
+   */
+  private async storeLinkEvents(
+    runner: { id: string },
+    sessionId: string,
+    leaseOwner: string | null,
+    events: NormalizedRunEvent[],
+    tombstones: LinkTombstone[],
+  ): Promise<{ unstorable: LinkTombstone[]; alreadyStored: number }> {
+    try {
+      const { alreadyStored } = await this.ingestEvents(runner, sessionId, leaseOwner, events, { tombstones });
+      return { unstorable: [], alreadyStored };
+    } catch (error) {
+      const sqlState = events.length > 0 ? refusedValueState(error) : null;
+      if (sqlState === null) throw error;
+      if (events.length === 1) {
+        const refused = unstorableTombstone(events[0], sqlState);
+        const { alreadyStored } = await this.ingestEvents(runner, sessionId, leaseOwner, [], { tombstones: [...tombstones, refused] });
+        return { unstorable: [refused], alreadyStored };
+      }
+    }
+    const half = Math.ceil(events.length / 2);
+    const first = await this.storeLinkEvents(runner, sessionId, leaseOwner, events.slice(0, half), tombstones);
+    const rest = await this.storeLinkEvents(runner, sessionId, leaseOwner, events.slice(half), []);
+    return { unstorable: [...first.unstorable, ...rest.unstorable], alreadyStored: first.alreadyStored + rest.alreadyStored };
+  }
+
+  /**
+   * POST /runner/link/events (RunnerLinkEventsController): the link gateway's merged call, the event batches it
+   * collected from any of its connections, stored in ONE transaction instead of one each (docs/runner-link-design.md
+   * §6.6, §6.7; link-events.ts). Each batch is taken as `linkEvents` takes it alone, by the same ingest, and answered
+   * alike. What the call shares is everything around that ingest:
+   *
+   *   - the runners: each connection admitted as RunnerAuthGuard admits a link call, every runner the call names read
+   *     in one statement (admitLinkCallConnections);
+   *   - the sessions: all of them locked in one statement, sorted by id, under lockSessionLeaseOwner's fence
+   *     (lockLinkCallSessions), and their rows and stored seqs read in one statement each;
+   *   - their run_event rows, inserted in one statement once every batch is derived;
+   *   - the other replicas' notice of each batch, sent by the transaction itself, so they hear of each batch once, at
+   *     its commit (§6.7).
+   *
+   * A batch the call cannot take as the events route would is answered `sendAlone`, and so is one whose ingest fails:
+   * the transaction is run again without it, at most LINK_CALL_RERUNS times, and past that every batch left is sent
+   * alone. So is every batch of a call its transaction's own timeouts cut short. The gateway forwards such a batch to
+   * the events route on its own, which refuses or stores it exactly as it always has, tombstones and EVENT_UNSTORABLE
+   * included. Nothing of a batch answered `sendAlone` was written. When the one run_event insert fails, which cannot
+   * say whose rows it refused, the next run has each batch insert its own, so that the batch is found as above.
+   */
+  async ingestLinkEventCall(call: LinkEventCall, publicKey: KeyObject): Promise<LinkEventCallAnswer> {
+    const results: LinkEventCallResult[] = call.batches.map(() => ({ sendAlone: true }));
+    // Each batch as linkEvents reads it, before the database is asked anything. One that names no session, or is not a
+    // batch of events, is sent alone, to be refused there; so is every batch of a session after its first, which the
+    // gateway never sends while the first is out, and which must not be stored ahead of it.
+    let candidates: LinkCallBatch[] = [];
+    const named = new Set<string>();
+    call.batches.forEach((batch, index) => {
+      let sessionId: string;
+      try {
+        sessionId = toUuid(batch.sessionId);
+      } catch {
+        return;
+      }
+      if (named.has(sessionId)) return;
+      named.add(sessionId);
+      let read: LinkEventBatch;
+      try {
+        read = readLinkEventBatch(batch);
+      } catch {
+        return;
+      }
+      candidates.push({ index, connection: batch.connection, sessionId, read });
+    });
+    // Whether each batch inserts its own run_event rows, as alone, rather than the call all of them in one statement:
+    // from the run after that one statement failed, which cannot say whose rows it refused.
+    let insertEach = false;
+    // One run of the call's transaction: what of the call it took, and when it began to hold its sessions.
+    const instance = this.realtime.instance;
+    const ingestCall = async (tx: Prisma.TransactionClient) => {
+      const ingested: Array<{ batch: LinkCallBatch; outcome: IngestOutcome; coordinator: boolean }> = [];
+      const runEvents: Prisma.RunEventCreateManyInput[] | undefined = insertEach ? undefined : [];
+      // It holds every session of the call, so what it would wait on, and any statement of it that runs long, is cut
+      // short, and the call sends every batch alone instead.
+      await tx.$queryRaw`
+        SELECT set_config('lock_timeout', ${`${LINK_CALL_LOCK_TIMEOUT_MS}ms`}, true),
+               set_config('statement_timeout', ${`${LINK_CALL_STATEMENT_TIMEOUT_MS}ms`}, true)
+      `;
+      // A connection RunnerAuthGuard would refuse sends its batches alone, where it refuses them.
+      const connections = await admitLinkCallConnections(tx, publicKey, call.connections, new Date());
+      const admitted = candidates.flatMap((batch) => {
+        const connection = connections[batch.connection];
+        if (!connection) return [];
+        let leaseOwner: string | null;
+        try {
+          leaseOwner = parseLeaseGeneration(connection.leaseOwner, 'leaseOwner');
+        } catch {
+          return [];
+        }
+        return [{ batch, runnerId: connection.runnerId, leaseOwner }];
+      });
+      if (admitted.length === 0) return { ingested, lockedAt: null };
+      const lockedAt = performance.now();
+      const locked = await this.lockLinkCallSessions(tx, admitted.map(({ batch, runnerId, leaseOwner }) => ({
+        sessionId: batch.sessionId,
+        runnerId,
+        leaseOwner,
+      })));
+      // Sent alone: a session another writer holds (it waits for it there), one that is not this runner's or that
+      // another process leases, and a landing — each refused there as it always was.
+      const fenced = admitted.filter(({ batch }) => {
+        const lock = locked.get(batch.sessionId);
+        return lock !== undefined && lock.leaseOwnerMatches && !lock.landing;
+      });
+      const rows = fenced.length === 0
+        ? []
+        : await tx.session.findMany({
+            where: { id: { in: fenced.map(({ batch }) => batch.sessionId) } },
+            select: { id: true, ...INGEST_SESSION_SELECT },
+          });
+      const sessions = new Map(rows.map(({ id, ...session }) => [id, session as IngestSessionRow]));
+      // A session no longer open is refused there too, before anything is written.
+      const open = fenced
+        .filter(({ batch }) => OPEN.includes(sessions.get(batch.sessionId)!.status))
+        .sort((x, y) => (x.batch.sessionId < y.batch.sessionId ? -1 : x.batch.sessionId > y.batch.sessionId ? 1 : 0));
+      const stored = await storedLinkCallSeqs(tx, open.map(({ batch }) => ({
+        sessionId: batch.sessionId,
+        firstSeq: batch.read.firstSeq,
+        lastSeq: batch.read.lastSeq,
+      })));
+      for (const { batch, runnerId, leaseOwner } of open) {
+        try {
+          const outcome = await this.ingestEvents(
+            { id: runnerId },
+            batch.sessionId,
+            leaseOwner,
+            batch.read.events,
+            { tombstones: batch.read.tombstones },
+            { tx, session: sessions.get(batch.sessionId)!, stored: stored.get(batch.sessionId)!, runEvents },
+          );
+          ingested.push({ batch, outcome, coordinator: locked.get(batch.sessionId)!.coordinator });
+        } catch (error) {
+          // Anything but the call's own failure is this batch's, a value the database refuses among it: the call is run
+          // again without it.
+          if (linkCallFault(error)) throw error;
+          throw new LinkCallBatchFailed(batch, error);
+        }
+      }
+      // Every session's run_event rows in one statement, session by session as the ingests built them: nothing in an
+      // ingest reads them back, and every session they belong to is held (rank 60 after rank 30).
+      if (runEvents) {
+        try {
+          await chunkedCreateMany((data) => tx.runEvent.createMany({ data, skipDuplicates: true }), runEvents as never[]);
+        } catch (error) {
+          if (linkCallFault(error)) throw error;
+          throw new LinkCallBatchFailed(null, error);
+        }
+      }
+      // The other replicas hear of each batch once, at this commit, of what was stored while the session is open: what
+      // publishBatch tells them after an ingest of its own.
+      const notices = ingested.flatMap(({ batch, outcome }) => {
+        if (!OPEN.includes(outcome.session.status)) return [];
+        const notice = runEventBatchNotice(instance, batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)));
+        return notice ? [notice] : [];
+      });
+      if (notices.length > 0) {
+        await tx.$executeRaw`
+          SELECT pg_notify(n.channel, n.payload)
+            FROM unnest(${notices.map((n) => n.channel)}::text[], ${notices.map((n) => n.payload)}::text[]) AS n(channel, payload)
+        `;
+      }
+      return { ingested, lockedAt };
+    };
+    let heldMs = 0;
+    for (let run = 0; candidates.length > 0 && run <= LINK_CALL_RERUNS; run += 1) {
+      try {
+        const committed = await withTransactionRetry(this.prisma, ingestCall, loggedRetry(this.logger, 'runnerApi.linkEvents', {
+          transaction: { timeout: LINK_CALL_TRANSACTION_TIMEOUT_MS, maxWait: LINK_CALL_TRANSACTION_TIMEOUT_MS },
+        }));
+        heldMs = committed.lockedAt === null ? 0 : Math.round(performance.now() - committed.lockedAt);
+        for (const { batch, outcome, coordinator } of committed.ingested) {
+          await this.announceIngest(batch.sessionId, outcome, { coordinator });
+          results[batch.index] = await this.linkCallAnswer(batch, outcome);
+        }
+        break;
+      } catch (error) {
+        if (error instanceof LinkCallBatchFailed) {
+          const { evidence } = classifyTransactionFault(error.failure);
+          if (error.batch === null) {
+            this.logger.warn(`the run_event insert of a merged runner link call of ${candidates.length} batches failed `
+              + `(${refusedValueState(error.failure) ?? evidence ?? 'no SQLSTATE'}); run again with each batch inserting its own`);
+            insertEach = true;
+            continue;
+          }
+          this.logger.warn(`session ${error.batch.sessionId}: its batch failed inside a merged runner link call `
+            + `(${refusedValueState(error.failure) ?? evidence ?? 'no SQLSTATE'}); sent alone, the other `
+            + `${candidates.length - 1} run again without it`);
+          candidates = candidates.filter((batch) => batch !== error.batch);
+          continue;
+        }
+        if (!linkCallCutShort(error)) throw error;
+        this.logger.warn(`a merged runner link call of ${candidates.length} batches was cut short by its own lock or `
+          + 'statement timeout: every batch sent alone');
+        break;
+      }
+    }
+    return { results, heldMs };
+  }
+
+  /** What a batch a merged link call stored is answered with: what linkEvents answers it with alone. */
+  private async linkCallAnswer(batch: LinkCallBatch, outcome: IngestOutcome): Promise<LinkEventsAnswer> {
+    const { firstSeq, lastSeq, tombstones } = batch.read;
+    if (outcome.alreadyStored === 0 && tombstones.length === 0) return { ok: true, durableSeq: lastSeq, rejected: [] };
+    // What the session's tombstones say of the batch's seqs, whichever delivery wrote them.
+    const rejected = (await this.prisma.runEvent.findMany({
+      where: { sessionId: batch.sessionId, seq: { gte: firstSeq, lte: lastSeq }, type: TOMBSTONE_EVENT_TYPE },
+      orderBy: { seq: 'asc' },
+      select: { seq: true, payload: true },
+    })).map(rejectionOf);
+    if (outcome.alreadyStored === 0) {
+      this.logger.warn(`session ${batch.sessionId}: ${rejected.length} event(s) refused over the runner link and held by tombstones: `
+        + rejected.slice(0, 10).map((r) => `seq ${r.seq} ${r.code}`).join(', ')
+        + (rejected.length > 10 ? ', …' : ''));
+    }
+    return { ok: true, durableSeq: lastSeq, rejected };
+  }
+
+  /**
+   * Stores one batch of a session's events and derives the session's state from them: the one ingest of both doors,
+   * HTTPS (`events`) and the runner link (`linkEvents`). A link batch also carries the tombstones of the events it
+   * refused, and is stored once per seq with everything derived from it (`link`). Says how many of the batch's seqs
+   * were already stored.
+   *
+   * Inside a merged link call (`merged`, ingestLinkEventCall) it is the same ingest in the call's transaction: the
+   * call has locked the session under the same fence and read its row and stored seqs, and it announces the batch
+   * once it has committed.
+   */
+  private async ingestEvents(
+    runner: { id: string },
+    sessionId: string,
+    leaseOwner: string | null,
+    batch: NormalizedRunEvent[],
+    link?: { tombstones: readonly LinkTombstone[] },
+    merged?: MergedIngest,
+  ): Promise<IngestOutcome> {
     // Retried whole. This is the durable event batch, and it is the clearest case for a retry there
     // is: every write in it is already idempotent (`run_event` by `(sessionId, seq)` with
     // skipDuplicates, the tool_call outcome by tool_use id, the running sets by set semantics),
-    // `durable` and `events` are derived from the request body above, and the ONE Session write is
-    // accumulated from a row re-read under its lock on every attempt. The live broadcast below is
-    // outside the loop, so a retried batch is published once, after the attempt that committed.
-    const eventOutcome = await withTransactionRetry(this.prisma, async (tx) => {
+    // `durable` and `events` are derived from the request body on every attempt, and the ONE
+    // Session write is accumulated from a row re-read under its lock on every attempt. The live
+    // broadcast below is outside the loop, so a retried batch is published once, after the attempt
+    // that committed.
+    const ingest = async (tx: Prisma.TransactionClient): Promise<IngestOutcome> => {
       // Take the Session lock before any event-side write. Besides fencing stale runner
       // processes, a consistent lock order prevents event writes from racing a takeover
-      // outside the transaction and later deadlocking when they touch Session.
-      await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
-      const session = await tx.session.findUniqueOrThrow({
-        where: { id: sessionId },
-        select: {
-          // Whose rows a control-plane turn's card may be read from (project-started.ts).
-          ownerId: true,
-          status: true,
-          runtimeSessionId: true,
-          // Read under the row lock so the three conditional writes this transaction used to
-          // issue as separate guarded statements can be decided here instead. Nothing can move
-          // them between this read and the single write below: the row is held FOR UPDATE.
-          cancelRequestedAt: true,
-          runningBgShells: true,
-          runningBgJobs: true,
-          runningBgJobActivity: true,
-          runningSubagents: true,
-          coordinatorContextEpoch: true,
-          // Same one-shot-per-run reason as runtimeSessionId: the stamp below is only taken
-          // while this is still null, and the row is held FOR UPDATE across that decision.
-          engineStartedAt: true,
-          enginePhase: true,
-          // Which task this run executes and which door created it — read only when a user turn in
-          // this batch is the one that delivers the task's brief (`readTurnCards` below).
-          taskId: true,
-          runSource: true,
-          // The line an account-pool member switch owes the transcript, taken below by the first
-          // engine start this batch carries (QueueService.resolvePoolMember writes it).
-          poolSwitchNotice: true,
-        },
-      });
+      // outside the transaction and later deadlocking when they touch Session. A merged call
+      // took it, with every other session of the call, before any of them was written.
+      if (!merged) await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
+      // A link batch is stored once per seq, and so is everything derived from it: an event whose seq the session
+      // already holds is left out before anything is written, tool calls and session state included. That covers a
+      // batch sent again after its answer was lost, and a copy of it another backend took while this one waited for
+      // the lock above. Read after the lock, so such a copy sees the rows the first committed. Over HTTPS a batch is
+      // taken whole, as it always was.
+      const stored = merged ? merged.stored : link ? await this.storedSeqs(tx, sessionId, batch, link.tombstones) : new Set<number>();
+      const events = stored.size > 0 ? batch.filter((e) => !stored.has(e.seq)) : batch;
+      const tombstones = link ? link.tombstones.filter((t) => !stored.has(t.seq)) : [];
+      // Persist idempotently — RunEvent has @@unique([sessionId, seq]) + skipDuplicates.
+      // text_delta / thinking_delta are streaming-animation increments: broadcast them
+      // live (below) but DON'T persist them — the full reply is durably saved as the
+      // trailing `assistant` / `thinking` event, so replay/refresh still shows complete
+      // text without piling up rows. background_output is the live tail of a background
+      // shell's file, and tool_output is the current output snapshot of an in-flight foreground
+      // shell — same deal (ephemeral animation; their durable records are background_task / the
+      // final tool_result respectively). The shared deny-list also fences control-plane nudges such
+      // as approvals/resync if a newer or misbehaving runner ever sends one through this generic
+      // event ingress; the read paths use the same list for rolling-deployment history compatibility.
+      const durable = events.filter((e) => !NON_REPLAYABLE_EVENT_TYPES.includes(e.type));
+      const session = merged
+        ? merged.session
+        : await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: INGEST_SESSION_SELECT });
       // The owner fence alone is insufficient when the same runner process
       // survives a control-plane terminal transition. Reject before every event-
       // derived write, including empty and streaming-only batches. The runner drains
@@ -6506,19 +7307,22 @@ export class RunnerApiController {
         // leaves it BELOW what the dead process had counted to. The slots it fell behind by were
         // never stored, so a runner resuming at max+1 re-uses empty ones and `skipDuplicates`
         // has nothing to swallow. A batch that is nothing but pings stores nothing at all
-        // (chunkedCreateMany's loop does not run on an empty list).
-        await chunkedCreateMany(
+        // (chunkedCreateMany's loop does not run on an empty list). A merged link call inserts
+        // the rows built here itself, every session's in one statement (MergedIngest.runEvents).
+        const rows = durable.filter((e) => !isNoiseSystemEvent(e)).map((e) => ({
+          sessionId,
+          seq: e.seq,
+          type: e.type,
+          payload: e.payload as Prisma.InputJsonValue,
+          turnId: e.turnId ?? null,
+          createdAt: new Date(e.ts),
+          ingestedByRunnerId: runner.id,
+          ingestedUnderLeaseGeneration: leaseOwner,
+        }));
+        if (merged?.runEvents) merged.runEvents.push(...rows);
+        else await chunkedCreateMany(
           (data) => tx.runEvent.createMany({ data, skipDuplicates: true }),
-          durable.filter((e) => !isNoiseSystemEvent(e)).map((e) => ({
-            sessionId,
-            seq: e.seq,
-            type: e.type,
-            payload: e.payload as Prisma.InputJsonValue,
-            turnId: e.turnId ?? null,
-            createdAt: new Date(e.ts),
-            ingestedByRunnerId: runner.id,
-            ingestedUnderLeaseGeneration: leaseOwner,
-          })) as never[],
+          rows as never[],
         );
         // Persisted conversation/background activity is liveness. Session-level system events
         // are different: every reclaimed idle session emits init/resumed when its runner restarts,
@@ -6530,6 +7334,15 @@ export class RunnerApiController {
         if (hasSessionActivity(durable) && session.cancelRequestedAt == null) {
           sessionData.lastTurnAt = new Date();
         }
+      }
+      // The seqs of the events a link batch refused (linkEvents): a tombstone holds each one, written with the events
+      // around it and as idempotently, so a batch sent again finds it there. It is never read back as an event
+      // (NON_REPLAYABLE_EVENT_TYPES), and it keeps `max(seq)` past the refused event, so a resumed runner never
+      // reuses that seq.
+      if (tombstones.length > 0) {
+        const rows = tombstones.map((tombstone) => tombstoneRow(tombstone, sessionId, runner.id, leaseOwner));
+        if (merged?.runEvents) merged.runEvents.push(...rows);
+        else await tx.runEvent.createMany({ data: rows, skipDuplicates: true });
       }
 
       // Dynamic runtimes report their session id in an init/resumed event; unlike Claude
@@ -6998,7 +7811,9 @@ export class RunnerApiController {
       }
 
       if (Object.keys(sessionData).length > 0) {
-        await tx.session.update({ where: { id: sessionId }, data: sessionData });
+        // The row comes back as its id alone: nothing here reads it, and all 140 of its columns, returned, made this
+        // the batch's costliest statement for both the database and Prisma (task O2's measurement).
+        await tx.session.update({ where: { id: sessionId }, data: sessionData, select: { id: true } });
       }
       // A Claude session its account's usage limit just moved (retryPlanFor) still has its engine up on
       // the old account. A reload naming the provider re-spawns it with the new account's
@@ -7021,8 +7836,27 @@ export class RunnerApiController {
           },
         });
       }
-      return { session, currentWorkAcknowledged, abandonedApprovals, accountReload };
-    }, loggedRetry(this.logger, 'runnerApi.events', { transaction: { timeout: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS, maxWait: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS } }));
+      return { session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size };
+    };
+    if (merged) return ingest(merged.tx);
+    const eventOutcome = await withTransactionRetry(this.prisma, ingest, loggedRetry(this.logger, 'runnerApi.events', { transaction: { timeout: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS, maxWait: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS } }));
+    await this.announceIngest(sessionId, eventOutcome);
+    return eventOutcome;
+  }
+
+  /**
+   * What is announced of a batch once its ingest has committed (ingestEvents). For a batch of a merged link call
+   * (`merged`, ingestLinkEventCall) the other replicas have already heard of it, in the call's transaction, so its
+   * events go to this replica's streams alone; and the spend fuse is asked only for a session the call found
+   * coordinating a project.
+   */
+  private async announceIngest(
+    sessionId: string,
+    eventOutcome: IngestOutcome,
+    merged?: { coordinator: boolean },
+  ): Promise<void> {
+    // What the attempt that committed stored: the whole batch, or for a link batch what was not already stored.
+    const { events, durable } = eventOutcome;
 
     if (eventOutcome.accountReload) this.realtime.notifyInbox(sessionId);
     // One frame per collected card, as a takeover sends: the clients re-read the conversation's
@@ -7049,24 +7883,53 @@ export class RunnerApiController {
       this.realtime.publishQueuedTurnsChanged(sessionId);
     }
     if (OPEN.includes(eventOutcome.session.status)) {
-      for (const e of events) {
-        // Persisted above either way — but a `system` progress ping renders as nothing on every
-        // client, so spending a frame on it only costs the reader bandwidth. The replay paths
-        // drop the same events (notNoiseSql), so live and replayed transcripts agree.
-        if (isNoiseSystemEvent(e)) continue;
-        this.realtime.publish(sessionId, e);
-      }
+      // Persisted above either way — but a `system` progress ping renders as nothing on every
+      // client, so spending a frame on it only costs the reader bandwidth. The replay paths
+      // drop the same events (notNoiseSql), so live and replayed transcripts agree. Published
+      // as one batch: the other replicas hear of it once, not once per event (publishBatch). A merged
+      // call's notice went with its transaction (ingestLinkEventCall), so only this replica is left.
+      const published = events.filter((e) => !isNoiseSystemEvent(e));
+      if (merged) this.realtime.publishBatchHere(sessionId, published);
+      else this.realtime.publishBatch(sessionId, published);
     }
     // Two of the three facts the spend fuse is read on (contract §6.1 F5): this batch committed a
     // turn nobody delivered, or a call that opened a session. Decided from the batch already in
     // hand rather than by asking the fuse on every ingest — this is the hottest path there is, and
-    // a batch carrying neither is the overwhelming majority.
+    // a batch carrying neither is the overwhelming majority. A merged call asked, for all of its
+    // sessions at once, which ones coordinate a project with the coordinator on, which is the first
+    // thing the fuse asks, and the only sessions it goes on for.
+    const fused = !merged || merged.coordinator;
     if (durable.some((e) => e.type === RunEventType.TURN_END && !e.turnId)) {
-      await this.fuse?.afterCoordinatorSpend(sessionId, 'run_event');
+      // A turn nobody delivered is one the engine started itself (a background task reporting in,
+      // a scheduled wake-up). It never reaches /turn-complete, so this is where its recap is asked
+      // for; without it the list kept the recap from before the turn that wrote the conclusion.
+      void this.recapAfterTurn(sessionId);
+      if (fused) await this.fuse?.afterCoordinatorSpend(sessionId, 'run_event');
     } else if (events.some((e) => e.type === RunEventType.TOOL_USE)) {
-      await this.fuse?.afterCoordinatorSpend(sessionId, 'tool_call');
+      if (fused) await this.fuse?.afterCoordinatorSpend(sessionId, 'tool_call');
     }
-    return { ok: true };
+  }
+
+  /**
+   * Which seqs of a link batch the session already holds a row at, an event's or a tombstone's: read inside the ingest's
+   * transaction, under the session lock.
+   */
+  private async storedSeqs(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    events: readonly NormalizedRunEvent[],
+    tombstones: readonly LinkTombstone[],
+  ): Promise<Set<number>> {
+    const seqs = [...events.map((e) => e.seq), ...tombstones.map((t) => t.seq)];
+    if (seqs.length === 0) return new Set();
+    const rows = await tx.runEvent.findMany({
+      where: {
+        sessionId,
+        seq: { gte: seqs.reduce((a, b) => Math.min(a, b)), lte: seqs.reduce((a, b) => Math.max(a, b)) },
+      },
+      select: { seq: true },
+    });
+    return new Set(rows.map((row) => row.seq));
   }
 
   @UseGuards(RunnerAuthGuard)
@@ -7777,7 +8640,7 @@ export class RunnerApiController {
     // parked PENDING behind the claim fence (see trySessionClaim); re-drive the queue so it
     // gets a slot now instead of on the next ≤5s poll. Not on `released`: the operation is
     // still pending and a successor process re-runs it.
-    if (!released) this.queue.notifySessionQueued();
+    if (!released) this.queue.notifySessionQueued(runner.id);
     return { ok: true };
   }
 
@@ -7887,7 +8750,7 @@ export class RunnerApiController {
     }, loggedRetry(this.logger, 'runnerApi.commitResult'));
     // Mirror mergeResult: release a message queued behind this commit now that the
     // checkout is free, rather than waiting for the queue's periodic poll.
-    if (!released) this.queue.notifySessionQueued();
+    if (!released) this.queue.notifySessionQueued(runner.id);
     return { ok: true };
   }
 
@@ -8065,6 +8928,45 @@ export class RunnerApiController {
     if (!locked[0].leaseOwnerMatches) {
       throw new ConflictException('runner process no longer owns this session');
     }
+  }
+
+  /**
+   * lockSessionLeaseOwner's fence for every session of a merged link call at once (ingestLinkEventCall): ONE statement,
+   * sorted by id, so no two transactions take the same pair of sessions in opposite orders (common/lock-order.ts: rows of
+   * one relation are taken in one statement, in id order), and SKIP LOCKED, so the call waits for no session another
+   * writer holds: that batch is sent alone, and waits for its session there, as a batch always has. For each session
+   * it locked that is assigned to the batch's runner: whether the batch's process holds its inbox lease, whether it is
+   * a landing (assertEngineSessionById's question, which the events route asks first), and whether it coordinates a
+   * project with the coordinator on (the spend fuse's first question, announceIngest). The projects are read, not
+   * locked.
+   */
+  private async lockLinkCallSessions(
+    tx: Prisma.TransactionClient,
+    fences: ReadonlyArray<{ sessionId: string; runnerId: string; leaseOwner: string | null }>,
+  ): Promise<Map<string, { leaseOwnerMatches: boolean; landing: boolean; coordinator: boolean }>> {
+    if (fences.length === 0) return new Map();
+    const rows = await tx.$queryRaw<Array<{ id: string; leaseOwnerMatches: boolean; kind: string; coordinator: boolean }>>`
+      SELECT s."id"::text AS "id",
+             (s."inbox_lease_owner" IS NOT DISTINCT FROM f.lease_owner) AS "leaseOwnerMatches",
+             s."kind" AS "kind",
+             EXISTS (
+               SELECT 1 FROM "project" p WHERE p."coordinator_session_id" = s."id" AND p."coordinator_enabled"
+             ) AS "coordinator"
+        FROM "session" s
+        JOIN unnest(
+               ${fences.map((f) => f.sessionId)}::uuid[],
+               ${fences.map((f) => f.runnerId)}::uuid[],
+               ${fences.map((f) => f.leaseOwner)}::uuid[]
+             ) AS f(session_id, runner_id, lease_owner)
+          ON s."id" = f.session_id AND s."assigned_runner_id" = f.runner_id
+       ORDER BY s."id"
+         FOR UPDATE OF s SKIP LOCKED
+    `;
+    return new Map(rows.map((row) => [row.id, {
+      leaseOwnerMatches: row.leaseOwnerMatches,
+      landing: row.kind === SESSION_KIND_LANDING,
+      coordinator: row.coordinator,
+    }]));
   }
 
   /**

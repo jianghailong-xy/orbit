@@ -262,9 +262,13 @@ open it:
 - Nothing limits how many accounts sign up, or what each one stores or runs.
 - To keep someone out, disable their account: **Admin → Users → Disable**. They are signed out everywhere and
   can no longer sign in, with their password or with Google, and their personal access tokens, runners and service
-  tokens are refused, all within 30 seconds. Their Google account cannot sign up again: it stays linked to the
-  disabled account. Nothing they own is deleted. **Enable** lets them back in: they sign in again, and their
-  personal access tokens and runners work as before. You cannot disable your own account or the last
+  tokens are refused, all within 30 seconds. A provider pool they own stops with them: within the same 30 seconds
+  it serves nobody's sessions, on any of its API keys or ChatGPT accounts, including keys other people put in it.
+  An API key or ChatGPT account they put in someone else's pool stops serving that pool, while its other keys and
+  accounts carry on. A session refused this way is told whose account is disabled. Their Google account cannot
+  sign up again: it stays linked to the disabled account. Nothing they own is deleted. **Enable** lets them back
+  in: they sign in again, their personal access tokens and runners work as before, and their pools, keys and
+  ChatGPT accounts serve again. You cannot disable your own account or the last
   administrator. Disable rather than delete: deleting an account still fails while it owns runners, workspaces or
   tasks.
 - **Admin → Users** shows how each account signs in, when it was created and when it last used Orbit (in one of
@@ -354,6 +358,213 @@ its address or key; if the endpoint refuses the key, correct it and recreate the
 [configuration reference](configuration.md#wiki-worker-and-system-model) for every variable. The worker runs every
 account's wiki jobs with this model. To pause them, stop it with `docker compose stop wiki-worker`: the jobs wait in
 the queue until it is started again.
+
+## Runner link
+
+Runners reach the control plane over HTTPS. The runner link is the connection that is to replace those requests: one
+WebSocket per runner, to a link gateway that serves the runners of its cell. The gateway is part of this stack, as the
+`link-gateway` service under the `runner-link` Compose profile, with the `nats` service beside it under the same
+profile. Both run only where `.env` turns that profile on.
+
+For now the link runs in shadow. Runners keep working over HTTPS. The gateway authenticates their connections, keeps
+them alive, and compares the heartbeats and event batches runners mirror to it with what the HTTPS side received. It
+forwards nothing to the control plane, so turning it off changes no runner's work. Once the link is switched over, the
+gateway forwards each runner's requests, heartbeats and events to the apiserver's
+[internal listener](#runner-link-calls), and its live stream to NATS while someone watches the session.
+
+Whenever work waits for a runner (a queued session, a message in its inbox, or a sign-in, merge or update that its
+heartbeat delivers), the apiserver also publishes a hint on NATS, on the subject of that runner alone. The gateway
+subscribes for the runners it holds connections of and relays each hint to that runner. While the link runs in shadow,
+hints are counted and not sent. NATS keeps nothing: no JetStream, no volume. It has no port on the host, and a hint lost
+while it is down costs a runner one heartbeat interval. The apiserver publishes only while the connection tokens below
+are configured, to `nats://nats:4222` unless `RUNNER_LINK_NATS_URL` names another server. With NATS unreachable, it
+logs the hints it dropped once a minute and goes on. Session content crosses NATS too (the live stream, and the text a
+turn has streamed so far), so NATS admits only the apiserver and the gateway, each by its own
+[nkey](#nats-credentials).
+[src/link-gateway/README.md](../src/link-gateway/README.md) describes the gateway in full.
+
+### Connection tokens
+
+Before it connects, a runner trades its runner token for a connection token, and the gateway refuses the tokens of
+revoked credentials. Both come from the apiserver, which offers them only when all three of these are set in `.env`.
+While they are not, those routes answer 404 and runners keep working over HTTP. A value that cannot be used leaves the
+link off too, and the apiserver logs why when it starts:
+
+```dotenv
+RUNNER_LINK_SIGNING_KEY="base64 of an Ed25519 private key in PEM"
+RUNNER_LINK_URL="wss://link.orbit.example.com"
+RUNNER_LINK_GATEWAY_TOKEN="a secret only the gateway is given"
+```
+
+Generate the key and the secret. The gateway is given the public key and the secret, never the private key:
+
+```bash
+openssl genpkey -algorithm ed25519 -out runner-link.pem
+base64 -w0 runner-link.pem                          # RUNNER_LINK_SIGNING_KEY
+openssl pkey -in runner-link.pem -pubout | base64 -w0  # RUNNER_LINK_PUBLIC_KEY, for the gateway
+openssl rand -base64 32                             # RUNNER_LINK_GATEWAY_TOKEN, at least 32 characters
+```
+
+Keep `runner-link.pem` with the deployment's other protected secrets, then recreate the apiserver and check its log:
+
+```bash
+docker compose up -d apiserver
+docker compose logs --tail=50 apiserver | grep RunnerLink
+```
+
+How the tokens work:
+
+- A runner calls `POST /api/runner/link-token` with its runner token and the process identity it heartbeats with.
+  The token it gets back lasts one hour and names the runner, its account, its cell (`cell-1`, the only cell) and
+  the address in `RUNNER_LINK_URL`, which the response repeats.
+- Tokens are signed EdDSA over Ed25519 and name their key (`kid`, the public key's RFC 7638 thumbprint), so the
+  gateway verifies them with the public key alone and can accept an old and a new key while the signing key is
+  replaced. Tokens signed with the old key stop working within the hour.
+- Deleting a runner, `orbit unregister`, rotating a runner's token and registering a runner again under the same
+  name revoke every token minted with its old credential. The gateway reads `GET /api/runner/link-token/revocations`
+  with `Authorization: Bearer <RUNNER_LINK_GATEWAY_TOKEN>` and refuses those tokens; one it has not yet heard of
+  stops working when it expires.
+
+### Runner link calls
+
+Once the link carries the runners' work, the gateway calls the runner routes on the apiserver's behalf, through a
+listener of their own that serves the gateway alone: every call must present `RUNNER_LINK_GATEWAY_TOKEN`, and only the
+runner routes answer there. Compose sets it up:
+
+```dotenv
+RUNNER_LINK_INTERNAL_PORT=3001       # the listener's port; Compose's default
+RUNNER_LINK_INTERNAL_HOST=0.0.0.0    # every interface of the apiserver's container; Compose's default
+```
+
+The listener opens only while the connection tokens above are configured; without them the apiserver logs
+`runner link calls are not served: the runner link is off` and opens nothing. Inside its container, `0.0.0.0` means this
+project's network: the gateway reaches it as `apiserver:3001` (its `LINK_INTERNAL_API_URLS`). **Never publish this
+port** on the host or put it behind the web gateway. Outside Compose, the apiserver binds `127.0.0.1` unless
+`RUNNER_LINK_INTERNAL_HOST` says otherwise; give it an address only the gateway's network reaches.
+
+### NATS credentials
+
+NATS admits two users, each by an nkey, an Ed25519 key pair: the apiserver, which publishes hints and reads live
+streams, and the gateway, which reads hints and publishes live streams. `src/link-gateway/nats.conf`, which the `nats`
+service reads, allows each nothing else, and a client without a key cannot connect. Make two pairs:
+
+```bash
+docker compose --profile runner-link build link-gateway
+docker compose --profile runner-link run --rm --no-deps link-gateway nkey   # the apiserver's pair
+docker compose --profile runner-link run --rm --no-deps link-gateway nkey   # the gateway's pair
+```
+
+Each run prints a new pair once, `seed=SU…` and `public=U…`, and keeps no copy. Put the four values in `.env`:
+
+```dotenv
+RUNNER_LINK_NATS_APISERVER_SEED=SU...   # the apiserver's seed: given to the apiserver alone
+RUNNER_LINK_NATS_APISERVER_KEY=U...     # its public key: given to nats alone
+RUNNER_LINK_NATS_GATEWAY_SEED=SU...     # the gateway's seed: given to the link gateway alone
+RUNNER_LINK_NATS_GATEWAY_KEY=U...       # its public key: given to nats alone
+```
+
+A seed is a credential: keep it with the deployment's other secrets. To replace a pair, make a new one, set both its
+values and recreate `apiserver` (or `link-gateway`) and `nats`.
+
+What missing values look like:
+
+- Either public key empty or unset: `nats` refuses to start, and `docker compose logs nats` says
+  `User entry requires a user` (empty) or `variable reference for 'RUNNER_LINK_NATS_…_KEY' … can not be found`
+  (unset). Hints, and the live stream once the link is switched over, stop; runners on HTTPS are not affected.
+- The apiserver's seed unset: its log warns `RUNNER_LINK_NATS_SEED is not set` and then that NATS is unreachable
+  (`Authorization Violation`); it drops hints and counts them.
+- The gateway's seed unset: its log warns `LINK_NATS_SEED is not set`, `link_nats_connected` stays `0`, and no hint is
+  relayed.
+
+> **Upgrading a deployment that already runs the `runner-link` profile:** add the four values above to `.env` before
+> you upgrade. From this release on, `nats` reads `src/link-gateway/nats.conf` and refuses to start without the two
+> public keys, and the apiserver and the gateway connect only with their seeds.
+
+### Deploy the link gateway
+
+Runners connect to the gateway directly, on a host name and a port of its own. A proxying CDN or the web gateway
+never stands between them: a CDN would terminate and inspect the connection, and its outages and limits would become
+the link's. Set it up in this order.
+
+1. **DNS.** Give the link a host name of its own, such as `link.orbit.example.com`, with an A or AAAA record for this
+   host. Make the record **DNS only**: on Cloudflare, a grey cloud, not proxied. The web origin's own record stays as
+   it is.
+2. **Certificates.** Choose one way:
+   - **ACME.** The gateway obtains a Let's Encrypt certificate on its first connection and renews it on its own. Set
+     `RUNNER_LINK_ACME_DOMAINS` to the link's host name and `RUNNER_LINK_ACME_EMAIL` to a contact address. Its
+     TLS-ALPN-01 challenge reaches the gateway on port 443, so set `RUNNER_LINK_PORT=443`. Certificates are kept in
+     `RUNNER_LINK_GATEWAY_DIR/acme`.
+   - **Files.** Put the certificate chain and its key in `RUNNER_LINK_GATEWAY_DIR/tls/fullchain.pem` and
+     `RUNNER_LINK_GATEWAY_DIR/tls/privkey.pem`, from certbot, another ACME client or your own CA. Any port works.
+     When the files change, the gateway loads them within 30 seconds without a restart, and open connections stay
+     up. A certbot deploy hook that copies the renewed files there is enough. To load them at once, run
+     `docker compose kill -s HUP link-gateway`.
+3. **Firewall.**
+   - Open TCP `RUNNER_LINK_PORT` to the internet: runners connect from wherever they are.
+   - Leave the gateway's metrics port closed. Compose binds it to `127.0.0.1:RUNNER_LINK_METRICS_PORT` (9464).
+   - Keep the web origin's rules: where it sits behind Cloudflare, it accepts only Cloudflare's address ranges. The
+     link's port is a separate entrance and does not change them.
+   - In ACME mode, the gateway needs outbound HTTPS to Let's Encrypt.
+4. **Configure.** Add to `.env`, keeping any profiles `COMPOSE_PROFILES` already lists:
+
+   ```dotenv
+   COMPOSE_PROFILES=runner-link
+   RUNNER_LINK_URL="wss://link.orbit.example.com"
+   RUNNER_LINK_PUBLIC_KEY="base64 of the public key in PEM"
+   RUNNER_LINK_GATEWAY_DIR=/srv/orbit/link-gateway
+   RUNNER_LINK_PORT=443
+   RUNNER_LINK_ACME_DOMAINS=link.orbit.example.com
+   RUNNER_LINK_ACME_EMAIL=ops@example.com
+   ```
+
+   and the four [NATS credentials](#nats-credentials).
+
+   `RUNNER_LINK_URL` carries the port when it is not 443, as in `wss://link.orbit.example.com:8443`. Create
+   `RUNNER_LINK_GATEWAY_DIR` before starting, with `tls/` inside it when certificates come from files. The gateway
+   runs as root in its container, with every capability dropped, so root-owned certificate files are readable.
+5. **Start and check.**
+
+   ```bash
+   docker compose up -d --build apiserver link-gateway nats
+   docker compose ps link-gateway nats
+   docker compose logs --tail=50 link-gateway
+   docker compose logs apiserver | grep RunnerHints
+   curl -s http://127.0.0.1:9464/metrics | grep -E '^link_(connections|handshakes_total|revocation_fetches_total|nats_connected)'
+   curl -sI https://link.orbit.example.com   # 426: the gateway speaks WebSocket only
+   ```
+
+   `link_revocation_fetches_total{result="ok"}` rising every 30 seconds shows that the gateway reads the apiserver
+   with the right secret. `link_nats_connected 1`, and `connected to NATS` in the apiserver's log, show that hints flow,
+   both clients signed in with their seeds. `runner link calls are served on 0.0.0.0:3001` in the apiserver's log shows
+   the listener the gateway forwards to once the link is switched over.
+
+### Operate the link gateway
+
+- **Releases.** An upgrade, or `docker compose up -d --force-recreate link-gateway`, stops the gateway gracefully.
+  It drains first:
+  1. It refuses new connections.
+  2. It tells its runners, in batches, to reconnect after a delay drawn at random within 30 seconds.
+  3. It closes what is left within 80 seconds.
+
+  Compose waits up to 90 seconds before it stops the container. Runners come back to the new gateway once it is up.
+- **Certificate rotation.** In ACME mode it is automatic. With files, replace them. Either way,
+  `link_tls_certificate_not_after_timestamp_seconds` shows the expiry of the certificate in use (files mode).
+- **Replacing the signing key.**
+  1. Give the gateway both public keys, comma-separated (`RUNNER_LINK_PUBLIC_KEY="<old>,<new>"`), and recreate it.
+  2. Switch the apiserver to the new `RUNNER_LINK_SIGNING_KEY`.
+  3. After an hour, when every old token has expired, drop the old public key.
+- **Monitoring.** `/metrics` on the metrics port counts connections, handshakes by result and their duration,
+  disconnects by reason, ping round trips, token refusals by reason, revocation reads, the shadow comparison, and
+  hints by kind and by what became of them. Once the link is switched over it also counts forwarded calls by result and
+  their latency, retries across apiserver instances, events stored and their acknowledgement latency, the ingest queue
+  and the credit it grants, the live stream by what became of it, and frames dropped or connections closed for slow
+  reading.
+  [The gateway's README](../src/link-gateway/README.md#metrics) lists them all.
+- **Logs.** `docker compose logs link-gateway` shows one line per connection event. Set `LINK_FRAME_LOG=all` in the
+  service's environment to log a summary of every frame, too. The gateway decodes frames that it or a runner logged:
+  `docker compose logs link-gateway | docker compose exec -T link-gateway /link-gateway dump`.
+- **Turning it off.** Remove `runner-link` from `COMPOSE_PROFILES`, then run
+  `docker compose stop link-gateway nats && docker compose rm -f link-gateway nats`. Runners keep working over HTTPS.
 
 ## Managed runners
 
@@ -578,6 +789,10 @@ docker compose up -d --wait --no-deps --force-recreate docker-channel
 ## Production checklist
 
 - [ ] `JWT_SECRET` and `PROVIDER_SECRET_KEY` are unique, protected, and backed up.
+- [ ] The runner link is off, or `RUNNER_LINK_SIGNING_KEY` and `RUNNER_LINK_GATEWAY_TOKEN` are unique and protected,
+      and the gateway holds the public key, not the private one.
+- [ ] Where the link gateway runs, its DNS record is DNS only (not proxied), its port is the only other one open to
+      the internet, and its metrics port stays on loopback.
 - [ ] The public endpoint uses HTTPS and the configured origin matches it.
 - [ ] Only the gateway is publicly reachable.
 - [ ] The first administrator uses a strong password and user access is reviewed.

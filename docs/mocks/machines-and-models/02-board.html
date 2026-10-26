@@ -1,0 +1,241 @@
+<!doctype html>
+<!-- Design board 02: Machines & models reached from Settings on the web and the Mac, as it already is on the
+     phone. Web frames are real-page captures: "B" is main a3d923687 with capture/rename-web.py (board 01),
+     "A" the same tree with capture/settings-web.py on top. The Mac frames are drawn from AppSection.swift,
+     SettingsAdminView.swift (the Mac's Settings form) and SkillsRunnersView.swift (RunnersListView).
+     Not shipped code. Render: render.mjs 02-board. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Machines &amp; models, from Settings</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="../cursor-engine/board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<script src="../cursor-engine/kit.js"></script>
+<script src="shots/marks.js"></script>
+<style>
+  .m-sheet { width: 1980px; }
+  .row-frames { display: flex; flex-wrap: wrap; gap: 26px 30px; align-items: flex-start; }
+  .note { max-width: 900px; font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 6px 2px 0; }
+  .amber { color: #b35a00; }
+  .t-clicks { border-collapse: collapse; font-size: 13px; line-height: 1.6; }
+  .t-clicks th, .t-clicks td { border: 1px solid var(--border-subtle); padding: 7px 12px; text-align: left; vertical-align: top; }
+  .t-clicks th { background: var(--fill-muted); font-weight: 600; color: var(--text-1); }
+  .t-clicks td.n { white-space: nowrap; }
+  .t-clicks b { font-size: 15px; }
+  .t-clicks .same { color: var(--text-3); }
+  /* macOS window, three columns (drawn) */
+  .mac3 { position: relative; width: 590px; height: 410px; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.12), 0 8px 24px rgba(0,0,0,.10); display: grid; grid-template-columns: 160px 218px 1fr; font-family: -apple-system, Inter, sans-serif; color: #1d1d1f; }
+  .mac3 > * { min-width: 0; }
+  .mac-side { background: #ecebf0; padding: 12px 8px; border-right: 1px solid #d9d8de; border-radius: 12px 0 0 12px; }
+  .mac-dots { display: flex; gap: 7px; margin: 0 0 16px 4px; }
+  .mac-dots i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; display: block; }
+  .mac-dots i:nth-child(2) { background: #febc2e; } .mac-dots i:nth-child(3) { background: #28c840; }
+  .mac-row { display: flex; align-items: center; gap: 8px; height: 27px; padding: 0 8px; border-radius: 7px; font-size: 12.5px; color: #1d1d1f; white-space: nowrap; }
+  .mac-row.on { background: #d9d8de; font-weight: 600; }
+  .mac-row svg { width: 15px; height: 15px; color: #3e69f6; flex: none; }
+  .m3-col { border-right: 1px solid #e3e3e8; display: flex; flex-direction: column; }
+  .m3-bar { height: 40px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 13px; font-weight: 600; border-bottom: 1px solid #ececf0; white-space: nowrap; }
+  .m3-bar .bk { color: #3e69f6; font-weight: 500; }
+  .m3-list { padding: 4px 8px; font-size: 12px; }
+  .m3-h { display: flex; justify-content: space-between; gap: 6px; font-size: 11px; font-weight: 600; color: #8a8a8e; margin: 10px 6px 3px; white-space: nowrap; }
+  .m3-h span:last-child { font-weight: 400; }
+  .m3-r { display: flex; align-items: center; gap: 7px; min-height: 25px; padding: 2px 7px; border-radius: 6px; white-space: nowrap; overflow: hidden; }
+  .m3-r.on { background: #3e69f6; color: #fff; }
+  .m3-r.on .sub { color: rgba(255,255,255,.8); }
+  .m3-r .v { margin-left: auto; color: #8a8a8e; font-size: 11.5px; }
+  .m3-r .v.amber { color: #b35a00; }
+  .m3-r .sub { color: #8a8a8e; font-size: 11px; }
+  .m3-r .chev { color: #b9b9bb; font-size: 13px; }
+  .m3-r .ic { width: 15px; height: 15px; color: #3e69f6; flex: none; }
+  .m3-dot { width: 7px; height: 7px; border-radius: 50%; background: #34c759; flex: none; }
+  .m3-warn { width: 7px; height: 7px; border-radius: 50%; background: #e8890c; flex: none; }
+  .m3-group { background: #f5f5f7; border-radius: 8px; padding: 3px 2px; margin: 8px 2px 0; }
+  .m3-foot { font-size: 10.5px; color: #8a8a8e; padding: 4px 8px 2px; line-height: 1.4; white-space: normal; }
+  .m3-av { width: 26px; height: 26px; border-radius: 50%; background: #3e69f6; flex: none; }
+  .m3-tog { width: 26px; height: 15px; border-radius: 8px; background: #34c759; margin-left: auto; flex: none; }
+  .m3-detail { background: #fbfbfd; padding: 16px 16px; font-size: 12px; border-radius: 0 12px 12px 0; overflow: hidden; }
+  .m3-dh { font-size: 16px; font-weight: 700; margin-bottom: 3px; }
+  .m3-ds { color: #6e6e73; font-size: 11.5px; margin-bottom: 12px; }
+  .m3-eng { display: flex; align-items: center; gap: 7px; height: 27px; border-bottom: 1px solid #efeff2; white-space: nowrap; }
+  .m3-eng .v { margin-left: auto; color: #8a8a8e; font-size: 11.5px; }
+  .m3-eng .btn { margin-left: auto; padding: 1px 8px; border-radius: 5px; background: #3e69f6; color: #fff; font-size: 11px; }
+  .m3-eng .amber { color: #b35a00; }
+  .m3-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: #8a8a8e; font-size: 12px; }
+  .m3-empty svg { width: 30px; height: 30px; color: #b9b9bb; }
+  .m3-empty b { color: #3c3c43; font-size: 14px; }
+  .mac3 .m-mark { outline-offset: 2px; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Machines &amp; models 从侧栏挪进 Settings：web 和 Mac 跟手机一样从设置进入</h1>
+  <p class="m-sub zh">iPhone、iPad 和 Android 早就从设置进这个页面（设置里 Machines &amp; models 那一行）。这张板子画的是 web 和 Mac 也这样：<b>侧栏只剩 Projects · Tasks · Wiki</b>，和 iPhone 抽屉一样；从 Settings 里新加的一段进入，web 的头像菜单里再放一行直达（⑧-2）。<b>页面本身不动</b>：地址 <code>/infrastructure</code> 和它下面的 key 页、pool 页、机器页，页面内容，以及报错卡片、新建会话等 6 处直接链过来的入口都照旧。在 01 板改名的基础上画：<b>B = 只改名（01 板）</b>，<b>A = 改名并挪进 Settings</b>。Web 帧是真实页面截图（main a3d923687 + 01 的改名 + <code>capture/settings-web.py</code>），Mac 帧按现有代码的结构画。橙色数字标改动，待你定的在 ⑧。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① Web 桌面：侧栏和 Settings 页（1280 × 1020）</div>
+    <div class="row-frames" id="w1"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② Web 桌面：头像菜单，和从 Settings 进来后的页面顶部</div>
+    <div class="row-frames" id="w2"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ Web 手机（390 宽）：抽屉和 Settings</div>
+    <div class="row-frames" id="w3"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">④ Mac（示意）：侧栏 → 设置 → 页面</div>
+    <div class="row-frames" id="mac"></div>
+    <p class="note zh" style="max-width:1900px">iPhone、iPad、Android 不变：本来就是 设置 → Machines &amp; models → 页面（01 板 ③）。Mac 设置里那一行照 01 板 ⑥-2 的建议画：不带组标题，行叫 Machines &amp; models，下面一句说明，行尾写和手机同一个状态。</p>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑤ 到这个页面要点几下</div>
+    <div id="clicks"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑥ 新增的文案（英文，只这几处；其余文案按 01 板）</div>
+    <div id="copy"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑦ 改动的文件</div>
+    <div class="two">
+      <ul class="files zh">
+        <li><b>Web</b> — <code>components/TasksSidePanel.tsx</code>（侧栏 / 抽屉去掉那一项；头像菜单在 Settings 上面加一行，⑧-2）、<code>pages/SettingsPage.tsx</code>（新的一段：<code>Field</code> 的说明行要能放下状态）、<code>pages/InfrastructurePage.tsx</code>（页顶「‹ Settings」），和断言侧栏那一行、Settings 各段的测试，以及 <code>ui-migration</code> 里从侧栏点进这个页面的浏览器脚本。</li>
+        <li><b>Mac</b> — <code>OrbitKit/App/AppSection.swift</code>（<code>visible</code> 去掉 <code>.runners</code>；深链接、通知里的机器 <code>forRoute(.runner)</code> 改落到设置下的这个页面）、Mac 的设置表单（<code>SettingsAdminView.swift</code> 的 <code>SettingsView</code>，Account 下面加一段）、<code>MainView.swift</code>（设置栏里推入 <code>RunnersListView</code>，右栏显示选中的机器），和 OrbitKit 的 <code>AppSection</code> 测试。</li>
+      </ul>
+      <ul class="files zh">
+        <li><b>不动</b> — iPhone、iPad、Android 的导航；服务端（它的句子只说页面名，不说从哪个菜单进）；所有地址。</li>
+        <li><b>文档</b> — 01 板 ⑥-4 选 A 时，对外文章那条路径写成「Settings → Machines &amp; models → Add → Register a machine」。</li>
+        <li><b>和 01 板一起落地</b> — 改名和挪位置改的是同一批文件，一次改完、一次验；选 B 就只做 01。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑧ 待你定（建议项带绿框；板上按建议画）</div>
+    <div class="ask zh">
+      <h4><span class="tbd">1</span>挪不挪</h4>
+      <div class="ab"><div class="ab-opt rec"><h5><span class="ab-k">A</span>挪：web 和 Mac 从 Settings 进</h5><div class="ab-sub">各端一个位置、一个名字。侧栏只放干活的地方（项目、任务、Wiki、工作区），和 iPhone 抽屉一样；这页靠 Settings、头像菜单和 6 处直达链接进。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">B</span>不挪：只按 01 板改名</h5><div class="ab-sub">web 和 Mac 侧栏保留这一行，一下就到；手机还是从设置进，两边位置不一样。</div></div></div>
+    </div>
+    <div class="ask zh">
+      <h4><span class="tbd">2</span>web 头像菜单里放不放一行直达（② 中）</h4>
+      <div class="ab"><div class="ab-opt rec"><h5><span class="ab-k">A</span>放：Machines &amp; models 在 Settings 上面</h5><div class="ab-sub">两下就到，和手机「齿轮 → 那一行」一样两步。菜单里本来就放 Settings、Admin 这种管理页。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">B</span>不放：只从 Settings 页进</h5><div class="ab-sub">三下，而且 Settings 里那一段在 1280 × 900 的第一屏只露出上半张，要往下滚。</div></div></div>
+    </div>
+    <div class="ask zh">
+      <h4><span class="tbd">3</span>Mac</h4>
+      <div class="ab"><div class="ab-opt rec"><h5><span class="ab-k">A</span>跟 web 一样挪进设置（④）</h5><div class="ab-sub">Mac 侧栏本来就有 Settings，点它再点那一行，两下；右栏照旧显示选中的机器。</div></div>
+        <div class="ab-opt"><h5><span class="ab-k">B</span>Mac 保留侧栏那一行</h5><div class="ab-sub">像 9 月 24 日 Following 那次：iPhone 和 web 撤了，Mac 侧栏地方够就留着。</div></div></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑨ 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+<script>
+const frame = (kind, label, html, cap = '') => `<div class="frame"><div class="lbl zh"><span class="m-k${kind.startsWith('A') ? ' new' : ''}">${kind}</span>${label}</div>${html}${cap ? `<p class="note zh">${cap}</p>` : ''}</div>`;
+const col = (...frames) => `<div style="display:flex;flex-direction:column;gap:22px">${frames.join('')}</div>`;
+
+/* ① ② ③ web, real captures */
+document.getElementById('w1').innerHTML =
+  frame('B 只改名', '侧栏第四行是 Machines &amp; models；Settings 里没有它', shot('s-settings-B', { width: 900, marks: [{ box: 'nav', n: 'B', pad: 2 }] })) +
+  frame('A 挪进 Settings', '侧栏只剩三行；Settings 里 Session 两段后面多一段', shot('s-settings-A', { width: 900, marks: [{ box: 'work', n: 1, pad: 3 }, { box: 'card', n: 2, pad: 4 }] }));
+document.getElementById('w2').innerHTML =
+  frame('B', '头像菜单（今天这样）', shot('s-menu-B', { width: 304 })) +
+  frame('A（⑧-2 建议）', '头像菜单：Settings 上面一行', shot('s-menu-A', { width: 304, marks: [{ box: 'row', n: 3, pad: 2 }] })) +
+  frame('A', '点进来后的页面：左上角回 Settings，侧栏没有哪一行亮', shot('s-head-A', { width: 1180, marks: [{ box: 'back', n: 4, pad: 4 }, { box: 'work', n: 1, pad: 3 }] }), 'B（只改名）的页头见 01 板 ①：侧栏那一行亮着，没有返回链接。');
+document.getElementById('w3').innerHTML =
+  frame('B 只改名', '手机抽屉', shot('drawer-new', { width: 330, marks: [{ box: 'nav', n: 'B', pad: 2 }] })) +
+  frame('A', '手机抽屉：只剩三行', shot('s-drawer-A', { width: 330, marks: [{ box: 'work', n: 1, pad: 3 }] })) +
+  frame('A', '手机上的 Settings：标签两行，Manage 在右', shot('s-psettings-A', { width: 330, marks: [{ box: 'card', n: 2, pad: 3 }] }));
+
+/* ④ Mac, drawn */
+const ico = {
+  machines: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.5" y="2.5" width="13" height="9" rx="1.5"/><path d="M5 14h6M8 11.5V14"/></svg>',
+  dot: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="2.5" width="11" height="11" rx="3"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>',
+};
+const side = (rows, on) => `<div class="mac-side"><div class="mac-dots"><i></i><i></i><i></i></div>${rows.map((n) => `<div class="mac-row${n === on ? ' on' : ''}">${n === 'Machines &amp; models' ? ico.machines : ico.dot}${n}</div>`).join('')}</div>`;
+const SIDE_B = ['Machines &amp; models', 'Workspaces', 'Projects', 'Tasks', 'Wiki', 'Following', 'Settings'];
+const SIDE_A = ['Workspaces', 'Projects', 'Tasks', 'Wiki', 'Following', 'Settings'];
+const FOOT = 'Where your agents run, and whose model quota they spend.';
+const machinesList = `<div class="m3-list">
+  <div class="m3-h"><span>Needs you</span><span>4</span></div>
+  <div class="m3-r"><span class="m3-warn"></span>Kimi Code is signed out on wik…</div>
+  <div class="m3-r"><span class="m3-warn"></span>Claude Code is signed out on …</div>
+  <div class="m3-r"><span class="sub">2 more</span></div>
+  <div class="m3-h"><span>Machines</span><span>4 · 6 / 52 busy</span></div>
+  <div class="m3-r on"><span class="m3-dot"></span>wikova<span class="v" style="color:rgba(255,255,255,.8)">0 / 12</span></div>
+  <div class="m3-r"><span class="m3-dot"></span>workstation<span class="v">1 / 8</span></div>
+  <div class="m3-r"><span class="m3-dot"></span>mac-mini.local<span class="v">0 / 16</span></div>
+  <div class="m3-r"><span class="m3-dot"></span>HPC<span class="v">5 / 16</span></div>
+  <div class="m3-h"><span>Account pools</span><span>1</span></div>
+  <div class="m3-r">Codex Pool<span class="v">1 of 1 available</span></div>
+</div>`;
+const machineDetail = `<div class="m3-detail"><div class="m3-dh">wikova</div><div class="m3-ds">Online · 0 / 12 running · v0.1.236</div>
+  <div class="m3-eng">Claude Code<span class="v">3 accounts</span></div>
+  <div class="m3-eng">Codex<span class="v">2 accounts</span></div>
+  <div class="m3-eng">Antigravity CLI<span class="v">Signed in</span></div>
+  <div class="m3-eng">Kimi Code <span class="amber">signed out</span><span class="btn">Sign in</span></div>
+  <div class="m3-eng">OpenCode<span class="v">Installed</span></div></div>`;
+const settingsForm = `<div class="m3-list">
+  <div class="m3-group"><div class="m3-r" style="min-height:38px"><span class="m3-av"></span><span>Baseline Reviewer<br><span class="sub">reviewer@example.test</span></span></div></div>
+  ${mk(2, `<div class="m3-group" style="margin-top:0"><div class="m3-r"><span class="ic">${ico.machines}</span>Machines &amp; models<span class="v amber">4 need you</span><span class="chev">›</span></div></div><div class="m3-foot">${FOOT}</div>`, false, 'margin-top:12px')}
+  <div class="m3-h"><span>Preferences</span><span></span></div>
+  <div class="m3-group" style="margin-top:0"><div class="m3-r">Notifications<span class="v">On</span></div><div class="m3-r">Appearance<span class="v">Light</span></div></div>
+  <div class="m3-h"><span>Session orchestration</span><span></span></div>
+  <div class="m3-group" style="margin-top:0"><div class="m3-r">Let sessions orchestrate<span class="m3-tog"></span></div></div>
+</div>`;
+const empty = `<div class="m3-detail"><div class="m3-empty">${ico.gear}<b>Settings</b><span>Browse settings in the list.</span></div></div>`;
+const macB = `<div class="mac3">${side(SIDE_B, 'Machines &amp; models')}<div class="m3-col"><div class="m3-bar">Machines &amp; models</div>${machinesList}</div>${machineDetail}</div>`;
+const macA1 = `<div class="mac3" style="grid-template-columns:160px 262px 1fr">${mk(1, side(SIDE_A, 'Settings'), false, 'border-radius:12px 0 0 12px')}<div class="m3-col"><div class="m3-bar">Settings</div>${settingsForm}</div>${empty}</div>`;
+const macA2 = `<div class="mac3">${side(SIDE_A, 'Settings')}<div class="m3-col"><div class="m3-bar">${mk(4, '<span class="bk">‹ Settings</span>', true)}<span>Machines &amp; models</span></div>${machinesList}</div>${machineDetail}</div>`;
+document.getElementById('mac').innerHTML =
+  frame('B 只改名', '侧栏第一行；中间栏是列表，右栏是选中的机器', macB) +
+  frame('A ①', '侧栏没有这一行；设置里 Account 下面多一行', macA1) +
+  frame('A ②', '点那一行：中间栏换成这个页面，左上角回 Settings', macA2);
+
+/* ⑤ clicks */
+const R = (where, b, a, aNo) => `<tr><td>${where}</td><td class="n">${b}</td><td class="n">${a}</td><td class="n">${aNo}</td></tr>`;
+document.getElementById('clicks').innerHTML = `<table class="t-clicks zh">
+  <tr><th>从哪儿</th><th>B 只改名（今天的位置）</th><th>A 挪进 Settings，头像菜单有那一行（⑧-2 A）</th><th>A 挪进 Settings，头像菜单没有（⑧-2 B）</th></tr>
+  ${R('Web 桌面', '<b>1</b>：侧栏', '<b>2</b>：头像 → Machines &amp; models', '<b>3</b>：头像 → Settings → Manage，还要往下滚')}
+  ${R('Web 手机', '<b>2</b>：抽屉 → 那一行', '<b>3</b>：抽屉 → 头像 → Machines &amp; models', '<b>4</b>：抽屉 → 头像 → Settings → Manage')}
+  ${R('Mac', '<b>1</b>：侧栏', '<b>2</b>：Settings → 那一行（⑧-3 A）', '同左')}
+  ${R('iPhone、iPad、Android', '<b>2</b>：齿轮 → 那一行', '<span class="same">不变</span>', '<span class="same">不变</span>')}
+  ${R('出了问题时：会话里的修复卡、新建会话、托管 runner 提示、任务详情、Wiki 计划、项目页', '<b>1</b>：直接链过去', '<span class="same">不变</span>', '<span class="same">不变</span>')}
+</table>`;
+
+/* ⑥ new copy */
+document.getElementById('copy').innerHTML = `<table class="t-clicks"><tr><th class="zh">在哪</th><th class="zh">文案</th></tr>
+  <tr><td class="zh">Web Settings 新的一段</td><td>Machines &amp; models · Machines, API keys and account pools · ${FOOT} · Manage</td></tr>
+  <tr><td class="zh">它的状态（和手机那一行同一个规则）</td><td><span class="amber">1 needs you</span> · <span class="amber">4 need you</span> · 3 of 4 online · None</td></tr>
+  <tr><td class="zh">Web 头像菜单</td><td>Machines &amp; models</td></tr>
+  <tr><td class="zh">Web 页面顶部</td><td>‹ Settings</td></tr>
+  <tr><td class="zh">Mac 设置那一行</td><td>Machines &amp; models · ${FOOT}（行尾状态同上）</td></tr></table>`;
+
+document.getElementById('notes').innerHTML = notes([
+  [1, '<b>侧栏 / 抽屉只剩 Projects · Tasks · Wiki</b>：和 iPhone 抽屉一样（web 侧栏这三行本来就是照抽屉排的）。在这个页面和它下面的页时，侧栏没有哪一行亮，和在 Settings 时一样。Mac 侧栏去掉第一行，其余照旧（Following 还在）。'],
+  [2, '<b>Settings 里的一段</b>：放在 Session 两段后面，和手机设置的组顺序一样（Sessions → Machines &amp; models → Preferences → Account）；样子和 Sharing、Access tokens 两段一样，右边一个 Manage。说明下面一行写状态，和手机那一行同一个规则：在线机器上掉了登录的引擎、离线的机器、起不了会话的账号池，有就写「N need you」（橙色），没有就写「3 of 4 online」。截图里的 4 是示例数据里 4 台机器上掉了登录的 4 个引擎。Mac 设置里放在 Account 下面。'],
+  [3, '<b>头像菜单的一行</b>（⑧-2）：放在 Settings 上面，图标用侧栏原来那个。'],
+  [4, '<b>页顶「‹ Settings」</b>：web 页面左上角、Mac 中间栏左上角，回到设置。key 页、pool 页上的「‹ Machines &amp; models」照旧。Shared links、Access tokens 两页今天没有返回链接，这次不动。'],
+  ['·', '<b>不变</b>：地址 <code>/infrastructure</code> 和它下面所有页（旧的 <code>/runners</code>、<code>/providers</code> 照旧跳过来），页面内容，6 处直达链接，服务端的句子，iPhone / iPad / Android。'],
+]);
+finish();
+</script>
+</body>
+</html>

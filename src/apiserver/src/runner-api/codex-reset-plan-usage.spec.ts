@@ -68,6 +68,7 @@ function harness(initial: unknown = null) {
   const row = { planUsage: clone(initial), writes: 0, misses: 0, updates: [] as Record<string, unknown>[], dispatchReads: [] as unknown[] };
   let interleave: { write: () => void; times: number } | undefined;
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: {
       update: async ({ data }: { data: Record<string, unknown> }) => {
         row.updates.push(data);

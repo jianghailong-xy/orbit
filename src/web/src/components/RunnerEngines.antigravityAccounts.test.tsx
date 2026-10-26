@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsageBucket, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
-import { MachineEngines, RunnerEngines, accountsGroup, summaryOf } from './RunnerEngines';
+import { MachineEngines, RunnerEngines, accountsGroup, machineChipsOf, summaryOf } from './RunnerEngines';
 import { openRunnerMenu, clickRunnerMenuItem, openRunnerCards } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
@@ -287,8 +287,15 @@ describe('two Google accounts on one runner', () => {
   });
 
   it('counts a signed-out account against the folded card', () => {
-    expect(summaryOf(runner())).toBe('All signed in');
-    expect(summaryOf(runner(antigravity({ accounts: [DEFAULT, { ...WORK, auth: 'no' }] })))).toBe('3 of 4 signed in');
+    const chip = (box: Runner) => machineChipsOf(box).find((each) => each.engine === 'antigravity');
+    expect(chip(runner())).toEqual({ engine: 'antigravity', logins: 2, accounts: 2, signedOut: false });
+    expect(chip(runner(antigravity({ accounts: [DEFAULT, { ...WORK, auth: 'no' }] })))).toEqual({
+      engine: 'antigravity',
+      logins: 1,
+      accounts: 2,
+      signedOut: false,
+    });
+    expect(summaryOf(runner(antigravity({ accounts: [DEFAULT, { ...WORK, auth: 'no' }] })))).toBeNull();
   });
 });
 
@@ -351,7 +358,12 @@ describe('a runner that runs agy on its Gemini key', () => {
     expect(all(await openRunnerMenu(defaultRow), '[role="menuitem"]').map((item) => item.textContent?.trim())).toEqual(['Rename', 'Remove account']);
     // Automatic starts on a Google account, the only one with a quota to spend first.
     expect([defaultRow, workRow].map((row) => row.querySelector('.re-name')?.textContent)).toEqual(['Default', 'WorkNEXT']);
-    expect(summaryOf(box)).toBe('All signed in');
+    expect(machineChipsOf(box).find((chip) => chip.engine === 'antigravity')).toEqual({
+      engine: 'antigravity',
+      logins: 2,
+      accounts: 2,
+      signedOut: false,
+    });
   });
 
   it('keeps its one row as it was: env key, with no pause to offer', () => {

@@ -2092,7 +2092,7 @@ describe('runtime authentication help', () => {
         </AuthErrorCtx.Provider>
       </QueryClientProvider>,
     );
-    expect(html).toContain('The DeepSeek key “DeepSeek” was rejected. Update it in Infrastructure, then send your message again.');
+    expect(html).toContain('The DeepSeek key “DeepSeek” was rejected. Update it on the Machines &amp; models page, then send your message again.');
     expect(html).not.toContain('<code>deepseek</code>');
     // A key this account no longer has: still no slug.
     expect(card('deepseek')).toContain('The API key was rejected.');

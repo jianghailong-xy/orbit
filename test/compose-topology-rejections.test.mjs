@@ -10,10 +10,19 @@ import { fileURLToPath } from 'node:url';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = readFileSync(path.join(repo, 'docker-compose.yml'), 'utf8');
+// NATS's configuration, which the suite pins beside Compose (case (q)); a counterexample may replace it instead.
+const NATS_CONF = 'src/link-gateway/nats.conf';
+const natsConf = readFileSync(path.join(repo, NATS_CONF), 'utf8');
 
 function replace(before, after) {
   assert.ok(source.includes(before), `counterexample target missing: ${before}`);
   return source.replace(before, after);
+}
+
+/** A counterexample in nats.conf: Compose as it is, the configuration changed. */
+function replaceConf(before, after) {
+  assert.ok(natsConf.includes(before), `counterexample target missing in ${NATS_CONF}: ${before}`);
+  return { compose: source, conf: natsConf.replace(before, after) };
 }
 
 const cases = [
@@ -104,6 +113,71 @@ const cases = [
   ['a Kubernetes template mounted by the Docker channel', 'Compose names nothing of Kubernetes',
     replace('      - /var/run/docker.sock:/var/run/docker.sock\n',
       '      - /var/run/docker.sock:/var/run/docker.sock\n      - ./deploy/managed-runner/storage:/templates:ro\n')],
+  // The runner link gateway of 2026-10-25: off unless its profile is on, pinned whole, given the token signing key's
+  // public half and never the key itself.
+  ['the link gateway outside its profile', 'the runner link gateway is exactly the service',
+    replace('    profiles: [runner-link]\n', '')],
+  ['the runner link profile on another service', 'nothing was added back:',
+    replace('  web:\n', '  web:\n    profiles: [runner-link]\n')],
+  ['the token signing key given to the link gateway', 'the link token signing key is given to the apiserver alone',
+    replace('      LINK_API_URL: http://apiserver:3000\n',
+      '      LINK_API_URL: http://apiserver:3000\n      LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:-}"\n')],
+  ['a database for the link gateway', 'the runner link gateway is exactly the service',
+    replace('      LINK_API_URL: http://apiserver:3000\n',
+      '      LINK_API_URL: http://apiserver:3000\n      DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"\n')],
+  ['the link gateway metrics on every interface', 'the runner link gateway is exactly the service',
+    replace('      - "127.0.0.1:${RUNNER_LINK_METRICS_PORT:-9464}:9464"', '      - "${RUNNER_LINK_METRICS_PORT:-9464}:9464"')],
+  ['a writable root for the link gateway', 'the runner link gateway is exactly the service',
+    replace('    stop_grace_period: 90s\n    read_only: true\n', '    stop_grace_period: 90s\n')],
+  ['the Docker socket given to the link gateway', 'is given to the Docker channel and to no other service',
+    replace('      - "${RUNNER_LINK_GATEWAY_DIR:-/dev/null}:/var/lib/orbit-link-gateway"\n',
+      '      - "${RUNNER_LINK_GATEWAY_DIR:-/dev/null}:/var/lib/orbit-link-gateway"\n      - /var/run/docker.sock:/var/run/docker.sock\n')],
+  // The runner link's NATS of 2026-10-25 (task B1): off unless the gateway's profile is on, pinned whole, storing nothing,
+  // on no port of the host and never reading the image's configuration file; and where the apiserver publishes hints.
+  ['NATS outside its profile', "the runner link's NATS is exactly the service",
+    replace('  nats:\n    profiles: [runner-link]\n', '  nats:\n')],
+  ['JetStream on NATS', "the runner link's NATS is exactly the service",
+    replace('    command: ["--config", "/etc/orbit-nats/nats.conf"]\n', '    command: ["--config", "/etc/orbit-nats/nats.conf", "--jetstream"]\n')],
+  ["NATS reading the image's configuration file", "the runner link's NATS is exactly the service",
+    replace('    command: ["--config", "/etc/orbit-nats/nats.conf"]\n', '    command: ["--config", "/etc/nats/nats-server.conf"]\n')],
+  ['a NATS port on the host', "the runner link's NATS is exactly the service",
+    replace('    expose:\n      - "4222"\n', '    expose:\n      - "4222"\n    ports:\n      - "4222:4222"\n')],
+  ['a store for NATS', "the runner link's NATS is exactly the service",
+    replace('    expose:\n      - "4222"\n', '    expose:\n      - "4222"\n    volumes:\n      - ./data/nats:/data\n')],
+  ['hints published to another NATS by default', 'nothing beyond the approved configuration was added',
+    replace('${RUNNER_LINK_NATS_URL:-nats://nats:4222}', '${RUNNER_LINK_NATS_URL:-nats://elsewhere.example:4222}')],
+  ['the hints address given to the wiki worker', 'NATS is named to the apiserver and the link gateway alone',
+    replace('      ORBIT_WIKI_MODEL_CONCURRENCY:',
+      '      RUNNER_LINK_NATS_URL: "${RUNNER_LINK_NATS_URL:-nats://nats:4222}"\n      ORBIT_WIKI_MODEL_CONCURRENCY:')],
+  // The gateway's forwarding of 2026-10-25 (task B4): the listener for runner link calls published nowhere, each NATS seed
+  // given to its one client and the users' public keys to NATS alone, and nats.conf pinned line by line.
+  ['the runner link listener published on the host', 'nothing beyond the approved configuration was added',
+    replace('    expose:\n      - "3000"\n', '    expose:\n      - "3000"\n    ports:\n      - "3001:3001"\n')],
+  ['the runner link listener on another port by default', 'nothing beyond the approved configuration was added',
+    replace('${RUNNER_LINK_INTERNAL_PORT:-3001}"\n      RUNNER_LINK_INTERNAL_HOST', '${RUNNER_LINK_INTERNAL_PORT:-3002}"\n      RUNNER_LINK_INTERNAL_HOST')],
+  ["the gateway's NATS seed given to the apiserver", 'nothing beyond the approved configuration was added',
+    replace('${RUNNER_LINK_NATS_APISERVER_SEED:-}', '${RUNNER_LINK_NATS_GATEWAY_SEED:-}')],
+  // The link's releases of 2026-10-25 (task B4a): read from the web container beside the apiserver unless .env says otherwise.
+  ['the runner releases read from elsewhere by default', 'nothing beyond the approved configuration was added',
+    replace('${RUNNER_RELEASE_DL_URL:-http://web/dl/}', '${RUNNER_RELEASE_DL_URL:-https://elsewhere.example/dl/}')],
+  ["the apiserver's NATS seed given to the gateway", 'the runner link gateway is exactly the service',
+    replace('      LINK_NATS_SEED: "${RUNNER_LINK_NATS_GATEWAY_SEED:-}"', '      LINK_NATS_SEED: "${RUNNER_LINK_NATS_APISERVER_SEED:-}"')],
+  ["a NATS user's key given to the gateway", 'NATS is named to the apiserver and the link gateway alone',
+    replace('      LINK_NATS_URL: nats://nats:4222\n', '      LINK_NATS_URL: nats://nats:4222\n      RUNNER_LINK_NATS_GATEWAY_KEY: "${RUNNER_LINK_NATS_GATEWAY_KEY:-}"\n')],
+  ['NATS reading a writable configuration', "the runner link's NATS is exactly the service",
+    replace('nats.conf:/etc/orbit-nats/nats.conf:ro', 'nats.conf:/etc/orbit-nats/nats.conf')],
+  ['a third NATS user', "the runner link's NATS configuration is exactly the one task B4 added",
+    replaceConf('  users: [\n', '  users: [\n    { user: monitor, password: monitor }\n')],
+  ['a NATS cluster', "the runner link's NATS configuration is exactly the one task B4 added",
+    replaceConf('http_port: 8222\n', 'http_port: 8222\ncluster { port: 6222 }\n')],
+  ['JetStream in the NATS configuration', "the runner link's NATS configuration is exactly the one task B4 added",
+    replaceConf('http_port: 8222\n', 'http_port: 8222\njetstream: enabled\n')],
+  ['a gateway allowed to publish hints', "the runner link's NATS configuration is exactly the one task B4 added",
+    replaceConf('publish: { allow: ["ses.*.live"] }', 'publish: { allow: ["ses.*.live", "rnr.>"] }')],
+  ['an apiserver allowed to publish live streams', "the runner link's NATS configuration is exactly the one task B4 added",
+    replaceConf('publish: { allow: ["rnr.>"] }', 'publish: { allow: ["rnr.>", "ses.*.live"] }')],
+  ['NATS on another listener', "the runner link's NATS configuration is exactly the one task B4 added",
+    replaceConf('port: 4222\n', 'port: 4222\nwebsocket { port: 8080, no_tls: true }\n')],
 ];
 
 test('the topology checks accept the control and reject deployment counterexamples', async (t) => {
@@ -115,11 +189,14 @@ test('the topology checks accept the control and reject deployment counterexampl
     mkdirSync(path.join(fixture, 'test'));
     copyFileSync(path.join(repo, 'test/compose-topology.test.mjs'),
       path.join(fixture, 'test/compose-topology.test.mjs'));
+    mkdirSync(path.join(fixture, path.dirname(NATS_CONF)), { recursive: true });
     // A child suite must start its own runner rather than inherit node:test's recursion marker.
     const env = { ...process.env };
     delete env.NODE_TEST_CONTEXT;
-    const run = (compose) => {
+    const run = (variant) => {
+      const { compose, conf } = typeof variant === 'string' ? { compose: variant, conf: natsConf } : variant;
       writeFileSync(path.join(fixture, 'docker-compose.yml'), compose);
+      writeFileSync(path.join(fixture, NATS_CONF), conf);
       const result = spawnSync(process.execPath,
         ['--test', '--test-reporter=tap', 'test/compose-topology.test.mjs'],
         { cwd: fixture, encoding: 'utf8', env });

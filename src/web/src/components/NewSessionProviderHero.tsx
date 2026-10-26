@@ -108,7 +108,7 @@ export function NewSessionProviderHero({
         key={engine.slug}
         to={fixLink(engine)}
         className="np-row np-unavailable"
-        title={`${engine.label}: ${engine.unavailable}${onRunner(engine)} — fix it in Infrastructure`}
+        title={`${engine.label}: ${engine.unavailable}${onRunner(engine)} — fix it on the Machines & models page`}
         onClick={() => setOpen(false)}
       >
         <BrandMark choice={engine} size={20} />

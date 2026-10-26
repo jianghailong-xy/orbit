@@ -24,6 +24,7 @@ import { stripNul } from '../runner-api/strip-nul';
 import { postgresSqlState } from '../tasks/task-supersession';
 import { WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { wikiJsonIsStorable, wikiStoredText, wikiTextFromStored, wikiTextIsStorable, wikiTextIsWellFormed } from './wiki-stored-text';
+import { RUNNER_BEATS, RUNNER_OFFLINE_AFTER_MS, runnerLastBeatAt } from '../runners/runner-presence';
 
 /**
  * The `wiki_repo_op` table and the space's snapshot cache (migration 0402, contract `repoOps`,
@@ -1398,9 +1399,6 @@ function maintenanceWorkspaceOf(settings: unknown): string | null {
 
 // ── the health line's read ──────────────────────────────────────────────────────────────────────
 
-/** Three missed 30-second beats, the same window the runner list reads a machine as offline by. */
-const RUNNER_OFFLINE_AFTER_MS = 90_000;
-
 /**
  * Whether the space's repository steps can run, and if not, what the status line should say (design §2.2):
  * no workspace to read, no machine behind the workspace, the machine away, or a machine too old to be given
@@ -1436,7 +1434,7 @@ export async function readWikiRepoReadiness(
   const runnerRow = workspace.runnerId
     ? await prisma.runner.findFirst({
       where: { id: workspace.runnerId, ownerId: input.ownerId },
-      select: { id: true, name: true, version: true, capabilities: true, capabilitiesReportedAt: true, lastHeartbeatAt: true },
+      select: { id: true, name: true, version: true, capabilities: true, capabilitiesReportedAt: true, ...RUNNER_BEATS },
     })
     : null;
   if (!runnerRow) {
@@ -1447,8 +1445,9 @@ export async function readWikiRepoReadiness(
       pending,
     };
   }
-  const online = !!runnerRow.lastHeartbeatAt
-    && now.getTime() - runnerRow.lastHeartbeatAt.getTime() < RUNNER_OFFLINE_AFTER_MS;
+  // Heard from within three missed 30-second beats, the window the runner list reads a machine as offline by.
+  const lastBeatAt = runnerLastBeatAt(runnerRow);
+  const online = !!lastBeatAt && now.getTime() - lastBeatAt.getTime() < RUNNER_OFFLINE_AFTER_MS;
   const reported = !!runnerRow.capabilitiesReportedAt;
   const capability = reported && runnerRow.capabilities.includes(WIKI_REPO_OP_CAPABILITY);
   const wholeFile = reported && runnerRow.capabilities.includes(WIKI_REPO_OP_READ_CAPABILITY);

@@ -80,8 +80,8 @@ final class ProjectDoneWiringTests: XCTestCase {
         // closing card down, as the browser draws none.
         XCTAssertTrue(adopt.contains("case .none: if projectDone != nil { decisionCards.removeAll { $0.kind == .projectDone || $0.kind == .projectNotDone } }"),
                       "a read that answered with nothing to ask leaves no closing card behind")
-        XCTAssertTrue(adopt.contains("decisionCards.removeAll { $0.kind == .projectDone } deliver(.projectNotDone)"),
-                      "why it is not done replaces the done card")
+        XCTAssertFalse(adopt.contains("deliver(.projectNotDone)"),
+                       "why it is not done is delivered to a conversation again — Orbit's own DONE included (2026-10-25)")
         XCTAssertTrue(adopt.contains("decisionCards.removeAll { $0.kind == .projectNotDone } deliver(.projectDone, placement: donePlacement(live))"),
                       "the done card replaces why it is not done")
         // A read asked for after a press here that still says the project is not DONE retires the

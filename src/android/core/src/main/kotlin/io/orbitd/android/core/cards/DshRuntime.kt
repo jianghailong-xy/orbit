@@ -25,8 +25,8 @@ object DshRuntime {
         READY(null),
         UPDATE_RUNNER("This runner predates DeepSeek Harness. It updates itself when no session is running on it."),
         UNSUPPORTED_PLATFORM("DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only."),
-        NOT_INSTALLED("Install DeepSeek Harness on this runner from Infrastructure."),
-        UNSUPPORTED_VERSION("This runner has a DeepSeek Harness version Orbit does not support. Reinstall it from Infrastructure.");
+        NOT_INSTALLED("Install DeepSeek Harness on this runner from the Machines & models page."),
+        UNSUPPORTED_VERSION("This runner has a DeepSeek Harness version Orbit does not support. Reinstall it from the Machines & models page.");
 
         /** The one state a client can fix from here: install the pinned CLI on that machine. */
         val installable get() = this == NOT_INSTALLED || this == UNSUPPORTED_VERSION
@@ -47,10 +47,10 @@ object DshRuntime {
     /** What went wrong in a Harness session, when the runner's or the server's message says so, and what its repair card says. */
     enum class Repair(private val title: String, val detail: String) {
         NEEDS_KEY("DeepSeek Harness needs a DeepSeek key",
-            "This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again."),
-        INVALID_KEY("DeepSeek rejected this API key", "Update the DeepSeek key in Infrastructure, then send your message again."),
+            "This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key on the Machines & models page, then send your message again."),
+        INVALID_KEY("DeepSeek rejected this API key", "Update the DeepSeek key on the Machines & models page, then send your message again."),
         UPDATE_RUNNER("Waiting for a newer runner", "This runner predates DeepSeek Harness. It updates itself when no session is running on it."),
-        NOT_INSTALLED("DeepSeek Harness isn't installed on this runner", "Install it from Infrastructure, then send your message again."),
+        NOT_INSTALLED("DeepSeek Harness isn't installed on this runner", "Install it from the Machines & models page, then send your message again."),
         UNSUPPORTED_PLATFORM("DeepSeek Harness can't run on this runner",
             "DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only. Move this work to a runner that can.");
 
@@ -67,7 +67,7 @@ object DshRuntime {
         /** The detail, naming the session's key where the reader knows it — `the DeepSeek key “DeepSeek 2”` (A07-19 (b), iOS 6f3083272
          * `detail(keyName:)`): one DeepSeek key runs on Claude Code, OpenCode and Harness alike, and there can be several, so neither
          * the engine nor "the key" says which. */
-        fun detail(keyName: String?) = if (this == INVALID_KEY && keyName != null) "Update $keyName in Infrastructure, then send your message again." else detail
+        fun detail(keyName: String?) = if (this == INVALID_KEY && keyName != null) "Update $keyName on the Machines & models page, then send your message again." else detail
 
         /** Fixed on the session's own key, in Infrastructure. */
         val isKeyProblem get() = this == NEEDS_KEY || this == INVALID_KEY

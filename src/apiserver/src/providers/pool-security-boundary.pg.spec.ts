@@ -63,6 +63,7 @@ import { toUuid, uuidToBase62, type ClaimedSession } from '@orbit/shared';
 import { json, urlencoded } from 'express';
 import { Client } from 'pg';
 
+import { DisabledAccounts } from '../auth/disabled-accounts';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { sha256 } from '../common/crypto.util';
 import { PublicIdExceptionFilter } from '../common/public-id.filter';
@@ -425,9 +426,10 @@ async function openGateway(
   });
   await new Promise<void>((resolve) => recorder.listen(0, '127.0.0.1', resolve));
   const upstream = `http://127.0.0.1:${(recorder.address() as AddressInfo).port}`;
-  const keys = new PoolGatewayService(prisma, pools, new PoolUsageLedger(prisma), `${upstream}/v1`);
+  const keys = new PoolGatewayService(prisma, pools, new PoolUsageLedger(prisma), `${upstream}/v1`, new DisabledAccounts(prisma));
   const accounts = new PoolLoginGatewayService(
     prisma, logins, new PoolLoginLedger(prisma), realtime, `${upstream}/backend-api/codex`, `${upstream}/oauth/token`,
+    new DisabledAccounts(prisma),
   );
   @Module({
     controllers: [PoolGatewayController],

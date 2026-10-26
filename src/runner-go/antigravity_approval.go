@@ -500,7 +500,7 @@ func askAntigravityApproval(policy *agyApprovalPolicy, in *agyHookInput) agyHook
 	if in.StepIdx != nil && in.ConversationID != "" {
 		toolUseID = in.ConversationID + ":" + fmt.Sprint(*in.StepIdx)
 	}
-	t := NewTransport(cfg.ServerURL, cfg.RunnerToken)
+	t := newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerAntigravityHook)
 	approvalID, err := t.createApproval(ctx, policy.SessionID, map[string]interface{}{
 		"toolName":  name,
 		"input":     input,

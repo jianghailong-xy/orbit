@@ -242,7 +242,9 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
   }
   if (res.status === 401) {
     clearToken();
-    if (location.pathname !== '/login') location.href = '/login';
+    // The privacy policy and a shared link (/s/…) are read signed out as well: a stored session found
+    // dead under one (the theme's read of the account) is cleared, and the reader stays on the page.
+    if (location.pathname !== '/login' && location.pathname !== '/privacy' && !location.pathname.startsWith('/s/')) location.href = '/login';
   }
   return res;
 }
@@ -1930,6 +1932,17 @@ export const getSessionDiff = (idOrPublicId: string) =>
  *  diff lands asynchronously via the runner, so the caller refetches getSessionDiff after. */
 export const refreshSessionDiff = (idOrPublicId: string) =>
   api<void>(`/sessions/${idOrPublicId}/diff/refresh`, { method: 'POST' });
+
+/** What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why
+ *  it wrote none. */
+export type RecapOutcome =
+  | { written: true; recapText: string; recapEventSeq: number }
+  | { written: false; reason: string };
+
+/** Rewrite this session's recap now, past the settle hooks' two-minute window (POST
+ *  /sessions/:id/recap). Answers once the pass has finished, with what it did. */
+export const refreshSessionRecap = (idOrPublicId: string) =>
+  api<RecapOutcome>(`/sessions/${idOrPublicId}/recap`, { method: 'POST' });
 
 /** Enable per-session worktree isolation for a workspace whose workDir isn't a git repo:
  *  flips `autoInitGit` so the runner `git init`s the dir (default .gitignore + baseline

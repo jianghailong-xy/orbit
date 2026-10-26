@@ -127,6 +127,27 @@ export const newKeyEngines = (key: { runtime?: string | null; presetSlug: string
     subscriptionToken: false,
   });
 
+/** The vendors offered to connect: every preset but the retired DeepSeek Harness one, less any whose keys
+ *  run on no engine this page draws — Cursor's run on Cursor CLI alone, which the web draws once a runner
+ *  of the account knows it (webShowsEngine). */
+const offeredPresets = (runners: readonly SignedInRunner[]) =>
+  PROVIDER_PRESETS.filter((p) => p.slug !== DSH_PRESET_SLUG
+    && newKeyEngines({ runtime: p.runtime, presetSlug: p.slug, baseUrl: p.baseUrl })
+      .some((engine) => webShowsEngine(engine, runners)));
+
+/** How many of the user's keys each vendor accounts for. A row records the preset it was created from,
+ *  so a second Anthropic key — which lands on the slug "anthropic-2" — still counts towards Anthropic,
+ *  and a key from the retired DeepSeek Harness preset towards DeepSeek (vendorOf). */
+function connectedCounts(rows: readonly ProviderRow[]): Map<string, number> {
+  const connected = new Map<string, number>();
+  for (const p of rows) {
+    if (!p.presetSlug) continue;
+    const vendor = vendorOf(p.presetSlug);
+    connected.set(vendor, (connected.get(vendor) ?? 0) + 1);
+  }
+  return connected;
+}
+
 /** The vendor picker. Every card is a link into the connect page, so a vendor's onboarding is
  *  deep-linkable (/providers/new/anthropic) and the browser's back button works.
  *
@@ -141,15 +162,7 @@ export function ProviderGallery() {
     queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
   });
   const runners = useQuery(runnersQuery());
-  // How many of the user's keys each vendor accounts for. A row records the preset it was created
-  // from, so a second Anthropic key — which lands on the slug "anthropic-2" — still counts towards
-  // Anthropic, and a key from the retired DeepSeek Harness preset towards DeepSeek (vendorOf).
-  const connected = new Map<string, number>();
-  for (const p of providers.data ?? []) {
-    if (!p.presetSlug) continue;
-    const vendor = vendorOf(p.presetSlug);
-    connected.set(vendor, (connected.get(vendor) ?? 0) + 1);
-  }
+  const connected = connectedCounts(providers.data ?? []);
   // Three of these vendors are also engines the user may already be signed into on a machine of
   // their own. Say so on the card: buying a key for a subscription you already pay for is the one
   // mistake this gallery can lead someone into. It stays a link — a key alongside a sign-in is a
@@ -167,11 +180,7 @@ export function ProviderGallery() {
 
   return (
     <div className="provider-gallery">
-      {/* A vendor whose keys run on no engine this page draws is not offered: Cursor's run on Cursor CLI
-          alone, which the web draws once a runner of the account knows it (webShowsEngine). */}
-      {PROVIDER_PRESETS.filter((p) => p.slug !== DSH_PRESET_SLUG
-        && newKeyEngines({ runtime: p.runtime, presetSlug: p.slug, baseUrl: p.baseUrl })
-          .some((engine) => webShowsEngine(engine, (runners.data ?? []) as SignedInRunner[]))).map((p) => {
+      {offeredPresets((runners.data ?? []) as SignedInRunner[]).map((p) => {
         const count = connected.get(p.slug) ?? 0;
         return (
           <Link
@@ -212,6 +221,37 @@ export function ProviderGallery() {
           <div className="pc-name">Custom</div>
           <div className="pc-sub">Manual endpoint</div>
         </div>
+      </Link>
+    </div>
+  );
+}
+
+/**
+ * The vendor picker under the keys there are (docs/mocks/infrastructure-focus): one line, a pill for each
+ * vendor with no key yet and one for Custom, each a link into its connect page as the gallery's cards are.
+ * A vendor already connected takes another key from its own card's + Add key.
+ */
+export function ProviderPills() {
+  const providers = useQuery({
+    queryKey: PROVIDERS_LIST_KEY,
+    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
+  });
+  const runners = useQuery(runnersQuery());
+  const connected = connectedCounts(providers.data ?? []);
+  return (
+    <div className="pv-more">
+      <span className="pv-more-l">Connect another provider</span>
+      {offeredPresets((runners.data ?? []) as SignedInRunner[])
+        .filter((p) => !connected.has(p.slug))
+        .map((p) => (
+          <Link key={p.slug} to={`/providers/new/${p.slug}`} className="pv-pill">
+            <ProviderTile slug={p.slug} label={vendorName(p.slug)} size={18} />
+            {vendorName(p.slug)}
+          </Link>
+        ))}
+      <Link to="/providers/new/custom" className="pv-pill">
+        <ProviderTile slug="custom" label="Custom" size={18} muted />
+        Custom
       </Link>
     </div>
   );

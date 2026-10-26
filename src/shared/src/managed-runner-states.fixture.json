@@ -20,7 +20,7 @@
     "`display` is what every client shows for that status (`managedRunnerDisplay`, null: no managed UI).",
     "`title` and `detail` are the exact words; `detail` is the server's reason sentence when the status",
     "carries one. `retry` offers Retry (POST /managed-runner/retry with the read revision), `ensure` offers",
-    "Set up (POST /managed-runner/ensure), `signIn` points at the runner's runtimes in Infrastructure.",
+    "Set up (POST /managed-runner/ensure), `signIn` points at the runner's runtimes on the Machines & models page.",
     "`acceptsWork`: a message or turn sent now is accepted and waits for the runner, so a client does not",
     "refuse it as offline. `startsNewSession`: a first session in the managed default workspace can start:",
     "the server names what it starts on (`firstSessionProvider`: `initialProvider` once the runner was READY,",
@@ -47,7 +47,7 @@
   "copy": {
     "retry": "Retry",
     "ensure": "Set up",
-    "signIn": "Open Infrastructure",
+    "signIn": "Open Machines & models",
     "registerOwn": "Register your own machine"
   },
   "capabilities": [
@@ -562,7 +562,7 @@
       "display": {
         "kind": "modelUnavailable",
         "title": "Your managed runner needs a model",
-        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
         "retry": false,
         "ensure": false,
         "signIn": true,
@@ -583,7 +583,7 @@
         "usable": false,
         "reason": {
           "code": "MODEL_UNAVAILABLE",
-          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
           "retryable": true
         },
         "retryAfter": null,
@@ -636,7 +636,7 @@
       "display": {
         "kind": "modelUnavailable",
         "title": "Your managed runner needs a model",
-        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
         "retry": false,
         "ensure": false,
         "signIn": true,
@@ -657,7 +657,7 @@
         "usable": false,
         "reason": {
           "code": "MODEL_UNAVAILABLE",
-          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
           "retryable": true
         },
         "retryAfter": null,
@@ -1675,7 +1675,7 @@
       "display": {
         "kind": "failed",
         "title": "Managed runner failed",
-        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
         "retry": true,
         "ensure": false,
         "signIn": true,
@@ -1696,7 +1696,7 @@
         "usable": false,
         "reason": {
           "code": "MODEL_UNAVAILABLE",
-          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
           "retryable": true
         },
         "retryAfter": null,

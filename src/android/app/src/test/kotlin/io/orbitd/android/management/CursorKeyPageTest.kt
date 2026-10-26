@@ -24,7 +24,7 @@ import org.robolectric.annotation.Config
 import java.time.Instant
 
 /**
- * A Cursor User API Key on Infrastructure, over the controlled server (the owner's board, iOS 4): its row in API keys runs on Cursor CLI
+ * A Cursor User API Key on the Machines & models page, over the controlled server (the owner's board, iOS 4): its row in API keys runs on Cursor CLI
  * alone, on Auto, and ends with Rejected once Cursor refused it; its page says what it works with and whose plan it bills, what Cursor
  * answered its last check, Check Again where that was no yes (P2 follow-up's POST providers/mine/:id/key-check), and the key itself.
  * Adding or changing a key happens on the web.

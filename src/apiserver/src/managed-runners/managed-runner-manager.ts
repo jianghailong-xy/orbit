@@ -57,6 +57,7 @@ import {
   type VolumeSwitchCheck,
 } from './managed-runner-volume-switch';
 import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } from './managed-runner-work';
+import { RUNNER_BEATS, runnerLastBeatAt } from '../runners/runner-presence';
 
 /**
  * The managed runner manager: drives one mapping's data volume and instance towards its desired
@@ -191,7 +192,7 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
   RETRY_EXHAUSTED: { message: 'Provisioning kept failing on transient infrastructure errors and stopped. It can be retried.', retryable: true },
   STARTUP_TIMEOUT: { message: 'The runner did not report in before its startup deadline. It can be retried.', retryable: true },
   [MODEL_UNAVAILABLE]: {
-    message: 'The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.',
+    message: 'The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.',
     retryable: true,
   },
   POD_RESTARTING: {
@@ -795,11 +796,12 @@ export class ManagedRunnerManager {
   private async instanceReport(mapping: ManagedRunner, now: Date): Promise<StoredManagedWorkload | null> {
     const runner = await this.prisma.runner.findUnique({
       where: { id: mapping.runnerId },
-      select: { capabilities: true, lastHeartbeatAt: true, managedWorkload: true },
+      select: { capabilities: true, ...RUNNER_BEATS, managedWorkload: true },
     });
     if (!runner?.capabilities.includes(MANAGED_RUNNER_SLEEP_CAPABILITY)) return null;
     const freshMs = this.profile.lifecycle.heartbeatFreshSeconds * 1000;
-    if (!runner.lastHeartbeatAt || now.getTime() - runner.lastHeartbeatAt.getTime() > freshMs) return null;
+    const beat = runnerLastBeatAt(runner);
+    if (!beat || now.getTime() - beat.getTime() > freshMs) return null;
     const report = readStoredWorkload(runner.managedWorkload);
     if (!report || report.generation !== mapping.generation || report.podUid !== mapping.podUid) return null;
     const received = Date.parse(report.receivedAt);
@@ -1736,9 +1738,9 @@ export class ManagedRunnerManager {
   private async reportSince(mapping: ManagedRunner, since: Date): Promise<ManagedSupplyRunner | null> {
     const runner = await this.prisma.runner.findUnique({
       where: { id: mapping.runnerId },
-      select: { status: true, lastHeartbeatAt: true, engines: true, defaultRemoved: true, capabilities: true },
+      select: { status: true, ...RUNNER_BEATS, engines: true, defaultRemoved: true, capabilities: true },
     });
-    const beat = runner?.lastHeartbeatAt;
+    const beat = runnerLastBeatAt(runner);
     if (!runner || !beat || runner.status === 'OFFLINE' || beat < since) return null;
     return this.now().getTime() - beat.getTime() <= this.profile.lifecycle.heartbeatFreshSeconds * 1000 ? runner : null;
   }

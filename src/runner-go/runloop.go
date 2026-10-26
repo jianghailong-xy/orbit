@@ -935,6 +935,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// A copy of the Google sign-in lives in a session's directory only while an agy runs on it; the
 	// copies a crash or a kill left behind go before any session starts again.
 	pruneAntigravityTokenCopies()
+	// The runner link (link_mode.go): t's daemon calls move to it when the control plane asks, and until
+	// then the shadow (link_shadow.go) mirrors the heartbeats and event batches t delivers over HTTPS on a
+	// connection of its own, which the work never waits on. Started before anything sends on t, whose
+	// requests it watches.
+	stopLink := startLink(cfg, t)
+	defer stopLink()
 
 	// This machine's free-space floor (Runner.minFreeDiskMb), kept in sync the same way and for
 	// the same reason as max-concurrent above: the worktree sweep reclaims checkouts against it,

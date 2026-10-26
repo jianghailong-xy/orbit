@@ -140,7 +140,7 @@ const text = (el: Element | null | undefined) => el?.textContent?.replace(/\s+/g
 const engineCard = (name: string) =>
   [...document.body.querySelectorAll<HTMLElement>('.infra-engine')].find((card) => text(card.querySelector('.infra-engine-name')).startsWith(name)) ?? null;
 
-describe('Cursor CLI on Infrastructure', () => {
+describe('Cursor CLI on the Machines & models page', () => {
   it('is nowhere while no runner of the account knows it', async () => {
     runners = [hpc(null, [])];
     keys = [];
@@ -150,21 +150,27 @@ describe('Cursor CLI on Infrastructure', () => {
     expect(document.body.querySelector('a[href="/providers/new/cursor-api"]')).toBeNull();
   });
 
-  it('gets the seventh engine card: the machines and accounts signed in, and its keys on Auto', async () => {
+  it('gets the seventh engine row: the machines and accounts signed in, and its keys — each starting on Auto', async () => {
     await mount();
     const card = engineCard('Cursor CLI')!;
     expect(text(card.querySelector('.infra-engine-state'))).toBe('Ready');
     expect([...card.querySelectorAll('.infra-engine-src > div')].map((line) => text(line))).toEqual([
       'Subscription · HPC ×2',
-      'API key · Cursor Auto',
+      'API key · Cursor',
     ]);
+    // The machine's card chips both accounts, and the key's row says what a session on it starts on.
+    expect(text(document.body.querySelector('.re-runner-card .mc-row'))).toContain('Cursor CLI ×2');
+    expect(text(document.body.querySelector('.vk-row .vk-model'))).toBe('Starts on Auto');
   });
 
-  it('says in Needs attention that Cursor CLI is signed out on a machine, with its sign-in', async () => {
+  it('says on the machine’s card that Cursor CLI is signed out there, with its sign-in', async () => {
     runners = [hpc(cursor({ auth: 'no', accounts: [{ id: 'default', home: '/root/.orbit/cursor/default', auth: 'no' }] }))];
     await mount();
-    const rows = [...document.body.querySelectorAll<HTMLElement>('.infra-attn-row')].map((row) => text(row.querySelector('.infra-attn-text')));
-    expect(rows).toContain('Cursor CLI is signed out on HPC · Sessions there can’t use it');
+    const pair = [...document.body.querySelectorAll<HTMLElement>('.re-runner-card .mc-pair')].find((el) =>
+      text(el.querySelector('.mc-chip')).startsWith('Cursor CLI'),
+    )!;
+    expect(text(pair.querySelector('.mc-chip'))).toBe('Cursor CLI signed out');
+    expect(pair.querySelector('button')?.getAttribute('aria-label')).toBe('Sign in to Cursor CLI on HPC');
   });
 
   it('offers Cursor in the vendor gallery, on its own connect page, as already signed in on the machine', async () => {
@@ -178,7 +184,7 @@ describe('Cursor CLI on Infrastructure', () => {
   it('says on a key Cursor refused that it was refused, and where a new one is pasted', async () => {
     keys = [cursorKey({ keyCheckState: 'INVALID', keyCheckedAt: new Date(Date.now() - 4 * 60_000).toISOString() })];
     await mount();
-    const line = document.body.querySelector('.provider-keys .dsb-line.fail');
+    const line = document.body.querySelector('.vk-cards .dsb-line.fail');
     expect(text(line)).toBe('Rejected by Cursor · 4m ago · Paste a new key');
     expect(line?.querySelector('a')?.getAttribute('href')).toBe(`/providers/${keys[0].id}`);
   });
@@ -186,7 +192,7 @@ describe('Cursor CLI on Infrastructure', () => {
   it('asks again from a key Cursor could not be reached to check, and says nothing of one it accepted', async () => {
     keys = [cursorKey({ keyCheckState: 'UNREACHABLE', keyCheckedAt: new Date(Date.now() - 12 * 60_000).toISOString() })];
     await mount();
-    const line = document.body.querySelector('.provider-keys .dsb-line.fail');
+    const line = document.body.querySelector('.vk-cards .dsb-line.fail');
     expect(text(line)).toBe('Couldn’t reach Cursor to check this key · 12m ago · Retry');
     await act(async () => line!.querySelector<HTMLButtonElement>('button')!.click());
     await settle();
@@ -196,6 +202,6 @@ describe('Cursor CLI on Infrastructure', () => {
     host?.remove();
     keys = [cursorKey()];
     await mount();
-    expect(document.body.querySelector('.provider-keys .dsb-line.fail')).toBeNull();
+    expect(document.body.querySelector('.vk-cards .dsb-line.fail')).toBeNull();
   });
 });

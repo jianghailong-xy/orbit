@@ -73,7 +73,7 @@ class DshSessionShellTest : ComposerShellTest() {
             "(request_id: 64d2f58d-15e2-4744-aafd-d463abb21741) ")
         signIn(); openSession()
         awaitText("DeepSeek rejected this API key")
-        assertTrue(shows("Update the DeepSeek key in Infrastructure, then send your message again."))
+        assertTrue(shows("Update the DeepSeek key on the Machines & models page, then send your message again."))
         assertFalse("the card stands in for the runner's line", has(hasText("Authentication Fails", substring = true)))
         compose.onNode(hasText("Update the API key") and hasClickAction()).performScrollTo().performClick()
         await { shadowOf(compose.activity).peekNextStartedActivity() != null }
@@ -93,7 +93,7 @@ class DshSessionShellTest : ComposerShellTest() {
         failure("DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key")
         signIn(); openSession()
         awaitText("DeepSeek Harness needs a DeepSeek key")
-        assertTrue(shows("This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again."))
+        assertTrue(shows("This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key on the Machines & models page, then send your message again."))
         compose.onNode(hasText("Update the API key") and hasClickAction()).performScrollTo().performClick()
         await { shadowOf(compose.activity).peekNextStartedActivity() != null }
         assertEquals("https://a07c.test/infrastructure#keys", shadowOf(compose.activity).nextStartedActivity.dataString)
@@ -109,7 +109,7 @@ class DshSessionShellTest : ComposerShellTest() {
         }
         signIn(); openSession()
         awaitText("DeepSeek Harness isn't installed on “Fixture runner”")
-        assertTrue(shows("Install it from Infrastructure, then send your message again."))
+        assertTrue(shows("Install it from the Machines & models page, then send your message again."))
         val install = hasText("Install") and hasClickAction() and isEnabled()
         await { has(install) }
         compose.onNode(install).performScrollTo().performClick()

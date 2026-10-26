@@ -22,7 +22,8 @@ jobs:
       # Two removal censuses (evidence-judgment-removal, session-current-work-startup-removal)
       # measure `git show --numstat` over the commit that carries their migration. A shallow
       # checkout leaves HEAD parentless, so that reports the whole tree as additions and never
-      # mentions a deleted file at all. They need the history they read.
+      # mentions a deleted file at all. They need the history they read. The runner link check
+      # below reads origin/main from it too.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -32,6 +33,19 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      # The runner link protocol (contracts/runner-link): buf lint, then buf breaking against main,
+      # so a change that runners already in the field could not read fails here. Until the protocol
+      # first reaches main there is no earlier version to compare with, and the step says so in a
+      # notice; a checkout without origin/main fails rather than skipping the comparison.
+      - name: Check the runner link protocol (buf lint, buf breaking against main)
+        run: |
+          npx buf lint contracts/runner-link
+          main="$(git rev-parse --verify refs/remotes/origin/main)"
+          if git cat-file -e "$main:contracts/runner-link/buf.yaml" 2>/dev/null; then
+            npx buf breaking contracts/runner-link --against ".git#ref=$main,subdir=contracts/runner-link"
+          else
+            echo "::notice::main has no contracts/runner-link yet, so there is no earlier protocol to compare with"
+          fi
       - name: Test documentation checks
         run: npm run test:docs
       - name: Validate public documentation
@@ -255,6 +269,22 @@ jobs:
       - name: Test runner
         working-directory: src/runner-go
         run: go test ./...
+
+  # The runner link gateway (src/link-gateway), a Go module of its own. -race because it is a server of concurrent
+  # connections whose reader, writer and pinger share state.
+  go-link-gateway:
+    name: Go link gateway
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.x'
+          cache-dependency-path: src/link-gateway/go.sum
+      - name: Test link gateway
+        working-directory: src/link-gateway
+        run: go test -race ./...
 
   swift-core:
     name: Swift core

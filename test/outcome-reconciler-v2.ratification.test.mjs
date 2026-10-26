@@ -867,7 +867,9 @@ test('(p) project acceptance is untouched: 0178-0190 keeps its schema and its ro
 // (q) --------------------------------------------------------------------------------------------
 test('(q) this change adds no compose service and no resident process', () => {
   const compose = read('docker-compose.yml');
-  const services = [...compose.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((match) => match[1]);
+  // Top-level `x-*` blocks are Compose extension fields (the `x-logging` anchor), never services.
+  const withoutExtensions = compose.replace(/^x-[^\n]*\n(?:[ \t][^\n]*\n|\n)*/gm, '');
+  const services = [...withoutExtensions.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((match) => match[1]);
   // watchdog, outcome-coordinator, outcome-coordinator-secondary and executable-dead-man were
   // removed from Compose after this migration landed. The list shrank; this assertion still says
   // the same thing it always did — that nothing here ADDS a service. ('pg-socket' is the volume,
@@ -877,8 +879,18 @@ test('(q) this change adds no compose service and no resident process', () => {
   // docker-channel is the managed runners' restricted Docker channel, which the account owner allowed on
   // 2026-10-17 under a Compose profile a fresh install switches on (docs/managed-runner-design.md,
   // "Implementation record: new deployments"), not this change.
+  // managed-runner-firewall is the managed runners' host firewall, which the account owner decided on
+  // 2026-10-19 under a Compose profile of its own (docs/managed-runner-design.md, "Implementation record: the
+  // managed runners' host firewall"), not this change.
+  // link-gateway is the runner link's WebSocket gateway, which the runner link project added on 2026-10-25 under a Compose
+  // profile of its own that no install switches on (docs/runner-link-design.md §6.1 and D1; project 34bc0CsOzPh9KshG7H3DW,
+  // task A4), not this change.
+  // nats is the runner link's message bus, which the runner link project added on 2026-10-25 beside link-gateway,
+  // under the same Compose profile (docs/runner-link-design.md §6.3; project 34bc0CsOzPh9KshG7H3DW, task B1), not
+  // this change.
   assert.deepEqual(services.sort(), [
-    'apiserver', 'docker-channel', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web', 'wiki-worker',
+    'apiserver', 'docker-channel', 'gateway', 'link-gateway', 'managed-runner-firewall', 'nats', 'pg-socket',
+    'pgbackup', 'postgres', 'web', 'wiki-worker',
   ], 'the deployment is exactly the services it already had');
 
   // A resident process would arrive as a new long-running start script or a new scheduled job.
@@ -1129,7 +1141,9 @@ test('(u) removing the envelope did not reach project acceptance', async () => {
 // (v) --------------------------------------------------------------------------------------------
 test('(v) this is subtraction: nothing new runs, and less SQL is in force than before', () => {
   const compose = read('docker-compose.yml');
-  const services = [...compose.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((match) => match[1]);
+  // Top-level `x-*` blocks are Compose extension fields (the `x-logging` anchor), never services.
+  const withoutExtensions = compose.replace(/^x-[^\n]*\n(?:[ \t][^\n]*\n|\n)*/gm, '');
+  const services = [...withoutExtensions.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((match) => match[1]);
   // The same list (q) asserts, and for the same reason: watchdog, outcome-coordinator,
   // outcome-coordinator-secondary and executable-dead-man were removed from Compose after 0218
   // landed. The list shrank; the claim is still that nothing here ADDS a service.
@@ -1138,8 +1152,18 @@ test('(v) this is subtraction: nothing new runs, and less SQL is in force than b
   // docker-channel is the managed runners' restricted Docker channel, which the account owner allowed on
   // 2026-10-17 under a Compose profile a fresh install switches on (docs/managed-runner-design.md,
   // "Implementation record: new deployments"), not this change.
+  // managed-runner-firewall is the managed runners' host firewall, which the account owner decided on
+  // 2026-10-19 under a Compose profile of its own (docs/managed-runner-design.md, "Implementation record: the
+  // managed runners' host firewall"), not this change.
+  // link-gateway is the runner link's WebSocket gateway, which the runner link project added on 2026-10-25 under a Compose
+  // profile of its own that no install switches on (docs/runner-link-design.md §6.1 and D1; project 34bc0CsOzPh9KshG7H3DW,
+  // task A4), not this change.
+  // nats is the runner link's message bus, which the runner link project added on 2026-10-25 beside link-gateway,
+  // under the same Compose profile (docs/runner-link-design.md §6.3; project 34bc0CsOzPh9KshG7H3DW, task B1), not
+  // this change.
   assert.deepEqual(services.sort(), [
-    'apiserver', 'docker-channel', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web', 'wiki-worker',
+    'apiserver', 'docker-channel', 'gateway', 'link-gateway', 'managed-runner-firewall', 'nats', 'pg-socket',
+    'pgbackup', 'postgres', 'web', 'wiki-worker',
   ], 'the deployment is exactly the services it already had');
   const packageJson = JSON.parse(read('package.json'));
   const apiserver = JSON.parse(read('src/apiserver/package.json'));

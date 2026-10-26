@@ -32,7 +32,7 @@ open class OrbitApplication : Application() {
     /** The Google sign-in this process started, if any: its verifier is in memory only. */
     val googleSignIn = GoogleSignIn()
     internal val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    val realtime: RealtimeStore by lazy { RealtimeStore(session, processScope).also { RealtimeLifecycle(this, it) } }
+    val realtime: RealtimeStore by lazy { RealtimeStore(session, processScope, Dispatchers.Default).also { RealtimeLifecycle(this, it) } }
     /** The sessions on their way to Trash from this device, kept out of every list until their move has settled (A05-9). */
     internal val trashing = TrashingSessions()
     /** Each landing job as the last integration read described it: a landing page opened while the server cannot be read draws it,

@@ -44,7 +44,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { AutoRetryService, BACKOFF_MS } from './auto-retry.service';
-import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
+import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { SessionsService } from './sessions.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -90,6 +90,7 @@ function connect(url: string): Harness {
   const prisma = db as unknown as PrismaService;
   const realtime = {
     publish: () => undefined,
+    publishBatch: () => undefined,
     publishSessionUpdated: () => undefined,
     publishQueuedTurnsChanged: () => undefined,
     notifyInbox: () => undefined,
@@ -227,7 +228,7 @@ function connect(url: string): Harness {
       await sql.query(
         `UPDATE "runner" SET last_heartbeat_at = $2::timestamptz - ($3 || ' milliseconds')::interval
           WHERE id = $1::uuid`,
-        [runnerId, at.toISOString(), String(SESSION_RUNNER_OFFLINE_AFTER_MS / 2)],
+        [runnerId, at.toISOString(), String(RUNNER_OFFLINE_AFTER_MS / 2)],
       );
     },
   };

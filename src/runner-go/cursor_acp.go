@@ -1216,6 +1216,10 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 
 	pollCtx, pollCancel := context.WithCancel(p.ctx)
 	defer pollCancel()
+	// The generation's inbox poller: what fetches its turns, and the turnIds already taken on, which
+	// a redelivery of one is dropped against for the generation's whole life.
+	poller := newInboxPoller(p.t, p.job.SessionID, p.leaseGeneration)
+	defer poller.close()
 	inbox := make(chan *RunInboxResponse, 8)
 	pollErrors := make(chan error, 1)
 	var pollWG sync.WaitGroup
@@ -1224,31 +1228,20 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	go func() {
 		defer pollWG.Done()
 		for pollCtx.Err() == nil {
-			resp, err := p.t.inbox(pollCtx, p.job.SessionID, p.leaseGeneration)
+			resp, err := poller.next(pollCtx)
 			if err != nil {
-				if pollCtx.Err() != nil {
-					return
-				}
-				if isLeaseOwnershipError(err) {
+				if pollCtx.Err() == nil && isLeaseOwnershipError(err) {
 					select {
 					case pollErrors <- err:
 					case <-pollCtx.Done():
 					}
-					return
 				}
-				select {
-				case <-time.After(time.Second):
-				case <-pollCtx.Done():
-					return
-				}
-				continue
+				return
 			}
-			if resp != nil {
-				select {
-				case inbox <- resp:
-				case <-pollCtx.Done():
-					return
-				}
+			select {
+			case inbox <- resp:
+			case <-pollCtx.Done():
+				return
 			}
 		}
 	}()
@@ -1262,7 +1255,6 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	stopped := false
 	refused := ""
 	var stopDeadline <-chan time.Time
-	seen := map[string]bool{}
 	var queued []*RunInboxResponse
 	var shellContext []string
 	worktree := func(req *TurnCompleteRequest) {
@@ -1516,8 +1508,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			switch resp.Kind {
 			case "message", "shell":
 				// One at a time, in order; a turn delivered again is the one already here.
-				if !seen[resp.TurnID] {
-					seen[resp.TurnID] = true
+				if poller.markInflight(resp.TurnID) {
 					queued = append(queued, resp)
 				}
 			case "steer":

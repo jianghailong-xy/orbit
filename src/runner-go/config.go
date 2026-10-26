@@ -69,6 +69,15 @@ type RunnerConfig struct {
 	// an older config reads as "no" — a background service must not start installing
 	// software on someone's machine unasked.
 	AutoInstallEngines bool `json:"autoInstallEngines,omitempty"`
+	// LinkShadow is whether this runner mirrors the heartbeats and event batches it delivers
+	// over HTTPS to the runner link gateway, during the link's shadow period (link_shadow.go).
+	// Absent reads as on; false turns it off, as ORBIT_LINK_SHADOW=0 does.
+	LinkShadow *bool `json:"linkShadow,omitempty"`
+	// LinkMode is whether this runner's daemon work may move to the runner link when the control plane
+	// asks for it (link_mode.go). Absent, it follows the control plane: HTTPS until an UPGRADE_REQUIRED,
+	// or a Welcome or HeartbeatAck saying MODE_LINK, moves it. "off" keeps it on HTTPS, as
+	// ORBIT_LINK_MODE=off does.
+	LinkMode string `json:"linkMode,omitempty"`
 }
 
 // machineHome is where the runner stores its config + run scratch. One runner per

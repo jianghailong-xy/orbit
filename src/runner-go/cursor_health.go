@@ -25,15 +25,23 @@ import (
 )
 
 // cursorDefaultAccountDir is the Default account: the Cursor CLI login the runner keeps in its own
-// directory rather than the user's ~/.config/cursor (§16.2). `agent login`, run with
-// XDG_CONFIG_HOME=<dir>/xdg-config, saves it there as cursor/auth.json (§8.2).
+// directory rather than the user's ~/.config/cursor or ~/.cursor (§16.2), where `agent login` saves it as
+// any account's (cursorStoredLoginPath).
 func cursorDefaultAccountDir() string { return filepath.Join(cursorRoot(), "default") }
 
 // cursorLoginHint is how to sign the Default account in by hand: the pinned build's own `login`, saving
 // into Orbit's directory for that account, with a HOME of its own so ~/.cursor stays untouched.
 func cursorLoginHint() string { return cursorLoginHintFor(cursorDefaultAccountDir()) }
 
+// cursorStoredLoginPath is where `agent login`, run in the account at accountDir with its credentials in a
+// file (cursorLoginEnv), saves the login: on Linux under the XDG_CONFIG_HOME it is given,
+// xdg-config/cursor/auth.json (§8.2); on macOS always under its HOME, home/.cursor/auth.json, whatever
+// XDG_CONFIG_HOME and CURSOR_CONFIG_DIR say (§18.3). Every read of a login — its status, a session borrowing
+// it, its expiry, its account's usage — goes through here.
 func cursorStoredLoginPath(accountDir string) string {
+	if cursorOS == "darwin" {
+		return filepath.Join(accountDir, "home", ".cursor", "auth.json")
+	}
 	return filepath.Join(accountDir, "xdg-config", "cursor", "auth.json")
 }
 

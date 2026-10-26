@@ -311,7 +311,7 @@ describe('a DeepSeek key’s pages', { timeout: 30_000 }, () => {
     expect(sent[0]).toMatchObject({ method: 'PATCH', body: { enabled: false } });
   });
 
-  it('deletes the key from its page once asked, and goes back to Infrastructure', async () => {
+  it('deletes the key from its page once asked, and goes back to Machines & models', async () => {
     rows = [deepseekRow];
     usage = IN_USE;
     await mount('/providers/p-deepseek');

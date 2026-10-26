@@ -203,8 +203,9 @@ describe('a machine card’s head on /infrastructure', () => {
     // Its own line, after how busy it is; the toggle names it to a screen reader.
     expect(line?.previousElementSibling).toBe(util);
     expect(card('wikova').querySelector('.re-toggle')?.getAttribute('aria-describedby')).toBe(line?.id);
-    // Folded, and saying so.
-    expect(card('wikova').querySelector('.re-summary')).not.toBeNull();
+    // Folded, its engines still on its head.
+    expect(card('wikova').classList.contains('collapsed')).toBe(true);
+    expect(card('wikova').querySelector('.re-head .mc-row .mc-chip')).not.toBeNull();
   });
 
   it('is red when what it says already stops sessions, and names only the first two', async () => {

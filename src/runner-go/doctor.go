@@ -857,13 +857,18 @@ func doctorProxyVars(server string) []envVar {
 // installed so automation can gate on it.
 func cmdDoctor() {
 	server := ""
-	if cfg := loadConfig(); cfg != nil {
+	cfg := loadConfig()
+	if cfg != nil {
 		server = cfg.ServerURL
 		fmt.Printf("runner:  %s (%s)\nserver:  %s\n", cfg.Name, cfg.RunnerID, cfg.ServerURL)
 	} else {
 		fmt.Println("no runner registered on this machine — run `orbit register` first")
 	}
 	healths := runDoctor(true, doctorProxyVars(server))
+	// Whether this machine can hold the runner link, and through what (link_doctor.go).
+	if cfg != nil {
+		checkRunnerLink(cfg, os.Stdout)
+	}
 	for _, h := range healths {
 		if h.installed {
 			return

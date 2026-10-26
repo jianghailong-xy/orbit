@@ -20,6 +20,7 @@ import { ProviderPoolPage } from './pages/ProviderPoolPage';
 import { CliLoginPage } from './pages/CliLoginPage';
 import { EnrollPage } from './pages/EnrollPage';
 import { LoginPage } from './pages/LoginPage';
+import { PrivacyPage } from './pages/PrivacyPage';
 import { SetupPage } from './pages/SetupPage';
 import { RunnerDetailPage } from './pages/RunnerDetailPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
@@ -125,6 +126,9 @@ export function App() {
       <Route path="/s/:token/c/:sessionId" element={<SharedSessionPage />} />
       <Route path="/s/:token/t/:taskId" element={<SharedProjectTaskRoute />} />
       <Route path="/s/:token/d/:slug" element={<SharedWikiDocRoute />} />
+      {/* The privacy policy, which Google's consent screen and the login page link to: public, and the
+          same page signed out or in. */}
+      <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/login" element={authed ? <Navigate to="/" /> : <LoginPage />} />
       {/* First-run setup. Signed-out only; once a user exists SetupPage itself bounces to
           login, and a signed-in visitor (so users exist) is sent to the app. */}

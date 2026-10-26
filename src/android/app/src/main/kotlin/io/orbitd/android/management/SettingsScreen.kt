@@ -94,7 +94,7 @@ internal fun smartModelSelection(preferences: JsonObject?): Boolean =
 
 /** SettingsCopy's session recaps switch (SettingsHome.sessionRecaps): what a session list shows instead of the raw last reply. */
 internal const val SESSION_RECAPS = "Session recaps"
-internal const val SESSION_RECAPS_HINT = "Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply. Off: the raw last reply."
+internal const val SESSION_RECAPS_HINT = "Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply, and the conversation ends with it. Off: the raw last reply, and no summary in the conversation."
 
 /** UserPreferences.showRecaps: on unless the account turned it off; absent — or a value this build cannot read — means on, so
  * only opting out is ever written. */
@@ -212,7 +212,8 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             SettingsSwitch(SMART_MODEL_SELECTION, R.drawable.ic_sparkles, smartModelSelection(preferences), record.ready,
                 hint = SMART_MODEL_SELECTION_HINT) { preference("modelRouting", JsonPrimitive(it)) }
         }
-        SettingsGroup("Machines & models", footer = Infrastructure.SUBTITLE) {
+        // No header: the one row says the group's name (iOS SettingsHome.header, docs/mocks/machines-and-models ⑥-2).
+        SettingsGroup(null, footer = Infrastructure.SUBTITLE) {
             val needsYou = runners?.let { infrastructure.attention(it, System.currentTimeMillis()).size } ?: 0
             // What needs a person is said in amber, as the mock's row says it.
             SettingsLink(Infrastructure.TITLE, R.drawable.ic_runner, runners?.let { Infrastructure.settingsValue(needsYou, it) },
@@ -256,11 +257,16 @@ private fun SettingsIcon(icon: Int) = Icon(painterResource(icon), null, tint = M
 @Composable
 private fun settingsRowColors() = ListItemDefaults.colors(containerColor = Color.Transparent)
 
-/** A group of rows under its header, and — where it has one — the line under it (SettingsHome.footer). */
+/** A group of rows under its header — none where its one row says the name (SettingsHome.header) — and, where it has one, the line
+ * under it (SettingsHome.footer). */
 @Composable
-private fun SettingsGroup(title: String, footer: String? = null, rows: @Composable ColumnScope.() -> Unit) {
-    Text(title, Modifier.padding(start = 16.dp, top = 20.dp, bottom = 6.dp).semantics { heading() },
-        style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun SettingsGroup(title: String?, footer: String? = null, rows: @Composable ColumnScope.() -> Unit) {
+    if (title != null) {
+        Text(title, Modifier.padding(start = 16.dp, top = 20.dp, bottom = 6.dp).semantics { heading() },
+            style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    } else {
+        Spacer(Modifier.height(20.dp))
+    }
     Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
         Column(content = rows)
     }

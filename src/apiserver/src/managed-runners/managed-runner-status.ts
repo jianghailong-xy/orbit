@@ -10,6 +10,7 @@ import {
 import { managedRunnerAccountDisabledReason, managedRunnerNotEligibleReason } from './managed-runner-eligibility';
 import { managedRunnerDisabledReason } from './managed-runner-gate';
 import { managedFirstSessionProvider, type ManagedSupplyRunner } from './managed-runner-supply';
+import { runnerLastBeatAt, type RunnerBeats } from '../runners/runner-presence';
 
 /** How fresh a heartbeat must be to count, when no profile says otherwise: the reaper's threshold. */
 export const DEFAULT_HEARTBEAT_FRESH_MS = 90_000;
@@ -24,8 +25,9 @@ export interface ManagedRunnerStatusInput {
   /** An administrator disabled the owner's account (asked only while the switch is on). Absent: no. */
   ownerDisabled?: boolean;
   mapping: ManagedRunner | null;
-  /** The runner row: its heartbeat, and what its last heartbeat reported of its engines (absent: nothing yet). */
-  runner: ({ status: RunnerStatus; lastHeartbeatAt: Date | null } & Partial<ManagedSupplyRunner>) | null;
+  /** The runner row: its heartbeat (read with RUNNER_BEATS), and what its last heartbeat reported of its
+   *  engines (absent: nothing yet). */
+  runner: ({ status: RunnerStatus } & RunnerBeats & Partial<ManagedSupplyRunner>) | null;
   /** The owner's first own model key a managed runner can run (ownerManagedKeys), asked only before the
    *  runner has been READY. Absent: none. */
   firstSessionKey?: { slug: string; engine: LoginEngine } | null;
@@ -85,7 +87,7 @@ export function managedRunnerStatus(input: ManagedRunnerStatusInput): ManagedRun
   }
 
   const reason = storedReason(mapping.lastError);
-  const beat = runner?.lastHeartbeatAt ?? null;
+  const beat = runnerLastBeatAt(runner);
   const fresh = !!beat && now.getTime() - beat.getTime() <= input.heartbeatFreshMs;
   return {
     contractVersion: MANAGED_RUNNER_CONTRACT_VERSION,

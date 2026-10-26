@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { Prisma, PrismaClient, ProjectStatus } from '@prisma/client';
+import { Prisma, PrismaClient, ProjectStatus, RunnerStatus } from '@prisma/client';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -10,105 +10,77 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { readProjectListRollups } from './project-list-rollup';
+import { rebuildProjectRollupCandidates } from './project-rollup-candidate';
+import { projectTaskWorkStateSql } from './project-task-work-state';
 
 /**
- * `GET /projects` classifies its projects' tasks without visiting the Task heap — on real
- * PostgreSQL, against the plan.
+ * `GET /projects` reads the task rows it has to classify and no others — on real PostgreSQL,
+ * against the plan.
  *
- * The rollup asks one question per project — how many of your tasks are in each of seven lanes —
- * and the CASE that answers it (project-task-work-state.ts) reads eleven columns of each task row.
- * `task_project_rollup_covering_idx` has carried five of them since migration 0178 and the other
- * six were added as INCLUDE payload by 0395, which is the whole of this spec's subject: with the
- * eleven-column index the classification is answered from the index (`Heap Fetches: 0`), and
- * without it PostgreSQL fetches a heap row per task — 111,708 heap rows and 243 MB of buffers for
- * 107 projects, measured on production 2026-10-07.
+ * This file used to pin the opposite end of the same read: 0395 made the classification of EVERY
+ * task an index-only scan over `task_project_rollup_covering_idx`, and this asserted `Heap Fetches:
+ * 0` on it. That scan is gone by design (0441): each status's default lane is counted off
+ * `project_task_status_count`, and the shared classifier runs only on the rows
+ * `project_rollup_candidate` names and the tasks a work session carries. On production the scan
+ * had cost 71–96 ms on its own, and the classification riding on it 400–1,178 ms; what is pinned now
+ * is that neither comes back.
  *
  * WHAT IS ASSERTED
  * ================
- * The scan that CLASSIFIES — the one returning the project's tasks, where every other scan of
- * `task` in this statement is a probe returning at most one row — and two facts about it:
+ * Over every node of the executed plan that reads `task`, the rows it returns times its loops — the
+ * task rows the statement touches — and three facts about that number on a 10,000-task project:
  *
- *  - with the index, it is an Index Only Scan over `task_project_rollup_covering_idx` reporting
- *    zero heap fetches. Zero is the property the INCLUDE payload exists for; the moment the
- *    classifier reads a twelfth column, this scan fetches a heap row per task again and the
- *    assertion says so — there is no other symptom, because every count still comes back correct.
- *  - without it, the same scan reads the big project's every task from the heap. That is the
- *    control, and it is also what keeps the fixture honest: a table small enough to sit in cache,
- *    or one whose rows are narrow enough that the planner never had a reason to prefer the index,
- *    would satisfy the first assertion without telling the two paths apart.
- *
- * Both runs return the same rows, asserted here as the answer to "this is an access path, not a new
- * answer": the same seven bucket counts and the same `lastActivityAt`, from both.
+ *  - before a rebuild every OPEN task is still a candidate (each was appended when it was
+ *    inserted), and the statement classifies all of them. That is the control: it is what reading
+ *    every task looks like on this fixture, so the bound below means something;
+ *  - after the rebuild the candidates are the one chain head that can run, and the statement
+ *    touches a handful of task rows for the whole page — none of them through a sequential scan;
+ *  - both runs return what classifying every task with the shared expression returns, in the same
+ *    snapshot: the seven buckets, the total and `lastActivityAt` of every project.
  *
  * Destructive: it seeds rows, so it runs only against a disposable server.
  * `scripts/run-pg-spec.sh src/apiserver/src/projects/project-rollup-covering-plan.pg.spec.ts`
  */
 
 const URL = process.env.COORDINATOR_PG_URL;
-const INDEX = 'task_project_rollup_covering_idx';
 
+/** One project's tasks: enough that touching each of them is unmistakable in the plan. */
+const CHAIN_TASKS = 5_000;
+const DONE_TASKS = 5_000;
 /**
- * One project's tasks, enough that reading them from the heap is unmistakably not reading an
- * index, and few enough to seed in one statement. `description` is padded so the heap pages this
- * read would touch dwarf the index's — on production the same table is 2.3 KB a row.
+ * Generous for "the candidates, their probes and one activity probe per project": the run measured
+ * while this was written touched 5 — the chain's head and the four projects' activity probes.
  */
-const BIG_PROJECT_TASKS = 20_000;
-const TASK_PADDING = 'x'.repeat(700);
+const TOUCHED_TASK_ROWS_BOUND = 100;
 
 interface PlanNode {
   'Node Type': string;
-  'Parent Relationship'?: string;
   'Relation Name'?: string;
   'Index Name'?: string;
   'Actual Rows'?: number;
   'Actual Loops'?: number;
-  'Heap Fetches'?: number;
   Plans?: PlanNode[];
 }
 
-/**
- * The scan that classifies: of every scan of `task` in the statement, the one that returns the
- * most rows across its loops. The classifier is the only one of them that returns a project's worth
- * — the verification, dependency and epoch probes are lookups, one row or none per loop.
- */
-function classifyingScan(plan: PlanNode): PlanNode | null {
-  let best: PlanNode | null = null;
-  let bestRows = -1;
+/** Every node of the plan that reads `task`, with the rows it returned across its loops. */
+function taskReads(plan: PlanNode): Array<{ node: string; rows: number }> {
+  const reads: Array<{ node: string; rows: number }> = [];
   const walk = (node: PlanNode): void => {
     if (node['Relation Name'] === 'task') {
-      const rows = (node['Actual Rows'] ?? 0) * (node['Actual Loops'] ?? 0);
-      if (rows > bestRows) {
-        bestRows = rows;
-        best = node;
-      }
+      reads.push({
+        node: `${node['Node Type']}${node['Index Name'] ? ` using ${node['Index Name']}` : ''}`,
+        rows: (node['Actual Rows'] ?? 0) * (node['Actual Loops'] ?? 0),
+      });
     }
     for (const child of node.Plans ?? []) walk(child);
   };
   walk(plan);
-  return best;
+  return reads;
 }
 
-/** Owner-scoped tasks under one project, all DONE, each with a heap-sized description. */
-async function seed(
-  identity: Client, ownerId: string, projectId: string, n: number, updatedAt: Date,
-): Promise<void> {
-  await identity.query(
-    `INSERT INTO "task"(
-       "id", "title", "description", "owner_id", "project_id", "creator_type", "creator_id",
-       "status", "completion_criterion", "updated_at"
-     )
-     SELECT gen_random_uuid(), 'work ' || i, $4, $1::uuid, $2::uuid, 'USER', $1::uuid, 'DONE',
-            'EVIDENCE_JUDGMENT', $3::timestamp - make_interval(secs => i)
-       FROM generate_series(0, $5::int - 1) AS i`,
-    [ownerId, projectId, updatedAt.toISOString().replace('Z', ''), TASK_PADDING, n],
-  );
-}
-
-async function makeProject(
-  db: PrismaClient, ownerId: string, title: string, status: ProjectStatus = ProjectStatus.OPEN,
-): Promise<string> {
+async function makeProject(db: PrismaClient, ownerId: string, title: string): Promise<string> {
   const id = randomUUID();
-  await db.project.create({ data: { id, ownerId, title, status } });
+  await db.project.create({ data: { id, ownerId, title, status: ProjectStatus.OPEN } });
   return id;
 }
 
@@ -126,8 +98,8 @@ async function rollupStatement(ownerId: string): Promise<Prisma.Sql> {
   return sent;
 }
 
-test('the rollup classifies each project\'s tasks from the index, never the heap',
-  { skip: !URL, timeout: 300_000 }, async () => {
+test('the rollup touches the task rows it classifies and no others',
+  { skip: !URL, timeout: 600_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL);
     const identity = new Client({ connectionString: URL, connectionTimeoutMillis: 2_000 });
     await identity.connect();
@@ -138,67 +110,136 @@ test('the rollup classifies each project\'s tasks from the index, never the heap
       const ownerId = randomUUID();
       await db.user.create({
         data: {
-          id: ownerId, email: `rollup-${ownerId}@covering.invalid`, name: 'covering',
+          id: ownerId, email: `rollup-${ownerId}@candidates.invalid`, name: 'candidates',
           passwordHash: 'x',
         },
       });
-      const now = new Date('2026-10-07T00:00:00.000Z');
+      // A workspace on an online runner, so the chain's head is a task a person could Run and the
+      // READY lane has something to say.
+      const runnerId = randomUUID();
+      const workspaceId = randomUUID();
+      await db.runner.create({
+        data: {
+          id: runnerId, ownerId, name: `candidates runner ${ownerId}`, tokenHash: `candidates-${runnerId}`,
+          status: RunnerStatus.ONLINE, capabilities: [], capabilitiesReportedAt: new Date(),
+        },
+      });
+      await db.workspace.create({
+        data: { id: workspaceId, ownerId, runnerId, name: `candidates workspace ${ownerId}`, enabled: true },
+      });
+
+      // The production shape in small: one project holding a long chain of OPEN work, each task
+      // waiting on the one before it, beside a body of finished work and a few small projects.
       const big = await makeProject(db, ownerId, 'big');
-      await seed(identity, ownerId, big, BIG_PROJECT_TASKS, now);
+      await identity.query(
+        `INSERT INTO "task"("id", "title", "owner_id", "project_id", "creator_type", "creator_id",
+                            "assignee_id", "status", "completion_criterion", "acceptance_command",
+                            "acceptance_expected_exit_code", "created_at", "updated_at")
+         SELECT gen_random_uuid(), 'step ' || i, $1::uuid, $2::uuid, 'USER', $1::uuid, $3::uuid, 'OPEN',
+                'EXECUTABLE', 'true', 0,
+                timestamp '2026-10-01' + make_interval(secs => i),
+                timestamp '2026-10-01' + make_interval(secs => i)
+           FROM generate_series(1, $4::int) AS i`,
+        [ownerId, big, workspaceId, CHAIN_TASKS],
+      );
+      await identity.query(
+        `INSERT INTO "task_dependency"("id", "task_id", "depends_on_task_id")
+         SELECT gen_random_uuid(), step."id", step."previous"
+           FROM (SELECT t."id", lag(t."id") OVER (ORDER BY t."created_at") AS "previous"
+                   FROM "task" t WHERE t."project_id" = $1::uuid) step
+          WHERE step."previous" IS NOT NULL`,
+        [big],
+      );
+      await identity.query(
+        `INSERT INTO "task"("id", "title", "owner_id", "project_id", "creator_type", "creator_id",
+                            "status", "completion_criterion", "updated_at")
+         SELECT gen_random_uuid(), 'done ' || i, $1::uuid, $2::uuid, 'USER', $1::uuid, 'DONE',
+                'EVIDENCE_JUDGMENT', timestamp '2026-09-01' + make_interval(secs => i)
+           FROM generate_series(1, $3::int) AS i`,
+        [ownerId, big, DONE_TASKS],
+      );
       for (let i = 0; i < 3; i += 1) {
-        await seed(identity, ownerId, await makeProject(db, ownerId, `small ${i}`), 40,
-          new Date(now.getTime() - (i + 1) * 3_600_000));
+        await identity.query(
+          `INSERT INTO "task"("id", "title", "owner_id", "project_id", "creator_type", "creator_id",
+                              "status", "completion_criterion", "updated_at")
+           SELECT gen_random_uuid(), 'small ' || i, $1::uuid, $2::uuid, 'USER', $1::uuid, 'DONE',
+                  'EVIDENCE_JUDGMENT', timestamp '2026-08-01' + make_interval(secs => i)
+             FROM generate_series(1, 40) AS i`,
+          [ownerId, await makeProject(db, ownerId, `small ${i}`)],
+        );
       }
-      // Statistics and the visibility map, because an index-only scan answers from both and
-      // neither exists after a bulk load until autovacuum gets round to it.
+      // Statistics and the visibility map, as autovacuum would leave them.
       await identity.query('VACUUM ANALYZE "task"');
+      await identity.query('VACUUM ANALYZE "task_dependency"');
+      await identity.query('ANALYZE "project_rollup_candidate"');
 
       const statement = await rollupStatement(ownerId);
-      const run = async (dropIndex: boolean) => {
+      // Every task classified with the shared expression, un-narrowed: the answer the read has to
+      // keep giving, computed the way the list computed it before 0441.
+      const oracle = `
+        SELECT t."project_id" AS "projectId",
+               count(*)::int AS "taskCount",
+               (count(*) FILTER (WHERE s."workState" = 'RUNNING'))::int AS "running",
+               (count(*) FILTER (WHERE s."workState" = 'READY'))::int AS "ready",
+               (count(*) FILTER (WHERE s."workState" = 'BLOCKED'))::int AS "blocked",
+               (count(*) FILTER (WHERE s."workState" = 'AWAITING_VERIFICATION'))::int AS "awaitingVerification",
+               (count(*) FILTER (WHERE s."workState" = 'DONE'))::int AS "done",
+               (count(*) FILTER (WHERE s."workState" = 'FAILED'))::int AS "failed",
+               (count(*) FILTER (WHERE s."workState" = 'CANCELLED'))::int AS "cancelled",
+               max(t."updated_at") AS "lastActivityAt"
+          FROM "task" t
+         CROSS JOIN LATERAL (SELECT (${projectTaskWorkStateSql('t')})::text AS "workState") s
+         WHERE t."owner_id" = $1::uuid AND t."project_id" IS NOT NULL
+         GROUP BY t."project_id"`;
+      const columns = `"projectId", "taskCount", "running", "ready", "blocked", "awaitingVerification",
+                       "done", "failed", "cancelled",
+                       (extract(epoch FROM "lastActivityAt") * 1000)::bigint::text AS ms`;
+
+      const run = async () => {
         await identity.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
         try {
-          if (dropIndex) await identity.query(`DROP INDEX "${INDEX}"`);
+          // As production runs (jit = off for its role and database): compiling these plans costs
+          // this server seconds that production never pays, and a timeout here would be about JIT.
+          await identity.query('SET LOCAL jit = off');
           const explained = await identity.query(
             `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${statement.text}`, statement.values);
-          const rows = await identity.query(
-            `SELECT "projectId", "taskCount", "running", "ready", "blocked",
-                    "awaitingVerification", "done", "failed", "cancelled",
-                    (extract(epoch FROM "lastActivityAt") * 1000)::bigint::text AS ms
-               FROM (${statement.text}) rollup ORDER BY 1`,
-            statement.values);
+          const listed = await identity.query(
+            `SELECT ${columns} FROM (${statement.text}) rollup ORDER BY 1`, statement.values);
+          const classified = await identity.query(
+            `SELECT ${columns} FROM (${oracle}) everything ORDER BY 1`, [ownerId]);
           return {
-            scan: classifyingScan(explained.rows[0]['QUERY PLAN'][0].Plan as PlanNode),
-            rows: rows.rows.map((row) => Object.values(row).join(' ')),
+            reads: taskReads(explained.rows[0]['QUERY PLAN'][0].Plan as PlanNode),
+            listed: listed.rows.map((row) => Object.values(row).join(' ')),
+            classified: classified.rows.map((row) => Object.values(row).join(' ')),
           };
         } finally {
           await identity.query('ROLLBACK');
         }
       };
+      const touched = (reads: Array<{ rows: number }>) => reads.reduce((sum, read) => sum + read.rows, 0);
 
-      const withIndex = await run(false);
-      const withoutIndex = await run(true);
+      // The control: every OPEN task was appended as it was inserted, so all of them are classified.
+      const before = await run();
+      assert.ok(touched(before.reads) >= CHAIN_TASKS,
+        `the control touched only ${touched(before.reads)} task rows: ${JSON.stringify(before.reads)}`);
+      assert.deepEqual(before.listed, before.classified, 'a stale candidate set still gives the classifier’s answer');
 
-      // The control first: without the index the classifier reads the big project's every task
-      // from the heap. A fixture where this fails could not tell the two paths apart.
-      assert.ok(withoutIndex.scan, 'the rollup scans task at all');
-      assert.ok(((withoutIndex.scan['Actual Rows'] ?? 0) * (withoutIndex.scan['Actual Loops'] ?? 1))
-        >= BIG_PROJECT_TASKS,
-      `the control read only ${withoutIndex.scan['Actual Rows']} rows per loop over `
-        + `${withoutIndex.scan['Actual Loops']} loops`);
+      await rebuildProjectRollupCandidates(db as unknown as PrismaService);
+      await identity.query('ANALYZE "project_rollup_candidate"');
+      const after = await run();
+      assert.ok(touched(after.reads) <= TOUCHED_TASK_ROWS_BOUND,
+        `the rollup touched ${touched(after.reads)} task rows after the rebuild: ${JSON.stringify(after.reads)}`);
+      for (const read of after.reads) {
+        assert.doesNotMatch(read.node, /^Seq Scan/, `the rollup read task through ${read.node}`);
+      }
+      assert.deepEqual(after.listed, after.classified, 'the narrowed read gives the classifier’s answer');
+      assert.deepEqual(after.listed, before.listed, 'the rebuild moved no number');
 
-      assert.ok(withIndex.scan, 'the rollup scans task at all');
-      assert.equal(withIndex.scan['Node Type'], 'Index Only Scan', 'the classification is index-only');
-      assert.equal(withIndex.scan['Index Name'], INDEX, `${INDEX} does not serve the classification`);
-      assert.equal(withIndex.scan['Heap Fetches'], 0, 'a heap fetch per task is what this index exists to remove');
-      assert.ok(((withIndex.scan['Actual Rows'] ?? 0) * (withIndex.scan['Actual Loops'] ?? 1))
-        >= BIG_PROJECT_TASKS,
-      'the index served the classifying scan, not some other one');
-
-      // The same answer from both paths, in one snapshot each and over the same rows.
-      assert.deepEqual(withIndex.rows, withoutIndex.rows);
-      assert.equal(withIndex.rows.length, 4, 'every project with tasks is reported');
-      assert.ok(withIndex.rows.some((row) => row.includes(`${BIG_PROJECT_TASKS} `)),
-        'the big project reports its whole population');
+      assert.equal(after.listed.length, 4, 'every project with tasks is reported');
+      const [bigRow] = after.listed.filter((row) => row.startsWith(big));
+      // The head of the chain can run; every other step waits on the one before it.
+      assert.equal(bigRow, `${big} ${CHAIN_TASKS + DONE_TASKS} 0 1 ${CHAIN_TASKS - 1} 0 ${DONE_TASKS} 0 0 `
+        + `${Date.UTC(2026, 9, 1) + CHAIN_TASKS * 1000}`);
     } finally {
       await db.$disconnect();
       await identity.end();

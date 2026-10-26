@@ -247,8 +247,8 @@ import {
 } from '../managed-runners/managed-runner-demand';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
 import {
-  CURSOR_RUNNER_UPGRADE_ERROR,
   DSH_RUNNER_UPGRADE_ERROR,
+  cursorRunnerRefusal,
   dshRuntimeUnavailable,
 } from '../runner-api/runner-provider-support';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
@@ -291,7 +291,6 @@ import {
 } from './engine-session';
 import { readLandingView } from '../projects/landing-view';
 import {
-  SESSION_RUNNER_OFFLINE_AFTER_MS,
   deriveSessionCapabilities,
   withSessionCapabilities,
   withSessionState,
@@ -304,10 +303,16 @@ import {
   changedFileCount,
   mergeTargetOf,
   moveTargetRefusal,
-  runnerIsOnline,
   runnerLabel,
   sessionMoveVerdict,
 } from './session-move';
+import {
+  RUNNER_BEATS,
+  runnerIsOnline,
+  runnerLastBeatSql,
+  runnerOfflineSql,
+  withRunnerLastBeat,
+} from '../runners/runner-presence';
 
 /**
  * A turn the control plane queued with no words of anybody's, whose content is written in at delivery:
@@ -1208,7 +1213,7 @@ export class SessionsService {
     const targetRunner = await this.prisma.runner.findFirst({
       where: { id: assignedRunnerId, ownerId },
       select: {
-        name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true,
+        name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
         accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true, capabilitiesReportedAt: true,
       },
     });
@@ -1233,7 +1238,7 @@ export class SessionsService {
     // named one for starts in one it does (cursorDefaultPermissionMode, below).
     if (runtime === AgentProvider.CURSOR) {
       if (!targetRunner?.capabilitiesReportedAt || !targetRunner.capabilities?.includes('provider:cursor')) {
-        throw new ConflictException(CURSOR_RUNNER_UPGRADE_ERROR);
+        throw new ConflictException(cursorRunnerRefusal(targetRunner));
       }
       if (dto.permissionMode) normalizeBuiltinPermissionMode(runtime, model ?? '', dto.permissionMode as PermissionMode);
     }
@@ -1421,7 +1426,7 @@ export class SessionsService {
     // as an imported transcript's and lays no turn down, so without this the files would never
     // reach the engine.
     if (attachmentsAlone) await this.seedOpeningTurn(session);
-    this.queue.notifySessionQueued();
+    this.queue.notifySessionQueued(session.assignedRunnerId);
     // A task run, a delegation or a message opening a session on a sleeping managed runner wakes it.
     await this.wakeManagedRunner(session.assignedRunnerId, 'session');
     // Push the new session to the owner's control-plane stream (GET /api/events) so other
@@ -1616,7 +1621,7 @@ export class SessionsService {
       },
       loggedRetry(this.logger, 'session.import'),
     );
-    this.queue.notifySessionQueued();
+    this.queue.notifySessionQueued(session.assignedRunnerId);
     await this.wakeManagedRunner(session.assignedRunnerId, 'session');
     this.realtime.publishSessionCreated(session.id);
     return withSessionState(session);
@@ -3318,7 +3323,8 @@ export class SessionsService {
         s.assigned_runner_id AS "runnerId",
         r.name  AS "runnerName",
         r.status AS "runnerStatus",
-        r.last_heartbeat_at AS "runnerLastHeartbeatAt",
+        -- Its last beat, from either record of it (runners/runner-presence.ts).
+        ${runnerLastBeatSql('r')} AS "runnerLastHeartbeatAt",
         s.task_id AS "taskId",
         t.title   AS "taskTitle",
         cp.id     AS "projectId",
@@ -3392,11 +3398,7 @@ export class SessionsService {
               -- machine is the least useful thing the UI could tell someone. Same rule
               -- deriveSessionCapabilities resumes on, so one runner cannot read online here and
               -- offline there.
-              WHEN r.id IS NULL
-                   OR r.status = 'OFFLINE'
-                   OR r.last_heartbeat_at IS NULL
-                   OR r.last_heartbeat_at
-                      < now() - (${SESSION_RUNNER_OFFLINE_AFTER_MS} * interval '1 millisecond')
+              WHEN r.id IS NULL OR ${runnerOfflineSql('r')}
                 THEN 'runner_offline'
               WHEN ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} >= r.max_concurrent
                 THEN 'runner_at_capacity'
@@ -3625,7 +3627,7 @@ export class SessionsService {
         workspace: true,
         assignedRunner: {
           select: {
-            id: true, name: true, displayName: true, version: true, engines: true, status: true, lastHeartbeatAt: true, capabilities: true,
+            id: true, name: true, displayName: true, version: true, engines: true, status: true, ...RUNNER_BEATS, capabilities: true,
             // What its engines are served with (servedRunner), and served without.
             accountNames: true, accountPauses: true, defaultRemoved: true,
           },
@@ -3785,7 +3787,8 @@ export class SessionsService {
     const landing = session.sessionKind === SESSION_KIND_LANDING
       ? await readLandingView(this.prisma, ownerId, session.id)
       : undefined;
-    const assignedRunner = session.assignedRunner && servedRunner(session.assignedRunner);
+    // As clients have always read it: `lastHeartbeatAt` is its last beat, from either record of it.
+    const assignedRunner = session.assignedRunner && servedRunner(withRunnerLastBeat(session.assignedRunner));
     return withSessionCapabilities({
       ...rest,
       // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
@@ -4664,7 +4667,7 @@ export class SessionsService {
       where: { id, ownerId },
       select: {
         id: true, changedFiles: true,
-        assignedRunner: { select: { status: true, lastHeartbeatAt: true } },
+        assignedRunner: { select: { status: true, ...RUNNER_BEATS } },
       },
     });
     if (!session) throw new NotFoundException('Session not found.');
@@ -4682,6 +4685,8 @@ export class SessionsService {
     const turn = await this.insertTurn(id, {
       kind: 'artifact', content: JSON.stringify(content), clientTurnId: `worktree-file-${randomUUID()}`,
     });
+    // The runner's heartbeat hands the request over: over the runner link, the next one is told so.
+    this.realtime.markSessionRunnerChanged(id);
     const deadline = Date.now() + 40_000;
     while (true) {
       const result = await this.prisma.conversationTurn.findFirst({
@@ -4821,6 +4826,7 @@ export class SessionsService {
         data: { status: 'PENDING', answeredAt: null, deliveredAt: null, leaseDeadlineAt: null },
       });
     }
+    this.realtime.markSessionRunnerChanged(sessionId);
   }
 
   private async resolveLegacyArtifactPath(
@@ -4948,7 +4954,12 @@ export class SessionsService {
     // A landing writes no run_event, so every one of recap.ts's four gates would refuse it anyway;
     // the door says so as the structural refusal rather than as "too little to recap" (§2.9 LS6).
     assertEngineSessionRow(session);
-    return enqueueRecap({ db: this.prisma, sessionId: id, force: true });
+    return enqueueRecap({
+      db: this.prisma,
+      sessionId: id,
+      force: true,
+      onWritten: () => this.realtime.publishSessionUpdated(id),
+    });
   }
 
   // The session list shows the last reply as a single ellipsised line, so it only
@@ -5865,7 +5876,7 @@ export class SessionsService {
       // is shorter than a legitimate contender can hold it, so make the deadline explicit.
       transaction: { maxWait: 10_000, timeout: 30_000 },
     }));
-    if (queued.wakeQueue) this.queue.notifySessionQueued();
+    if (queued.wakeQueue) this.queue.notifySessionQueued(turnRunnerId);
     if (queued.wakeInbox) this.realtime.notifyInbox(id);
     // A message, a scheduled wakeup, a watch or a task's prompt that left the session waiting for its
     // runner wakes a sleeping managed runner. A turn joining a running one needs no wake.
@@ -5956,6 +5967,7 @@ export class SessionsService {
         })
       : undefined;
     // Retried whole: the interrupt is decided from the Session row re-read under its lock.
+    let interruptRunnerId: string | null = null;
     const queued = await withTransactionRetry(this.prisma, async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "session"
@@ -5963,6 +5975,7 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      interruptRunnerId = session.assignedRunnerId;
       // Keyed on the interrupt rather than on the message, because only the interrupt is
       // certainly still there: a later interrupt may have dropped the follow-up, and a
       // retry must not then re-file it. A control turn is never deleted, so its presence
@@ -6116,7 +6129,7 @@ export class SessionsService {
     }, loggedRetry(this.logger, 'sessions.interrupt'));
     // The inbox is woken unconditionally: the interrupt turn is what it is waiting for, and
     // it is deliverable the moment this commits, whatever the follow-up's status implies.
-    if (queued.wakeQueue) this.queue.notifySessionQueued();
+    if (queued.wakeQueue) this.queue.notifySessionQueued(interruptRunnerId);
     if (queued.wakeInbox) this.realtime.notifyInbox(id);
     if (!queued.idempotent) this.realtime.publishQueuedTurnsChanged(id);
     return queued.turn
@@ -8123,7 +8136,7 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       include: {
-        assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true } },
+        assignedRunner: { select: { id: true, status: true, ...RUNNER_BEATS } },
       },
     });
     if (!session) throw new NotFoundException('session not found');
@@ -8342,7 +8355,7 @@ export class SessionsService {
       const current = await tx.session.findUniqueOrThrow({
         where: { id },
         include: {
-          assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true, capabilities: true, capabilitiesReportedAt: true, engines: true } },
+          assignedRunner: { select: { id: true, status: true, ...RUNNER_BEATS, capabilities: true, capabilitiesReportedAt: true, engines: true } },
         },
       });
       // Everything was locked in the order project → task → session, but the SESSION was the last
@@ -8475,7 +8488,7 @@ export class SessionsService {
       const resumeRuntime = next.engine;
       if (resumeRuntime === AgentProvider.CURSOR) {
         if (!current.assignedRunner?.capabilitiesReportedAt || !current.assignedRunner.capabilities?.includes('provider:cursor')) {
-          throw new ConflictException(CURSOR_RUNNER_UPGRADE_ERROR);
+          throw new ConflictException(cursorRunnerRefusal(current.assignedRunner));
         }
         // D5, as on a live switch (updateConfig): revived on another key or sign-in, a conversation it
         // has would have to go with it.
@@ -8637,7 +8650,7 @@ export class SessionsService {
     // failure and only re-opens once the client believes the session is live again.
     if (revived.wasCompleted) this.realtime.publishSessionCreated(id);
     else if (revived.wasRevived) this.realtime.publishSessionUpdated(id);
-    this.queue.notifySessionQueued();
+    this.queue.notifySessionQueued(session.assignedRunnerId);
     // A revived run waits for its runner like any queued turn: a managed one not asked above — its
     // heartbeat still looked fresh — is asked now.
     if (revived.wasRevived && !askedManagedRunner) await this.wakeManagedRunner(session.assignedRunnerId, 'resume');
@@ -8684,7 +8697,7 @@ export class SessionsService {
   ): Promise<SessionReceiveBlockedReason | null> {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, ownerId },
-      include: { assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true } } },
+      include: { assignedRunner: { select: { id: true, status: true, ...RUNNER_BEATS } } },
     });
     if (!session) return 'SESSION_GONE';
     const capabilities = deriveSessionCapabilities(session);
@@ -9045,7 +9058,7 @@ export class SessionsService {
       }
       if (exec.provider === AgentProvider.CURSOR && (!session.assignedRunner?.capabilitiesReportedAt ||
         !session.assignedRunner.capabilities?.includes('provider:cursor'))) {
-        throw new ConflictException(CURSOR_RUNNER_UPGRADE_ERROR);
+        throw new ConflictException(cursorRunnerRefusal(session.assignedRunner));
       }
       const requestedPermissionMode =
         (dto.permissionMode as PermissionMode | undefined) ??
@@ -9741,7 +9754,7 @@ export class SessionsService {
         defaultMergeTarget: true,
       },
     },
-    assignedRunner: { select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true } },
+    assignedRunner: { select: { name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true } },
   } satisfies Prisma.SessionSelect;
 
   /**
@@ -9809,7 +9822,7 @@ export class SessionsService {
         runnerId: true,
         workDir: true,
         runner: {
-          select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, capabilities: true, engines: true },
+          select: { name: true, displayName: true, status: true, ...RUNNER_BEATS, capabilities: true, engines: true },
         },
       },
     });

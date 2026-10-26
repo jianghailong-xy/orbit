@@ -1,6 +1,6 @@
 import { wikiSpaceSettings, type WikiPlanJob, type WikiPlanVersion } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { isRunnerOnline } from '../runners/runners.service';
+import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import { wikiPlanJobRowOfSpace, wikiPlanJobStateOf } from './wiki-plan-job';
 
 /**
@@ -92,7 +92,7 @@ export async function wikiPlanWaitingOfSpaces(
  * Whether each space's maintenance runner is online, as the clients read it (web
  * `useWikiMaintenanceWhere`, OrbitKit `wikiMaintenanceRunnerOnline`): the workspace the space's
  * maintenance names, found among the owner's workspaces, and that workspace's runner among the owner's
- * runners — online by the runners list's own rule (`isRunnerOnline`). Absent — unknown — when the space
+ * runners — online by the runners list's own rule (`runnerIsOnline`). Absent — unknown — when the space
  * names no workspace, or the workspace is gone or has no runner.
  */
 async function maintenanceRunnersOnline(
@@ -115,13 +115,13 @@ async function maintenanceRunnersOnline(
   const runnerIds = [...new Set(workspaces.map((workspace) => workspace.runnerId).filter((id): id is string => id !== null))];
   const runners = runnerIds.length === 0
     ? []
-    : await prisma.runner.findMany({ where: { ownerId, id: { in: runnerIds } }, select: { id: true, status: true, lastHeartbeatAt: true } });
+    : await prisma.runner.findMany({ where: { ownerId, id: { in: runnerIds } }, select: { id: true, status: true, ...RUNNER_BEATS } });
   const runnerById = new Map(runners.map((runner) => [runner.id, runner]));
   const online = new Map<string, boolean>();
   for (const [spaceId, workspaceId] of named) {
     const runnerId = runnerOf.get(workspaceId);
     const runner = runnerId ? runnerById.get(runnerId) : undefined;
-    if (runner) online.set(spaceId, isRunnerOnline(runner, now.getTime()));
+    if (runner) online.set(spaceId, runnerIsOnline(runner, now.getTime()));
   }
   return online;
 }

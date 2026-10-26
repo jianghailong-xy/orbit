@@ -10,7 +10,9 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const TEST_MCP = join(here, '..', 'test-mcp.mjs');
-export const NODE = '/usr/local/bin/node';
+// The node that runs the harness also runs the test MCP server and the fixture repos' servers
+// (P0b: /usr/local/bin/node does not exist on orbit-macos; the harness node is /opt/homebrew/bin/node).
+export const NODE = process.execPath;
 
 const HOOK_EVENTS = ['beforeShellExecution', 'beforeMCPExecution', 'afterShellExecution', 'afterMCPExecution', 'beforeReadFile',
   'afterFileEdit', 'stop', 'beforeSubmitPrompt', 'afterAgentResponse', 'afterAgentThought', 'sessionStart', 'sessionEnd',

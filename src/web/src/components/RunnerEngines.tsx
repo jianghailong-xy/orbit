@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, HolderOutlined, KeyOutlined, LoadingOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, WarningFilled, WarningOutlined } from '@ant-design/icons';
@@ -63,6 +63,7 @@ import {
   cursorStateHint,
   type CursorRunnerFacts,
 } from '../lib/cursorRuntime';
+import { dshRunnerState } from '../lib/dshRuntime';
 import {
   bindingPlanUsageRow,
   currentPlanUsageRows,
@@ -90,7 +91,7 @@ import { ago, engineVersionNumber, updateNoteOf, webShowsEngine } from '../lib/r
 import { ENGINE_PRESET, ENGINE_SLUGS } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { DshRunnerStatus } from './DshRunnerStatus';
-import { ProviderTile } from './ProviderGallery';
+import { EngineTile, ProviderTile } from './ProviderGallery';
 import { ENGINE_NAME, GoogleSignInTerms, KIMI_SITE, RunnerSignIn } from './RunnerSignIn';
 import { useRunnerTokenRotation } from './RunnerTokenRotation';
 import type { Runner } from './TasksSidePanel';
@@ -1447,8 +1448,9 @@ function AddEngineAccount({
   );
 }
 
-/** What a collapsed card says in one line, so folding a runner away never hides a problem. */
-export function summaryOf(runner: Runner): string {
+/** What a collapsed card says at the end of its head, so folding a runner away never hides a problem —
+ *  or nothing, when its chips (MachineChips) already say all there is. */
+export function summaryOf(runner: Runner): string | null {
   const relay = runner.install;
   const updating = relay?.mode === 'update';
   if (relay?.status === 'failed') return updating ? 'Update failed' : 'Install failed';
@@ -1456,8 +1458,8 @@ export function summaryOf(runner: Runner): string {
     return updating ? 'Updating…' : 'Installing…';
   }
   if (!runner.engines) return 'Engines not reported';
-  // Only the engines a sign-in can be counted for: this line says who is signed in, and how much
-  // of the machine's updating has stopped. A runner reports every CLI on the machine, OpenCode
+  // Only the engines a sign-in can be counted for: this line says how much of the machine's updating
+  // has stopped, and — with no chips on the head — who is signed in. A runner reports every CLI on the machine, OpenCode
   // included, and OpenCode now has a row of its own below — but it has no sign-in to be in or out
   // of, so it is in neither half of this line; its drift is the machine page's news.
   // Cursor CLI wherever its row can get it signed in, installed or not, as every engine here — not on
@@ -1475,8 +1477,128 @@ export function summaryOf(runner: Runner): string {
   if (stale && runner.online) {
     return stale === 1 ? '1 engine not updating' : `${stale} engines not updating`;
   }
-  const ready = shown.filter(signedIn).length;
-  return ready === engines.length ? 'All signed in' : `${ready} of ${engines.length} signed in`;
+  // Who is signed in is the head's chips' to say (MachineChips), folded or open. The count is left for a
+  // machine they have nothing to draw on: one with nothing signed in, or out, yet.
+  if (machineChipsOf(runner).length > 0) return null;
+  return `${shown.filter(signedIn).length} of ${engines.length} signed in`;
+}
+
+/**
+ * How many of an engine's logins a session on this machine can run on: each account signed in, or the
+ * engine's own answer where it reports no accounts — for OpenCode, whether its own sign-in (`opencode
+ * auth login`) is set up there. Antigravity's Default on the machine's own Gemini key counts, as it does
+ * on its row (runsOnEnvKey); a Cursor CLI this runner can't run counts none.
+ */
+function loginsOn(runner: Runner, engine: RowEngine): number {
+  const health = engineHealthOf(runner, engine);
+  if (!health?.installed || (engine === 'antigravity' && runner.antigravity?.supported === false)) return 0;
+  if (engine === 'cursor' && cursorRunnerState(runner) !== 'ready') return 0;
+  const accounts = health.accounts ?? [];
+  if (accounts.length === 0) return health.auth === 'yes' ? 1 : 0;
+  return accounts.filter((account) => account.auth === 'yes' || runsOnEnvKey(health, account)).length;
+}
+
+/**
+ * Whether this engine is signed out on this machine: installed, the CLI's own answer is no, and no
+ * account of it is signed in either — with one that is, sessions there still run on it. Antigravity
+ * only where its Google sign-in can be started from here, since that is the one way back in this
+ * offers, and Cursor CLI only where this runner can run it.
+ */
+function signedOutOn(runner: Runner, engine: LoginEngine): boolean {
+  const health = engineHealthOf(runner, engine);
+  if (rowKindOf(health, runner.install, engine) !== 'out') return false;
+  if (engine === 'antigravity' && (runner.antigravity?.supported === false || runner.antigravity?.googleLogin !== 'available')) {
+    return false;
+  }
+  if (engine === 'cursor' && cursorRunnerState(runner) !== 'ready') return false;
+  return !health?.accounts?.some((account) => account.auth === 'yes');
+}
+
+/** One engine on a machine card's head (MachineChips). */
+export interface MachineChip {
+  engine: AgentProvider;
+  /** The logins a session here can run on (loginsOn): none for an engine signed out, nor for DeepSeek
+   *  Harness, which runs on DeepSeek keys and signs nothing in. */
+  logins: number;
+  /** The accounts of it the machine lists, signed in or not — none where it lists none. Fewer logins
+   *  than accounts is an account signed out, or one whose CLI wouldn't say, beside one that runs. */
+  accounts: number;
+  /** Installed, its CLI says signed out, and no account of it is signed in (signedOutOn). */
+  signedOut: boolean;
+}
+
+/**
+ * What a session on this machine can run on, in the order its rows come (docs/mocks/infrastructure-focus):
+ * each engine signed in here, with how many of its logins, and each one signed out, which its chip signs
+ * in again — and DeepSeek Harness once it can run here. An engine not installed, or whose CLI wouldn't
+ * say, has nothing to show on the head: its row says what it is.
+ */
+export function machineChipsOf(runner: Runner): MachineChip[] {
+  if (!runner.engines) return [];
+  const chips: MachineChip[] = [];
+  const add = (engine: RowEngine) => {
+    const logins = loginsOn(runner, engine);
+    if (logins > 0) {
+      const accounts = engineHealthOf(runner, engine)?.accounts?.length ?? 0;
+      chips.push({ engine: engine as AgentProvider, logins, accounts, signedOut: false });
+    } else if (engine !== 'opencode' && signedOutOn(runner, engine)) {
+      chips.push({ engine: engine as AgentProvider, logins: 0, accounts: 0, signedOut: true });
+    }
+  };
+  rowEnginesOf(runner.engines).forEach(add);
+  const harness = runner.engines.find((health) => health.engine === AgentProvider.DSH);
+  if (harness?.installed && dshRunnerState(runner) === 'ready') {
+    chips.push({ engine: AgentProvider.DSH, logins: 0, accounts: 0, signedOut: false });
+  }
+  add('cursor');
+  return chips;
+}
+
+/**
+ * A machine card's engines, on a line of their own under its name (docs/mocks/infrastructure-focus):
+ * what its sessions can run on, a chip each — ×N for several accounts — and an engine signed out there in
+ * amber, beside the Sign in its row offers, which opens the card on that sign-in. An engine still running
+ * on one account while another is out is amber too, with how many of them are in: a folded card never
+ * calls a machine signed in over an account that isn't, and that account's own row has its Sign in. An
+ * offline machine's are what it last said, with nothing to press until it is back.
+ */
+function MachineChips({ runner, onSignIn }: { runner: Runner; onSignIn: (engine: LoginEngine) => void }) {
+  const chips = machineChipsOf(runner);
+  if (chips.length === 0) return null;
+  const name = runner.displayName || runner.name;
+  return (
+    <div className="mc-row">
+      {chips.map((chip) => {
+        const partly = !chip.signedOut && chip.logins < chip.accounts;
+        return (
+          <span className="mc-pair" key={chip.engine}>
+            <span className={`mc-chip${chip.signedOut || partly ? ' out' : ''}`}>
+              <EngineTile engine={chip.engine} size={14} />
+              {ENGINE_CLI_NAMES[chip.engine]}{' '}
+              {!partly && chip.logins > 1 && <span className="mc-n">×{chip.logins}</span>}
+              {partly && (
+                <span className="mc-out">
+                  {chip.logins} of {chip.accounts} signed in
+                </span>
+              )}
+              {chip.signedOut && <span className="mc-out">signed out</span>}
+            </span>
+            {chip.signedOut && runner.online && (
+              <Button
+                size="small"
+                variant="primary"
+                className="mc-signin"
+                aria-label={`Sign in to ${ENGINE_CLI_NAMES[chip.engine]} on ${name}`}
+                onClick={() => onSignIn(chip.engine as LoginEngine)}
+              >
+                Sign in
+              </Button>
+            )}
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 function RunnerEngineCard({
@@ -1515,6 +1637,28 @@ function RunnerEngineCard({
   const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: runner.id, disabled: dragDisabled });
   const kebab = useRef<HTMLButtonElement>(null);
+  const card = useRef<HTMLDivElement | null>(null);
+  const cardRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      setNodeRef(node);
+      card.current = node;
+    },
+    [setNodeRef],
+  );
+  // A chip's Sign in opens the card on that engine's own sign-in — Default's row for an engine with
+  // accounts, which only an open group draws — and brings it into view, since it can open below the
+  // window's edge.
+  const [revealSignIn, setRevealSignIn] = useState(0);
+  useEffect(() => {
+    if (revealSignIn > 0) card.current?.querySelector('.rsi')?.closest('.re-panel')?.scrollIntoView({ block: 'nearest' });
+  }, [revealSignIn]);
+  const signInFromChip = (engine: LoginEngine) => {
+    const panel = ownSignInPanel(runner, engine);
+    if (collapsed) onToggle();
+    if (panel !== engine) onFoldAccounts(engine, true);
+    setSignIn(panel);
+    setRevealSignIn((count) => count + 1);
+  };
   const name = runner.displayName || runner.name;
   // How many of its slots are taken, ahead of where it is: an offline machine takes none, and its
   // header says Offline instead.
@@ -1534,10 +1678,12 @@ function RunnerEngineCard({
   const attentionLine = listAttentionLine(attention);
   const attentionTone = attention.slice(0, 2).some((item) => item.tone === 'bad') ? 'bad' : 'warn';
   const attentionId = useId();
+  // At the folded head's end, what is going on with the machine itself (summaryOf).
+  const summary = collapsed ? summaryOf(runner) : null;
 
   return (
     <div
-      ref={setNodeRef}
+      ref={cardRef}
       // Translate, not Transform: an open card is many times a folded one's height, and the scale a
       // transform carries would stretch one into the other's slot while it is dragged past.
       style={{ transform: CSS.Translate.toString(transform), transition, zIndex: isDragging ? 1 : undefined }}
@@ -1598,12 +1744,12 @@ function RunnerEngineCard({
             )}
           </span>
         </button>
-        {(!runner.online || collapsed) && (
+        {(!runner.online || summary) && (
           <div className="re-runner-status">
             {!runner.online && <Badge>Offline</Badge>}
-            {collapsed && (
+            {summary && (
               <span className={`re-summary${failed ? ' warn' : ''}`}>
-                {failed && <WarningOutlined aria-hidden />}{summaryOf(runner)}
+                {failed && <WarningOutlined aria-hidden />}{summary}
               </span>
             )}
           </div>
@@ -1630,6 +1776,7 @@ function RunnerEngineCard({
             />
           }
         />
+        <MachineChips runner={runner} onSignIn={signInFromChip} />
       </div>
       {!collapsed && (
         <MachineEngines

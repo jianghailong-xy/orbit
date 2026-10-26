@@ -74,7 +74,8 @@ import { SignInProvidersService } from './sign-in-providers.service';
   // PatService, PatRequestAudit, DisabledAccounts and Impersonation are exported because JwtAuthGuard is
   // instantiated in every module that uses it, PatService also because admin/* lists and revokes a user's tokens,
   // GoogleLoginService because admin/* unlinks a user's Google account, DisabledAccounts also because admin/*
-  // disables one, and Impersonation also because admin/* issues the token for viewing one.
+  // disables one and the pool gateways read it, and Impersonation also because admin/* issues the token for
+  // viewing one.
   exports: [JwtAuthGuard, JwtModule, PatService, PatRequestAudit, GoogleLoginService, DisabledAccounts, Impersonation],
 })
 export class AuthModule {}

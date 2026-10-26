@@ -148,7 +148,7 @@ test('a workspace on a signed-out account is refused as an engine sign-out, nami
     assert.ok(err.message.includes(`\`CODEX_HOME='${WORK_HOME}' codex login --device-auth\``), err.message);
     assert.ok(
       err.message.endsWith(
-        `Sign it in from Infrastructure, or run \`CODEX_HOME='${WORK_HOME}' codex login --device-auth\` on that machine, then start this session again.`,
+        `Sign it in from the Machines & models page, or run \`CODEX_HOME='${WORK_HOME}' codex login --device-auth\` on that machine, then start this session again.`,
       ),
       err.message,
     );
@@ -192,7 +192,7 @@ test('a workspace on Default is judged on Default, and named as such only among 
     assert.equal(
       err.message,
       'Codex is signed out on runner "build-box" — every session started there fails immediately. ' +
-        'Sign in from Infrastructure, or run `codex login --device-auth` on that machine, then start this session again.',
+        'Sign in from the Machines & models page, or run `codex login --device-auth` on that machine, then start this session again.',
     );
   }
 });

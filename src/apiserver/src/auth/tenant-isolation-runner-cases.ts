@@ -777,6 +777,11 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: RUNNER,
     request: (of) => ({ params: {}, body: heartbeat({ agentDirProbes: [{ agentId: of.workspaceId, exists: true, isGitRepo: false }] }) }),
   },
+  // What the link gateway's Welcome says of a process's sessions: B's own process, asking after A's leased session.
+  'POST /runner/link/welcome body sessionIds[]': {
+    as: RUNNER,
+    request: (of, mine) => ({ params: {}, body: { leaseOwner: mine.runner.leaseOwner, sessionIds: [of.runner.activateSessionId] } }),
+  },
   // B's own claim of an operation of its own, but A's operation named.
   'POST /runner/codex-rate-limit-reset-result body operationId': {
     as: RUNNER,
@@ -1145,6 +1150,10 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     + 'answered is read back by (id, the caller\'s owner, the path\'s space, kind import), so another account\'s job '
     + 'under that id is neither read nor written (wiki-import-jobs.ts:115)',
   // ── the machine protocol: tokens the machine or the engine makes up, and the machine's own snapshots ──
+  'GET /runner/sessions/:id/inbox query runningTurnId':
+    'which turn the polling process says it is running, read on a runner link call only: compared, for inequality, '
+    + 'with the turns of the path\'s session, already locked as this runner\'s, so another account\'s turn under that '
+    + 'id is neither read nor written (runner-api.controller.ts:4270)',
   'POST /runner/integration-jobs/:jobId/result body unknownPushes[].jobId':
     'the earlier landing the control plane itself listed in this claim\'s command (J12), re-read only inside the '
     + 'reporting account and on the claiming job\'s own serial key: another account\'s job under that id is not '
@@ -1466,4 +1475,24 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
     + 'its body is an AdmissionReview whose ids are Kubernetes UIDs and names, and it reads only the managed_runner '
     + 'rows owning the claims the reviewed Pod names, in the configured cluster and namespace, answering allowed or '
     + 'not — managed-runner-admission.controller.ts:97',
+  'GET /runner/link-token/revocations':
+    'the runner link gateway\'s door, protected by the gateway service secret: the bearer must be '
+    + 'RUNNER_LINK_GATEWAY_TOKEN, compared in constant time (404 with the link off) — '
+    + 'runner-link-token.controller.ts:61, runner-link-token.ts:241; it takes no id, and answers only the '
+    + 'fingerprints of the runner credentials revoked within a token\'s lifetime, which name no account and no '
+    + 'runner — runner-link-token.controller.ts:122',
+  'POST /runner/link/events':
+    'the runner link gateway\'s merged event call, served on the link\'s internal listener alone, which admits only the '
+    + 'gateway, by its service secret (404 over HTTPS, and with the link off) — runner-link-events.controller.ts:34, '
+    + 'runner-link-call.ts:188. It carries batches of many runners, and each batch is the runner\'s whose link token its '
+    + 'connection carries, admitted as RunnerAuthGuard admits a link call: the token verified, the runner read with its '
+    + 'credential, its owner and its managed instance — link-events.ts:420, :450. A batch is written only into a session '
+    + 'assigned to that runner and leased to that process, locked under that fence before anything is written — '
+    + 'runner-api.controller.ts:8961, :8950, :7041; any other batch is answered sendAlone with nothing written, and '
+    + 'the gateway sends it to the events route, which refuses it there as it refuses any runner\'s call',
+  'GET /runner/link/mode':
+    'the runner link gateway\'s door, behind the same gateway service secret (RunnerLinkGatewayGuard, 404 with the '
+    + 'link off) — runner-link-required.controller.ts:58, runner-link-token.controller.ts:61, runner-link-token.ts:241; '
+    + 'it takes no id, and answers only whether RUNNER_LINK_REQUIRED is on, read from the deployment\'s one switch row, '
+    + 'which names no account and no runner — runner-link-required.controller.ts:64, runner-link-required.ts:129',
 };

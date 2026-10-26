@@ -1860,3 +1860,19 @@ public struct SessionSearchResponse: Codable, Equatable, Sendable {
     /// it is its own total either way.
     public var effectiveTotal: Int { total ?? hits.count }
 }
+
+/// What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why it
+/// wrote none — the answer of `POST /sessions/:id/recap` (`APIClient.refreshRecap`).
+public struct RecapOutcome: Decodable, Equatable, Sendable {
+    public let written: Bool
+    /// The recap the pass wrote; nil when it wrote none.
+    public let recapText: String?
+    /// Why it wrote none (`RecapCard.notice(for:)`); nil when it wrote.
+    public let reason: String?
+
+    public init(written: Bool, recapText: String? = nil, reason: String? = nil) {
+        self.written = written
+        self.recapText = recapText
+        self.reason = reason
+    }
+}

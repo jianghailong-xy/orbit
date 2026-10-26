@@ -1,0 +1,71 @@
+{
+  "generatedBy": "scripts/runner-link/gen-hint-fixtures.mjs, with src/apiserver/src/realtime/runner-hints.ts",
+  "cases": [
+    {
+      "name": "claim: a session is queued for the runner",
+      "runnerId": "0190a0b0-0000-7000-8000-000000000001",
+      "hint": {
+        "claim": {}
+      },
+      "subject": "rnr.0190a0b0-0000-7000-8000-000000000001",
+      "message": "{\"hint\":{\"claim\":{}}}"
+    },
+    {
+      "name": "commands: something its heartbeat delivers is waiting",
+      "runnerId": "0190a0b0-0000-7000-8000-000000000001",
+      "hint": {
+        "commands": {}
+      },
+      "subject": "rnr.0190a0b0-0000-7000-8000-000000000001",
+      "message": "{\"hint\":{\"commands\":{}}}"
+    },
+    {
+      "name": "inbox: a message is waiting in one of its sessions",
+      "runnerId": "0190a0b0-0000-7000-8000-000000000001",
+      "hint": {
+        "inbox": {
+          "sessionId": "0190a0b0-0000-7000-8000-0000000000a1"
+        }
+      },
+      "subject": "rnr.0190a0b0-0000-7000-8000-000000000001",
+      "message": "{\"hint\":{\"inbox\":{\"sessionId\":\"0190a0b0-0000-7000-8000-0000000000a1\"}}}"
+    },
+    {
+      "name": "approval: a person decided an approval of one of its sessions",
+      "runnerId": "0190a0b0-0000-7000-8000-000000000001",
+      "hint": {
+        "approval": {
+          "sessionId": "0190a0b0-0000-7000-8000-0000000000a1",
+          "approvalId": "0190a0b0-0000-7000-8000-0000000000f1"
+        }
+      },
+      "subject": "rnr.0190a0b0-0000-7000-8000-000000000001",
+      "message": "{\"hint\":{\"approval\":{\"sessionId\":\"0190a0b0-0000-7000-8000-0000000000a1\",\"approvalId\":\"0190a0b0-0000-7000-8000-0000000000f1\"}}}"
+    },
+    {
+      "name": "watchers: one apiserver instance counts the live streams of one of its sessions",
+      "runnerId": "0190a0b0-0000-7000-8000-000000000001",
+      "hint": {
+        "watchers": {
+          "sessionId": "0190a0b0-0000-7000-8000-0000000000a1",
+          "watchers": 2
+        }
+      },
+      "subject": "rnr.0190a0b0-0000-7000-8000-000000000001",
+      "message": "{\"hint\":{\"watchers\":{\"sessionId\":\"0190a0b0-0000-7000-8000-0000000000a1\",\"watchers\":2}}}",
+      "headers": {
+        "Orbit-Instance": "0190a0b0-0000-4000-8000-0000000000e1"
+      }
+    }
+  ],
+  "requests": [
+    {
+      "name": "turn prefix: what the current turn of one of its sessions has streamed so far",
+      "runnerId": "0190a0b0-0000-7000-8000-000000000001",
+      "sessionId": "0190a0b0-0000-7000-8000-0000000000a1",
+      "requestId": "0190a0b0-0000-4000-8000-0000000000c1",
+      "subject": "rnr.0190a0b0-0000-7000-8000-000000000001",
+      "message": "{\"turnPrefixRequest\":{\"requestId\":\"0190a0b0-0000-4000-8000-0000000000c1\",\"sessionId\":\"0190a0b0-0000-7000-8000-0000000000a1\"}}"
+    }
+  ]
+}

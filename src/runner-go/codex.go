@@ -86,24 +86,21 @@ func runCodexSessionProcess(ctx context.Context, shutdownCtx context.Context, t 
 func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, setTurn func(string), _ bool, bg *bgTailer, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
 	setTurn("")
 	var pendingShellCtx []string
-	inflight := map[string]bool{}
+	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	defer inbox.close()
+	inboxCtx, stopInbox := contextUntilEither(ctx, shutdownCtx)
+	defer stopInbox()
 
 	for ctx.Err() == nil && shutdownCtx.Err() == nil {
-		resp, err := t.inbox(ctx, job.SessionID, leaseGeneration)
+		resp, err := inbox.next(inboxCtx)
 		if err != nil {
 			if ctx.Err() != nil || shutdownCtx.Err() != nil {
 				break
 			}
 			if isLeaseOwnershipError(err) {
 				onLeaseLost(err)
-				return stCancelled, true, false
 			}
-			logln("inbox poll failed for", job.SessionID+":", err)
-			time.Sleep(time.Second)
-			continue
-		}
-		if resp == nil {
-			continue
+			return stCancelled, true, false
 		}
 		if ctx.Err() != nil || shutdownCtx.Err() != nil {
 			break // timer/LRU/shutdown raced the inbox response
@@ -117,10 +114,9 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 				// switch) keeps this from spinning on the inbox discarding messages.
 				return stCancelled, true, false
 			}
-			if inflight[resp.TurnID] {
+			if !inbox.markInflight(resp.TurnID) {
 				continue
 			}
-			inflight[resp.TurnID] = true
 			setTurn(resp.TurnID)
 			prepared := prepareCodexTurn(ctx, t, job, resp, pendingShellCtx)
 			pendingShellCtx = nil
@@ -164,17 +160,16 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 			}); err != nil {
 				logln("turn-complete failed for", job.SessionID+":", err)
 			}
-			delete(inflight, resp.TurnID)
+			inbox.clearInflight(resp.TurnID)
 			setTurn("")
 
 		case "shell":
 			if !waitTurnPermit(ctx) {
 				return stCancelled, true, false
 			}
-			if inflight[resp.TurnID] {
+			if !inbox.markInflight(resp.TurnID) {
 				continue
 			}
-			inflight[resp.TurnID] = true
 			setTurn(resp.TurnID)
 			if shCmd, isBg := shellTurnBackgroundCommand(resp); isBg {
 				runShellTurnBackground(bg, execDir, scratchDir, shCmd, resp.TurnID, emit, job.Agent.Env)
@@ -202,7 +197,7 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 					logln("shell turn-complete failed for", job.SessionID+":", err)
 				}
 			}
-			delete(inflight, resp.TurnID)
+			inbox.clearInflight(resp.TurnID)
 			setTurn("")
 
 		case "interrupt":

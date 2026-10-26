@@ -32,9 +32,10 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import java.time.Instant
 
-// "Is this project done?", its receipt, and the terminal "This project is done · recorded by Orbit" — the closing cards
-// (iOS ProjectDoneCards.swift), drawn from what they are given and from nothing else: the coordinator conversation draws them
-// (`CoordinatorDoneCard`) and the project page's Review / Record as done… opens the same card over the page (`ProjectDoneSheet`).
+// "Is this project done?", its receipt, and the settled "This project is done · recorded by Orbit" — the closing cards
+// (iOS ProjectDoneCards.swift), drawn from what they are given and from nothing else: the coordinator conversation draws the
+// first two (`CoordinatorDoneCard`), the project page's Review / Record as done… opens the same card over the page
+// (`ProjectDoneSheet`), and the page draws the settled card where its progress card was (`SessionProjectPage`).
 // Every word is `ProjectDone`'s; every number is the server's (`derivedDone.counts`), and nothing here counts anything itself.
 
 /** "Is this project done?" — the coordinator's call, Done when, what Orbit can't prove, what Orbit checked and the two answers —
@@ -191,9 +192,9 @@ private fun ProjectDoneReceipt(doc: JsonObject, record: JsonObject?, enabled: Bo
 }
 
 /** A project that is done: the old question's terminal state, "This project is done · recorded by Orbit" (or "recorded by you"),
- * and how its criteria ended — the only part of "Why is this project not done?" a conversation still draws, and the card a project's
- * sessions page draws where its progress card was while it is done (docs/mocks/project-done-sessions-page, owner decision 2026-10-10).
- * The chrome belongs to the caller: the conversation wraps it in its Surface, the page in the list's own. */
+ * and how its criteria ended — the card a project's sessions page draws where its progress card was while it is done
+ * (docs/mocks/project-done-sessions-page, owner decision 2026-10-10). A coordinator conversation drew it too, for a DONE Orbit
+ * recorded itself, until the owner's ruling of 2026-10-25. The chrome belongs to the caller: the page's list. */
 @Composable
 internal fun ProjectSettledCard(doc: JsonObject, tag: String) {
     Column(Modifier.fillMaxWidth().testTag("$tag-settled"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -233,10 +234,11 @@ private fun DoneOrdinal(text: String) = Box(Modifier.defaultMinSize(18.dp, 18.dp
     Text(text, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.surface)
 }
 
-/** The closing card in a coordinator conversation (iOS `ProjectDoneCardView` and its terminal `ProjectNotDoneCardView`): which one
- * is re-derived from the session read on every render (`ProjectDone.slot`) — the question while the coordinator's request stands or
- * the row says Record as done…, its receipt once the project is recorded, Orbit's own DONE as the terminal card, and nothing
- * otherwise. Pressed at the project's own doors; the question turns into its receipt in place, from the record the press came back
+/** The closing card in a coordinator conversation (iOS `ProjectDoneCardView`): which one is re-derived from the session read on
+ * every render (`ProjectDone.slot`) — the question while the coordinator's request stands or the row says Record as done…, its
+ * receipt once the project is recorded, and nothing otherwise, Orbit's own DONE included (the owner's ruling of 2026-10-25: its
+ * ending is the page's `ProjectSettledCard`).
+ * Pressed at the project's own doors; the question turns into its receipt in place, from the record the press came back
  * with until the read catches up — and a read after the press that still says the project is not DONE means it was reopened since,
  * and the press no longer stands. A refusal stays on the card in the door's words. */
 @Composable
@@ -270,7 +272,6 @@ fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId:
             else LocalOrbitColors.current.success.copy(alpha = 0.08f).compositeOver(MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(16.dp)) {
             when (slot) {
-                ProjectDone.Slot.NotDone -> ProjectSettledCard(doc, tag)
                 is ProjectDone.Slot.Done -> ProjectDoneCard(doc, live, confirmation?.obj("confirmation")?.text("confirmedAt"), ProjectDone.openItemsCount(openItems),
                     ProjectDone.runningCount(doc), record, sealRead = live?.obj("doneRequest") != null || confirmation?.obj("currentVersion")?.text("digest") != null,
                     now = Instant.now(), enabled = fresh, error = error, tag = tag,

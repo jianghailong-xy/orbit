@@ -29,6 +29,43 @@
 // network and NET_ADMIN, never the Docker socket, under a profile of its own that only the install switches on, whose
 // whole definition (n) pins. A deployment whose .env does not name that profile, every one installed before it
 // included, runs exactly what it ran.
+//
+// On 2026-10-25 the runner link's connection tokens (project 34bc0CsOzPh9KshG7H3DW, task A3, whose plan the account
+// owner confirmed; its coordinator approved this pin) added three lines to the apiserver's environment: the token
+// signing key, the gateway's address and the gateway's secret, each empty unless the host's .env sets it. No service,
+// mount or port is added, and a deployment whose .env names none of them runs with the link off, as before.
+//
+// On 2026-10-25 the runner link's gateway (project 34bc0CsOzPh9KshG7H3DW, task A4, of the plan the account owner
+// confirmed: design D1 and section 11.5 put the gateway in Compose, its coordinator filed the service) added one more
+// service, link-gateway: the WebSocket endpoint runners connect to directly, on a port of its own. It is given the token
+// signing key's public half and the gateway's secret, never the signing key itself, and no database, Docker socket or
+// host network, under a profile of its own that no install switches on, whose whole definition (o) pins. A deployment
+// whose .env does not name that profile runs exactly what it ran.
+//
+// On 2026-10-25 the runner link's hints (project 34bc0CsOzPh9KshG7H3DW, task B1, of the plan the account owner confirmed:
+// design section 6.3 puts NATS beside the gateway and section 11.5 in Compose; its coordinator approved this pin) added one
+// more service, nats: core NATS with no JetStream, no volume and no port on the host, run from flags alone so that the
+// image's own configuration file never opens its cluster port, under the gateway's runner-link profile, whose whole
+// definition (p) pins. The gateway gains the line naming it, and the apiserver one line of its environment: where it
+// publishes the hints, read only while the link is configured. A deployment whose .env names neither the profile nor the
+// link runs exactly what it ran, and its apiserver connects to nothing.
+//
+// On 2026-10-25 the runner link gateway's forwarding (project 34bc0CsOzPh9KshG7H3DW, task B4, of the plan the account owner
+// confirmed; its coordinator approved this pin) added three lines to the apiserver's environment: the port and host of
+// the listener the gateway calls the runner routes through, which opens only while the link is configured and is
+// published nowhere, and the apiserver's NATS credential, an nkey seed, empty unless .env sets it. Because session
+// content now crosses NATS, NATS authenticates: the nats service reads src/link-gateway/nats.conf, mounted read-only and
+// pinned line by line by (q), with two nkey users, the apiserver and the gateway, each allowed only what it does, by
+// public keys from .env, and refuses to start without them. The gateway gains the internal listener's address and its
+// own seed. Every seed is given to its one service, the public keys to NATS alone. A deployment whose .env does not
+// name the runner-link profile runs exactly what it ran, and its apiserver opens no listener.
+//
+// On 2026-10-25 the runner link's Welcome (project 34bc0CsOzPh9KshG7H3DW, task B4a, of the plan the account owner confirmed:
+// design section 7 has Welcome and HeartbeatAck name the runner's release; its coordinator approved this pin) added one line
+// to the apiserver's environment: the web container's /dl, which the apiserver reads the two published runner releases
+// from, to state the release GET /api/runner/release would assign. No service, mount or port is added. It is read only for
+// the link's answers, at most once a minute; while it cannot be read, the link states no release and runners ask that
+// route as before.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -77,7 +114,14 @@ const MANAGED_RUNNERS_PROFILE = 'managed-runners-docker';
 // Decided by the account owner on 2026-10-19 (see the top of this file): started only under its own profile.
 const MANAGED_RUNNER_FIREWALL = 'managed-runner-firewall';
 const FIREWALL_PROFILE = 'managed-runner-firewall';
-const APPROVED_ADDITIONS = [WIKI_WORKER, DOCKER_CHANNEL, MANAGED_RUNNER_FIREWALL];
+// Added by the runner link project on 2026-10-25 (see the top of this file): started only under its own profile.
+const LINK_GATEWAY = 'link-gateway';
+const LINK_PROFILE = 'runner-link';
+// Added by the runner link project on 2026-10-25 (see the top of this file): started only under the gateway's profile.
+const NATS = 'nats';
+// NATS's whole configuration since task B4, pinned by (q).
+const NATS_CONF = 'src/link-gateway/nats.conf';
+const APPROVED_ADDITIONS = [WIKI_WORKER, DOCKER_CHANNEL, MANAGED_RUNNER_FIREWALL, LINK_GATEWAY, NATS];
 const REMOVED_SERVICES = [
   'watchdog', 'outcome-coordinator', 'outcome-coordinator-secondary', 'executable-dead-man',
 ];
@@ -147,9 +191,9 @@ test('the approved configuration commits still have exactly the five surviving s
   assert.deepEqual([...survivingConfigurationServices.keys()], EXPECTED_SERVICES);
 });
 
-test('(a) Compose declares exactly the five surviving services, the wiki worker, the Docker channel and the managed runners\' firewall', () => {
+test('(a) Compose declares exactly the five surviving services, the wiki worker, the Docker channel, the managed runners\' firewall, the runner link gateway and its NATS', () => {
   assert.deepEqual([...currentServices.keys()].sort(), [...EXPECTED_SERVICES, ...APPROVED_ADDITIONS].sort());
-  assert.equal(currentServices.size, 8);
+  assert.equal(currentServices.size, 10);
 });
 
 test('(b) no removed sidecar is named anywhere in Compose', () => {
@@ -174,17 +218,19 @@ test('(c) nothing was added back: no new service, no new always-on process, no i
   assert.deepEqual(alwaysOn(currentServices).sort(),
     [...alwaysOn(baselineServices).filter((name) => currentServices.has(name)), ...APPROVED_ADDITIONS].sort());
   // No one-shot substitute: nothing may declare a run-once profile or a restart policy that
-  // re-runs a job, and no service may be introduced solely to be `docker compose run`. The two
-  // profiles are the Docker channel's and the managed runners' firewall's, which keep each off where a
-  // deployment's .env does not name it.
+  // re-runs a job, and no service may be introduced solely to be `docker compose run`. The three
+  // profiles are the Docker channel's, the managed runners' firewall's and the runner link's, which the gateway
+  // and its NATS share, and they keep each off where a deployment's .env does not name it.
   const profiled = [...currentServices]
     .filter(([, block]) => /^\s+profiles:/m.test(block))
     .map(([name, block]) => [name, block.match(/^\s+profiles:.*$/gm)]);
   assert.deepEqual(profiled, [
     [DOCKER_CHANNEL, [`    profiles: [${MANAGED_RUNNERS_PROFILE}]`]],
     [MANAGED_RUNNER_FIREWALL, [`    profiles: [${FIREWALL_PROFILE}]`]],
+    [LINK_GATEWAY, [`    profiles: [${LINK_PROFILE}]`]],
+    [NATS, [`    profiles: [${LINK_PROFILE}]`]],
   ]);
-  assert.equal(current.match(/^\s+profiles:/gm).length, 2);
+  assert.equal(current.match(/^\s+profiles:/gm).length, 4);
   assert.doesNotMatch(current, /^\s+restart: (on-failure|always)$/m);
   assert.doesNotMatch(current, /\bexecutable-acceptance-dead-man\b/);
 });
@@ -243,6 +289,34 @@ function directivesNotInBaseline(block, baselineBlock) {
 // The exception is an approved block of the apiserver's. It is listed here as directives — comments
 // explaining it do not count — so a line added anywhere else still turns this red exactly as it did before.
 const APPROVED_APISERVER_BLOCKS = [
+  // The runner link's connection tokens (2026-10-25, the top of this file): the Ed25519 signing key, the link
+  // gateway's address and the secret the gateway reads revocations with, each empty unless the host's .env sets it.
+  // Listed first because the lines come before the managed runners' in the file.
+  [
+    '      RUNNER_LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:-}"',
+    '      RUNNER_LINK_URL: "${RUNNER_LINK_URL:-}"',
+    '      RUNNER_LINK_GATEWAY_TOKEN: "${RUNNER_LINK_GATEWAY_TOKEN:-}"',
+  ],
+  // The runner link's hints (2026-10-25, the top of this file): where the apiserver publishes them, the nats service unless
+  // the host's .env names another server, and read only while the link above is configured. It comes after the link's
+  // lines in the file, and before the managed runners'.
+  [
+    '      RUNNER_LINK_NATS_URL: "${RUNNER_LINK_NATS_URL:-nats://nats:4222}"',
+  ],
+  // The runner link gateway's forwarding (2026-10-25, the top of this file): the listener the gateway calls the runner
+  // routes through, on every interface of the container and published nowhere, and the apiserver's NATS nkey seed, empty
+  // unless the host's .env sets it. It comes after the hints' line in the file, and before the managed runners'.
+  [
+    '      RUNNER_LINK_INTERNAL_PORT: "${RUNNER_LINK_INTERNAL_PORT:-3001}"',
+    '      RUNNER_LINK_INTERNAL_HOST: "${RUNNER_LINK_INTERNAL_HOST:-0.0.0.0}"',
+    '      RUNNER_LINK_NATS_SEED: "${RUNNER_LINK_NATS_APISERVER_SEED:-}"',
+  ],
+  // The runner link's releases (2026-10-25, the top of this file): where the apiserver reads what /dl publishes, the web
+  // container beside it unless the host's .env names another. It comes after the forwarding's lines in the file, and
+  // before the managed runners'.
+  [
+    '      RUNNER_RELEASE_DL_URL: "${RUNNER_RELEASE_DL_URL:-http://web/dl/}"',
+  ],
   // Managed runners on this host's Docker (2026-10-17, the top of this file): the switch, off unless the
   // host's .env says true; the profile's fixed path; and the directory holding the profile and the Docker
   // channel's token and socket, read-only, with /dev/null standing in where .env names none, so that an
@@ -306,8 +380,9 @@ function withoutApprovedAdditions(source) {
 // approved blocks are pinned beside them; all are set aside here, so that a line added anywhere else still
 // turns this red exactly as it did before those decisions.
 test('(k) removing the sidecars is subtraction: setting the approved wiki worker aside, Compose lost more lines than it gained', () => {
-  const rest = withoutApprovedAdditions(
-    withoutService(withoutService(withoutService(current, WIKI_WORKER), DOCKER_CHANNEL), MANAGED_RUNNER_FIREWALL));
+  const rest = withoutApprovedAdditions(withoutService(withoutService(
+    withoutService(withoutService(withoutService(current, WIKI_WORKER), DOCKER_CHANNEL), MANAGED_RUNNER_FIREWALL),
+    LINK_GATEWAY), NATS));
   const scratch = mkdtempSync(path.join(tmpdir(), 'compose-topology-'));
   try {
     writeFileSync(path.join(scratch, 'baseline.yml'), baseline);
@@ -458,4 +533,151 @@ test('(n) the host\'s network and NET_ADMIN are given to the managed runners\' f
     assert.deepEqual(given, name === MANAGED_RUNNER_FIREWALL ? ['    network_mode: host', '    cap_add: [NET_ADMIN, NET_RAW]'] : [],
       `${name} is given ${given.join(', ')}`);
   }
+});
+
+// The definition the runner link project's task A4 added on 2026-10-25 (see the top of this file), every directive of it
+// in order: the gateway built from src/link-gateway, under the one profile no install switches on; a read-only root, every
+// capability dropped and no privilege escalation; time to drain before Docker stops it; the token signing key's public
+// half, the gateway's secret, and the apiserver's and NATS's addresses inside this network (NATS's added by task B1 on
+// the same day; the apiserver's listener for runner link calls and the gateway's NATS nkey seed by task B4, the same
+// day); certificates from files in its directory or
+// over ACME; the runners' port published as RUNNER_LINK_PORT and its metrics on the host's loopback only; and one mount,
+// its own directory, /dev/null unless .env names one. No database, no Docker socket, no host network. Changing any of it
+// is a new decision, made here.
+test('(o) the runner link gateway is exactly the service the runner link project added on 2026-10-25, off unless its profile is on', () => {
+  assert.deepEqual(directives(currentServices.get(LINK_GATEWAY)), [
+    '  link-gateway:',
+    `    profiles: [${LINK_PROFILE}]`,
+    '    build:',
+    '      context: src/link-gateway',
+    '      args:',
+    '        ORBIT_SOURCE_SHA: "${ORBIT_SOURCE_SHA:-}"',
+    '    image: orbit-link-gateway:local',
+    '    container_name: orbit-link-gateway',
+    '    restart: unless-stopped',
+    '    stop_grace_period: 90s',
+    '    read_only: true',
+    '    cap_drop: [ALL]',
+    '    security_opt: ["no-new-privileges:true"]',
+    '    environment:',
+    '      LINK_PUBLIC_KEYS: "${RUNNER_LINK_PUBLIC_KEY:-}"',
+    '      LINK_GATEWAY_TOKEN: "${RUNNER_LINK_GATEWAY_TOKEN:-}"',
+    '      LINK_API_URL: http://apiserver:3000',
+    '      LINK_INTERNAL_API_URLS: "http://apiserver:${RUNNER_LINK_INTERNAL_PORT:-3001}"',
+    '      LINK_NATS_URL: nats://nats:4222',
+    '      LINK_NATS_SEED: "${RUNNER_LINK_NATS_GATEWAY_SEED:-}"',
+    '      LINK_TLS_CERT_FILE: /var/lib/orbit-link-gateway/tls/fullchain.pem',
+    '      LINK_TLS_KEY_FILE: /var/lib/orbit-link-gateway/tls/privkey.pem',
+    '      LINK_ACME_DOMAINS: "${RUNNER_LINK_ACME_DOMAINS:-}"',
+    '      LINK_ACME_EMAIL: "${RUNNER_LINK_ACME_EMAIL:-}"',
+    '      LINK_ACME_CACHE_DIR: /var/lib/orbit-link-gateway/acme',
+    '    ports:',
+    '      - "${RUNNER_LINK_PORT:-8443}:8443"',
+    '      - "127.0.0.1:${RUNNER_LINK_METRICS_PORT:-9464}:9464"',
+    '    volumes:',
+    '      - "${RUNNER_LINK_GATEWAY_DIR:-/dev/null}:/var/lib/orbit-link-gateway"',
+    '    depends_on:',
+    '      apiserver:',
+    '        condition: service_healthy',
+    '    healthcheck:',
+    '      test: ["CMD", "/link-gateway", "health"]',
+    '      interval: 5s',
+    '      timeout: 5s',
+    '      retries: 6',
+    '      start_period: 10s',
+  ]);
+});
+
+test('(o) the link token signing key is given to the apiserver alone, and the gateway secret to the apiserver and the link gateway', () => {
+  for (const [name, block] of currentServices) {
+    const text = directives(block).join('\n');
+    assert.equal(/RUNNER_LINK_SIGNING_KEY/.test(text), name === 'apiserver', `${name} and the token signing key`);
+    assert.equal(/RUNNER_LINK_PUBLIC_KEY/.test(text), name === LINK_GATEWAY, `${name} and the signing key's public half`);
+    assert.equal(/RUNNER_LINK_GATEWAY_TOKEN/.test(text), ['apiserver', LINK_GATEWAY].includes(name), `${name} and the gateway secret`);
+  }
+});
+
+// The definition the runner link project's task B1 added on 2026-10-25 (see the top of this file), every directive of it in
+// order: the official NATS image on its 2.15 line, under the gateway's profile; a read-only root, every capability dropped
+// and no privilege escalation; the client port exposed to this project's network and published nowhere. No store, no
+// host network. Task B4 (the same day) gave it authentication: it reads src/link-gateway/nats.conf and nothing else,
+// mounted read-only, so the image's configuration file and the cluster port it opens are still never loaded, and (q)
+// pins that file's every line; the two users' public keys, which nats.conf names, come from .env, empty unless it sets
+// them, and with either empty the server refuses to start. Changing any of it is a new decision, made here.
+test('(p) the runner link\'s NATS is exactly the service the runner link project added on 2026-10-25, off unless its profile is on', () => {
+  assert.deepEqual(directives(currentServices.get(NATS)), [
+    '  nats:',
+    `    profiles: [${LINK_PROFILE}]`,
+    '    image: nats:2.15-alpine',
+    '    container_name: orbit-nats',
+    '    restart: unless-stopped',
+    '    read_only: true',
+    '    cap_drop: [ALL]',
+    '    security_opt: ["no-new-privileges:true"]',
+    '    command: ["--config", "/etc/orbit-nats/nats.conf"]',
+    '    environment:',
+    '      RUNNER_LINK_NATS_APISERVER_KEY: "${RUNNER_LINK_NATS_APISERVER_KEY:-}"',
+    '      RUNNER_LINK_NATS_GATEWAY_KEY: "${RUNNER_LINK_NATS_GATEWAY_KEY:-}"',
+    '    volumes:',
+    `      - ./${NATS_CONF}:/etc/orbit-nats/nats.conf:ro`,
+    '    expose:',
+    '      - "4222"',
+    '    healthcheck:',
+    '      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8222/healthz"]',
+    '      interval: 5s',
+    '      timeout: 5s',
+    '      retries: 6',
+    '      start_period: 5s',
+  ]);
+});
+
+test('(p) NATS is named to the apiserver and the link gateway alone, and stores nothing', () => {
+  for (const [name, block] of currentServices) {
+    const text = directives(block).join('\n');
+    assert.equal(/RUNNER_LINK_NATS_URL/.test(text), name === 'apiserver', `${name} and where hints are published`);
+    assert.equal(/nats:\/\/nats:4222/.test(text), [LINK_GATEWAY, 'apiserver'].includes(name), `${name} and the NATS address`);
+    // Each NATS seed to its one client, and the public keys to the server alone (task B4).
+    assert.equal(/RUNNER_LINK_NATS_APISERVER_SEED/.test(text), name === 'apiserver', `${name} and the apiserver's NATS seed`);
+    assert.equal(/RUNNER_LINK_NATS_GATEWAY_SEED/.test(text), name === LINK_GATEWAY, `${name} and the gateway's NATS seed`);
+    assert.equal(/RUNNER_LINK_NATS_(APISERVER|GATEWAY)_KEY/.test(text), name === NATS, `${name} and the NATS users' public keys`);
+  }
+  assert.doesNotMatch(directives(currentServices.get(NATS)).join('\n'), /jetstream|-js\b|store_dir|ports:|nats-server\.conf/i);
+  // The one file it reads, read-only, is the one (q) pins.
+  assert.deepEqual(directives(currentServices.get(NATS)).filter((line) => /^\s+- /.test(line) && !/"4222"/.test(line)),
+    [`      - ./${NATS_CONF}:/etc/orbit-nats/nats.conf:ro`]);
+});
+
+// src/link-gateway/nats.conf, the nats service's whole configuration since task B4 (see the top of this file), every
+// directive of it in order, comments aside: the client port and the monitoring port its health check reads and no other
+// listener; no cluster, routes, leaf nodes, gateways, JetStream, WebSocket or MQTT, and nothing included; and exactly
+// two users, each by the public key the environment names, with exactly what it may do. The apiserver publishes runners'
+// hints and turn prefix requests and reads live streams and the answers to its requests; the gateway reads runners'
+// hints and requests, publishes live streams and answers a request once. Changing any of it is a new decision, made here.
+test('(q) the runner link\'s NATS configuration is exactly the one task B4 added: two nkey users, each allowed only what it does', () => {
+  const conf = readFileSync(path.join(repo, NATS_CONF), 'utf8');
+  const lines = conf.split('\n').map((line) => line.replace(/#.*$/, '').trim()).filter((line) => line !== '');
+  assert.deepEqual(lines, [
+    'port: 4222',
+    'http_port: 8222',
+    'authorization {',
+    'users: [',
+    '{',
+    'nkey: $RUNNER_LINK_NATS_APISERVER_KEY',
+    'permissions: {',
+    'publish: { allow: ["rnr.>"] }',
+    'subscribe: { allow: ["ses.*.live", "_INBOX.>"] }',
+    '}',
+    '}',
+    '{',
+    'nkey: $RUNNER_LINK_NATS_GATEWAY_KEY',
+    'permissions: {',
+    'publish: { allow: ["ses.*.live"] }',
+    'subscribe: { allow: ["rnr.>"] }',
+    'allow_responses: true',
+    '}',
+    '}',
+    ']',
+    '}',
+  ]);
+  assert.doesNotMatch(lines.join('\n'), /cluster|routes|leafnode|gateway\s*[{:]|jetstream|websocket|mqtt|include|listen|no_auth_user|token|password/i);
 });

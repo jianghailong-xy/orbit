@@ -14,10 +14,10 @@ enum class AntigravityRepair {
     }
 
     fun body(runnerName: String?, runnerVersion: String?) = when (this) {
-        NEEDS_KEY -> "Sign in with Google on this runner, or connect a Gemini API key in Infrastructure."
+        NEEDS_KEY -> "Sign in with Google on this runner, or connect a Gemini API key on the Machines & models page."
         UPDATE_RUNNER -> "${machine(runnerName)} runs Orbit runner ${runnerVersion?.takeIf { it.isNotEmpty() } ?: "an unknown version"}; " +
             "Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then."
-        NOT_INSTALLED -> "Install it from Infrastructure, then send your message again."
+        NOT_INSTALLED -> "Install it from the Machines & models page, then send your message again."
     }
 
     companion object {

@@ -33,7 +33,7 @@ type cursorPinRunner struct {
 func newCursorPinRunner(t *testing.T) cursorPinRunner {
 	t.Helper()
 	useCursorRealHome(t)
-	useCursorAccountsOS(t, "linux")
+	useCursorPlatform(t, "linux", "amd64")
 	signInCursorDefault(t, cursorTestToken(t, time.Now().Add(24*time.Hour)))
 	r := cursorPinRunner{scratch: runDir(cursorTestSessionID), execDir: t.TempDir()}
 	for _, slot := range []struct {

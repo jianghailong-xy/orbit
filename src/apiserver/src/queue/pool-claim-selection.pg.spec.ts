@@ -144,6 +144,7 @@ suite('an account pool at claim time, on real PostgreSQL', async (t) => {
 
   const realtime = {
     publish: () => {},
+    publishBatch: () => {},
     publishSessionUpdated: () => {},
     publishQueuedTurnsChanged: () => {},
     publishForUser: () => {},

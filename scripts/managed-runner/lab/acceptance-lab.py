@@ -558,7 +558,8 @@ def selfhost_setup(ctx, step):
     ctx['selfhost'] = {'runnerId': registered['runnerId'], 'runnerPublicId': runner['id'], 'workspaceId': workspace['id'], 'provider': key['slug']}
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
-        row = wl.sql_json(f"select status, last_heartbeat_at, capabilities_reported_at from runner where id = {wl.quote(registered['runnerId'])}")[0]
+        row = wl.sql_json(f"select status, {sw.runner_last_beat()} as last_heartbeat_at, capabilities_reported_at from runner "
+                          f"where id = {wl.quote(registered['runnerId'])}")[0]
         if row['capabilities_reported_at']:
             break
         time.sleep(2)
@@ -817,7 +818,8 @@ def provisioned(name):
     pvc = kget('pvc', m['pvc_name'])
     pod = kget('pod', f'mr-{runner}')
     secret = kget('secret', f'mr-boot-{runner}')
-    row = wl.sql_json(f"select status, enrolled_at, last_heartbeat_at, capabilities_reported_at, version from runner where id = {wl.quote(runner)}")[0]
+    row = wl.sql_json(f"select status, enrolled_at, {sw.runner_last_beat()} as last_heartbeat_at, capabilities_reported_at, version "
+                      f"from runner where id = {wl.quote(runner)}")[0]
     created = wl.sql_json(f"select created_at from managed_runner where id = {wl.quote(m['id'])}")[0]['created_at']
     statuses = (pod or {}).get('status', {}).get('containerStatuses') or []
     running = next((s['state']['running']['startedAt'] for s in statuses if s['name'] == 'runner' and 'running' in s.get('state', {})), None)

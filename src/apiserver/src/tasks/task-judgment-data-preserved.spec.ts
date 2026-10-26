@@ -2446,7 +2446,74 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // is created, replaced or dropped, so it is not another writer of the DONE fence and names none
       // of the six preserved objects. No INSERT, UPDATE or DELETE: every stored runner reads as one
       // whose every Default is listed and used, and a removal is written only when somebody asks.
-      '0440_runner_default_removed'],
+      '0440_runner_default_removed',
+      // The candidates `GET /projects` classifies itself (0441): one new table,
+      // `project_rollup_candidate`, with no unique key and no foreign key, its (owner_id, task_id)
+      // index, three new trigger functions and four statement triggers — AFTER INSERT and AFTER
+      // UPDATE on `task`, AFTER DELETE and AFTER UPDATE on `task_dependency`. Read against every claim
+      // above: it names `task` and `task_dependency`, which are preserved, only to hang AFTER triggers
+      // on them and to READ them; every function it creates writes `project_rollup_candidate` and
+      // nothing else, so no preserved row is written, dropped or altered, no column, constraint or
+      // type of `task` changes, and neither 0177 relation, `task_executable_acceptance_pair` nor any
+      // `project_acceptance_*` object is named. None of the six preserved triggers/functions is named
+      // or replaced and the DONE writer fence is untouched, so it is not another writer of it. Its one
+      // INSERT seeds the new table from a read of `task` and `task_dependency`.
+      '0441_project_rollup_candidate',
+      // The runner dispatch pause (0442, docs/runner-link-design.md §11.1, §11.3): one new table,
+      // `dispatch_pause`, of at most one row (`dispatch_pause_one_row_chk`, `id` = 1) with no foreign
+      // key — `updated_by_id` names an administrator by id only. Read against every claim above: no
+      // `task`, `session`, `project` or `project_acceptance_*` object is named, the 0177 pair and every
+      // stored task and criterion row are out of its reach, and no function, trigger or type is
+      // created, replaced or dropped, so it is not another writer of the DONE fence and names none of
+      // the six preserved objects. No INSERT, UPDATE or DELETE: no row means the pause is off, and the
+      // row is written only when an administrator switches it. Every statement can run twice.
+      '0442_dispatch_pause',
+      // The runner link's connection tokens (0443, docs/runner-link-design.md §6.2): two new tables —
+      // `tenant_cell`, the cell directory, with a CHECK naming its one cell and a foreign key to `user`
+      // that cascades, and `runner_link_revocation`, with a reason CHECK, two indexes and no foreign
+      // key — and one trigger function with its AFTER DELETE OR UPDATE OF "token_hash" trigger on
+      // `runner`. Read against every claim above: `runner` and `user` are none of the preserved
+      // relations, so no `task`, `session`, `project` or `project_acceptance_*` object is named and
+      // the 0177 pair and every stored task and criterion row are out of its reach. The function writes
+      // `runner_link_revocation` and nothing else, and names none of the six preserved
+      // triggers/functions, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE runs: both tables start empty, and the trigger records only changes made after it.
+      '0443_runner_link_token',
+      // Runner presence (0444, docs/runner-link-design.md §5.7, §6.5): one new UNLOGGED table,
+      // `runner_presence`, keyed by `runner_id` with a foreign key to `runner` that cascades and a CHECK
+      // on `link_state`. Read against every claim above: `runner` is none of the preserved relations,
+      // so no `task`, `session`, `project` or `project_acceptance_*` object is named and the 0177 pair
+      // and every stored task and criterion row are out of its reach. No function, trigger or type is
+      // created, replaced or dropped, so it names none of the six preserved triggers/functions and is
+      // not another writer of the DONE fence. No INSERT, UPDATE or DELETE: the table starts empty and
+      // only heartbeats write it.
+      '0444_runner_presence',
+      // The runner link request id a session was claimed under (0445, docs/runner-link-design.md §5.6):
+      // one nullable TEXT column, `session.claim_request_id`, added with IF NOT EXISTS and no default,
+      // read and written only by the claim (QueueService.trySessionClaim). Read against every claim
+      // above: `session` gains a column and nothing of it changes — no CHECK, no index, no constraint,
+      // no trigger — and no `task`, `project` or `project_acceptance_*` object is named, so the 0177
+      // pair and every stored task and criterion row are out of its reach. No function or trigger is
+      // created, and no INSERT, UPDATE or DELETE runs: every existing session reads NULL there.
+      '0445_session_claim_request_id',
+      // The runner link's cut-over switch, RUNNER_LINK_REQUIRED (0446, docs/runner-link-design.md §11.3,
+      // §11.4): one new table, `runner_link_switch`, of at most one row (`runner_link_switch_one_row_chk`,
+      // `id` = 1) with no foreign key — `updated_by_id` names an administrator by id only. Read against
+      // every claim above: no `task`, `session`, `project` or `project_acceptance_*` object is named, the
+      // 0177 pair and every stored task and criterion row are out of its reach, and no function, trigger
+      // or type is created, replaced or dropped, so it is not another writer of the DONE fence and names
+      // none of the six preserved objects. No INSERT, UPDATE or DELETE: no row means the switch is off,
+      // and the row is written only when an administrator switches it. Every statement can run twice.
+      '0446_runner_link_switch',
+      // What a link heartbeat needs to answer from runner_presence alone (0447, docs/runner-link-design.md §5.7,
+      // §6.5): two columns on the UNLOGGED `runner_presence` of 0444, `changes` (BIGINT NOT NULL DEFAULT 0) and
+      // `reconciled_at` (nullable TIMESTAMP(3)), each added with IF NOT EXISTS. Read against every claim above:
+      // `runner_presence` is none of the preserved relations, and no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion row are out of
+      // its reach. No function, trigger or type is created, replaced or dropped, so it names none of the six preserved
+      // objects and is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: a constant default rewrites
+      // nothing, and every row reads 0 and NULL until a heartbeat writes it.
+      '0447_runner_presence_reconcile'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

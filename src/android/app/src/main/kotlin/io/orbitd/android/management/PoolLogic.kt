@@ -426,7 +426,7 @@ internal class WhoCanUseIt(val pool: JsonObject, val accounts: Int?) {
         else "Set by ${PoolPage.owner(pool)?.text("name").orEmpty()} · share of this month’s API key use"
     val addsPeople = mine && people
     val showsMode = mine
-    val modeHint = if (people) "They see ${pool.text("label")} on their Infrastructure page and in the session picker." else "Nobody else in Orbit sees this pool or its accounts."
+    val modeHint = if (people) "They see ${pool.text("label")} on their Machines & models page and in the session picker." else "Nobody else in Orbit sees this pool or its accounts."
     val rows = if (people) PoolPage.people(pool) else emptyList()
     data class PersonLine(val runs: String?, val everything: Boolean, val rest: String)
     fun line(person: JsonObject): PersonLine {
@@ -473,7 +473,7 @@ internal object SharePool {
             else -> Fact("Their sessions run on the pool’s API keys", ", which ${if (keys.size == 1) "is" else "are"} ${PoolPage.listOf(keys)} now.")
         }
         return buildList {
-            add(Fact("They see ${pool.text("label")}", " on their Infrastructure page and in the session picker, and can start sessions on it."))
+            add(Fact("They see ${pool.text("label")}", " on their Machines & models page and in the session picker, and can start sessions on it."))
             add(run)
             if (pool.bool("membersCanAddAccounts") == true) add(Fact("They can sign in ChatGPT accounts of their own",
                 ", which then run everyone’s sessions here too — theirs and yours — until they take them out again."))

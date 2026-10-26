@@ -25,6 +25,9 @@ data class Tag(val id: String, val name: String, val color: String? = null,
     val isSystem: Boolean = false, val position: Int = 0)
 @Serializable
 data class WorkspaceRef(val id: String, val name: String = "")
+/** What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why it wrote none ([RecapCard.notice]). */
+@Serializable
+data class RecapOutcome(val written: Boolean, val recapText: String? = null, val reason: String? = null)
 @Serializable
 data class DirectorySession(
     val id: String, val title: String? = null, val status: String = "UNKNOWN",

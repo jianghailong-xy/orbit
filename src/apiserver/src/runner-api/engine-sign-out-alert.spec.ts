@@ -21,6 +21,7 @@ function harness(priorEngines: unknown, row: Record<string, unknown> = {}) {
   const notified: { runnerId: string; engine: string }[] = [];
   let current: Record<string, unknown> = { maxConcurrent: 4, engines: priorEngines, ...row };
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: {
       findUnique: async () => current,
       update: async ({ data }: { data: Record<string, unknown> }) => {

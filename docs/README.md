@@ -75,6 +75,8 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 - [Managed runner deployment and data contract](managed-runner-design.md) — default disabled Kubernetes runners,
   per-user Ceph RBD storage, lifecycle, fencing, client status, and isolated test prerequisites.
 - [Interactive runner sessions](interactive-claude-runner-design.md) — the original long-lived session design.
+- [Runner link protocol v1](runner-link-design.md) — one WebSocket per runner to its cell's gateway, protobuf
+  frames, five traffic classes, presence, and the shadow-then-cutover plan that replaces the HTTP long polls.
 - [Session lifecycle](session-lifecycle-design.md) — run state, lifecycle state, and task state.
 - [Suggested replies](prompt-suggestions-design.md) — Claude Code's guess at the next message after a turn,
   how it reaches the transcript, and where the clients offer it.

@@ -214,6 +214,46 @@ type Transport struct {
 	// made again when one fails on its way.
 	wikiMu sync.Mutex
 	wiki   *http.Client
+	// caller marks a transport that is not the runner daemon's: what every request it makes with the
+	// runner credential says in runnerCallerHeader. Empty on the daemon's own transport, which never
+	// sends the header.
+	caller string
+	// link is the runner link the daemon's work moves to once the control plane asks for it
+	// (link_mode.go). Set only on the daemon's transport, by startLink; nil everywhere else, where
+	// every call goes over HTTPS.
+	link *linkMode
+}
+
+// runnerCallerHeader names the process making a request with the runner credential when it is not
+// the runner daemon: `orbit mcp`, the Antigravity approval hook, or a CLI verb. The runner link's
+// cutover (task D0) refuses the daemon routes over HTTPS with UPGRADE_REQUIRED only to calls that
+// carry no marker, because those processes share some of the daemon's routes (the approvals, an
+// orchestration credential's refresh) and hold no link of their own. Marking them rather than the
+// daemon means a daemon too old to know the link carries no marker either, and is refused like any
+// other daemon. The daemon's transport never sets it (TestTheDaemonNeverSaysWhoIsCalling).
+const runnerCallerHeader = "X-Orbit-Runner-Caller"
+
+// The callers runnerCallerHeader names.
+const (
+	runnerCallerMCP             = "mcp"
+	runnerCallerAntigravityHook = "antigravity-hook"
+	runnerCallerCLI             = "cli"
+)
+
+// newCallerTransport is NewTransport for a process that is not the runner daemon: every request it
+// makes with the runner credential names caller in runnerCallerHeader.
+func newCallerTransport(baseURL, token, caller string) *Transport {
+	t := NewTransport(baseURL, token)
+	t.caller = caller
+	return t
+}
+
+// setCaller marks a request made with the runner credential as this transport's caller's, when it
+// is not the daemon's.
+func (t *Transport) setCaller(h http.Header) {
+	if t.caller != "" {
+		h.Set(runnerCallerHeader, t.caller)
+	}
 }
 
 func isTransportHTTPStatus(err error, status int) bool {
@@ -281,8 +321,21 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 	return t.doVia(ctx, t.client, method, path, body, out, timeout, headers)
 }
 
-// doVia is doHeaders sent through client: t.client for every call but the wiki door's (wiki_conn.go).
+// doVia is doHeaders sent through client: t.client for every call but the wiki door's
+// (wiki_conn.go). On the daemon's transport in link mode, a daemon route's call goes over the
+// runner link instead (linkMode.doVia); every other call, and every call while the link is not in
+// use, is doHTTP's.
 func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path string, body, out interface{}, timeout time.Duration, headers map[string]string) error {
+	if t.link != nil {
+		return t.link.doVia(ctx, method, path, body, out, timeout, headers, func(ctx context.Context) error {
+			return t.doHTTP(ctx, client, method, path, body, out, timeout, headers)
+		})
+	}
+	return t.doHTTP(ctx, client, method, path, body, out, timeout, headers)
+}
+
+// doHTTP is one call over HTTPS, as every call went before the runner link.
+func (t *Transport) doHTTP(ctx context.Context, client *http.Client, method, path string, body, out interface{}, timeout time.Duration, headers map[string]string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -310,6 +363,7 @@ func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path
 		req.Header.Set("authorization", "Bearer "+t.token)
 		// A managed runner's credential is accepted only from the instance it was issued to.
 		setManagedInstanceHeaders(req.Header)
+		t.setCaller(req.Header)
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -369,9 +423,15 @@ func (t *Transport) deregister() error {
 }
 
 func (t *Transport) heartbeat(b HeartbeatRequest) (*HeartbeatResponse, error) {
+	if t.link != nil {
+		t.link.supervising(b.SupervisedSessionIDs)
+	}
 	var r HeartbeatResponse
 	if err := t.do(nil, "POST", "/runner/heartbeat", b, &r, 15*time.Second); err != nil {
 		return nil, err
+	}
+	if t.link != nil {
+		t.link.afterHeartbeat(&r)
 	}
 	return &r, nil
 }
@@ -384,8 +444,15 @@ func (t *Transport) me() (*MeResponse, error) {
 	return &r, nil
 }
 
-// claimSession long-polls; returns nil when the server holds then yields nothing.
+// claimSession long-polls; returns nil when the server holds then yields nothing. In link mode the
+// claim does not hang on the server: it is asked once a hint says a session waits (link_hints.go),
+// and nil is the hint not coming.
 func (t *Transport) claimSession(ctx context.Context) (*ClaimedSession, error) {
+	if t.link != nil && t.link.inUse() {
+		if due, err := t.link.gates.takeClaim(ctx, linkLongPoll); !due {
+			return nil, err
+		}
+	}
 	var r ClaimedSession
 	if err := t.do(ctx, "GET", "/runner/sessions/claim", nil, &r, 35*time.Second); err != nil {
 		return nil, err
@@ -397,8 +464,13 @@ func (t *Transport) claimSession(ctx context.Context) (*ClaimedSession, error) {
 }
 
 // waitForWake long-polls GET /runner/wake: true once the control plane has something this runner's
-// heartbeat carries waiting for it (see runWakeLoop), false when the poll times out.
+// heartbeat carries waiting for it (see runWakeLoop), false when the poll times out. In link mode
+// the wake is a CommandsHint (or a new connection, whose first heartbeat is owed at once), and
+// nothing is asked.
 func (t *Transport) waitForWake(ctx context.Context) (bool, error) {
+	if t.link != nil && t.link.inUse() {
+		return t.link.gates.takeWake(ctx, linkLongPoll)
+	}
 	var r struct {
 		Wake bool `json:"wake"`
 	}
@@ -433,9 +505,51 @@ func (t *Transport) pinSessionSource(ctx context.Context, sessionID string, req 
 	return &r, nil
 }
 
+// postEvents delivers a batch of a session's events and returns once they are stored: over HTTPS, as every runner
+// always has, or, while the runner link is in use, on the session's event stream there (link_events.go). A batch HTTPS
+// answers UPGRADE_REQUIRED goes over the link, and one the link gives back once it is out of use goes over HTTPS.
+// A session's supervisor does not come through here: it hands its events to its stream itself (session.go).
 func (t *Transport) postEvents(ctx context.Context, sessionID string, batch RunEventBatch) error {
+	for {
+		if t.link != nil && t.link.inUse() {
+			err := t.link.events.deliver(ctx, sessionID, batch.Events)
+			if !errors.Is(err, errLinkEventsOffLink) {
+				return err
+			}
+		}
+		err := t.postEventsHTTPS(ctx, sessionID, batch)
+		if !errors.Is(err, errLinkEventsMoved) {
+			return err
+		}
+	}
+}
+
+// postEventsHTTPS posts a batch of a session's events over HTTPS. On the daemon's transport it also records what a Hello
+// resumes the session from and what its turn completion waits for (link_mode.go), and that the session's event stream
+// on the link need not send these again. Answered UPGRADE_REQUIRED, it puts the link in use and returns
+// errLinkEventsMoved: the control plane takes the session's events over the link now, where they go instead.
+func (t *Transport) postEventsHTTPS(ctx context.Context, sessionID string, batch RunEventBatch) error {
 	batch.LeaseOwner = t.leaseOwner
-	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/events", batch, nil, 35*time.Second)
+	path := "/runner/sessions/" + sessionID + "/events"
+	if t.link == nil {
+		return t.do(ctx, "POST", path, batch, nil, 35*time.Second)
+	}
+	t.link.sentEvents(sessionID, batch.Events)
+	err := t.doHTTP(ctx, t.client, "POST", path, batch, nil, 35*time.Second, nil)
+	if linkUpgradeRequired(err) {
+		t.link.upgradeRequired("POST " + path)
+		if t.link.inUse() {
+			return errLinkEventsMoved
+		}
+		return err
+	}
+	if err == nil && len(batch.Events) > 0 {
+		t.link.storedEvents(sessionID, batch.Events)
+		if s := t.link.events.stream(sessionID); s != nil {
+			s.storedOverHTTPS(batch.Events[0].Seq, batch.Events[len(batch.Events)-1].Seq)
+		}
+	}
+	return err
 }
 
 // finalizeRun finalizes the current run server-side and reports back whether the isolated worktree
@@ -478,8 +592,9 @@ func (t *Transport) worktreesRemovable(ids []string) ([]string, error) {
 	return r.Removable, nil
 }
 
-// inbox long-polls for the next user turn of an interactive session; returns nil
-// when the server holds then yields nothing (turnId == "").
+// inbox fetches the next user turn of an interactive session; returns nil when there is none
+// (turnId == ""): over HTTPS a long poll the server holds, over the runner link at once. Every
+// session loop fetches through its inboxPoller (inbox_poller.go), which decides when.
 //
 // `acceptsSteer` says this binary knows the `steer` kind — a message written into the turn
 // already running. It is a property of the runner, not of the session: every session loop
@@ -603,6 +718,9 @@ func (t *Transport) turnComplete(ctx context.Context, sessionID string, b TurnCo
 	}, isRetryableTransportError)
 	if err != nil {
 		return "", err
+	}
+	if t.link != nil {
+		t.link.turnDone(sessionID, b.TurnID)
 	}
 	status := r.Status
 	if status == "" {
@@ -873,6 +991,7 @@ func (t *Transport) fetchAttachment(ctx context.Context, sessionID, attID string
 	if t.token != "" {
 		req.Header.Set("authorization", "Bearer "+t.token)
 		setManagedInstanceHeaders(req.Header)
+		t.setCaller(req.Header)
 	}
 	resp, err := t.client.Do(req)
 	if err != nil {
@@ -957,6 +1076,7 @@ func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID s
 	if t.token != "" {
 		req.Header.Set("authorization", "Bearer "+t.token)
 		setManagedInstanceHeaders(req.Header)
+		t.setCaller(req.Header)
 	}
 	resp, err := t.client.Do(req)
 	if err != nil {
@@ -995,11 +1115,21 @@ func (t *Transport) createApproval(ctx context.Context, sessionID string, body i
 }
 
 // pollApproval long-polls one approval; a "PENDING" status means the server's window
-// elapsed undecided and the caller should re-poll.
+// elapsed undecided and the caller should re-poll. In link mode the read answers at once, so it is
+// paced instead: asked when an ApprovalHint or a HeartbeatAck says the approval was decided, and at
+// most every linkApprovalRecheck otherwise.
 func (t *Transport) pollApproval(ctx context.Context, sessionID, approvalID string) (*ApprovalDecisionResponse, error) {
+	if t.link != nil && t.link.inUse() {
+		if _, err := t.link.gates.takeApproval(ctx, approvalID, linkApprovalRecheck); err != nil {
+			return nil, err
+		}
+	}
 	var r ApprovalDecisionResponse
 	if err := t.do(ctx, "GET", "/runner/sessions/"+sessionID+"/approvals/"+approvalID, nil, &r, 35*time.Second); err != nil {
 		return nil, err
+	}
+	if t.link != nil && r.Status != "PENDING" {
+		t.link.gates.forgetApproval(approvalID)
 	}
 	return &r, nil
 }
@@ -1074,14 +1204,23 @@ type StoredEventsResponse struct {
 }
 
 // sessionEvents pulls one page of the session's stored transcript (seq > after). Used only by
-// the transcript rebuild, so the timeout is generous: pages carry whole tool payloads.
+// the transcript rebuild, so the timeout is generous: pages carry whole tool payloads. Over the
+// runner link an answer is at most one frame, 8 MiB, which a page of whole tool payloads can pass:
+// such a page is asked for again in halves, and the rebuild reads on from where it ends.
 func (t *Transport) sessionEvents(ctx context.Context, sessionID string, after, limit int) (*StoredEventsResponse, error) {
-	var out StoredEventsResponse
-	path := fmt.Sprintf("/runner/sessions/%s/events?after=%d&limit=%d", sessionID, after, limit)
-	if err := t.do(ctx, "GET", path, nil, &out, 60*time.Second); err != nil {
-		return nil, err
+	for {
+		var out StoredEventsResponse
+		path := fmt.Sprintf("/runner/sessions/%s/events?after=%d&limit=%d", sessionID, after, limit)
+		err := t.do(ctx, "GET", path, nil, &out, 60*time.Second)
+		if err != nil && limit > 1 && linkAnswerTooLarge(err) {
+			limit /= 2
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		return &out, nil
 	}
-	return &out, nil
 }
 
 // listTasks filters and caps server-side. Fetching every task to filter here means downloading

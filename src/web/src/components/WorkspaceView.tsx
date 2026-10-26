@@ -204,6 +204,7 @@ import { accountIsPaused } from '../lib/accountPause';
 import { cursorUsageLimit, sessionPlanUsage } from '../lib/planUsage';
 import {
   CURSOR_AUTO_NOTE,
+  CURSOR_CLI,
   CURSOR_CONTEXT_UNAVAILABLE,
   CURSOR_MOVE_BLOCKED_NOTE,
   CURSOR_QUEUE_NOTE,
@@ -212,6 +213,7 @@ import {
   cursorConversationStarted,
   cursorModelPick,
   cursorSettingRows,
+  runnerKnowsCursor,
   type CursorRunnerFacts,
 } from '../lib/cursorRuntime';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
@@ -317,6 +319,7 @@ import { DshRepairCard } from './Transcript';
 import {
   RunNeverStartedCard,
   runNeverStarted,
+  type NeverStartedActions,
   type NeverStartedSession,
 } from './RunNeverStartedCard';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
@@ -361,6 +364,7 @@ import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip'
 import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
 import { isLandingSessionDetail } from '../lib/landingSession';
 import { Glyph, landingCard } from './ProjectPanoramaHeader';
+import { SessionRecapCard } from './SessionRecapCard';
 import { LandingJobsSheet } from './LandingJobsSheet';
 import { LandingLink } from './LandingLink';
 import { SessionProjectLandings } from './SessionProjectLandings';
@@ -473,7 +477,6 @@ import { lastTypedUserMessage } from '../lib/deliveredMessage';
 import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
-import { tagChipLabels } from '../lib/tagColor';
 import {
   isSessionBusy,
   isSessionLive,
@@ -1065,22 +1068,6 @@ const fmtTime = (d?: string): string => {
 // plain tool names (Bash, Read, Edit) pass through unchanged.
 const fmtTool = (name: string): string => name.replace(/^mcp__[^_]+__/, '');
 
-// "5:38 PM" today, "Wed, Aug 6, 5:38 PM" beyond it — a bare clock time on another day misleads
-// (the same call the transcript's turn foot makes).
-const fmtClock = (at: Date): string => {
-  const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  return at.toDateString() === new Date().toDateString()
-    ? time
-    : `${at.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`;
-};
-
-// The recap's prefix: what the line is, and when the server wrote it (Session.recapAt). A recap
-// that arrived with no time on it — an older control plane — keeps the word without one.
-const recapLabel = (recapAt?: string | null): string => {
-  const at = recapAt ? new Date(recapAt) : null;
-  return at && !Number.isNaN(at.getTime()) ? `Recap · ${fmtClock(at)}` : 'Recap';
-};
-
 // The runner's own sentence about a finished commit — which background jobs were live in the
 // checkout while it committed, and what it did about them (commitResultMessage). Trimmed because a
 // whitespace-only value would otherwise draw an empty detail row; null and blank both mean "the
@@ -1142,8 +1129,6 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
 type SessionLine = {
   text: string;
   tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review';
-  /** A muted prefix naming what the line is, before `text` — the recap's "Recap · 5:38 PM". */
-  label?: string;
 };
 // The line for a message of YOURS the workspace hasn't answered yet. Prefixed, because the preview
 // line is otherwise the workspace's voice: unmarked, a message you sent and a reply to it read
@@ -1280,12 +1265,28 @@ export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | 
   // the server wrote about the session, not the raw last reply flattened down to one line. Only
   // here — below every live line above — so a working session still says what it is doing. Off
   // with the account's Session recaps switch, the row falls through to the reply preview below.
+  // Unlabelled, as a project row's always was (the owner, 2026-10-22): the whole line is the
+  // sentence, and when it was written is the Recap card's to say, at the conversation's end.
   if (recaps && typeof s.recapText === 'string' && s.recapText.trim())
-    return { label: recapLabel(s.recapAt), text: s.recapText.trim(), tone: 'preview' };
+    return { text: s.recapText.trim(), tone: 'preview' };
   if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
   // Nothing to preview at all (a run that died before even its user turn was recorded, or an older
   // row from before the server kept the pending message): say what happened rather than nothing.
   return { text: statusLabel(s), tone: 'preview' };
+};
+
+// Whether a conversation is at rest for its Recap card (SessionRecapCard): nothing it is doing or
+// asking outranks the summary of what it did. The lines that outrank the recap on its row
+// (sessionLine above) and are work in hand — waiting on you, starting, generating, queued, an agent
+// it started — keep the card away. A watch it is parked on, or a process it left running, is no
+// turn of its own and does not.
+export const restsForRecap = (s: any): boolean => {
+  const state = sessionReadingState(s);
+  return (s.pendingApprovals ?? 0) === 0
+    && !waitingNoticeFor(s)
+    && !isGenerating(s, state)
+    && state !== 'QUEUED'
+    && (s.runningSubagentCount ?? 0) === 0;
 };
 
 /**
@@ -1609,53 +1610,6 @@ export function SessionProjectListRow({
         </div>
       </div>
     </div>
-  );
-}
-
-/** Compact tag summary for a session-list row. The first tag is the one users can scan; the
- * fixed count survives when that name has to ellipsize, and a container query swaps to the total
- * count when the resizable session column becomes too narrow to show a useful name. */
-export function SessionTagChips({
-  tags,
-  tooltipOpen,
-}: {
-  tags?: SessionTagRef[] | null;
-  tooltipOpen?: boolean;
-}) {
-  if (!tags?.length) return null;
-
-  const first = tags[0];
-  const label = tagChipLabels(first.color);
-  const names = tags.map((tag) => tag.name).join(', ');
-
-  return (
-    <>
-      <Tooltip content={names} open={tooltipOpen}>
-        <span className="session-tag-chips" aria-hidden="true">
-          <span className="session-tag-named">
-            <span
-              className="session-tag-chip"
-              style={
-                {
-                  '--chip': first.color,
-                  '--chip-label': label.light,
-                  '--chip-label-dark': label.dark,
-                } as React.CSSProperties
-              }
-            >
-              <span className="session-tag-chip-label">{first.name}</span>
-            </span>
-          </span>
-          {tags.length > 1 && (
-            <span className="session-tag-more session-tag-more--remaining">+{tags.length - 1}</span>
-          )}
-          <span className="session-tag-more session-tag-more--total">+{tags.length}</span>
-        </span>
-      </Tooltip>
-      {/* Generic spans cannot reliably take an accessible name from aria-label. Keep the real
-          names as text outside the visual summary so compact layouts may hide the named chip. */}
-      <span className="sr-only">Tags: {names}</span>
-    </>
   );
 }
 
@@ -3237,6 +3191,23 @@ export function WorkspaceView({
     });
   }, [message, pendingOperationQueries, pendingOperations, qc]);
   const live = !!selectedSession && !selectedTrashed && isSessionLive(selectedSession);
+  // The Recap card at the conversation's end steps aside for the rest of a visit once the
+  // conversation starts a new turn: the reader is in the conversation now, and a card arriving under
+  // each answer would push the answer up the screen. It is back the next time the session is opened
+  // (the owner, 2026-10-22).
+  const selectedRests = selectedSession ? restsForRecap(selectedSession) : true;
+  const [recapAsideFor, setRecapAsideFor] = useState<string | null>(null);
+  useEffect(() => {
+    setRecapAsideFor(null);
+  }, [selectedId]);
+  useEffect(() => {
+    if (selectedId && !selectedRests) setRecapAsideFor(selectedId);
+  }, [selectedId, selectedRests]);
+  const selectedRecap =
+    selectedSession && recapsEnabled && !selectedTrashed && selectedRests && recapAsideFor !== selectedId
+      && typeof selectedSession.recapText === 'string'
+      ? selectedSession.recapText.trim()
+      : '';
   // On older servers, infer resumability exactly as before. Newer servers know whether runner
   // context still exists and are authoritative — notably preventing a false-positive Resume.
   const legacyResumable =
@@ -3355,8 +3326,9 @@ export function WorkspaceView({
   // The project's ending where the page's progress card was (owner, 2026-10-10): a DONE project's
   // first card is its record — "This project is done · recorded by Orbit · 6 criteria · 5 on main
   // · 1 no code to land" — and never a progress card with nothing in it but the word Done. The
-  // same card, off the same read, as the conversation's settled branch; a read that carries no
-  // projection, or one without the unified counts (an older server), keeps the progress card.
+  // one place the card is drawn, since the owner's ruling of 2026-10-25 took it out of the
+  // coordinator conversation; a read that carries no projection, or one without the unified
+  // counts (an older server), keeps the progress card.
   const pageDetails = pageProjectDetailsQ.data as unknown as ProjectDoneDocument | undefined;
   const pageSettledDoc = pageDetails && pageStatus === 'DONE' && pageDetails.derivedDone != null
       && 'counts' in pageDetails.derivedDone
@@ -8339,6 +8311,13 @@ export function WorkspaceView({
     onSuccess: () => qc.invalidateQueries({ queryKey: ['runners'] }),
     onError: (e: Error) => void message.error("Couldn't install DeepSeek Harness", e.message),
   });
+  // The never-started card's Install for a Cursor CLI session: the engine row's own request, offered
+  // only on a runner whose release knows Cursor CLI (one that does not is told to update instead).
+  const installCursor = useMutation({
+    mutationFn: () => api(`/runners/${encodeId(runner.id)}/install`, { method: 'POST', body: { engine: 'cursor' } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['runners'] }),
+    onError: (e: Error) => void message.error(`Couldn't install ${CURSOR_CLI}`, e.message),
+  });
   // Hand an undelivered message back to the composer, so a message the engine never received can
   // be re-sent without being retyped out of a bubble. Explicitly user-initiated, so unlike the
   // interrupt/withdraw fold-backs (which fire on their own and therefore only write into an empty
@@ -9207,6 +9186,37 @@ export function WorkspaceView({
       navigate,
     ],
   );
+  // What the never-started card's presses do, in either of the places it stands (see its render).
+  const neverStartedActions: NeverStartedActions = {
+    // SR34: a refused run is not re-resolved, it is replaced by a NEW run of the
+    // task — the same write the task panel's Run now makes, under the same
+    // request token so a lost answer is resent rather than duplicated.
+    startAgain: selectedSession?.taskId
+      ? () =>
+          startRunAgain.mutate({
+            taskId: selectedSession.taskId as string,
+            triggerId: newRunRequestToken(),
+          })
+      : undefined,
+    // An ordinary session is resumable as it stands, so the message goes again —
+    // the transcript's own retry, whose words it would carry.
+    sendAgain: authErrorHelp.onRetry,
+    install:
+      selectedRuntime === AgentProvider.DSH
+        ? authErrorHelp.onInstallDsh
+        : selectedRuntime === AgentProvider.CURSOR
+          ? runner.online && runnerKnowsCursor(runner) ? () => installCursor.mutate() : undefined
+          : authErrorHelp.onInstall,
+    openProviders:
+      selectedRuntime === AgentProvider.DSH
+        ? authErrorHelp.onEditDshKey
+        : authErrorHelp.onOpenProviders,
+    openRunner: () => navigate(`/runners/${encodeId(runner.id)}`),
+    // The conversation is the other way to answer a refusal, so this only arms it:
+    // the reader's own words are the point, and nothing is sent for them.
+    chatAbout: () => setTimeout(() => taRef.current?.focus(), 0),
+    busy: retryInFlight || startRunAgain.isPending || installCursor.isPending,
+  };
   const pickModel = (v: string): void => {
     // A re-selection is still a preference, even when the session config already matches it.
     qc.setQueryData<Me>(meQuery().queryKey, (prev) =>
@@ -10432,27 +10442,13 @@ export function WorkspaceView({
                         ) : (
                           <>
                             <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
-                            {/* Tags lead the second line and the reply preview follows them. They sat
-                                beside the title as bare colour dots until the naming pass started
-                                writing semantic ones ("登录", "性能"): a dot cannot show a word, so the
-                                meaning lived only in a tooltip. Here they read at a glance and the
-                                preview yields, being the echo of a reply rather than the handle you
-                                file the session under. */}
+                            {/* One line under the title, and all of it is what the session is doing
+                                or waiting on, else its recap (sessionLine). Tags are filed and
+                                filtered by, not drawn on the row (the owner, 2026-10-22). */}
                             <div className="session-sub">
-                              <SessionTagChips
-                                tags={s.tags as SessionTagRef[] | null | undefined}
-                                tooltipOpen={hoverTipOpen}
-                              />
                               <div
                                 className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
                               >
-                                {/* The label and the space after it are drawn together, so a line
-                                    with no label carries no separator of its own. */}
-                                {line.label && (
-                                  <>
-                                    <span className="session-preview-label">{line.label}</span>{' '}
-                                  </>
-                                )}
                                 {line.text}
                               </div>
                             </div>
@@ -10980,39 +10976,10 @@ export function WorkspaceView({
               {/* A run that never became one says why, in place of the waiting notice that would
                   otherwise promise it is still coming. It takes the slot the two notices below
                   take, and suppresses them: the same empty transcript cannot be both a start that
-                  is on its way and a start that was refused. */}
-              {selected && !selectedTrashed && neverStarted && (
-                <RunNeverStartedCard
-                  never={neverStarted}
-                  actions={{
-                    // SR34: a refused run is not re-resolved, it is replaced by a NEW run of the
-                    // task — the same write the task panel's Run now makes, under the same
-                    // request token so a lost answer is resent rather than duplicated.
-                    startAgain: selectedSession?.taskId
-                      ? () =>
-                          startRunAgain.mutate({
-                            taskId: selectedSession.taskId as string,
-                            triggerId: newRunRequestToken(),
-                          })
-                      : undefined,
-                    // An ordinary session is resumable as it stands, so the message goes again —
-                    // the transcript's own retry, whose words it would carry.
-                    sendAgain: authErrorHelp.onRetry,
-                    install:
-                      selectedRuntime === AgentProvider.DSH
-                        ? authErrorHelp.onInstallDsh
-                        : authErrorHelp.onInstall,
-                    openProviders:
-                      selectedRuntime === AgentProvider.DSH
-                        ? authErrorHelp.onEditDshKey
-                        : authErrorHelp.onOpenProviders,
-                    openRunner: () => navigate(`/runners/${encodeId(runner.id)}`),
-                    // The conversation is the other way to answer a refusal, so this only arms it:
-                    // the reader's own words are the point, and nothing is sent for them.
-                    chatAbout: () => setTimeout(() => taRef.current?.focus(), 0),
-                    busy: retryInFlight || startRunAgain.isPending,
-                  }}
-                />
+                  is on its way and a start that was refused. Under a transcript that already has
+                  content it stands where their one-line forms do, below the last turn. */}
+              {selected && !selectedTrashed && neverStarted && transcriptEvents.length === 0 && (
+                <RunNeverStartedCard never={neverStarted} actions={neverStartedActions} />
               )}
               {placeholder === 'queued' && showQueuedNotice && !neverStarted && (
                 dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-queued-state">
@@ -11077,6 +11044,19 @@ export function WorkspaceView({
                   </AuthErrorCtx.Provider>
                 </EventFullCtx.Provider>
               </SessionNavCtx.Provider>
+              {/* The conversation's last row while it is at rest: its recap whole, the line its list
+                  row reads in one (SessionRecapCard). Above the cards that ask the owner something,
+                  which stay nearest the composer, and only once the transcript it sums up is drawn.
+                  Keyed by the session like its siblings, so a refresh in flight stays with the
+                  conversation that asked for it. */}
+              {selected && selectedId && selectedRecap && transcriptEvents.length > 0 && (
+                <SessionRecapCard
+                  key={`recap:${selectedId}`}
+                  sessionId={selectedId}
+                  text={selectedRecap}
+                  recapAt={selectedSession?.recapAt ?? null}
+                />
+              )}
               {/* The delivered card, in the conversation it was delivered to and scrolling with
                   it: the server's own ask about this project's ruler. Its content is re-derived on
                   every render — the frame keeps the proposal's address and nothing else — so a
@@ -11182,7 +11162,9 @@ export function WorkspaceView({
                   the conversation: "Is this project done?" while the coordinator has asked (or the
                   row says Record as done…), and the receipt in its place once it is recorded. A
                   project nobody has asked about draws nothing here — its gaps and the entries that
-                  act on them are the project page's Open items row and the Needs you hint. Keyed
+                  act on them are the project page's Open items row and the Needs you hint — and
+                  nor does a DONE Orbit recorded itself (owner, 2026-10-25): the project page draws
+                  its ending. Keyed
                   by the session, because whether it was delivered belongs to this conversation,
                   and by a key none of its siblings carries, for the reason the evidence card's
                   note above gives. */}
@@ -11215,9 +11197,16 @@ export function WorkspaceView({
                   </LandingLink>
                 </div>
               ) : null}
+              {/* A conversation that has talked, whose next message waits on something only the
+                  reader or the machine can change (P9 §8.1): the card, in place of the queued
+                  note, which would read as an ordinary wait for a slot. */}
+              {selected && !selectedTrashed && neverStarted && transcriptEvents.length > 0 && (
+                <RunNeverStartedCard never={neverStarted} actions={neverStartedActions} />
+              )}
               {selected &&
                 !selectedTrashed &&
                 showQueuedNotice &&
+                !neverStarted &&
                 transcriptEvents.length > 0 && (
                 dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-note chat-slot-wait">
                   <span>{queuedTitle(selectedSession ?? selected)}</span>

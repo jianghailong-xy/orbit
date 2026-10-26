@@ -118,6 +118,7 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       maxConcurrent: true,
       version: true,
       lastHeartbeatAt: true,
+      presence: { select: { lastBeatAt: true } },
       enrolledAt: true,
       position: true,
       runsAsRoot: true,

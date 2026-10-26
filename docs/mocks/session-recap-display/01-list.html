@@ -1,0 +1,96 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .grid4 { display: grid; grid-template-columns: repeat(4, 440px); gap: 0 40px; align-items: start; }
+  .lede, .foot { max-width: 1880px; }
+</style>
+<body>
+<h1>Recap 展示优化 · 列表页 · 三个方向</h1>
+<p class="lede">左一是按你 6:15 那张截图量出来重画的<b>现状</b>（Pro Max 440pt、暗色；行距、字号、标签颜色、每行在哪个字被截断都和截图一致）；右边三个是改法，同一屏、同一份数据。
+标题、标签、时间和每条 recap 的<b>开头</b>都照截图；recap 的后半句是按各会话最后一条回复补写的示意（都在服务端 80 字的上限内）。灰字 = 上线文案（英文），说明用中文。</p>
+
+<div class="grid4">
+  <div class="col"><span class="tag now">现状 · 你的截图</span><div id="today"></div><div class="cap" id="cap-today"></div></div>
+  <div class="col"><span class="tag rec">A · 我建议</span><div id="A"></div><div class="cap" id="cap-A"></div></div>
+  <div class="col"><span class="tag alt">B</span><div id="B"></div><div class="cap" id="cap-B"></div></div>
+  <div class="col"><span class="tag alt">C</span><div id="C"></div><div class="cap" id="cap-C"></div></div>
+</div>
+
+<p class="foot" id="foot"></p>
+
+<script>
+for (const v of ['today', 'A', 'B', 'C']) document.getElementById(v).innerHTML = listPhone('dark', v, { firstSep: v === 'A' || v === 'C' ? 217 : 197 });
+
+// 标注：量出元素在手机里的位置再画框，框和号都画在手机里面
+const ph = (v) => document.querySelector(`#${v} .ph`);
+const rowEl = (v, i) => ph(v).querySelector(`.lr[data-i="${i}"]`);
+function rectIn(v, el, clipEl) {
+  const p = ph(v).getBoundingClientRect();
+  let r = el.getBoundingClientRect();
+  if (clipEl) {
+    const c = clipEl.getBoundingClientRect();
+    r = { left: Math.max(r.left, c.left), top: Math.max(r.top, c.top), right: Math.min(r.right, c.right), bottom: Math.min(r.bottom, c.bottom) };
+  }
+  return { x: r.left - p.left, y: r.top - p.top, w: r.right - r.left, h: r.bottom - r.top };
+}
+function mark(v, r, n, { pad = 3, at = 'tr', cls = '' } = {}) {
+  const inner = ph(v).firstElementChild;
+  const x0 = r.x - pad, y0 = r.y - pad, x1 = r.x + r.w + pad, y1 = r.y + r.h + pad;
+  const pos = { tr: [x1 - 10, y0 - 12], tl: [x0 - 10, y0 - 12], br: [x1 - 10, y1 - 8], bl: [x0 - 10, y1 - 8] }[at];
+  inner.insertAdjacentHTML('beforeend', mk(x0, y0, x1 - x0, y1 - y0, cls) + num(n, pos[0], pos[1], cls));
+}
+
+document.fonts.ready.then(() => {
+  const S = {};
+  for (const v of ['today', 'A', 'B', 'C']) S[v] = phoneStats(ph(v));
+
+  // 现状的标注（Watching 那一行 = data-i 4；项目行 Cursor = 2；调研 = 7）
+  const w = rowEl('today', 4);
+  mark('today', rectIn('today', w.querySelector('.lb')), 1, { at: 'bl' });
+  mark('today', rectIn('today', w.querySelector('.rel')), 2, { at: 'tl' });
+  mark('today', rectIn('today', w.querySelector('.rt'), w.querySelector('.pv')), 3, { at: 'br' });
+  const pr = rowEl('today', 2);
+  mark('today', rectIn('today', pr.querySelector('.rt'), pr.querySelector('.pv')), 4);
+  const rs = rowEl('today', 7);
+  const lb7 = rs.querySelector('.lb');
+  mark('today', rectIn('today', lb7), 5, { at: 'bl' });
+
+  // A 的标注（蓝）：标签内联、字绕回左边；两行高保留
+  const a3 = rowEl('A', 3);
+  mark('A', rectIn('A', a3.querySelector('.blk')), 6, { cls: 'blue', at: 'br' });
+  const a1 = rowEl('A', 1);
+  mark('A', rectIn('A', a1.querySelector('.blk')), 7, { cls: 'blue', at: 'br' });
+
+  const stat = (v) => `<span class="stat">每条 recap 平均露出 ${S[v].pct}%</span><span class="stat">整句读完 ${S[v].full} / ${S[v].recaps} 条</span><span class="stat">一屏约 ${(800 / PITCH[v]).toFixed(1)} 行</span>`;
+  document.getElementById('cap-today').innerHTML = `<h3>现状</h3>${stat('today')}<ul>
+<li><span class="n">1</span>标签后面先是灰字 <code>Recap · Sat, Oct 17, 4:05 PM</code>，占掉剩下宽度的六成。</li>
+<li><span class="n">2</span>它的日期和右边的 <code>3d ago</code> 说的是同一件事：recap 在会话停下时写，和最后活动只差几秒到几分钟。</li>
+<li><span class="n">3</span>真正的 recap 每行只露 4–10 个字（「已删10…」「Main CI …」）。</li>
+<li><span class="n">4</span>同一张列表里，<b>项目行一直显示的就是 coordinator 的 recap，不带 label</b>（<code>SessionProjectRowView</code> 只画 <code>line.text</code>），读起来并不缺什么。</li>
+<li><span class="n">5</span>这条是 1:20 写的，可这个会话 1:44 才交出调研结论：结论没进 recap（原因和配套修法见 03）。</li>
+</ul>行高 <span class="cost">75pt</span></div>`;
+  document.getElementById('cap-A').innerHTML = `<h3>A · 两行，去掉 label</h3>${stat('A')}<ul>
+<li><b>label 整个去掉</b>（词和时间都不要）：时间右边已经有了；「这是 recap」不必每行说一遍——项目行就是这么读的。</li>
+<li><span class="n blue">6</span>第二行起是一个<b>两行的块</b>：标签照旧领头，字接在标签后面，第二行回到左边（标签像这段话的前缀，不再自己占一列）。</li>
+<li><span class="n blue">7</span><b>永远占两行高</b>（<code>lineLimit(2, reservesSpace: true)</code>）：短的留白，整张列表一个行高；会话从 <code>Running…</code> 变回 recap 时行不跳。</li>
+<li>项目行跟着两行：进度块领头，coordinator 那句写全。</li>
+<li>在做事的行：第一行照旧说现在（<code>Running Bash…</code> / 等你），第二行接 recap——见 03。</li>
+</ul>行高 <span class="cost">95pt</span>（+20）；代价是一屏约少两行（10.6 → 8.4）。</div>`;
+  document.getElementById('cap-B').innerHTML = `<h3>B · 一行，只去 label</h3>${stat('B')}<ul>
+<li>只删 <code>Recap · 时间</code>，行高、标签、一行都不动。</li>
+<li>每行 recap 从 4–10 字变成中文十六七个字 / 英文三十来个字符：能认出说的是哪件事，但读不完一句话。</li>
+<li>改动最小：<code>SessionLine</code> 不再带 <code>label</code>，四端各删一处。</li>
+</ul>行高 <span class="cost">75pt</span>（不变）</div>`;
+  document.getElementById('cap-C').innerHTML = `<h3>C · 两行，标签缩成色点</h3>${stat('C')}<ul>
+<li>recap 两行占满整宽，标签缩回标题后的色点（Mac 今天就是这样，<code>SessionTagDots</code>）。</li>
+<li>能读到的字最多。</li>
+<li>代价：iPhone 上标签又只剩颜色。当初改成带字的胶囊，正是因为色点说不出「性能问题」「功能缺陷」这样的词（<code>SessionTagChips</code> 的注释）。</li>
+</ul>行高 <span class="cost">95pt</span>（+20）</div>`;
+
+  document.getElementById('foot').innerHTML = `<b>三个方案都不动的</b>：行上的顺序（等你 / 在做事 / 你发出还没回 &gt; recap &gt; 原始回复）；Settings 里的 <b>Session recaps</b> 开关（关掉 = 原始回复，同样按各方案的行数）；第一行（标题、状态点、相对时间）。<br>
+<b>A 要动的</b>：OrbitKit <code>SessionLine</code> 去掉 <code>label</code>，多带一个 <code>recap</code>（给在做事的行的第二行用）；iOS <code>AgentSessionRow.compactRow</code> 和 <code>SessionProjectRowView</code> 把第二行换成两行块（标签内联：iOS 17 用 <code>ImageRenderer</code> 把胶囊拼进同一个 <code>Text</code>，18+ 可用 <code>TextRenderer</code>）；web 的 <code>.session-sub</code> 从一行 flex 改成 <code>-webkit-line-clamp: 2</code> 的块，标签组改 <code>inline-flex</code> 放在字前面；Android 目录行用 <code>InlineTextContent</code>。iPad 的 regular 行、Mac 的列表跟同一规则。没有新文案。<br>
+会话页里怎么放 recap 见 <b>02</b>；A 的各种状态（在做事、等你、没 recap、亮色）和服务端那处配套修正见 <b>03</b>。`;
+});
+</script>
+</body></html>

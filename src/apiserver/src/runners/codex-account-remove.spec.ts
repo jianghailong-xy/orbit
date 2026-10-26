@@ -70,6 +70,7 @@ function harness(row: Row = {}) {
    *  (RunnersService.renameAccount keeps those names; the done report drops the removed account's). */
   const raw: unknown[][] = [];
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: runnerModel,
     workspace: { findMany: async () => [] },
     codexRateLimitResetOperation: { findMany: async () => [] },
