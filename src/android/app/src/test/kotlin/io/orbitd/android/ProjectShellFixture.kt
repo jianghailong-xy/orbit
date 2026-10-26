@@ -70,6 +70,11 @@ internal object ProjectShell {
     @Volatile var landTasks: String? = null
     /** The dependency graph `projects/:id/dependency-graph` answers, with a confirmation the start card can seal; null answers `{}`. */
     @Volatile var plan: String? = null
+    // A11i: the start sheets read Launch's document afresh as they open.
+    /** The status `GET projects/<LAUNCH>` answers with: 200 serves the document, anything else refuses it in the server's sentence. */
+    @Volatile var documentStatus = 200
+    /** A document read waits for this before it answers: a server that has stopped answering. */
+    @Volatile var holdDocument: CompletableDeferred<Unit>? = null
     /** Every write's body, by `METHOD path`. */
     val bodies = java.util.concurrent.ConcurrentHashMap<String, String>()
 
@@ -119,7 +124,7 @@ internal object ProjectShell {
         calls.clear(); started = true; startRequest = false; quietStatus = 200
         done = false; doneBy = "DERIVED"; doneCounts = true
         promotion = null; merged = "[]"; mergeCheck = false; mergeJobKind = "CHECK_PROMOTION"; holder = null; criteria = null; pressStatus = 200; mergeWaiting = false; bodies.clear()
-        landTasks = null; plan = null; landing = null; landingTitle = null; inFlightJobs = null
+        landTasks = null; plan = null; documentStatus = 200; holdDocument = null; landing = null; landingTitle = null; inFlightJobs = null
         landings = null; needsYouItems = null; sourceLanding = null
         landingLog = """{"jobId":"j-1","entries":[],"nextCursor":null}"""; taskTitle = "Wire the page"
         landingStatus = 200; landingLogStatus = 200
@@ -240,7 +245,10 @@ internal object ProjectShell {
             path == "projects/sidebar" -> ok(sidebar())
             path == "projects" -> ok("""[$project,{"id":"$QUIET","title":"Quiet","status":"OPEN","createdAt":"2026-10-01T00:00:00Z"${
                 quietAttention?.let { ""","attention":$it""" }.orEmpty()}}]""")
-            path == "projects/$LAUNCH" -> ok(project)
+            path == "projects/$LAUNCH" -> {
+                holdDocument?.await()
+                if (documentStatus == 200) ok(project) else ApiResponse(documentStatus, """{"message":"The project is unavailable"}""".encodeToByteArray())
+            }
             path == "projects/$LAUNCH/integration" -> ok(integration)
             path == "projects/$LAUNCH/coordinator/status" -> ok(coordinatorStatus)
             path == "projects/$LAUNCH/open-items" -> ok(openItems)
