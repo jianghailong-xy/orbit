@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// The API calls rollback-drill.sh makes on the staging stack (README.md beside this file): as its owner, who is also its
-// administrator, or as the drill runner. Each prints one line of JSON and exits non-zero on an answer outside 2xx.
+// The API calls rollback-drill.sh and lost-answer-drill.sh make on the staging stack (README.md beside this file): as its
+// owner, who is also its administrator, or as the drill runner. Each prints one line of JSON and exits non-zero on an
+// answer outside 2xx.
 //
 //   node rollback-drill.mjs <origin> <state dir> switch on|off|get
 //   node rollback-drill.mjs <origin> <state dir> workspace <runner id> <work dir> <name>
