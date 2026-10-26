@@ -791,7 +791,11 @@ class ManagementDeviceTest {
                 page("edit-profile", report, problems)
                 activate("Choose photo", "talkback-profile-photo", report, problems); await("Photo library")
                 report.appendLine("double tap Choose photo -> the photo menu opened")
-                back(); back(); await("Default permission")
+                // The menu is a window of its own, and a key goes to the window in front: the second Back waits until the menu has
+                // gone and the page's window is in front again (sent at once, on A15b's first 360×640 dp round, the two Backs left
+                // the profile page open).
+                back(); compose.waitUntil(5_000) { compose.onAllNodesWithText("Photo library").fetchSemanticsNodes().isEmpty() && compose.activity.hasWindowFocus() }
+                back(); await("Default permission")
                 activate("Admin", "talkback-settings-admin", report, problems); await("Second user")
                 report.appendLine("double tap Admin -> the users list opened")
                 page("admin-users", report, problems)
