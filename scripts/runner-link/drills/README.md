@@ -172,7 +172,8 @@ How a round is judged:
   answer (`after_ms`). It measures until that answer is written to the runner's new connection.
 - **The same work**: that answer hands out the session or the turn the lost one did (`same_work=true`).
 - **Once**:
-  - The message reached the scripted claude's stdin once (`stdin.jsonl`).
+  - The message reached the scripted claude's stdin once, as a user message (`stdin.jsonl`). The runner's request for
+    a session's title quotes its prompt too, and is not counted.
   - The turn's events are one `user`, one `user_delivery` written, one `user_delivery` acknowledged and one
     `turn_end`.
   - For a claim, the session's engine started once (`spawns.jsonl`).

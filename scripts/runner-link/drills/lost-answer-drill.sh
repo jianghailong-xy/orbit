@@ -130,14 +130,15 @@ https_calls() {
 }
 # spawns: how many times the scripted claude has been started, for any session.
 spawns() { if [ -f "$drill/fake/spawns.jsonl" ]; then wc -l < "$drill/fake/spawns.jsonl"; else echo 0; fi; }
-# executions TURN MARKER: how many times the turn ran, as five counts: the times its message, which holds MARKER, was
-# written to the scripted claude's stdin, and its events: the runner taking the turn (user), writing it to the engine
-# (user_delivery written), the engine taking it (user_delivery acknowledged), and the turn ending (turn_end). A turn
-# that ran once is "1 1 1 1 1".
+# executions TURN MARKER: how many times the turn ran, as five counts: the user messages holding MARKER written to the
+# scripted claude's stdin (a session's title request quotes its prompt too, and is no delivery), and the turn's events:
+# the runner taking the turn (user), writing it to the engine (user_delivery written), the engine taking it
+# (user_delivery acknowledged), and the turn ending (turn_end). A turn that ran once is "1 1 1 1 1".
 executions() {
   local deliveries
-  deliveries="$(grep -c -- "$2" "$drill/fake/stdin.jsonl" || true)"
-  echo "${deliveries:-0} $(psql_value "SELECT count(*) FILTER (WHERE type = 'user') || ' ' ||
+  deliveries="$(awk -v marker="$2" 'index($0, "\"type\":\"user\"") && index($0, marker) { n++ } END { print n + 0 }' \
+    "$drill/fake/stdin.jsonl")"
+  echo "$deliveries $(psql_value "SELECT count(*) FILTER (WHERE type = 'user') || ' ' ||
     count(*) FILTER (WHERE type = 'user_delivery' AND payload->>'delivery' = 'written') || ' ' ||
     count(*) FILTER (WHERE type = 'user_delivery' AND payload->>'delivery' = 'acknowledged') || ' ' ||
     count(*) FILTER (WHERE type = 'turn_end') FROM run_event WHERE turn_id = '$1'")"
