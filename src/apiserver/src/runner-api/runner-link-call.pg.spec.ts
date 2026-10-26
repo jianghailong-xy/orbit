@@ -32,6 +32,14 @@
  *       go on long-polling over HTTPS.
  *   (7) The door: only the gateway, with a token the link vouches for; and a link claim the gateway
  *       cancels while it waits for the claim lock — the runner gone — claims nothing (hungUp).
+ *   (8) Every other kind (task B2b). An interrupt, end, diff, setconfig, withdraw, steer or reload whose
+ *       inbox answer was lost — answered or leased once as it was handed out, so nothing hands it out again
+ *       — is answered again, the same answer within 5 s, when the same process sends the fetch again
+ *       under its request id, and that resend changes nothing; a fetch with no request id, another
+ *       process's under the same id, an HTTPS poll and any later fetch are not handed it. The dispatch
+ *       pause does not hold the resend; a message's resend does not lease it again; two fetches at once
+ *       under one id hand out one turn; a withdraw past its delivery window is not handed out again; and
+ *       an HTTPS hand-out records nothing.
  *
  * Every state is read on a second connection, never through the answer that wrote it.
  *
@@ -53,7 +61,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { type PrismaClient, RunStatus } from '@prisma/client';
-import { RunEventType } from '@orbit/shared';
+import { RunEventType, SESSION_CLAUDE_STEER_WITHDRAW_V1 } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -816,5 +824,208 @@ test('runner link calls: answers lost on the way back are made good, and nothing
     assert.equal(untouched.claimRequestId, null);
     const connected = await send(door.linkPort, 'GET', '/api/runner/sessions/claim', viaLink({ 'x-orbit-link-request-id': 'claim-reconnected' }));
     assert.equal(connected.body.sessionId, waiting, 'the session is claimable once the runner is back');
+  });
+
+  await t.test('(8) a lost answer of any kind: the same request id has the same turn back within 5 s, handed out once', async (st) => {
+    // Where the inbox records a link hand-out (0448): two nullable columns.
+    const { rows: columns } = await sql.query<{ column_name: string; data_type: string; is_nullable: string }>(
+      `SELECT column_name, data_type, is_nullable FROM information_schema.columns
+       WHERE table_name = 'session' AND column_name IN ('inbox_request_id', 'inbox_request_turn_id')
+       ORDER BY column_name`,
+    );
+    assert.deepEqual(columns.map((c) => [c.column_name, c.data_type, c.is_nullable]), [
+      ['inbox_request_id', 'text', 'YES'],
+      ['inbox_request_turn_id', 'uuid', 'YES'],
+    ]);
+
+    /** Another process on the same machine, connected with a link token of its own. */
+    const otherProcessToken = signRunnerLinkToken(
+      link.config!,
+      { runnerId, ownerId, cellId: 'cell-1', leaseOwner: randomUUID(), credential: runnerLinkCredential(sha256(RUNNER_TOKEN)) },
+      new Date(),
+    ).token;
+    /** Every fetch here is a claude poller's, which declares the arm a withdraw is answered by. */
+    const poller = (extra: Record<string, string> = {}) => ({ 'x-orbit-runner-capabilities': SESSION_CLAUDE_STEER_WITHDRAW_V1, ...extra });
+
+    async function turnState(turnId: string) {
+      const { rows } = await sql.query<{
+        kind: string;
+        status: string;
+        deliveredAt: string | null;
+        answeredAt: string | null;
+        leaseDeadlineAt: string | null;
+        leaseGeneration: string | null;
+      }>(
+        `SELECT kind, status, delivered_at::text AS "deliveredAt", answered_at::text AS "answeredAt",
+                lease_deadline_at::text AS "leaseDeadlineAt", lease_generation AS "leaseGeneration"
+         FROM "conversation_turn" WHERE id = $1`,
+        [turnId],
+      );
+      return rows[0];
+    }
+    async function recorded(sessionId: string) {
+      const { rows } = await sql.query<{ requestId: string | null; turnId: string | null }>(
+        `SELECT inbox_request_id AS "requestId", inbox_request_turn_id AS "turnId" FROM "session" WHERE id = $1`,
+        [sessionId],
+      );
+      return rows[0];
+    }
+    /** Over HTTPS: whether the poll was answered within AT_ONCE_MS, and with what. It goes on waiting server-side. */
+    async function httpsPoll(s: { sessionId: string; generation: string }, runningTurnId: string, requestId: string) {
+      const abandon = new AbortController();
+      const poll = send(door.httpsPort, 'GET', inboxPath(s, runningTurnId), viaHttps(poller({ 'x-orbit-link-request-id': requestId })), undefined, abandon.signal);
+      poll.catch(() => undefined);
+      const outcome = await Promise.race([poll.then((a) => a), sleep(AT_ONCE_MS).then(() => null)]);
+      abandon.abort();
+      return outcome;
+    }
+    const contentOf: Record<string, string | null> = {
+      interrupt: null,
+      end: null,
+      diff: null,
+      setconfig: JSON.stringify({ model: 'claude-sonnet-5-5' }),
+      withdraw: JSON.stringify({ turnId: randomUUID() }),
+      steer: 'and one more thing, while you are at it',
+      reload: JSON.stringify({ permissionMode: 'plan' }),
+    };
+
+    for (const kind of Object.keys(contentOf)) {
+      const s = await runningSession(`a ${kind} whose inbox answer was lost`);
+      // The message runs — handed out and leased to the engine — so a steer has a turn to join and every control turn
+      // jumps the queue. A reload waits for a running turn to end, so its session's message has already been answered.
+      let running = '';
+      if (kind === 'reload') {
+        await sql.query(`UPDATE "conversation_turn" SET status = 'ANSWERED', answered_at = now() WHERE id = $1`, [s.turnId]);
+      } else {
+        const first = await send(door.linkPort, 'GET', inboxPath(s, ''), viaLink(poller({ 'x-orbit-link-request-id': `message-${kind}` })));
+        assert.equal(first.body.turnId, s.turnId, `${kind}: the message was not handed out`);
+        running = s.turnId;
+      }
+      const turnId = randomUUID();
+      await prisma.conversationTurn.create({
+        data: { id: turnId, sessionId: s.sessionId, seq: 2, clientTurnId: randomUUID(), kind, content: contentOf[kind], status: 'PENDING' },
+      });
+      const requestId = `inbox-${kind}-${randomUUID()}`;
+      const sameId = poller({ 'x-orbit-link-request-id': requestId });
+
+      await assert.rejects(send(lossyPort, 'GET', inboxPath(s, running), losing(sameId)), `${kind}: the gateway was handed the answer it was meant to lose`);
+      const lostAt = Date.now();
+      const answer = lost.at(-1);
+      assert.equal(answer?.status, 200, `${kind}: the route answered before the answer was lost`);
+      assert.equal((answer?.body as { turnId?: string }).turnId, turnId, `${kind}: the lost answer did not carry the ${kind}`);
+      assert.equal((answer?.body as { kind?: string }).kind, kind);
+      const handedOut = await turnState(turnId);
+      assert.equal(handedOut.status, kind === 'steer' ? 'IN_FLIGHT' : 'ANSWERED', `${kind}: not handed out as the inbox hands one out`);
+      assert.equal(handedOut.leaseGeneration, s.generation);
+      assert.deepEqual(await recorded(s.sessionId), { requestId, turnId }, `${kind}: the hand-out was not recorded`);
+
+      // Handed out, it is never handed out again to a fetch that carries no request id: without the resend it is gone.
+      const noId = await send(door.linkPort, 'GET', inboxPath(s, running), viaLink(poller()));
+      assert.equal(noId.status, 200, JSON.stringify(noId.body));
+      assert.equal(noId.body.turnId, '', `${kind}: a fetch with no request id was handed it`);
+
+      // The same process sends the fetch again under its request id, as the runner does once it is connected again:
+      // the same answer, at once.
+      const again = await send(door.linkPort, 'GET', inboxPath(s, running), viaLink(sameId));
+      const recoveredInMs = Date.now() - lostAt;
+      assert.equal(again.status, 200, JSON.stringify(again.body));
+      assert.deepEqual(again.body, answer?.body, `${kind}: the resend was not answered as the lost answer was`);
+      assert.ok(recoveredInMs < RECOVERY_BUDGET_MS, `${kind}: recovered in ${recoveredInMs} ms`);
+      st.diagnostic(`the lost ${kind}'s answer was given again ${recoveredInMs} ms after the loss`);
+
+      // Once: the resend changed nothing about the turn. Nor is it handed to another process asking under the same id,
+      // to an HTTPS poll, where the link's request id means nothing, or to any later fetch.
+      assert.deepEqual(await turnState(turnId), handedOut, `${kind}: the resend handed the turn out a second time`);
+      const otherProcess = await send(door.linkPort, 'GET', inboxPath(s, running), {
+        ...viaLink(sameId),
+        'x-orbit-runner-link-token': otherProcessToken,
+      });
+      assert.equal(otherProcess.status, 200, JSON.stringify(otherProcess.body));
+      assert.equal(otherProcess.body.turnId, '', `${kind}: another process was answered with this process's hand-out`);
+      assert.equal(await httpsPoll(s, running, requestId), null, `${kind}: an HTTPS poll under the same id was answered with it`);
+      const later = await send(door.linkPort, 'GET', inboxPath(s, running), viaLink(poller({ 'x-orbit-link-request-id': `${requestId}-next` })));
+      assert.equal(later.body.turnId, '', `${kind}: a later fetch was handed it again`);
+      assert.deepEqual(await recorded(s.sessionId), { requestId, turnId }, `${kind}: a fetch that handed nothing out moved the record`);
+      assert.deepEqual(await turnState(turnId), handedOut);
+
+      if (kind === 'withdraw') {
+        // Only while fresh, as it was handed out: past its window the person who asked has been told it did not happen.
+        await sql.query(`UPDATE "conversation_turn" SET created_at = created_at - interval '9 seconds' WHERE id = $1`, [turnId]);
+        const stale = await send(door.linkPort, 'GET', inboxPath(s, running), viaLink(sameId));
+        assert.equal(stale.status, 200, JSON.stringify(stale.body));
+        assert.equal(stale.body.turnId, '', 'a withdraw past its delivery window was handed out again');
+      }
+    }
+
+    // The dispatch pause holds work that has not started, not the resend of a turn handed out before it: an interrupt
+    // whose answer was lost, a message waiting behind it, the pause switched on, and the resend answered all the same.
+    const p = await runningSession('a lost interrupt, then the dispatch pause');
+    const pausedInterrupt = randomUUID();
+    await prisma.conversationTurn.create({
+      data: { id: pausedInterrupt, sessionId: p.sessionId, seq: 2, clientTurnId: randomUUID(), kind: 'interrupt', status: 'PENDING' },
+    });
+    const pausedId = poller({ 'x-orbit-link-request-id': 'inbox-before-the-pause' });
+    await assert.rejects(send(lossyPort, 'GET', inboxPath(p, ''), losing(pausedId)));
+    assert.equal((lost.at(-1)?.body as { turnId?: string }).turnId, pausedInterrupt);
+    await setPause(true);
+    try {
+      const underPause = await send(door.linkPort, 'GET', inboxPath(p, ''), viaLink(pausedId));
+      assert.equal(underPause.status, 200, JSON.stringify(underPause.body));
+      assert.equal(underPause.body.turnId, pausedInterrupt, 'the dispatch pause held the resend of a turn handed out before it');
+      // A fetch of its own is new work: the pause puts the run back in the queue, and the message waits.
+      const held = await send(door.linkPort, 'GET', inboxPath(p, ''), viaLink(poller({ 'x-orbit-link-request-id': 'inbox-under-the-pause' })));
+      assert.equal(held.status, 409, JSON.stringify(held.body));
+      assert.equal((await turnRow(p.turnId)).status, 'PENDING', 'the pause let the waiting message through');
+    } finally {
+      await setPause(false);
+    }
+
+    // A message is answered by the resend as it was too, and stays the one delivery: it is not leased again.
+    const m = await runningSession('a message whose inbox answer was lost');
+    const messageId = poller({ 'x-orbit-link-request-id': 'inbox-message' });
+    await assert.rejects(send(lossyPort, 'GET', inboxPath(m, ''), losing(messageId)));
+    const lostMessage = lost.at(-1);
+    assert.equal((lostMessage?.body as { turnId?: string }).turnId, m.turnId);
+    const leased = await turnState(m.turnId);
+    const resentMessage = await send(door.linkPort, 'GET', inboxPath(m, ''), viaLink(messageId));
+    assert.equal(resentMessage.status, 200, JSON.stringify(resentMessage.body));
+    assert.deepEqual(resentMessage.body, lostMessage?.body, 'the resend was not answered as the lost answer was');
+    assert.deepEqual(await turnState(m.turnId), leased, 'the resend leased the message again');
+
+    // Two fetches at once under one id — a gateway retrying on another replica while the first still runs — hand out one
+    // turn between them, and both answer it.
+    const s = await runningSession('two fetches at once under one request id');
+    const first = await send(door.linkPort, 'GET', inboxPath(s, ''), viaLink(poller({ 'x-orbit-link-request-id': 'message-at-once' })));
+    assert.equal(first.body.turnId, s.turnId);
+    const interruptId = randomUUID();
+    const diffId = randomUUID();
+    await prisma.conversationTurn.createMany({
+      data: [
+        { id: interruptId, sessionId: s.sessionId, seq: 2, clientTurnId: randomUUID(), kind: 'interrupt', status: 'PENDING' },
+        { id: diffId, sessionId: s.sessionId, seq: 3, clientTurnId: randomUUID(), kind: 'diff', status: 'PENDING' },
+      ],
+    });
+    const atOnce = viaLink(poller({ 'x-orbit-link-request-id': 'inbox-at-once' }));
+    const [left, right] = await Promise.all([
+      send(door.linkPort, 'GET', inboxPath(s, s.turnId), atOnce),
+      send(door.linkPort, 'GET', inboxPath(s, s.turnId), atOnce),
+    ]);
+    assert.equal(left.body.turnId, interruptId);
+    assert.equal(right.body.turnId, interruptId, 'one request id handed out two turns');
+    assert.equal((await turnState(diffId)).status, 'PENDING', 'the turn behind it was handed out under the same id');
+    const next = await send(door.linkPort, 'GET', inboxPath(s, s.turnId), viaLink(poller({ 'x-orbit-link-request-id': 'inbox-after-at-once' })));
+    assert.equal(next.body.turnId, diffId);
+
+    // Over HTTPS nothing is recorded, and the same id dequeues the next turn as it always did.
+    const h = await runningSession('handed out over HTTPS');
+    const httpsInterrupt = randomUUID();
+    await prisma.conversationTurn.create({
+      data: { id: httpsInterrupt, sessionId: h.sessionId, seq: 2, clientTurnId: randomUUID(), kind: 'interrupt', status: 'PENDING' },
+    });
+    const overHttps = await send(door.httpsPort, 'GET', inboxPath(h, ''), viaHttps(poller({ 'x-orbit-link-request-id': 'over-https' })));
+    assert.equal(overHttps.body.turnId, httpsInterrupt);
+    assert.deepEqual(await recorded(h.sessionId), { requestId: null, turnId: null }, 'an HTTPS hand-out was recorded');
+    const httpsAgain = await send(door.httpsPort, 'GET', inboxPath(h, ''), viaHttps(poller({ 'x-orbit-link-request-id': 'over-https' })));
+    assert.equal(httpsAgain.body.turnId, h.turnId, 'HTTPS answered a link resend');
   });
 });

@@ -1,0 +1,37 @@
+-- 0448 — the turn a runner link inbox fetch handed out, by the fetch's request id (docs/runner-link-design.md §5.6).
+--
+-- Until now only an IN_FLIGHT message or shell turn whose answer was lost came back: the same process says it is not
+-- running it, and the inbox hands it out again (task B2). Every other kind is gone once handed out: interrupt, end,
+-- diff, setconfig, reload and withdraw are answered as they are handed out, and a steer is handed out once and never
+-- leased again. A link answer lost on its way back took such a turn with it, and a lost steer is the person's own words.
+-- Over the link every call carries a request id, which every resend of the call keeps (proto `Rpc.request_id`), so the
+-- inbox now answers a fetch sent again under the id of one that handed a turn out with that same turn
+-- (RunnerApiController.dequeueTurn).
+--
+-- WHAT IT ADDS
+-- ============
+-- Two nullable columns on `session`:
+--   * `inbox_request_id` (TEXT) — the Rpc.request_id of the newest link inbox fetch that handed a turn out to the
+--     session's engine;
+--   * `inbox_request_turn_id` (UUID) — that turn.
+-- Written together, under the session lock the inbox takes, by a link fetch that hands a turn out; never by an HTTPS
+-- fetch, which carries no request id and reads neither. A fetch under the same id, of the process that holds the inbox
+-- lease and under the lease generation the turn was handed to, is answered with that turn while it can still be handed
+-- out as it was, and dequeues nothing.
+--
+-- WHY ON THE ROW
+-- ==============
+-- The inbox already locks this row FOR UPDATE before it decides anything, and a fetch and its resend of one engine
+-- generation come one after another (a session loop fetches its inbox one call at a time), so the newest hand-out is
+-- the only one a resend can name. Read with the lock, it costs no statement; a table of requests would cost one per
+-- fetch, hold the same fact a second time and need purging. The answer itself is rebuilt for the resend from the turn,
+-- as the inbox builds it, never stored: a reload's carries a decrypted provider key. The turn id is not a foreign key,
+-- so no write takes a lock on the turn, and a turn deleted since (a withdrawn steer) is simply not found.
+--
+-- 0448: the next number free on main, on every branch of origin, in every commit of `git log --all` and in every
+-- worktree on this host (2026-10-26). A nullable column with no default is a catalog-only change, so the hot table is
+-- not rewritten. Both statements can run twice (IF NOT EXISTS); no index, constraint, function, trigger or type is
+-- created, and no row is written.
+
+ALTER TABLE "session" ADD COLUMN IF NOT EXISTS "inbox_request_id" TEXT;
+ALTER TABLE "session" ADD COLUMN IF NOT EXISTS "inbox_request_turn_id" UUID;
