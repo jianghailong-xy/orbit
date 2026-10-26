@@ -169,10 +169,20 @@ class ComposerDeviceTest {
         compose.waitUntil(10000) { compose.onAllNodesWithTag("card-review").fetchSemanticsNodes().isEmpty() }
         // A08i: the composer asks for the focus once the page's window has it back from the review's sheet, and its keyboard comes up
         // with it. Asked for in the step that closed the review, both were lost while the sheet still held the window (A15b, API 36).
-        compose.waitUntil(10000) {
-            compose.onAllNodes(hasTestTag("composer-input") and isFocused()).fetchSemanticsNodes().isNotEmpty() &&
-                ViewCompat.getRootWindowInsets(compose.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
-        }
+        compose.waitUntil(10000) { compose.onAllNodes(hasTestTag("composer-input") and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+        // Whether the soft keyboard shows is the device's call: with a hardware keyboard exposed (the API 36 AVD's "qwerty,
+        // keysexposed") Android may keep it down, so there its state is recorded and not asserted; without one it must come up
+        // (the coordinator's ruling on A15b's 360x640 round). The request itself is CardDiscussionFocusTest's to pin.
+        fun keyboardShown() = ViewCompat.getRootWindowInsets(compose.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        val config = compose.activity.resources.configuration
+        if (config.keyboard != android.content.res.Configuration.KEYBOARD_NOKEYS &&
+            config.hardKeyboardHidden == android.content.res.Configuration.HARDKEYBOARDHIDDEN_NO) {
+            val shown = runCatching { compose.waitUntil(10000) { keyboardShown() }; true }.getOrDefault(false)
+            capture("card-discussion-keyboard")
+            File(evidence, "card-discussion-keyboard.txt").writeText("hardware keyboard: yes (keyboard=${config.keyboard}, " +
+                "hardKeyboardHidden=${config.hardKeyboardHidden}); show_ime_with_hard_keyboard=" +
+                "${String(shellBytes("settings get secure show_ime_with_hard_keyboard")).trim()}; soft keyboard shown within 10 s: $shown\n")
+        } else compose.waitUntil(10000) { keyboardShown() }
         compose.onNodeWithTag("composer-input").assertIsFocused()
         compose.waitUntil(5000) { model.state.value.draft.text.contains("fixture-criteria-seal") }
         val text = model.state.value.draft.text
