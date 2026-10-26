@@ -44,7 +44,9 @@ func TestLinkResumesAfterADroppedConnection(t *testing.T) {
 	if err := r.t.postEvents(context.Background(), "session-a", linkTestEvents(1, 5, 10)); err != nil {
 		t.Fatal(err)
 	}
-	if turn, err := r.t.inbox(context.Background(), "session-a", "gen-1"); err != nil || turn == nil || turn.TurnID != "turn-7" {
+	inbox := newInboxPoller(r.t, "session-a", "gen-1")
+	defer inbox.close()
+	if turn, err := inbox.next(context.Background()); err != nil || turn == nil || turn.TurnID != "turn-7" {
 		t.Fatalf("inbox: %+v %v", turn, err)
 	}
 	result := make(chan error, 1)
@@ -699,6 +701,59 @@ func jsonEqual(t *testing.T, a, b []byte) bool {
 	return string(xa) == string(ya)
 }
 
+// A call its caller has already given up on is not sent: an inbox fetch of an engine generation that has ended could
+// be handed a control turn nobody receives.
+func TestALinkCallItsCallerGaveUpOnIsNotSent(t *testing.T) {
+	r := newLinkWorkRig(t)
+	r.useLink(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := r.t.inbox(ctx, "session-a", "gen-1"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a fetch whose context had ended answered %v", err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if n := len(r.g.rpcsTo("/runner/sessions/session-a/inbox")); n != 0 {
+		t.Fatalf("a fetch whose context had ended went over the link %d times", n)
+	}
+}
+
+// A call still waited for goes again on the next connection when the one it went on is lost, under its request_id, as
+// it always has: its caller has not given up, so what keeps a given-up call from going (the test above) is no bar.
+func TestALinkCallStillWaitedForIsSentAgainAfterAReconnect(t *testing.T) {
+	for _, c := range []struct {
+		name, path string
+		call       func(r *linkWorkRig) error
+	}{
+		{"turn-complete", "/runner/sessions/session-a/turn-complete", func(r *linkWorkRig) error {
+			_, err := r.t.turnComplete(context.Background(), "session-a", TurnCompleteRequest{TurnID: "turn-1", Status: stSucceeded})
+			return err
+		}},
+		{"release-leases", "/runner/sessions/session-a/release-leases", func(r *linkWorkRig) error {
+			return r.t.releaseTurnLeases(context.Background(), "session-a", "gen-1")
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := newLinkWorkRig(t)
+			var lost atomic.Bool
+			r.g.backend = func(conn *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResult {
+				if rpc.GetTunnel().GetPath() == c.path && lost.CompareAndSwap(false, true) {
+					conn.drop() // the connection is lost with the call on it
+					return nil
+				}
+				return fakeWorkAnswer(rpc, 200, `{"ok":true,"status":"AWAITING_INPUT"}`)
+			}
+			r.useLink(t)
+			if err := c.call(r); err != nil {
+				t.Fatalf("%s across a lost connection: %v", c.name, err)
+			}
+			calls := r.g.rpcsTo(c.path)
+			if len(calls) != 2 || calls[0].requestID != calls[1].requestID || calls[0].conn == calls[1].conn {
+				t.Fatalf("%s went as %+v: want once on each connection, under one request_id", c.name, calls)
+			}
+		})
+	}
+}
+
 // A heartbeat that reconciled nothing failed, as an HTTPS heartbeat that got no 2xx does: nothing is applied.
 func TestALinkHeartbeatThatReconciledNothingFailed(t *testing.T) {
 	r := newLinkWorkRig(t)
@@ -709,9 +764,9 @@ func TestALinkHeartbeatThatReconciledNothingFailed(t *testing.T) {
 	}
 }
 
-// In link mode the long polls hang nowhere: a claim, an inbox fetch or the wake is asked once something says there is
-// an answer (a hint, the HintState of a HeartbeatAck, a new connection) and otherwise answers nothing at the end of
-// its window without asking at all.
+// In link mode the long polls hang nowhere: a claim or the wake is asked once something says there is an answer (a
+// hint, the HintState of a HeartbeatAck, a new connection) and otherwise answers nothing at the end of its window
+// without asking at all. A session's inbox is fetched by its inbox poller, which decides when (inbox_poller_test.go).
 func TestLinkLongPollsWaitForHints(t *testing.T) {
 	shortenLinkWaits(t, 300*time.Millisecond, 200*time.Millisecond, linkAfterSeqWait)
 	r := newLinkWorkRig(t)
@@ -721,8 +776,6 @@ func TestLinkLongPollsWaitForHints(t *testing.T) {
 		switch {
 		case path == "/runner/sessions/claim" && claimable.Load():
 			return fakeWorkAnswer(rpc, 200, `{"sessionId":"session-c","title":"t"}`)
-		case strings.Contains(path, "/inbox"):
-			return fakeWorkAnswer(rpc, 200, `{"turnId":"turn-1","kind":"message"}`)
 		case strings.Contains(path, "/approvals/"):
 			return fakeWorkAnswer(rpc, 200, `{"id":"ap-1","status":"PENDING"}`)
 		}
@@ -749,30 +802,6 @@ func TestLinkLongPollsWaitForHints(t *testing.T) {
 	}()
 	if job, err := r.t.claimSession(ctx); err != nil || job == nil || job.SessionID != "session-c" {
 		t.Fatalf("a hinted claim: %+v %v", job, err)
-	}
-
-	// The inbox: the first ask, then a hint for that session, or the HintState of a HeartbeatAck.
-	if turn, _ := r.t.inbox(ctx, "session-a", ""); turn == nil {
-		t.Fatal("the first inbox fetch asked nothing")
-	}
-	if turn, _ := r.t.inbox(ctx, "session-a", ""); turn != nil {
-		t.Fatal("an unhinted inbox fetch asked")
-	}
-	conn.send(&linkpb.Frame{Body: &linkpb.Frame_Hint{Hint: &linkpb.Hint{Kind: &linkpb.Hint_Inbox{Inbox: &linkpb.InboxHint{SessionId: "session-b"}}}}})
-	if turn, _ := r.t.inbox(ctx, "session-a", ""); turn != nil {
-		t.Fatal("a hint for another session fetched this one's inbox")
-	}
-	r.g.mu.Lock()
-	r.g.ackHints = &linkpb.HintState{InboxSessionIds: []string{"session-a"}}
-	r.g.mu.Unlock()
-	if _, err := r.t.heartbeat(HeartbeatRequest{Status: "ONLINE", LeaseOwner: r.t.leaseOwner}); err != nil {
-		t.Fatal(err)
-	}
-	if turn, _ := r.t.inbox(ctx, "session-a", ""); turn == nil {
-		t.Fatal("the HintState of a HeartbeatAck did not fetch the inbox")
-	}
-	if n := len(r.g.rpcsTo("/runner/sessions/session-a/inbox")); n != 2 {
-		t.Errorf("the inbox was asked %d times with two reasons to ask", n)
 	}
 
 	// The wake asks nothing: a CommandsHint is the wake.

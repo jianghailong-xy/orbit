@@ -2014,8 +2014,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 
 	pending := make(chan string, 8) // message turnIds fed but not yet resulted (FIFO)
 	var shellsInFlight atomic.Int32 // runner shell turns running, until their turn-complete is sent
-	inflight := map[string]bool{}   // turnIds being processed (dedup lease re-delivery)
-	var inflightMu sync.Mutex
+	// The generation's inbox: what fetches its turns, and the turnIds being processed (dedup
+	// lease re-delivery).
+	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	defer inbox.close()
 	// Exact Orbit executable turn owned by this Claude generation. It is separate from the
 	// transcript attribution cursor: the poller and stdout reader use it as one linearization
 	// boundary for target-bearing steer commit versus target result.
@@ -2045,9 +2047,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// second one behind, showing what the person sent twice. Same reasoning as codex's requeue.
 	requeueSteer := func(resp *RunInboxResponse) {
 		requeueSteerTurn(resp.TurnID, job, completeTurn)
-		inflightMu.Lock()
-		delete(inflight, resp.TurnID)
-		inflightMu.Unlock()
+		inbox.clearInflight(resp.TurnID)
 	}
 	refuseSteer := func(resp *RunInboxResponse, cause error, retryable bool) {
 		emitFor(resp.TurnID, evUser, map[string]interface{}{
@@ -2055,9 +2055,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		})
 		reportDelivery(resp.TurnID, deliveryFailed, cause.Error(), retryable)
 		settleSteerTurn(resp.TurnID, cause, job, completeTurn)
-		inflightMu.Lock()
-		delete(inflight, resp.TurnID)
-		inflightMu.Unlock()
+		inbox.clearInflight(resp.TurnID)
 	}
 	steerTargetCause := func(resp *RunInboxResponse) error {
 		if rt.currentPhase() != phaseWaiting || activeOrbitTurnID == "" {
@@ -2088,21 +2086,12 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		// Whether this spawn has asked the engine to name the session (session_naming.go).
 		namingAsked := false
 		for pollCtx.Err() == nil {
-			resp, err := t.inbox(pollCtx, job.SessionID, leaseGeneration)
+			resp, err := inbox.next(pollCtx)
 			if err != nil {
-				if pollCtx.Err() != nil {
-					return
-				}
-				if isLeaseOwnershipError(err) {
+				if pollCtx.Err() == nil && isLeaseOwnershipError(err) {
 					onLeaseLost(err)
-					return
 				}
-				logln("inbox poll failed for", job.SessionID+":", err)
-				time.Sleep(time.Second)
-				continue
-			}
-			if resp == nil {
-				continue // long-poll timeout, re-poll
+				return
 			}
 			if pollCtx.Err() != nil {
 				return // drain raced a pulled turn: drop it (the next runner re-delivers)
@@ -2127,13 +2116,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				}
 				// The inbox lease can re-deliver a turn still running (turn > lease).
 				// Dedup by turnId so we never double-feed claude or desync `pending`.
-				inflightMu.Lock()
-				dup := inflight[resp.TurnID]
-				if !dup {
-					inflight[resp.TurnID] = true
-				}
-				inflightMu.Unlock()
-				if dup {
+				if !inbox.markInflight(resp.TurnID) {
 					continue
 				}
 				// A steer only means anything while a turn is actually in progress. The
@@ -2272,9 +2255,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 						failUndeliveredTurn(resp.TurnID, err, job, completeTurn)
 						setTurn("")
 					}
-					inflightMu.Lock()
-					delete(inflight, resp.TurnID)
-					inflightMu.Unlock()
+					inbox.clearInflight(resp.TurnID)
 					continue
 				}
 				// Linearize the last target check with result handling. If A ends while the
@@ -2383,13 +2364,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// `!`-prefixed shell command: run it on the runner (no claude), echo the
 				// output, and buffer it for the next message's context. Dedup on turnId so
 				// a lease re-delivery can't re-run side effects.
-				inflightMu.Lock()
-				if inflight[resp.TurnID] {
-					inflightMu.Unlock()
+				if !inbox.markInflight(resp.TurnID) {
 					continue
 				}
-				inflight[resp.TurnID] = true
-				inflightMu.Unlock()
 				setTurn(resp.TurnID)
 				if shCmd, isBg := shellTurnBackgroundCommand(resp); isBg {
 					// `!cmd &`: launch detached and finish the turn now — the process keeps
@@ -2423,9 +2400,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					}
 					shellsInFlight.Add(-1)
 				}
-				inflightMu.Lock()
-				delete(inflight, resp.TurnID)
-				inflightMu.Unlock()
+				inbox.clearInflight(resp.TurnID)
 				setTurn("")
 			case "interrupt":
 				// Stopping a turn is a request with an answer, not a shout into the pipe:
@@ -2901,9 +2876,7 @@ scanLoop:
 				}); err != nil {
 					logln("turn-complete failed for", job.SessionID+":", err)
 				}
-				inflightMu.Lock()
-				delete(inflight, turnID)
-				inflightMu.Unlock()
+				inbox.clearInflight(turnID)
 				setTurn("") // turn acked; until the next message, events are session-level
 			}
 			if len(fenced) > 0 {

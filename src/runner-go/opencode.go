@@ -55,10 +55,17 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 	setTurn("")
 	inboxCtx, stopInbox := contextUntilEither(ctx, shutdownCtx)
 	defer stopInbox()
+	// The generation's inbox: what fetches its turns, and the turnIds already taken on, which a
+	// redelivery of one is dropped against for the generation's whole life.
+	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	defer inbox.close()
 	inboxCh := make(chan openCodeInboxResult, 16)
 	go func() {
-		for inboxCtx.Err() == nil {
-			resp, err := t.inbox(inboxCtx, job.SessionID, leaseGeneration)
+		for {
+			resp, err := inbox.next(inboxCtx)
+			if err != nil && !isLeaseOwnershipError(err) {
+				return // the inbox is stopped
+			}
 			select {
 			case inboxCh <- openCodeInboxResult{response: resp, err: err}:
 			case <-inboxCtx.Done():
@@ -66,11 +73,8 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 			}
 			// A superseded generation never regains ownership, so stop polling instead of
 			// spinning on 409s; the main loop hands this session back below.
-			if err != nil && isLeaseOwnershipError(err) {
+			if err != nil {
 				return
-			}
-			if err != nil && inboxCtx.Err() == nil {
-				time.Sleep(time.Second)
 			}
 		}
 	}()
@@ -78,7 +82,6 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 	var pendingShellCtx []string
 	var pendingReloads []*RunInboxResponse
 	var queued []*RunInboxResponse
-	seen := map[string]bool{}
 	queuedIDs := map[string]bool{}
 	var activeID string
 	var activeCancel context.CancelCauseFunc
@@ -110,16 +113,15 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 		// A long-poll response can already be buffered when turn-complete parks the
 		// session. Reject settled redeliveries before waiting for a fresh permit, or
 		// they can block control handling and later replay completed side effects.
-		if seen[resp.TurnID] {
+		if inbox.isInflight(resp.TurnID) {
 			return
 		}
 		if !waitTurnPermit(ctx) {
 			return
 		}
-		if seen[resp.TurnID] {
+		if !inbox.markInflight(resp.TurnID) {
 			return
 		}
-		seen[resp.TurnID] = true
 		activeID = resp.TurnID
 		setTurn(resp.TurnID)
 
@@ -211,10 +213,10 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 			// Nothing is running to steer here, and each turn is its own process anyway.
 			refuseUnsupportedSteer(resp.TurnID, resp.Content, providerOpenCode, job, emitFor, completeTurn)
 		case "shell":
-			if seen[resp.TurnID] || !waitTurnPermit(ctx) {
+			if inbox.isInflight(resp.TurnID) || !waitTurnPermit(ctx) {
 				return false
 			}
-			seen[resp.TurnID] = true
+			inbox.markInflight(resp.TurnID)
 			setTurn(resp.TurnID)
 			if shCmd, isBg := shellTurnBackgroundCommand(resp); isBg {
 				runShellTurnBackground(bg, execDir, scratchDir, shCmd, resp.TurnID, emit, job.Agent.Env)
@@ -300,23 +302,15 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 			finishTurn(result)
 		case item := <-inboxCh:
 			if item.err != nil {
-				if isLeaseOwnershipError(item.err) {
-					stopInbox()
-					if activeCancel != nil {
-						activeCancel(context.Canceled)
-					}
-					onLeaseLost(item.err)
-					return stCancelled, true, false
+				// The lease: the poller retries every other failure itself.
+				stopInbox()
+				if activeCancel != nil {
+					activeCancel(context.Canceled)
 				}
-				if inboxCtx.Err() == nil {
-					logln("inbox poll failed for", job.SessionID+":", item.err)
-				}
-				continue
+				onLeaseLost(item.err)
+				return stCancelled, true, false
 			}
 			resp := item.response
-			if resp == nil {
-				continue
-			}
 			if activeID == "" {
 				if handleIdle(resp) {
 					return stSucceeded, true, false
@@ -346,7 +340,7 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 			case "diff":
 				reportOpenCodeDiff(inboxCtx, t, job)
 			case "message", "shell":
-				if resp.TurnID != activeID && !seen[resp.TurnID] && !queuedIDs[resp.TurnID] && !endRequested {
+				if resp.TurnID != activeID && !inbox.isInflight(resp.TurnID) && !queuedIDs[resp.TurnID] && !endRequested {
 					queued = append(queued, resp)
 					queuedIDs[resp.TurnID] = true
 				}

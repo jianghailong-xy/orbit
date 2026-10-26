@@ -648,6 +648,11 @@ func (w *linkWork) rpc(ctx context.Context, rpc *linkpb.Rpc) (*linkpb.TunnelResp
 	}()
 	frame := &linkpb.Frame{Body: &linkpb.Frame_Rpc{Rpc: rpc}}
 	for attempt := 0; ; attempt++ {
+		// A call its caller has given up on is not sent, nor sent again: an answer nobody reads can hand out what
+		// nobody receives, such as a control turn of an engine generation that has ended (inbox_poller.go).
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		conn, err := w.waitConn(ctx)
 		if err != nil {
 			return nil, err

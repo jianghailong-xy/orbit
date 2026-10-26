@@ -16,21 +16,27 @@ import (
 //     waits), ApprovalHint for the approval;
 //   - the HintState every HeartbeatAck carries, which says the same thing again whole, so a hint that was lost costs at
 //     most one heartbeat interval;
-//   - a new connection: hints sent while there was none are lost, so everything is asked once more.
+//   - a new connection: hints sent while there was none are lost, so the claim and the approvals are asked once more,
+//     and the wake sends the connection's first heartbeat at once. Its HeartbeatAck's HintState names every session
+//     with a turn waiting in its inbox, so the inboxes are not each asked again (§10).
 //
 // Each of those makes its gate due, and a long poll that finds its gate due asks once and clears it. The first ask
-// for a session's inbox or an approval is due too: nothing has been heard about it yet. So a hint, or a HintState
-// entry, marks only a gate a long poll has made: one for a session or an approval nobody asks about would never be
-// deleted, and a gate made later is due anyway. A long poll that waits its whole window (linkLongPoll) answers that
-// nothing came, without asking, as an HTTP long poll that timed out does. An approval's gate waits
-// linkApprovalRecheck at most: the fallback for a decision no hint and no HintState names.
+// for an approval is due too: nothing has been heard about it yet. So a hint, or a HintState entry, marks only a gate
+// a long poll has made: one for an approval nobody asks about would never be deleted, and a gate made later is due
+// anyway. A long poll that waits its whole window (linkLongPoll) answers that nothing came, without asking, as an
+// HTTP long poll that timed out does. An approval's gate waits linkApprovalRecheck at most: the fallback for a
+// decision no hint and no HintState names.
+//
+// A session's inbox gate is its inbox poller's (inbox_poller.go), which decides when to fetch: openInbox makes it,
+// due, for the poller's first fetch, and closeInbox forgets it when the engine generation ends. Hints mark it while it
+// is open.
 
 // linkGates are the gates of one link mode.
 type linkGates struct {
 	mu       sync.Mutex
 	claim    *linkGate
 	wake     *linkGate
-	inbox    map[string]*linkGate // by session, as decodeSessionID spells it
+	inbox    map[string]*linkGate // the open inbox pollers', by session, as decodeSessionID spells it
 	approval map[string]*linkGate // by approval, as decodeSessionID spells it
 }
 
@@ -98,9 +104,34 @@ func (gs *linkGates) takeWake(ctx context.Context, wait time.Duration) (bool, er
 	return gs.take(ctx, func() *linkGate { return gs.wake }, wait)
 }
 
-func (gs *linkGates) takeInbox(ctx context.Context, sessionID string, wait time.Duration) (bool, error) {
+// openInbox makes the inbox gate of a session's inbox poller, due: its first fetch asks, nothing having been heard
+// about the session yet. A poller opened for a session that has one takes its place: the newest engine generation is
+// the one the inbox serves.
+func (gs *linkGates) openInbox(sessionID string) *linkGate {
+	g := &linkGate{due: true}
+	gs.mu.Lock()
+	gs.inbox[decodeSessionID(sessionID)] = g
+	gs.mu.Unlock()
+	return g
+}
+
+// closeInbox forgets the gate openInbox made, unless a newer poller of the session has taken its place, and wakes the
+// poller if it waits on it, so it sees that it is closed.
+func (gs *linkGates) closeInbox(sessionID string, g *linkGate) {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
 	key := decodeSessionID(sessionID)
-	return gs.take(ctx, func() *linkGate { return keyed(gs.inbox, key) }, wait)
+	if gs.inbox[key] == g {
+		delete(gs.inbox, key)
+	}
+	g.markLocked()
+}
+
+// mark makes one gate due: the inbox poller's own, after a fetch that handed it a turn or one that failed.
+func (gs *linkGates) mark(g *linkGate) {
+	gs.mu.Lock()
+	g.markLocked()
+	gs.mu.Unlock()
 }
 
 func (gs *linkGates) takeApproval(ctx context.Context, approvalID string, wait time.Duration) (bool, error) {
@@ -120,7 +151,8 @@ func (gs *linkGates) markWake() {
 	gs.mu.Unlock()
 }
 
-// markInbox and markApproval mark a gate a long poll has made. One that does not exist is due when it is made.
+// markInbox marks the gate of the session's open inbox poller, and markApproval the gate a long poll has made. One that
+// does not exist is due when it is made.
 func (gs *linkGates) markInbox(sessionID string) {
 	gs.mu.Lock()
 	if g := gs.inbox[decodeSessionID(sessionID)]; g != nil {
@@ -137,17 +169,15 @@ func (gs *linkGates) markApproval(approvalID string) {
 	gs.mu.Unlock()
 }
 
-// markAll makes every gate due: a new connection, which missed whatever was hinted while there was none. The wake
-// among them sends the connection's first heartbeat at once, as Welcome asks (§5.3), and its HeartbeatAck carries what
-// waits.
+// markAll makes the gates due that a new connection needs asked again, having missed whatever was hinted while there
+// was none. The wake among them sends the connection's first heartbeat at once, as Welcome asks (§5.3), and its
+// HeartbeatAck carries what waits: its HintState names the sessions with a turn waiting in their inbox, whose pollers
+// ask then, so the inbox gates are left as they are (§10: a mass reconnect must not have every session ask).
 func (gs *linkGates) markAll() {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 	gs.claim.markLocked()
 	gs.wake.markLocked()
-	for _, g := range gs.inbox {
-		g.markLocked()
-	}
 	for _, g := range gs.approval {
 		g.markLocked()
 	}
@@ -181,21 +211,6 @@ func (gs *linkGates) state(h *linkpb.HintState) {
 	}
 	for _, a := range h.GetApprovals() {
 		gs.markApproval(a.GetApprovalId())
-	}
-}
-
-// keepInbox forgets the inbox gates of sessions no heartbeat names any more, unless a long poll waits on one.
-func (gs *linkGates) keepInbox(sessionIDs []string) {
-	keep := make(map[string]bool, len(sessionIDs))
-	for _, id := range sessionIDs {
-		keep[decodeSessionID(id)] = true
-	}
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-	for key, g := range gs.inbox {
-		if !keep[key] && g.ch == nil {
-			delete(gs.inbox, key)
-		}
 	}
 }
 
