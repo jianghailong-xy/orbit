@@ -55,7 +55,8 @@ the same `sourceSha` and skip quietly, without failing the run. Any other
 `versionCode` that does not increase fails the run before a secret is read.
 
 `build-release.sh` refuses an uncommitted tree, records full Git HEAD and clean
-state, checks APK package/version/min/target SDK, rejects debuggable APKs, verifies
+state, checks APK package/version/min/target SDK, rejects debuggable APKs and APKs
+the shell cannot profile ([the measurement build](#the-release-is-the-measurement-build)), verifies
 the signer against an independently supplied SHA-256 fingerprint, checks the
 source SHA occurs in packaged DEX and that the updater reads `api.github.com`. The
 source SHA is injected at build time, so a rebuild at another commit is a different
@@ -87,15 +88,15 @@ same certificate, and losing the key means users must uninstall to move on.
 
 Firebase client values are public app configuration, not credentials. The release
 build reads them from optional `android-internal` environment variables
-`ANDROID_FIREBASE_APP_ID`, `ANDROID_FIREBASE_API_KEY`, `ANDROID_FIREBASE_PROJECT_ID`,
-`ANDROID_FIREBASE_SENDER_ID` and `ANDROID_FIREBASE_ANDROID_PACKAGE` (A10's
-`ORBIT_ANDROID_FIREBASE_*` build inputs, see `notifications.md`). Set all five or
-none: `build-release.sh` refuses a partial set or a package other than the
-application ID, checks the values reached `BuildConfig`, and records
-`pushConfigured` in `identity.json`. With none set, push notifications stay off.
-Leave them unset until the released source contains A10's notification-channel
-migration. A Firebase service account belongs only to the backend; never put it in
-this repository, a workflow or the app.
+`ORBIT_ANDROID_FIREBASE_APP_ID`, `ORBIT_ANDROID_FIREBASE_API_KEY`,
+`ORBIT_ANDROID_FIREBASE_PROJECT_ID`, `ORBIT_ANDROID_FIREBASE_SENDER_ID` and
+`ORBIT_ANDROID_FIREBASE_ANDROID_PACKAGE`, named like A10's build inputs (see
+`notifications.md`). Set all five or none: `build-release.sh` refuses a partial set
+or a package other than the application ID, checks the values reached `BuildConfig`,
+and records `pushConfigured` in `identity.json`. With none set, push notifications
+stay off. The workflow reads these names only from the source that also carries
+A10's notification-channel migration. A Firebase service account belongs only to the
+backend; never put it in this repository, a workflow or the app.
 
 For a local signed build (for example a rehearsal with a disposable key), export
 `ORBIT_ANDROID_APPLICATION_ID`, `ORBIT_ANDROID_VERSION_NAME`,
@@ -175,6 +176,51 @@ login requests intentionally do not create a row. An unchanged version is thrott
 to one write per hour; a changed version is recorded immediately. Record the exact
 backend SHA, request date and observed row; a local PostgreSQL fixture is not
 evidence from a real deployment.
+
+## The release is the measurement build
+
+D09's performance measurements (P01 startup, P03 frames and the rest) need a fixed
+release-equivalent build that is not debuggable and is profileable. The release
+build is that build; there is no separate measurement variant.
+`<profileable android:shell="true"/>` in the main manifest lets shell tools trace and
+profile every release APK: Perfetto, simpleperf, `am profile` and Macrobenchmark's
+trace-based metrics. A debuggable build would distort the timings. The line adds no
+debugger or `run-as`, and Android designs it for release builds. `build-release.sh`
+refuses a release APK the shell cannot profile and records `profileableByShell: true`
+in `identity.json`.
+
+So the measured APK and the distributed APK are the same file: same SHA-256 (in the
+release's `.apk.sha256` and `android-update.json`), applicationId, signer and
+`versionCode`. It installs over an existing installation, so sign-in, data and the
+push registration stay. Every measurement is traced to a release by that SHA-256.
+
+To get the build:
+
+- **A released candidate:** download `orbit-android-<versionName>.apk` from its v*
+  GitHub Release and compare its SHA-256 with `.apk.sha256`. Install it with
+  `adb install -r` over the existing installation, or let the app update itself.
+- **A candidate commit without a v* release:** the holder of the release key runs
+  `build-release.sh` on it with `ORBIT_ANDROID_SIGNING_PURPOSE=release` and
+  `ORBIT_ANDROID_VERSION_CODE=$(git rev-list --count HEAD)`, as `release.yml` does. The
+  output directory's `identity.json` and the APK's SHA-256 name it. A test-signed
+  `*.upgradetest` build is profileable too, but it is another package with another
+  signer. It cannot replace a release installation, and it is not the distributed
+  identity.
+
+Before the first sample, check the APK:
+
+```sh
+aapt2 dump xmltree --file AndroidManifest.xml orbit-android-<versionName>.apk | grep -A1 'E: profileable'
+# → A: http://schemas.android.com/apk/res/android:shell(0x01010594)=true
+aapt dump badging orbit-android-<versionName>.apk | grep -c application-debuggable   # → 0
+```
+
+Profileable makes the app observable; it adds no measurement points. TTFD ends at
+the app's own `reportFullyDrawn()`, and `hwuiRenderGt700Count` reads each window's
+`FrameMetrics` inside the app. Both come from app code, not from this line. On a
+`userdebug` or `eng` system image, such as the Google APIs emulator images, the
+platform lets the shell profile every app regardless of this line. Only a
+production (`user`) system, such as a phone's, shows its effect.
 
 ## Notes accompanying each release
 

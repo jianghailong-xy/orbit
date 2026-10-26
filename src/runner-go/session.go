@@ -283,10 +283,14 @@ func eventFlushRetryPolicy(serverRejections *int) func(error) bool {
 
 const (
 	leaseActivationTimeout    = 20 * time.Second
-	finalLeaseReleaseTimeout  = 10 * time.Second
 	terminalEventFlushTimeout = 5 * time.Second
 	finalizeRunShutdownGrace  = 20 * time.Second
 )
+
+// finalLeaseReleaseTimeout bounds one release of an inbox generation (retirePendingGeneration). A variable only so a
+// test can shorten it: the release that follows an engine's stop is sent again past it for as long as the control plane
+// cannot be reached (retireStoppedGeneration).
+var finalLeaseReleaseTimeout = 10 * time.Second
 
 // eventFlushShutdownGrace is what the final event flush is given past the turn drain and the
 // lease releases once the runner has begun to stop. A variable only so a test can scale it down
@@ -720,6 +724,17 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			cancelOwnership()
 		}
 	}
+	// The runner link gave up the session's events (errLinkEventsAbandoned, link_events.go): the control plane kept
+	// refusing them, or the runner had no room left to hold them. That ends the supervisor, as a lost lease does. This
+	// process still owns the session, though, so it ends it, with that as its error, rather than detach or run on with a
+	// transcript nothing stores. What the stream held is in the spool.
+	var eventsGivenUp atomic.Pointer[error]
+	markEventsGivenUp := func(err error) {
+		if eventsGivenUp.CompareAndSwap(nil, &err) {
+			logln("session", sessionID, "ends: its events cannot be stored:", err)
+			cancelSessionCtx()
+		}
+	}
 	// A revived claim with a rotated owner drains this supervisor before takeover.
 	// Reuse the ownership-loss path so provider teardown can never finalize the
 	// newly reopened control-plane Session.
@@ -907,8 +922,14 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		taken := takeBuffered(flushCtx)
 		err := linkStream.submit(taken)
 		backlog.settled(len(taken)) // the stream counts what it holds
+		if err == nil {
+			// Given up since the last flush, with nothing new to hand over: the session ends all the same.
+			err = linkStream.givenUp()
+		}
 		if isLeaseOwnershipError(err) {
 			markOwnershipLost(err)
+		} else if errors.Is(err, errLinkEventsAbandoned) {
+			markEventsGivenUp(err)
 		}
 		return err
 	}
@@ -928,6 +949,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				}
 				if isLeaseOwnershipError(err) {
 					markOwnershipLost(err)
+				} else if errors.Is(err, errLinkEventsAbandoned) {
+					markEventsGivenUp(err)
 				}
 				if err == nil {
 					err = criticalFlushFence.check()
@@ -944,7 +967,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	flushWithContext := func(ctx context.Context) error { return flushEvents(ctx, true) }
 	periodicEventCtx, cancelPeriodicEvents := context.WithCancel(eventCtx)
 	flushPeriodic := func() {
-		if err := flushEvents(periodicEventCtx, false); err != nil && periodicEventCtx.Err() == nil && !isLeaseOwnershipError(err) {
+		if err := flushEvents(periodicEventCtx, false); err != nil && periodicEventCtx.Err() == nil && !isLeaseOwnershipError(err) &&
+			!errors.Is(err, errLinkEventsAbandoned) {
 			logln("event flush failed for", sessionID+":", err)
 		}
 	}
@@ -1309,6 +1333,35 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		}
 		return err
 	}
+	// retireStoppedGeneration retires the generation of an engine that has stopped, and waits out a control plane that
+	// cannot be reached: the network gone, an apiserver deploy, a database failing over, the runner link down. A release
+	// that fails that way (isRetryableTransportError) is sent again, with retryReleaseTurnLeases' capped backoff, until it
+	// lands, the session is cancelled or the runner stops. The supervisor does nothing else meanwhile: it takes no turn
+	// and activates no generation, and the session keeps the state it had. A refusal, another process owning the session
+	// among them, is returned at once, as it always was.
+	retireStoppedGeneration := func() error {
+		began := time.Now()
+		err := retirePendingGeneration()
+		if err == nil || !isRetryableTransportError(err) || sessionCtx.Err() != nil || shutdownCtx.Err() != nil {
+			return err
+		}
+		generation := leaseResetGeneration
+		logln(fmt.Sprintf("inbox generation of %s not released yet (%v): the control plane cannot be reached, so the release goes again until it lands, and the session takes no turn until then",
+			sessionID, err))
+		retryCtx, cancelRetry := contextUntilEither(sessionCtx, shutdownCtx)
+		defer cancelRetry()
+		err = retryReleaseTurnLeases(retryCtx, func(attemptCtx context.Context) error {
+			return t.releaseTurnLeases(attemptCtx, sessionID, generation)
+		})
+		if err != nil {
+			return err
+		}
+		if leaseResetGeneration == generation {
+			leaseResetGeneration = ""
+		}
+		logln(fmt.Sprintf("inbox generation of %s released %s after its engine stopped", sessionID, time.Since(began).Round(time.Millisecond)))
+		return nil
+	}
 	for {
 		if sessionCtx.Err() != nil || shutdownCtx.Err() != nil {
 			break
@@ -1503,7 +1556,13 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// Retire before any cold wait, branch handling, or crash backoff. The HTTP inbox
 		// handler can outlive cancellation of the Go request, so leaving this until the next
 		// activation would let that detached poll consume a control turn with no receiver.
-		if releaseErr := retirePendingGeneration(); releaseErr != nil {
+		// Over the link a fetch sent before the stop can still be served after it (the gateway
+		// tries the backends for a few seconds). Nothing of this process fetches under the
+		// generation any more (inbox_poller.go), and once the release lands the control plane
+		// hands it nothing. A control plane that cannot be reached is waited out, not taken
+		// for the session's failure: the release goes again until it lands, ahead of anything
+		// else this session does (retireStoppedGeneration).
+		if releaseErr := retireStoppedGeneration(); releaseErr != nil {
 			logln("inbox generation cleanup after process stop failed for", sessionID+":", releaseErr)
 			if sessionCtx.Err() == nil && shutdownCtx.Err() == nil {
 				status = stFailed
@@ -1593,6 +1652,14 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	}
 	if ctx.Err() != nil && !terminalAckSettled {
 		status = stCancelled
+	}
+	// Events the link gave up end the session as failed, with why (markEventsGivenUp), unless it was cancelled, settled
+	// or lost to another process first.
+	if givenUp := eventsGivenUp.Load(); givenUp != nil && ctx.Err() == nil && !terminalAckSettled && !ownershipLost.Load() {
+		status = stFailed
+		lastErrMu.Lock()
+		lastErrorMessage = (*givenUp).Error()
+		lastErrMu.Unlock()
 	}
 	// Stop and join runner-owned background work before the final event drain and
 	// before any git snapshot/commit/removal. Otherwise a `!cmd &` can write the
