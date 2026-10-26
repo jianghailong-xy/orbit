@@ -39,6 +39,9 @@ func forwardRPC(c *conn, rpc *linkpb.Rpc) {
 		if result == nil {
 			return // the connection ended: nobody to answer
 		}
+		if c.g.drill.lose(c, rpc, result) {
+			return // a drill lost it, and cut the connection (drill.go)
+		}
 		c.send(&linkpb.Frame{Body: &linkpb.Frame_RpcResult{RpcResult: result}}, false)
 	}()
 }
