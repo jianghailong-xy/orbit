@@ -54,7 +54,8 @@ them was built from this very commit (a second tag on it), every later step is
 skipped and the job succeeds with a notice. Otherwise it runs the original
 verification gate, restores the keystore into a private runner file (`umask
 077`), builds with `build-release.sh` (which verifies package, version, min/target
-SDK, non-debuggable release and the signer against `ANDROID_CERT_SHA256`) and
+SDK, a release that is not debuggable but is profileable by the shell, and the signer
+against `ANDROID_CERT_SHA256`) and
 deletes the keystore on exit and in an `always()` step. Only that build step
 references the secrets. No shell tracing, Gradle `--info/--debug` or build scans are
 used. The APK and its `identity.json` go to the publishing job as a run artifact.
