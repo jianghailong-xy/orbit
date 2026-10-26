@@ -134,3 +134,55 @@ The version phase waits for the runner's own release check, up to `ORBIT_ROLLBAC
 checks); `ORBIT_ROLLBACK_UPDATE_NOW=1` presses Update Runner Now instead. It needs root, for the runner's mount
 namespace: the runner looks for its engines under the account's home whatever `$HOME` says, and there it would find this
 host's own CLIs, signed in to nothing on the stack.
+
+# An answer lost on its way: the drill
+
+A control request's answer can be lost on its way to the runner: the connection drops after the apiserver has committed
+the claim or the lease, before the answer arrives. The design's answer (docs/runner-link-design.md §5.6, §10) is that
+the runner sends the call again under the same request_id and gets the same work back at once: the same session from a
+claim, the same message from an inbox fetch, instead of waiting for the 300 s lease to run out. The runner drops a turn
+it already runs by its id, so the work runs once. `lost-answer-drill.sh` beside this file drills that on a staging stack
+with a real runner (task C1c).
+
+The fault comes from the link gateway, and only when a drill asks for it: `LINK_DRILL_LOSE_ANSWERS`
+(src/link-gateway/README.md, "Lost answers"). With it, the gateway has the apiserver's answer to a claim or an inbox
+fetch, and cuts the runner's connection instead of relaying it. The drill sets it by recreating the gateway with
+`lost-answer.compose.yml` on top of the stack's own files, and its last phase recreates the gateway without it.
+
+```bash
+export ORBIT_LINK_STAGING_PROJECT=orbit-link-c1c ORBIT_LINK_STAGING_DIR=/var/tmp/orbit-link-c1c
+ORBIT_LINK_STAGING_HTTP_PORT=27086 ORBIT_LINK_STAGING_LINK_PORT=27443 ORBIT_LINK_STAGING_METRICS_PORT=27464 \
+ORBIT_LINK_STAGING_NATS_PORT=27422 ORBIT_LINK_STAGING_NATS_MONITOR_PORT=27822 \
+scripts/runner-link/drills/lost-answer-drill.sh all
+scripts/runner-link/drills/lost-answer-drill.sh stop
+scripts/runner-link/staging-down.sh
+```
+
+| Phase | What it does | What must hold |
+| --- | --- | --- |
+| `prepare` | Starts the stack in `MODE_LINK`, built from this checkout, with the link gateway as the stack runs it. Builds the runner and the test suite's scripted claude (`src/runner-go/fake_claude_test.go`) from this checkout, then registers and starts the runner. | The gateway runs without `LINK_DRILL_LOSE_ANSWERS`. The runner's work goes over the link: a baseline session's prompt and message are answered, with calls forwarded by the gateway and none over HTTPS. |
+| `claim` | Recreates the gateway to lose `ORBIT_LOST_ANSWER_ROUNDS` (5) claim answers. Each round opens a session. | The answer that claimed the session is lost, and the claim is answered again within `ORBIT_LOST_ANSWER_BOUND` (5) seconds, with the same session. The session's `claim_request_id` is the lost call's request_id, so the second answer replayed the first claim and claimed nothing new. The session's engine starts once, and its prompt runs once. |
+| `inbox` | Recreates the gateway to lose as many inbox answers. Each round sends the baseline session a message. | The answer that leased the message's turn is lost, and the fetch is answered again within the bound, with the same turn. The message runs once. |
+| `restore` | Recreates the gateway as the stack runs it. | The gateway's environment and log say nothing of the setting. A new session's prompt and a message are answered, no answer is lost, and the runner's connection holds. |
+| `all` | `prepare`, `claim`, `inbox`, `restore`. | |
+
+How a round is judged:
+
+- **Within the bound**: the gateway logs how long after the cut the same call, under the same request_id, got its next
+  answer (`after_ms`). It measures until that answer is written to the runner's new connection.
+- **The same work**: that answer hands out the session or the turn the lost one did (`same_work=true`).
+- **Once**:
+  - The message reached the scripted claude's stdin once (`stdin.jsonl`).
+  - The turn's events are one `user`, one `user_delivery` written, one `user_delivery` acknowledged and one
+    `turn_end`.
+  - For a claim, the session's engine started once (`spawns.jsonl`).
+
+The records go to `<state>/client/lost-answer/`:
+
+- `timeline.txt` is the drill's account. It quotes the gateway's log lines for each loss, and the runner's lines for its
+  connection ending and coming back.
+- `rounds.tsv` has a line per lost answer.
+- Each phase leaves the link gateway's log and metrics.
+
+The runner keeps running after the drill until `lost-answer-drill.sh stop`. The drill needs root for the runner's mount
+namespace, as the rollback drill does.
