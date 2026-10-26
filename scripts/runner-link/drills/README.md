@@ -189,3 +189,50 @@ The records go to `<state>/client/lost-answer/`:
 
 The runner keeps running after the drill until `lost-answer-drill.sh stop`. The drill needs root for the runner's mount
 namespace, as the rollback drill does.
+
+# An engine that stops during an outage: the drill
+
+When an engine stops (the pool recycles an idle one, or it crashes), the runner releases its inbox generation before the
+session does anything else: a fetch that outlives its runner (an HTTPS long poll, a link call the gateway still forwards)
+must find the generation retired, or it could take a control turn nobody receives (src/runner-go/session.go). Before
+task B9, a release that failed for 10 s failed the session, so a network cut, an apiserver deploy or a database failover
+failed every session whose engine stopped while it lasted, though no event was lost. Now the release goes again until
+it lands, and the session takes no turn until then. `release-outage-drill.sh` beside this file drills that on a staging
+stack with a real runner (task B9).
+
+The engine is the test suite's scripted claude, set to end itself `ORBIT_RELEASE_OUTAGE_ENGINE_IDLE` (20 s) after its
+last message (`ORBIT_FAKE_CLAUDE_WAIT`): the drill takes the control plane down as a turn is answered, and the idle
+engine stops inside the outage.
+
+```bash
+export ORBIT_LINK_STAGING_PROJECT=orbit-link-b9 ORBIT_LINK_STAGING_DIR=/var/tmp/orbit-link-b9
+ORBIT_LINK_STAGING_HTTP_PORT=23086 ORBIT_LINK_STAGING_LINK_PORT=23443 ORBIT_LINK_STAGING_METRICS_PORT=23464 \
+ORBIT_LINK_STAGING_NATS_PORT=23422 ORBIT_LINK_STAGING_NATS_MONITOR_PORT=23822 \
+scripts/runner-link/drills/release-outage-drill.sh all
+scripts/runner-link/drills/release-outage-drill.sh stop
+scripts/runner-link/staging-down.sh
+```
+
+| Phase | What it does | What must hold |
+| --- | --- | --- |
+| `prepare` | Starts the stack in shadow mode (`MODE_HTTP`), built from this checkout. Builds the runner and the scripted claude from `ORBIT_RELEASE_OUTAGE_RUNNER_SRC` (this checkout), then registers and starts the runner. | The runner's presence says HTTP. |
+| `https` | Opens a session; once its prompt is answered, kills the apiserver for `ORBIT_RELEASE_OUTAGE_SECONDS` (60), then starts it again. | See below. |
+| `link` | Brings the stack to `MODE_LINK` and the runner onto the link. Opens a session; once its prompt is answered, kills the link gateway as long, with the apiserver up, and asks for a diff refresh of the session meanwhile (`POST /api/sessions/:id/diff/refresh`, a `diff` control turn). | See below. |
+| `all` | `prepare`, `https`, `link`. | |
+
+What must hold in each outage:
+
+- The engine stops inside it, and the runner retries the release (`inbox generation of … not released yet`), never
+  `inbox generation cleanup after process stop failed`.
+- The session is `AWAITING_INPUT` throughout, and once the control plane is back the runner logs `inbox generation of …
+  released`.
+- A message sent then is answered by a new engine, once: one user message on the scripted claude's stdin, and one each
+  of `user`, `user_delivery` written, `user_delivery` acknowledged and `turn_end`.
+- Over the link: the diff turn is still `PENDING` when the generation is released (nothing that fetched for the stopped
+  engine took it), then `ANSWERED` after the next engine started, and the runner never logs it handed over twice.
+
+The records go to `<state>/client/release-outage/`: `timeline.txt` is the drill's account, with the runner's log lines
+for each step, and `phases.tsv` has a line per outage. The runner keeps running after the drill until
+`release-outage-drill.sh stop`. The drill needs root for the runner's mount namespace, as the rollback drill does. A
+runner built from before task B9 (`ORBIT_RELEASE_OUTAGE_RUNNER_SRC` pointing at an older checkout) fails the `https`
+phase: its session goes `FAILED` once one release has failed for 10 s.
