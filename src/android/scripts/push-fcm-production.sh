@@ -248,8 +248,15 @@ if [[ "$steps" == *" crossdevice "* ]]; then
   "$orbit" session create --title "$title" --permission-mode default --json --prompt "This session only raises one permission \
 request for an Android notification test. Use the Write tool to create /tmp/a10-push-check.txt containing the word ok. Do \
 nothing else; if the write is refused, stop." > "$output/crossdevice-session.json" 2>&1 9>&- || true
-  scratch="$(python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); print(d.get("id") or d.get("sessionId") or "")' \
-    "$output/crossdevice-session.json" 2>/dev/null || true)"
+  scratch="$(python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+for o in (d, d.get("session") or {}):
+    ids = [o.get(k) for k in ("id", "sessionId", "publicId") if isinstance(o.get(k), str) and o.get(k)]
+    if ids:
+        print(ids[0])
+        break
+' "$output/crossdevice-session.json" 2>/dev/null || true)"
   if [[ -n "$scratch" ]] && await_entry "$title" 300; then
     mark approval_entry_seen
     entry "$title" > "$output/crossdevice-entry.txt"
