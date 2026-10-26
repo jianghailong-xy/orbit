@@ -17,6 +17,14 @@ The coordinator subsequently fixed A07's 413 follow-up at
 composer tests/fixture, and composer documentation inherited in that merge are
 A07 work and are not A10-authored changes.
 
+The first run's handoff is `482b132e8c57053113f2e3fa467d02de2b809d95`
+(parent `51bbcc3`). That run stopped at a Codex usage limit with its device-test
+files uncommitted; the coordinator snapshotted them as
+`f71654d1eb9aeaa864646c3fd0e11db1be9a93c8` (parent `482b132e8`). The second run
+(Claude, 2026-10-07) started from the same starting SHA, fast-forwarded to
+`482b132e8`, took the snapshot commit itself into its history, and changed the
+files listed in its own commit messages. No other branch was merged.
+
 A14 `f59ab46cf223f813dbc9c0a1bed3399d8eb90649` is a separately fixed release
 input, not merged into this development input. A10 must preserve its build
 isolation when the platform integrates the branches; notification configuration
@@ -39,7 +47,7 @@ timing evidence.
 | --- | --- | --- |
 | `src/ios/Sources/Push.swift`, `PushRegistrar` | Buffer FCM token callbacks until authentication; register the current token through authenticated HTTP. | Android always uses `production`, including debug; installation and fresh registration binding keys are Android contract additions. |
 | `src/ios/Sources/Push.swift`, silent push delegate | Receive silent sync without a banner/sound; remove stale needs-you reminders and refresh authoritative state. | Android owns every display because FCM messages contain only data. |
-| `src/macos/OrbitApp/Sources/OrbitApp/NotificationManager.swift` | Notification permission, categories, display, tap routing, focused-session suppression, and removal. | Android 13+ runtime permission and API 29+ notification-channel controls replace Apple authorization/categories; an in-app Snackbar provides the foreground approval cue. |
+| `src/macos/OrbitApp/Sources/OrbitApp/NotificationManager.swift` | Notification permission, categories, display, tap routing, focused-session suppression, and removal. | Android 13+ runtime permission and API 29+ notification-channel controls replace Apple authorization/categories; `configure()` asks at launch, Android asks once after the first signed-in foreground (below); an in-app Snackbar provides the foreground approval cue. |
 | `src/macos/OrbitKit/Sources/OrbitKit/App/Notifications.swift` | Stable replacement identity, approval versus session semantics, authenticated session/card entry. | Inline Apple Allow/Deny/Reply must not become unauthenticated Android mutations; opening the existing authoritative card is the safe business entry. |
 | `src/macos/OrbitKit/Sources/OrbitKit/App/SessionGrouping.swift` | Reconcile needs-you reminders from canonical REST state, excluding `waitingKind=START_REQUEST`. | `ownerItems` may keep an AWAITING_INPUT coordinator in needs-you; do not impose the native approval RUNNING requirement on owner items. |
 | `src/apiserver/src/push/push.controller.ts`, `dto.ts` | Register/refresh/unregister wire requests with a generation-safe local binding. | Registration success proves only backend registration, not configured FCM delivery or notification permission. |
@@ -114,22 +122,55 @@ Material Snackbar. Open sends the same explicit ACTION_VIEW entry as a system
 notification; Dismiss calls `controller.dismissNotice()`. The host pads above the
 IME and navigation bars and does not change the shell's destinations or back
 stack. The controller owns clearing on reconciliation, focus change, and logout.
-System banners are suppressed in the foreground, keeping the existing card as
-the focused session's only approval prompt. This follows the Swift separation
-between an in-app foreground cue and background system display; the current
-Android foreground cue does not independently play Swift's approval sound.
+In the foreground there is no sound or heads-up. Like iOS, which lists every
+foreground alert in Notification Center (`.list`), each alert still goes to the
+tray, silently: the platform builder has no per-post silent switch, so it joins
+the `orbit.silent` group with `GROUP_ALERT_SUMMARY` and no summary (what
+NotificationCompat.setSilent does). The one exception is the focused session's
+own approval, whose card is already on screen. An approval for another session
+also gets the notice. Swift additionally plays the approval sound in the
+foreground; Android stays silent there. "Foreground" means started: an alert that
+lands while the Activity is paused but still visible is treated as foreground. The
+account owner accepted this difference on 2026-10-07 (card 34bbkPvI56b7ZUi8cJjX4),
+given the silent tray entry above.
+
+Android 13+ shows no notification until the app is granted POST_NOTIFICATIONS.
+iOS asks at launch (`NotificationManager.configure`). A configured Android build
+asks once per installation, in context: `PushNoticeHost` launches the system
+request on the first signed-in foreground (`PushController.claimPermissionPrompt`
+only reads state and holds an in-process guard). The mark is written to the push
+storage under `noBackupFilesDir` after the request was answered
+(`permissionPromptFinished`), on an IO thread and isolated like every other push
+storage write; if it cannot be written, the next launch asks again instead of
+crashing. A refusal is final for the automatic path; asking again is the user's
+choice from `NotificationSettings` or Android settings. Builds without Firebase configuration, and API 29–32 where
+the permission is granted at install, never prompt. Token registration does not
+depend on the permission, as on iOS, so silent sync and reconciliation still run.
+The account owner accepted this automatic one-time request on 2026-10-07 (card
+34bbkPvI56b7ZUi8cJjX4).
+
+Channels: `orbit.needs-you.alert` ("Needs your reply", approvals, owner items and
+confirmation problems) is `IMPORTANCE_HIGH`, so it pops up like the iOS banner;
+`orbit.sessions` and `orbit.updates` are `IMPORTANCE_DEFAULT`. Android never
+raises the importance of a channel that already exists, so an installation of
+`482b132e8`, which created `orbit.needs-you` at DEFAULT, would otherwise keep
+DEFAULT forever. On start, an `orbit.needs-you` whose importance the user has not
+set (`hasUserSetImportance()`) is deleted and the new channel is used; one the
+user changed is kept and used as it is. Deleting the old channel also removes a
+reminder that was showing in it at the moment of the upgrade.
 
 ## Route correspondence and cross-module interfaces
 
 | Payload | Existing product entry | Integration boundary |
 | --- | --- | --- |
-| `sessionID` for approval/settled/agent-message | `orbit://session/<id>` | Reader, current pending cards, and composer are inherited A06/A08/A07 work. |
-| `sessionID` and `recordID` for confirmation problems | `orbit://session/<id>?at=<recordID>` | Reader requests the server's record anchor; inaccessible/deleted records use its existing error state. |
+| `sessionID` for approval/settled/agent-message | `orbit-session:<id>` | Reader, current pending cards, and composer are inherited A06/A08/A07 work. |
+| `sessionID` and `recordID` for confirmation problems | `orbit-session:<id>?at=<recordID>` | Reader requests the server's record anchor; inaccessible/deleted records use its existing error state. |
 | Owner item with `sessionID` | Coordinator session | `openItemID` is not a transcript record ID; do not put it into `?at=`. Card state comes from the project snapshot. |
 | Owner item without coordinator, with `projectID` | `orbit-project:<id>` | A11 owns the project product page. Its completed integration needs separate evidence. |
 | `watchID` | `orbit://watch/<id>` | A12 owns the watch product page and generation interpretation. |
 | `runnerID`/`engine` | `orbit://runner/<id>` | A13 owns runner/engine management; do not invent a notification-only editor. |
-| `wikiSpaceID` | Existing `Destination.WIKI` can name a space, but the fixed `OrbitLinks` has no space URI | A12 was asked for `orbit://wiki/<spaceId>` → `OrbitRoute(Destination.WIKI, id=canonicalSpaceId)`. This remains a route integration gap until the minimal extension and its product destination are integrated and verified. |
+| `wikiSpaceID` | `orbit://wiki/<spaceId>` | The URI handed to A12 (comment 34aIrgslPhvEl3IPNty9m): `OrbitLinks.parse` → `OrbitRoute(Destination.WIKI, id=canonicalSpaceId)` is A12's branch. Until it is integrated the fixed parser returns null, so the tap opens Orbit without navigating, as iOS does for this payload. A route integration gap until verified with A12's page. |
+| Headless `agent-message` (no `sessionID`) | Launcher `ACTION_MAIN` to MainActivity | No object to open: the tap brings Orbit forward at its current screen, like iOS opening the app. |
 
 The fixed Swift `Notifications.intent` handles session and watch payloads; it
 does not route runner or wiki-space payloads. Extending an Android route is a
@@ -137,17 +178,20 @@ documented difference, not evidence of parity with an installed iOS client.
 The existing pending-login route survives cold entry and is consumed after
 authentication; account switches discard the previous account's path.
 
-A13 owns the Settings page. A10 provides
+A13 owns the Settings page. Apart from the one-time request above, A10 provides
 `@Composable fun NotificationSettings(controller: PushController)` in
 `app/src/main/kotlin/io/orbitd/android/push/NotificationSettings.kt`; A13 can call
 `NotificationSettings(app.push)`. The component requests Android 13+ permission
 on an explicit tap, reads current authorization on resume, and opens Android's
 app notification settings. `controller.configured` describes SDK availability;
 `controller.notifications.allowed(channel: String? = null)` checks global or
-individual-channel authorization. Channel IDs are `orbit.needs-you`,
+individual-channel authorization. Channel IDs are `controller.notifications.needsYou`
+(`orbit.needs-you.alert`, or a user-changed legacy `orbit.needs-you`),
 `orbit.sessions`, and `orbit.updates`. The interface was handed to A13 in a task
-comment; A10 does not insert it into MainActivity's Settings branch. Settings
-integration/permission-discovery remains incomplete until A13 wires that entry.
+comment. Until A13's settings page replaces MainActivity's Settings branch, that
+branch shows `NotificationSettings(app.push)` under the account section (a
+one-line entry the coordinator asked for), so a refused request can be repeated
+or Android's notification settings opened.
 A10 owns `OrbitApplication.push` and its notification initialization. Shared-entry
 changes remain minimal and preserve unrelated navigation/auth/attachment cleanup.
 
@@ -182,6 +226,13 @@ configuration. A debug package value cannot initialize the release package
 because of the runtime equality check. The A14 integration must still inspect
 the combined release artifact and retain its existing fixture/signing isolation.
 
+A tagged release reads the values from the `android-internal` environment
+variables of the same names, which `release.yml`'s signing step passes to
+`build-release.sh` (see `release.md`). The Firebase project registers only
+`io.orbitd.android`, so a debug build (`io.orbitd.android.debug`) keeps push
+disabled even when the values are supplied; the real-Firebase emulator check below
+builds the release package instead.
+
 The deployment separately needs A09's `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`,
 base64 PEM `FCM_PRIVATE_KEY`, and exact `FCM_ANDROID_PACKAGE`. These must belong to
 the same isolated project/package as the client. Backend registration success
@@ -203,48 +254,110 @@ processing through WorkManager. Scheduling and the OS's execution window still
 need actual-device validation; these deadlines do not prove delivery reliability.
 [Firebase receiving guidance](https://firebase.google.com/docs/cloud-messaging/android/receive-messages)
 
-## Local verification plan
+## Local verification
 
-The development handoff on the fixed `51bbcc3` base passed the original
-`test lintDebug assembleDebug` gate and compiled the controlled instrumentation
-APK: 90 core checks, 108 debug app checks, and 108 release app checks, with no
-failures or skips. The 29 new notification cases run in both app variants.
-Lint reported no errors. The unchanged fixed A09 push backend also passed 87
-local non-Postgres regression cases. These checks do not establish device UI or
-transport delivery. The first two emulator attempts retained runner/lifecycle
-harness failures; their fixes and further device results are follow-up evidence.
+The original gate is unchanged and must pass on every handoff:
 
-Run the original Android gate with `--max-workers=2`; do not replace it with
-only notification tests. Build and unit/HTTP checks can proceed without a device.
-Use the shared fixture as input, with independent assertions about registration,
-payload decoding, replacement/removal, and routes. Cover:
+```sh
+env JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ANDROID_HOME=/opt/android-sdk ANDROID_SDK_ROOT=/opt/android-sdk \
+  bash src/android/gradlew -p src/android --no-daemon --max-workers=2 test lintDebug assembleDebug
+```
 
-- Registration before/after token arrival, refresh, uncertain responses,
-  same-token new binding, late old responses/logout, server/account switch,
-  persistence after process restart, and installation storage exclusion.
-- Binding rejection before display; duplicate event, same-tag replacement, and a
-  new approval after clearing; UUID/public-ID equivalence; unsupported data.
-- Native approval and exact owner-item authoritative reads; resolved, inaccessible,
-  offline, and malformed responses; `clearSessions` preserving unrelated notes.
-- Notification permission denied, individual channel blocked, global notifications
-  blocked, missing Firebase configuration, and restored permission/channel state.
-  Foreground login, reading, approvals, and sending must remain usable.
-- Existing ACTION_VIEW cold entry, pending-login entry, real session/card actions,
-  another device's resolution signal, foreground recovery, and account isolation.
+It runs the 38 notification unit cases in both app variants: registration and
+binding generations, installation identity, the once-per-installation permission
+claim, payload parsing against the shared fixture, authority reads for every
+alert kind, sync/clear semantics, worker expiry, channels, content intents and
+dedup/replacement under Robolectric. They establish logic and wire shape only.
+
+Device checks use the debug APK and an instrumentation APK whose runner swaps in
+a controlled token source (the debug build has no Firebase configuration, so the
+production app keeps push disabled):
+
+```sh
+bash src/android/gradlew -p src/android --max-workers=2 :app:assembleDebug :app:assembleDebugAndroidTest \
+  -PorbitTestRunner=io.orbitd.android.push.PushTestRunner
+bash src/android/scripts/push-device-test.sh APP_APK TEST_APK NEW_EVIDENCE_DIR 36
+```
+
+Messages are contract-shaped data handed to `PushController.receive`, never an
+FCM delivery. HTTP goes to controlled fixtures: an in-process MockWebServer for
+the warm suite and `push-cold-fixture.py` (A08's cards fixture plus the push
+registration contract, reached through `adb reverse`) for the multi-process
+phases. The script holds `ui.lock` for the whole run, refuses a serial that is
+not an emulator, reinstalls both APKs, records device/APK/input hashes, and
+restores what it changed (night mode, font scale, reverse mapping, fixture).
+`A10_PHASES`, `A10_TESTS`, `A10_NIGHT` and `A10_FONT_SCALE` select a subset or an
+appearance pass; `A10_OLD_APK` names the earlier release for the upgrade phase. Every
+phase records PASS/FAIL/NOT_RUN in `result.txt`.
+
+| Phase | Processes | What it exercises |
+| --- | --- | --- |
+| `upgrade` | `A10_OLD_APK`, then `adb install -r` | The earlier release creates `orbit.needs-you` at DEFAULT; after the in-place upgrade `push-channel-upgrade.py` reads `dumpsys notification` and requires that channel deleted and `orbit.needs-you.alert` at HIGH. |
+| `suite` (`PushDeviceTest`) | one instrumented process | Background alert → real tray entry → real touch → reader card → approval endpoint; duplicate event and same-tag replacement; foreground alert deduplicated, then another end's resolution clears tray and card through sync and, separately, through foreground REST; a PendingIntent captured before sign-out survives login and Activity recreation; 403/404/503/stale authority before display and on tap; channel deleted (plus the app-op on API 29–32) while approval keeps working; account switch rejects the old binding, keeps the installation and unregisters; foreground notice opens an unfocused session; a foreground agent message and an unfocused approval stay in the tray silently (also after Home) while the focused session's approval is left out; WorkManager retry after 503 and old-binding rejection after an account switch. |
+| `cold` (`ColdPushDeviceTest`) | three processes | Sign in and post in the background; force-stop; a new process whose first Activity is the notification's ACTION_VIEW restores the login, binding and event history, shows the card and approves; then a signed-out new process keeps the route through the login screen and opens it after authentication. |
+| `tray` | launcher start + `--no-restart` attachment + SystemUI start | The production builder posts an entry in a launcher-started process, which is killed; a host tap on the surviving entry starts a new, uninstrumented process that restores the login and opens the session card; the host taps Allow and the fixture records the decision. |
+| `permission` (API 33+) | fresh app data | The first signed-in foreground shows the system request once; "Don't allow" leaves no tray entry; approval still works; a second sign-in does not ask again. |
+| `storage` (API 33+) | fresh app data, push directory replaced by a file | Signing in still shows the request; after "Don't allow" the failed mark write leaves the app running. |
+
+Platform limits seen on the emulator: finishing an instrumentation force-stops
+the target, which cancels its notifications, so the tray phase attaches to a
+process the launcher started (`am instrument --no-restart` attaches; it does
+not start one). On API 33+ the app-op no longer turns notifications off; the
+runtime permission does, and revoking it is done between processes. Under heavy
+host load the emulator stalled system-wide once (an `onStopJob` ANR during the
+worker case, with system_server itself delayed by tens of seconds); such a run is
+repeated rather than counted.
+
+The A02 AVDs use Google APIs system images, which carry Google Play services but
+no Play Store; FCM needs only the former. `push-fcm-emulator.sh` (export the five
+`ORBIT_ANDROID_FIREBASE_*` values first) builds the release package with a
+throwaway key and runs `FcmTokenDeviceTest` with the default runner, so the
+production `FirebaseTokenSource` asks Google for the token. Sign-in registers
+Google's token with the fixture, which keeps only a hash prefix, length and shape.
+Deleting and requesting the token again at Google delivers a new one to
+`onNewToken`, which registers again under a new binding. A new process restores
+that binding, and sign-out unregisters it. Between the two test methods the script
+hands the stopped app one FCM-shaped data message through Firebase's own receiver,
+as root in place of Google Play services, and checks the tray entry and the
+`OrbitPush` receipt line. No message travels through FCM in this check: sending
+needs the backend's service account, which only production holds.
+
+`push-fcm-production.sh LOGIN_ENV DIR` is the delivery half, run since production
+sends FCM (2026-10-25). The release package signs in to orbitd.io with the account in
+`LOGIN_ENV` (`ORBIT_LOGIN_EMAIL`, `ORBIT_LOGIN_PASSWORD`), through
+`RealPushDeviceTest`. The file is pushed to the device, read inside the test and
+removed right after sign-in. The run registers Google's token with production. Then,
+acting as the Orbit session that runs it, the script has the server send real pushes
+through the orbit CLI:
+- with Orbit stopped in the background, an entry is opened from the tray;
+- with the process killed (not force-stopped), an entry is swiped away;
+- with Orbit on screen, an entry joins the silent group;
+- a scratch session's approval arrives as a needs-you entry, and ending that session
+  makes the server's sync push remove it. The Orbit session that runs the script
+  starts and ends the scratch session with its own tools, because a runner-hosted job
+  does not carry orchestration, and the two sides hand over through files.
+
+The run records the server's notify answers, the receipt lines, Orbit's event-log
+lines and screenshots, and signs out (unregisters) at the end. Every notify and the
+approval also alert the account's other devices. A loopback server
+(`http://127.0.0.1:PORT`) runs the fixture instead: sign-in, registration and
+sign-out only.
 
 Any emulator operation must hold `flock /var/lib/orbit/android/ui.lock`
-exclusively for the whole device flow. If unavailable, continue non-device work.
-Use production app/HTTP/navigation paths with a controlled server; injected
-messages are transport substitutes only. Retain the APK/source/server/fixture
-identities and failures. Restore settings, stop owned fixtures, remove owned adb
-reverse mappings, and release the lock when finished. A fixture assertion or
-shell notification injection is never an FCM receipt.
+exclusively for the whole device flow and name `emulator-5554` (or the API
+29–35 AVD the script starts) explicitly; a physical phone on the same adb server
+is scheduled by the coordinator. A fixture assertion or injected message is
+never an FCM receipt.
 
 ## Remaining real-device evidence and platform limits
 
-Current resources do not include the target physical phones, matching live FCM
-client/server credentials, deployment role accounts, or an installed iOS build
-identity. The following steps remain even if every local check succeeds:
+Since 2026-10-17 the Firebase client configuration for `io.orbitd.android` exists
+on the build host and in `android-internal`, and the coordinator reports the
+production FCM credentials configured on 2026-10-10. The target physical phones,
+deployment role accounts and an installed iOS build identity are still not
+available to this task. On 2026-10-07 the account owner asked for emulator testing
+with screenshots first and deferred the physical phone, which the coordinator
+schedules. The following steps remain even if every local check succeeds:
 
 1. Integrate the exact A10 client commit with the fixed backend/shared inputs and
    A14 release isolation. Record each source SHA, APK hash/package/build/signature,
@@ -261,6 +374,16 @@ identity. The following steps remain even if every local check succeeds:
    P95 ≤10 seconds, and tap-to-actionable P95 ≤3 seconds. Record provider acceptance,
    device receipt, visible result, and tap/action timestamps separately with clock
    uncertainty. A foreground-suppressed system banner needs actual in-app evidence.
+   Device sources: the `OrbitPush` receipt line (`adb logcat -v epoch -s OrbitPush`:
+   eventId, the server's `sentAt`, FCM's `sentTime`, priorities), the system event
+   log (`adb logcat -b events`: `notification_enqueue`, `notification_canceled`,
+   `notification_clicked`, `wm_on_resume_called`) and a frame-timestamped screen
+   recording (`screenrecord --bugreport`), mapped to one collector time line with
+   the offset bounds of a01-errata-v2 §6. `scripts/push-p07-collect.sh SERIAL DIR`
+   captures all of these beside a scheduled phone session (it never installs, taps
+   or changes settings; clock samples every 15 seconds; Orbit's lines only) until
+   `DIR/stop` exists. Server clock marks come from records the server timestamps,
+   with the collector's time before and after each request.
 5. Resolve an approval on another actual client; after sync and independently after
    foreground recovery, record notification removal and refreshed in-app pending
    state within the required ≤3 seconds. Exercise token refresh, account/server

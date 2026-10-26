@@ -2,6 +2,7 @@ package io.orbitd.android.push
 
 import android.app.Activity
 import android.app.Application
+import android.os.Build
 import android.os.Bundle
 import io.orbitd.android.core.auth.AuthSession
 import io.orbitd.android.core.auth.AuthState
@@ -21,6 +22,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import io.orbitd.android.navigation.ObjectId
 
@@ -36,10 +38,27 @@ class PushController(
     private val mutableNotice = MutableStateFlow<PushMessage?>(null)
     val notice = mutableNotice.asStateFlow()
     fun dismissNotice() { mutableNotice.value = null }
-    val registration = PushRegistration(session, PushStorage(File(app.noBackupFilesDir, "push")), app.packageName, {
+    private val storage = PushStorage(File(app.noBackupFilesDir, "push"))
+    val registration = PushRegistration(session, storage, app.packageName, {
         notifications.clear(); dismissNotice()
     })
     val configured: Boolean get() = tokenSource.available
+    val signedIn = session.state.map { it is AuthState.SignedIn }.distinctUntilChanged()
+
+    /** iOS asks at launch (NotificationManager.configure). Android 13+ shows nothing until asked, so
+     * a configured build asks once per installation, in context: the first signed-in foreground.
+     * A refusal is final here; asking again is the user's choice from NotificationSettings.
+     * Main-thread safe: nothing is written until the system request has been answered. */
+    fun claimPermissionPrompt(): Boolean = configured && Build.VERSION.SDK_INT >= 33 &&
+        session.state.value is AuthState.SignedIn && !notifications.permitted() && !storage.permissionPrompted() &&
+        permissionRequest.compareAndSet(false, true)
+    private val permissionRequest = AtomicBoolean()
+
+    /** The system request was shown and answered. A failed write only means asking once more later. */
+    fun permissionPromptFinished() {
+        scope.launch(Dispatchers.IO) { safely { storage.setPermissionPrompted() } }
+        requestReconcile()
+    }
     private val work = Mutex()
     private val refresh = Channel<Unit>(Channel.CONFLATED)
     @Volatile private var foreground = false
@@ -117,8 +136,15 @@ class PushController(
             when (result) {
                 PushCheck.ACTIVE -> {
                     if (foreground) {
-                        if (message.payload.kind == "approval" && !ObjectId.same(message.payload.sessionId, realtime.state.value.session?.id)) {
-                            mutableNotice.value = message
+                        // iOS lists every foreground alert in Notification Center without a banner. Here
+                        // it stays in the tray silently; only the focused session's own approval, whose
+                        // card is on screen, is left out. An approval elsewhere also gets the in-app notice.
+                        val approval = message.payload.kind == "approval"
+                        val focused = message.payload.sessionId != null &&
+                            ObjectId.same(message.payload.sessionId, realtime.state.value.session?.id)
+                        if (!(approval && focused)) {
+                            notifications.show(message, data, silent = true)
+                            if (approval) mutableNotice.value = message
                         }
                         notifications.remember(message)
                     } else if (notifications.show(message, data)) notifications.remember(message)

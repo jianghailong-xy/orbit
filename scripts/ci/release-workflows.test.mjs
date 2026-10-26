@@ -284,7 +284,7 @@ test('Android signing is confined to the android-build job and its one build ste
   const publish = job('android-publish');
   const signing = step('android-build', 'Build and verify signed APK');
   const secrets = (source) => source.match(/\$\{\{ secrets\.[A-Z_0-9]+ \}\}/g) ?? [];
-  const androidRefs = /secrets\.ANDROID_|vars\.ANDROID_|environment:\s*android-internal/;
+  const androidRefs = /secrets\.ANDROID_|vars\.(ORBIT_)?ANDROID_|environment:\s*android-internal/;
   assert.match(build, /^    environment: android-internal$/m);
   assert.equal([...release.matchAll(/^\s+environment:/gm)].length, 1, 'no other job names an environment');
   assert.deepEqual(secrets(signing).sort(), ['ANDROID_KEYSTORE_BASE64', 'ANDROID_STORE_PASSWORD', 'ANDROID_KEY_ALIAS',
@@ -296,7 +296,7 @@ test('Android signing is confined to the android-build job and its one build ste
   assert.match(signing, /^          ORBIT_ANDROID_SIGNING_PURPOSE: release$/m);
   // Firebase client values are public configuration: variables, never secrets, never a service account.
   for (const name of ['APP_ID', 'API_KEY', 'PROJECT_ID', 'SENDER_ID', 'ANDROID_PACKAGE']) {
-    assert.match(signing, new RegExp(`^          ORBIT_ANDROID_FIREBASE_${name}: \\$\\{\\{ vars\\.ANDROID_FIREBASE_${name} \\}\\}$`, 'm'));
+    assert.match(signing, new RegExp(`^          ORBIT_ANDROID_FIREBASE_${name}: \\$\\{\\{ vars\\.ORBIT_ANDROID_FIREBASE_${name} \\}\\}$`, 'm'));
   }
   assert.doesNotMatch(build, /service[_-]?account|GOOGLE_APPLICATION_CREDENTIALS|FIREBASE_TOKEN|private_key/i);
   // The keystore exists only as a private temporary file, removed on exit and again in an always() step.
