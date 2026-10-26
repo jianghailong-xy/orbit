@@ -505,30 +505,51 @@ func (t *Transport) pinSessionSource(ctx context.Context, sessionID string, req 
 	return &r, nil
 }
 
+// postEvents delivers a batch of a session's events and returns once they are stored: over HTTPS, as every runner
+// always has, or, while the runner link is in use, on the session's event stream there (link_events.go). A batch HTTPS
+// answers UPGRADE_REQUIRED goes over the link, and one the link gives back once it is out of use goes over HTTPS.
+// A session's supervisor does not come through here: it hands its events to its stream itself (session.go).
 func (t *Transport) postEvents(ctx context.Context, sessionID string, batch RunEventBatch) error {
-	batch.LeaseOwner = t.leaseOwner
-	if t.link == nil {
-		return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/events", batch, nil, 35*time.Second)
+	for {
+		if t.link != nil && t.link.inUse() {
+			err := t.link.events.deliver(ctx, sessionID, batch.Events)
+			if !errors.Is(err, errLinkEventsOffLink) {
+				return err
+			}
+		}
+		err := t.postEventsHTTPS(ctx, sessionID, batch)
+		if !errors.Is(err, errLinkEventsMoved) {
+			return err
+		}
 	}
-	// What a Hello resumes the session from, and what its turn completion waits for (link_mode.go).
+}
+
+// postEventsHTTPS posts a batch of a session's events over HTTPS. On the daemon's transport it also records what a Hello
+// resumes the session from and what its turn completion waits for (link_mode.go), and that the session's event stream
+// on the link need not send these again. Answered UPGRADE_REQUIRED, it puts the link in use and returns
+// errLinkEventsMoved: the control plane takes the session's events over the link now, where they go instead.
+func (t *Transport) postEventsHTTPS(ctx context.Context, sessionID string, batch RunEventBatch) error {
+	batch.LeaseOwner = t.leaseOwner
+	path := "/runner/sessions/" + sessionID + "/events"
+	if t.link == nil {
+		return t.do(ctx, "POST", path, batch, nil, 35*time.Second)
+	}
 	t.link.sentEvents(sessionID, batch.Events)
-	if !t.link.inUse() {
-		err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/events", batch, nil, 35*time.Second)
-		if err == nil {
-			t.link.storedEvents(sessionID, batch.Events)
+	err := t.doHTTP(ctx, t.client, "POST", path, batch, nil, 35*time.Second, nil)
+	if linkUpgradeRequired(err) {
+		t.link.upgradeRequired("POST " + path)
+		if t.link.inUse() {
+			return errLinkEventsMoved
 		}
 		return err
 	}
-	// Over the link a batch's seqs must count up by one (link-events.ts), and two emitters can buffer
-	// theirs out of order: the batch goes as its runs of consecutive seqs, in seq order.
-	for _, run := range linkEventRuns(batch.Events) {
-		part := RunEventBatch{LeaseOwner: batch.LeaseOwner, Events: run}
-		if err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/events", part, nil, 35*time.Second); err != nil {
-			return err
+	if err == nil && len(batch.Events) > 0 {
+		t.link.storedEvents(sessionID, batch.Events)
+		if s := t.link.events.stream(sessionID); s != nil {
+			s.storedOverHTTPS(batch.Events[0].Seq, batch.Events[len(batch.Events)-1].Seq)
 		}
-		t.link.storedEvents(sessionID, run)
 	}
-	return nil
+	return err
 }
 
 // finalizeRun finalizes the current run server-side and reports back whether the isolated worktree

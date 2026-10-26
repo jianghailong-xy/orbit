@@ -40,7 +40,7 @@ import {
   reportedLandingAuthority,
 } from '../projects/task-checkpoint.service';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, Prisma, RunStatus, TaskStatus, type Runner } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
@@ -354,10 +354,27 @@ import {
   normalizeCompletionEvidence,
   type CompletionCriterionSnapshotInput,
 } from '../tasks/task-completion-evidence.service';
-import { RunnerAuthGuard } from './runner-auth.guard';
+import { AdmitsLinkCallItself, readAdmittedLinkRunner, RunnerAuthGuard, runnerLinkTokenRevoked } from './runner-auth.guard';
 import { CurrentRunnerLink, type RunnerLinkContext } from './runner-link-call';
 import { RunnerLinkRequiredInterceptor, StaysOnHttps } from './runner-link-required';
-import { readRunnerLinkHints, type RunnerLinkHints } from './runner-link-hints';
+import { readRunnerLinkHints, runnerLinkHintsOf, type RunnerLinkHints } from './runner-link-hints';
+import {
+  heartbeatAnswerHandsOut,
+  LinkReportUnwritable,
+  linkBeatDigests,
+  linkBeatVerdict,
+  quietHeartbeatAnswer,
+  readFactsHash,
+  readLinkBeat,
+  readLinkReconcilePending,
+  reconcileHashOf,
+  recordLinkReconcile,
+  RUNNER_ROW_FACTS,
+  writeLinkBeatReports,
+  type HeartbeatFactKind,
+  type LinkBeatDigests,
+  type LinkBeatRow,
+} from './link-heartbeat';
 import { RunnerReleaseFeed } from './runner-release-feed';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { ListEventsService } from '../task-lists/list-events.service';
@@ -412,6 +429,7 @@ import {
 import { providerDispatchWhereOn } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
 import { CURSOR_KEY_CHECK_V1, cursorKeyCheckRelay } from '../providers/cursor-key-check-relay';
+import { accountDisabled } from '../auth/disabled-accounts';
 import {
   recordedEngine,
   SESSION_ENGINE_UNKNOWN_MESSAGE,
@@ -419,7 +437,7 @@ import {
   type SessionEngineFacts,
 } from '../providers/session-engine';
 import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
-import { reauthorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
+import { authorizeManagedRunnerInstance, reauthorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import {
   managedRunnerHeartbeat,
@@ -1314,7 +1332,9 @@ export class RunnerApiController {
     return { ok: true };
   }
 
+  // A beat the link gateway forwarded is admitted in the statement that answers it (linkHeartbeat).
   @UseGuards(RunnerAuthGuard)
+  @AdmitsLinkCallItself()
   @Post('heartbeat')
   async heartbeat(
     // `lastHeartbeatAt` is the runner's own record of its beats, as the guard read the row: what
@@ -1328,6 +1348,129 @@ export class RunnerApiController {
     @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
     /** Set when the link gateway forwarded this beat (runner-link-call.ts): presence records it as LINK. */
     @CurrentRunnerLink() link?: RunnerLinkContext,
+    /** The headers a process declares, as the link gateway forwards them from its Hello. */
+    @Headers() headers?: Record<string, string | string[] | undefined>,
+  ): Promise<RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints }> {
+    if (link?.admission) {
+      return this.linkHeartbeat(runner.id, dto, { capabilities, providerHeader, osHeader, all: headers ?? {} }, link, link.admission);
+    }
+    return this.reconcileHeartbeat(runner, dto, capabilities, providerHeader, osHeader, managedInstance, link);
+  }
+
+  /**
+   * A heartbeat the link gateway forwarded, which RunnerAuthGuard left to this route to admit (AdmitsLinkCallItself):
+   * admitted, recorded in runner_presence and read in one statement, then answered from that statement unless
+   * something says the beat must reconcile in full (link-heartbeat.ts). The body's own refusals come first, as the
+   * full reconcile makes them, so a refused body writes nothing.
+   */
+  private async linkHeartbeat(
+    runnerId: string,
+    dto: RunnerHeartbeatRequest,
+    headers: { capabilities?: string | string[]; providerHeader?: string; osHeader?: string; all: Record<string, string | string[] | undefined> },
+    link: RunnerLinkContext,
+    admission: NonNullable<RunnerLinkContext['admission']>,
+  ): Promise<RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints }> {
+    const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
+    if ((dto?.supervisedSessionIds?.length ?? 0) > 10_000) {
+      throw new BadRequestException('too many supervised session IDs');
+    }
+    const supervised = leaseOwner
+      ? [...new Set((dto?.supervisedSessionIds ?? []).map((id) => parseSupervisedSessionId(id)))]
+      : [];
+    const named = [
+      ...new Set(
+        [
+          ...(dto?.supervisedSessionIds ?? []),
+          ...(dto?.sessions ?? []).map((s) => s?.sessionId),
+          ...(dto?.expiredCommitErrors ?? []).map((e) => e?.sessionId),
+        ]
+          .filter((id): id is string => typeof id === 'string' && SESSION_ID_RE.test(id))
+          .map((id) => id.toLowerCase()),
+      ),
+    ];
+    const digests = linkBeatDigests(dto, { capabilities: headers.capabilities, providers: headers.providerHeader, os: headers.osHeader });
+    let row: LinkBeatRow | null;
+    try {
+      row = await readLinkBeat(this.prisma, {
+        runnerId,
+        ownerId: admission.ownerId,
+        credential: admission.credential,
+        processId: leaseOwner,
+        gatewayId: link.gatewayId ?? null,
+        namedSessionIds: named,
+        supervisedSessionIds: supervised,
+        planUsageDigest: digests.facts.planUsage ?? null,
+      });
+    } catch (error) {
+      // Nothing recorded this beat: the reaper must not read the silence it leaves as the runner's.
+      this.presence?.beatNotRecorded(error);
+      throw error;
+    }
+    if (!row || !row.credentialHeld) throw runnerLinkTokenRevoked();
+    if (row.ownerDisabled) throw accountDisabled();
+    if (row.managed) {
+      // A managed runner is admitted with its instance, as RunnerAuthGuard admits it, and reconciles in full.
+      const admitted = await readAdmittedLinkRunner(this.prisma, { runnerId, credential: admission.credential });
+      const instance = await authorizeManagedRunnerInstance(this.prisma, admitted.id, headers.all);
+      return this.reconcileHeartbeat(admitted, dto, headers.capabilities, headers.providerHeader, headers.osHeader, instance, link);
+    }
+    if (row.landingNamed) assertEngineSessionRow({ sessionKind: 'LANDING' });
+    let verdict = linkBeatVerdict(runnerId, row, digests, supervised.length);
+    if (verdict.answer === 'REPORT') {
+      try {
+        await writeLinkBeatReports(this.prisma, {
+          runnerId,
+          leaseOwner,
+          dto,
+          reports: verdict.reports,
+          digests,
+          storedFacts: readFactsHash(row.factsHash) ?? {},
+          storedPlanUsage: row.planUsage,
+          now: new Date(),
+        });
+      } catch (error) {
+        if (!(error instanceof LinkReportUnwritable)) throw error;
+        // What one statement cannot write, the full reconcile writes, and refuses, as an HTTPS beat does.
+        verdict = { answer: 'FULL', reason: 'INPUTS' };
+      }
+    }
+    if (verdict.answer !== 'FULL') {
+      const cursorKeyChecks = runnerSupportsCapability(headers.capabilities, CURSOR_KEY_CHECK_V1)
+        ? cursorKeyCheckRelay.take(runnerId)
+        : [];
+      return quietHeartbeatAnswer(row, { cursorKeyChecks, linkHints: this.linkHintsOf(runnerId, row, supervised) });
+    }
+    // The full reconcile reads the runner row the guard would have read; the beat statement admitted it.
+    const current = await this.prisma.runner.findUnique({ where: { id: runnerId } });
+    if (!current) throw runnerLinkTokenRevoked();
+    return this.reconcileHeartbeat(current, dto, headers.capabilities, headers.providerHeader, headers.osHeader, undefined, link, {
+      row,
+      digests,
+    });
+  }
+
+  /** What a link heartbeat's answer says waits for the runner: the beat statement's HintState, and this process's own. */
+  private linkHintsOf(runnerId: string, row: LinkBeatRow, supervised: readonly string[]): RunnerLinkHints {
+    const watchers = this.realtime.linkWatchersOf(supervised);
+    const release = this.releases?.assignedTo(runnerId);
+    return { ...runnerLinkHintsOf(row), ...(watchers ? { watchers } : {}), ...(release ? { release } : {}) };
+  }
+
+  /**
+   * The full reconcile: what every HTTPS heartbeat does, and what a link heartbeat does when linkHeartbeat says so.
+   * With `linkBeat` the beat statement has already admitted the caller, refused a landing session and written its
+   * presence row, so this does neither again; it leaves the runner row as it is when nothing written there changed
+   * (only its own record of the beat, when that is due); and it records what it covered (recordLinkReconcile).
+   */
+  private async reconcileHeartbeat(
+    runner: { id: string; version: string | null; lastHeartbeatAt?: Date | null },
+    dto: RunnerHeartbeatRequest,
+    capabilities?: string | string[],
+    providerHeader?: string,
+    osHeader?: string,
+    managedInstance?: ManagedRunnerInstance,
+    link?: RunnerLinkContext,
+    linkBeat?: { row: LinkBeatRow; digests: LinkBeatDigests },
   ): Promise<RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints }> {
     const heartbeatLeaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     // Idle sleep (managed-runners/managed-runner-sleep.ts), only for an authorized managed instance
@@ -1353,11 +1496,15 @@ export class RunnerApiController {
     // runner row and any session row is written, so a body naming one changes nothing at all. The
     // raw field is read rather than the parsed one: a heartbeat without a lease owner ignores the
     // field downstream, but naming a landing in it is still refused.
-    await this.assertNoLandingSessionNamed([
-      ...(dto?.supervisedSessionIds ?? []),
-      ...(dto?.sessions ?? []).map((s) => s?.sessionId),
-      ...(dto?.expiredCommitErrors ?? []).map((e) => e?.sessionId),
-    ], (runner as { ownerId?: string }).ownerId);
+    if (!linkBeat) {
+      await this.assertNoLandingSessionNamed([
+        ...(dto?.supervisedSessionIds ?? []),
+        ...(dto?.sessions ?? []).map((s) => s?.sessionId),
+        ...(dto?.expiredCommitErrors ?? []).map((e) => e?.sessionId),
+      ], (runner as { ownerId?: string }).ownerId);
+    }
+    // The reports a link beat's full reconcile could not write, which it leaves unrecorded for the next beat to write.
+    const unwritten = new Set<HeartbeatFactKind>();
     const reportedEngines = dto?.engines == null ? null : (sanitizeRunnerEngines(dto.engines) ?? []);
     // Whether each engine is signed in, as the runner list says it: an engine whose Default the owner
     // removed from Orbit is signed in or out by the accounts that remain (usedRunnerEngines), so the
@@ -1384,11 +1531,21 @@ export class RunnerApiController {
     // follows the row, so a beat whose report the database refused is not heard, as when the beat was
     // one column of that one write. Either failing is told to the presence service before the error
     // reaches the runner: the reaper must not read the silence it leaves as the runner's.
+    // A link beat's presence row was written by the beat statement before any of this: its silence is not in question.
     const beatLost = (error: unknown): never => {
-      this.presence?.beatNotRecorded(error);
+      if (!linkBeat) this.presence?.beatNotRecorded(error);
       throw error;
     };
-    const updated = await this.prisma.runner.update({
+    // A link beat's full reconcile leaves the runner row as it is when nothing the heartbeat writes there changed
+    // since the last write: only the runner's own record of its beats, once that is due (link-heartbeat.ts).
+    const storedFacts = linkBeat ? readFactsHash(linkBeat.row.factsHash) : null;
+    const runnerRowUnchanged = !!linkBeat && !!storedFacts && !managedSleepOn
+      && RUNNER_ROW_FACTS.every((kind) => storedFacts[kind] === linkBeat.digests.facts[kind]);
+    const updated = runnerRowUnchanged
+      ? durableBeatDue(runner.lastHeartbeatAt, beatAt)
+        ? await this.prisma.runner.update({ where: { id: runner.id }, data: { lastHeartbeatAt: beatAt } }).catch(beatLost)
+        : (runner as Runner)
+      : await this.prisma.runner.update({
       where: { id: runner.id },
       data: {
         status: dto?.status ?? 'ONLINE',
@@ -1462,14 +1619,17 @@ export class RunnerApiController {
     }).catch(beatLost);
     // Heard over HTTPS, or forwarded by the link gateway: either way this beat sent its facts in full
     // above, so none of the hashes a link heartbeat may carry instead. A forwarded beat names the gateway
-    // node holding the connection (X-Orbit-Link-Gateway-Id).
-    await recordRunnerBeat(this.prisma, {
-      runnerId: runner.id,
-      processId: heartbeatLeaseOwner,
-      gatewayId: link?.gatewayId ?? null,
-      linkState: link ? 'LINK' : 'HTTP',
-      at: beatAt,
-    }).catch(beatLost);
+    // node holding the connection (X-Orbit-Link-Gateway-Id). A link beat the beat statement recorded is
+    // not recorded twice.
+    if (!linkBeat) {
+      await recordRunnerBeat(this.prisma, {
+        runnerId: runner.id,
+        processId: heartbeatLeaseOwner,
+        gatewayId: link?.gatewayId ?? null,
+        linkState: link ? 'LINK' : 'HTTP',
+        at: beatAt,
+      }).catch(beatLost);
+    }
     // Whether this instance's mapping is draining to sleep, and what it is told about it. Advisory
     // like the relays below: a read that fails hands out this beat's work as usual, and the instance,
     // busy, then declines the sleep it would have been asked for.
@@ -1489,7 +1649,10 @@ export class RunnerApiController {
     // compare-and-set, so the Codex reset block in it only moves forwards: a block relayed by another
     // process, an older read, an old process or a late heartbeat never takes a newer one back.
     let planUsageStored = true;
-    if (dto?.planUsage != null) {
+    // A link beat's full reconcile leaves a plan usage the runner reported unchanged where it is: its compare-and-set
+    // would rewrite the runner row with the value it holds (link-heartbeat.ts).
+    const planUsageUnchanged = !!linkBeat && !!storedFacts && storedFacts.planUsage === linkBeat.digests.facts.planUsage;
+    if (dto?.planUsage != null && !planUsageUnchanged) {
       planUsageStored = false;
       try {
         planUsageStored = await storeHeartbeatPlanUsage(this.prisma, runner.id, dto.planUsage, heartbeatLeaseOwner);
@@ -1500,6 +1663,7 @@ export class RunnerApiController {
         // Advisory telemetry, like the live diffs below: never fail the heartbeat for it.
         this.logger.warn(`runner ${runner.id}: planUsage not stored (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
       }
+      if (!planUsageStored) unwritten.add('planUsage');
     }
     // Codex rate-limit reset (docs/codex-rate-limit-reset-contract.md §6.2, §6.5): this runner's active
     // operations expired, settled, claimed or redelivered for the process THIS heartbeat speaks for —
@@ -1663,6 +1827,7 @@ export class RunnerApiController {
         );
       } catch {
         // Next heartbeat retries; the status bar tolerates a one-cycle lag.
+        unwritten.add('sessions');
       }
     }
     // Commits this runner reported as failed that no longer fail for the reason they gave: the
@@ -1695,6 +1860,7 @@ export class RunnerApiController {
         );
       } catch {
         // Advisory: the error stays until the next click, as it always did.
+        unwritten.add('expiredCommitErrors');
       }
     }
     // Record what the runner found at each workspace's working directory, so the config form can
@@ -1739,6 +1905,7 @@ export class RunnerApiController {
         );
       } catch {
         // Advisory telemetry — never fail the heartbeat (that would read as offline).
+        unwritten.add('agentDirProbes');
       }
     }
     let cancelSessionIds: string[] = [];
@@ -1820,7 +1987,10 @@ export class RunnerApiController {
     // the gateway states in HeartbeatAck.hints, and with the release the runner is assigned, which it states in
     // HeartbeatAck.release. Read last, and only for a link call; a read that fails leaves it out, and the gateway then
     // states nothing rather than that nothing waits.
-    const linkHints = link
+    // A link beat's full reconcile reuses what its beat statement read of them.
+    const linkHints = linkBeat
+      ? this.linkHintsOf(runner.id, linkBeat.row, supervisedSessionIds)
+      : link
       ? await readRunnerLinkHints(this.prisma, runner.id).then(
           (waiting): RunnerLinkHints => {
             const watchers = this.realtime.linkWatchersOf(supervisedSessionIds);
@@ -1834,7 +2004,7 @@ export class RunnerApiController {
     // syncs its self-gate to a UI/API change without needing a restart. The free-space floor
     // rides along for the same reason: the runner reclaims its own session checkouts under disk
     // pressure, and that has to be the floor the owner set here, not a second number.
-    return {
+    const answer: RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } = {
       cancelSessionIds,
       leaseLostSessionIds: ownershipLostSessionIds,
       maxConcurrent: updated.maxConcurrent,
@@ -1866,6 +2036,35 @@ export class RunnerApiController {
       // Only on a link call, which the gateway takes it out of: an HTTPS response keeps its shape.
       ...(linkHints ? { linkHints } : {}),
     };
+    if (linkBeat) await this.recordLinkBeatReconcile(runner.id, linkBeat, answer, unwritten);
+    return answer;
+  }
+
+  /**
+   * What a link beat's full reconcile covered, in its presence row (recordLinkReconcile): the digests of the reports
+   * it wrote, and — when it handed out nothing and left nothing in flight (readLinkReconcilePending) — the delivery
+   * inputs and change count it reconciled against, which let the next beats answer from the row. A report it could not
+   * write is left out, so the next beat writes it again. A record that cannot be written leaves the last one standing,
+   * and the next beat compares with that: the answer has gone out either way.
+   */
+  private async recordLinkBeatReconcile(
+    runnerId: string,
+    linkBeat: { row: LinkBeatRow; digests: LinkBeatDigests },
+    answer: RunnerHeartbeatResponse,
+    unwritten: ReadonlySet<HeartbeatFactKind>,
+  ): Promise<void> {
+    try {
+      const pending = unwritten.size > 0 || heartbeatAnswerHandsOut(answer) || (await readLinkReconcilePending(this.prisma, runnerId));
+      const facts = { ...linkBeat.digests.facts };
+      for (const kind of unwritten) delete facts[kind];
+      await recordLinkReconcile(this.prisma, {
+        runnerId,
+        facts,
+        reconcileHash: pending ? null : reconcileHashOf(linkBeat.digests.delivery, linkBeat.row.changes ?? '0'),
+      });
+    } catch (error) {
+      this.logger.warn(`runner ${runnerId}: this link heartbeat's reconcile was not recorded; the next one reconciles again (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
   }
 
   /** The queue, or the reason a request about one cannot be answered without it. */
@@ -6482,6 +6681,9 @@ export class RunnerApiController {
       // Only announce the terminal status if this call actually finalized the session
       // (a late/duplicate turn-complete for an already-ended session is a no-op).
       if (finalized.applied) {
+        // The failure also asked the runner to tear the process down (cancelRequestedAt), which its heartbeat
+        // hands over: over the runner link, the next one is told so.
+        this.realtime.markRunnerChanged(runner.id);
         this.realtime.publish(sessionId, {
           seq: Number.MAX_SAFE_INTEGER,
           type: RunEventType.STATUS,

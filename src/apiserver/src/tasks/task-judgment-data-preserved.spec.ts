@@ -2504,7 +2504,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or type is created, replaced or dropped, so it is not another writer of the DONE fence and names
       // none of the six preserved objects. No INSERT, UPDATE or DELETE: no row means the switch is off,
       // and the row is written only when an administrator switches it. Every statement can run twice.
-      '0446_runner_link_switch'],
+      '0446_runner_link_switch',
+      // What a link heartbeat needs to answer from runner_presence alone (0447, docs/runner-link-design.md §5.7,
+      // §6.5): two columns on the UNLOGGED `runner_presence` of 0444, `changes` (BIGINT NOT NULL DEFAULT 0) and
+      // `reconciled_at` (nullable TIMESTAMP(3)), each added with IF NOT EXISTS. Read against every claim above:
+      // `runner_presence` is none of the preserved relations, and no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion row are out of
+      // its reach. No function, trigger or type is created, replaced or dropped, so it names none of the six preserved
+      // objects and is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: a constant default rewrites
+      // nothing, and every row reads 0 and NULL until a heartbeat writes it.
+      '0447_runner_presence_reconcile'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

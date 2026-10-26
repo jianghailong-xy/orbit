@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -50,6 +51,9 @@ type fakeWorkGateway struct {
 	ackRelease *linkpb.AssignedRelease
 	// refuse, when it says so, refuses an upgrade with that status, body and Retry-After.
 	refuse func(r *http.Request) (status int, body, retryAfter string)
+	// ingest, when set, stores the EventBatches and records the LiveBatches its connections carry
+	// (link_events_harness_test.go); unset, they go unanswered.
+	ingest *fakeIngest
 
 	conns    []*fakeWorkConn
 	upgrades []time.Time
@@ -195,6 +199,9 @@ func (g *fakeWorkGateway) serve(w http.ResponseWriter, r *http.Request) {
 	c.hello, c.welcomed = first.GetHello(), time.Now()
 	welcome := &linkpb.Welcome{ProtocolVersion: 1, Mode: g.mode, HeartbeatIntervalMs: 30000,
 		Limits: &linkpb.Limits{MaxFrameBytes: linkMaxFrameBytes}, Hints: &linkpb.HintState{}, ConnectionId: c.id}
+	if g.ingest != nil {
+		g.ingest.welcome(c, welcome)
+	}
 	if g.welcome != nil {
 		g.welcome(c, welcome)
 	}
@@ -227,6 +234,12 @@ func (g *fakeWorkGateway) serve(w http.ResponseWriter, r *http.Request) {
 			g.onBeat(c, body.Heartbeat)
 		case *linkpb.Frame_Rpc:
 			g.onRpc(c, body.Rpc)
+		case *linkpb.Frame_EventBatch:
+			g.onEventBatch(c, body.EventBatch)
+		case *linkpb.Frame_LiveBatch:
+			g.onLiveBatch(c, body.LiveBatch)
+		case *linkpb.Frame_TurnPrefixResponse:
+			g.onTurnPrefixAnswer(c, body.TurnPrefixResponse)
 		}
 	}
 }
@@ -446,6 +459,10 @@ type linkWorkRig struct {
 // newLinkWorkRig builds the rig. Its link is not in use until something puts it there.
 func newLinkWorkRig(t *testing.T) *linkWorkRig {
 	t.Helper()
+	// What the link mode's event streams still hold when it closes goes to the spool under ORBIT_HOME.
+	if os.Getenv("ORBIT_HOME") == "" || !strings.HasPrefix(os.Getenv("ORBIT_HOME"), os.TempDir()) {
+		t.Setenv("ORBIT_HOME", t.TempDir())
+	}
 	g := newFakeWorkGateway(t)
 	cp := newFakeLinkControlPlane(t, g.linkURL())
 	r := &linkWorkRig{cp: cp, g: g, logs: &linkTestLog{}}

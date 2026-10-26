@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -52,12 +53,37 @@ export async function readRunnerLinkHints(
   prisma: Pick<PrismaService, '$queryRaw'>,
   runnerId: string,
 ): Promise<Pick<RunnerLinkHints, 'inboxSessionIds' | 'claim' | 'approvals'>> {
-  const rows = await prisma.$queryRaw<Array<{
-    inboxSessionIds: string[] | null;
-    claim: boolean;
-    approvals: Array<{ sessionId: string; approvalId: string }> | null;
-  }>>`
-    SELECT
+  const rows = await prisma.$queryRaw<RunnerLinkHintColumns[]>`
+    SELECT ${runnerLinkHintsSql(runnerId)}
+  `;
+  return runnerLinkHintsOf(rows[0]);
+}
+
+/** The three columns runnerLinkHintsSql selects, as Prisma reads them. */
+export interface RunnerLinkHintColumns {
+  inboxSessionIds: string[] | null;
+  claim: boolean;
+  approvals: Array<{ sessionId: string; approvalId: string }> | null;
+}
+
+/** What the three columns say, an absent row saying nothing waits. */
+export function runnerLinkHintsOf(
+  row: RunnerLinkHintColumns | undefined,
+): Pick<RunnerLinkHints, 'inboxSessionIds' | 'claim' | 'approvals'> {
+  return {
+    inboxSessionIds: row?.inboxSessionIds ?? [],
+    claim: row?.claim === true,
+    approvals: row?.approvals ?? [],
+  };
+}
+
+/**
+ * The select list readRunnerLinkHints reads: three columns, "inboxSessionIds", "claim" and "approvals". A link
+ * heartbeat answered from runner_presence reads them in its own statement (runner-api/link-heartbeat.ts), so the two
+ * readings are one text.
+ */
+export function runnerLinkHintsSql(runnerId: string): Prisma.Sql {
+  return Prisma.sql`
       (
         SELECT array_agg(waiting.id)
         FROM (
@@ -105,9 +131,4 @@ export async function readRunnerLinkHints(
         ) decided
       ) AS "approvals"
   `;
-  return {
-    inboxSessionIds: rows[0]?.inboxSessionIds ?? [],
-    claim: rows[0]?.claim === true,
-    approvals: rows[0]?.approvals ?? [],
-  };
 }
