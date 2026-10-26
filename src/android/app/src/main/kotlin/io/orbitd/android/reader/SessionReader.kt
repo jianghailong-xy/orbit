@@ -27,6 +27,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -89,6 +90,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val model = remember(handle, route.id, route.recordId) { SessionReaderModel(app.session, handle,
         app.realtime, route.id!!, app.processScope, route.recordId, recordOpened) }
     DisposableEffect(model) { onDispose { model.close() } }
+    // D09 P02: the entry a tap or a link started, marked when its last page and composer are first drawn (LastPageMark).
+    val lastPage = remember(handle, route.id, route.recordId) { LastPageMarks.claim(route) }
     val state by model.state.collectAsState()
     val composer = remember(app, handle, route.id) { app.composer(handle, route.id!!) }
     val composerState by composer.state.collectAsState()
@@ -334,6 +337,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         val otherInputHasKeyboard = WindowInsets.ime.getBottom(LocalDensity.current) > 0 && !composerFocused
         val composerHeight = if (otherInputHasKeyboard) 0.dp else if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
         val compact = maxWidth < 600.dp
+        val view = LocalView.current
+        // What D09 P02 waits for, as this frame composes it: the newest durable row of a window at the live tail (the list's
+        // measure says whether it is on screen), and a composer that takes typing, with room, in a window no dialog covers.
+        if (lastPage != null) {
+            val focused = LocalWindowInfo.current.isWindowFocused
+            val tail = rows.lastOrNull()?.takeIf { !state.denied && state.window.seeded && state.window.newerAfter == null }?.let { it.key to it.newestSeq }
+            val composerUsable = composerState.loaded && composerHeight > 0.dp && focused && !state.denied
+            SideEffect { lastPage.composed(view, tail, state.firstSeed, composerUsable) }
+        }
         // iOS `ConsoleView.foldsChrome`: on a phone, while the composer holds the keyboard the conversation gets the
         // screen. The shell's bar, the needs-you bar, the reconnect line and the cards above the composer fold away together, and come
         // back when the keyboard goes; a wide page keeps all of it.
@@ -387,7 +399,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     // Do not consume the gesture: native selection/links still receive it.
                     // A touch pauses following so a live update cannot move text under a selection.
                     awaitEachGesture { awaitFirstDown(requireUnconsumed = false); follow = false }
-                }.testTag("transcript-list"), state = list,
+                }.testTag("transcript-list").lastPageProbe(lastPage, list, view), state = list,
                     // No room under the rows but the tail row's own: every follow and jump lands on it (iOS 9d3751ec2).
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }

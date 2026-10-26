@@ -108,7 +108,7 @@ class RealtimeStore(
         val focus = selection.value
         if (focus.handle === handle && focus.id == id) {
             updateSession(handle, focus) { it.copy(accessDenied = true, fresh = false, snapshot = null,
-                transcript = Transcript(), error = RealtimeError.from(error)) }
+                transcript = Transcript(), error = RealtimeError.from(error), seededFromCache = false) }
             refreshSession()
         }
         // A route can disappear before its UI collector runs. The store persists this decision
@@ -165,7 +165,8 @@ class RealtimeStore(
             writes.trySend(Unit)
             val denied = focus.id?.let { ReadingCache(auth, handle, it).permission().denied } == true
             publish(handle) { it.copy(session = focus.id?.let { id ->
-                SessionState(id, if (denied) Transcript() else cache.value.sessions[id]?.withoutLive() ?: Transcript(), accessDenied = denied)
+                val saved = if (denied) Transcript() else cache.value.sessions[id]?.withoutLive() ?: Transcript()
+                SessionState(id, saved, accessDenied = denied, seededFromCache = saved.seeded)
             }) }
             if (focus.id == null) return@collectLatest
             combine(foreground, network) { visible, path -> visible to path }.collectLatest { (visible, path) ->
@@ -288,7 +289,7 @@ class RealtimeStore(
                         val tail = rest.page(handle, id)
                         check()
                         val before = state.value.session?.transcript
-                        updateSession(handle, focus) { it.copy(transcript = it.transcript.tail(tail)) }
+                        updateSession(handle, focus) { it.copy(transcript = it.transcript.tail(tail), seededFromCache = false) }
                         witnessed(before, tail, "tail")
                         save()
                     }
@@ -299,7 +300,7 @@ class RealtimeStore(
                     updateSession(handle, focus) { it.copy(fresh = false, error = RealtimeError.from(error),
                         accessDenied = it.accessDenied || denied,
                         snapshot = if (denied) null else it.snapshot,
-                        transcript = if (denied) Transcript() else it.transcript) }
+                        transcript = if (denied) Transcript() else it.transcript, seededFromCache = it.seededFromCache && !denied) }
                     if (denied) {
                         withContext(NonCancellable) { ReadingCache(auth, handle, id).revoke() }
                         cache.update { it.copy(sessions = it.sessions - id) }; writes.trySend(Unit)
@@ -348,7 +349,7 @@ class RealtimeStore(
                     val tail = rest.page(handle, id)
                     check()
                     val before = state.value.session?.transcript
-                    updateSession(handle, focus) { if (it.accessDenied) it else it.copy(transcript = it.transcript.tail(tail)) }
+                    updateSession(handle, focus) { if (it.accessDenied) it else it.copy(transcript = it.transcript.tail(tail), seededFromCache = false) }
                     witnessed(before, tail, "tail")
                     save()
                     reseed = false
@@ -386,7 +387,7 @@ class RealtimeStore(
             catch (_: Resync) {
                 reseed = true
                 failed = true // Repeated resyncs must back off, even if each socket opens cleanly.
-                updateSession(handle, focus) { it.copy(transcript = Transcript(), fresh = false) }
+                updateSession(handle, focus) { it.copy(transcript = Transcript(), fresh = false, seededFromCache = false) }
                 save()
             } catch (error: Exception) {
                 failed = true

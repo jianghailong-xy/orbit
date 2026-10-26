@@ -100,6 +100,8 @@ contract provenance, auth device tests and physical-phone evidence requirements.
 
 See [reading.md](docs/reading.md) for the real session destination, pagination/anchor/cache
 rules, small text/link reuse surface, deterministic DS3/DS4/streaming fixture and A06 device checks.
+Its last section has D09's P02 (a long session's last page) and P03 (`hwuiRenderGt700Count`) collection points: lines
+under the `OrbitPerf` logcat tag, off until `adb shell setprop log.tag.OrbitPerf D`.
 
 ## Directory and navigation (A05)
 
