@@ -73,7 +73,8 @@ internal object ProjectShell {
     // A11i: the start sheets read Launch's document afresh as they open.
     /** The status `GET projects/<LAUNCH>` answers with: 200 serves the document, anything else refuses it in the server's sentence. */
     @Volatile var documentStatus = 200
-    /** A document read waits for this before it answers: a server that has stopped answering. */
+    /** A read of Launch's document waits for this before it answers, with the document as it was when it arrived: a server that has
+     * stopped answering, or one still answering a write's read-back (A15 F-22). Only a read (`GET`) is held; a write is not. */
     @Volatile var holdDocument: CompletableDeferred<Unit>? = null
     /** Every write's body, by `METHOD path`. */
     val bodies = java.util.concurrent.ConcurrentHashMap<String, String>()
@@ -120,6 +121,15 @@ internal object ProjectShell {
     /** Whether Launch's coordinator has a turn under way (`engineTurnActive`), which the Open list draws as its spinner. */
     @Volatile var coordinatorWorking = false
 
+    // A15 F-22: How it runs' authorization set, fenced on its revision as `PATCH projects/:id` fences it. Off by default, which
+    // leaves the set out of Launch's document as before.
+    /** Launch's `configRevision`; null leaves Automatic and At most out of its document, so neither can be pressed. */
+    @Volatile var configRevision: Int? = null
+    @Volatile var automatic = true
+    @Volatile var maxConcurrentTasks = 2
+    /** The crossings `projects/:id/handoffs` lists, as a JSON array; null answers as before, which the page cannot read. */
+    @Volatile var crossings: String? = null
+
     fun reset() {
         calls.clear(); started = true; startRequest = false; quietStatus = 200
         done = false; doneBy = "DERIVED"; doneCounts = true
@@ -133,6 +143,7 @@ internal object ProjectShell {
         // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state.
         trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
         quietAttention = null; coordinatorWorking = false
+        configRevision = null; automatic = true; maxConcurrentTasks = 2; crossings = null
     }
 
     private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
@@ -191,7 +202,32 @@ internal object ProjectShell {
     private val project get() = """{"id":"$LAUNCH","title":"Launch","status":"${if (done) "DONE" else "OPEN"}","goal":"Ship it.","createdAt":"2026-10-01T00:00:00Z","_count":{"tasks":8},
         "startedAt":${if (started) "\"2026-10-02T00:00:00Z\"" else "null"}${
         if (done) ""","doneBy":"$doneBy","derivedDone":$projection""" else ""}${criteria?.let { ""","acceptanceCriteriaItems":$it""" }.orEmpty()}${
-        attention?.let { ""","attention":$it""" }.orEmpty()}}"""
+        attention?.let { ""","attention":$it""" }.orEmpty()}${configRevision?.let {
+        ""","configRevision":"$it","coordinatorEnabled":$automatic,"maxConcurrentTasks":$maxConcurrentTasks""" }.orEmpty()}}"""
+
+    /** How it runs' write (`PATCH projects/:id`): a revision the project has moved on from is refused with nothing written, as the
+     * server refuses it (STALE_CONFIG_REVISION); otherwise its fields are written, and a write of the set moves the revision on by one. */
+    private fun authorize(body: String): ApiResponse {
+        val sent = Wire.json.parseToJsonElement(body).jsonObject
+        val expected = sent.text("expectedConfigRevision")
+        if (expected != null && expected != "$configRevision") return ApiResponse(409, ("""{"message":"this project is at configRevision """ +
+            """$configRevision, not $expected — its coordination settings changed after you read them, so nothing was written",""" +
+            """"code":"STALE_CONFIG_REVISION"}""").encodeToByteArray())
+        sent["automatic"]?.jsonPrimitive?.booleanOrNull?.let { automatic = it }
+        sent["maxConcurrentTasks"]?.jsonPrimitive?.intOrNull?.let { maxConcurrentTasks = it }
+        if ("automatic" in sent || "maxConcurrentTasks" in sent) configRevision = configRevision!! + 1
+        return ok(project)
+    }
+
+    /** A crossing's answer: a question takes it — a yes to a move is the move — and an answer already given refuses another, in the
+     * server's words. */
+    private fun decide(handoff: String): ApiResponse {
+        val rows = crossings.orEmpty()
+        if (!rows.contains("\"state\":\"PENDING\"")) return ApiResponse(409, ("""{"message":"handoff approval $handoff is APPLIED and """ +
+            """cannot be APPROVED; a spent approval authorised one crossing and is finished"}""").encodeToByteArray())
+        crossings = rows.replace("\"state\":\"PENDING\"", "\"state\":\"APPLIED\"")
+        return ok("{}")
+    }
 
     /** A press on Launch's candidate: the door's answer is the candidate in its next state, or the server's refusal. */
     private fun press(door: String): ApiResponse {
@@ -245,10 +281,14 @@ internal object ProjectShell {
             path == "projects/sidebar" -> ok(sidebar())
             path == "projects" -> ok("""[$project,{"id":"$QUIET","title":"Quiet","status":"OPEN","createdAt":"2026-10-01T00:00:00Z"${
                 quietAttention?.let { ""","attention":$it""" }.orEmpty()}}]""")
+            path == "projects/$LAUNCH" && method == "PATCH" && configRevision != null -> authorize(api.body?.decodeToString().orEmpty())
             path == "projects/$LAUNCH" -> {
-                holdDocument?.await()
-                if (documentStatus == 200) ok(project) else ApiResponse(documentStatus, """{"message":"The project is unavailable"}""".encodeToByteArray())
+                val answer = if (documentStatus == 200) ok(project) else ApiResponse(documentStatus, """{"message":"The project is unavailable"}""".encodeToByteArray())
+                if (method == "GET") holdDocument?.await()
+                answer
             }
+            path == "projects/$LAUNCH/handoffs" && crossings != null -> ok(crossings!!)
+            method == "POST" && crossings != null && path.startsWith("projects/$LAUNCH/handoffs/") && path.endsWith("/decision") -> decide(api.path[3])
             path == "projects/$LAUNCH/integration" -> ok(integration)
             path == "projects/$LAUNCH/coordinator/status" -> ok(coordinatorStatus)
             path == "projects/$LAUNCH/open-items" -> ok(openItems)
