@@ -384,9 +384,10 @@ A stack runs several apiservers in one of two ways:
   [docs/self-hosting.md](../../docs/self-hosting.md#several-apiservers) gives, with `apiserver-2` and on. Put it on top
   of the stack's Compose files beside a link to `docker-compose.yml`, plus staging's renaming of what it adds (the
   container's name and its image's tag). Task O3 brought its stack up so, with the file cut out of the document byte
-  for byte, and recorded what follows. Every process was healthy. From the web gateway's container, `apiserver`
-  resolved to the first one alone. The link gateway was given both. The second applied no migration and started only
-  once the first was healthy.
+  for byte, on Compose v5.5.1, and recorded what follows. Every process was healthy. From the web gateway's container,
+  `apiserver` resolved to the first one alone. The link gateway was given both. The second applied no migration and
+  started only once the first was healthy (Compose's own record of the start). In a short run (300 runners, 30 s),
+  the two processes took the same share of the link calls: 0.082 and 0.079 cores.
 
 Either way `loadgen-run.sh` samples every apiserver it finds running, `apiserver-*` beside the first, and the report and
 the baseline count them all: "apiserver CPU" is the sum. Each process's main thread is what fills: a process carries
