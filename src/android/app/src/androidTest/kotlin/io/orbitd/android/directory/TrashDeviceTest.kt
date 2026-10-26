@@ -5,13 +5,14 @@ import android.os.SystemClock
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
-import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.core.net.ServerAddress
 import java.io.File
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
@@ -33,7 +34,8 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class TrashDeviceTest {
-    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    @get:Rule val compose = createEmptyComposeRule()
+    private lateinit var scenario: ActivityScenario<MainActivity>
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val app get() = instrumentation.targetContext.applicationContext as OrbitApplication
     private val theme = InstrumentationRegistry.getArguments().getString("a05e_theme") ?: "light"
@@ -50,16 +52,18 @@ class TrashDeviceTest {
 
     @Test fun moveToTrashAnswersThePressAndTheDrawerCountsWhatWaits() {
         instrumentation.sendStatus(0, android.os.Bundle().apply { putString("a05e_pid", android.os.Process.myPid().toString()) })
+        // No Activity has started to restore the stored session, as one does on launch: restored here, as a process without one does.
+        runBlocking { app.session.restore() }
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
         assertTrue("Requires a dedicated signed-out debug installation", app.session.state.value is AuthState.SignedOut)
         evidence.listFiles()?.forEach { it.delete() }
         MockWebServer().use { server ->
             server.dispatcher = fixture()
             try {
-                compose.chooseServer(server.url("/").toString())
-                compose.onNodeWithText("Email").performTextReplacement("a05e@example.test")
-                compose.onNodeWithText("Password").performTextReplacement("a05e-fixture-password")
-                compose.onNodeWithText("Sign In").performScrollTo().performClick()
+                // Signed in before the Activity starts, as ProjectSessionsDeviceTest is: a sign-in pressed on the login page
+                // resumes on OkHttp's thread under the test rule and runs a Recomposer frame there (A05i, F-19).
+                runBlocking { app.session.login(ServerAddress.parse(server.url("/").toString(), true), "a05e@example.test", "a05e-fixture-password") }
+                scenario = ActivityScenario.launch(MainActivity::class.java)
                 compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
 
                 // A11-2 · the drawer's project row: a question, two escalations, a start and a close asked for — five things.
@@ -127,6 +131,7 @@ class TrashDeviceTest {
             } finally {
                 repeat(3) { answers.put(504) }
                 runBlocking { app.session.logout() }
+                if (::scenario.isInitialized) scenario.close()
                 app.realtime.selectSession(null)
                 File(evidence, "requests.txt").writeText(calls.joinToString("\n"))
             }
