@@ -37,9 +37,10 @@
  *       — is answered again, the same answer within 5 s, when the same process sends the fetch again
  *       under its request id, and that resend changes nothing; a fetch with no request id, another
  *       process's under the same id, an HTTPS poll and any later fetch are not handed it. The dispatch
- *       pause does not hold the resend; a message's resend does not lease it again; two fetches at once
- *       under one id hand out one turn; a withdraw past its delivery window, or a steer settled since, is
- *       not handed out again; and an HTTPS hand-out records nothing.
+ *       pause does not hold the resend; a message's resend is the same delivery, its lease renewed as
+ *       B2's re-delivery renews it; two fetches at once under one id hand out one turn; a withdraw past
+ *       its delivery window, or a steer settled since, is not handed out again; and an HTTPS hand-out
+ *       records nothing.
  *
  * Every state is read on a second connection, never through the answer that wrote it.
  *
@@ -988,17 +989,21 @@ test('runner link calls: answers lost on the way back are made good, and nothing
       await setPause(false);
     }
 
-    // A message is answered by the resend as it was too, and stays the one delivery: it is not leased again.
+    // A message is answered by the resend as it was too: the same delivery, its lease renewed from the resend, as B2's
+    // re-delivery renews it.
     const m = await runningSession('a message whose inbox answer was lost');
     const messageId = poller({ 'x-orbit-link-request-id': 'inbox-message' });
     await assert.rejects(send(lossyPort, 'GET', inboxPath(m, ''), losing(messageId)));
     const lostMessage = lost.at(-1);
     assert.equal((lostMessage?.body as { turnId?: string }).turnId, m.turnId);
     const leased = await turnState(m.turnId);
+    await sleep(50); // a renewed lease deadline then reads later, at the column's millisecond precision
     const resentMessage = await send(door.linkPort, 'GET', inboxPath(m, ''), viaLink(messageId));
     assert.equal(resentMessage.status, 200, JSON.stringify(resentMessage.body));
     assert.deepEqual(resentMessage.body, lostMessage?.body, 'the resend was not answered as the lost answer was');
-    assert.deepEqual(await turnState(m.turnId), leased, 'the resend leased the message again');
+    const renewed = await turnState(m.turnId);
+    assert.deepEqual({ ...renewed, leaseDeadlineAt: null }, { ...leased, leaseDeadlineAt: null }, 'the resend was another delivery');
+    assert.ok(renewed.leaseDeadlineAt! > leased.leaseDeadlineAt!, 'the resend did not renew the lease');
 
     // Two fetches at once under one id — a gateway retrying on another replica while the first still runs — hand out one
     // turn between them, and both answer it.

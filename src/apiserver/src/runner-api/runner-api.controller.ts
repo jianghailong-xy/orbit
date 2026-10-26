@@ -4495,6 +4495,15 @@ export class RunnerApiController {
               END
           `
         : [];
+      // A message or shell turn handed back this way is leased again from now, as the re-delivery below leases
+      // it: the same delivery, its lease counted from when the process has the turn.
+      if (resent[0]?.kind === 'message' || resent[0]?.kind === 'shell') {
+        await tx.$executeRaw`
+          UPDATE "conversation_turn"
+          SET "lease_deadline_at" = now() + (${INBOX_LEASE_MS} * interval '1 millisecond')
+          WHERE id = ${resent[0].id}::uuid
+        `;
+      }
       // The pause may have been requested after the claim but before inbox delivery. Only
       // executable work that has not started is held; control messages and the active turn stay.
       // So may the Default a resident engine runs on have been removed from Orbit by its owner: its
