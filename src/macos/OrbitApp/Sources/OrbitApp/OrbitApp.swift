@@ -95,7 +95,7 @@ struct OrbitApp: App {
         // Standard macOS Settings window — adds "Settings…" (⌘,) to the app menu. Reuses the same
         // SettingsView as the in-app Settings section so both stay in sync.
         Settings {
-            SettingsView()
+            SettingsView(inSettingsWindow: true)
                 .environment(model)
                 .environmentObject(updater)
                 .preferredColorScheme(model.preferredColorScheme)

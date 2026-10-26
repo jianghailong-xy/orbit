@@ -66,7 +66,7 @@ export const NEVER_STARTED_ACTION_LABEL: Readonly<Record<NeverStartedActionId, s
   'start-again': 'Start it again',
   'send-again': 'Send it again',
   install: 'Install',
-  'open-providers': 'Open Infrastructure',
+  'open-providers': 'Open Machines & models',
   'open-runner': 'Open the runner',
   'chat-about': 'Chat about this',
 };
@@ -167,22 +167,22 @@ const MACHINE_COPY = {
   upgradeWhy: 'Waiting for a newer runner', // DshRepairCard / AntigravityRepairCard, updateRunner
   /** AntigravityRepairCard's updateRunner body's second sentence, with this card's one subject. */
   upgradeClause: 'The runner updates itself when no session is running on it, and this run starts then.',
-  notInstalledBody: 'Install it from Infrastructure, then send your message again.', // both repair cards
+  notInstalledBody: 'Install it from the Machines & models page, then send your message again.', // both repair cards
   /** The same install, for a run still in the queue: it is claimed once the engine is there, so a
    *  second send would only be a second turn. The queue notice's own promise (runnerSlots). */
-  notInstalledWaitingBody: 'Install it from Infrastructure, and this run starts as soon as it’s installed.',
+  notInstalledWaitingBody: 'Install it from the Machines & models page, and this run starts as soon as it’s installed.',
   unsupportedWhy: (machine: string) => `DeepSeek Harness can’t run on ${machine}`, // DshRepairCard
   unsupportedBody:
     'DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only. Move this work to a runner that can.',
   dshKeyWhy: 'DeepSeek Harness needs a DeepSeek key', // DshRepairCard
-  dshKeyBody: 'This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.',
+  dshKeyBody: 'This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key on the Machines & models page, then send your message again.',
   dshBadKeyWhy: 'DeepSeek rejected this API key', // DshRepairCard
   /** DshRepairCard's, naming the key when the session's is known. */
   dshBadKeyBody: (keyName: string | null | undefined) =>
-    `Update ${keyName ?? 'the DeepSeek key'} in Infrastructure, then send your message again.`,
+    `Update ${keyName ?? 'the DeepSeek key'} on the Machines & models page, then send your message again.`,
   antigravityAuthWhy: 'Antigravity needs authentication', // AntigravityRepairCard
   antigravityAuthBody:
-    'Sign in with Google on this runner, or connect a Gemini API key in Infrastructure.',
+    'Sign in with Google on this runner, or connect a Gemini API key on the Machines & models page.',
   offlineWhy: 'The runner holding this session went offline',
   offlineBody: (machine: string) =>
     `${machine} stopped reporting while this run was starting. Nothing was produced, and nothing was sent anywhere.`,

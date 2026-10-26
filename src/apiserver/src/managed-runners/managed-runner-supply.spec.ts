@@ -69,7 +69,7 @@ test("a session bringing its own credential needs the CLI installed, not the CLI
   assert.deepEqual(managedRuntimeSupply(runner), [], 'and it is still not supply of its own');
 });
 
-test('a first session with no runtime ready is refused, to be signed in from Infrastructure', async () => {
+test('a first session with no runtime ready is refused, to be signed in from the Machines & models page', async () => {
   const prisma = { session: { findFirst: async () => null } } as never;
   await assert.rejects(
     assertManagedFirstSessionRuntime(prisma, {
@@ -84,7 +84,7 @@ test('a first session with no runtime ready is refused, to be signed in from Inf
         code: MODEL_UNAVAILABLE,
         message:
           'No runtime is installed and signed in on your managed runner yet, so this first session cannot start. ' +
-          'Sign one in, or add a model key, from Infrastructure, then start the session again.',
+          'Sign one in, or add a model key, from the Machines & models page, then start the session again.',
       });
       return true;
     },

@@ -155,7 +155,7 @@ test('READY reports the runtime it was found ready with; waiting on model supply
   assert.equal(
     waiting.reason?.message,
     'The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. ' +
-      'Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.',
+      'Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.',
   );
   assert.equal(waiting.reason?.retryable, true);
   assert.equal(waiting.actions.canRetry, false, 'nothing to retry while it is still waiting');

@@ -140,7 +140,7 @@ const text = (el: Element | null | undefined) => el?.textContent?.replace(/\s+/g
 const engineCard = (name: string) =>
   [...document.body.querySelectorAll<HTMLElement>('.infra-engine')].find((card) => text(card.querySelector('.infra-engine-name')).startsWith(name)) ?? null;
 
-describe('Cursor CLI on Infrastructure', () => {
+describe('Cursor CLI on the Machines & models page', () => {
   it('is nowhere while no runner of the account knows it', async () => {
     runners = [hpc(null, [])];
     keys = [];

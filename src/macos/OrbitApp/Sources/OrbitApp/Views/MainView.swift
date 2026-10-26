@@ -265,6 +265,7 @@ struct AvatarMonogram: View {
 
 /// Middle column: the selected section's list.
 struct SectionContent: View {
+    @Environment(AppModel.self) private var model
     let section: AppSection
 
     var body: some View {
@@ -282,7 +283,20 @@ struct SectionContent: View {
         case .skills:
             SkillsView()
         case .runners:
+            #if os(macOS)
+            // Settings' page (docs/mocks/machines-and-models, 02): the sidebar has no row for it, so the way
+            // back to Settings is in the column's own toolbar.
             RunnersListView()
+                .toolbar {
+                    ToolbarItem(placement: .navigation) {
+                        Button { model.selectedSection = .settings } label: {
+                            Label("Settings", systemImage: "chevron.left").labelStyle(.titleAndIcon)
+                        }
+                    }
+                }
+            #else
+            RunnersListView()
+            #endif
         case .settings:
             #if os(iOS)
             // Never the section on iOS: choosing Settings presents it as a sheet over the section

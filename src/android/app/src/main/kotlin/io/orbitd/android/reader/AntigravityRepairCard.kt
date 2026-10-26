@@ -63,7 +63,7 @@ internal fun AntigravityRepairCard(repair: AntigravityRepair, console: SessionCo
             } else {
                 if (repair == AntigravityRepair.NOT_INSTALLED) Button(enabled = console.canInstallAntigravity, onClick = console::installAntigravity) { Text("Install") }
                 val runnerId = console.runnerId
-                OutlinedButton(enabled = runnerId != null, onClick = { runnerId?.let { console.openRunner(it, "antigravity") } }) { Text("Open in Infrastructure") }
+                OutlinedButton(enabled = runnerId != null, onClick = { runnerId?.let { console.openRunner(it, "antigravity") } }) { Text("Open in Machines & models") }
             }
         }
     }

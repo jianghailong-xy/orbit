@@ -38,7 +38,7 @@ export function runnerKnowsCursor(runner: {
  *  Spelled the way every client's not-installed card already reads one: web's RunNeverStartedCard, and
  *  OrbitKit's and Android's SessionRunStart.notInstalled. */
 export const CURSOR_NOT_INSTALLED_ERROR =
-  `${ENGINE_CLI_NAMES[AgentProvider.CURSOR]} isn't installed on this runner; install it from Infrastructure, then try again`;
+  `${ENGINE_CLI_NAMES[AgentProvider.CURSOR]} isn't installed on this runner; install it from the Machines & models page, then try again`;
 
 /** Declared by a release that knows Cursor CLI, the CLI installed or not (CURSOR_ACCOUNT_LOGIN_V1 in
  *  runner-api.controller.ts, which this module does not import). */
@@ -67,13 +67,13 @@ export function cursorRunnerRefusal(runner: {
  */
 export const DSH_NOT_INSTALLED_ERROR =
   'DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; ' +
-  'install it from Infrastructure, then try again';
+  'install it from the Machines & models page, then try again';
 export const DSH_PLATFORM_UNSUPPORTED_ERROR =
   'DSH_PLATFORM_UNSUPPORTED: DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only; ' +
   'use a runner that can run it';
 export const DSH_VERSION_INCOMPATIBLE_ERROR =
   'DSH_VERSION_INCOMPATIBLE: this runner has a DeepSeek Harness version Orbit does not support; ' +
-  'reinstall it from Infrastructure, then try again';
+  'reinstall it from the Machines & models page, then try again';
 
 export const PROVIDER_UNAVAILABLE_ERROR = 'Provider is unavailable; check its configuration';
 

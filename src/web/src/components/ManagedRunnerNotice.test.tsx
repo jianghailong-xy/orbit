@@ -99,7 +99,7 @@ describe('every server state sample, drawn', () => {
       expect(!!button(MANAGED_RUNNER_COPY.retry), `${name}: Retry`).toBe(expected.retry);
       expect(!!button(MANAGED_RUNNER_COPY.ensure), `${name}: Set up`).toBe(expected.ensure);
       const signIn = [...container.querySelectorAll('a')].find((a) => a.textContent === MANAGED_RUNNER_COPY.signIn);
-      expect(!!signIn, `${name}: Open Infrastructure`).toBe(expected.signIn);
+      expect(!!signIn, `${name}: Open Machines & models`).toBe(expected.signIn);
       if (signIn) expect(signIn.getAttribute('href')).toBe(`/infrastructure?runner=${encodeId(status.runnerId!)}`);
       // A state that moves by itself shows it is moving; none of them is an endless spinner on its own.
       expect(!!notice().querySelector('.orbit-spinner'), `${name}: moving`).toBe(expected.moving);

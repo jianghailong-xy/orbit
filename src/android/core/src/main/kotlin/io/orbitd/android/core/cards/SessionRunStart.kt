@@ -17,7 +17,7 @@ object SessionRunStart {
     const val startItAgain = "Start it again"
     const val startingAgain = "Starting a new run…"
     const val offlineLabel = "Disconnected — runner went offline"
-    const val installAdvice = "Install it from Infrastructure, then send your message again."
+    const val installAdvice = "Install it from the Machines & models page, then send your message again."
     /** What a press of "Chat about this" puts in the composer. */
     const val chatPrefix = "About this run: "
 

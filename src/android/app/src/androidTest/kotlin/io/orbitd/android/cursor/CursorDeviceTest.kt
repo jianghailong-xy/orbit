@@ -200,7 +200,7 @@ class CursorDeviceTest {
         back()
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         click(hasText("Settings") and hasClickAction())
-        click(hasText("Infrastructure") and hasClickAction())
+        click(hasText("Machines & models") and hasClickAction())
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("engine-sources:cursor").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("engine-sources:cursor").performScrollTo()
         capture("ios2-infrastructure-$pass")

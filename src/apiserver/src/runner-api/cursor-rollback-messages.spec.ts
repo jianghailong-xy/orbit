@@ -164,7 +164,7 @@ async function markedOnClaim(request: string, snapshot: unknown): Promise<Map<st
 
 test('Rollback messages: a runner that knows Cursor CLI but does not declare it is told to install it, and only an older one to update', () => {
   // The new sentence names the CLI and the install, and none of the upgrade's words.
-  assert.equal(CURSOR_NOT_INSTALLED_ERROR, "Cursor CLI isn't installed on this runner; install it from Infrastructure, then try again");
+  assert.equal(CURSOR_NOT_INSTALLED_ERROR, "Cursor CLI isn't installed on this runner; install it from the Machines & models page, then try again");
   assert.doesNotMatch(CURSOR_NOT_INSTALLED_ERROR, UPGRADE_WORDS);
   // A release that knows Cursor CLI: its engine report names it, installed or not, or it declares Cursor
   // CLI's account sign-in — which it does whether the CLI is there or not.
@@ -273,7 +273,7 @@ test('Rollback messages: the Antigravity, DeepSeek Harness and OpenCode notices 
   assert.equal(DSH_RUNNER_UPGRADE_ERROR, 'DeepSeek Harness requires a newer Orbit runner with dsh support; update this runner first');
   assert.equal(OPENCODE_RUNNER_UPGRADE_ERROR, 'OpenCode requires Orbit runner 0.1.82 or newer; update this runner first');
   assert.equal(DSH_NOT_INSTALLED_ERROR,
-    'DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; install it from Infrastructure, then try again');
+    'DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; install it from the Machines & models page, then try again');
   assert.equal(CURSOR_RUNNER_UPGRADE_ERROR, 'Cursor CLI requires a newer Orbit runner with Cursor CLI support; update this runner first');
   assert.deepEqual(ADVERTISED_RUNTIMES.map(({ provider, upgradeError }) => [provider, upgradeError]), [
     [AgentProvider.OPENCODE, OPENCODE_RUNNER_UPGRADE_ERROR],
