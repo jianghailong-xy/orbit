@@ -223,18 +223,34 @@ func TestALostControlTurnOrSteerAnswerComesBackAfterTheLinkWasDownLongerThanACal
 			turns := pollInBackground(t, p)
 
 			// Back once the link is: within the reconnect's backoff (linkBackoffMax) and the poller's (inboxLinkBackoffMax).
-			pastWindow := kind == "withdraw" && outage >= fakeWithdrawWindow
-			want := "c-1"
-			if pastWindow {
-				want = "m-1"
+			var got *RunInboxResponse
+			select {
+			case got = <-turns:
+			case <-time.After(outage + linkBackoffMax + inboxLinkBackoffMax + 30*time.Second):
+				t.Fatal("nothing was handed over after the link came back")
 			}
-			got := recvTurn(t, turns, outage+linkBackoffMax+inboxLinkBackoffMax+30*time.Second, want)
 			handedBack := time.Now()
+			if got == nil {
+				t.Fatal("the poller stopped")
+			}
 			if lostAt.Load() == 0 {
 				t.Fatal("no answer was lost")
 			}
 			lost := time.Unix(0, lostAt.Load())
 			back := r.g.waitWelcomed(t, 2).welcomed
+			fetches := in.fetchedFor("session-a")
+			if len(fetches) < 2 || fetches[0].handed != "c-1" {
+				t.Fatalf("fetches %+v: want c-1 handed out, and its answer lost", fetches)
+			}
+			// A withdraw sent again past its window is served as a new fetch, which hands out what is queued behind it.
+			pastWindow := kind == "withdraw" && fetches[1].at.Sub(fetches[0].at) >= fakeWithdrawWindow
+			want := "c-1"
+			if pastWindow {
+				want = "m-1"
+			}
+			if got.TurnID != want {
+				t.Fatalf("handed %s (%s) first after the link came back, want %s", got.TurnID, got.Kind, want)
+			}
 			if took := handedBack.Sub(lost); took <= longPollCallTimeout {
 				t.Fatalf("%s was handed over %s after its answer was lost, within the call's own %s deadline", want, took, longPollCallTimeout)
 			}
@@ -243,11 +259,6 @@ func TestALostControlTurnOrSteerAnswerComesBackAfterTheLinkWasDownLongerThanACal
 			}
 			t.Logf("%s (%s) handed over %s after its answer was lost and the link went down for %s, %s after the link was back",
 				got.TurnID, got.Kind, handedBack.Sub(lost).Round(time.Millisecond), outage, handedBack.Sub(back).Round(time.Millisecond))
-
-			fetches := in.fetchedFor("session-a")
-			if len(fetches) < 2 || fetches[0].handed != "c-1" {
-				t.Fatalf("fetches %+v: want c-1 handed out, and its answer lost", fetches)
-			}
 			if fetches[1].requestID != fetches[0].requestID {
 				t.Errorf("the first fetch after the outage went under %s, not the lost fetch's %s", fetches[1].requestID, fetches[0].requestID)
 			}
@@ -266,6 +277,8 @@ func TestALostControlTurnOrSteerAnswerComesBackAfterTheLinkWasDownLongerThanACal
 				if n := in.handedOut("c-1"); n != 2 {
 					t.Errorf("c-1 was handed out %d times, want 2: the lost answer and the fetch under its id", n)
 				}
+			} else if n := in.handedOut("c-1"); n != 1 {
+				t.Errorf("the withdraw past its window was handed out %d times, want once: the answer that was lost", n)
 			}
 			select {
 			case extra := <-turns:
