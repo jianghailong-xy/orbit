@@ -1,5 +1,6 @@
 package io.orbitd.android
 
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -125,6 +126,75 @@ class ProjectSessionsShellTest {
         compose.onNodeWithTag("project-start-task-graph").assertDoesNotExist()
         compose.onNode(hasText("PLAN · 2 TASKS") and hasAnyAncestor(hasTestTag("project-start-sheet"))).assertExists()
     }
+
+    /** A11i (A15 F-25): the coordinator's start sheet reads its card afresh as it opens. A read the card cannot be drawn without that
+     * fails is said in the server's words, with Retry, where the spinner turned for as long as the failure lasted; Retry reads again
+     * at once, not on the next 4 s round, and the card is drawn. */
+    @Test fun theCoordinatorsStartSheetSaysWhyItCouldNotLoadAndRetries() {
+        ProjectShell.started = false; ProjectShell.startRequest = true
+        ProjectShell.plan = graph(listOf("a" to "A · Contract", "b" to "B · Server"), listOf("a" to "b"))
+        signIn(); openAlpha()
+        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        await { exists(hasTestTag("project-sessions-review-start")) }
+        ProjectShell.documentStatus = 500
+        compose.onNodeWithTag("project-sessions-review-start").performClick()
+        await { exists(hasText("Couldn't load the start card") and hasAnyAncestor(hasTestTag("project-start-request-sheet"))) }
+        compose.onNodeWithText("The project is unavailable.").assertExists()
+        compose.onAllNodes(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertCountEquals(0)
+        ProjectShell.documentStatus = 200
+        retryAtOnce("project-start-request-sheet")
+        await { exists(hasTestTag("project-start-request")) }
+        compose.onAllNodesWithText("Couldn't load the start card").assertCountEquals(0)
+    }
+
+    /** A11i: a read that never answers is given up after 15 s and said, not left under a spinner to whatever the transport waits; the
+     * next round, 4 s on, reads again and draws the card. */
+    @Test fun aStartSheetReadThatNeverAnswersIsSaidAndTheNextRoundDrawsTheCard() {
+        ProjectShell.started = false; ProjectShell.startRequest = true
+        ProjectShell.plan = graph(listOf("a" to "A · Contract", "b" to "B · Server"), listOf("a" to "b"))
+        signIn(); openAlpha()
+        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        await { exists(hasTestTag("project-sessions-review-start")) }
+        ProjectShell.holdDocument = CompletableDeferred()
+        compose.onNodeWithTag("project-sessions-review-start").performClick()
+        await { exists(hasTestTag("project-start-request-sheet")) }
+        compose.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate) and hasAnyAncestor(hasTestTag("project-start-request-sheet"))).assertExists()
+        compose.mainClock.advanceTimeBy(15_000)
+        await { exists(hasText("Couldn't load the start card")) }
+        compose.onNodeWithText("The server didn't answer in time.").assertExists()
+        ProjectShell.holdDocument = null
+        compose.mainClock.advanceTimeBy(4_000)
+        await { exists(hasTestTag("project-start-request")) }
+    }
+
+    /** A11i: the owner's own start sheet over this page reads the document itself too, and says so with Retry when it cannot. */
+    @Test fun theOwnersStartSheetSaysWhyItCouldNotLoadAndRetries() {
+        ProjectShell.started = false
+        ProjectShell.plan = graph(listOf("a" to "A · Contract", "b" to "B · Server"), listOf("a" to "b"))
+        signIn(); openAlpha()
+        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        await { exists(hasTestTag("project-sessions-start-own")) }
+        ProjectShell.documentStatus = 500
+        compose.onNodeWithTag("project-sessions-start-own").performClick()
+        await { exists(hasText("Couldn't load the start card") and hasAnyAncestor(hasTestTag("project-start-sheet"))) }
+        compose.onNodeWithText("The project is unavailable.").assertExists()
+        ProjectShell.documentStatus = 200
+        retryAtOnce("project-start-sheet")
+        await { exists(hasTestTag("project-start")) }
+    }
+
+    /** Retry with the clock held: the read it asks for goes out within ten frames, not on the sheet's 4 s round. */
+    private fun retryAtOnce(sheet: String) {
+        val asked = documentReads()
+        compose.mainClock.autoAdvance = false
+        try {
+            compose.onNode(hasText("Retry") and hasAnyAncestor(hasTestTag(sheet))).performClick()
+            repeat(10) { compose.mainClock.advanceTimeByFrame() }
+            compose.waitForIdle()
+            assertTrue("Retry reads the document again at once", documentReads() > asked)
+        } finally { compose.mainClock.autoAdvance = true }
+    }
+    private fun documentReads() = ProjectShell.calls.count { it == "GET projects/${ProjectShell.LAUNCH}" }
 
     private fun graph(tasks: List<Pair<String, String>>, edges: List<Pair<String, String>>) = """{"marks":[${tasks.joinToString(",") { (id, title) ->
         """{"kind":"TASK","id":"$id","taskId":"$id","title":"$title","status":"OPEN","completionCriterion":"EVIDENCE_JUDGMENT","autoRunWhenReady":true}""" }}],
