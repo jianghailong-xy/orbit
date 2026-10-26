@@ -197,6 +197,14 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         }
         // A page sending the reader to a destination: its root, whatever was showing.
         fun land(key: String, root: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.land(key, root) }
+        // A merge's push (A11-9) names its project only: once the directory is read, its sessions page lands as the project's root
+        // over the workspace the drawer's row would pick (iOS 6b4bef713 `openProjectMerge`).
+        val arrival = navigation.pending?.takeIf { it.waitsForDirectory }
+        LaunchedEffect(arrival, data.ready, data.error) {
+            val id = arrival?.id ?: return@LaunchedEffect
+            if (data.ready || data.error != null)
+                navigation = navigation.landPending(projectRoot(id, data, navigation.current.workspaceId, arrival.origin))
+        }
         LaunchedEffect(route, signedIn.handle, live.first) {
             // A landing session is the platform's, not a conversation's: it opens no `sessions/:id/events` stream (LS6), and
             // SessionDestination never mounts the reader for one. The reader selects the conversation it shows, and clears
@@ -254,14 +262,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         // A drawer project row: the project's sessions page as its root, over its coordinator's workspace — or the one
                         // showing, or the first — and the project's page when there is no workspace to open it over (iOS 6f5f883c8).
                         DrawerProjects(projects, ProjectAttention.coordinatorPulses(data.sessions["open"].orEmpty()), drawerLive,
-                            navigation.section, root = { id ->
-                            val coordinator = (data.sessions["open"].orEmpty() + data.sessions["completed"].orEmpty()).firstOrNull {
-                                it.projectMembership?.isCoordinator == true && ObjectId.same(it.projectMembership?.projectId, id)
-                            }
-                            val over = coordinator?.workspace ?: route.workspaceId ?: workspaces.firstOrNull()?.id
-                            if (over == null) OrbitRoute(Destination.PROJECT, id, origin = Origin.DRAWER)
-                            else OrbitRoute(Destination.PROJECT_SESSIONS, id, over, origin = Origin.DRAWER)
-                        }) { key, root -> select(key, root) }
+                            navigation.section, root = { id -> projectRoot(id, data, route.workspaceId, Origin.DRAWER) }) { key, root -> select(key, root) }
                         Spacer(Modifier.height(24.dp))
                         val workspace = route.workspaceId ?: workspaces.firstOrNull()?.id
                         Button(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.DRAFT, workspaceId = workspace, origin = Origin.DRAWER)) },

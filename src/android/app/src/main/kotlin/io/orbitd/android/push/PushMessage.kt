@@ -33,6 +33,9 @@ data class PushPayload(
     val link: String? get() = when {
         kind == "watch-matched" -> watchId?.let { "orbit://watch/$it" }
         kind == "engine-signed-out" -> runnerId?.let { "orbit://runner/$it" }
+        // A merge into main waiting on the owner opens its project's sessions page, where its card is, as that project's root
+        // (iOS 6b4bef713 `Notifications.intent`). Every other owner item opens the conversation, and so does a merge naming no project.
+        kind == "approve-merge-to-main" && projectId != null -> "orbit://project/$projectId"
         sessionId != null -> "orbit-session:$sessionId" +
             (if (kind == "confirmation-problems" && recordId != null) "?at=$recordId" else "")
         projectId != null -> "orbit-project:$projectId"
