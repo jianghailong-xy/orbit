@@ -19,6 +19,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.auth.chooseServer
+import io.orbitd.android.auth.pressSignIn
 import io.orbitd.android.*
 import io.orbitd.android.attachments.importAttachment
 import io.orbitd.android.attachments.decodeAttachmentImage
@@ -169,6 +170,9 @@ class ComposerDeviceTest {
         compose.onNodeWithTag("transcript-list").performScrollToNode(hasText(CardPreviews.viewDetailsAndAct))
         compose.onNodeWithText(CardPreviews.viewDetailsAndAct).performClick()
         compose.waitUntil(10000) { compose.onAllNodesWithTag("card-review").fetchSemanticsNodes().isNotEmpty() }
+        // The review reads the session again as it opens and holds its buttons, "Chat about this" among them, until that read is
+        // in (`fresh`): a press before then lands on a disabled button and does nothing, and the review stays. Pressed once pressable.
+        compose.waitUntil(10000) { compose.onAllNodes(hasText("Chat about this") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Chat about this").performScrollTo().performClick()
         compose.waitUntil(10000) { compose.onAllNodesWithTag("card-review").fetchSemanticsNodes().isEmpty() }
         // A08i: the composer asks for the focus once the page's window has it back from the review's sheet, and its keyboard comes up
@@ -391,7 +395,7 @@ class ComposerDeviceTest {
         compose.chooseServer(server)
         compose.onNodeWithText("Email").performTextReplacement("a07@example.test")
         compose.onNodeWithText("Password").performTextReplacement("a07-fixture-password")
-        compose.onNodeWithText("Sign In").performScrollTo().performClick()
+        compose.pressSignIn()
         compose.waitUntil(15000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
         compose.onNodeWithTag("workspace:$workspace").performClick()
         awaitText("Composer conversation")
