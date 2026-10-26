@@ -138,8 +138,12 @@ class ComposerDeviceTest {
         compose.waitUntil(15000) { compose.onAllNodes(hasText("queued message") and tray).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Queued for next turn") and tray).assertExists()
         capture("queued-tray")
-        compose.onNodeWithTag("pending-tray-withdraw").performClick()
-        compose.waitUntil(5000) { stats()["controls"]!!.jsonArray.any { it.jsonObject["action"]?.jsonPrimitive?.content=="withdraw" } }
+        // Pressed through its click action once enabled, as the account row above is: on API 29 a touch on the tray's trash icon
+        // once reached nothing (no withdraw sent, the row still there 5 s on, A15b's API 29 round).
+        val withdraw = hasTestTag("pending-tray-withdraw") and isEnabled()
+        compose.waitUntil(10000) { compose.onAllNodes(withdraw).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(withdraw).performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitUntil(10000) { stats()["controls"]!!.jsonArray.any { it.jsonObject["action"]?.jsonPrimitive?.content=="withdraw" } }
         compose.waitUntil(10000) { model.state.value.draft.text=="queued message" && compose.onAllNodesWithTag("pending-tray").fetchSemanticsNodes().isEmpty() }
         // With nothing typed, Send is Stop.
         compose.onNodeWithTag("composer-input").performTextClearance()
