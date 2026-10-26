@@ -59,6 +59,8 @@ open class OrbitApplication : Application() {
         super.onCreate()
         p06ProcessStart()
         realtime // Register lifecycle/network callbacks before the first Activity starts.
+        // D09 P03: each window's frames, while `log.tag.OrbitPerf` is D; otherwise one property read per Activity callback.
+        registerActivityLifecycleCallbacks(io.orbitd.android.perf.WindowFrames)
         push.start()
         updates.start()
         clearAttachmentHandoffs(this)
