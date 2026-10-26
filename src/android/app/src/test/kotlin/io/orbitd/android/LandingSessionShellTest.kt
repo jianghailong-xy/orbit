@@ -7,6 +7,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.core.auth.AuthState
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -164,6 +165,65 @@ class LandingSessionShellTest {
         compose.onNodeWithTag("landing:retry").performClick()
         await { text("landing:refusal") != null }
         assertEquals("Retry failed — The job is no longer running.", text("landing:refusal"))
+    }
+
+    /** A15 F-22's kind on this page (A11k): a door holds the page until the page has read the press back. Pressed before then, a door
+     *  would go out over the claim the press has just moved on, and the server refuses it. Once the read lands, the doors are the new
+     *  claim's. */
+    @Test fun noDoorIsPressedAgainUntilThePageHasReadThePressBack() {
+        ProjectShell.landing = view(timedOut = true, liveness = "LEASE_EXPIRED", retryable = true)
+        // Retry hands the job its next claim, which runs; a door on the claim that timed out is refused from then on.
+        ProjectShell.landingAfterDoor = view(claim = 2)
+        signIn(); open("orbit-session:$landing")
+        await { enabled("landing:retry") && enabled("landing:abandon") }
+        ProjectShell.holdLanding = CompletableDeferred()
+        val reads = landingReads()
+        compose.onNodeWithTag("landing:retry").performClick()
+        await { jobDoors("retry") == 1 && landingReads() > reads }
+        compose.waitForIdle()
+        // The server has moved the job on; the page still draws the claim that timed out, and none of its doors can be pressed, on
+        // the card or in the menu.
+        compose.onNodeWithTag("landing:retry").assertIsNotEnabled()
+        compose.onNodeWithTag("landing:abandon").assertIsNotEnabled().performClick()
+        menu(); item("Abandon").performClick()
+        compose.waitForIdle()
+        assertEquals(0, jobDoors("abandon"))
+        assertEquals(1, jobDoors("retry"))
+
+        ProjectShell.holdLanding!!.complete(Unit)
+        await { !exists(hasTestTag("landing:retry"), unmerged = true) && !exists(hasTestTag("landing:abandon"), unmerged = true) }
+        // The running claim's own door goes out.
+        menu()
+        assertEquals(listOf("Open task", "Open source session", "Stop landing"), items())
+        item("Stop landing").performClick()
+        await { ProjectShell.calls.contains("POST projects/$launch/tasks/t-landing/integration/stop") }
+        settle()
+        assertFalse(exists(hasTestTag("landing:refusal"), unmerged = true))
+        assertEquals(0, jobDoors("abandon"))
+        assertEquals(1, jobDoors("retry"))
+    }
+
+    /** The page's poll that leaves while a press is out carries the page as it was then, press and all. Landing after the press has
+     *  read itself back, it must not put the doors down again — every later poll would carry them down, and none would come back. */
+    @Test fun aPollThatLeftDuringAPressDoesNotHoldTheDoorsDownAfterIt() {
+        ProjectShell.landing = view(timedOut = true, liveness = "LEASE_EXPIRED", retryable = true)
+        signIn(); open("orbit-session:$landing")
+        await { enabled("landing:retry") && enabled("landing:abandon") }
+        val press = CompletableDeferred<Unit>()
+        val poll = CompletableDeferred<Unit>()
+        ProjectShell.holdLandingReads.addAll(listOf(press, poll))
+        val reads = landingReads()
+        compose.onNodeWithTag("landing:retry").performClick()
+        await { jobDoors("retry") == 1 && landingReads() == reads + 1 }
+        // The poll comes round (4 s for a running attempt) while the press's read is out.
+        compose.mainClock.advanceTimeBy(4_100)
+        await { landingReads() == reads + 2 }
+        press.complete(Unit)
+        await { enabled("landing:retry") && enabled("landing:abandon") }
+        poll.complete(Unit)
+        settle()
+        compose.onNodeWithTag("landing:abandon").assertIsEnabled().performClick()
+        await { jobDoors("abandon") == 1 }
     }
 
     /** The status card's V6 line is the server's liveness, drawn under the same head every landing surface wears. */
@@ -421,5 +481,9 @@ class LandingSessionShellTest {
     private fun text(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()
         ?.config?.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
     private fun exists(matcher: SemanticsMatcher, unmerged: Boolean = false) = compose.onAllNodes(matcher, unmerged).fetchSemanticsNodes().isNotEmpty()
+    private fun enabled(tag: String) = exists(hasTestTag(tag) and isEnabled())
+    private fun landingReads() = ProjectShell.calls.count { it == "GET sessions/$landing" }
+    /** The presses of one door on the landing's job: `retry` or `abandon`. */
+    private fun jobDoors(door: String) = ProjectShell.calls.count { it == "POST projects/$launch/integration/jobs/j-1/$door" }
     private fun await(condition: () -> Boolean) = compose.waitUntil(60_000, condition)
 }

@@ -30,7 +30,9 @@ internal object ProjectShell {
     /** A landing session (sessionKind LANDING): never in a list, reached by its link only. Its row may not exist yet — the
      *  pre-generated id answers the landing view either way (contract §2.9 LS1). */
     const val LANDING = "34A05dSessionLanding06"
-    private val ids = listOf(ALPHA, BETA, LAUNCH, QUIET, COORD, WORKER, WAITING, PLAIN, DONE, LANDING)
+    /** A task of Launch's, assigned to Alpha (which has a runner): its Run starts [WORKER] as its run (A11k). */
+    const val TASK = "34A11kTaskRunsOnce0007"
+    private val ids = listOf(ALPHA, BETA, LAUNCH, QUIET, COORD, WORKER, WAITING, PLAIN, DONE, LANDING, TASK)
 
     /** Every request after the login, as `METHOD path?query`. */
     val calls = CopyOnWriteArrayList<String>()
@@ -107,6 +109,24 @@ internal object ProjectShell {
     /** What the landing doors answer: 200 (the body is read by no page) or a refusal in the server's own sentence. */
     @Volatile var doorStatus = 200
     @Volatile var doorMessage = "The job is no longer running."
+    /** A read of the landing's detail waits for this before it answers, with the view as it was when the read arrived: a server still
+     *  answering a door's read-back (A11k, A15 F-22's kind). Only that read is held. */
+    @Volatile var holdLanding: CompletableDeferred<Unit>? = null
+    /** One hold per read, in the order the reads arrive: the next read of the landing's detail waits for the first of these, so a
+     *  test can let reads land in an order of its own. A read finding none waits for nothing more. */
+    val holdLandingReads = java.util.concurrent.ConcurrentLinkedQueue<CompletableDeferred<Unit>>()
+    /** The view a door the server takes moves the landing to, or null to leave it where it was. The job that door was pressed on has
+     *  moved on: a door pressed on it again is refused in the server's words ([doorMessage]). */
+    @Volatile var landingAfterDoor: String? = null
+    private val movedJobs = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    // A11k: the task page's Run. Off by default: [TASK] is open, and nothing runs it.
+    /** Whether [TASK]'s Run has started its run: its detail then carries [WORKER], running, and another Run is refused as the server
+     *  refuses it (TASK_ALREADY_RUNNING, naming that run). */
+    @Volatile var taskRunning = false
+    /** A read of [TASK]'s detail waits for this before it answers, with the task as it was when the read arrived: a server still
+     *  answering a write's read-back (A15 F-22's kind). Only that read is held. */
+    @Volatile var holdTask: CompletableDeferred<Unit>? = null
 
     // A05-9: sessions moved to Trash. The server takes a move when the DELETE's held answer is let go; from then no list has the row.
     @Volatile var trashed: Set<String> = emptySet()
@@ -139,7 +159,8 @@ internal object ProjectShell {
         landingLog = """{"jobId":"j-1","entries":[],"nextCursor":null}"""; taskTitle = "Wire the page"
         landingStatus = 200; landingLogStatus = 200
         coordinatorStatus = "{\"state\":\"NEVER_OPENED\"}"; doorStatus = 200; doorMessage = "The job is no longer running."
-        landingServed = 0
+        landingServed = 0; holdLanding = null; holdLandingReads.clear(); landingAfterDoor = null; movedJobs.clear()
+        taskRunning = false; holdTask = null
         // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state.
         trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
         quietAttention = null; coordinatorWorking = false
@@ -204,6 +225,23 @@ internal object ProjectShell {
         if (done) ""","doneBy":"$doneBy","derivedDone":$projection""" else ""}${criteria?.let { ""","acceptanceCriteriaItems":$it""" }.orEmpty()}${
         attention?.let { ""","attention":$it""" }.orEmpty()}${configRevision?.let {
         ""","configRevision":"$it","coordinatorEnabled":$automatic,"maxConcurrentTasks":$maxConcurrentTasks""" }.orEmpty()}}"""
+    /** [TASK] as `GET tasks/:id` reads it: open with no run, or — once its Run has started — in progress, with [WORKER] running it. */
+    private val task get() = """{"id":"$TASK","title":"Wire the run","status":"${if (taskRunning) "IN_PROGRESS" else "OPEN"}","priority":0,
+        "projectId":"$LAUNCH","project":{"id":"$LAUNCH","title":"Launch","status":"OPEN"},"assignee":{"id":"$ALPHA","name":"Alpha"},
+        "creatorType":"USER","createdAt":"2026-10-26T08:00:00.000Z","updatedAt":"2026-10-26T08:0${if (taskRunning) 5 else 0}:00.000Z",
+        "comments":[],"dependsOn":[],"dependedOnBy":[],"attachments":[],"sessions":[${if (!taskRunning) "" else
+        """{"id":"$WORKER","title":"Wire tests","status":"RUNNING","runState":"RUNNING","agent":{"id":"$ALPHA","name":"Alpha"},
+        "createdAt":"2026-10-26T08:05:00.000Z"}"""}]}"""
+
+    /** [TASK]'s Run (`POST tasks/:id/execute`): the first starts its run; while that run goes, another Run — whatever trigger it
+     * names — is refused as the server refuses it, naming the run that holds the task. */
+    private fun execute(): ApiResponse {
+        if (!taskRunning) { taskRunning = true; return ok("{}") }
+        return ApiResponse(409, ("""{"statusCode":409,"error":"Conflict","code":"TASK_ALREADY_RUNNING","message":"task $TASK could not be """ +
+            """started: session $WORKER (RUNNING) holds its execution claim. Let that run reach a terminal status of its own, then start """ +
+            """the task again","taskId":"$TASK","conflictingSessionId":"$WORKER","conflictingSessionStatus":"RUNNING",""" +
+            """"conflictingSessionEnding":false}""").encodeToByteArray())
+    }
 
     /** How it runs' write (`PATCH projects/:id`): a revision the project has moved on from is refused with nothing written, as the
      * server refuses it (STALE_CONFIG_REVISION); otherwise its fields are written, and a write of the set moves the revision on by one. */
@@ -267,10 +305,21 @@ internal object ProjectShell {
                 ApiResponse(landingStatus, """{"message":"The server is unavailable"}""".encodeToByteArray())
             // A landing id reached by a link or a row: the detail is a landing's whenever the fixture says this id is one.
             api.path.size == 2 && path.startsWith("sessions/") && method == "GET" && landing != null &&
-                landingIds.any { ObjectId.same(it, path.removePrefix("sessions/")) } -> ok(landingDetail(path.removePrefix("sessions/")))
+                landingIds.any { ObjectId.same(it, path.removePrefix("sessions/")) } -> {
+                val answer = ok(landingDetail(path.removePrefix("sessions/")))
+                holdLanding?.await()
+                holdLandingReads.poll()?.await()
+                answer
+            }
             path == "sessions/$LANDING/landing/log" ->
                 if (landingLogStatus == 200) ok(landingLog) else ApiResponse(landingLogStatus, """{"message":"The log is unavailable"}""".encodeToByteArray())
             path == "tasks/t-landing" -> ok("""{"id":"t-landing","title":"$taskTitle"}""")
+            path == "tasks/$TASK" && method == "GET" -> {
+                val answer = ok(task)
+                holdTask?.await()
+                answer
+            }
+            path == "tasks/$TASK/execute" && method == "POST" -> execute()
             api.path.size == 2 && path.startsWith("sessions/") && method == "GET" -> ok(session(path.removePrefix("sessions/")))
             api.path.size == 2 && path.startsWith("sessions/") && method == "DELETE" -> {
                 holdDelete?.await()
@@ -299,8 +348,15 @@ internal object ProjectShell {
                 ok("""{"state":"UNCONFIRMED","confirmed":false,"currentVersion":{"digest":"digest-1","material":[]}}""")
             // The landing page's doors (J-T8's stop, J-T9's retry and re-check, J-T10's abandon): the answer is the server's.
             method == "POST" && (path.endsWith("/integration/stop") || path.endsWith("/integration/retry") ||
-                path.contains("/integration/jobs/") && path.endsWith("/retry") || path.endsWith("/abandon")) ->
-                if (doorStatus == 200) ok("{}") else ApiResponse(doorStatus, """{"message":"$doorMessage","code":"DOOR_REFUSED"}""".encodeToByteArray())
+                path.contains("/integration/jobs/") && path.endsWith("/retry") || path.endsWith("/abandon")) -> {
+                val job = if (path.contains("/integration/jobs/")) api.path.getOrNull(4) else null
+                if (doorStatus != 200) ApiResponse(doorStatus, """{"message":"$doorMessage","code":"DOOR_REFUSED"}""".encodeToByteArray())
+                else if (job != null && job in movedJobs) ApiResponse(409, """{"message":"$doorMessage","code":"DOOR_REFUSED"}""".encodeToByteArray())
+                else {
+                    landingAfterDoor?.let { next -> landing = next; landingAfterDoor = null; job?.let(movedJobs::add) }
+                    ok("{}")
+                }
+            }
             method == "POST" && path.startsWith("projects/$LAUNCH/promotions/") -> press(path.substringAfterLast('/'))
             path.startsWith("projects/") -> ok("{}")
             path.startsWith("wiki/") -> ApiResponse(404, """{"code":"WIKI_DISABLED","message":"The wiki is off."}""".encodeToByteArray())
