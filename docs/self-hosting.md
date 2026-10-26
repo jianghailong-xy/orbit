@@ -576,6 +576,7 @@ processes and a database host of its own busy.
 ### The cell's size
 
 The cell's load at its peak:
+
 - 15,000 connections;
 - 500 heartbeats a second, a quarter of them reconciled in full (an estimate for production's commands and changes);
 - 2,000 durable events a second;
@@ -673,6 +674,7 @@ Until then they run the old code against the schema the first apiserver has just
 
 **Before production.** Each apiserver runs every background job. Most jobs coordinate through the database, so with
 several processes they repeat work but do nothing twice:
+
 - the reaper's finalizing of sessions;
 - watches, open items and managed runners;
 - scheduled wakeups and session requests;
@@ -711,6 +713,7 @@ docker compose restart postgres
 
 **Pool in session mode only.** The apiserver sends its most frequent statement, the runner link heartbeat's, as a
 named prepared statement. It is prepared once on each connection and reused after that.
+
 - A pooler in **transaction mode** (PgBouncer's `pool_mode = transaction`) hands each transaction whichever server
   connection is free, and that connection may never have prepared the statement. Never put the apiservers behind one.
 - **Connect them directly, or through a pooler in session mode**, which gives each client connection one server
