@@ -132,11 +132,14 @@ internal fun LandingSessionPage(app: OrbitApplication, handle: SessionHandle, ro
     val scope = rememberCoroutineScope()
     val zone = remember { ZoneId.systemDefault() }
 
-    suspend fun readOnce() = LandingSessionReads.read(api, projects, id, state, app.landingJobs, handle) { state = it }
+    /** A read's answer, with the press as it stands now: a read carries the page as it was when it left, and one that left before
+     *  a press, or while one was out, must neither let the doors up under it nor hold them down after it. */
+    fun publish(read: LandingSessionRead) { state = read.copy(acting = state.acting) }
+    suspend fun readOnce() = LandingSessionReads.read(api, projects, id, state, app.landingJobs, handle, ::publish)
 
     LaunchedEffect(id) {
         while (isActive) {
-            LandingSessionReads.read(api, projects, id, state, app.landingJobs, handle) { state = it }
+            LandingSessionReads.read(api, projects, id, state, app.landingJobs, handle, ::publish)
             val next = LandingSessionModel.nextReadMs(state.view) ?: break
             delay(next)
         }
@@ -189,8 +192,10 @@ internal fun LandingSessionPage(app: OrbitApplication, handle: SessionHandle, ro
                     }
                     refusal = "$label — ${failureReason(failure).trimEnd('.')}."
                 }
-                state = state.copy(acting = false, refusal = refusal)
-                readOnce()
+                // The doors stay down until the page has read the press back, where iOS's `defer` puts it: pressed before then, a door
+                // goes out over the claim this press has just moved on, and the server refuses it (A15 F-22's kind).
+                state = state.copy(refusal = refusal)
+                try { readOnce() } finally { state = state.copy(acting = false) }
             }
         }
     }

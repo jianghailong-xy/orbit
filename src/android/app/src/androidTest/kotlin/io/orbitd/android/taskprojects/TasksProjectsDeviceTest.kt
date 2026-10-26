@@ -230,7 +230,8 @@ class TasksProjectsDeviceTest {
             it.text("method") == "POST" && it.text("path")?.endsWith("/comments") == true && it.obj("body")?.text("body") == "A11 controlled comment"
         } }
         scrollTo("task-detail", hasText("A11 controlled comment"))
-        scrollTo("task-detail", hasTestTag("task-run")); compose.onNodeWithTag("task-run").assertTextContains(TaskDetailCopy.runNow).performClick()
+        // The comment's write holds the page until its read lands (A11k): the Run waits for its control, as tap() does.
+        scrollTo("task-detail", hasTestTag("task-run")); compose.onNodeWithTag("task-run").assertTextContains(TaskDetailCopy.runNow); tap("task-run")
         compose.waitUntil(20_000) { http("/__stats").obj("tasks")?.obj(taskId)?.flag("running") == true }
         val runs = journal().filter { it.text("path") == "/api/tasks/$taskId/execute" }
         assertEquals(1, runs.mapNotNull { it.obj("body")?.text("triggerId") }.distinct().size)
