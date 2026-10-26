@@ -333,7 +333,9 @@ through the orbit CLI:
 - with the process killed (not force-stopped), an entry is swiped away;
 - with Orbit on screen, an entry joins the silent group;
 - a scratch session's approval arrives as a needs-you entry, and ending that session
-  from the host makes the server's sync push remove it.
+  makes the server's sync push remove it. The Orbit session that runs the script
+  starts and ends the scratch session with its own tools, because a runner-hosted job
+  does not carry orchestration, and the two sides hand over through files.
 
 The run records the server's notify answers, the receipt lines, Orbit's event-log
 lines and screenshots, and signs out (unregisters) at the end. Every notify and the

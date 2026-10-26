@@ -7,8 +7,9 @@
 #   background   Orbit stopped in the background; `orbit notify`; the tray entry is opened.
 #   killed       Orbit's process killed (not force-stopped); `orbit notify`; the tray entry is swiped away.
 #   foreground   Orbit on screen; `orbit notify`; the entry joins the tray silently.
-#   crossdevice  a scratch session parks on an approval (needs-you push); ending it here makes the approval stale,
-#                and the server's sync push must take the entry away.
+#   crossdevice  a scratch session the running Orbit session starts parks on an approval (needs-you push); that
+#                session then ends it, which makes the approval stale, and the server's sync push must take the
+#                entry away. The two sides hand over through files in the evidence directory.
 # Each notify and the approval alert every device of the account, phone and Mac included. The run ends signed out
 # (unregistered). A loopback SERVER (http://127.0.0.1:PORT) runs push-cold-fixture.py instead: sign-in, registration
 # and sign-out only, nothing is sent.
@@ -45,7 +46,6 @@ started_unit=false
 installed=false
 signed_in=false
 fixture_pid=''
-scratch=''
 failures=0
 exec 9>"${ANDROID_DEVICE_LOCK:-/var/lib/orbit/android/ui.lock}"
 printf 'lock_wait_started_utc=%s\n' "$(date -u +%FT%TZ)" > "$output/result.txt"
@@ -62,7 +62,6 @@ instrument() { # NAME METHOD
 cleanup() {
   local result=$? failed=0
   adbx -s "$serial" shell rm -f "$remote/login.env" > /dev/null 2>&1 || true
-  if [[ -n "$scratch" ]]; then "$orbit" session end "$scratch" --json > "$output/crossdevice-end-cleanup.json" 2>&1 9>&- || true; fi
   if [[ "$signed_in" == true ]]; then instrument sign-out-cleanup signOutAndUnregister || failed=1; fi
   adbx -s "$serial" logcat -d -v epoch -s OrbitPush:I A10Real:I > "$output/logcat-orbitpush.txt" 2>&1 || true
   adbx -s "$serial" logcat -d -v epoch -b events -e 'io\.orbitd\.android' > "$output/logcat-events.txt" 2>&1 || true
@@ -241,46 +240,53 @@ fi
 
 if [[ "$steps" == *" crossdevice "* ]]; then
   home
-  title="A10 Android push cross-device check $(date -u +%H%M%S)"
   mark() { printf '%s host_utc=%s device_epoch=%s\n' "$1" "$(date -u +%FT%T.%3NZ)" "$(device_now)" >> "$output/crossdevice-timeline.txt"; }
+  await_file() { # FILE TIMEOUT
+    local deadline=$((SECONDS + $2))
+    while (( SECONDS < deadline )); do [[ -s "$1" ]] && return 0; sleep 2; done
+    return 1
+  }
+  # The Orbit session running this script starts the scratch session (session_create, permissionMode default) and
+  # later ends it (session_end) through its own tools: orchestration rides that session's context, which a
+  # runner-hosted job does not carry. The two sides meet through files here: crossdevice-ready, then the session's
+  # "ID<TAB>TITLE" in crossdevice-session.txt, crossdevice-seen, and crossdevice-ended.
   created="$(device_now)"
-  mark session_create_sent
-  "$orbit" session create --title "$title" --permission-mode default --json --prompt "This session only raises one permission \
-request for an Android notification test. Use the Write tool to create /tmp/a10-push-check.txt containing the word ok. Do \
-nothing else; if the write is refused, stop." > "$output/crossdevice-session.json" 2>&1 9>&- || true
-  scratch="$(python3 -c '
-import json, sys
-d = json.load(open(sys.argv[1]))
-for o in (d, d.get("session") or {}):
-    ids = [o.get(k) for k in ("id", "sessionId", "publicId") if isinstance(o.get(k), str) and o.get(k)]
-    if ids:
-        print(ids[0])
-        break
-' "$output/crossdevice-session.json" 2>/dev/null || true)"
-  if [[ -n "$scratch" ]] && await_entry "$title" 300; then
-    mark approval_entry_seen
-    entry "$title" > "$output/crossdevice-entry.txt"
-    shade crossdevice-1-approval-tray
-    collapse
-    receipts_since "$created" alert > "$output/crossdevice-receipt.txt"
-    # Another client answers it: ending the scratch session takes it out of "needs you", and the server's sync push
-    # names it in clearSessions; the app re-reads the approval before removing the entry.
-    ended="$(device_now)"
-    mark session_end_sent
-    "$orbit" session end "$scratch" --json > "$output/crossdevice-end.json" 2>&1 9>&- || true
-    scratch=''
-    if await_gone "$title" 120; then
-      mark approval_entry_gone
-      shade crossdevice-2-cleared
-      receipts_since "$ended" sync > "$output/crossdevice-sync.txt"
-      if [[ -s "$output/crossdevice-receipt.txt" && -s "$output/crossdevice-sync.txt" ]]; then record crossdevice PASS
-      else record crossdevice FAIL; fi
+  printf 'ready\n' > "$output/crossdevice-ready"
+  mark waiting_for_scratch_session
+  if await_file "$output/crossdevice-session.txt" 900; then
+    IFS=$'\t' read -r scratch title < "$output/crossdevice-session.txt"
+    mark scratch_session_named
+    if [[ -n "$title" ]] && await_entry "$title" 300; then
+      mark approval_entry_seen
+      entry "$title" > "$output/crossdevice-entry.txt"
+      shade crossdevice-1-approval-tray
+      collapse
+      receipts_since "$created" alert > "$output/crossdevice-receipt.txt"
+      # Another client answers it: ending the scratch session takes it out of "needs you", and the server's sync
+      # push names it in clearSessions; the app re-reads the approval before removing the entry.
+      ended="$(device_now)"
+      printf 'seen\n' > "$output/crossdevice-seen"
+      mark waiting_for_session_end
+      if await_file "$output/crossdevice-ended" 900; then
+        mark scratch_session_ended
+        if await_gone "$title" 120; then
+          mark approval_entry_gone
+          shade crossdevice-2-cleared
+          receipts_since "$ended" sync > "$output/crossdevice-sync.txt"
+          if [[ -s "$output/crossdevice-receipt.txt" && -s "$output/crossdevice-sync.txt" ]]; then record crossdevice PASS
+          else record crossdevice FAIL; fi
+        else
+          shade crossdevice-timeout; record crossdevice FAIL
+        fi
+        collapse
+      else
+        record crossdevice FAIL
+      fi
     else
-      shade crossdevice-timeout; record crossdevice FAIL
+      shade crossdevice-no-approval; record crossdevice FAIL
     fi
-    collapse
   else
-    shade crossdevice-no-approval; record crossdevice FAIL
+    record crossdevice FAIL
   fi
 fi
 
