@@ -15,12 +15,13 @@ object Wire {
         json.decodeFromString(serializer, bytes.decodeToString())
     }
 
-    /** A JSON array of objects, read one object at a time straight from [bytes]: never the body as one string. [each] may
-     * answer an equal object it already holds instead of the one just read. */
+    /** A JSON array of objects, read one object at a time straight from [bytes]: never the body as one string. An object
+     * [held] answers with an equal one the caller already holds is that one; the rest are compacted (JsonCompactor). */
     @OptIn(ExperimentalSerializationApi::class)
-    fun objects(bytes: ByteArray, each: (JsonObject) -> JsonObject = { it }): List<JsonObject> = protocol {
+    fun objects(bytes: ByteArray, held: (JsonObject) -> JsonObject? = { null }): List<JsonObject> = protocol {
+        val compactor = JsonCompactor()
         json.decodeToSequence(bytes.inputStream(), JsonObject.serializer(), DecodeSequenceMode.ARRAY_WRAPPED)
-            .map(each).toList()
+            .map { row -> held(row) ?: compactor.compact(row) }.toList()
     }
 
     private inline fun <T> protocol(decode: () -> T): T = try {

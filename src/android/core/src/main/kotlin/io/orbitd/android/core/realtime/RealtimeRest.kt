@@ -26,15 +26,16 @@ internal class RealtimeRest(private val api: OrbitApi, private val background: C
 
     /**
      * A list read row by row from the body, never as one string. A row equal to the row of [previous] with its id is that
-     * row, so reading an unchanged directory again holds one copy of it, not two (A04c: an owner's thousands of sessions,
-     * read again on every account event, ran a release build out of heap once the cache write no longer did).
+     * row, so reading an unchanged directory again holds one copy of it, not two; new rows are compacted (Wire.objects).
+     * A04c: an owner's thousands of sessions, read again on every account event, ran a release build out of heap once the
+     * cache write no longer did.
      */
     private suspend fun objects(handle: SessionHandle, path: List<String>, query: List<Pair<String, String>> = emptyList(),
         previous: List<JsonObject>? = null): List<JsonObject> {
         val body = api.request(handle, ApiRequest(path, query = query)).body
         return withContext(background) {
             val known = previous.orEmpty().associateBy { it.text("id") }
-            Wire.objects(body) { row -> known[row.text("id")]?.takeIf { it == row } ?: row }
+            Wire.objects(body) { row -> known[row.text("id")]?.takeIf { it == row } }
         }
     }
 

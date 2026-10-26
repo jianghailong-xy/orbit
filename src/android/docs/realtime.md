@@ -43,8 +43,11 @@ All directory requests form one snapshot; a failed component does not silently
 erase rows from another component. Each list is read row by row from the
 response bytes, never as one string, and a row equal to the published
 snapshot's row with the same `id` is kept as that object: reading an unchanged
-directory again (on every account event) holds one copy of it, not two. The
-application decodes the lists off the main thread.
+directory again (on every account event) holds one copy of it, not two. New
+rows are compacted: objects with the same keys share one key table and keep
+their values in an array, and equal primitives are one object (an owner's
+5,945 Completed rows took 72 MB of heap as plain trees, 4.2 times their JSON).
+The application decodes the lists off the main thread.
 
 `ConnectionState` has exactly `STOPPED`, `CONNECTING`, `CONNECTED`, `BACKOFF`.
 `RealtimeError` has `reason: FailureReason` and `httpStatus: Int?`.
