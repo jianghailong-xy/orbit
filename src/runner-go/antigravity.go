@@ -1118,32 +1118,31 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 
 	inboxCtx, stopInbox := contextUntilEither(ctx, shutdownCtx)
 	defer stopInbox()
+	// The generation's inbox: what fetches its turns, and the turnIds already taken on, which a
+	// redelivery of one is dropped against for the generation's whole life.
+	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	defer inbox.close()
 	inboxCh := make(chan agyInboxResult, 16)
 	go func() {
-		for inboxCtx.Err() == nil {
-			resp, err := t.inbox(inboxCtx, job.SessionID, leaseGeneration)
+		for {
+			resp, err := inbox.next(inboxCtx)
+			if err != nil && !isLeaseOwnershipError(err) {
+				return // the inbox is stopped
+			}
 			select {
 			case inboxCh <- agyInboxResult{response: resp, err: err}:
 			case <-inboxCtx.Done():
 				return
 			}
 			// A superseded generation never regains ownership: stop rather than spin on 409s.
-			if err != nil && isLeaseOwnershipError(err) {
+			if err != nil {
 				return
-			}
-			if err != nil && inboxCtx.Err() == nil {
-				select {
-				case <-time.After(time.Second):
-				case <-inboxCtx.Done():
-					return
-				}
 			}
 		}
 	}()
 
 	var queued []*RunInboxResponse
 	queuedIDs := map[string]bool{}
-	seen := map[string]bool{}
 	var pendingShellCtx []string
 	var pendingReloads []*RunInboxResponse
 	endRequested := false
@@ -1169,7 +1168,7 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 	handleIdle := func(resp *RunInboxResponse) (status string, done bool) {
 		switch resp.Kind {
 		case "message":
-			if seen[resp.TurnID] {
+			if inbox.isInflight(resp.TurnID) {
 				return "", false
 			}
 			// The permit is also lost when the session detaches or leaves the pool, which does not
@@ -1177,17 +1176,17 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 			if !waitTurnPermit(ctx) {
 				return stCancelled, true
 			}
-			seen[resp.TurnID] = true
+			inbox.markInflight(resp.TurnID)
 			d.startTurn(resp, pendingShellCtx)
 			pendingShellCtx = nil
 		case "shell":
-			if seen[resp.TurnID] {
+			if inbox.isInflight(resp.TurnID) {
 				return "", false
 			}
 			if !waitTurnPermit(ctx) {
 				return stCancelled, true
 			}
-			seen[resp.TurnID] = true
+			inbox.markInflight(resp.TurnID)
 			setTurn(resp.TurnID)
 			if command, background := shellTurnBackgroundCommand(resp); background {
 				runShellTurnBackground(bg, execDir, scratchDir, command, resp.TurnID, emit, job.Agent.Env)
@@ -1292,18 +1291,13 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 			}
 		case item := <-inboxCh:
 			if item.err != nil {
-				if isLeaseOwnershipError(item.err) {
-					stopInbox()
-					onLeaseLost(item.err)
-					return stCancelled, true, false
-				}
-				if inboxCtx.Err() == nil {
-					logln("inbox poll failed for", job.SessionID+":", item.err)
-				}
-				continue
+				// The lease: the poller retries every other failure itself.
+				stopInbox()
+				onLeaseLost(item.err)
+				return stCancelled, true, false
 			}
 			resp := item.response
-			if resp == nil || draining {
+			if draining {
 				continue
 			}
 			if d.turn == nil && (d.proc == nil || !d.proc.retiring) && len(queued) == 0 {
@@ -1330,7 +1324,7 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 			case "diff":
 				reportOpenCodeDiff(inboxCtx, t, job)
 			default:
-				if resp.TurnID != "" && !seen[resp.TurnID] && !queuedIDs[resp.TurnID] && !endRequested &&
+				if resp.TurnID != "" && !inbox.isInflight(resp.TurnID) && !queuedIDs[resp.TurnID] && !endRequested &&
 					(d.turn == nil || resp.TurnID != d.turn.turnID) {
 					queued = append(queued, resp)
 					queuedIDs[resp.TurnID] = true

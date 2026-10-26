@@ -652,6 +652,10 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 
 	pollCtx, pollCancel := context.WithCancel(p.ctx)
 	defer pollCancel()
+	// The generation's inbox poller: what fetches its turns, and the turnIds already taken on, which
+	// a redelivery of one is dropped against for the generation's whole life.
+	poller := newInboxPoller(p.t, p.job.SessionID, p.leaseGeneration)
+	defer poller.close()
 	inbox := make(chan *RunInboxResponse, 8)
 	pollErrors := make(chan error, 1)
 	var pollWG sync.WaitGroup
@@ -660,31 +664,20 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	go func() {
 		defer pollWG.Done()
 		for pollCtx.Err() == nil {
-			resp, err := p.t.inbox(pollCtx, p.job.SessionID, p.leaseGeneration)
+			resp, err := poller.next(pollCtx)
 			if err != nil {
-				if pollCtx.Err() != nil {
-					return
-				}
-				if isLeaseOwnershipError(err) {
+				if pollCtx.Err() == nil && isLeaseOwnershipError(err) {
 					select {
 					case pollErrors <- err:
 					case <-pollCtx.Done():
 					}
-					return
 				}
-				select {
-				case <-time.After(time.Second):
-				case <-pollCtx.Done():
-					return
-				}
-				continue
+				return
 			}
-			if resp != nil {
-				select {
-				case inbox <- resp:
-				case <-pollCtx.Done():
-					return
-				}
+			select {
+			case inbox <- resp:
+			case <-pollCtx.Done():
+				return
 			}
 		}
 	}()
@@ -694,7 +687,6 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	defer func() { app.fail(fmt.Errorf("dsh session loop stopped")); promptWG.Wait() }()
 	var activeID string
 	stopped := false // a local stop of the active turn; see dshSettlementOutcome
-	seen := map[string]bool{}
 	var queued []*RunInboxResponse
 	worktree := func(req *TurnCompleteRequest) {
 		req.IsolationStatus = p.job.IsolationStatus
@@ -897,8 +889,7 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			case "message":
 				// One prompt at a time; the rest wait in Orbit's queue, or here when a lease
 				// expiry redelivered them. A redelivered active, queued or settled turn is dropped.
-				if !seen[resp.TurnID] {
-					seen[resp.TurnID] = true
+				if poller.markInflight(resp.TurnID) {
 					queued = append(queued, resp)
 				}
 			case "steer":
@@ -955,10 +946,9 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 					logln("diff-result failed for", p.job.SessionID+":", err)
 				}
 			case "shell":
-				if seen[resp.TurnID] {
+				if !poller.markInflight(resp.TurnID) {
 					continue
 				}
-				seen[resp.TurnID] = true
 				if resp.TaskAcceptance {
 					// The server-generated EXECUTABLE command is the runner's, not the engine's: it
 					// waits behind the messages ahead of it and then runs in the worktree exactly as
