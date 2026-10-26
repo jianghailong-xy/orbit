@@ -1,9 +1,13 @@
+import type { KeyObject } from 'node:crypto';
+
 import { BadRequestException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import type { ManagedRunnerManagementState, Prisma } from '@prisma/client';
 import { toUuid, type NormalizedRunEvent, type RunEventType } from '@orbit/shared';
 
 import { NON_REPLAYABLE_EVENT_TYPES, TOMBSTONE_EVENT_TYPE } from '../common/system-noise';
 import { classifyTransactionFault } from '../common/transaction-retry';
+import { managedRunnerInstanceOffer, managedRunnerInstanceVerdict } from '../managed-runners/managed-runner-instance';
+import { runnerLinkCredential, RunnerLinkTokenRefused, verifyRunnerLinkToken } from './runner-link-token';
 import { stripNul } from './strip-nul';
 
 /**
@@ -230,6 +234,22 @@ const MAX_CAUSE_NODES = 32;
 export function refusedValueState(error: unknown): string | null {
   const { family } = classifyTransactionFault(error);
   if (family === 'TRANSIENT' || family === 'RESOURCE' || family === 'ANSWERED') return null;
+  return sqlStateIn(error, VALUE_REFUSED);
+}
+
+/**
+ * What a merged link call's transaction is cut short by: its own lock timeout (55P03) and statement timeout (57014),
+ * LINK_CALL_LOCK_TIMEOUT_MS and LINK_CALL_STATEMENT_TIMEOUT_MS in RunnerApiController.
+ */
+const CUT_SHORT = /^(?:55P03|57014)$/;
+
+/** Whether a merged link call's transaction was cut short by its own timeouts: its batches are then sent alone. */
+export function linkCallCutShort(error: unknown): boolean {
+  return sqlStateIn(error, CUT_SHORT) !== null;
+}
+
+/** The first SQLSTATE matching `pattern` anywhere in an error's cause chain, or null. */
+function sqlStateIn(error: unknown, pattern: RegExp): string | null {
   const seen = new Set<unknown>();
   let level: unknown[] = [error];
   let visited = 0;
@@ -242,7 +262,7 @@ export function refusedValueState(error: unknown): string | null {
       const record = node as Record<string, unknown>;
       for (const field of ['code', 'originalCode']) {
         const code = record[field];
-        if (typeof code === 'string' && VALUE_REFUSED.test(code)) return code;
+        if (typeof code === 'string' && pattern.test(code)) return code;
       }
       next.push(record.cause);
       const meta = record.meta;
@@ -251,4 +271,220 @@ export function refusedValueState(error: unknown): string | null {
     level = next;
   }
   return null;
+}
+
+/**
+ * The link gateway's merged call (docs/runner-link-design.md §6.6, §6.7): POST /runner/link/events
+ * (RunnerLinkEventsController) takes the EventBatches a gateway collected from any of its connections for a short
+ * window (src/link-gateway/events_merge.go) in ONE transaction (RunnerApiController.ingestLinkEventCall), where each
+ * would otherwise be one call to the events route and one transaction of its own.
+ *
+ * Each batch is the body the gateway would forward alone, beside the connection it came on: the runner's link token
+ * and what its Hello declared, which RunnerAuthGuard reads off a link call's headers. Each is answered in the order
+ * asked, either as the events route answers it over the link (LinkEventsAnswer), or `sendAlone`: this call did not take
+ * it and wrote nothing of it, and the gateway forwards it to the events route on its own, which answers it as it
+ * always has. That is how everything a batch can be refused for, or fail of, is answered: exactly as before this call
+ * existed.
+ */
+
+/** One connection of a merged call: what every call forwarded for it carries (src/link-gateway/link.go `headers`). */
+export interface LinkEventCallConnection {
+  /** The link token the runner connected with (X-Orbit-Runner-Link-Token): it names the runner and the process. */
+  linkToken: string;
+  /** The other headers a call forwarded for the connection carries, by their lowercase names. */
+  headers: Record<string, string>;
+}
+
+/** One session's EventBatch in a merged call: the events route's body for it, and the connection it came on. */
+export interface LinkEventCallBatch {
+  /** Its connection, by index in `connections`. */
+  connection: number;
+  /** As the events route's path names it: a UUID or a public id. */
+  sessionId: string;
+  events: unknown;
+}
+
+export interface LinkEventCall {
+  connections: LinkEventCallConnection[];
+  batches: LinkEventCallBatch[];
+}
+
+/** A batch the merged call did not take: nothing of it was written, and it is to be forwarded on its own. */
+export interface LinkEventSentAlone {
+  sendAlone: true;
+}
+
+export type LinkEventCallResult = LinkEventsAnswer | LinkEventSentAlone;
+
+/** What the merged call answers. */
+export interface LinkEventCallAnswer {
+  /** One for each batch, in the order asked. */
+  results: LinkEventCallResult[];
+  /** How long the call's transaction held the sessions it locked, until its commit, in milliseconds: 0 for none. */
+  heldMs: number;
+}
+
+/** What a body that is not a merged call is answered with: the gateway then forwards each of its batches alone. */
+export const LINK_EVENT_CALL_MALFORMED = 'LINK_EVENT_CALL_MALFORMED';
+
+/**
+ * How many batches, and connections, one merged call may carry. Each batch is a session the call's transaction holds
+ * FOR UPDATE until it commits, so this bounds how long a user's message or a turn completion of any of them can wait
+ * behind one call; the gateway asks for fewer (LINK_EVENT_MERGE_MAX_BATCHES).
+ */
+export const MAX_LINK_CALL_BATCHES = 256;
+
+/** What a link token or one connection's headers may weigh: far more than any the gateway forwards. */
+const MAX_LINK_TOKEN_CHARS = 8_192;
+const MAX_CONNECTION_HEADERS = 64;
+const MAX_HEADER_CHARS = 16_384;
+
+/** Reads a merged call. Throws 400 LINK_EVENT_CALL_MALFORMED when it is not one; a batch it carries is read later. */
+export function readLinkEventCall(body: unknown): LinkEventCall {
+  const call = (body ?? {}) as { connections?: unknown; batches?: unknown };
+  const { connections, batches } = call;
+  if (!Array.isArray(connections) || connections.length === 0 || connections.length > MAX_LINK_CALL_BATCHES) {
+    callMalformed(`connections is a list of 1 to ${MAX_LINK_CALL_BATCHES} connections`);
+  }
+  if (!Array.isArray(batches) || batches.length === 0 || batches.length > MAX_LINK_CALL_BATCHES) {
+    callMalformed(`batches is a list of 1 to ${MAX_LINK_CALL_BATCHES} batches`);
+  }
+  const read: LinkEventCall = { connections: [], batches: [] };
+  connections.forEach((item, index) => {
+    const connection = (item ?? {}) as { linkToken?: unknown; headers?: unknown };
+    const token = connection.linkToken;
+    if (typeof token !== 'string' || token === '' || token.length > MAX_LINK_TOKEN_CHARS) {
+      callMalformed(`connection ${index} names no link token`);
+    }
+    const headers: Record<string, string> = {};
+    if (connection.headers !== undefined) {
+      const given = connection.headers;
+      if (!given || typeof given !== 'object' || Array.isArray(given) || Object.keys(given).length > MAX_CONNECTION_HEADERS) {
+        callMalformed(`connection ${index}: headers is an object of at most ${MAX_CONNECTION_HEADERS} strings`);
+      }
+      for (const [name, value] of Object.entries(given as Record<string, unknown>)) {
+        if (typeof value !== 'string' || value.length > MAX_HEADER_CHARS) callMalformed(`connection ${index}: header ${name} is not a string`);
+        headers[name.toLowerCase()] = value;
+      }
+    }
+    read.connections.push({ linkToken: token, headers });
+  });
+  batches.forEach((item, index) => {
+    const batch = (item ?? {}) as { connection?: unknown; sessionId?: unknown; events?: unknown };
+    const connection = batch.connection;
+    if (typeof connection !== 'number' || !Number.isInteger(connection) || connection < 0 || connection >= read.connections.length) {
+      callMalformed(`batch ${index} names no connection of this call`);
+    }
+    if (typeof batch.sessionId !== 'string') callMalformed(`batch ${index} names no session`);
+    read.batches.push({ connection, sessionId: batch.sessionId, events: batch.events });
+  });
+  return read;
+}
+
+function callMalformed(message: string): never {
+  throw new BadRequestException({
+    code: LINK_EVENT_CALL_MALFORMED,
+    message: `This is not a merged call of event batches: ${message}.`,
+    retryable: false,
+  });
+}
+
+/** A connection of a merged call that RunnerAuthGuard would admit: whose batches they are. */
+export interface AdmittedLinkConnection {
+  runnerId: string;
+  ownerId: string;
+  /** The process the link token was minted for, which every batch of the connection is fenced to (linkEvents). */
+  leaseOwner: string;
+}
+
+/** What admitting a connection reads of its runner: the runner, its owner's state, its managed instance's mapping. */
+interface LinkCallRunnerRow {
+  id: string;
+  ownerId: string;
+  tokenHash: string;
+  disabledAt: Date | null;
+  mappingId: string | null;
+  generation: number | null;
+  podUid: string | null;
+  managementState: string | null;
+}
+
+/**
+ * Admits a merged call's connections as RunnerAuthGuard admits a link call, with ONE read for every runner they name:
+ * the link token verified with the link's public key; the runner it names read with its owner's state and its
+ * managed instance's mapping; the runner still holding the credential the token was minted with (the revocation the
+ * gateway learns of by polling is exact here, as there); its owner's account not disabled; a managed runner's instance
+ * the one its mapping authorizes for the headers the connection's calls carry. Null for a connection the guard would
+ * refuse: its batches are sent alone, where the guard refuses them as it always has.
+ */
+export async function admitLinkCallConnections(
+  tx: Pick<Prisma.TransactionClient, '$queryRaw'>,
+  publicKey: KeyObject,
+  connections: readonly LinkEventCallConnection[],
+  now: Date,
+): Promise<Array<AdmittedLinkConnection | null>> {
+  const claims = connections.map((connection) => {
+    try {
+      return verifyRunnerLinkToken(connection.linkToken, publicKey, now);
+    } catch (error) {
+      if (error instanceof RunnerLinkTokenRefused) return null;
+      throw error;
+    }
+  });
+  const runnerIds = [...new Set(claims.flatMap((claim) => (claim ? [claim.runnerId] : [])))];
+  if (runnerIds.length === 0) return connections.map(() => null);
+  const rows = await tx.$queryRaw<LinkCallRunnerRow[]>`
+    SELECT r."id"::text AS "id", r."owner_id"::text AS "ownerId", r."token_hash" AS "tokenHash",
+           u."disabled_at" AS "disabledAt",
+           m."id"::text AS "mappingId", m."generation" AS "generation", m."pod_uid" AS "podUid",
+           m."management_state"::text AS "managementState"
+      FROM "runner" r
+      JOIN "user" u ON u."id" = r."owner_id"
+      LEFT JOIN "managed_runner" m ON m."runner_id" = r."id"
+     WHERE r."id" = ANY(${runnerIds}::uuid[])
+  `;
+  const runners = new Map(rows.map((row) => [row.id, row]));
+  return connections.map((connection, index) => {
+    const claim = claims[index];
+    const runner = claim ? runners.get(claim.runnerId) : undefined;
+    if (!claim || !runner || runnerLinkCredential(runner.tokenHash) !== claim.credential) return null;
+    if (runner.disabledAt) return null;
+    if (runner.mappingId !== null) {
+      const verdict = managedRunnerInstanceVerdict(
+        {
+          id: runner.mappingId,
+          generation: Number(runner.generation),
+          podUid: runner.podUid,
+          managementState: runner.managementState as ManagedRunnerManagementState,
+        },
+        managedRunnerInstanceOffer(connection.headers),
+      );
+      if (!verdict.authorized) return null;
+    }
+    return { runnerId: runner.id, ownerId: runner.ownerId, leaseOwner: claim.leaseOwner };
+  });
+}
+
+/**
+ * The seqs the sessions of a merged call already hold a row at, an event's or a tombstone's, within each one's batch:
+ * RunnerApiController.storedSeqs for every session in one statement, read inside the call's transaction once its
+ * sessions are locked, so a copy another backend took first is seen as it committed.
+ */
+export async function storedLinkCallSeqs(
+  tx: Pick<Prisma.TransactionClient, '$queryRaw'>,
+  batches: ReadonlyArray<{ sessionId: string; firstSeq: number; lastSeq: number }>,
+): Promise<Map<string, Set<number>>> {
+  const stored = new Map<string, Set<number>>(batches.map((batch) => [batch.sessionId, new Set<number>()]));
+  if (batches.length === 0) return stored;
+  const rows = await tx.$queryRaw<Array<{ sessionId: string; seq: number }>>`
+    SELECT e."session_id"::text AS "sessionId", e."seq" AS "seq"
+      FROM unnest(
+             ${batches.map((batch) => batch.sessionId)}::uuid[],
+             ${batches.map((batch) => batch.firstSeq)}::int[],
+             ${batches.map((batch) => batch.lastSeq)}::int[]
+           ) AS b(session_id, first_seq, last_seq)
+      JOIN "run_event" e ON e."session_id" = b.session_id AND e."seq" BETWEEN b.first_seq AND b.last_seq
+  `;
+  for (const row of rows) stored.get(row.sessionId)?.add(Number(row.seq));
+  return stored;
 }

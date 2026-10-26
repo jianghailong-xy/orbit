@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { Button } from '../components/ui/Button';
@@ -7,13 +7,19 @@ import { Card } from '../components/ui/Card';
 import { Segmented } from '../components/ui/Segmented';
 import { Select } from '../components/ui/Select';
 import { Switch } from '../components/ui/Switch';
-import { meQuery, type Me, type UserPreferences } from '../lib/queries';
+import { machineChipsOf } from '../components/RunnerEngines';
+import type { Runner } from '../components/TasksSidePanel';
+import { isLoginPool } from '../lib/codexLogin';
+import { routeId } from '../lib/idCodec';
+import { providerPoolsQuery, type ProviderPool } from '../lib/providerPools';
+import { meQuery, runnersQuery, type Me, type UserPreferences } from '../lib/queries';
+import { accountPoolList, poolAccessQuery, sharedPoolsQuery } from '../lib/sharedPools';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { useToast } from '../lib/toast';
 import { DEFAULT_PERMISSION_MODE, MODE_OPTIONS } from '../lib/workspaceDefaults';
 
 // One labelled row: title + hint on the left, the control on the right.
-function Field({ label, hint, children }: { label: string; hint: string; children: ReactNode }) {
+function Field({ label, hint, children }: { label: string; hint: ReactNode; children: ReactNode }) {
   return (
     <div
       style={{
@@ -30,6 +36,62 @@ function Field({ label, hint, children }: { label: string; hint: string; childre
       </div>
       <div style={{ flex: 'none' }}>{children}</div>
     </div>
+  );
+}
+
+/**
+ * What the phone's Settings row for Machines & models says (SettingsHome.infrastructureValue in OrbitKit):
+ * how many things on the page need a person — an engine signed out on a machine that is online (the
+ * amber chip on its card), a machine offline, an account pool no session can start on — or, with none,
+ * how many of the machines are online.
+ */
+function machinesValue(runners: Runner[], pools: ProviderPool[]): { text: string; needsYou: boolean } {
+  const online = runners.filter((runner) => runner.online);
+  const needsYou =
+    online.reduce((n, runner) => n + machineChipsOf(runner).filter((chip) => chip.signedOut).length, 0) +
+    (runners.length - online.length) +
+    pools.filter((pool) => pool.unavailable).length;
+  if (needsYou > 0) return { text: needsYou === 1 ? '1 needs you' : `${needsYou} need you`, needsYou: true };
+  return { text: runners.length === 0 ? 'None' : `${online.length} of ${runners.length} online`, needsYou: false };
+}
+
+/**
+ * The way into Machines & models (docs/mocks/machines-and-models, 02), laid out as Sharing and Access tokens
+ * are: what the page holds and the line it opens with on the left, Manage on the right — and under that
+ * line what the phone's row says, once the machines and the pools have been read.
+ */
+function MachinesAndModels() {
+  const navigate = useNavigate();
+  const runners = useQuery(runnersQuery());
+  const pools = useQuery(providerPoolsQuery());
+  const shared = useQuery(sharedPoolsQuery());
+  const access = useQueries({ queries: (pools.data ?? []).filter(isLoginPool).map((pool) => poolAccessQuery(pool.id)) });
+  const accessOf = new Map(access.flatMap((read) => (read.data ? [[routeId(read.data.id), read.data] as const] : [])));
+  const value =
+    runners.data && !pools.isPending && !shared.isPending
+      ? machinesValue(runners.data as Runner[], accountPoolList(pools.data ?? [], shared.data ?? [], accessOf))
+      : null;
+  return (
+    <Card title="Machines & models" style={{ marginBottom: 16 }}>
+      <Field
+        label="Machines, API keys and account pools"
+        hint={
+          <>
+            Where your agents run, and whose model quota they spend.
+            {value && (
+              <div
+                className="settings-machines-value"
+                style={{ marginTop: 4, fontSize: 13, color: value.needsYou ? 'var(--warning)' : 'var(--text-2)' }}
+              >
+                {value.text}
+              </div>
+            )}
+          </>
+        }
+      >
+        <Button onClick={() => navigate('/infrastructure')}>Manage</Button>
+      </Field>
+    </Card>
   );
 }
 
@@ -60,8 +122,9 @@ export function SettingsPage() {
     <div style={{ maxWidth: 560, margin: '0 auto' }}>
       <h1 className="page-title">Settings</h1>
 
-      {/* The same order as Settings on iOS: how sessions start, then the alerts and the look, then
-          what the account has shared. iOS lays these out as one list (SettingsHome in OrbitKit). */}
+      {/* The same order as Settings on iOS: how sessions start, then where agents run, then the alerts
+          and the look, then what the account has shared. iOS lays these out as one list (SettingsHome in
+          OrbitKit). */}
       <Card title="Session defaults" style={{ marginBottom: 16 }}>
         <Field
           label="Default permission mode"
@@ -132,6 +195,7 @@ export function SettingsPage() {
           />
         </Field>
       </Card>
+      <MachinesAndModels />
       <Card title="Notifications" style={{ marginBottom: 16 }}>
         <Field
           label="When a session finishes"

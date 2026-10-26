@@ -1219,7 +1219,7 @@ export function RunnerDetailPage() {
       <div className="runners-empty">
         Runner not found —{' '}
         <span className="rd-link" onClick={() => navigate('/infrastructure')}>
-          back to Infrastructure
+          back to Machines & models
         </span>
         .
       </div>
@@ -1428,7 +1428,7 @@ export function RunnerDetailPage() {
       <div className="rd-page">
       <div className="rd-head">
         <span className="rd-back" onClick={() => navigate('/infrastructure')}>
-          <ArrowLeftOutlined /> Infrastructure
+          <ArrowLeftOutlined /> Machines & models
         </span>
       </div>
 

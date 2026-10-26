@@ -124,7 +124,7 @@ struct SettingsHomeView: View {
                         self.row(row)
                     }
                 } header: {
-                    SettingsHeader(SettingsHome.header(group))
+                    if let header = SettingsHome.header(group) { SettingsHeader(header) }
                 } footer: {
                     if let footer = SettingsHome.footer(group) {
                         Text(footer)

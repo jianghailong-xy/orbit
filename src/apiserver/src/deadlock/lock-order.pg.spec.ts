@@ -9,10 +9,14 @@ import {
   admissionFenceSteps,
   capacityFenceScenario,
   heldRelations,
+  MERGED_ARRIVALS,
+  mergedIngestAgainstSingleWriterScenario,
+  mergedIngestStatements,
   orderedBatchCreateScenario,
   orderedCreateScenario,
   orderedDependencyScenario,
   reverseCycleScenario,
+  twoMergedIngestsScenario,
 } from './lock-order-fixture';
 import { newFixtureIds, seedLockFixture, seedThreePartyFixture } from './orbit-lock-fixture';
 import { runScenario, type ScenarioOutcome } from './pg-barrier';
@@ -243,6 +247,58 @@ test('the canonical lock order holds from both directions', { skip: !URL, timeou
       }
     });
   }
+
+  // The runner link's merged event call (RunnerApiController.ingestLinkEventCall): every session of the call taken in
+  // ONE statement sorted by id, SKIP LOCKED, then each written once. It waits for no session, so it can close no cycle
+  // through one; a writer of one of its sessions waits for it at most once, in the order the rank predicts.
+  for (const arrival of MERGED_ARRIVALS) {
+    await t.test(`a merged link call against a turn completion of one of its sessions (${arrival})`, async () => {
+      const ids = newFixtureIds(`lockorder-merged-${arrival}`);
+      await seedLockFixture(admin, ids);
+      const outcome = await runScenario(url, mergedIngestAgainstSingleWriterScenario(ids, arrival), 30_000);
+      assertAllCommitted(outcome);
+      assert.deepEqual(
+        edges(outcome),
+        arrival === 'merged-first' ? ['turn-complete -> merged-ingest'] : [],
+        `${outcome.name}: the completion waits for the call once, or nobody waits at all`,
+      );
+      const { rows } = await admin.query<{ id: string; text: string | null }>(
+        `SELECT id::text AS id, last_assistant_text AS text FROM "session" WHERE id = ANY($1::uuid[])`,
+        [[ids.contendedSessionId, ids.telemetrySessionId]],
+      );
+      const text = Object.fromEntries(rows.map((r) => [r.id, r.text]));
+      assert.equal(text[ids.contendedSessionId], `${ids.label}-merged`, 'the call wrote the session it took');
+      assert.equal(text[ids.telemetrySessionId], `${ids.label}-turn-complete`, 'the completion wrote its own, last');
+    });
+  }
+
+  await t.test('two merged link calls naming the same sessions in opposite orders never wait for each other', async () => {
+    const ids = newFixtureIds('lockorder-merged-two');
+    await seedLockFixture(admin, ids);
+    const outcome = await runScenario(url, twoMergedIngestsScenario(ids), 30_000);
+    assertAllCommitted(outcome);
+    assert.deepEqual(edges(outcome), [], `${outcome.name}: the second call waits for neither session the first holds`);
+  });
+
+  await t.test('a merged link call takes its sessions and their child rows, and nothing else', async () => {
+    const ids = newFixtureIds('lockorder-merged-set');
+    await seedLockFixture(admin, ids);
+    const probe = new Client({ connectionString: url });
+    await probe.connect();
+    const { rows } = await probe.query<{ pid: number }>('SELECT pg_backend_pid() AS pid');
+    try {
+      await probe.query('BEGIN');
+      for (const step of mergedIngestStatements(ids)) await probe.query(step.sql, step.values);
+      assert.deepEqual(
+        await heldRelations(admin, rows[0].pid),
+        ['run_event', 'session'],
+        'both sessions locked, each written once with its event: no user, workspace, runner or task lock (I3)',
+      );
+    } finally {
+      await probe.query('ROLLBACK').catch(() => undefined);
+      await probe.end().catch(() => undefined);
+    }
+  });
 
   await t.test('a telemetry-only Session write takes no Project lock', async () => {
     const ids = newFixtureIds('lockorder-telemetry-scope');

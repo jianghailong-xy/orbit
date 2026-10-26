@@ -189,6 +189,28 @@ function endedSessionStates(
 }
 
 /**
+ * The notification publishBatch sends the other replicas of a batch of a session's events, from the replica named
+ * `instanceId`, or null when nothing of the batch is stored: the stored events whole when they fit (MAX_NOTIFY_BYTES),
+ * otherwise their seq range. A function of its arguments alone, so that a transaction storing several sessions'
+ * batches (RunnerApiController.ingestLinkEventCall) sends each one's itself, and the other replicas hear of every
+ * batch once, at its commit (docs/runner-link-design.md §6.7).
+ */
+export function runEventBatchNotice(
+  instanceId: string,
+  runId: string,
+  events: readonly NormalizedRunEvent[],
+): { channel: string; payload: string } | null {
+  const stored = events.filter((event) => !NON_REPLAYABLE_EVENT_TYPES.includes(event.type));
+  if (stored.length === 0) return null;
+  const whole = JSON.stringify({ i: instanceId, r: runId, b: stored });
+  if (Buffer.byteLength(whole, 'utf8') <= MAX_NOTIFY_BYTES) return { channel: EVENT_CHANNEL, payload: whole };
+  const seqs = stored.map((event) => event.seq);
+  const from = seqs.reduce((a, b) => Math.min(a, b));
+  const to = seqs.reduce((a, b) => Math.max(a, b));
+  return { channel: EVENT_CHANNEL, payload: JSON.stringify({ i: instanceId, r: runId, f: from, t: to }) };
+}
+
+/**
  * Realtime fan-out. Within a process it uses an in-memory RxJS hub (events) and an
  * EventEmitter (inbox wakeups) — zero latency. Across replicas it bridges those over
  * Postgres LISTEN/NOTIFY: every publish/notifyInbox also NOTIFYs (tagged with this
@@ -572,21 +594,22 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    *     the other replicas read back from run_event, where the ingest has already stored them.
    */
   publishBatch(runId: string, events: readonly NormalizedRunEvent[]): void {
-    const stored: NormalizedRunEvent[] = [];
-    for (const event of events) {
-      this.publishHere(runId, event);
-      if (!NON_REPLAYABLE_EVENT_TYPES.includes(event.type)) stored.push(event);
-    }
-    if (stored.length === 0) return;
-    const whole = JSON.stringify({ i: this.instanceId, r: runId, b: stored });
-    if (Buffer.byteLength(whole, 'utf8') <= MAX_NOTIFY_BYTES) {
-      this.notifyRaw(EVENT_CHANNEL, whole);
-      return;
-    }
-    const seqs = stored.map((event) => event.seq);
-    const from = seqs.reduce((a, b) => Math.min(a, b));
-    const to = seqs.reduce((a, b) => Math.max(a, b));
-    this.notifyRaw(EVENT_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId, f: from, t: to }));
+    this.publishBatchHere(runId, events);
+    const notice = runEventBatchNotice(this.instanceId, runId, events);
+    if (notice) this.notifyRaw(notice.channel, notice.payload);
+  }
+
+  /**
+   * publishBatch without its notification: the batch to this replica's streams alone. For a batch whose notification
+   * the transaction that stored it sent (runEventBatchNotice), once that transaction has committed.
+   */
+  publishBatchHere(runId: string, events: readonly NormalizedRunEvent[]): void {
+    for (const event of events) this.publishHere(runId, event);
+  }
+
+  /** This replica's name in the notifications it sends, by which it knows its own when they come back (onNotify). */
+  get instance(): string {
+    return this.instanceId;
   }
 
   /** One event to this replica's own streams and consumers; `publish` and `publishBatch` add the other replicas. */

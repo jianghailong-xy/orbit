@@ -20,7 +20,7 @@ import kotlinx.serialization.json.put
 internal object Infrastructure {
     // Words
     /** The page's name: the Settings row that opens it, and its title. */
-    const val TITLE = "Infrastructure"
+    const val TITLE = "Machines & models"
     /** The page's line: under Settings' Machines & models row. */
     const val SUBTITLE = "Where your agents run, and whose model quota they spend."
     const val NEEDS_YOU = "Needs you"

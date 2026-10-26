@@ -2,7 +2,7 @@ import XCTest
 @testable import OrbitKit
 
 /// A DeepSeek key's account balance as this client reads it: what GET /providers/mine/:id/balance
-/// answers decodes, what each answer comes to on Infrastructure's API keys and on the key's page — and that
+/// answers decodes, what each answer comes to on the Machines & models page's API keys and on the key's page — and that
 /// no answer short of DeepSeek's own balance is ever drawn as an amount. Mirrors web's
 /// deepseekBalance.test.ts and DeepSeekBalance.test.tsx where the two overlap.
 final class DeepSeekBalanceTests: XCTestCase {

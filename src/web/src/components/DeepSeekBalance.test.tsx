@@ -133,7 +133,7 @@ describe('the DeepSeek account balance', () => {
   };
   const balanceRequests = () => apiMock.mock.calls.map(([path]) => path as string).filter((path) => path.includes('/balance'));
 
-  describe('the line under a DeepSeek row on Infrastructure’s API keys', () => {
+  describe('the line under a DeepSeek row on the Machines & models page’s API keys', () => {
     it('says it is checking until the server answers — with no number in the meantime', async () => {
       await show(<DeepSeekBalanceLine row={row()} />);
       expect(text()).toBe('Checking account balance…');

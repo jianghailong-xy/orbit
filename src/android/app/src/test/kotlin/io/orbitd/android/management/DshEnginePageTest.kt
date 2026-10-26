@@ -56,7 +56,7 @@ class DshEnginePageTest {
         fixture.runnerEngines = harness(installed = false)
         fixture.runnerExtra = ""","capabilities":["provider:dsh"]"""
         page()
-        await("Install DeepSeek Harness on this runner from Infrastructure.")
+        await("Install DeepSeek Harness on this runner from the Machines & models page.")
         compose.waitUntil(60_000) { compose.onAllNodes(install and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(install).performScrollTo().performClick()
         compose.waitUntil(60_000) { fixture.installBodies.isNotEmpty() }
@@ -67,7 +67,7 @@ class DshEnginePageTest {
         fixture.runnerEngines = harness(installed = true, compatible = false)
         fixture.runnerExtra = ""","capabilities":["provider:dsh"]"""
         page()
-        await("This runner has a DeepSeek Harness version Orbit does not support. Reinstall it from Infrastructure.")
+        await("This runner has a DeepSeek Harness version Orbit does not support. Reinstall it from the Machines & models page.")
         compose.waitUntil(60_000) { compose.onAllNodes(install and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
     }
 
@@ -102,6 +102,6 @@ class DshEnginePageTest {
         page()
         await("0.2.0-rc.2")
         assertEquals(0, shown("Install DeepSeek Harness"))
-        assertEquals(0, shown("Infrastructure"))
+        assertEquals(0, shown("the Machines & models page"))
     }
 }

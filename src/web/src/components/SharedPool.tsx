@@ -182,7 +182,7 @@ export function WhoCanUseItCard({
           />
           <span className="who-mode-h">
             {people
-              ? `They see ${pool.label} on their Infrastructure page and in the session picker.`
+              ? `They see ${pool.label} on their Machines & models page and in the session picker.`
               : 'Nobody else in Orbit sees this pool or its accounts.'}
           </span>
         </div>
@@ -507,7 +507,7 @@ function SharePoolModal({
         <>
           <ul className="pa-facts">
             <li>
-              <b>They see {pool.label}</b> on their Infrastructure page and in the session picker, and can start
+              <b>They see {pool.label}</b> on their Machines & models page and in the session picker, and can start
               sessions on it.
             </li>
             <li>

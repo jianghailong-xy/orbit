@@ -91,10 +91,10 @@ class RunnerRefreshShellTest : ComposerShellTest() {
             if (failures-- > 0) ApiResponse(503, """{"message":"unavailable"}""".encodeToByteArray()) else ApiResponse(200, ComposerShell.providers.encodeToByteArray())
         }
         signIn(); openSession()
-        awaitText("Update the DeepSeek key “DeepSeek” in Infrastructure, then send your message again.")
+        awaitText("Update the DeepSeek key “DeepSeek” on the Machines & models page, then send your message again.")
         assertEquals(3, reads("GET providers"))
         ComposerShell.providers = harnessKey("DeepSeek main")
         ComposerShell.endStream()
-        awaitText("Update the DeepSeek key “DeepSeek main” in Infrastructure, then send your message again.")
+        awaitText("Update the DeepSeek key “DeepSeek main” on the Machines & models page, then send your message again.")
     }
 }

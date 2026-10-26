@@ -192,7 +192,7 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
   RETRY_EXHAUSTED: { message: 'Provisioning kept failing on transient infrastructure errors and stopped. It can be retried.', retryable: true },
   STARTUP_TIMEOUT: { message: 'The runner did not report in before its startup deadline. It can be retried.', retryable: true },
   [MODEL_UNAVAILABLE]: {
-    message: 'The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.',
+    message: 'The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.',
     retryable: true,
   },
   POD_RESTARTING: {

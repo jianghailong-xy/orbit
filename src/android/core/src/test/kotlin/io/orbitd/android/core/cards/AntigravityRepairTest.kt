@@ -19,7 +19,7 @@ class AntigravityRepairTest {
 
     @Test fun eachRepairSaysWhatStopsTheSessionAndWhereItIsFixed() {
         assertEquals("Antigravity needs authentication", AntigravityRepair.NEEDS_KEY.title("wikova"))
-        assertEquals("Sign in with Google on this runner, or connect a Gemini API key in Infrastructure.", AntigravityRepair.NEEDS_KEY.body("wikova", "0.1.230"))
+        assertEquals("Sign in with Google on this runner, or connect a Gemini API key on the Machines & models page.", AntigravityRepair.NEEDS_KEY.body("wikova", "0.1.230"))
         assertEquals("Waiting for a newer runner", AntigravityRepair.UPDATE_RUNNER.title(null))
         assertEquals("wikova runs Orbit runner 0.1.200; Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running " +
             "on it, and this session starts then.", AntigravityRepair.UPDATE_RUNNER.body("wikova", "0.1.200"))
@@ -27,6 +27,6 @@ class AntigravityRepairTest {
             "session is running on it, and this session starts then.", AntigravityRepair.UPDATE_RUNNER.body(null, ""))
         assertEquals("Antigravity CLI isn't installed on wikova", AntigravityRepair.NOT_INSTALLED.title("wikova"))
         assertEquals("Antigravity CLI isn't installed on this runner", AntigravityRepair.NOT_INSTALLED.title(""))
-        assertEquals("Install it from Infrastructure, then send your message again.", AntigravityRepair.NOT_INSTALLED.body(null, null))
+        assertEquals("Install it from the Machines & models page, then send your message again.", AntigravityRepair.NOT_INSTALLED.body(null, null))
     }
 }

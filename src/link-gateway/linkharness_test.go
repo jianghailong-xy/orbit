@@ -147,6 +147,9 @@ func newLinkHarness(t *testing.T, backends []*fakeBackend, mutate func(*config))
 		}
 		c.link.RetryBudget = 2 * time.Second
 		c.link.BackendDownFor = 500 * time.Millisecond
+		// Every batch forwarded alone, the route each test here holds the gateway to; merged calls have tests of their
+		// own (events_merge_test.go), which set a window.
+		c.link.Merge.Window = 0
 		if mutate != nil {
 			mutate(c)
 		}

@@ -389,7 +389,7 @@ describe('a managed workspace in the console', () => {
     };
     await open(MANAGED_WORKSPACE);
     await waitForUi(() => expect(noticeTitle()).toBe('Your managed runner needs a model'));
-    const link = [...notice()!.querySelectorAll('a')].find((a) => a.textContent === 'Open Infrastructure');
+    const link = [...notice()!.querySelectorAll('a')].find((a) => a.textContent === 'Open Machines & models');
     expect(link?.getAttribute('href')).toBe(`/infrastructure?runner=${encodeId(MANAGED_RUNNER)}`);
     expect(mounted().querySelector('.np-hero')).toBeNull();
     expect(mounted().querySelector('.composer-model-chip')).toBeNull();
