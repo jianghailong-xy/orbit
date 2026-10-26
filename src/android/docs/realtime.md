@@ -31,6 +31,7 @@ file under `app/realtime`; it does not replace those entrypoints.
 | `handle` | Captured A03 identity. A consumer must match it with the current `AuthState.SignedIn.handle` by identity before showing account data. |
 | `directory` | Nullable full REST snapshot; non-null cached rows may be shown while stale. |
 | `directoryRefreshing`, `directoryFresh`, `directoryError` | REST progress, freshness and failure. Failure retains old rows. |
+| `directoryCached` | `directory` is the copy restored from the device cache, not yet replaced by a REST read. P01's fully-drawn line reports it as `source=cache`. |
 | `controlConnection`, `controlError` | Account SSE status, separate from REST success. |
 | `session` | Selected session's transcript, pending-state snapshot, freshness, connection and error. |
 | `invalidationRevision` | Increments on control reconnect and every non-ping control event, including an empty `sessionId`. Other pages use it to reload their authority. |
