@@ -59,6 +59,8 @@ class MainBranchDeviceTest {
 
     @Test fun theMainBranchRowOnEveryPathTheOwnerMeetsIt() {
         instrumentation.sendStatus(0, android.os.Bundle().apply { putString("main_branch_pid", android.os.Process.myPid().toString()) })
+        // No Activity has started to restore the stored session, as one does on launch: restored here, as a process without one does.
+        runBlocking { app.session.restore() }
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
         assertTrue("Requires a dedicated signed-out debug installation", app.session.state.value is AuthState.SignedOut)
         evidence.listFiles()?.forEach { it.delete() }
