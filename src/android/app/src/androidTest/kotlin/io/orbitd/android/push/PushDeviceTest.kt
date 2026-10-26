@@ -150,6 +150,32 @@ class PushDeviceTest {
         pass()
     }
 
+    /** A11h (A11-9's push, iOS 6b4bef713 `Notifications.intent` → `openProjectSessions(_:inColumn: false)`): the tray tap of a merge into
+     * main waiting on the owner delivers `orbit://project/<id>` and opens the project's sessions page as its root — the session showing
+     * before goes and the drawer's button leads — with the merge card to press, not the coordinator conversation the payload names. */
+    @Test fun mergeTrayTapOpensProjectSessionsPageAsRoot() {
+        fixture.project = true; fixture.pending = false
+        login(); openSession()
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Back").fetchSemanticsNodes().isNotEmpty() }
+        background()
+        deliver(envelope("alert", buildJsonObject {
+            put("title", "A11h merge"); put("body", "Merge 1 task into main?"); put("category", "ORBIT_OWNER_ITEM")
+            put("kind", "approve-merge-to-main"); put("sessionID", fixture.sessionId); put("projectID", fixture.projectId)
+            put("openItemID", fixture.itemId); put("threadId", fixture.projectId)
+        }, key = "owner-item-${fixture.itemId}"))
+        awaitNotifications(1)
+        tapTrayNotification("A11h merge")
+        awaitCondition { resumedActivity?.intent?.dataString == "orbit://project/${fixture.projectId}" }
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("project-merge-card:asking").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("project-sessions").assertExists()
+        compose.onNodeWithContentDescription("Back").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Open navigation").assertExists()
+        // The coordinator conversation that was showing is left, not opened again: no session stays selected.
+        awaitCondition { app.realtime.state.value.session == null }
+        capture("merge-tray-root")
+        pass()
+    }
+
     @Test fun foregroundDedupAndOtherEndResolutionClearTrayAndRealCard() {
         login(); openSession(); awaitCard()
         val foregroundEvent = alert()
@@ -424,7 +450,7 @@ class PushDeviceTest {
             SystemClock.sleep(100)
         }
     }
-    private fun tapTrayNotification() {
+    private fun tapTrayNotification(title: String = "A10 approval") {
         val service = instrument.uiAutomation.serviceInfo
         service.flags = service.flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
         instrument.uiAutomation.serviceInfo = service
@@ -434,7 +460,7 @@ class PushDeviceTest {
         var stableSince = SystemClock.elapsedRealtime()
         fun findTitle(node: AccessibilityNodeInfo?, depth: Int): Rect? {
             if (node == null || depth > 30) return null
-            if (node.isVisibleToUser && node.text?.toString() == "A10 approval") {
+            if (node.isVisibleToUser && node.text?.toString() == title) {
                 val bounds = Rect()
                 node.getBoundsInScreen(bounds)
                 if (!bounds.isEmpty && bounds.centerX() >= 0 && bounds.centerY() >= 0) return bounds
@@ -538,6 +564,10 @@ private class PushHttpFixture(corpus: String) {
     val accessToken get() = listOf("a10", "controlled", "access", account).joinToString("-")
     @Volatile var pending = true
     @Volatile var sessionFailure = 0
+    /** A11h: the session coordinates a project, and a merge into main ([itemId]) waits on the owner there. */
+    @Volatile var project = false
+    val projectId = "019a11a9-0000-7000-8000-000000000003"
+    val itemId = "019a11a9-0000-7000-8000-000000000004"
     @Volatile var unregisterCount = 0
     @Volatile private var account = "first"
     private val registrationLock = Any()
@@ -616,6 +646,18 @@ private class PushHttpFixture(corpus: String) {
                     put("hasMore", false); put("after", JsonNull)
                 })
                 path == "/api/tasks/evidence-decisions/pending" -> json(buildJsonObject { put("count", 0); put("pending", JsonArray(emptyList())) })
+                project && path == "/api/projects/$projectId" -> json(projectRow())
+                project && path in setOf("/api/projects", "/api/projects/sidebar") -> json(JsonArray(listOf(projectRow())))
+                project && path == "/api/projects/$projectId/open-items" -> json(buildJsonObject {
+                    put("needsYou", JsonArray(listOf(buildJsonObject { put("itemId", itemId); put("assignee", "OWNER"); put("kind", "PROMOTION_APPROVAL") })))
+                    put("withCoordinator", JsonArray(emptyList()))
+                })
+                project && path == "/api/projects/$projectId/integration" -> json(buildJsonObject { put("line", "PROJECT_BRANCH"); put("ref", "project/a11h") })
+                project && path == "/api/projects/$projectId/promotions/current" -> json(Wire.json.parseToJsonElement("""{"promotionId":"pr-a11h",
+                    "state":"READY","sourceRef":"refs/heads/project/a11h","sourceSha":"5e5bfca23aa1","upstreamRef":"refs/heads/main","commitsAhead":3,
+                    "filesChanged":4,"taskIds":["t1"],"tasks":[{"taskId":"t1","title":"A11h push routing"}],"checks":[{"name":"MERGE_CHECK",
+                    "command":"gradlew test","expectedExitCode":0,"exitCode":0,"timedOut":false,"durationMs":372000}],"conflicts":[],
+                    "landsAs":"MERGE_COMMIT","askedAt":"2026-10-26T00:00:00Z","merged":null}"""))
                 // Held open like the server's streams: a body that ends makes the client reconnect and
                 // re-read the session in a loop, which keeps the card's actions flickering.
                 path.endsWith("/events") -> MockResponse().setHeader("Content-Type", "text/event-stream")
@@ -628,7 +670,20 @@ private class PushHttpFixture(corpus: String) {
         remove("projectId"); remove("taskId")
         put("title", JsonPrimitive("A10 notification session")); put("workspaceId", JsonPrimitive(workspace))
         put("pendingApprovals", JsonPrimitive(if (pending) 1 else 0)); put("ownerItems", JsonArray(emptyList()))
+        if (project) {
+            put("projectMembership", buildJsonObject {
+                put("projectId", projectId); put("projectTitle", "A11h merge project"); put("projectStatus", "OPEN"); put("role", "COORDINATOR")
+            })
+            put("ownerItems", JsonArray(listOf(buildJsonObject {
+                put("itemId", itemId); put("kind", "PROMOTION_APPROVAL"); put("title", "Merge 1 task into main?"); put("since", "2026-10-26T00:00:00Z")
+            })))
+        }
     })
+    private fun projectRow() = buildJsonObject {
+        put("id", projectId); put("title", "A11h merge project"); put("status", "OPEN"); put("coordinatorSessionId", sessionId)
+        put("createdAt", "2026-10-20T00:00:00Z"); put("startedAt", "2026-10-20T00:00:00Z")
+        put("taskCounts", buildJsonObject { put("done", 1); put("failed", 0); put("total", 2) })
+    }
     fun journal() = buildJsonObject {
         put("pending", pending); put("sessionFailure", sessionFailure); put("decisions", JsonArray(decisions))
         put("requests", JsonArray(requests.map { request -> buildJsonObject {
