@@ -3,6 +3,7 @@ package io.orbitd.android
 import android.content.Intent
 import android.net.Uri
 import android.os.Looper
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.core.auth.AuthState
@@ -103,8 +104,10 @@ class ProjectRunSettingsShellTest {
         assertFalse(exists(hasTestTag("project-notice")))
     }
 
-    /** A crossing's answer holds its row until the page has read the answer back: asked again before then, the second press cannot
-     * send the key once more over an answer the server has taken, which it would refuse as spent. */
+    /** A crossing's answer holds its row until the page has read the answer back. Until then the row is being answered: its second
+     * press stays up, spinning and dead — it cannot send the key once more over an answer the server has taken, which it would
+     * refuse as spent — and its first press does not come back over the row read before the answer (iOS's order: `answerCrossing`
+     * closes the question after `decideCrossing`'s read). Once the read lands, the row says what the answer left: the task moved. */
     @Test fun aCrossingIsAnsweredOnceWhileThePageReadsTheAnswerBack() {
         val row = "34A11jCrossingMove0001"
         val key = "c".repeat(64)
@@ -121,16 +124,22 @@ class ProjectRunSettingsShellTest {
         compose.onNodeWithTag("crossing:$row:answer").performClick()
         await { decisions(row) == 1 && documentReads() > reads }
         assertEquals("""{"decision":"APPROVE","acknowledgedCrossingKey":"$key"}""", ProjectShell.bodies["POST projects/$launch/handoffs/$row/decision"])
-        // The question closed over the row as it was read before the answer; asked again, its second press is dead.
-        scrollTo("crossing:$row:approve")
-        compose.onNodeWithTag("crossing:$row:approve").performClick()
-        scrollTo("crossing:$row:answer")
+        compose.waitForIdle()
+        // The server has taken the answer and the page's read of it is out: no Approve… or Refuse… again, the question still asked.
+        compose.onAllNodesWithTag("crossing:$row:approve").assertCountEquals(0)
+        compose.onAllNodesWithTag("crossing:$row:refuse").assertCountEquals(0)
+        compose.onNodeWithText("Approve moving “Wire the drain watchdog” from Launch to Runner hardening?").assertExists()
+        compose.onNode(hasAnyAncestor(hasTestTag("crossing:$row:answer")) and hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate),
+            useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("crossing:$row:cancel").assertIsNotEnabled()
         compose.onNodeWithTag("crossing:$row:answer").assertIsNotEnabled().performClick()
         compose.waitForIdle()
         assertEquals(1, decisions(row))
 
         ProjectShell.holdDocument!!.complete(Unit)
-        await { !exists(hasTestTag("crossing:$row:approve")) && !exists(hasTestTag("crossing:$row:answer")) }
+        await { !exists(hasTestTag("crossing:$row:confirm")) }
+        compose.onNodeWithTag("crossing:$row:meaning").assertTextEquals("the task was moved when this request was confirmed")
+        compose.onAllNodesWithTag("crossing:$row:approve").assertCountEquals(0)
         assertEquals(1, decisions(row))
         assertFalse(exists(hasTestTag("crossing:$row:refusal")))
     }
