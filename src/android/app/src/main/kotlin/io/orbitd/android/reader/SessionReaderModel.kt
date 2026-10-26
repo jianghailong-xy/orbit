@@ -7,6 +7,7 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.directoryError
 import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.realtime.RestoredPosition
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.Serializable
@@ -31,6 +32,9 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
     val state = mutable.asStateFlow()
     var following: Boolean = record == null
         private set
+    /** The reading position this page restored from disk, if it did (D09 P06's `p06_restored` checks the list against it). */
+    var restored: RestoredPosition? = null
+        private set
     private var bookmark = ReadingBookmark()
     private var pageJob: Job? = null
     private var saveJob: Job? = null
@@ -50,6 +54,7 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
                 !access.denied && saved.accessRevision == access.revision && saved.window.events.size <= ReadingWindow.LIMIT
             if (restoreSaved) {
                 bookmark = saved; following = saved.following
+                restored = RestoredPosition(saved.seq, saved.offset, saved.following)
                 mutable.value = ReadingState(window = saved.window, ready = true,
                     targetSeq = saved.seq.takeIf { !saved.following }, targetOffset = saved.offset, targetTick = 1)
                 if (!saved.following && !saved.window.seeded) restore(saved.seq, saved.offset)

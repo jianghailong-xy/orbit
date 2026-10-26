@@ -40,11 +40,12 @@ import kotlinx.coroutines.withContext
  * by identity with its captured AuthState handle. Neither background execution nor a live-only
  * event is needed to recover pending cards on the next foreground connection. [background] is where the cache record is
  * encoded and directory lists are decoded; the application's store runs on the main thread and passes a background
- * dispatcher. */
+ * dispatcher. [witness] is told what the streams and pages brought in, for a measurement. */
 class RealtimeStore(
     private val auth: AuthSession,
     scope: CoroutineScope,
     private val background: CoroutineContext = EmptyCoroutineContext,
+    private val witness: RealtimeWitness? = null,
 ) : AutoCloseable {
     private data class Network(val available: Boolean = false, val identity: String? = null)
     private data class Selection(val id: String?, val revision: Long, val handle: SessionHandle? = null)
@@ -224,6 +225,7 @@ class RealtimeStore(
                     policy.healthy()
                     if (event.type != "ping") {
                         publish(handle) { it.copy(accountEvents = it.accountEvents + (event.type to (it.accountEvents[event.type] ?: 0L) + 1)) }
+                        if (witness?.enabled == true) witness.account(event.type, event.sessionId)
                         invalidate(handle)
                     }
                 })
@@ -261,6 +263,13 @@ class RealtimeStore(
             cache.update { it.remember(id, transcript) }
             writes.trySend(Unit)
         }
+        // A page's durable events for the witness, once they are in the window: whether it held each already ([before]).
+        fun witnessed(before: Transcript?, page: EventPage, via: String) {
+            if (witness?.enabled != true) return
+            val after = state.value.session?.takeUnless { it.accessDenied }?.transcript
+            if (after == null || after === before) return
+            for (event in page.events) if (event.durable) witness.durable(id, event.seq, via == "page" && before?.holds(event.seq) == true, via)
+        }
         val refresh = Channel<Unit>(Channel.CONFLATED)
         launch { sessionRevision.collect { refresh.trySend(Unit) } }
         launch {
@@ -278,7 +287,9 @@ class RealtimeStore(
                     if (wasDenied) {
                         val tail = rest.page(handle, id)
                         check()
+                        val before = state.value.session?.transcript
                         updateSession(handle, focus) { it.copy(transcript = it.transcript.tail(tail)) }
+                        witnessed(before, tail, "tail")
                         save()
                     }
                     policy.healthy()
@@ -303,7 +314,9 @@ class RealtimeStore(
         launch { while (isActive) { delay(30_000); refreshSession() } }
         fun land(page: EventPage) {
             check()
+            val before = state.value.session?.transcript
             updateSession(handle, focus) { if (it.accessDenied) it else it.copy(transcript = it.transcript.page(page)) }
+            witnessed(before, page, "page")
             save()
         }
         // Close the gap over REST pages before the stream opens. The gateway gzips JSON but never
@@ -334,7 +347,9 @@ class RealtimeStore(
                 if (reseed || state.value.session?.transcript?.seeded != true) {
                     val tail = rest.page(handle, id)
                     check()
+                    val before = state.value.session?.transcript
                     updateSession(handle, focus) { if (it.accessDenied) it else it.copy(transcript = it.transcript.tail(tail)) }
+                    witnessed(before, tail, "tail")
                     save()
                     reseed = false
                 } else {
@@ -359,7 +374,11 @@ class RealtimeStore(
                     if (event.type == "resync") throw Resync()
                     // An opening heartbeat alone does not prove that the replay window works.
                     if (event.type != "ping") policy.healthy()
+                    val before = state.value.session?.transcript
                     updateSession(handle, focus) { if (it.accessDenied) it else it.copy(transcript = it.transcript.apply(event)) }
+                    // A durable frame the window kept as it was is one it held already (or one older than the trimmed window).
+                    if (event.durable && witness?.enabled == true && state.value.session?.accessDenied == false)
+                        witness.durable(id, event.seq, state.value.session?.transcript === before, "sse")
                     if (event.durable) save()
                     if (event.type in SNAPSHOT_EVENTS) refreshSession()
                 })
@@ -379,6 +398,9 @@ class RealtimeStore(
             delay(policy.delayMs(failed))
         }
     }
+
+    /** The window is sorted by sequence. */
+    private fun Transcript.holds(seq: Long) = events.binarySearchBy(seq) { it.seq } >= 0
 
     companion object {
         /** Five 200-event pages: the server's SSE_GAP_CAP, past which it answers a cursor with resync. */
