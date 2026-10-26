@@ -148,7 +148,7 @@ func TestRunLoopBeatsBeforeAManagedInstanceClaims(t *testing.T) {
 
 	gate := strings.Index(body, "case <-startupBeatDone:")
 	loop := strings.Index(body, "\tfor loopCtx.Err() == nil {")
-	claim := strings.Index(body, "t.claimSession(loopCtx)")
+	claim := strings.Index(body, "t.claimSession(loopCtx, &claims)")
 	if gate < 0 || loop < gate || claim < loop {
 		t.Fatal("the claim loop does not wait for the startup beat before its first claim")
 	}

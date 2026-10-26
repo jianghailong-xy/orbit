@@ -31,7 +31,9 @@ import { isRunnerLinkGateway, RUNNER_LINK, type RunnerLinkConfig, type RunnerLin
  *                              RunnerAuthGuard checks it with the link's public key and reads the
  *                              runner by it, which must still hold the credential it was minted with.
  *   X-Orbit-Link-Request-Id    Rpc.request_id: a claim sent again under the same id answers the
- *                              session the first one claimed, not another (QueueService.trySessionClaim).
+ *                              session the first one claimed, not another (QueueService.trySessionClaim),
+ *                              and an inbox fetch the turn the first one handed out, of any kind
+ *                              (RunnerApiController.dequeueTurn).
  *   X-Orbit-Link-Session-Id    Rpc.session_id and Rpc.after_seq: the call is handled only once that
  *   X-Orbit-Link-After-Seq     session's events are stored through after_seq (`assertAfterSeqStored`).
  *   X-Orbit-Link-Gateway-Id    the gateway node holding the runner's connection, which the heartbeat
@@ -47,7 +49,8 @@ import { isRunnerLinkGateway, RUNNER_LINK, type RunnerLinkConfig, type RunnerLin
  * over HTTPS — the claim, the inbox, the wake and an approval's decision — answer at once, as if asked
  * with `wait=0`, because a hint tells the runner when to ask; every error carries `code`, `retryable` and
  * a retry hint (common/runner-link-error.filter.ts); and the inbox hands a turn whose answer was lost back
- * to the process that leased it as soon as it says it is not running it (RunnerApiController.inbox).
+ * to the process that leased it as soon as it says it is not running it (RunnerApiController.inbox), or
+ * sends the fetch again under its request id.
  */
 
 export const RUNNER_LINK_TOKEN_HEADER = 'x-orbit-runner-link-token';

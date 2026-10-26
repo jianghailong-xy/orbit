@@ -27,11 +27,14 @@ import (
 // fakeLinkInbox is one session's inbox as the control plane serves a link call (dequeueTurn, task B2): turns handed out
 // in the order they were queued; a message or shell turn leased IN_FLIGHT under the fetch's lease generation until its
 // turn completion, and meanwhile handed straight back to a fetch of that generation that names another running turn,
-// or none; every other kind answered as it is handed out. serve is a fakeWorkGateway backend.
+// or none; every other kind answered as it is handed out. A fetch sent again under the request id of one that handed a
+// turn out is answered with that turn, whatever its kind, a withdraw only within its delivery window (task B2b). serve
+// is a fakeWorkGateway backend.
 type fakeLinkInbox struct {
 	mu       sync.Mutex
 	queued   map[string][]RunInboxResponse // by session
 	inFlight map[string]*fakeLinkLease     // by session
+	handedBy map[string]fakeLinkHandOut    // by the request id of the fetch that handed the turn out
 	fetches  []fakeLinkFetch
 	// completions are the turns whose turn completions were taken, in order.
 	completions []string
@@ -50,6 +53,17 @@ type fakeLinkLease struct {
 	generation string
 }
 
+// fakeLinkHandOut is a turn a fetch handed out, the session and lease generation it was handed out to, and when.
+type fakeLinkHandOut struct {
+	session, generation string
+	turn                RunInboxResponse
+	at                  time.Time
+}
+
+// fakeWithdrawWindow is how long a withdraw is handed out at all: STEER_WITHDRAW_DELIVERY_WINDOW_MS
+// (src/apiserver/src/sessions/steer-withdraw.ts), counted here from its first hand-out.
+const fakeWithdrawWindow = 8 * time.Second
+
 // fakeLinkFetch is one inbox fetch the control plane served.
 type fakeLinkFetch struct {
 	requestID  string
@@ -62,7 +76,8 @@ type fakeLinkFetch struct {
 }
 
 func newFakeLinkInbox() *fakeLinkInbox {
-	return &fakeLinkInbox{queued: map[string][]RunInboxResponse{}, inFlight: map[string]*fakeLinkLease{}}
+	return &fakeLinkInbox{queued: map[string][]RunInboxResponse{}, inFlight: map[string]*fakeLinkLease{},
+		handedBy: map[string]fakeLinkHandOut{}}
 }
 
 // queue queues turns in session's inbox.
@@ -143,7 +158,11 @@ func (in *fakeLinkInbox) fetch(c *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResu
 	in.mu.Lock()
 	var turn *RunInboxResponse
 	lease := in.inFlight[f.session]
-	if lease != nil && f.stated && lease.generation == f.generation && lease.turn.TurnID != f.running {
+	if prior, ok := in.handedBy[f.requestID]; ok && prior.session == f.session && prior.generation == f.generation &&
+		(prior.turn.Kind != "withdraw" || time.Since(prior.at) < fakeWithdrawWindow) {
+		picked := prior.turn // the same fetch sent again: the turn it handed out
+		turn = &picked
+	} else if lease != nil && f.stated && lease.generation == f.generation && lease.turn.TurnID != f.running {
 		picked := lease.turn // the generation's own lease, which the fetch says it is not running
 		turn = &picked
 	} else {
@@ -164,6 +183,9 @@ func (in *fakeLinkInbox) fetch(c *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResu
 	}
 	if turn != nil {
 		f.handed = turn.TurnID
+		if prior, ok := in.handedBy[f.requestID]; !ok || prior.turn.TurnID != turn.TurnID {
+			in.handedBy[f.requestID] = fakeLinkHandOut{session: f.session, generation: f.generation, turn: *turn, at: f.at}
+		}
 	}
 	in.fetches = append(in.fetches, f)
 	lose, fail := in.lose, in.fail
@@ -556,6 +578,288 @@ printf '%s\n' '{"type":"step_finish","part":{"cost":0,"tokens":{"total":2,"input
 		t.Fatalf("no lost-answer session for %s", engine)
 	}
 	return run, ran
+}
+
+// onceKinds are the kinds of turn the poller hands to the session loop once: every kind but message and shell.
+var onceKinds = []string{"interrupt", "end", "diff", "setconfig", "reload", "withdraw", "steer"}
+
+// The answer that handed out a turn of any other kind is made good the same way (task B2b): the connection drops with
+// the answer, the call goes again on the next connection under its request id, the control plane answers it with that
+// same turn, and the session loop is handed it once, within 5 s. A fetch of its own, under a new request id, would have
+// been handed what is queued behind it, and the turn would be gone: answered as it was handed out, or, a steer, never
+// leased again.
+func TestALostControlTurnOrSteerAnswerIsHandedBackOnceWithinFiveSeconds(t *testing.T) {
+	for _, kind := range onceKinds {
+		t.Run(kind, func(t *testing.T) {
+			r := newLinkWorkRig(t)
+			in := newFakeLinkInbox()
+			var lostAt atomic.Int64
+			in.lose = func(f fakeLinkFetch) bool {
+				return f.handed == "c-1" && lostAt.CompareAndSwap(0, time.Now().UnixNano())
+			}
+			r.g.backend = in.serve
+			r.useLink(t)
+			in.queue("session-a", RunInboxResponse{TurnID: "c-1", Kind: kind, Content: "{}"},
+				RunInboxResponse{TurnID: "m-1", Kind: "message", Content: "queued behind it"})
+			p := newInboxPoller(r.t, "session-a", "gen-1")
+			defer p.close()
+			turns := pollInBackground(t, p)
+
+			if got := recvTurn(t, turns, 10*time.Second, "c-1"); got.Kind != kind {
+				t.Fatalf("c-1 was handed over as %q, want %q", got.Kind, kind)
+			}
+			handedBack := time.Now()
+			recvTurn(t, turns, 5*time.Second, "m-1")
+			if lostAt.Load() == 0 {
+				t.Fatal("no answer was lost")
+			}
+			if took := handedBack.Sub(time.Unix(0, lostAt.Load())); took > 5*time.Second {
+				t.Errorf("c-1 was handed over %s after its answer was lost", took)
+			}
+			fetches := in.fetchedFor("session-a")
+			if len(fetches) < 3 || fetches[0].handed != "c-1" || fetches[1].handed != "c-1" || fetches[2].handed != "m-1" {
+				t.Fatalf("fetches %+v: want c-1 handed out and lost, handed out again, then m-1", fetches)
+			}
+			if fetches[1].requestID != fetches[0].requestID {
+				t.Errorf("the fetch after the loss is %s, not the lost call %s sent again", fetches[1].requestID, fetches[0].requestID)
+			}
+			if fetches[2].requestID == fetches[0].requestID {
+				t.Errorf("the fetch after c-1 went under the lost call's request id %s", fetches[2].requestID)
+			}
+			select {
+			case extra := <-turns:
+				t.Fatalf("handed over %s (%s) as well", extra.TurnID, extra.Kind)
+			case <-time.After(300 * time.Millisecond):
+			}
+		})
+	}
+}
+
+// A turn of any kind but message and shell is handed to the session loop once, in either mode. The control plane answers
+// a control turn as it hands it out and never leases a steer again, and over the link hands either out again only to a
+// fetch sent again under the request id that handed it out, whose answer never arrived. A second copy that arrives all
+// the same is dropped: it would interrupt, end, reconfigure or steer the engine a second time. A steer the engine could
+// not take is put back in the queue as a message under its own id, and that is handed over.
+func TestAControlTurnOrSteerIsHandedToTheSessionLoopOnce(t *testing.T) {
+	check := func(t *testing.T, turns <-chan *RunInboxResponse, handedOut func(string) int) {
+		t.Helper()
+		for _, kind := range onceKinds {
+			if got := recvTurn(t, turns, 5*time.Second, "c-"+kind); got.Kind != kind {
+				t.Fatalf("c-%s was handed over as %q", kind, got.Kind)
+			}
+		}
+		if got := recvTurn(t, turns, 5*time.Second, "c-steer"); got.Kind != "message" {
+			t.Fatalf("the steer put back in the queue was handed over as %q, want a message", got.Kind)
+		}
+		select {
+		case extra := <-turns:
+			t.Fatalf("handed over %s (%s) again", extra.TurnID, extra.Kind)
+		case <-time.After(300 * time.Millisecond):
+		}
+		for _, kind := range onceKinds {
+			want := 2
+			if kind == "steer" {
+				want = 3 // and once more as the message it became
+			}
+			if n := handedOut("c-" + kind); n != want {
+				t.Errorf("c-%s was handed out %d times, want %d", kind, n, want)
+			}
+		}
+	}
+	// Each turn of those kinds twice, then the steer as the message it is put back in the queue as.
+	queue := func(add func(...RunInboxResponse)) {
+		for _, kind := range onceKinds {
+			c := RunInboxResponse{TurnID: "c-" + kind, Kind: kind, Content: "{}"}
+			add(c, c)
+		}
+		add(RunInboxResponse{TurnID: "c-steer", Kind: "message", Content: "the steer, put back in the queue"})
+	}
+
+	t.Run("over the link", func(t *testing.T) {
+		r := newLinkWorkRig(t)
+		in := newFakeLinkInbox()
+		queue(func(turns ...RunInboxResponse) { in.queue("session-a", turns...) })
+		r.g.backend = in.serve
+		r.useLink(t)
+		p := newInboxPoller(r.t, "session-a", "gen-1")
+		defer p.close()
+		check(t, pollInBackground(t, p), in.handedOut)
+	})
+	t.Run("over HTTPS", func(t *testing.T) {
+		var mu sync.Mutex
+		var queued []RunInboxResponse
+		handed := map[string]int{}
+		queue(func(turns ...RunInboxResponse) { queued = append(queued, turns...) })
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			mu.Lock()
+			if len(queued) > 0 {
+				next := queued[0]
+				queued = queued[1:]
+				handed[next.TurnID]++
+				mu.Unlock()
+				_ = json.NewEncoder(w).Encode(next)
+				return
+			}
+			mu.Unlock()
+			time.Sleep(20 * time.Millisecond) // the long poll, shortened
+			_, _ = w.Write([]byte(`{"turnId":"","seq":0,"kind":"message"}`))
+		}))
+		defer srv.Close()
+		p := newInboxPoller(NewTransport(srv.URL, "runner-token"), "session-a", "gen-1")
+		defer p.close()
+		check(t, pollInBackground(t, p), func(turnID string) int {
+			mu.Lock()
+			defer mu.Unlock()
+			return handed[turnID]
+		})
+	})
+}
+
+// What the session loop does with a turn it is handed takes effect once when the turn arrives twice: the engine is
+// interrupted once, reconfigured once, has one steer written into its turn and is asked once to withdraw it, and the
+// worktree's diff is sent once.
+func TestTheClaudeLoopActsOnceOnAControlTurnOrSteerHandedOverTwice(t *testing.T) {
+	twice := func(s scriptedTurn) []scriptedTurn { return []scriptedTurn{s, s} }
+	settledAs := func(run *deliverySession, turnID string) int {
+		run.mu.Lock()
+		defer run.mu.Unlock()
+		n := 0
+		for _, s := range run.settled {
+			if s.TurnID == turnID {
+				n++
+			}
+		}
+		return n
+	}
+	// The follow-up the inbox hands out once the copies have gone: by the time it runs, the loop has taken both.
+	followUp := afterTurn(messageTurn("turn-2", "and now the next thing"), "turn-1")
+
+	t.Run("interrupt", func(t *testing.T) {
+		run := runDeliverySession(t,
+			[]fakeStep{
+				{Await: "user"}, {Emit: "replay_user"},
+				{Emit: "assistant", Text: "starting the long thing"},
+				{Await: "control_request", Subtype: ctrlInterrupt},
+				{Emit: "control_response"},
+				{Emit: "result", Subtype: "error_during_execution", Text: "interrupted"},
+				{Await: "user"}, {Emit: "replay_user"},
+				{Emit: "result", Text: "done"},
+				{Emit: "eof"},
+			},
+			append(append([]scriptedTurn{messageTurn("turn-1", "start something long")}, twice(interruptTurn("int-1"))...), followUp),
+			nil)
+		if reqs := interruptRequests(run.fake); len(reqs) != 1 {
+			t.Fatalf("the CLI received %d interrupt control_request(s), want 1", len(reqs))
+		}
+		if markers := run.interruptMarkers(); len(markers) != 1 {
+			t.Errorf("the transcript shows %d interrupt marker(s), want 1", len(markers))
+		}
+		if msgs := run.errorMessages(); len(msgs) != 0 {
+			t.Errorf("the run reported failures: %v", msgs)
+		}
+		if got := run.turnResult("turn-2"); got == nil || got.Status != stSucceeded {
+			t.Errorf("the follow-up settled as %+v", got)
+		}
+	})
+	t.Run("setconfig", func(t *testing.T) {
+		run := runDeliverySession(t,
+			[]fakeStep{
+				{Await: "user"}, {Emit: "replay_user"},
+				{Await: "control_request", Subtype: ctrlSetPermissionMode},
+				{Emit: "control_response"},
+				{Emit: "result", Text: "done"},
+				{Await: "user"}, {Emit: "replay_user"},
+				{Emit: "result", Text: "done again"},
+				{Emit: "eof"},
+			},
+			append(append([]scriptedTurn{messageTurn("turn-1", "start something long")},
+				twice(setConfigTurn("cfg-1", "claude-opus-5", "plan"))...), followUp),
+			nil)
+		if asked := controlRequests(run, ctrlSetPermissionMode); len(asked) != 1 {
+			t.Fatalf("the CLI was asked %d time(s) to set the permission mode, want 1", len(asked))
+		}
+		if n := settledAs(run, "cfg-1"); n != 1 {
+			t.Errorf("the setconfig turn was settled %d times, want 1", n)
+		}
+		if run.reload {
+			t.Error("the run asked to be spawned again")
+		}
+		if got := run.turnResult("turn-2"); got == nil || got.Status != stSucceeded {
+			t.Errorf("the follow-up settled as %+v", got)
+		}
+	})
+	t.Run("steer and withdraw", func(t *testing.T) {
+		run := runDeliverySession(t,
+			[]fakeStep{
+				{Emit: "system_init", Version: "2.1.300"},
+				{Await: "user"}, // the message that opens the turn
+				{Emit: "replay_user"},
+				{Emit: "tool_use", ToolUseID: "toolu_1", ToolName: "Bash", Input: map[string]interface{}{"command": "sleep 20"}},
+				{Await: "user"}, // the steer, queued while the tool runs
+				{Await: "control_request", Subtype: ctrlCancelAsyncMessage},
+				{Emit: "control_response", Response: map[string]interface{}{"cancelled": true}},
+				{Emit: "tool_result", ToolUseID: "toolu_1", Text: "done"},
+				{Emit: "result", Text: "built"},
+				{Await: "user"}, {Emit: "replay_user"},
+				{Emit: "result", Text: "done"},
+				{Emit: "eof"},
+			},
+			append(append(append([]scriptedTurn{messageTurn("turn-1", "build it")},
+				twice(steerAfterRead("steer-1", "then push it to main", "turn-1"))...),
+				twice(withdrawTurn("withdraw-1", "steer-1", "then push it to main"))...), followUp),
+			nil)
+		steers := 0
+		for _, frame := range run.fake.Stdin() {
+			if frame["type"] == "user" && userFrameText(t, frame) == "then push it to main" {
+				steers++
+			}
+		}
+		if steers != 1 {
+			t.Fatalf("the steer was written into the turn %d times, want 1", steers)
+		}
+		if asked := controlRequests(run, ctrlCancelAsyncMessage); len(asked) != 1 {
+			t.Fatalf("the CLI was asked %d time(s) to drop the steer, want 1", len(asked))
+		}
+		if n := settledAs(run, "withdraw-1"); n != 1 {
+			t.Errorf("the withdraw turn was settled %d times, want 1", n)
+		}
+		if w := run.turnResult("withdraw-1"); w == nil || w.Result != withdrawWithdrawn {
+			t.Errorf("the withdraw turn settled as %+v, want %s", w, withdrawWithdrawn)
+		}
+		if got := run.turnResult("turn-2"); got == nil || got.Status != stSucceeded {
+			t.Errorf("the follow-up settled as %+v", got)
+		}
+	})
+	t.Run("diff", func(t *testing.T) {
+		var mu sync.Mutex
+		diffs := 0
+		run := runDeliverySessionWith(t,
+			[]fakeStep{
+				{Await: "user"}, {Emit: "replay_user"},
+				{Emit: "result", Text: "done"},
+				{Await: "user"}, {Emit: "replay_user"},
+				{Emit: "result", Text: "done again"},
+				{Emit: "eof"},
+			},
+			append(append([]scriptedTurn{messageTurn("turn-1", "change something")},
+				twice(scriptedTurn{turn: RunInboxResponse{TurnID: "diff-1", Kind: "diff"}, ungated: true})...), followUp),
+			nil,
+			deliveryOptions{onRequest: func(path string, _ []byte) {
+				if strings.HasSuffix(path, "/diff") {
+					mu.Lock()
+					diffs++
+					mu.Unlock()
+				}
+			}})
+		mu.Lock()
+		defer mu.Unlock()
+		if diffs != 1 {
+			t.Fatalf("the worktree's diff was sent %d times, want 1", diffs)
+		}
+		if got := run.turnResult("turn-2"); got == nil || got.Status != stSucceeded {
+			t.Errorf("the follow-up settled as %+v", got)
+		}
+	})
 }
 
 // A new connection does not have every inbox asked again (§10): the Welcome is followed at once by the connection's

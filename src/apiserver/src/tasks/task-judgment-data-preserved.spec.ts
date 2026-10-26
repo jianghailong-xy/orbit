@@ -2513,7 +2513,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // its reach. No function, trigger or type is created, replaced or dropped, so it names none of the six preserved
       // objects and is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: a constant default rewrites
       // nothing, and every row reads 0 and NULL until a heartbeat writes it.
-      '0447_runner_presence_reconcile'],
+      '0447_runner_presence_reconcile',
+      // The turn a runner link inbox fetch handed out, by the fetch's request id (0448, docs/runner-link-design.md
+      // §5.6): two nullable columns on `session`, `inbox_request_id` (TEXT) and `inbox_request_turn_id` (UUID), each
+      // added with IF NOT EXISTS and no default, written and read only by the inbox (RunnerApiController.dequeueTurn)
+      // under its session lock. Read against every claim above: `session` gains two columns and nothing of it changes —
+      // no CHECK, no index, no constraint, no foreign key, no trigger names them — and no `task`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion row are out of its
+      // reach. No function or trigger is created, and no INSERT, UPDATE or DELETE runs: every session reads NULL there.
+      '0448_session_inbox_request'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

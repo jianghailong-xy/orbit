@@ -46,7 +46,7 @@ func TestTransportAdvertisesSupportedProviders(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if _, err := NewTransport(server.URL, "runner-token").claimSession(context.Background()); err != nil {
+	if _, err := NewTransport(server.URL, "runner-token").claimSession(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := NewTransport(server.URL, "runner-token").reclaim(context.Background()); err != nil {

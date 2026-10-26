@@ -59,6 +59,8 @@ before(async () => {
   // `engine` is the recorded engine (migration 0414): the claim reads it to decide whether this
   // poller may be handed a steer, and a NULL one is derived from the provider slug exactly as
   // before the split (providers/session-engine.ts) — which is what every case below sets.
+  // `inbox_request_id` and `inbox_request_turn_id` are the link hand-out a resend is answered with
+  // (migration 0448): read with the session lock, NULL on every case here, which polls as HTTPS does.
   await client.query(`
     DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn";
     DROP TABLE IF EXISTS steer_dequeue_test."session";
@@ -68,6 +70,8 @@ before(async () => {
       assigned_runner_id uuid,
       inbox_lease_generation uuid,
       inbox_lease_owner uuid,
+      inbox_request_id text,
+      inbox_request_turn_id uuid,
       provider text NOT NULL DEFAULT 'claude',
       provider_builtin boolean NOT NULL DEFAULT true,
       engine text,

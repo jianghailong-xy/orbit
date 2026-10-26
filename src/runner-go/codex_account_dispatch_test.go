@@ -196,7 +196,7 @@ func claimedThrough(t *testing.T, door, url string) *ClaimedSession {
 	transport := NewTransport(url, "runner-token")
 	switch door {
 	case "claim":
-		job, err := transport.claimSession(context.Background())
+		job, err := transport.claimSession(context.Background(), nil)
 		if err != nil || job == nil {
 			t.Fatalf("claim: %v, %+v", err, job)
 		}
