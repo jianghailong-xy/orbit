@@ -124,8 +124,7 @@ scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 20
   (`samples.jsonl`); every service's and container's CPU on the host every 15 s, for what else ran (`slices.jsonl`);
   the gateway's `/metrics` every 15 s (`metrics.prom`); the database's sessions, transactions, rows and WAL every 15 s
   (`db.jsonl`), its statements (`pgss.json`, the 60 with the most time, after `pg_stat_statements_reset()` at the start;
-  `pgss-totals.json`, every statement's calls) and sizes; and each
-  container's log over the run (`logs/`).
+  `pgss-totals.json`, every statement's calls) and sizes; and each container's log over the run (`logs/`).
 - **The report** takes every figure over the steady window. Errors are counted wherever a part can report them: the
   runners, the gateway's counters and its WARN/ERROR lines, the apiserver's ERROR lines and any 5xx of the web
   gateway, the database's ERROR/FATAL/PANIC lines and deadlocks, NATS's `[ERR]` lines. The database's CPU peak is the
@@ -199,4 +198,53 @@ statements, and the batch at 2.20 / 2.69 / 0.16 ms and 13.6 statements.
 - At the cell's target (500 beats/s and 2,000 events/s, which the B8 cadence sends as about 1,290 batches/s of 1.55
   events), these costs come to about 5 apiserver cores (7 or more Node processes at 75%) and about 7.7 database cores
   on average, 11 to 12 at 10-second peaks.
+
+### Merged event calls
+
+Since task O2 the link gateway merges the event batches of all its connections into calls of up to 64 batches, and the
+apiserver stores each call in one transaction (design §6.6, [events_merge.go](../../src/link-gateway/events_merge.go)).
+The pair of runs above measures them, with the gateway's merge window off (`ORBIT_LINK_STAGING_MERGE_WINDOW=0`: every
+batch alone, as before merging) and on (`default`, 100 ms), at the same event rates. 400 events/s over 1,000 running
+sessions is the cell's target shape (0.4 events/s a session) at a fifth. On a host other load tests share:
+
+- every run holds the host's load-test lock, arm included, and once it holds it, waits until no other stack's loadgen
+  process (`pgrep -af 'cmd/loadgen|/loadgen -fleet'`) or `*-loadgen` container has run for 2 minutes;
+- a heartbeats-only run goes before and after the event runs, and each event run is taken against the two around it;
+- a run whose host swapped in more than 100 pages/s over its steady window is void and run again: swapping inflates
+  CPU (a heartbeats-only run swapping in 1,100 pages/s read 12% more database CPU than its repeat at 2 pages/s). So does
+  other work: with the host's other work at 9.4 cores instead of 5.2, an event run read 30 to 40% more per event.
+
+```bash
+lock() { flock /var/tmp/orbit-loadgen.lock sh -c "scripts/runner-link/loadgen-seed.sh arm && scripts/runner-link/loadgen-run.sh $*"; }
+ORBIT_LINK_STAGING_MERGE_WINDOW=default scripts/runner-link/staging-up.sh --no-build     # 0: merging off
+lock --name hb-1 -- -duration 2m -event-rate 0
+lock --name ev400-on -- -duration 2m -event-rate 400
+lock --name hb-2 -- -duration 2m -event-rate 0
+node scripts/runner-link/loadgen-baseline.mjs <state>/loadgen/runs/hb-1 <state>/loadgen/runs/ev400-on --target-events 2000
+node scripts/runner-link/loadgen-baseline.mjs <state>/loadgen/runs/hb-2 <state>/loadgen/runs/ev400-on --target-events 2000
+```
+
+Measured on 2026-10-26 with the apiserver and gateway of commit 03bee4272, the reports written with 99a58ea8e's
+steady-window means, one apiserver, heartbeats-only runs at 0.81 to 0.83 database cores (8.1 ms a beat), each event run
+against the heartbeats-only runs before and after it, the host's other work at 5.2 cores:
+
+| Per event | apiserver CPU | database CPU | SQL statements | commits | EventAck p99 at the runner |
+| --- | --- | --- | --- | --- | --- |
+| 150 events/s, merging off (1.22 events a batch) | 1.81–1.84 ms | 1.80–1.93 ms | 11.2 | 5.16 | 17–19 ms |
+| 150 events/s, merging on | 0.60–0.61 ms | 0.87–1.03 ms | 2.5 | 0.06 | 133–137 ms |
+| 400 events/s, merging on (1.55 events a batch) | 0.47 ms | 0.75–0.78 ms, mean 0.76 (4 runs) | 2.0 | 0.025 | 176–185 ms |
+
+- At 400 events/s the gateway made 8.9 merged calls a second of 27 batches each. They are the ingest's only commits,
+  against 674 a second unmerged at 150 events/s. Each call's transaction held its sessions p50 35 ms, p99 95 to 117 ms.
+- With merging off, 400 events/s saturates the one apiserver (EventAck p99 42 s, 2026-10-25), so before and after are
+  compared at 150 events/s. There the database's per-event figure is noisy: the events add 0.15 cores to 0.8.
+- Linear in events, 2,000 events/s needs about 1.5 database cores and 0.95 apiserver cores for the ingest, and at most
+  45 commits a second. That is an upper bound: at that rate one gateway's calls fill to their 64-batch cap, where at
+  400 events/s they carry 27 (a 250 ms window gives 61 at 400 events/s, but the host swapped through that run).
+- What an event still costs is the derivation's own work, 0.28 ms of execution at 400 events/s: the session's one
+  UPDATE (non-HOT whenever the preview text changes, since `session_search_trgm` indexes it), the run_event insert,
+  and the tool_call and approval writes. The rest, about 0.23 ms for each of its 2.0 statements, is parse, plan and
+  protocol: the Prisma adapter sends every statement unnamed (task O1's finding).
+- Statement counts come from `pgss-totals.json` since b47a66768. Before it, a merged run counted only the 60 statements
+  with the most time, and the one insert's row-count variants pushed the approval writes off that list.
 
