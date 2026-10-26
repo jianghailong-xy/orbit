@@ -385,7 +385,7 @@ func TestInboxPollerFetchesAgainAfterAFailureWithoutAHint(t *testing.T) {
 // under the generation's lease, straight back. Every fetch while it runs names it, so it is not handed out a third time,
 // and its completion goes once.
 func TestALostInboxAnswerIsHandedBackWithinFiveSecondsAndRunOnce(t *testing.T) {
-	for _, engine := range []string{providerClaude, providerCodex, providerOpenCode} {
+	for _, engine := range []string{providerClaude, providerCodex, providerKimi, providerOpenCode} {
 		t.Run(engine, func(t *testing.T) {
 			r := newLinkWorkRig(t)
 			in := newFakeLinkInbox()
@@ -511,6 +511,32 @@ func lostAnswerSession(t *testing.T, engine string, r *linkWorkRig) (run func(),
 			}
 			return n
 		}
+	case providerKimi:
+		fake := newFakeKimiEngine(t, map[string]interface{}{"sessionUpdate": "agent_message_chunk",
+			"content": map[string]interface{}{"type": "text", "text": "done"}})
+		t.Setenv("PATH", fake.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+		home, err := os.MkdirTemp("", "ors") // short: sockets live under it
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(home) })
+		t.Setenv("ORBIT_HOME", home)
+		job := &ClaimedSession{SessionID: lostAnswerSessionID, SessionUUID: "11111111-2222-3333-4444-555555555557",
+			Provider: providerKimi, Agent: AgentExecConfig{Provider: providerKimi, Env: map[string]string{
+				"KIMI_CODE_HOME": filepath.Join(t.TempDir(), ".kimi-code"), "KIMI_MODEL_NAME": "test-model", "KIMI_MODEL_API_KEY": "test-key",
+			}}}
+		// The fake records no prompts: each time the loop takes the message on it says so in a user event.
+		var taken atomic.Int32
+		emit := func(kind string, payload map[string]interface{}) {
+			if kind == evUser && payload["text"] == "do the thing" {
+				taken.Add(1)
+			}
+		}
+		run = func() {
+			runKimiSessionProcess(context.Background(), context.Background(), r.t, job, "gen-1", dir, t.TempDir(), emit, noEmitFor,
+				func(string) {}, false, nil, complete, permit, func(error) {})
+		}
+		ran = func() int { return int(taken.Load()) }
 	case providerOpenCode:
 		count := filepath.Join(dir, "invocations")
 		writeFakeBin(t, dir, providerOpenCode, `printf x >> "$COUNT_PATH"
