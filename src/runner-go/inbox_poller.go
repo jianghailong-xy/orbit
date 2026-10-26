@@ -37,6 +37,13 @@ import (
 // takes its turn completion (linkMode.turnDone) or the generation ends (close). The table of turns being processed is
 // what keeps a turn handed over again from running twice.
 //
+// A turn of any other kind — interrupt, end, diff, setconfig, reload, withdraw, a steer — is handed to the session loop
+// once. The control plane answers a control turn as it hands it out and never leases a steer again, and over the link
+// hands either out again only to a fetch sent again under the request id that handed it out, whose answer never
+// arrived (§5.6, task B2b); a second copy that arrives all the same is dropped here, so that it cannot interrupt,
+// reconfigure or steer the engine a second time. A fetch over the link that got no answer at all is therefore
+// followed by one under its request id, however long the link stays down, until one is answered (linkRequestIDs).
+//
 // A fetch refused for the lease (isLeaseOwnershipError: 409, 403, 404) ends the poller: the generation never owns the
 // inbox again. Nor does a poller whose context has ended, or that has been closed, ever fetch again, in either mode: the
 // engine it fetched for is gone, and a control turn handed to it would have no receiver (retirePendingGeneration in
@@ -64,6 +71,8 @@ type inboxPoller struct {
 	gate *linkGate
 	// failures counts the fetches in a row that failed, for the link's backoff.
 	failures int
+	// ids is the request id its fetches go under over the link, kept while one gets no answer.
+	ids linkRequestIDs
 
 	mu     sync.Mutex
 	closed bool
@@ -73,11 +82,13 @@ type inboxPoller struct {
 	// handed is the message or shell turn the control plane handed this generation last: what close stops counting as
 	// the turn this process runs in the session.
 	handed string
+	// once are the turns of every other kind handed to this generation, by id: each is handed to the session loop once.
+	once map[string]bool
 }
 
 // newInboxPoller is the inbox of the engine generation leaseGeneration of a session. close ends it with the generation.
 func newInboxPoller(t *Transport, sessionID, leaseGeneration string) *inboxPoller {
-	p := &inboxPoller{t: t, sessionID: sessionID, leaseGeneration: leaseGeneration, turns: map[string]bool{}}
+	p := &inboxPoller{t: t, sessionID: sessionID, leaseGeneration: leaseGeneration, turns: map[string]bool{}, once: map[string]bool{}}
 	if t.link != nil {
 		p.gate = t.link.gates.openInbox(sessionID)
 	}
@@ -105,7 +116,8 @@ func (p *inboxPoller) next(ctx context.Context) (*RunInboxResponse, error) {
 				return nil, err
 			}
 		}
-		resp, err := p.t.inbox(ctx, p.sessionID, p.leaseGeneration)
+		resp, err := p.t.inbox(p.ids.with(ctx), p.sessionID, p.leaseGeneration)
+		p.ids.settle(err)
 		if err != nil {
 			if err := p.stopped(ctx); err != nil {
 				return nil, err
@@ -133,13 +145,28 @@ func (p *inboxPoller) next(ctx context.Context) (*RunInboxResponse, error) {
 		if resp == nil {
 			continue // a long poll that held and yielded nothing, or a link fetch with nothing to hand out
 		}
-		if !p.handedOver(resp) {
+		handed := p.handedOver(resp)
+		if handed == handedClosed {
 			return nil, errInboxPollerClosed
 		}
 		p.markDue() // more may wait behind it
+		if handed == handedAgain {
+			logln(fmt.Sprintf("inbox of %s handed over %s turn %s again; it was handed over once and takes effect once",
+				p.sessionID, resp.Kind, resp.TurnID))
+			continue
+		}
 		return resp, nil
 	}
 }
+
+// handover is what handedOver made of a turn a fetch brought back.
+type handover int
+
+const (
+	handedOn     handover = iota // a turn for the session loop
+	handedAgain                  // a turn other than a message or shell turn, handed to this generation already
+	handedClosed                 // the poller was closed while the fetch was out
+)
 
 // stopped is why the poller fetches nothing more, nil while it may.
 func (p *inboxPoller) stopped(ctx context.Context) error {
@@ -162,21 +189,28 @@ func (p *inboxPoller) markDue() {
 }
 
 // handedOver records a turn the control plane handed this generation, unless the poller was closed while the fetch was
-// out: a message or shell turn is the one this process runs in the session from now on. Under p.mu, so that close
-// cannot come between the check and the record.
-func (p *inboxPoller) handedOver(resp *RunInboxResponse) bool {
+// out: a message or shell turn is the one this process runs in the session from now on, and a turn of any other kind
+// is handed on the first time only. Under p.mu, so that close cannot come between the check and the record.
+func (p *inboxPoller) handedOver(resp *RunInboxResponse) handover {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed {
-		return false
+		return handedClosed
 	}
 	if resp.Kind == "message" || resp.Kind == "shell" {
 		p.handed = resp.TurnID
 		if p.t.link != nil {
 			p.t.link.handedTurn(p.sessionID, resp)
 		}
+		return handedOn
 	}
-	return true
+	// A steer the engine could not take is put back in the queue as a message under its own id, and that comes
+	// through above.
+	if p.once[resp.TurnID] {
+		return handedAgain
+	}
+	p.once[resp.TurnID] = true
+	return handedOn
 }
 
 // close ends the poller with its engine generation: it fetches nothing more, no hint marks it, and the turn it was handed
