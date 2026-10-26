@@ -79,7 +79,11 @@ do not sign out. Logout revocation is best-effort with a captured old server/tok
 five-second limit; local cleanup does not depend on it. A lost refresh response cannot
 guarantee remote revocation of the newly issued token, but cannot restore local credentials.
 
-OkHttp disables redirects and connection retries. Auth/mutation bodies are one-shot at the
+OkHttp disables redirects. Its connection retries only take a call whose connect failed, before
+anything was sent, on to the host's next address: OkHttp tries an address it timed out on last, so
+`localhost` (127.0.0.1 and ::1) served on 127.0.0.1 alone otherwise failed every later call on ::1
+(A03i). A network interceptor keeps every other retry the option allows off: a request that fails
+once connected is not sent again, and a 408 is not repeated. Auth/mutation bodies are one-shot at the
 transport layer, also preventing automatic HTTP 408/503 resubmission. The session layer
 constructs a fresh request body only for its explicit 401 retry. There are no HTTP disk caches,
 cookie stores or logging interceptors.
@@ -235,8 +239,10 @@ same-account re-login, server/user isolation, persistence failures, corrupt rest
 restore through storage failures that may pass (read again; still failing, kept for the next
 launch) or not (a permanently invalidated key: cleared). `AndroidSessionStorageTest` pins which
 platform failures are unrecoverable and that each keeps its cause.
-Real HTTP tests check paths, bearer/client headers, exact replay body, redirects, 503 and
-socket cancellation. UI tests cover usable login/logout and activity recreation.
+Real HTTP tests check paths, bearer/client headers, exact replay body, redirects, 503,
+socket cancellation, the fallback to localhost's other address after a read timeout, and no
+second send after a dropped connection or a 408. UI tests cover usable login/logout and
+activity recreation.
 `GoogleSignInTest` covers the start URL, the RFC 7636 challenge and callback parsing (ticket, error,
 another or repeated state, no sign-in waiting, other addresses); `AuthSessionTest` and
 `HttpTransportTest` cover the ticket login and `auth/methods`; `GoogleSignInFlowTest` drives the
