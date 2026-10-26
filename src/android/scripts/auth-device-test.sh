@@ -122,6 +122,14 @@ fi
 [[ "$night" =~ ^(yes|no|auto|custom)$ ]] || { echo "Unreadable night mode: $night" >&2; exit 1; }
 for phase in light dark; do
   adb -s "$serial" shell cmd uimode night "$([[ "$phase" == dark ]] && echo yes || echo no)" > /dev/null
+  # The configuration takes the night mode a moment after the command answers: on API 29 the dark phase once started under
+  # the light one. Wait (up to 10 s) until the device's configuration carries this phase's qualifier.
+  want="$([[ "$phase" == dark ]] && echo night || echo notnight)"
+  for _ in $(seq 1 40); do
+    config="$(adb -s "$serial" shell am get-config 2> /dev/null | tr -d '\r' || true)"
+    [[ "$config" == *"-$want-"* ]] && break
+    sleep 0.25
+  done
   run_test "login-page-$phase" io.orbitd.android.auth.LoginPageDeviceTest 1 -e a03c_phase "$phase"
 done
 adb -s "$serial" shell cmd uimode night "$night" > /dev/null
