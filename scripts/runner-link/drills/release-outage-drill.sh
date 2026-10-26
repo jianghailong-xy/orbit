@@ -129,7 +129,12 @@ executions() {
     count(*) FILTER (WHERE type = 'user_delivery' AND payload->>'delivery' = 'acknowledged') || ' ' ||
     count(*) FILTER (WHERE type = 'turn_end') FROM run_event WHERE turn_id = '$1'")"
 }
-spawns() { if [ -f "$drill/fake/spawns.jsonl" ]; then wc -l < "$drill/fake/spawns.jsonl"; else echo 0; fi; }
+# engine_starts RUNTIME_SESSION_ID: how many times a session's engine was started (spawns.jsonl): its conversation opened
+# or resumed under that id. The runner's own probes (the slash-command registry, the auth check) start the scripted
+# claude too, under no conversation.
+engine_starts() {
+  if [ -f "$drill/fake/spawns.jsonl" ]; then grep -c -- "$1" "$drill/fake/spawns.jsonl" || true; else echo 0; fi
+}
 
 # --- Sessions. --------------------------------------------------------------------------------------------------------
 open_session() {
@@ -174,7 +179,7 @@ start_container() {
 # started again. Then the release must land, the session must still be open, and a message must be answered once; over
 # the link a diff refresh asked for during the outage must reach the session's next engine, once.
 outage() {
-  local phase=$1 container=$2 created sid suuid from spawns0 down_at back_at released_at statuses=() st diff="" diff_state
+  local phase=$1 container=$2 created sid suuid from runtime starts0 started down_at back_at released_at statuses=() st diff="" diff_state
   local marker turn ran verdict="" failed_lines released_line engine_started answered_at generation handed_to
   created="$(open_session "$phase" "Release outage drill, $phase: the prompt")"
   sid="$(json "$created" id)"
@@ -182,7 +187,8 @@ outage() {
   wait_answered "$phase" "$suuid" 1
   # The inbox generation of the engine that answered: the one that stops inside the outage.
   generation="$(psql_value "SELECT inbox_lease_generation FROM session WHERE id = '$suuid'")"
-  spawns0="$(spawns)"
+  runtime="$(psql_value "SELECT runtime_session_id FROM session WHERE id = '$suuid'")"
+  starts0="$(engine_starts "$runtime")"
   from="$(log_lines)"
   kill_container "$container"
   down_at="$(now)"
@@ -238,8 +244,10 @@ outage() {
     turn="$(turn_of "$suuid" "$marker")"
     ran="$(executions "$turn" "$marker")"
     engine_started="$(psql_value "SELECT engine_started_at FROM session WHERE id = '$suuid'")"
-    say "$phase: the message after the outage ran as \"$ran\" (stdin, user, written, acknowledged, turn_end); the session's engine started $(($(spawns) - spawns0)) time(s) since the outage began, last at $engine_started"
+    started=$(($(engine_starts "$runtime") - starts0))
+    say "$phase: the message after the outage ran as \"$ran\" (stdin, user, written, acknowledged, turn_end); the session's engine (conversation $runtime) started $started time(s) since the outage began, last at $engine_started"
     [ "$ran" = "1 1 1 1 1" ] || verdict+="the message after the outage ran as \"$ran\", not once; "
+    [ "$started" = 1 ] || verdict+="the session's engine started $started times since the outage began, not once; "
     if [ -n "$diff" ]; then
       local deadline2=$((SECONDS + 60))
       until [ "$(psql_value "SELECT status FROM conversation_turn WHERE id = '$diff'")" = ANSWERED ] || [ $SECONDS -ge $deadline2 ]; do sleep 0.5; done
