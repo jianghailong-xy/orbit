@@ -11,10 +11,12 @@
  * is never handed a session.
  *
  *   1. a session opened in A's workspace is hinted to A alone: one claim hint on rnr.<A> and nothing on rnr.<B>. B's
- *      long poll stays open, and A's claim takes the session over HTTPS, as before;
+ *      long poll stays open, and A's claim takes the session over HTTPS, as before, and wakes its inbox: one inbox
+ *      hint naming it, on rnr.<A>;
  *   2. a message sent to that session while it runs is hinted to A alone, as an inbox hint naming the session;
  *   3. Update Runner Now on B is hinted to B alone, as a commands hint, and B's wake poll returns as before;
- *   4. a message sent to a session of A's that is between turns queues it again: a claim hint for A alone;
+ *   4. a message sent to a session of A's that is between turns queues it again: a claim hint for A alone, and A's
+ *      claim of it an inbox hint, as in 1;
  *   5. an approval A asks for on its running session, decided by the account owner through the Web API, is hinted to A
  *      alone, naming the session and the approval, once the decision is stored; a second click on it hints nothing, a
  *      deny is hinted like an allow, and A's approval poll reads each decision over HTTPS as before;
@@ -275,15 +277,20 @@ test('each wake is hinted on NATS to the runner it concerns alone, and HTTPS wor
 
   let onA = '';
   await t.test('1. a session opened on A is hinted to A alone, and A claims it over HTTPS', async () => {
-    const mark = nats.published.length;
+    let mark = nats.published.length;
     onA = await openSession(a.workspaceId, 'work for machine A');
     assert.deepEqual(await publishedSince(mark, 1), [{ subject: `rnr.${a.id}`, message: claimHint }],
       'one claim hint, for the runner the session is queued for, and none for B');
     assert.deepEqual(bClaimed, [], "B's claim long poll was handed a session");
+    mark = nats.published.length;
     const claimed = await within(10_000, "A's claim", api('GET', '/api/runner/sessions/claim', a.token));
     assert.equal(claimed.status, 200, claimed.text);
     assert.equal(toUuid(claimed.json.sessionId), onA);
     assert.equal(await statusOf(onA), 'RUNNING');
+    // The claim wakes the session's inbox for a process of A's that already runs it (RunnerApiController.claim). That
+    // hint goes once the session's runner is read, which can be after the claim answered: it is counted here, not in 2.
+    assert.deepEqual(await publishedSince(mark, 1), [{ subject: `rnr.${a.id}`, message: inboxHint(onA) }],
+      'one inbox hint for the claimed session, to A alone');
   });
 
   await t.test('2. a message to that running session is an inbox hint to A alone', async () => {
@@ -314,16 +321,19 @@ test('each wake is hinted on NATS to the runner it concerns alone, and HTTPS wor
         status: RunStatus.AWAITING_INPUT, numTurns: 1, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
       },
     });
-    const mark = nats.published.length;
+    let mark = nats.published.length;
     const sent = await api('POST', `/api/sessions/${uuidToBase62(idle)}/turns`, ownerToken,
       { clientTurnId: randomUUID(), content: 'the next turn' });
     assert.equal(sent.status, 201, sent.text);
     assert.equal(await statusOf(idle), 'PENDING');
     assert.deepEqual(await publishedSince(mark, 1), [{ subject: `rnr.${a.id}`, message: claimHint }]);
     assert.deepEqual(bClaimed, []);
+    mark = nats.published.length;
     const claimed = await within(10_000, "A's claim", api('GET', '/api/runner/sessions/claim', a.token));
     assert.equal(claimed.status, 200, claimed.text);
     assert.equal(toUuid(claimed.json.sessionId), idle, 'A claims the session it was hinted about');
+    // As in 1: the claim's own inbox hint, which a process of A's still holding the session between turns waits for.
+    assert.deepEqual(await publishedSince(mark, 1), [{ subject: `rnr.${a.id}`, message: inboxHint(idle) }]);
   });
 
   await t.test('5. an approval the owner decides through the Web API is hinted to A alone, after the decision is stored', async () => {

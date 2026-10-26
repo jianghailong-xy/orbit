@@ -420,7 +420,7 @@ func TestALostInboxAnswerIsHandedBackWithinFiveSecondsAndRunOnce(t *testing.T) {
 			r.useLink(t)
 			in.queue(lostAnswerSessionID, RunInboxResponse{TurnID: "m-1", Kind: "message", Content: text})
 
-			run, ran := lostAnswerSession(t, engine, r)
+			run, ran, completed := lostAnswerSession(t, engine, r)
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
@@ -428,7 +428,9 @@ func TestALostInboxAnswerIsHandedBackWithinFiveSecondsAndRunOnce(t *testing.T) {
 			}()
 			linkWaitFor(t, 15*time.Second, "the engine to run m-1", func() bool { return ran() >= 1 })
 			handedBack := time.Now()
-			linkWaitFor(t, 15*time.Second, "m-1's completion", func() bool { return len(in.completed()) == 1 })
+			// Answered, not only taken: the control plane takes the completion before its answer reaches the runner,
+			// and until then the runner still names m-1 as running (linkMode.turnDone), as it must.
+			linkWaitFor(t, 15*time.Second, "m-1's completion", func() bool { return completed() == 1 })
 			if lostAt.Load() == 0 {
 				t.Fatal("no answer was lost")
 			}
@@ -436,7 +438,9 @@ func TestALostInboxAnswerIsHandedBackWithinFiveSecondsAndRunOnce(t *testing.T) {
 				t.Errorf("m-1 reached the engine %s after its answer was lost", took)
 			}
 
-			// End the session, on whatever connection carries the work now.
+			// End the session, on whatever connection carries the work now, once the fetch that followed m-1's
+			// hand-back has been served: the fetch the hint brings is then the first sent since the completion.
+			linkWaitFor(t, 5*time.Second, "the fetch after m-1 was handed back", func() bool { return len(in.fetched()) >= 3 })
 			in.queue(lostAnswerSessionID, RunInboxResponse{TurnID: "e-1", Kind: "end"})
 			sendInboxHint(r.currentConn(t), lostAnswerSessionID)
 			select {
@@ -459,7 +463,7 @@ func TestALostInboxAnswerIsHandedBackWithinFiveSecondsAndRunOnce(t *testing.T) {
 				t.Errorf("the fetch after the loss %+v: want the lost call sent again, naming no running turn", fetches[1])
 			}
 			// Handed out twice, the lost answer and the call sent again: every fetch after that named m-1 while it
-			// ran, and nothing after its completion.
+			// ran, and nothing once its completion was answered.
 			if n := in.handedOut("m-1"); n != 2 {
 				t.Errorf("m-1 was handed out %d times, want 2", n)
 			}
@@ -477,14 +481,19 @@ func TestALostInboxAnswerIsHandedBackWithinFiveSecondsAndRunOnce(t *testing.T) {
 
 const lostAnswerSessionID = "sess-lost"
 
-// lostAnswerSession is a session loop of engine over r's transport, and how many times its engine has run the message
-// "do the thing".
-func lostAnswerSession(t *testing.T, engine string, r *linkWorkRig) (run func(), ran func() int) {
+// lostAnswerSession is a session loop of engine over r's transport, how many times its engine has run the message
+// "do the thing", and how many of its turn completions the control plane has answered.
+func lostAnswerSession(t *testing.T, engine string, r *linkWorkRig) (run func(), ran func() int, completed func() int) {
 	t.Helper()
+	var answered atomic.Int32
 	complete := func(req TurnCompleteRequest, _ ...context.Context) error {
 		_, err := r.t.turnComplete(context.Background(), lostAnswerSessionID, req)
+		if err == nil {
+			answered.Add(1)
+		}
 		return err
 	}
+	completed = func() int { return int(answered.Load()) }
 	permit := func(context.Context) bool { return true }
 	noEmit := func(string, map[string]interface{}) {}
 	noEmitFor := func(string, string, map[string]interface{}) {}
@@ -577,7 +586,7 @@ printf '%s\n' '{"type":"step_finish","part":{"cost":0,"tokens":{"total":2,"input
 	default:
 		t.Fatalf("no lost-answer session for %s", engine)
 	}
-	return run, ran
+	return run, ran, completed
 }
 
 // onceKinds are the kinds of turn the poller hands to the session loop once: every kind but message and shell.
