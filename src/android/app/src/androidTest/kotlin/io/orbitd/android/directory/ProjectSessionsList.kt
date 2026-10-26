@@ -13,11 +13,15 @@ import androidx.compose.ui.test.performScrollToNode
 fun ComposeTestRule.listed(matcher: SemanticsMatcher) =
     try { onNodeWithTag("project-sessions-list").performScrollToNode(matcher); true } catch (_: AssertionError) { false }
 
-/** Scrolls the project's sessions page to [matcher] once a read draws it. */
+/**
+ * Scrolls the project's sessions page to [matcher] once a read draws it. Between tries the test's clock moves on as waitUntil moves
+ * it: the page reads again from its effects every 4 s of that clock, which a sleep alone does not move (API 30, where the merge's
+ * row waited on a read that never came).
+ */
 fun ComposeTestRule.awaitListed(matcher: SemanticsMatcher, timeoutMillis: Long = 30_000) {
     val deadline = SystemClock.uptimeMillis() + timeoutMillis
     while (!listed(matcher)) {
         if (SystemClock.uptimeMillis() > deadline) throw AssertionError("The project's sessions page never listed $matcher")
-        SystemClock.sleep(250); waitForIdle()
+        mainClock.advanceTimeBy(250); SystemClock.sleep(250)
     }
 }
