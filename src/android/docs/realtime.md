@@ -40,7 +40,11 @@ file under `app/realtime`; it does not replace those entrypoints.
 `open`/`completed`/`trash`. Capability, permission, explicit null and unknown
 fields survive REST and caching. A05 converts these to its directory DTOs.
 All directory requests form one snapshot; a failed component does not silently
-erase rows from another component.
+erase rows from another component. Each list is read row by row from the
+response bytes, never as one string, and a row equal to the published
+snapshot's row with the same `id` is kept as that object: reading an unchanged
+directory again (on every account event) holds one copy of it, not two. The
+application decodes the lists off the main thread.
 
 `ConnectionState` has exactly `STOPPED`, `CONNECTING`, `CONNECTED`, `BACKOFF`.
 `RealtimeError` has `reason: FailureReason` and `httpStatus: Int?`.
@@ -127,12 +131,13 @@ connection's draft would duplicate text on mid-turn entry.
 directory and last selected session. It retains up to eight sessions and
 8 MiB, and a write never encodes more than that into memory: each part is
 first measured by a streaming encoder that stops once it passes the room left,
-keeping no bytes, and only parts that fit are encoded. The directory comes first and is left out only when it
-cannot fit on its own (an owner's directory of thousands of sessions passed
-17 MB). Session windows follow newest first, each kept whole or not at all: a
-window that cannot fit in what is left is evicted, older windows that still
-fit stay, and no window is cut. A record within 8 MiB is byte for byte the
-plain encoding. The application encodes it off the main thread.
+keeping no bytes, and only parts that fit are encoded. The directory comes
+first and is left out only when it cannot fit on its own (an owner's directory
+of thousands of sessions passed 17 MB). Session windows follow newest first,
+each kept whole or not at all: a window that cannot fit in what is left is
+evicted, older windows that still fit stay, and no window is cut. A record
+within 8 MiB is byte for byte the plain encoding. The application encodes it
+off the main thread.
 Live animation and pending authority are excluded. Writes coalesce for 100 ms;
 death before a write is recovered by the earlier persisted cursor. Corrupt,
 unsupported-schema or inconsistent records fall back to a cold load.

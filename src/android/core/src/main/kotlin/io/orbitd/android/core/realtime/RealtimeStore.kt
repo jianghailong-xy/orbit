@@ -38,12 +38,13 @@ import kotlinx.coroutines.withContext
 /** One per application. Auth owns credentials and disk namespaces; this store owns foreground
  * connections, bounded transcript/cache state, and authority refreshes. UI must match state.handle
  * by identity with its captured AuthState handle. Neither background execution nor a live-only
- * event is needed to recover pending cards on the next foreground connection. [cacheEncoding] is where the cache record
- * is encoded; the application's store runs on the main thread and passes a background dispatcher. */
+ * event is needed to recover pending cards on the next foreground connection. [background] is where the cache record is
+ * encoded and directory lists are decoded; the application's store runs on the main thread and passes a background
+ * dispatcher. */
 class RealtimeStore(
     private val auth: AuthSession,
     scope: CoroutineScope,
-    private val cacheEncoding: CoroutineContext = EmptyCoroutineContext,
+    private val background: CoroutineContext = EmptyCoroutineContext,
 ) : AutoCloseable {
     private data class Network(val available: Boolean = false, val identity: String? = null)
     private data class Selection(val id: String?, val revision: Long, val handle: SessionHandle? = null)
@@ -59,7 +60,7 @@ class RealtimeStore(
     private val sessionRevision = MutableStateFlow(0L)
     private val mutableState = MutableStateFlow(RealtimeState())
     val state: StateFlow<RealtimeState> = mutableState.asStateFlow()
-    private val rest = RealtimeRest(auth)
+    private val rest = RealtimeRest(auth, background)
 
     init {
         owner.launch {
@@ -140,7 +141,7 @@ class RealtimeStore(
         launch {
             for (ignored in writes) {
                 delay(100) // Coalesce a durable burst, never serialize every animation delta.
-                try { RealtimeCache.write(auth, handle, cache.value, cacheEncoding) }
+                try { RealtimeCache.write(auth, handle, cache.value, background) }
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (error: Exception) { publish(handle) { it.copy(directoryError = RealtimeError.from(error)) } }
             }
@@ -187,7 +188,8 @@ class RealtimeStore(
                 val revision = directoryRevision.value
                 publish(handle) { it.copy(directoryRefreshing = true, directoryFresh = false) }
                 try {
-                    val snapshot = rest.directory(handle)
+                    // Rows the published directory already holds are kept, not read into a second tree beside it.
+                    val snapshot = rest.directory(handle, state.value.directory)
                     currentCoroutineContext().ensureActive()
                     if (!active(handle, path)) return@launch
                     if (directoryRevision.value != revision) { refresh.trySend(Unit); continue }

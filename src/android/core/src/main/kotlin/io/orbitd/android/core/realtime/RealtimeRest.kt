@@ -5,33 +5,46 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.protocol.ProtocolException
 import io.orbitd.android.core.protocol.Wire
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.serialization.json.JsonArray
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 
-internal class RealtimeRest(private val api: OrbitApi) {
+/** [background] is where lists are decoded: the application's store runs on the main thread and passes another. */
+internal class RealtimeRest(private val api: OrbitApi, private val background: CoroutineContext = EmptyCoroutineContext) {
     /** A read the server answers with null ("asking nothing", e.g. `promotions/current`) arrives as a 200 with no body. */
     private suspend fun get(handle: SessionHandle, path: List<String>, query: List<Pair<String, String>> = emptyList()): JsonElement {
         val body = api.request(handle, ApiRequest(path, query = query)).body
         return if (body.isEmpty()) JsonNull else Wire.decode(body, JsonElement.serializer())
     }
 
-    private suspend fun objects(handle: SessionHandle, path: List<String>, query: List<Pair<String, String>> = emptyList()): List<JsonObject> =
-        (get(handle, path, query) as? JsonArray)?.map { it as? JsonObject ?: throw ProtocolException() }
-            ?: throw ProtocolException()
+    /**
+     * A list read row by row from the body, never as one string. A row equal to the row of [previous] with its id is that
+     * row, so reading an unchanged directory again holds one copy of it, not two (A04c: an owner's thousands of sessions,
+     * read again on every account event, ran a release build out of heap once the cache write no longer did).
+     */
+    private suspend fun objects(handle: SessionHandle, path: List<String>, query: List<Pair<String, String>> = emptyList(),
+        previous: List<JsonObject>? = null): List<JsonObject> {
+        val body = api.request(handle, ApiRequest(path, query = query)).body
+        return withContext(background) {
+            val known = previous.orEmpty().associateBy { it.text("id") }
+            Wire.objects(body) { row -> known[row.text("id")]?.takeIf { it == row } ?: row }
+        }
+    }
 
-    suspend fun directory(handle: SessionHandle): DirectorySnapshot = coroutineScope {
-        val workspaces = async { objects(handle, listOf("workspaces")) }
-        val folders = async { objects(handle, listOf("session-folders")) }
-        val tags = async { objects(handle, listOf("session-tags")) }
-        val runners = async { objects(handle, listOf("runners")) }
+    suspend fun directory(handle: SessionHandle, previous: DirectorySnapshot? = null): DirectorySnapshot = coroutineScope {
+        val workspaces = async { objects(handle, listOf("workspaces"), previous = previous?.workspaces) }
+        val folders = async { objects(handle, listOf("session-folders"), previous = previous?.folders) }
+        val tags = async { objects(handle, listOf("session-tags"), previous = previous?.tags) }
+        val runners = async { objects(handle, listOf("runners"), previous = previous?.runners) }
         val views = listOf("open", "completed", "trash").map { view ->
-            async { view to objects(handle, listOf("sessions"), listOf("view" to view)) }
+            async { view to objects(handle, listOf("sessions"), listOf("view" to view), previous?.sessions?.get(view)) }
         }
         DirectorySnapshot(workspaces.await(), views.awaitAll().toMap(), folders.await(), tags.await(), runners.await())
     }
