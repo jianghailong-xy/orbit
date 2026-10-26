@@ -20,6 +20,7 @@ import { RunnerWatchesController } from './runner-watches.controller';
 import { RunnerReleaseController } from './runner-release.controller';
 import { RunnerLinkGatewayGuard, RunnerLinkTokenController } from './runner-link-token.controller';
 import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
+import { RunnerLinkEventsController, RunnerLinkGatewayCallGuard } from './runner-link-events.controller';
 import { RunnerLinkModeController, RunnerLinkRequiredController } from './runner-link-required.controller';
 import { RunnerLinkRequiredInterceptor, RunnerLinkSwitch } from './runner-link-required';
 import { RunnerReleaseFeed } from './runner-release-feed';
@@ -95,6 +96,8 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerLinkTokenController,
     // What the link gateway's Welcome says of a connecting process's sessions and release (runner-link-welcome.ts).
     RunnerLinkWelcomeController,
+    // The link gateway's merged call: several sessions' event batches in one transaction (link-events.ts).
+    RunnerLinkEventsController,
     // RUNNER_LINK_REQUIRED, the cut-over switch: switched by an administrator, read by the link gateway
     // (runner-link-required.ts).
     RunnerLinkRequiredController,
@@ -104,6 +107,7 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerAuthGuard,
     RunnerSessionAuthGuard,
     RunnerLinkGatewayGuard,
+    RunnerLinkGatewayCallGuard,
     RunnerWriteProtocolInterceptor,
     // The cut-over switch and RunnerApiController's interceptor that answers it (runner-link-required.ts).
     // AdminRoleGuard depends only on the global PrismaService; UsersModule does not export it.

@@ -7,6 +7,7 @@ import { MACHINE_PROTOCOL } from '../common/machine-protocol';
 import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { RunnerApiController } from './runner-api.controller';
 import { RunnerAgentsController } from './runner-agents.controller';
+import { RunnerLinkEventsController } from './runner-link-events.controller';
 import { RunnerLinkModeController } from './runner-link-required.controller';
 import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
 import { RunnerProjectsController } from './runner-projects.controller';
@@ -42,6 +43,11 @@ test('only the machine protocol keeps UUIDs', () => {
     Reflect.getMetadata(MACHINE_PROTOCOL, RunnerLinkWelcomeController),
     true,
     'the link gateway calls it, and the link serves the machine protocol alone',
+  );
+  assert.equal(
+    Reflect.getMetadata(MACHINE_PROTOCOL, RunnerLinkEventsController),
+    true,
+    'the link gateway sends it the batches it would forward to the events route, whose session ids are UUIDs',
   );
   assert.equal(
     Reflect.getMetadata(MACHINE_PROTOCOL, RunnerLinkModeController),

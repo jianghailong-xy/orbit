@@ -42,8 +42,11 @@ const round = (v, d = 1) => (v == null || Number.isNaN(v) ? null : Math.round(v 
 const STACK = ['postgres', 'apiserver', 'apiserver-b', 'link-gateway', 'gateway', 'nats'];
 
 // --- CPU from the 5 s samples. -----------------------------------------------------------------------------------------
-// Samples at the window's edges are included one interval out, so every second of the window is covered.
+// Samples at the window's edges are included one interval out, so every second of the window is covered. A mean counts
+// each interval for the part of it inside the window (`w`): counted whole, the interval after the window's end, in which
+// the loadgen stops, took up to 5% off a run's mean cores, by how the samples happened to fall (O2, 2026-10-26).
 const covering = samples.filter((s) => s.t >= steadyFrom - 6000 && s.t <= steadyTo + 6000);
+const insideUs = (from, to) => Math.max(0, Math.min(to, steadyTo) - Math.max(from, steadyFrom)) * 1000;
 function cpuSeries(key, field = 'cpuUsec') {
   const out = [];
   for (let i = 1; i < covering.length; i++) {
@@ -52,7 +55,7 @@ function cpuSeries(key, field = 'cpuUsec') {
     if (!a || !b) continue;
     const dt = (covering[i].t - covering[i - 1].t) * 1000;
     if (dt <= 0) continue;
-    out.push({ t: covering[i].t, dt, v: (b[field] - a[field]) / dt, mem: b.memBytes });
+    out.push({ t: covering[i].t, dt, w: insideUs(covering[i - 1].t, covering[i].t), v: (b[field] - a[field]) / dt, mem: b.memBytes });
   }
   return out;
 }
@@ -72,8 +75,8 @@ function peak(points, spanMs) {
   return best;
 }
 function mean(points) {
-  const used = points.reduce((n, p) => n + p.v * p.dt, 0);
-  const time = points.reduce((n, p) => n + p.dt, 0);
+  const used = points.reduce((n, p) => n + p.v * (p.w ?? p.dt), 0);
+  const time = points.reduce((n, p) => n + (p.w ?? p.dt), 0);
   return time > 0 ? used / time : null;
 }
 const components = {};
@@ -83,7 +86,7 @@ for (const key of [...STACK, 'loadgen']) {
   const psi = cpuSeries(key, 'psiSomeUsec');
   const thr = cpuSeries(key, 'throttledUsec');
   components[key] = {
-    meanCores: round(mean(cpu), 2),
+    meanCores: round(mean(cpu), 3),
     peak10sCores: round(peak(cpu, 10_000), 2),
     peak60sCores: round(peak(cpu, 60_000), 2),
     peakMemMiB: round(Math.max(...cpu.map((p) => p.mem ?? 0)) / 2 ** 20, 0),
@@ -211,7 +214,8 @@ for (const family of ['link_handshakes_total', 'link_token_refusals_total', 'lin
   'link_backend_calls_total', 'link_backend_retries_total', 'link_heartbeat_forwards_total', 'link_heartbeat_facts_total',
   'link_event_batches_total', 'link_events_stored_total', 'link_queue_full_total', 'link_credit_changes_total',
   'link_hints_total', 'link_hints_slow_total', 'link_frame_decode_errors_total', 'link_tls_handshake_errors_total',
-  'link_nats_reconnects_total', 'link_revocation_fetches_total', 'link_turn_prefix_requests_total']) {
+  'link_nats_reconnects_total', 'link_revocation_fetches_total', 'link_turn_prefix_requests_total',
+  'link_event_merge_calls_total', 'link_event_merge_flushes_total', 'link_event_merge_alone_total']) {
   gw[family] = counterFamily(family);
 }
 const steadyScrapes = scrapes.filter((s) => inSteady(s.t));
@@ -256,6 +260,12 @@ function histogram(name) {
 gw.eventAck = histogram('link_event_ack_duration_seconds');
 gw.heartbeatForward = histogram('link_heartbeat_forward_duration_seconds');
 gw.backendCall = histogram('link_backend_call_duration_seconds');
+// Merged ingest (src/link-gateway/events_merge.go): how many batches a call carried, how long its transaction held its
+// sessions (the apiserver's heldMs), and the call's own duration. None of them moves when the gateway merges nothing.
+gw.mergeCalls = delta('link_event_merge_batches_count');
+gw.mergeBatchesPerCall = gw.mergeCalls > 0 ? round(delta('link_event_merge_batches_sum') / gw.mergeCalls, 1) : null;
+gw.mergeHeld = histogram('link_event_merge_held_seconds');
+gw.mergeCall = histogram('link_event_merge_call_duration_seconds');
 // The gateway counters that are errors when they move.
 const gatewayErrors = {};
 const flag = (label, n) => {
@@ -418,7 +428,7 @@ md.push(`# Load test ${run.name}`, '');
 // The CPUs a container was confined to (docker update --cpuset-cpus): on a host of two kinds of core, what decides a
 // light run's CPU time per operation.
 const pinned = Object.entries(run.containers ?? {}).filter(([, c]) => c.cpuset).map(([svc, c]) => `${svc} ${c.cpuset}`);
-md.push(`Commit \`${run.sha.slice(0, 12)}\`${run.dirty ? ' (with uncommitted changes)' : ''}, ${run.backends} apiserver backend(s), database CPU allocation ${allocation ?? 'unlimited'}, host ${run.hostCpus} CPUs` +
+md.push(`Commit \`${run.sha.slice(0, 12)}\`${run.dirty ? ' (with uncommitted changes)' : ''}, ${run.backends} apiserver backend(s), database CPU allocation ${allocation ?? 'unlimited'}, host ${run.hostCpus} CPUs, the gateway's merge window ${run.mergeWindow ?? 'default'}` +
   (run.loadTestLock === undefined ? '.' : run.loadTestLock ? ", under the host's load test lock." : ", **not** under the host's load test lock.") +
   (pinned.length > 0 ? ` Containers pinned to CPUs: ${pinned.join(', ')}.` : ''));
 md.push(summary.steady
@@ -474,7 +484,13 @@ row('connections (min, max)', `${gw.connections.min}, ${gw.connections.max}`);
 row('EventAck duration (gateway)', `${gw.eventAck.count} batches, mean ${gw.eventAck.meanMs} ms, p50 ≈ ${gw.eventAck.p50Ms} ms, p99 ≈ ${gw.eventAck.p99Ms} ms, ${gw.eventAck.withinOneSecondPct}% within 1 s`);
 row('heartbeat forward duration', `mean ${gw.heartbeatForward.meanMs} ms, p99 ≈ ${gw.heartbeatForward.p99Ms} ms`);
 row('ingest queue, most events', gw.ingestQueueEventsMax);
-for (const family of ['link_handshakes_total', 'link_disconnects_total', 'link_backend_calls_total', 'link_heartbeat_forwards_total', 'link_event_batches_total', 'link_hints_total']) {
+if (gw.mergeCalls > 0) {
+  row('merged ingest calls', `${gw.mergeCalls} (${round(gw.mergeCalls / steady.seconds, 1)}/s), ${gw.mergeBatchesPerCall} batches each`);
+  row('merged transaction held its sessions (apiserver)', `mean ${gw.mergeHeld.meanMs} ms, p50 ≈ ${gw.mergeHeld.p50Ms} ms, p99 ≈ ${gw.mergeHeld.p99Ms} ms`);
+  row('merged call duration (gateway)', `mean ${gw.mergeCall.meanMs} ms, p50 ≈ ${gw.mergeCall.p50Ms} ms, p99 ≈ ${gw.mergeCall.p99Ms} ms`);
+}
+for (const family of ['link_handshakes_total', 'link_disconnects_total', 'link_backend_calls_total', 'link_heartbeat_forwards_total', 'link_event_batches_total', 'link_hints_total',
+  'link_event_merge_calls_total', 'link_event_merge_flushes_total', 'link_event_merge_alone_total']) {
   row(family, Object.entries(gw[family]).map(([k, v]) => `${k} ${v}`).join(', ') || '—');
 }
 md.push('', '## CPU and memory (steady window)', '');
