@@ -7,6 +7,8 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.protocol.Wire
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -36,8 +38,13 @@ import kotlinx.coroutines.withContext
 /** One per application. Auth owns credentials and disk namespaces; this store owns foreground
  * connections, bounded transcript/cache state, and authority refreshes. UI must match state.handle
  * by identity with its captured AuthState handle. Neither background execution nor a live-only
- * event is needed to recover pending cards on the next foreground connection. */
-class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : AutoCloseable {
+ * event is needed to recover pending cards on the next foreground connection. [cacheEncoding] is where the cache record
+ * is encoded; the application's store runs on the main thread and passes a background dispatcher. */
+class RealtimeStore(
+    private val auth: AuthSession,
+    scope: CoroutineScope,
+    private val cacheEncoding: CoroutineContext = EmptyCoroutineContext,
+) : AutoCloseable {
     private data class Network(val available: Boolean = false, val identity: String? = null)
     private data class Selection(val id: String?, val revision: Long, val handle: SessionHandle? = null)
     private class Resync : Exception()
@@ -133,7 +140,7 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
         launch {
             for (ignored in writes) {
                 delay(100) // Coalesce a durable burst, never serialize every animation delta.
-                try { RealtimeCache.write(auth, handle, cache.value) }
+                try { RealtimeCache.write(auth, handle, cache.value, cacheEncoding) }
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (error: Exception) { publish(handle) { it.copy(directoryError = RealtimeError.from(error)) } }
             }
