@@ -68,6 +68,7 @@ function controller(db: PrismaClient): RunnerApiController {
     publishSessionUpdated: () => undefined,
     publishTaskChanged: () => undefined,
     publishQueuedTurnsChanged: () => undefined,
+    markRunnerChanged: () => undefined,
     publish: () => undefined,
     notifyInbox: () => undefined,
     waitForInbox: async () => undefined,
