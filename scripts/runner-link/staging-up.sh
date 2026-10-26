@@ -24,6 +24,7 @@
 #   ORBIT_LINK_STAGING_BACKENDS      apiservers the gateway forwards to: 1 to 16  1
 #   ORBIT_LINK_STAGING_LOADGEN       1: the load test's settings (staging.loadgen.compose.yml)   0
 #   ORBIT_LINK_STAGING_DB_CPUS       with LOADGEN=1, the database's CPU allocation; 0 is unlimited   0
+#   ORBIT_LINK_STAGING_DB_MEM        with LOADGEN=1, the database's memory limit (Compose mem_limit)  4g
 #   ORBIT_LINK_STAGING_MERGE_WINDOW  the link gateway's LINK_EVENT_MERGE_WINDOW: 0 forwards each event
 #                                    batch alone; "default" is the gateway's own                         default
 set -euo pipefail
@@ -58,12 +59,14 @@ mode="${ORBIT_LINK_STAGING_MODE:-$(setting STAGING_MODE http)}"
 backends="${ORBIT_LINK_STAGING_BACKENDS:-$(setting STAGING_BACKENDS 1)}"
 loadgen="${ORBIT_LINK_STAGING_LOADGEN:-$(setting STAGING_LOADGEN 0)}"
 db_cpus="${ORBIT_LINK_STAGING_DB_CPUS:-$(setting STAGING_DB_CPUS 0)}"
+db_mem="${ORBIT_LINK_STAGING_DB_MEM:-$(setting STAGING_DB_MEM 4g)}"
 merge_window="${ORBIT_LINK_STAGING_MERGE_WINDOW:-$(setting STAGING_MERGE_WINDOW_SETTING default)}"
 acme_domain="link.orbit-staging.test"
 case "$tls_mode" in files|acme) ;; *) die "ORBIT_LINK_STAGING_TLS must be files or acme, not $tls_mode" ;; esac
 case "$mode" in http|link) ;; *) die "ORBIT_LINK_STAGING_MODE must be http or link, not $mode" ;; esac
 case "$loadgen" in 0|1) ;; *) die "ORBIT_LINK_STAGING_LOADGEN must be 0 or 1, not $loadgen" ;; esac
 [[ "$db_cpus" =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "ORBIT_LINK_STAGING_DB_CPUS must be a number of CPUs, not $db_cpus"
+[[ "$db_mem" =~ ^[1-9][0-9]*[mg]$ ]] || die "ORBIT_LINK_STAGING_DB_MEM must be a size such as 4g or 16384m, not $db_mem"
 [[ "$merge_window" =~ ^(default|0|[0-9]+ms)$ ]] || die "ORBIT_LINK_STAGING_MERGE_WINDOW must be default, 0 or a window such as 100ms, not $merge_window"
 gateway_merge_window="$merge_window"
 [ "$merge_window" = default ] && gateway_merge_window=""
@@ -198,6 +201,7 @@ STAGING_BACKENDS=$backends
 STAGING_BACKEND_URLS=$backend_urls
 STAGING_LOADGEN=$loadgen
 STAGING_DB_CPUS=$db_cpus
+STAGING_DB_MEM=$db_mem
 STAGING_MERGE_WINDOW_SETTING=$merge_window
 STAGING_MERGE_WINDOW=$gateway_merge_window
 RUNNER_LINK_NATS_APISERVER_SEED=$(read_nats apiserver seed || true)

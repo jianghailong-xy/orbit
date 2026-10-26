@@ -28,7 +28,16 @@ heartbeats and 2,000 durable events a second). Each simulated runner behaves as 
   first event, or at once on a `tool_result` (a boundary event), and kept until an `EventAck` covers it. A failed
   batch, and what was out behind it, is sent again from `durable_seq + 1`; a lost connection's batches are sent again
   on the next one; nothing of a session is sent on a new connection while a batch of it is out on the old one, so a
-  session's events are stored in seq order.
+  session's events are stored in seq order;
+- with `-live-rate` (task O3), each running session that somebody watches streams reply deltas (`text_delta`, about
+  100 bytes each, design §9), at its share of the rate across the sessions watched at the time. Who watches is read
+  as a runner reads it: a `Hint{watchers}`, the `HintState` of `Welcome` and of every `HeartbeatAck`, and a
+  `TurnPrefixRequest` (answered with the session's live seq). Deltas are gathered for 50 ms and sent as one
+  `LiveBatch`, with no acknowledgement, as runner-go's `link_events_live.go` does, and only while a connection is up.
+  Each delta's text starts with when it was produced (`@@<unix ms>@@`), so the watchers of
+  `scripts/runner-link/loadgen-watch.mjs` can count them and time them through the session stream, which merges the
+  deltas of each 50 ms. The deltas draw on a random source of their own. At the default of 0 no `LiveBatch` is sent,
+  and `summary.json` and `series.jsonl` carry no live field (`live.go`).
 
 It counts as an error every connection that ends unasked, every refusal, every `EventAck` that fails or refuses an
 event, every acknowledgement more than 30 s late, every heartbeat answered without a reconcile, and every heartbeat
@@ -54,6 +63,7 @@ loadgen -fleet fleet.jsonl -api http://127.0.0.1:61086 -link-url wss://link-gate
 | `-flush-min`, `-flush-max`, `-max-batch` | 1s, 3s, 100 | When a batch is sent, and how many events it carries at most. |
 | `-renew-before`, `-spread-renewals` | 5m, true | When a connection is replaced. |
 | `-volatile`, `-volatile-edits` | false, 0.5 | Move the parts of a heartbeat that move in production, as above; `-volatile-edits` is the share of a running session's beats on which its worktree moved. |
+| `-live-rate` | 0 | Live deltas a second across the fleet, on the running sessions somebody watches, as above. |
 | `-drain-timeout` | 30s | After the window, how long runners wait for their last acknowledgements. They send no new beat meanwhile, and close each connection with the close handshake, so the gateway sees them leave. |
 | `-interval` | 10s | How often `series.jsonl` gets a line. |
 | `-seed` | 1 | The random seed. |

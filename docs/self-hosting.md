@@ -566,6 +566,131 @@ the link's. Set it up in this order.
 - **Turning it off.** Remove `runner-link` from `COMPOSE_PROFILES`, then run
   `docker compose stop link-gateway nats && docker compose rm -f link-gateway nats`. Runners keep working over HTTPS.
 
+## Large deployments
+
+The stack as installed runs one apiserver, which is enough for a team. Once runners work over the
+[runner link](#runner-link), a deployment the size of a link cell needs more than that. A cell is up to 10,000
+people, with 15,000 runner connections. Its runners' heartbeats, events and live streams alone keep several Node
+processes and a database host of its own busy.
+
+### Several apiservers
+
+An apiserver is one Node process, and its main thread is what fills first. The link gateway can spread the runners'
+calls over several apiservers. It sends each call, whether a request, a heartbeat or an event batch, to the next
+apiserver in `LINK_INTERNAL_API_URLS`. A call that is safe to send again goes to the next apiserver when one cannot be
+reached.
+
+The web gateway keeps sending people's requests to the first apiserver. A Codex "Sign in with ChatGPT" runs its
+sign-in in the process that started it, so all of one person's requests must reach that same process.
+
+Add the other apiservers in `docker-compose.override.yml` beside `docker-compose.yml`. Compose reads the file with
+every command run in the checkout:
+
+```yaml
+# docker-compose.override.yml: a second apiserver for the runner link's calls (docs/self-hosting.md, "Several apiservers").
+services:
+  apiserver-2:
+    extends:
+      file: docker-compose.yml
+      service: apiserver
+    build: !reset null
+    container_name: orbit-apiserver-2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      apiserver:
+        condition: service_healthy
+  link-gateway:
+    environment:
+      LINK_INTERNAL_API_URLS: "http://apiserver:${RUNNER_LINK_INTERNAL_PORT:-3001},http://apiserver-2:${RUNNER_LINK_INTERNAL_PORT:-3001}"
+```
+
+- **`extends`** gives `apiserver-2` the first apiserver's whole definition: its image, environment, mounts and health
+  check. It builds nothing and runs the image the first one builds.
+- **Migrations.** It starts only once the first apiserver is healthy. So the first applies any pending migrations, and
+  the second finds none: its log says `No pending migrations to apply`.
+- **No name the web gateway uses.** `apiserver` still resolves to the first apiserver alone. `apiserver-2` is reached
+  only by the link gateway, which `LINK_INTERNAL_API_URLS` lists it to.
+- **More apiservers.** For a third and more, repeat the `apiserver-2` block as `apiserver-3` and on, and add each one
+  to `LINK_INTERNAL_API_URLS`. Keep the first apiserver in the list.
+
+Start the new apiservers, and recreate the link gateway so that it reads the new list:
+
+```bash
+docker compose up -d --wait apiserver-2 link-gateway
+docker compose ps apiserver apiserver-2 link-gateway
+docker compose logs apiserver-2 | grep -E 'pending migrations|runner link calls are served'
+```
+
+This was tested with Docker Compose v5.5.1. Versions have treated `extends` from a service with `depends_on`
+differently. `docker compose config apiserver-2` should list both `postgres` and `apiserver` under its `depends_on`.
+
+**Upgrades.** [Upgrading](#upgrading) with `docker compose up -d --build` recreates the other apiservers too, because
+their image is the one it rebuilt. `/upgrade`'s script recreates only the services it names. After it, recreate the
+others yourself, before anything else:
+
+```bash
+docker compose up -d --wait --no-deps --force-recreate apiserver-2   # and apiserver-3 and on
+```
+
+Until then they run the old code against the schema the first apiserver has just migrated.
+
+**Before production.** Each apiserver runs every background job. Most jobs coordinate through the database, so with
+several processes they repeat work but do nothing twice:
+- the reaper's finalizing of sessions;
+- watches, open items and managed runners;
+- scheduled wakeups and session requests;
+- mentions and claims.
+
+Three things still assume one process. Until they are fixed, run more than one apiserver for load tests and staging
+only:
+
+- **The reaper, the task scheduler's sweep and the auto-retry sweep** are written for one process.
+  - The reaper holds back while heartbeat writes fail, but it sees only its own process's failures. Another process can
+    take a silent runner for gone while the first one's database connections are exhausted.
+  - The task sweep can file two foreman tasks for one stalled list, and spend one free slot of a project's task limit
+    twice.
+  - Auto-retry can announce a retried session's end twice, and its release limit (one session for each runner and
+    provider a sweep) applies once per process.
+- **Antigravity's pasted sign-in code and the Cursor key check** are held in the memory of the process that took them.
+  They reach the runner only through a heartbeat that lands on that same process. The link gateway spreads heartbeats
+  over every apiserver, so a code waits several beats, and a key check mostly times out.
+- **`/upgrade`'s script** leaves the other apiservers on the old image (see above).
+
+### Database connections
+
+Each apiserver process opens at most 11 connections to PostgreSQL. Ten are its pool (node-postgres's default, which the
+apiserver keeps), and one listens for the notices the processes send each other. The wiki worker opens the same.
+
+So N apiservers and the wiki worker need up to 11 × (N + 1) connections, and the backup sidecar and anyone working
+in `psql` a few more. The default `max_connections` is 100, which is reached at about eight apiservers. Raise it,
+then restart PostgreSQL:
+
+```bash
+docker compose exec postgres psql -U orbit -d orbit -c "ALTER SYSTEM SET max_connections = 200"
+docker compose restart postgres
+```
+
+`ALTER SYSTEM` writes `postgresql.auto.conf` in the data directory, so the setting stays until it is reset.
+
+**Pool in session mode only.** The apiserver sends its most frequent statement, the runner link heartbeat's, as a
+named prepared statement. It is prepared once on each connection and reused after that.
+- A pooler in **transaction mode** (PgBouncer's `pool_mode = transaction`) hands each transaction whichever server
+  connection is free, and that connection may never have prepared the statement. Never put the apiservers behind one.
+- **Connect them directly, or through a pooler in session mode**, which gives each client connection one server
+  connection for as long as it lasts.
+
+**If the database runs hot.** Every statement is sent unnamed except that heartbeat statement and any others marked
+the same way (`PREPARED_STATEMENT` in `src/apiserver/src/prisma/prisma-client.ts`). PostgreSQL then parses and plans
+each unnamed statement every time it runs, at about 0.21 ms of database CPU each. Naming more statements is the first
+optimization left. Only statements whose text is fixed can be named:
+
+- **First: the merged event call's five fixed statements.** They run once per call, not per event, and save about
+  0.02–0.05 ms of database CPU per event: 0.04–0.1 cores at a cell's 2,000 events a second.
+- **Statements whose text varies with the batch** must be rewritten to fixed text first, with arrays as parameters,
+  before they can be named. These are the event insert, the session updates, and the tool-call writes. Their parse
+  and plan are most of what is left of an event's database cost.
+
 ## Managed runners
 
 A new deployment gives every account a runner of its own, so nobody has to register a machine before a first

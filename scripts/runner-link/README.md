@@ -16,7 +16,7 @@ be taken for a deployment's.
 | `staging-check.sh` | The shadow period's check, with the stack in MODE_HTTP. It checks the running stack's link gateway end to end, in six steps: refusals and TLS; a mirroring runner with heartbeats and pings; a gateway release that drains the runner, which then reconnects; a certificate rotation under a live connection; a revocation that closes a live connection; and hints over NATS, published on each runner's own subject and relayed only for the runner the gateway holds. Each step's records go to `<state>/client/check/`. Run it on a quiet stack, in the files TLS mode. Step 5 leaves the probe runner with a new token, and step 6 registers a second runner the first time it runs (its token is kept in `secrets/hint_peer_token`). |
 | `staging-check-link.sh` | The forwarding check, with the stack in MODE_LINK over two apiservers. Six steps, with the test runner's drills (`link-gateway client -drill`) and the stack's own state: NATS's authorization on the stack's NATS; the link drill (requests and their answers, heartbeats and facts, hints, an approval the owner allows through the web API with its hint and HeartbeatAck's hints, durable events, gaps and credit, the live stream while the owner watches, the turn prefix, an answer in pieces), then presence and the database's own record of it; a claim cancelled while it waits for the claim lock, held from `psql`; calls answered while the second apiserver is killed and started again; a runner that stops reading, closed as a slow consumer; and a session's event stream cut with batches in flight, resumed on a new connection from the durable seq its Welcome states, with no seq refused as a gap and every seq stored once. Each step's records go to `<state>/client/check-link/`. |
 | `staging-check-switch.sh` | The cut-over switch's check, with the gateway following the server's `RUNNER_LINK_REQUIRED` (`ORBIT_LINK_STAGING_MODE=http`). The test runner's switch drill (`link-gateway client -drill switch`): the owner, the stack's administrator, flips the switch on, and HTTPS daemon calls are answered `426 UPGRADE_REQUIRED` unless they name their caller, the shadow's connection is told `MODE_LINK`, and a new connection works over the link; then off in the middle of a session's event stream, and the work connection is told `MODE_HTTP` and its requests refused while its event batches are still stored, before the runner sends the rest over HTTPS. Then the stack's record: the gateway back in `MODE_HTTP`, every read of the switch answered, each switch logged, and every seq of the session stored once. The records go to `<state>/client/check-switch/`, and the switch is left off. |
-| `staging-name-check.sh` | Check that every staging script refuses a Compose project outside `orbit-link-*` before it does anything: a deployment's containers are `orbit-*`, so such a name could make a script stop, rebuild or write into one. |
+| `staging-name-check.sh` | Check that every staging script refuses a Compose project outside `orbit-link-*` before it does anything: a deployment's containers are `orbit-*`, so such a name could make a script stop, rebuild or write into one. `loadgen-watch.mjs`, which is given a state directory, refuses one of another project before it looks for the secret there. |
 | `nats-auth-check.sh` | Check `src/link-gateway/nats.conf` on a throwaway nats-server with fresh keys: it refuses to start without both public keys, and admits each user to what it does alone. |
 | `gen-hint-fixtures.mjs` | Regenerate `src/link-gateway/testdata/b1-hints.json` from the apiserver's hint encoder. |
 | `gen-token-fixtures.mjs` | Regenerate `src/link-gateway/testdata/a3-tokens.json` from the apiserver's token code. |
@@ -24,7 +24,8 @@ be taken for a deployment's.
 | `loadgen-seed.sh` | The load test's fleet in the stack's database: `seed` (owners, runners, a workspace each, idle sessions), `arm` before each run (fresh running sessions, presence, the fleet file `<state>/loadgen/fleet.jsonl`), `disarm` after it, `remove`. See [Load test](#load-test). |
 | `loadgen-run.sh` | One load test run: `src/link-gateway/cmd/loadgen` against the stack, with the stack's CPU, memory, metrics, database and logs collected beside it, then the report. |
 | `loadgen-report.mjs` | A run's report: each criterion with the figure it rests on (`report.md`, `report.json`). |
-| `loadgen-baseline.mjs` | What one heartbeat and one event batch cost, from a heartbeats-only run and a run with events: see [Per-operation baseline](#per-operation-baseline). |
+| `loadgen-baseline.mjs` | What one heartbeat and one event batch cost, from a heartbeats-only run and a run with events, and with `--live` what one forwarded live delta costs: see [Per-operation baseline](#per-operation-baseline). |
+| `loadgen-watch.mjs` | The load test's watchers: a session stream (SSE) on each of a run's first running sessions, as their owners, counting the live deltas that reach them and how late. `loadgen-run.sh --watch` starts it. See [The live stream](#the-live-stream). |
 
 ```bash
 scripts/runner-link/staging-up.sh
@@ -54,9 +55,10 @@ else the default:
 | `ORBIT_LINK_STAGING_NATS_PORT` | `14222` | NATS's client port, on the bind address. |
 | `ORBIT_LINK_STAGING_NATS_MONITOR_PORT` | `18222` | NATS's monitoring, on 127.0.0.1. |
 | `ORBIT_LINK_STAGING_MODE` | `http` | The link gateway's `LINK_MODE`: `http`, which follows the server's `RUNNER_LINK_REQUIRED` switch (the shadow period that `staging-check.sh` checks while the switch is off, and what `staging-check-switch.sh` flips), or `link`, forwarding whatever the switch says, that `staging-check-link.sh` checks. Switching recreates only the gateway. |
-| `ORBIT_LINK_STAGING_BACKENDS` | `1` | How many apiservers the gateway forwards to: `2` adds `apiserver-b`, the first one's whole definition on the same database, which `staging-check-link.sh` kills and starts again. |
+| `ORBIT_LINK_STAGING_BACKENDS` | `1` | How many apiservers the gateway forwards to, 1 to 16. `2` adds `apiserver-b`, the first one's whole definition on the same database, which `staging-check-link.sh` kills and starts again. A third and more are `apiserver-c` and on, each defined as `apiserver-b` is, in `<state>/backends.compose.yml`. Each starts once the first one is healthy, so migrations run once. |
 | `ORBIT_LINK_STAGING_LOADGEN` | `0` | `1` adds `staging.loadgen.compose.yml` for a load test: the gateway logs only Hello, Welcome, Drain and Close, admits any number of connections from one address (the per-address limit; the limit across all clients stays), and the gateway, apiservers and database are capped in memory. |
 | `ORBIT_LINK_STAGING_DB_CPUS` | `0` | With `LOADGEN=1`, the database's CPU allocation (Compose `cpus`), the capacity a load test's database CPU is a share of. `0` is unlimited. |
+| `ORBIT_LINK_STAGING_DB_MEM` | `4g` | With `LOADGEN=1`, the database's memory limit (Compose `mem_limit`): room for the cache a cell-scale run needs. |
 | `ORBIT_LINK_STAGING_MERGE_WINDOW` | `default` | The link gateway's `LINK_EVENT_MERGE_WINDOW`: how long an event batch waits for others, from any connection, to go with it in one merged call ([events_merge.go](../../src/link-gateway/events_merge.go)). `default` is the gateway's own (100 ms); `0` forwards every batch alone, as before merging, which is what a load test compares against. Changing it recreates only the gateway. |
 
 Two stacks can run side by side under different projects, state directories and ports. Compose runs with an empty
@@ -147,7 +149,8 @@ scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 20
 | `loadgen-run.sh -- …` | `-duration` (steady window), `-settle` (from the fleet connected to the window), `-event-rate` (events/s across the fleet), `-ramp-rate` (first connections/s), `-flush-min`/`-flush-max`/`-max-batch` (batching), `-runners` (play the first N), `-spread-renewals`, `-volatile`/`-volatile-edits` (the reports that move in production); all of them in [src/link-gateway/cmd/loadgen](../../src/link-gateway/cmd/loadgen/README.md) | 1h, 30s, 2000, 150, 1s/3s/100, all, true, off/0.5 |
 | `loadgen-run.sh` | `LOADGEN_MIN_AVAILABLE_MB`: the host memory floor that stops a run | 800 |
 | `loadgen-run.sh` | `--mark-every <seconds>`: move every runner's change count this often, so each beat reconciles in full (see [the heartbeat after task O1](#the-heartbeat-after-task-o1)) | off |
-| `staging-up.sh` | `ORBIT_LINK_STAGING_BACKENDS` (apiservers behind the gateway), `ORBIT_LINK_STAGING_DB_CPUS` (the database's CPU allocation) | 1, unlimited |
+| `loadgen-run.sh` | `--watch <N>`: a session stream on each of the first N running sessions while the run lasts, which the loadgen's `-live-rate` sends live deltas to (see [the live stream](#the-live-stream)) | off |
+| `staging-up.sh` | `ORBIT_LINK_STAGING_BACKENDS` (apiservers behind the gateway, up to 16), `ORBIT_LINK_STAGING_DB_CPUS` (the database's CPU allocation) | 1, unlimited |
 
 `node scripts/runner-link/loadgen-report.mjs <run>` writes a run's report again from what it collected.
 
@@ -327,3 +330,43 @@ work at 5.2 cores:
   protocol: the Prisma adapter sends every statement unnamed (task O1's finding).
 - Statement counts come from `pgss-totals.json` since b47a66768. Before it, a merged run counted only the 60 statements
   with the most time, and the one insert's row-count variants pushed the approval writes off that list.
+
+### The live stream
+
+Design §9 counts about 10,000 live deltas a second per cell that reach someone watching. They load:
+
+- the link gateway, which publishes each `LiveBatch` on NATS while somebody watches its session;
+- NATS;
+- the apiserver that holds the watcher's session stream, which relays the deltas into it;
+- the web gateway in front of that stream.
+
+Since task O3 a run can carry them:
+
+- **`loadgen -live-rate <deltas/s>`.** The deltas a second across the fleet, shared by the running sessions somebody
+  watches. They are gathered 50 ms a `LiveBatch`, as a runner gathers them
+  ([cmd/loadgen](../../src/link-gateway/cmd/loadgen/README.md)).
+- **`loadgen-run.sh --watch <N>`.** Before the loadgen starts, `loadgen-watch.mjs` opens a session stream
+  (`GET /api/sessions/:id/events`, through the web gateway) on each of the fleet's first N running sessions, as their
+  owners. The stack's apiserver counts each one as a watcher and tells the session's runner (`WatchersHint`).
+  - The watchers sign their access tokens with the stack's own secret (`<state>/secrets/jwt_secret`) and take it from
+    nowhere else.
+  - They refuse a state directory that is not an `orbit-link-*` stack's (`staging-name-check.sh` checks this).
+  - They record what reached them in `watch.jsonl` (every 10 s) and `watch.json`. The stream merges the deltas of each
+    50 ms and gives a delta no time, so each delta's text starts with when it was produced. The watchers count and time
+    the deltas from the text.
+- **The report.** It gets a section on the live stream: what the loadgen sent, what the gateway did with it
+  (`link_live_events_total`), and what the watchers received and how late.
+- **The baseline.** `loadgen-baseline.mjs --live <run>` gives what one delta costs each part, against a run with the
+  same events and no watchers.
+
+```bash
+lock() { flock /var/tmp/orbit-loadgen.lock sh -c "scripts/runner-link/loadgen-seed.sh arm && scripts/runner-link/loadgen-run.sh $*"; }
+lock --name hb -- -duration 2m -event-rate 0
+lock --name ev400 -- -duration 2m -event-rate 400
+lock --name ev400-live --watch 100 -- -duration 2m -event-rate 400 -live-rate 2000
+node scripts/runner-link/loadgen-baseline.mjs <state>/loadgen/runs/hb <state>/loadgen/runs/ev400 --live <state>/loadgen/runs/ev400-live
+```
+
+A run without `-live-rate` and `--watch` sends no `LiveBatch`, and its report is the same as before task O3, byte for
+byte. The loadgen's test (`TestNoLiveBatchWithoutTheLiveRate`) shows the first. The second was checked by reporting
+copies of O1's and O2's runs with both versions of `loadgen-report.mjs` and `loadgen-baseline.mjs`.
