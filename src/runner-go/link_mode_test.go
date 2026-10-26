@@ -78,7 +78,7 @@ func linkDaemonWorkout(t *testing.T, tr *Transport) {
 		SupervisedSessionIDs: []string{"session-a"}, ReposRoot: "/srv/repos"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tr.claimSession(ctx); err != nil {
+	if _, err := tr.claimSession(ctx, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tr.inbox(ctx, "session-a", "gen-1"); err != nil {
@@ -200,7 +200,7 @@ func TestUpgradeRequiredWithNoLinkYetFailsAsRetryable(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	_, err := r.t.claimSession(ctx)
+	_, err := r.t.claimSession(ctx, nil)
 	if err == nil {
 		t.Fatal("a claim with neither way open succeeded")
 	}
