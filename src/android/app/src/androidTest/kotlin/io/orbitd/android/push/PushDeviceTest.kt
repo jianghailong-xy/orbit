@@ -170,7 +170,8 @@ class PushDeviceTest {
         compose.onNodeWithTag("project-sessions").assertExists()
         compose.onNodeWithContentDescription("Back").assertDoesNotExist()
         compose.onNodeWithContentDescription("Open navigation").assertExists()
-        assertNull("the coordinator conversation is not what opened", app.realtime.state.value.session)
+        // The coordinator conversation that was showing is left, not opened again: no session stays selected.
+        awaitCondition { app.realtime.state.value.session == null }
         capture("merge-tray-root")
         pass()
     }
