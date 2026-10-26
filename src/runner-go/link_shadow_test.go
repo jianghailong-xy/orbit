@@ -140,7 +140,7 @@ func TestLinkShadowMirrorsNothingElse(t *testing.T) {
 	if _, err := rig.t.finalizeRun(context.Background(), "session-a", RunFinalizeRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rig.t.claimSession(context.Background()); err != nil {
+	if _, err := rig.t.claimSession(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := rig.t.do(context.Background(), http.MethodPost, "/runner/sessions/session-a/events/extra", map[string]int{"a": 1}, nil, time.Second); err != nil {
@@ -213,7 +213,7 @@ func TestLinkShadowTapLeavesTheWorkPathAsItWas(t *testing.T) {
 		}
 		hb, err := tr.heartbeat(linkTestHeartbeat(tr.leaseOwner))
 		add(hb, err)
-		claim, err := tr.claimSession(context.Background())
+		claim, err := tr.claimSession(context.Background(), nil)
 		add(claim, err)
 		in, err := tr.inbox(context.Background(), "s1", "gen-1")
 		add(in, err)
