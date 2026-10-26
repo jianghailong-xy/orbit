@@ -108,7 +108,10 @@ class NavigationIncrementDeviceTest {
                 compose.onNode(hasText("Review navigation") and hasClickAction()).performClick()
                 await { exists(hasContentDescription("Session actions") and isEnabled()) }
                 compose.onNodeWithContentDescription("Session actions").performClick(); settle()
-                assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Open Task", "Complete Session", "Move to Trash"), menuItems())
+                // Session details heads the group that opens what the session is part of since A06-18 (the session's name under the
+                // bar opened them until that row went with iOS's title).
+                assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Session details", "Open Task", "Complete Session",
+                    "Move to Trash"), menuItems())
                 compose.onNode(hasText("Complete Session") and hasText("Stops the current run") and hasAnyAncestor(isPopup())).assertExists()
                 capture("10-session-menu")
                 // Copy Link: the signed-in address, and the toast that says so.
@@ -145,7 +148,7 @@ class NavigationIncrementDeviceTest {
                 await { exists(hasContentDescription("Session actions") and isEnabled()) }
                 awaitWritable()
                 compose.onNodeWithContentDescription("Session actions").performClick(); settle()
-                assertEquals(listOf("Move to Open", "Delete Permanently"), menuItems())
+                assertEquals(listOf("Session details", "Move to Open", "Delete Permanently"), menuItems())
                 capture("14-trash-menu")
                 awaitWritable()
                 press(hasText("Delete Permanently") and hasAnyAncestor(isPopup()))

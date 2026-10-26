@@ -200,7 +200,8 @@ class LoginPageDeviceTest {
         // The emulator's screenshot can lag the UI under load: let the frame settle first.
         SystemClock.sleep(900)
         val bitmap = instrumentation.uiAutomation.takeScreenshot()
-        val directory = compose.activity.getExternalFilesDir("a03c-login")!!.also { it.mkdirs() }
+        // Into the app's own files, which auth-device-test.sh takes out with run-as: Android 11 lets adb read none of /sdcard/Android/data.
+        val directory = File(compose.activity.filesDir, "a03c-login").also { it.mkdirs() }
         File(directory, "$name-$phase.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
     }

@@ -4,9 +4,12 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.UiAutomation
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Point
 import android.graphics.Rect
+import android.hardware.display.DisplayManager
 import android.net.Uri
 import android.os.SystemClock
+import android.view.Display
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
@@ -788,7 +791,11 @@ class ManagementDeviceTest {
                 page("edit-profile", report, problems)
                 activate("Choose photo", "talkback-profile-photo", report, problems); await("Photo library")
                 report.appendLine("double tap Choose photo -> the photo menu opened")
-                back(); back(); await("Default permission")
+                // The menu is a window of its own, and a key goes to the window in front: the second Back waits until the menu has
+                // gone and the page's window is in front again (sent at once, on A15b's first 360×640 dp round, the two Backs left
+                // the profile page open).
+                back(); compose.waitUntil(5_000) { compose.onAllNodesWithText("Photo library").fetchSemanticsNodes().isEmpty() && compose.activity.hasWindowFocus() }
+                back(); await("Default permission")
                 activate("Admin", "talkback-settings-admin", report, problems); await("Second user")
                 report.appendLine("double tap Admin -> the users list opened")
                 page("admin-users", report, problems)
@@ -918,33 +925,42 @@ class ManagementDeviceTest {
      */
     private fun activate(words: String, shot: String, report: StringBuilder, problems: MutableList<String>) {
         val named = hasText(words, substring = true) or hasContentDescription(words, substring = true)
-        try { compose.onAllNodes(named).onFirst().performScrollTo() } catch (_: AssertionError) { }
-        // On screen is not enough: near the bottom the system's gesture bar takes the touch. Bring it to the middle.
-        try {
-            val y = compose.onAllNodes(named).onFirst().fetchSemanticsNode().boundsInRoot.center.y
-            val middle = (appRoot()?.let { Rect().also(it::getBoundsInScreen).height() } ?: 0) / 2f
-            compose.onAllNodes(hasScrollAction() and hasAnyDescendant(named)).onFirst()
-                .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, y - middle) }
-        } catch (_: AssertionError) { } catch (_: IllegalStateException) { }
-        compose.waitForIdle(); SystemClock.sleep(500)
-        // The words as drawn, and the control a finger on them presses (Compose keeps a row's words on its children).
-        val label = appRoot()?.let(::nodes)?.firstOrNull { node -> node.isVisibleToUser && words(node).any { it.contains(words) } }
-        var target = label
-        while (target != null && !target.isClickable) target = target.parent
-        target = target ?: label
-        if (target == null) { capture("$shot-missing"); problem(report, problems, "$shot: nothing on screen is named \"$words\""); return }
-        val at = Rect().also(target::getBoundsInScreen)
-        report.appendLine("touch \"$words\" at $at")
-        tap(at.exactCenterX(), at.exactCenterY())
-        // TalkBack moves its focus a moment after the touch ends (it first waits to see whether a second tap follows).
-        val until = SystemClock.uptimeMillis() + 3_000
-        var focus = focused()
-        while (focus?.let(::spoken)?.contains(words, ignoreCase = true) != true && SystemClock.uptimeMillis() < until) { SystemClock.sleep(200); focus = focused() }
-        val said = focus?.let(::spoken).orEmpty()
-        report.appendLine("touch \"$words\" -> TalkBack's focus on ${focus?.className?.toString()?.substringAfterLast('.')} \"$said\"")
+        var target: AccessibilityNodeInfo? = null
+        var focus: AccessibilityNodeInfo? = null
+        var said = ""
+        // A touch aimed from a page still moving (a scroll settling, a page coming back) lands on whatever is there by then, and on
+        // a loaded host that is another row (A15 F-23: TalkBack's focus on "Back" for "Edit profile"). TalkBack's focus says where
+        // it landed: the control is measured and touched again, up to three times, each touch in the report.
+        for (attempt in 1..3) {
+            try { compose.onAllNodes(named).onFirst().performScrollTo() } catch (_: AssertionError) { }
+            // On screen is not enough: near the bottom the system's gesture bar takes the touch. Bring it to the middle.
+            try {
+                val y = compose.onAllNodes(named).onFirst().fetchSemanticsNode().boundsInRoot.center.y
+                val middle = (appRoot()?.let { Rect().also(it::getBoundsInScreen).height() } ?: 0) / 2f
+                compose.onAllNodes(hasScrollAction() and hasAnyDescendant(named)).onFirst()
+                    .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, y - middle) }
+            } catch (_: AssertionError) { } catch (_: IllegalStateException) { }
+            compose.waitForIdle(); SystemClock.sleep(500)
+            // The words as drawn, and the control a finger on them presses (Compose keeps a row's words on its children).
+            val label = appRoot()?.let(::nodes)?.firstOrNull { node -> node.isVisibleToUser && words(node).any { it.contains(words) } }
+            target = label
+            while (target != null && !target.isClickable) target = target.parent
+            target = target ?: label
+            if (target == null) { capture("$shot-missing"); problem(report, problems, "$shot: nothing on screen is named \"$words\""); return }
+            val at = Rect().also(target::getBoundsInScreen)
+            report.appendLine("touch \"$words\" at $at" + if (attempt > 1) " (touch $attempt)" else "")
+            tap(at.exactCenterX(), at.exactCenterY())
+            // TalkBack moves its focus a moment after the touch ends (it first waits to see whether a second tap follows).
+            val until = SystemClock.uptimeMillis() + 3_000
+            focus = focused()
+            while (focus?.let(::spoken)?.contains(words, ignoreCase = true) != true && SystemClock.uptimeMillis() < until) { SystemClock.sleep(200); focus = focused() }
+            said = focus?.let(::spoken).orEmpty()
+            report.appendLine("touch \"$words\" -> TalkBack's focus on ${focus?.className?.toString()?.substringAfterLast('.')} \"$said\"")
+            if (focus != null && said.contains(words, ignoreCase = true)) break
+        }
         if (focus == null || !said.contains(words, ignoreCase = true)) problem(report, problems, "$shot: TalkBack's focus is on \"$said\", not \"$words\"")
         capture(shot)
-        val on = Rect().also { (focus ?: target).getBoundsInScreen(it) }
+        val on = Rect().also { (focus ?: target!!).getBoundsInScreen(it) }
         doubleTap(on.exactCenterX(), on.exactCenterY())
     }
 
@@ -974,12 +990,26 @@ class ManagementDeviceTest {
         fun close() { runCatching { writer.write("quit\n"); writer.flush() }; runCatching { socket.close() } }
     }
     private var console: Console? = null
+    /**
+     * Where the screen lies on the console's touchscreen, which is the panel itself: a screen resized by `wm size` (the
+     * 360×640 dp rounds) is drawn scaled onto the panel and letterboxed, as Android's LogicalDisplay places it. A touch sent
+     * at the screen's own coordinates lands elsewhere: aimed at "Machines & models", on "Session recaps" (A15 F-23, 360×640).
+     */
+    private val panel: Pair<Rect, Point> by lazy {
+        val display = app.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
+        val screen = Point().also { @Suppress("DEPRECATION") display.getRealSize(it) }
+        val pw = display.mode.physicalWidth; val ph = display.mode.physicalHeight
+        val (w, h) = if (pw.toLong() * screen.y < ph.toLong() * screen.x) pw to screen.y * pw / screen.x else screen.x * ph / screen.y to ph
+        val left = (pw - w) / 2; val top = (ph - h) / 2
+        Rect(left, top, left + w, top + h) to screen
+    }
     private fun finger(x: Int, y: Int, down: Boolean) {
         val open = console ?: InstrumentationRegistry.getArguments().let { args ->
             Console(args.getString("a13ConsolePort")?.toIntOrNull() ?: error("TalkBack takes touches from the screen only: needs a13ConsolePort"),
                 args.getString("a13ConsoleToken") ?: error("needs a13ConsoleToken"))
         }.also { console = it }
-        open.send("event mouse $x $y 0 ${if (down) 1 else 0}")
+        val (frame, screen) = panel
+        open.send("event mouse ${frame.left + x * frame.width() / screen.x} ${frame.top + y * frame.height() / screen.y} 0 ${if (down) 1 else 0}")
     }
     /** One finger on [x], [y] (explore by touch): TalkBack's focus goes to what is there, which it reads. */
     private fun tap(x: Float, y: Float) { finger(x.toInt(), y.toInt(), true); SystemClock.sleep(40); finger(x.toInt(), y.toInt(), false) }
