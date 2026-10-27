@@ -119,6 +119,8 @@ class OwnerAnswerCardDeviceTest : IncrementDeviceTest() {
         scrollTranscriptTo(hasTestTag("record:5:ownerAnswer"))
         verifyOneCardInTheTurnsPlace("record:5:ownerAnswer")
         verify("a delivered answer says nothing more", listOf("queued", "notice", "waiting").none { exists(hasTestTag("$recordKey:$it"), unmerged = true) })
+        // The coordinator's reply under it, so the card is seen between the turns, where the line was.
+        scrollTranscriptTo(hasTestTag("event:6"))
         capture("1-one-card")
     }
 
@@ -156,6 +158,7 @@ class OwnerAnswerCardDeviceTest : IncrementDeviceTest() {
         openConversation()
         scrollTranscriptTo(hasTestTag("record:5:ownerAnswer"))
         verifyOneCardInTheTurnsPlace("record:5:ownerAnswer")
+        scrollTranscriptTo(hasTestTag("event:6"))
         capture("5-dark")
     }
 }
