@@ -2,10 +2,15 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { renderRawQuery, noSessionRequests } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Logger } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
 import { API_ERROR_RETRY_BACKOFF_MS, MAX_API_ERROR_RETRIES, RunEventType } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
+import {
+  renderRunEventSeqConflictMetrics,
+  resetRunEventSeqConflictMetrics,
+  runEventSeqConflictsSnapshot,
+} from './run-event-seq-conflicts';
 
 /** A row as it lands in `run_event`: the columns the events write path sets. */
 type RunEventRow = {
@@ -77,6 +82,9 @@ function makeController(
         }
         return { count };
       },
+      // What the ingest reads back of the rows a batch's seqs already hold (run-event-seq-conflicts.ts).
+      findMany: async (args: { where: { sessionId: string; seq: { in: number[] } } }) =>
+        (runEventTable ?? []).filter((r) => r.sessionId === args.where.sessionId && args.where.seq.in.includes(r.seq)),
     },
     // Every tool_use is denormalized into tool_call on create, and its tool_result pairs back
     // via updateMany. Record both so a test can assert the id is stored and the outcome lands —
@@ -1285,4 +1293,52 @@ test('a ping dropped at the tail of a batch is a free slot when a runner resumes
 
   assert.deepEqual(table.map((r) => r.seq), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
   assert.deepEqual(table[8].payload, { text: 'the reply after the restart' }, 'stored, not skipped as a duplicate');
+});
+
+/**
+ * An event at a seq the session already holds another event at (run-event-seq-conflicts.ts, task 34mumXbJjOvZUwNmDNzmY).
+ * HTTPS still takes the batch whole and answers it as before, and skipDuplicates still keeps the row that was there: the
+ * difference is that the event it skipped is no longer lost in silence. It is logged as an error and counted, while the
+ * same event sent again (an answer that was lost) is neither.
+ */
+test('an event at a seq that holds another is logged and counted; the same event sent again is not', async (t) => {
+  resetRunEventSeqConflictMetrics();
+  const errors: string[] = [];
+  t.mock.method(Logger.prototype, 'error', (message: unknown) => {
+    errors.push(String(message));
+  });
+  const table: RunEventRow[] = [];
+  const { controller } = makeController(RunStatus.RUNNING, 'runtime-1', {}, table);
+  const tick = (seq: number, k: number, minute: number) => ({
+    seq,
+    type: RunEventType.ASSISTANT,
+    ts: at(minute),
+    turnId: '22222222-2222-4222-8222-222222222222',
+    payload: { text: `tick ${k}` },
+  });
+
+  await controller.events({ id: RUNNER_ID }, 'session-1', { events: [tick(1, 1, 0), tick(2, 2, 1)] });
+  // Sent again with one more after it: its answer was lost. Nothing is a conflict.
+  assert.deepEqual(await controller.events({ id: RUNNER_ID }, 'session-1', { events: [tick(2, 2, 1), tick(3, 3, 2)] }), { ok: true });
+  assert.deepEqual(runEventSeqConflictsSnapshot(), { https: 0, link: 0 });
+  assert.deepEqual(errors, []);
+
+  // A process that numbered from the server's last seq over events another one still held (the 2026-10-27 rollback
+  // drill): its system event and the tick that wanted seq 3 are different events.
+  const answer = await controller.events({ id: RUNNER_ID }, 'session-1', {
+    events: [
+      { seq: 3, type: RunEventType.SYSTEM, ts: at(30), payload: { content: 'the engine started again' } },
+      tick(4, 4, 31),
+    ],
+  });
+  assert.deepEqual(answer, { ok: true }, 'answered as HTTPS always has');
+  assert.deepEqual(table.map((r) => [r.seq, r.type]), [[1, 'assistant'], [2, 'assistant'], [3, 'assistant'], [4, 'assistant']],
+    'the row at seq 3 is the one that was there');
+  assert.deepEqual(runEventSeqConflictsSnapshot(), { https: 1, link: 0 });
+  assert.equal(errors.length, 1, errors.join('\n'));
+  assert.match(errors[0], /^session session-1: 1 event\(s\) sent over HTTPS are not stored, because the session already holds another event at their seq; /);
+  assert.match(errors[0], /seq 3: system \(no turn, 2026-09-18T10:30:00\.000Z\) where it holds assistant \(turn 22222222-2222-4222-8222-222222222222, 2026-09-18T10:02:00\.000Z\)/);
+  assert.match(errors[0], /\(1 such event\(s\) over HTTPS since this server started\)$/);
+  assert.match(renderRunEventSeqConflictMetrics(), /^orbit_run_event_seq_conflicts_total\{door="https"\} 1$/m);
+  assert.match(renderRunEventSeqConflictMetrics(), /^orbit_run_event_seq_conflicts_total\{door="link"\} 0$/m);
 });
