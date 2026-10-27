@@ -25,7 +25,8 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** The account's switch for session recaps (0418; iOS `UserPreferences.showRecaps`): Settings → Sessions has it, written alone as
+/** The account's switch for session recaps (0418; iOS `UserPreferences.showRecaps`): Settings → Sessions, a page of its own since
+ * docs/mocks/ios-settings-order, has it, written alone as
  * preferences.recaps, and while it is off the session lists draw none of the server's recap — every row falls back to the raw last
  * reply, which is what `DirectoryReviewTest` holds at the row itself. */
 @RunWith(RobolectricTestRunner::class)
@@ -69,7 +70,7 @@ class SessionRecapsGateTest {
     @Test fun settingsHasTheSwitchWrittenAloneAsRecaps() {
         val api = api()
         compose.setContent {
-            SettingsScreen(api, OrbitRoute(Destination.SETTINGS), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
+            SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "sessions"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
                 deviceAlerts = { true }, notifications = {}, about = {})
         }
         await("Session recaps")
@@ -92,7 +93,7 @@ class SessionRecapsGateTest {
             AccountAppearance(app) {
                 Column {
                     Text("session recaps: " + if (LocalSessionRecaps.current) "on" else "off")
-                    SettingsScreen(api, OrbitRoute(Destination.SETTINGS), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
+                    SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "sessions"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
                         deviceAlerts = { true }, notifications = {}, about = {})
                 }
             }

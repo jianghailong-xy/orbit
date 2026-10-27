@@ -208,25 +208,12 @@ final class SettingsStackWiringTests: XCTestCase {
                      ".task { await model.sharedPools?.load() }", "await model.sharedPools?.loadAccess(id)"] {
             XCTAssertTrue(list.contains(read), "the list reads \(read)")
         }
-        // Session orchestration is one switch for the whole account, so its row is the switch, and
-        // it is written the moment it flips.
-        XCTAssertTrue(rows.contains("Toggle(isOn: $orchestration) { label }"))
-        XCTAssertTrue(list.contains("UpdatePreferencesRequest(enableOrchestration: value)"))
-        // So is smart model selection, with the web's hint under its name; absent reads as off.
-        XCTAssertTrue(rows.contains("Toggle(isOn: $modelRouting) {"))
-        XCTAssertTrue(rows.contains("Text(SettingsCopy.smartModelSelectionHint)"))
-        XCTAssertTrue(list.contains("UpdatePreferencesRequest(modelRouting: value)"))
-        XCTAssertTrue(list.contains("modelRouting = p?.smartModelSelection ?? false"))
-        // And suggested replies, the same shape; absent reads as on.
-        XCTAssertTrue(rows.contains("Toggle(isOn: $promptSuggestions) {"))
-        XCTAssertTrue(rows.contains("Text(SettingsCopy.suggestedRepliesHint)"))
-        XCTAssertTrue(list.contains("UpdatePreferencesRequest(promptSuggestions: value)"))
-        XCTAssertTrue(list.contains("promptSuggestions = p?.suggestedReplies ?? true"))
-        // And session recaps, the same shape; absent reads as on.
-        XCTAssertTrue(rows.contains("Toggle(isOn: $recaps) {"))
-        XCTAssertTrue(rows.contains("Text(SettingsCopy.sessionRecapsHint)"))
-        XCTAssertTrue(list.contains("UpdatePreferencesRequest(recaps: value)"))
-        XCTAssertTrue(list.contains("recaps = p?.showRecaps ?? true"))
+        // The five session settings are the Sessions page's (`testTheSessionsPageDrawsSessionSettings`):
+        // the list has none of their controls, and its Sessions row is a link like Notifications'.
+        for control in ["$permMode", "$orchestration", "$modelRouting", "$promptSuggestions", "$recaps"] {
+            XCTAssertFalse(list.contains(control), "the list still draws \(control)")
+        }
+        XCTAssertTrue(rows.contains("case .sessions, .notifications, .sharedLinks, .accessTokens, .changePassword, .admin:"))
         // Signing out asks first, in the shape the width calls for — `ConfirmationStyle` asks a phone
         // for an alert and a tablet for the anchored panel, and every confirmation in the app goes
         // through it rather than naming one of the two itself.
@@ -236,6 +223,45 @@ final class SettingsStackWiringTests: XCTestCase {
                       "the question goes through the width-aware confirmation")
         XCTAssertTrue(list.contains("Button(SharePanelCopy.cancel, role: .cancel)"),
                       "with Cancel beside the destructive press")
+    }
+
+    /// Sessions is a page of its own (docs/mocks/ios-settings-order, 2A). It draws `SessionSettings` —
+    /// every row in a section of its own, the web's hint as its footer, as the Notifications page
+    /// draws its switches — and writes what the list used to, the moment a control moves: each guarded
+    /// against the account's own value, so seeding writes nothing.
+    func testTheSessionsPageDrawsSessionSettings() throws {
+        let sheet = try appSource("Views/SettingsSheet.swift")
+        let pages = code(try slice(sheet, from: "private struct SettingsPageView: View {", to: "// MARK: - The list"))
+        XCTAssertTrue(pages.contains("case .sessions:       SessionSettingsPage()"))
+        let page = code(try slice(sheet, from: "private struct SessionSettingsPage: View {", to: "// MARK: - Notifications"))
+        XCTAssertTrue(page.contains("ForEach(SessionSettings.Row.allCases, id: \\.self)"))
+        XCTAssertTrue(page.contains("Text(SessionSettings.footer(row))"), "each row's hint is its footer")
+        XCTAssertTrue(page.contains(".navigationTitle(SettingsPage.sessions.title)"))
+        let controls = try slice(page, from: "@ViewBuilder private func control(_ row: SessionSettings.Row) -> some View {",
+                                 to: "private func seed()")
+        for row in SessionSettings.Row.allCases {
+            XCTAssertTrue(controls.contains("case .\(row.rawValue):"), "the page has no control for .\(row.rawValue)")
+        }
+        // The mode is a menu on its row, and an unset one reads as the server's floor.
+        XCTAssertTrue(controls.contains("Picker(title, selection: $permMode)"))
+        XCTAssertTrue(page.contains("UpdatePreferencesRequest(defaultPermissionMode: value.rawValue)"))
+        XCTAssertTrue(page.contains("?? AgentDefaults.defaultPermissionMode"))
+        // The four switches are the account's, absent reading as each one's default.
+        for (toggle, write, seed) in [
+            ("Toggle(title, isOn: $orchestration)", "UpdatePreferencesRequest(enableOrchestration: value)",
+             "orchestration = p?.enableOrchestration ?? true"),
+            ("Toggle(title, isOn: $modelRouting)", "UpdatePreferencesRequest(modelRouting: value)",
+             "modelRouting = p?.smartModelSelection ?? false"),
+            ("Toggle(title, isOn: $promptSuggestions)", "UpdatePreferencesRequest(promptSuggestions: value)",
+             "promptSuggestions = p?.suggestedReplies ?? true"),
+            ("Toggle(title, isOn: $recaps)", "UpdatePreferencesRequest(recaps: value)", "recaps = p?.showRecaps ?? true"),
+        ] {
+            XCTAssertTrue(controls.contains(toggle), "the page lost \(toggle)")
+            XCTAssertTrue(page.contains(write), "the page no longer writes \(write)")
+            XCTAssertTrue(page.contains(seed), "the page no longer seeds \(seed)")
+        }
+        XCTAssertEqual(page.components(separatedBy: "guard (model.user?.preferences?.").count - 1, 4,
+                       "every switch's write is guarded against the account's own value")
     }
 
     /// The avatar and name are one button, pencilled as ChatGPT's are, that opens the edit-profile

@@ -9,8 +9,8 @@ import XCTest
 /// only — so each one is looked up in the web source it came from. A missing counterpart is a
 /// FAILURE, never an `XCTSkip`.
 ///
-/// Deliberately not compared: the group headers of Settings' list (Sessions, Machines & models,
-/// Preferences, Account), which regroup the web's cards for a phone; "Default permission", the
+/// Deliberately not compared: the group headers of Settings' list (Preferences, Account) and its
+/// Sessions row, which regroup the web's cards for a phone; "Default permission", the
 /// web's "Default permission mode" shortened to leave its row room for a value; and the words only a
 /// phone has to say — this device's own switch, the alerts that are always sent, the card shown
 /// while alerts are off, the sign-out confirmation, and Infrastructure's "Needs you" heading, its
@@ -68,7 +68,7 @@ final class SettingsCopyParityTests: XCTestCase {
     func testTheRowsCarryTheWebPagesNames() throws {
         let page = try web(Self.settings)
         for card in [SettingsHome.title(.notifications), SettingsHome.title(.appearance),
-                     SettingsHome.title(.orchestration)] {
+                     SessionSettings.title(.orchestration)] {
             assertSays(page, "title=\"\(card)\"", in: Self.settings)
         }
         assertSays(page, "label=\"\(SettingsHome.title(.sharedLinks))\"", in: Self.settings)
@@ -86,6 +86,12 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "hint=\"\(SettingsCopy.agentMessageHint)\"", in: Self.settings)
     }
 
+    /// Default permission: the Session defaults card's mode, whose hint is its row's footer on the
+    /// Sessions page.
+    func testDefaultPermissionSaysWhatTheWebPageSays() throws {
+        assertSays(try web(Self.settings), "hint=\"\(SettingsCopy.defaultPermissionHint)\"", in: Self.settings)
+    }
+
     /// Session orchestration: the web card's one switch, with its label and hint.
     func testOrchestrationSaysWhatTheWebPageSays() throws {
         let page = try web(Self.settings)
@@ -100,7 +106,7 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "hint=\"\(SettingsCopy.smartModelSelectionHint)\"", in: Self.settings)
         assertSays(page, "checked={prefs.modelRouting === true}", in: Self.settings)
         assertSays(page, "save.mutate({ modelRouting: v })", in: Self.settings)
-        XCTAssertEqual(SettingsHome.title(.modelRouting), SettingsCopy.smartModelSelection)
+        XCTAssertEqual(SessionSettings.title(.modelRouting), SettingsCopy.smartModelSelection)
     }
 
     /// Session recaps (0418): the Session defaults card's switch, with its label and hint — the same
@@ -111,7 +117,7 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "hint=\"\(SettingsCopy.sessionRecapsHint)\"", in: Self.settings)
         assertSays(page, "checked={prefs.recaps ?? true}", in: Self.settings)
         assertSays(page, "save.mutate({ recaps: v })", in: Self.settings)
-        XCTAssertEqual(SettingsHome.title(.recaps), SettingsCopy.sessionRecaps)
+        XCTAssertEqual(SessionSettings.title(.recaps), SettingsCopy.sessionRecaps)
     }
 
     /// The edit-profile card's field is called what the web Profile page calls the same value.

@@ -164,7 +164,8 @@ class InfrastructurePageTest {
     }
 
     /** Settings' Machines & models group: one row, Machines & models, and no header over it to say the name twice (iOS SettingsHome,
-     * docs/mocks/machines-and-models ⑥-2) — "1 needs you" while something does, else the machines online — and the page's line under it. */
+     * docs/mocks/machines-and-models ⑥-2) — "1 needs you" while something does, else the machines online — and the page's line under it.
+     * It comes first, before Preferences, whose first row is Sessions (docs/mocks/ios-settings-order). */
     @Test fun settingsHasOneInfrastructureRowWithItsValueAndTheLineUnderIt() {
         val api = api()
         compose.setContent {
@@ -176,8 +177,8 @@ class InfrastructurePageTest {
         compose.onNodeWithText(Infrastructure.SUBTITLE).assertExists()
         listOf("Runners", "Providers").forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
         compose.onAllNodesWithText(Infrastructure.TITLE).assertCountEquals(1)
-        assertTrue("Machines & models comes before Preferences", top("Sessions") < top(Infrastructure.TITLE) &&
-            top(Infrastructure.TITLE) < top(Infrastructure.SUBTITLE) && top(Infrastructure.SUBTITLE) < top("Preferences"))
+        assertTrue("Machines & models comes before Preferences", top(Infrastructure.TITLE) < top(Infrastructure.SUBTITLE) &&
+            top(Infrastructure.SUBTITLE) < top("Preferences") && top("Preferences") < top(SESSIONS) && top(SESSIONS) < top("Notifications"))
         codexSignedOut()
         revision++
         await("1 needs you")

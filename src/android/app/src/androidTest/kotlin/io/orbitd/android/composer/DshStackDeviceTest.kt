@@ -232,7 +232,7 @@ class DshStackDeviceTest {
             all.jsonArray.map { it.jsonObject }.firstOrNull { it.field("name") == name }?.engine("dsh")?.get("dsh")?.jsonObject?.get("versionCompatible") == JsonPrimitive(false) })
         signIn()
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        appClick("Settings"); awaitText("Default permission")
+        appClick("Settings"); awaitText("Appearance")
         appClick("Machines & models"); awaitText(name)
         appClick(name); awaitText("DeepSeek Harness")
         scrollTo(hasText("DeepSeek Harness") and hasClickAction())
