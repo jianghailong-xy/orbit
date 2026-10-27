@@ -1,0 +1,300 @@
+表：`analytics.events_dev`（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。
+
+按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。". The owner answered: 批准三条 (2026-10-27T14:52:00.000Z)." StaticText`
+    t =   125.65s Find the "From Orbit · owner answer: you asked "请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。
+
+表：`analytics.events_dev`（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。
+
+按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。". The owner answered: 批准三条 (2026-10-27T14:52:00.000Z)." StaticText
+    t =   126.36s Find the "From Orbit · owner answer: you asked "请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。
+
+表：`analytics.events_dev`（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。
+
+按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。". The owner answered: 批准三条 (2026-10-27T14:52:00.000Z)." StaticText
+    t =   127.70s Checking existence of `"From Orbit · owner answer: you asked "请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。
+
+表：`analytics.events_dev`（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。
+
+按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。". The owner answered: 批准三条 (2026-10-27T14:52:00.000Z)." StaticText`
+    t =   128.18s Find the "From Orbit · owner answer: you asked "请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。
+
+表：`analytics.events_dev`（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。
+
+按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。". The owner answered: 批准三条 (2026-10-27T14:52:00.000Z)." StaticText
+    t =   129.34s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   129.34s     Wait for io.orbitd.oacprobe to idle
+    t =   129.36s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   129.47s     Check for interrupting elements affecting Window
+    t =   129.74s     Synthesize event
+    t =   129.74s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   129.82s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   129.90s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   129.96s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   130.06s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   131.55s     Wait for io.orbitd.oacprobe to idle
+    t =   132.94s Checking existence of `"From Orbit · owner answer: you asked "请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。
+
+表：`analytics.events_dev`（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。
+
+按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。". The owner answered: 批准三条 (2026-10-27T14:52:00.000Z)." StaticText`
+    t =   133.46s Find the "From Orbit · owner answer: you asked "请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。
+
+表：`analytics.events_dev`（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。
+
+按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。". The owner answered: 批准三条 (2026-10-27T14:52:00.000Z)." StaticText
+    t =   133.97s Find the "From Orbit · owner answer: you asked "请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。
+
+表：`analytics.events_dev`（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。
+
+按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。". The owner answered: 批准三条 (2026-10-27T14:52:00.000Z)." StaticText
+    t =   134.49s Checking existence of `"From Orbit · owner answer: you asked "请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。
+
+表：`analytics.events_dev`（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。
+
+按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。". The owner answered: 批准三条 (2026-10-27T14:52:00.000Z)." StaticText`
+    t =   135.02s Find the "From Orbit · owner answer: you asked "请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。
+
+表：`analytics.events_dev`（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。
+
+按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。". The owner answered: 批准三条 (2026-10-27T14:52:00.000Z)." StaticText
+    t =   135.61s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   135.61s     Wait for io.orbitd.oacprobe to idle
+    t =   135.62s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   135.66s     Check for interrupting elements affecting Window
+    t =   135.82s     Synthesize event
+    t =   135.82s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   135.86s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   135.90s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   135.94s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   135.99s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   137.47s     Wait for io.orbitd.oacprobe to idle
+    t =   138.97s Find the "From Orbit · owner answer: you asked "请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。
+
+表：`analytics.events_dev`（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。
+
+按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。". The owner answered: 批准三条 (2026-10-27T14:52:00.000Z)." StaticText
+    t =   141.04s Requesting snapshot of accessibility hierarchy for app with pid 27738
+    t =   144.11s Requesting snapshot of accessibility hierarchy for app with pid 27738
+    t =   144.67s Checking existence of `Any (First Match)`
+    t =   151.32s Get all elements bound by index for: Descendants matching type StaticText
+    t =   152.96s Find the StaticText (Element at index 0)
+    t =   153.53s Find the StaticText (Element at index 1)
+    t =   153.72s Find the StaticText (Element at index 2)
+    t =   153.98s Find the StaticText (Element at index 3)
+    t =   154.24s Find the StaticText (Element at index 4)
+    t =   154.45s Find the StaticText (Element at index 5)
+    t =   154.90s Find the StaticText (Element at index 6)
+    t =   155.34s Find the StaticText (Element at index 7)
+    t =   155.61s Find the StaticText (Element at index 8)
+    t =   155.89s Find the StaticText (Element at index 9)
+    t =   156.14s Find the StaticText (Element at index 10)
+    t =   157.06s Find the StaticText (Element at index 11)
+    t =   157.69s Find the StaticText (Element at index 12)
+    t =   158.12s Find the StaticText (Element at index 13)
+    t =   158.48s Find the StaticText (Element at index 14)
+    t =   159.06s Find the StaticText (Element at index 15)
+    t =   159.51s Find the StaticText (Element at index 16)
+    t =   160.50s Find the StaticText (Element at index 17)
+    t =   160.92s Find the StaticText (Element at index 18)
+    t =   161.10s Find the StaticText (Element at index 19)
+    t =   161.31s Find the StaticText (Element at index 20)
+    t =   161.51s Find the StaticText (Element at index 21)
+    t =   161.90s Find the StaticText (Element at index 22)
+    t =   162.12s Find the StaticText (Element at index 23)
+    t =   162.32s Find the StaticText (Element at index 24)
+    t =   162.48s Find the StaticText (Element at index 25)
+    t =   162.63s Find the StaticText (Element at index 26)
+    t =   162.86s Find the StaticText (Element at index 27)
+    t =   163.00s Find the StaticText (Element at index 28)
+    t =   163.14s Find the StaticText (Element at index 29)
+    t =   163.29s Find the StaticText (Element at index 30)
+    t =   163.46s Find the StaticText (Element at index 31)
+    t =   163.63s Get all elements bound by index for: Descendants matching type Button
+    t =   163.82s Find the Button (Element at index 0)
+    t =   163.97s Find the Button (Element at index 1)
+    t =   164.12s Find the Button (Element at index 2)
+    t =   164.26s Find the Button (Element at index 3)
+    t =   164.42s Find the Button (Element at index 4)
+    t =   164.56s Find the Button (Element at index 5)
+    t =   164.81s Find the Button (Element at index 6)
+    t =   164.95s Find the Button (Element at index 7)
+    t =   165.14s Find the Button (Element at index 8)
+    t =   165.37s Find the Button (Element at index 9)
+    t =   165.50s Find the Button (Element at index 10)
+    t =   165.87s Find the Button (Element at index 11)
+    t =   166.48s Find the Button (Element at index 12)
+    t =   166.66s Find the Button (Element at index 13)
+    t =   166.83s Find the Button (Element at index 14)
+    t =   167.01s Find the Button (Element at index 15)
+    t =   167.18s Find the Button (Element at index 16)
+    t =   167.34s Find the Button (Element at index 17)
+    t =   167.53s Find the Button (Element at index 18)
+    t =   167.71s Find the Button (Element at index 19)
+    t =   167.89s Find the Button (Element at index 20)
+    t =   168.07s Find the Button (Element at index 21)
+    t =   168.27s Find the Button (Element at index 22)
+    t =   168.44s Find the Button (Element at index 23)
+    t =   168.97s Added attachment named 'ios-3-details'
+    t =   168.97s Requesting snapshot of accessibility hierarchy for app with pid 27738
+    t =   170.46s Requesting snapshot of accessibility hierarchy for app with pid 27738
+    t =   170.79s Tear Down
+Test Case '-[OacProbeUITests.CardShotTests test3TheWordsTheCoordinatorWasToldAreInsideViewDetails]' passed (171.753 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test4ANotYetKeepsTheLine]' started.
+    t =     0.00s Start Test at 2026-10-27 16:58:10.264
+    t =     0.15s Set Up
+    t =     0.19s Open io.orbitd.oacprobe
+    t =     0.19s     Launch io.orbitd.oacprobe
+    t =     0.19s         Terminate io.orbitd.oacprobe:27738
+2026-10-27 16:58:16.528 xcodebuild[5173:21006] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-27 16:58:16.528 xcodebuild[5173:21006] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     8.30s         Setting up automation session
+    t =    10.83s         Wait for io.orbitd.oacprobe to idle
+    t =    13.79s Checking existence of `Any (First Match)`
+    t =    17.98s Checking existence of `Any (First Match)`
+    t =    25.44s Checking existence of `Any (First Match)`
+    t =    33.12s Checking existence of `Button (First Match)`
+    t =    34.01s Checking existence of `Button (First Match)`
+    t =    34.35s Checking existence of `Button (First Match)`
+    t =    34.63s Find the Button (First Match)
+    t =    35.17s Find the "Sent to the coordinator · 11:41" Button
+    t =    35.67s Find the "Sent to the coordinator · 11:41" Button
+    t =    36.12s Find the "Sent to the coordinator · 11:41" Button
+    t =    36.42s Find the "Sent to the coordinator · 11:41" Button
+    t =    37.19s Added attachment named 'ios-4-not-yet-line'
+    t =    37.21s Tear Down
+Test Case '-[OacProbeUITests.CardShotTests test4ANotYetKeepsTheLine]' passed (37.465 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test5AQuestionWithNoRecordKeepsTheLine]' started.
+    t =     0.00s Start Test at 2026-10-27 16:58:47.730
+    t =     0.05s Set Up
+    t =     0.08s Open io.orbitd.oacprobe
+    t =     0.08s     Launch io.orbitd.oacprobe
+    t =     0.08s         Terminate io.orbitd.oacprobe:33107
+2026-10-27 16:58:48.830 xcodebuild[5173:21006] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-27 16:58:48.830 xcodebuild[5173:21006] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     3.13s         Setting up automation session
+    t =     5.55s         Wait for io.orbitd.oacprobe to idle
+    t =     8.20s Checking existence of `Any (First Match)`
+    t =    10.98s Checking existence of `Any (First Match)`
+    t =    16.90s Checking existence of `Any (First Match)`
+    t =    23.22s Checking existence of `Button (First Match)`
+    t =    25.42s Checking existence of `Button (First Match)`
+    t =    26.36s Checking existence of `Button (First Match)`
+    t =    27.01s Find the Button (First Match)
+    t =    27.53s Find the "Sent to the coordinator · 11:52" Button
+    t =    27.98s Find the "Sent to the coordinator · 11:52" Button
+    t =    28.35s Find the "Sent to the coordinator · 11:52" Button
+    t =    28.88s Find the "Sent to the coordinator · 11:52" Button
+    t =    29.72s Added attachment named 'ios-5-unheld-line'
+    t =    29.72s Tear Down
+Test Case '-[OacProbeUITests.CardShotTests test5AQuestionWithNoRecordKeepsTheLine]' passed (29.964 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test6AnUnconfirmedAnswerSaysSo]' started.
+    t =     0.00s Start Test at 2026-10-27 16:59:17.694
+    t =     0.06s Set Up
+    t =     0.10s Open io.orbitd.oacprobe
+    t =     0.11s     Launch io.orbitd.oacprobe
+    t =     0.11s         Terminate io.orbitd.oacprobe:33892
+2026-10-27 16:59:18.943 xcodebuild[5173:21006] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-27 16:59:18.944 xcodebuild[5173:21006] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     3.47s         Setting up automation session
+    t =     9.67s         Wait for io.orbitd.oacprobe to idle
+    t =    13.55s Checking existence of `Any (First Match)`
+    t =    16.68s Checking existence of `Any (First Match)`
+    t =    23.74s Waiting 20.0s for Button (First Match) to exist
+    t =    24.78s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    24.78s         Checking existence of `Button (First Match)`
+    t =    25.67s Get all elements bound by index for: Elements matching predicate 'label CONTAINS "View details" AND label CONTAINS "批准三条"'
+    t =    25.79s Checking existence of `Button (Element at index 0)`
+    t =    25.92s Find the Button (Element at index 0)
+    t =    26.04s Find the "Answered, 11:52, 请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。 表：analytics.events_dev（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。 按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。, 批准三条, The session has not confirmed it received this., View details" Button
+    t =    26.15s Find the "Answered, 11:52, 请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。 表：analytics.events_dev（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。 按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。, 批准三条, The session has not confirmed it received this., View details" Button
+    t =    26.26s Find the "Answered, 11:52, 请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。 表：analytics.events_dev（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。 按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。, 批准三条, The session has not confirmed it received this., View details" Button
+    t =    26.41s Find the "Answered, 11:52, 请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。 表：analytics.events_dev（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。 按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。, 批准三条, The session has not confirmed it received this., View details" Button
+    t =    26.62s Find the "Answered, 11:52, 请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。 表：analytics.events_dev（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。 按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。, 批准三条, The session has not confirmed it received this., View details" Button
+    t =    26.73s Find the "Answered, 11:52, 请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。 表：analytics.events_dev（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。 按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。, 批准三条, The session has not confirmed it received this., View details" Button
+    t =    26.86s Checking existence of `Button (First Match)`
+    t =    27.31s Checking existence of `Button (First Match)`
+    t =    27.82s Get all elements bound by index for: Descendants matching type StaticText
+    t =    27.92s Find the StaticText (Element at index 0)
+    t =    28.02s Find the StaticText (Element at index 1)
+    t =    28.11s Find the StaticText (Element at index 2)
+    t =    28.20s Find the StaticText (Element at index 3)
+    t =    28.35s Find the StaticText (Element at index 4)
+    t =    28.55s Find the StaticText (Element at index 5)
+    t =    28.64s Find the StaticText (Element at index 6)
+    t =    28.76s Find the StaticText (Element at index 7)
+    t =    28.87s Find the StaticText (Element at index 8)
+    t =    28.97s Find the StaticText (Element at index 9)
+    t =    29.11s Find the StaticText (Element at index 10)
+    t =    29.21s Find the StaticText (Element at index 11)
+    t =    29.37s Find the StaticText (Element at index 12)
+    t =    29.47s Find the StaticText (Element at index 13)
+    t =    29.57s Find the StaticText (Element at index 14)
+    t =    29.65s Find the StaticText (Element at index 15)
+    t =    29.76s Find the StaticText (Element at index 16)
+    t =    29.85s Find the StaticText (Element at index 17)
+    t =    29.95s Find the StaticText (Element at index 18)
+    t =    30.04s Get all elements bound by index for: Descendants matching type Button
+    t =    30.16s Find the Button (Element at index 0)
+    t =    30.25s Find the Button (Element at index 1)
+    t =    30.35s Find the Button (Element at index 2)
+    t =    30.43s Find the Button (Element at index 3)
+    t =    30.52s Find the Button (Element at index 4)
+    t =    30.60s Find the Button (Element at index 5)
+    t =    30.69s Find the Button (Element at index 6)
+    t =    30.79s Find the Button (Element at index 7)
+    t =    30.87s Find the Button (Element at index 8)
+    t =    30.97s Find the Button (Element at index 9)
+    t =    31.07s Find the Button (Element at index 10)
+    t =    31.23s Find the Button (Element at index 11)
+    t =    31.32s Find the Button (Element at index 12)
+    t =    31.42s Find the Button (Element at index 13)
+    t =    31.53s Find the Button (Element at index 14)
+    t =    31.63s Find the Button (Element at index 15)
+    t =    31.73s Find the Button (Element at index 16)
+    t =    31.83s Find the Button (Element at index 17)
+    t =    31.95s Find the Button (Element at index 18)
+    t =    32.04s Find the Button (Element at index 19)
+    t =    32.37s Added attachment named 'ios-6-unconfirmed'
+    t =    32.37s Tear Down
+Test Case '-[OacProbeUITests.CardShotTests test6AnUnconfirmedAnswerSaysSo]' passed (33.688 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test7OneCardInTheDark]' started.
+    t =     0.00s Start Test at 2026-10-27 16:59:51.383
+    t =     0.06s Set Up
+    t =     0.10s Open io.orbitd.oacprobe
+    t =     0.10s     Launch io.orbitd.oacprobe
+    t =     0.10s         Terminate io.orbitd.oacprobe:34668
+2026-10-27 16:59:52.511 xcodebuild[5173:21006] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-27 16:59:52.511 xcodebuild[5173:21006] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     3.70s         Setting up automation session
+    t =     6.12s         Wait for io.orbitd.oacprobe to idle
+    t =     8.80s Checking existence of `Any (First Match)`
+    t =    18.15s Waiting 20.0s for Button (First Match) to exist
+    t =    19.18s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    19.19s         Checking existence of `Button (First Match)`
+    t =    19.99s Get all elements bound by index for: Elements matching predicate 'label CONTAINS "View details" AND label CONTAINS "批准三条"'
+    t =    20.41s Checking existence of `Button (Element at index 0)`
+    t =    20.54s Find the Button (Element at index 0)
+    t =    20.73s Find the "Answered, 11:52, 请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。 表：analytics.events_dev（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。 按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。, 批准三条, View details" Button
+    t =    20.89s Find the "Answered, 11:52, 请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。 表：analytics.events_dev（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。 按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。, 批准三条, View details" Button
+    t =    21.02s Find the "Answered, 11:52, 请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。 表：analytics.events_dev（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。 按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。, 批准三条, View details" Button
+    t =    21.21s Find the "Answered, 11:52, 请批准 P1 在 dev 表上演练压缩编码切换。这条由我代 P1 发出：任务会话调不了 ask_owner，它从昨天下午起一直在等批准，表还没动过。 表：analytics.events_dev（dev 表，2.1 TiB，最后写入 09-20，没有其他写入方）。原始 schema 已存档。 按顺序执行三条：① apply → ② rollback（同一批列改回原编码）→ ③ 再 apply。每步之后逐列回读，③ 之后观察 1 小时。, 批准三条, View details" Button
+    t =    21.40s Checking existence of `Button (First Match)`
+    t =    22.72s Added attachment named 'ios-7-one-card-dark'
+    t =    22.73s Tear Down
+Test Case '-[OacProbeUITests.CardShotTests test7OneCardInTheDark]' passed (23.056 seconds).
+Test Suite 'CardShotTests' passed at 2026-10-27 17:00:14.441.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 406.188 (406.206) seconds
+Test Suite 'OacProbeUITests.xctest' passed at 2026-10-27 17:00:14.444.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 406.188 (406.210) seconds
+Test Suite 'All tests' passed at 2026-10-27 17:00:14.444.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 406.188 (406.213) seconds
+2026-10-27 17:01:21.652 xcodebuild[5173:21006] [MT] IDETestOperationsObserverDebug: 570.676 elapsed -- Testing started completed.
+2026-10-27 17:01:21.656 xcodebuild[5173:21006] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-27 17:01:21.656 xcodebuild[5173:21006] [MT] IDETestOperationsObserverDebug: 570.676 sec, +570.676 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.oac-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

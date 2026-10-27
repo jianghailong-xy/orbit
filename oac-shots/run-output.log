@@ -1,0 +1,53 @@
+==> probe zone Etc/GMT+3 (UTC-3), 13:37 there
+==> stub ready after 2s
+==> iPhone E839A11B-51B4-4AD3-ACF4-A53B95B7C957:     iPhone 17 Pro (E839A11B-51B4-4AD3-ACF4-A53B95B7C957) (Shutdown) 
+Test Case '-[OacProbeUITests.CardShotTests test1OneGreyCardWhereTheLineWas]' started.
+Test Case '-[OacProbeUITests.CardShotTests test1OneGreyCardWhereTheLineWas]' passed (74.219 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test2TheQueuedCardIsDashedAndSaysSo]' started.
+Test Case '-[OacProbeUITests.CardShotTests test2TheQueuedCardIsDashedAndSaysSo]' passed (36.042 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test3TheWordsTheCoordinatorWasToldAreInsideViewDetails]' started.
+Test Case '-[OacProbeUITests.CardShotTests test3TheWordsTheCoordinatorWasToldAreInsideViewDetails]' passed (171.753 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test4ANotYetKeepsTheLine]' started.
+Test Case '-[OacProbeUITests.CardShotTests test4ANotYetKeepsTheLine]' passed (37.465 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test5AQuestionWithNoRecordKeepsTheLine]' started.
+Test Case '-[OacProbeUITests.CardShotTests test5AQuestionWithNoRecordKeepsTheLine]' passed (29.964 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test6AnUnconfirmedAnswerSaysSo]' started.
+Test Case '-[OacProbeUITests.CardShotTests test6AnUnconfirmedAnswerSaysSo]' passed (33.688 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test7OneCardInTheDark]' started.
+Test Case '-[OacProbeUITests.CardShotTests test7OneCardInTheDark]' passed (23.056 seconds).
+	 Executed 7 tests, with 0 failures (0 unexpected) in 406.188 (406.206) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 406.188 (406.210) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 406.188 (406.213) seconds
+** TEST SUCCEEDED **
+.oac-probe/run.sh: line 72:  1903 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests.log" > "$OUT/stub.out" 2>&1
+total 7192
+drwxr-xr-x  30 runner  staff     960 Oct 27 17:01 .
+drwxr-xr-x  15 runner  staff     480 Oct 27 16:42 ..
+-rw-r--r--   1 runner  staff       7 Oct 27 17:01 .done-probe
+drwxr-xr-x  20 runner  staff     640 Oct 27 17:01 attachments
+-rw-r--r--@  1 runner  staff    2989 Oct 27 16:54 CardShotTeststest1OneGreyCardWhereTheLineWas-notes.txt
+-rw-r--r--@  1 runner  staff    2221 Oct 27 16:55 CardShotTeststest2TheQueuedCardIsDashedAndSaysSo-notes.txt
+-rw-r--r--@  1 runner  staff    5059 Oct 27 16:58 CardShotTeststest3TheWordsTheCoordinatorWasToldAreInsideViewDetails-notes.txt
+-rw-r--r--@  1 runner  staff     125 Oct 27 16:58 CardShotTeststest4ANotYetKeepsTheLine-notes.txt
+-rw-r--r--@  1 runner  staff     124 Oct 27 16:59 CardShotTeststest5AQuestionWithNoRecordKeepsTheLine-notes.txt
+-rw-r--r--@  1 runner  staff    2190 Oct 27 16:59 CardShotTeststest6AnUnconfirmedAnswerSaysSo-notes.txt
+-rw-r--r--@  1 runner  staff     587 Oct 27 17:00 CardShotTeststest7OneCardInTheDark-notes.txt
+-rw-r--r--   1 runner  staff  301174 Oct 27 16:54 ios-1-one-card.png
+-rw-r--r--   1 runner  staff   67642 Oct 27 16:54 ios-1b-the-card.png
+-rw-r--r--   1 runner  staff  258269 Oct 27 16:55 ios-2-queued.png
+-rw-r--r--   1 runner  staff   84315 Oct 27 16:55 ios-2b-the-queued-card.png
+-rw-r--r--   1 runner  staff  563553 Oct 27 16:58 ios-3-details.png
+-rw-r--r--   1 runner  staff  428346 Oct 27 16:56 ios-3a-details-folded.png
+-rw-r--r--   1 runner  staff  213176 Oct 27 16:58 ios-4-not-yet-line.png
+-rw-r--r--   1 runner  staff  255203 Oct 27 16:59 ios-5-unheld-line.png
+-rw-r--r--   1 runner  staff  252697 Oct 27 16:59 ios-6-unconfirmed.png
+-rw-r--r--   1 runner  staff  277574 Oct 27 17:00 ios-7-one-card-dark.png
+-rw-r--r--@  1 runner  staff   25263 Oct 27 16:57 missing-band-details-words.txt
+-rw-r--r--   1 runner  staff    2205 Oct 27 17:01 not-served.txt
+-rw-r--r--   1 runner  staff   33575 Oct 27 17:00 requests.log
+-rw-r--r--   1 runner  staff      76 Oct 27 16:37 stub.out
+-rw-r--r--@  1 runner  staff   25263 Oct 27 16:58 tree-details.txt
+-rw-r--r--@  1 runner  staff   17582 Oct 27 16:54 tree-one-card.txt
+-rw-r--r--@  1 runner  staff   17640 Oct 27 16:55 tree-queued.txt
+-rw-r--r--   1 runner  staff     175 Oct 27 17:01 writes.txt
+-rw-r--r--   1 runner  staff  770138 Oct 27 17:01 xcodebuild-ios.log

@@ -1,0 +1,18 @@
+Test Case '-[OacProbeUITests.CardShotTests test1OneGreyCardWhereTheLineWas]' started.
+Test Case '-[OacProbeUITests.CardShotTests test1OneGreyCardWhereTheLineWas]' passed (74.219 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test2TheQueuedCardIsDashedAndSaysSo]' started.
+Test Case '-[OacProbeUITests.CardShotTests test2TheQueuedCardIsDashedAndSaysSo]' passed (36.042 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test3TheWordsTheCoordinatorWasToldAreInsideViewDetails]' started.
+Test Case '-[OacProbeUITests.CardShotTests test3TheWordsTheCoordinatorWasToldAreInsideViewDetails]' passed (171.753 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test4ANotYetKeepsTheLine]' started.
+Test Case '-[OacProbeUITests.CardShotTests test4ANotYetKeepsTheLine]' passed (37.465 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test5AQuestionWithNoRecordKeepsTheLine]' started.
+Test Case '-[OacProbeUITests.CardShotTests test5AQuestionWithNoRecordKeepsTheLine]' passed (29.964 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test6AnUnconfirmedAnswerSaysSo]' started.
+Test Case '-[OacProbeUITests.CardShotTests test6AnUnconfirmedAnswerSaysSo]' passed (33.688 seconds).
+Test Case '-[OacProbeUITests.CardShotTests test7OneCardInTheDark]' started.
+Test Case '-[OacProbeUITests.CardShotTests test7OneCardInTheDark]' passed (23.056 seconds).
+	 Executed 7 tests, with 0 failures (0 unexpected) in 406.188 (406.206) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 406.188 (406.210) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 406.188 (406.213) seconds
+** TEST SUCCEEDED **
