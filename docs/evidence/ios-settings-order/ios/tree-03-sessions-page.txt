@@ -1,0 +1,226 @@
+Attributes: Application, 0x106a2c280, pid: 23459, label: 'SettingsOrderProbe'
+Element subtree:
+ →Application, 0x106a2c280, pid: 23459, label: 'SettingsOrderProbe'
+    Window (Main), 0x106a2c3c0, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x106a2c500, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x106a2c640, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x106a2c780, {{-402.0, -874.0}, {1206.0, 2622.0}}
+          Other, 0x106a2c8c0, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x106a2ca00, {{0.0, 0.0}, {402.0, 874.0}}
+              StaticText, 0x106a2cb40, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x106a2cc80, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x106a2cdc0, {{0.0, 128.0}, {305.7, 746.0}}
+                Other, 0x106a2cf00, {{0.0, -1364.0}, {305.7, 3206.0}}
+                Cell, 0x106a2d040, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x106a2d180, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x106a2d2c0, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x106a2d400, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x106a2d540, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x106a2d680, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x106a2d7c0, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x106a2d900, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x106a2da40, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x106a2db80, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x106a2dcc0, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x106a2de00, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x106a2df40, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x106a2e080, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x106a2e1c0, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x106a2e300, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x106a2e440, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x106a2e580, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x106a2e6c0, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x106a2e800, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x106a2e940, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x106a2ea80, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x106a2ebc0, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x106a2ed00, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x106a2ee40, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x106a2ef80, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x106a2f0c0, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x106a2f200, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x106a2f340, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x106a2f480, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x106a2f5c0, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x106a2f700, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x106a2f840, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x106a2f980, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x106a2fac0, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x106a2fc00, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x106a2fd40, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x106a2fe80, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x106a1be80, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x106a1a6c0, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x106a1a800, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x106a1a940, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x106a1aa80, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x106a1abc0, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x106a1ad00, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x106a1ae40, {{0.0, 305.7}, {305.3, 44.3}}, label: 'orbit,  · workstation'
+                          Other, 0x106a1af80, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x106a1b0c0, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x106a1b200, {{58.0, 317.7}, {35.3, 20.3}}, label: 'orbit'
+                          StaticText, 0x106a1b340, {{93.3, 317.7}, {101.7, 20.3}}, label: ' · workstation'
+                Other, 0x106a1b480, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x106a1b5c0, {{299.3, 649.7}, {3.0, 221.3}}
+                Other, 0x106a1b700, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x106a1b840, {{299.3, 649.7}, {3.0, 221.3}}
+              Button, 0x106a1b980, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x106a1bac0, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x106a1bc00, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x106a1a580, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x106a4c000, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x106a4c140, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI29PresentationHosting'
+                  Other, 0x106a4c280, {{20.0, 66.0}, {36.0, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                    Other, 0x106a4c3c0, {{20.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x106a4c500, {{22.3, 66.0}, {31.3, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                  Other, 0x106a4c640, {{76.0, 73.7}, {37.7, 20.7}}, label: 'Workspace: orbit'
+                    Other, 0x106a4c780, {{76.0, 73.7}, {37.7, 20.7}}
+                      StaticText, 0x106a4c8c0, {{76.0, 74.0}, {37.7, 20.3}}, label: 'Workspace: orbit'
+                  Other, 0x106a4ca00, {{283.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+                    Other, 0x106a4cb40, {{283.7, 66.0}, {41.7, 36.0}}
+                      Button, 0x106a4cc80, {{283.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+                        Button, 0x106a4cdc0, {{283.7, 66.0}, {41.7, 36.0}}
+                          Image, 0x106a4cf00, {{293.3, 77.7}, {22.0, 13.0}}, identifier: 'line.3.horizontal.decrease', label: 'Filter'
+                  Button, 0x106a4d040, {{341.3, 66.0}, {40.7, 36.0}}, label: 'Start a new session with orbit'
+                Other, 0x106a4d180, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x106a4d2c0, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x106a4d400, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x106a4d540, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x106a4d680, {{0.0, 116.0}, {402.0, 672.0}}
+                        CollectionView, 0x106a4d7c0, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x106a4d900, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x106a4da40, {{0.0, 0.0}, {402.0, 170.8}}
+                            Other, 0x106a4db80, {{0.0, 733.2}, {402.0, 140.8}}
+                          Other, 0x106a4dcc0, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x106a4de00, {{369.0, 116.0}, {30.0, 672.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x106a4df40, {{396.0, 778.0}, {3.0, 7.0}}
+                          Other, 0x106a4e080, {{369.0, 116.0}, {30.0, 672.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x106a4e1c0, {{396.0, 778.0}, {3.0, 7.0}}
+                        Image, 0x106a4e300, {{167.3, 403.0}, {67.3, 53.7}}, identifier: 'bubble.left.and.bubble.right', label: 'Conversation'
+                        StaticText, 0x106a4e440, {{111.0, 403.0}, {180.0, 98.3}}, label: 'No open sessions'
+                Other, 0x106a4e580, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x106a4e6c0, {{0.0, 0.0}, {402.0, 874.0}}
+                    Toolbar, 0x106a4e800, {{0.0, 788.0}, {402.0, 86.0}}, identifier: 'Toolbar', label: 'Toolbar'
+                      Other, 0x106a4e940, {{28.0, 798.0}, {346.0, 48.0}}
+                        Other, 0x106a4ea80, {{28.0, 798.0}, {346.0, 48.0}}
+                          Other, 0x106a4ebc0, {{28.0, 798.0}, {0.0, 0.0}}
+                            Other, 0x106a4ed00, {{28.0, 798.0}, {346.0, 48.0}}
+                              Other, 0x106a4ee40, {{28.0, 798.0}, {346.0, 48.0}}
+                                Other, 0x106a4ef80, {{33.0, 803.0}, {336.0, 38.0}}
+                                  SearchField, 0x106a4f0c0, {{33.0, 803.0}, {336.0, 38.0}}, label: 'Search sessions', placeholderValue: 'Search sessions'
+                                    Image, 0x106a4f200, {{46.0, 812.3}, {20.3, 18.7}}, identifier: 'magnifyingglass', label: 'Search'
+      Other, 0x106a4f340, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x106a4f480, {{-402.0, -874.0}, {1206.0, 2622.0}}
+        Other, 0x106a4f5c0, {{0.0, 62.0}, {402.0, 812.0}}
+          Other, 0x106a4f700, {{0.0, 62.0}, {402.0, 812.0}}
+            Other, 0x106a4f840, {{0.0, 62.0}, {402.0, 812.0}}
+              Other, 0x106a4f980, {{0.0, 62.0}, {402.0, 812.0}}
+                Other, 0x106a4fac0, {{0.0, 62.0}, {402.0, 812.0}}
+                  Other, 0x106a4fc00, {{0.0, 62.0}, {402.0, 812.0}}
+                    NavigationBar, 0x106a4fd40, {{0.0, 78.0}, {402.0, 54.0}}, identifier: 'Sessions'
+                      Button, 0x106a4fe80, {{16.0, 78.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Settings'
+                      StaticText, 0x106a70000, {{165.3, 89.7}, {71.3, 20.7}}, label: 'Sessions'
+                      Other, 0x106a70140, {{346.0, 82.0}, {36.0, 36.0}}, identifier: 'xmark', label: 'Close'
+                        Other, 0x106a70280, {{346.0, 82.0}, {36.0, 36.0}}
+                          Button, 0x106a703c0, {{350.7, 82.0}, {26.7, 36.0}}, identifier: 'xmark', label: 'Close'
+                    Other, 0x106a70500, {{0.0, 62.0}, {402.0, 812.0}}
+                      Other, 0x106a70640, {{0.0, 62.0}, {402.0, 812.0}}
+                        Other, 0x106a70780, {{0.0, 62.0}, {402.0, 812.0}}
+                          Other, 0x106a708c0, {{0.0, 62.0}, {402.0, 812.0}}
+                            CollectionView, 0x106a70a00, {{0.0, 62.0}, {402.0, 812.0}}
+                              Other, 0x106a70b40, {{-16.0, -1492.0}, {434.0, 1772.7}}
+                              Other, 0x106a70c80, {{0.0, 62.0}, {402.0, 812.0}}
+                              Other, 0x106a70dc0, {{0.0, 62.0}, {402.0, 812.0}}
+                              Cell, 0x106a70f00, {{16.0, 167.0}, {370.0, 52.0}}
+                                Other, 0x106a71040, {{16.0, 167.0}, {370.0, 52.0}}
+                                  Other, 0x106a71180, {{16.0, 167.0}, {370.0, 52.0}}
+                                Other, 0x106a712c0, {{16.0, 167.0}, {370.0, 52.0}}
+                                  Other, 0x106a71400, {{16.0, 167.0}, {370.0, 52.0}}
+                                    Other, 0x106a71540, {{16.0, 167.0}, {370.0, 52.0}}
+                                      StaticText, 0x106a71680, {{32.0, 182.8}, {142.3, 20.3}}, label: 'Default permission'
+                                      Button, 0x106a717c0, {{32.0, 176.0}, {338.0, 34.3}}, label: 'Default permission, Auto'
+                                        StaticText, 0x106a71900, {{318.3, 183.0}, {35.3, 20.3}}, label: 'Auto'
+                              Cell, 0x106a71a40, {{16.0, 219.0}, {370.0, 61.7}}
+                                Other, 0x106a71b80, {{16.0, 219.0}, {370.0, 61.7}}
+                                Other, 0x106a71cc0, {{16.0, 219.0}, {370.0, 61.7}}
+                                  Other, 0x106a71e00, {{16.0, 219.0}, {370.0, 61.7}}
+                                    Other, 0x106a71f40, {{16.0, 219.0}, {370.0, 61.7}}
+                                      StaticText, 0x106a72080, {{16.0, 219.0}, {370.0, 61.7}}, label: 'The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in.'
+                              Other, 0x106a721c0, {{-16.0, 280.7}, {434.0, 131.3}}
+                              Cell, 0x106a72300, {{16.0, 298.3}, {370.0, 52.0}}
+                                Other, 0x106a72440, {{16.0, 298.3}, {370.0, 52.0}}
+                                  Other, 0x106a72580, {{16.0, 298.3}, {370.0, 52.0}}
+                                Other, 0x106a726c0, {{16.0, 298.3}, {370.0, 52.0}}
+                                  Other, 0x106a72800, {{16.0, 298.3}, {370.0, 52.0}}
+                                    Other, 0x106a72940, {{16.0, 298.3}, {370.0, 52.0}}
+                                      Switch, 0x106a72a80, {{16.0, 298.3}, {370.0, 52.0}}, label: 'Session orchestration', value: 1
+                                        StaticText, 0x106a72bc0, {{32.0, 314.2}, {165.0, 20.3}}, label: 'Session orchestration'
+                                        Switch, 0x106a72d00, {{309.0, 310.3}, {63.0, 28.0}}, value: 1
+                              Cell, 0x106a72e40, {{16.0, 350.3}, {370.0, 61.7}}
+                                Other, 0x106a72f80, {{16.0, 350.3}, {370.0, 61.7}}
+                                Other, 0x106a730c0, {{16.0, 350.3}, {370.0, 61.7}}
+                                  Other, 0x106a73200, {{16.0, 350.3}, {370.0, 61.7}}
+                                    Other, 0x106a73340, {{16.0, 350.3}, {370.0, 61.7}}
+                                      StaticText, 0x106a73480, {{16.0, 350.3}, {370.0, 61.7}}, label: 'Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused.'
+                              Other, 0x106a735c0, {{-16.0, 412.0}, {434.0, 131.3}}
+                              Cell, 0x106a73700, {{16.0, 429.3}, {370.0, 52.0}}
+                                Other, 0x106a73840, {{16.0, 429.3}, {370.0, 52.0}}
+                                  Other, 0x106a73980, {{16.0, 429.3}, {370.0, 52.0}}
+                                Other, 0x106a73ac0, {{16.0, 429.3}, {370.0, 52.0}}
+                                  Other, 0x106a73c00, {{16.0, 429.3}, {370.0, 52.0}}
+                                    Other, 0x106a73d40, {{16.0, 429.3}, {370.0, 52.0}}
+                                      Switch, 0x106a73e80, {{16.0, 429.3}, {370.0, 52.0}}, label: 'Smart model selection', value: 0
+                                        StaticText, 0x106a7c000, {{32.0, 445.2}, {170.3, 20.3}}, label: 'Smart model selection'
+                                        Switch, 0x106a7c140, {{309.0, 441.3}, {63.0, 28.0}}, value: 0
+                              Cell, 0x106a7c280, {{16.0, 481.3}, {370.0, 61.7}}
+                                Other, 0x106a7c3c0, {{16.0, 481.3}, {370.0, 61.7}}
+                                Other, 0x106a7c500, {{16.0, 481.3}, {370.0, 61.7}}
+                                  Other, 0x106a7c640, {{16.0, 481.3}, {370.0, 61.7}}
+                                    Other, 0x106a7c780, {{16.0, 481.3}, {370.0, 61.7}}
+                                      StaticText, 0x106a7c8c0, {{16.0, 481.3}, {370.0, 61.7}}, label: 'Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before.'
+                              Other, 0x106a7ca00, {{-16.0, 543.0}, {434.0, 131.3}}
+                              Cell, 0x106a7cb40, {{16.0, 560.7}, {370.0, 52.0}}
+                                Other, 0x106a7cc80, {{16.0, 560.7}, {370.0, 52.0}}
+                                  Other, 0x106a7cdc0, {{16.0, 560.7}, {370.0, 52.0}}
+                                Other, 0x106a7cf00, {{16.0, 560.7}, {370.0, 52.0}}
+                                  Other, 0x106a7d040, {{16.0, 560.7}, {370.0, 52.0}}
+                                    Other, 0x106a7d180, {{16.0, 560.7}, {370.0, 52.0}}
+                                      Switch, 0x106a7d2c0, {{16.0, 560.7}, {370.0, 52.0}}, label: 'Suggested replies', value: 1
+                                        StaticText, 0x106a7d400, {{32.0, 576.5}, {137.3, 20.3}}, label: 'Suggested replies'
+                                        Switch, 0x106a7d540, {{309.0, 572.7}, {63.0, 28.0}}, value: 1
+                              Cell, 0x106a7d680, {{16.0, 612.7}, {370.0, 61.7}}
+                                Other, 0x106a7d7c0, {{16.0, 612.7}, {370.0, 61.7}}
+                                Other, 0x106a7d900, {{16.0, 612.7}, {370.0, 61.7}}
+                                  Other, 0x106a7da40, {{16.0, 612.7}, {370.0, 61.7}}
+                                    Other, 0x106a7db80, {{16.0, 612.7}, {370.0, 61.7}}
+                                      StaticText, 0x106a7dcc0, {{16.0, 612.7}, {370.0, 61.7}}, label: 'When a Claude turn ends, the empty message box offers what you'd probably type next. Each suggestion is one more request on that session's Claude account.'
+                              Other, 0x106a7de00, {{-16.0, 674.3}, {434.0, 1771.3}}
+                              Cell, 0x106a7df40, {{16.0, 691.7}, {370.0, 52.0}}
+                                Other, 0x106a7e080, {{16.0, 691.7}, {370.0, 52.0}}
+                                  Other, 0x106a7e1c0, {{16.0, 691.7}, {370.0, 52.0}}
+                                Other, 0x106a7e300, {{16.0, 691.7}, {370.0, 52.0}}
+                                  Other, 0x106a7e440, {{16.0, 691.7}, {370.0, 52.0}}
+                                    Other, 0x106a7e580, {{16.0, 691.7}, {370.0, 52.0}}
+                                      Switch, 0x106a7e6c0, {{16.0, 691.7}, {370.0, 52.0}}, label: 'Session recaps', value: 1
+                                        StaticText, 0x106a7e800, {{32.0, 707.5}, {115.3, 20.3}}, label: 'Session recaps'
+                                        Switch, 0x106a7e940, {{309.0, 703.7}, {63.0, 28.0}}, value: 1
+                              Cell, 0x106a7ea80, {{16.0, 743.7}, {370.0, 77.7}}
+                                Other, 0x106a7ebc0, {{16.0, 743.7}, {370.0, 77.7}}
+                                Other, 0x106a7ed00, {{16.0, 743.7}, {370.0, 77.7}}
+                                  Other, 0x106a7ee40, {{16.0, 743.7}, {370.0, 77.7}}
+                                    Other, 0x106a7ef80, {{16.0, 743.7}, {370.0, 77.7}}
+                                      StaticText, 0x106a7f0c0, {{16.0, 743.7}, {370.0, 77.7}}, label: 'Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply, and the conversation ends with it. Off: the raw last reply, and no summary in the conversation.'
+                              Other, 0x106a7f200, {{369.0, 132.0}, {30.0, 680.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                Other, 0x106a7f340, {{396.0, 153.7}, {3.0, 655.3}}
+                              Other, 0x106a7f480, {{369.0, 132.0}, {30.0, 680.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                Other, 0x106a7f5c0, {{396.0, 153.7}, {3.0, 655.3}}
+                    Other, 0x106a7f700, {{0.0, 62.0}, {402.0, 812.0}}
+                      Other, 0x106a7f840, {{0.0, 62.0}, {402.0, 812.0}}
+Path to element:
+ →Application, 0x106a2c280, pid: 23459, label: 'SettingsOrderProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.settingsorderprobe'
+  Output: {
+    Application, 0x106a7f980, pid: 23459, label: 'SettingsOrderProbe'
+  }

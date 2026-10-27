@@ -1,6 +1,8 @@
 # iOS 设置重排 · 设计板
 
-所有者 2026-10-27：「iOS 的 settings 页面重新设计，先给效果图，我认为现在的顺序不符合预期」（附 TestFlight 截图）。板子是 [`01-board-light.png`](01-board-light.png)（源 `01-board.html`），四段也各出了一张，方便在手机上看：`01-board-part-1-light.png` … `part-4`。界面文案全部英文，板上的说明是中文。所有者定了 ③ 的三项后再改代码。
+所有者 2026-10-27：「iOS 的 settings 页面重新设计，先给效果图，我认为现在的顺序不符合预期」（附 TestFlight 截图）。板子是 [`01-board-light.png`](01-board-light.png)（源 `01-board.html`），四段也各出了一张，方便在手机上看：`01-board-part-1-light.png` … `part-4`。界面文案全部英文，板上的说明是中文。
+
+**已定、已实现（2026-10-27）**：所有者「1A 2A 3A」，三项都按建议，代码在分支 `orbit/ios-settings-39abfb`，待合入 main。见文末「已实现」。
 
 ## 怎么做的
 
@@ -17,3 +19,13 @@ FONTCONFIG_FILE=<fonts.conf> node docs/mocks/ios-settings-order/calib.mjs
 ```
 
 `fonts.conf` 把 `-apple-system` 指到 Inter、`PingFang SC` 指到 Noto Sans SC（Kimi 那几块板用的那份）。Chromium 默认用 Playwright 的 chromium-1243。
+
+## 已实现
+
+00f5ccbdc（`feat(clients): Settings opens with Machines & models; the session settings get a page of their own`）：
+
+- **iPhone / iPad**：`SettingsHome` 的组是 Machines & models → Preferences → Account；Preferences 第一行 Sessions（`SettingsPage.sessions`），点进去是 `SessionSettingsPage`：五项各一段、说明作段脚，照 Notifications 页的样子；Default permission 补上 web 的那句说明（`SettingsCopy.defaultPermissionHint`）。写入和默认值不变。
+- **Android**：同一张列表、同一页（`"sessions"`），五项顺序跟 iOS；`ic_sessions` 是新行的图标，原来那几行专用的 `ic_orchestration`、`ic_sparkles` 删了。
+- **Web / Mac**：表单不动；web 里写着「和 iOS 同一个顺序」的注释改成说明手机端的不同。
+
+真机截图和每条核对在 [`docs/evidence/ios-settings-order/`](../../evidence/ios-settings-order/)：iPhone 是 GitHub macos-26 上 XCUITest 拍的真 app（`ios/01-settings-top.png`、`02-settings-bottom.png`、`03-sessions-page.png`），Android 是 Robolectric 渲染的真页面（`android/settings-home.png`、`settings-sessions.png`）。
