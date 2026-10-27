@@ -170,7 +170,7 @@ every fault, as a model's stream does.
 | `partition` | Cuts the runner off for `ORBIT_DURABLE_EVENTS_PARTITION_SECONDS` (600), with `RUNNER_LINK_REQUIRED` on: an nftables rule drops every packet its unit's processes send (`socket cgroupv2`). The runner and its engine keep running. | See below. |
 | `finish` | Releases the stream's last ticks at once and waits for its turn to end. | The whole session: every seq held, every tick stored once, no ping or delta stored, nothing dropped in the runner's whole log, the prompt delivered to the engine once, the engine started once, and the session `AWAITING_INPUT`. |
 | `rollback` | See [the rollback](#the-rollback-with-events-not-acknowledged) below. | |
-| `partition-off` | The partition with `RUNNER_LINK_REQUIRED` off and the gateway telling the runner `MODE_LINK` (it recreates the gateway with `ORBIT_LINK_STAGING_MODE=link`), on a session of its own. Not in `all`. | As for `partition`, except that the runner may take its work back to HTTPS. |
+| `partition-off` | The partition with `RUNNER_LINK_REQUIRED` off and the gateway telling the runner `MODE_LINK` (it recreates the gateway with `ORBIT_LINK_STAGING_MODE=link`), on a session of its own whose ticks are assistant messages alone: part of its stream goes over HTTPS, where a ping or a delta takes a seq and leaves a hole by design. It leaves the stack that way. Not in `all`. | As for `partition`, except that the runner may take its work back to HTTPS. |
 | `all` | `prepare`, `stream`, `gateway`, `apiserver`, `database`, `partition`, `finish`, `rollback`. | |
 
 What must hold after each fault. The drill waits for the tick released as the fault ended to be stored, for up to
@@ -191,8 +191,36 @@ runner has already had. The runner drops the events an acknowledgement covers, s
 them for good, and no protocol can send them again. Only a failover that loses no acknowledged commit can keep the
 events, which is what the drill checks. The standby is the primary's container in all but its data directory: the same
 image, command, WAL archive and environment, streaming through the primary's unix socket, which `pg_hba` already trusts
-for replication. `runner_presence` is UNLOGGED, so it is empty on the promoted standby, and the reaper's grace for a
-failed heartbeat write has to cover that.
+for replication. `runner_presence` is UNLOGGED, so it is empty on the promoted standby until the runner's next beat. The
+database phase waits until the apiserver is past its reaper's 3-minute startup grace, which the apiserver phase restarts,
+so that grace is not what keeps the session through the failover.
+
+The cut runner is the stack's only beating runner, so it is the whole cell, and the reaper holds its sessions as a mass
+silence (task B3). A runner cut off alone in a cell of many is reaped at the 90 s offline line instead. The drill does
+not cover that case: there the reaper decides, not the link.
+
+What the drill measured on 2026-10-27, in two runs: at 84a0b7424, and at 3b0141a78 with the project line merged in.
+Every fault held in both runs.
+
+- **The link gateway, killed for 60 s:** 33 ticks written meanwhile. The runner was back on the link 62 to 80 s after it
+  lost the connection, and the stored ticks caught up within 15 s of the gateway's restart.
+- **The apiserver, killed for 60 s:** 33 ticks written meanwhile. The link connection held. The gateway answered the
+  event batch `BACKEND_UNAVAILABLE`, retryable, and the runner sent it again; it was stored 0.1 s after the apiserver
+  was healthy.
+- **The failover:** 11 ticks written in the 20 s without a primary, stored 3.6 to 5.2 s after the promotion.
+  `runner_presence` held no row on the promoted standby. The switchback cost 6 to 8 s.
+- **The 10-minute cut:** 301 ticks written meanwhile. The runner reconnected 9 to 10 minutes after it lost its connection,
+  and never took its work back to HTTPS. The reaper held 18 sweeps in the second run.
+- **Through all of it:** the runner read every tick off its engine within 0.1 s of its release. Each run's session
+  stored seqs 1..1275 without a hole, and each of its 1270 ticks once. No ping or delta was stored, and there were no
+  tombstones. The runner's log has no `dropping N events` and none of the link's loss lines.
+
+`partition-off` held too, at 3b0141a78. The link had been unreachable for 5m27s when the runner took its work back to
+HTTPS (`runner link mode: off — the runner link has been unreachable for 5m27s`), with the network still cut. Once the
+network was back, all 300 ticks written during the cut were stored within 1.2 s, each once, and the session stored seqs
+1..755 without a hole. 29 s after the network was back, the Welcome of the shadow's connection said `MODE_LINK`,
+and the runner took its work back onto the link. This phase sends no control turn or message during the cut, so
+it says nothing about the claim and inbox request ids that going back to HTTPS gives up (task B2b).
 
 ## The rollback, with events not acknowledged
 
@@ -218,6 +246,21 @@ After steps 3, 4 and 5 the drill records:
   stores nothing there.
 
 The phase holds only if every tick the engine wrote is stored once.
+
+It did not hold in either run on 2026-10-27, and both runs lost the same events.
+
+1. **The stop.** The session had stored seqs 1..9 (ticks 1 to 5). The stopping runner kept 56 events in its spool: seqs
+   10..65, ticks 6 to 60 and the turn's end.
+2. **On HTTPS, with `ORBIT_LINK_MODE=off`.** The runner did not send them. It numbered its own events from the server's
+   last seq (`job.MaxSeq + 1`, session.go), so seqs 10..21 went to new events: the interrupted turn's recovery and the
+   message after the rollback. The session then stored seqs 1..21 without a hole, while 55 of its prompt's ticks were
+   missing.
+3. **On the link again.** The spool's events went first. The 44 whose seqs were still free were stored after the newer
+   turns (ticks 18 to 60 at seqs 22..65), with a second `turn_end` for a turn that already had one. The 12 whose seqs
+   were taken were acknowledged as already stored. Ticks 6 to 17 are lost, with no hole and nothing in the runner's log
+   to show it.
+
+A runner that never runs in link mode on that machine again loses all 56 once the spool is 72 hours old.
 
 ## Records
 

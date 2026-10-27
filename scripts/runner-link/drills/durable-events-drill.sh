@@ -588,7 +588,7 @@ judge() {
     "$read_max" "$stored_first..$stored_final" "$s" "${hole_list:-none}" "$t" "${missing:-none}" "$live" "$drops" "$losses" \
     "$fallbacks" "$retries" "$statuses" >> "$table"
   printf '%s\n' "$verdict" >> "$table"
-  [ -n "$reconnect_line" ] || reconnect_line="the link connection held"
+  [ -n "$reconnect_line" ] || reconnect_line="no new link connection carried the work"
   say "$phase: $reconnect_line; $retries resend(s) of the session's events logged; the apiserver (restarts, started) was \"$apiserver0\", is \"$apiserver1\""
   say "$phase: $((k_up - k_down)) ticks written during the fault, each read off the engine within $read_max s and stored $stored_first..$stored_final s after its release; tick $k_up stored ${caught_s} s after the fault ended; seqs (rows first last tombstones) $s, holes ${hole_list:-none}; ticks (rows distinct last) $t"
   docker logs --since "$since_at" "$gateway" > "$out/$phase-link-gateway.log" 2>&1 || true
@@ -976,7 +976,9 @@ partition_off_phase() {
   judge "the runner cut off the network for $partition_seconds s, RUNNER_LINK_REQUIRED off" 1
   release_rest
   wait_until 300 answered_with "$(prompt_marker)" || say "partition-off: the turn is not answered within 300 s"
-  say "partition-off: once its turn ended: seqs (rows first last tombstones) $(seqs), holes $(holes); ticks (rows distinct last) $(stored_ticks), not stored: $(missing_ticks "$ticks_total")"
+  hole_list="$(holes)"
+  missing="$(missing_ticks "$ticks_total")"
+  say "partition-off: once its turn ended: seqs (rows first last tombstones) $(seqs), holes ${hole_list:-none}; ticks (rows distinct last) $(stored_ticks), not stored: ${missing:-none}; the runner's presence is $(presence)"
 }
 
 summary() {
