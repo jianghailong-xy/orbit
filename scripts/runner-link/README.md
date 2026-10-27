@@ -26,7 +26,7 @@ be taken for a deployment's.
 | `loadgen-report.mjs` | A run's report: each criterion with the figure it rests on (`report.md`, `report.json`). |
 | `loadgen-baseline.mjs` | What one heartbeat and one event batch cost, from a heartbeats-only run and a run with events, and with `--live` what one forwarded live delta costs: see [Per-operation baseline](#per-operation-baseline). |
 | `loadgen-connects.mjs` | What one connect costs (a link token, the TLS handshake and Hello, the Welcome route, the first heartbeat reconciled in full), from a run's ramp: see [The cell's size](#the-cells-size). |
-| `cell-spec.mjs` | A cell's size projected from what each operation costs: apiserver processes, database cores, gateway nodes, and what a gateway node's loss adds. See [The cell's size](#the-cells-size). |
+| `cell-spec.mjs` | A cell's size projected from what each operation costs: apiserver processes, database cores, gateway nodes, and what a gateway node's loss adds. Task O3's inputs are `cell-inputs.json`. See [The cell's size](#the-cells-size). |
 | `loadgen-watch.mjs` | The load test's watchers: a session stream (SSE) on each of a run's first running sessions, as their owners, counting the live deltas that reach them and how late. `loadgen-run.sh --watch` starts it. See [The live stream](#the-live-stream). |
 
 ```bash
@@ -437,7 +437,8 @@ from it. [docs/self-hosting.md](../../docs/self-hosting.md#the-cells-size) gives
   indexes 1,070 bytes, its tool calls about 400.
 - **Peaks.** The database's 10-second peak was 1.40 times its mean with events, and the apiserver's 1.17.
 
-**What the projection takes** (`node scripts/runner-link/cell-spec.mjs <inputs.json>`):
+**What the projection takes** ([cell-inputs.json](cell-inputs.json), each cost with the runs it rests on;
+`node scripts/runner-link/cell-spec.mjs scripts/runner-link/cell-inputs.json` prints every step of the arithmetic):
 
 | Input | Value | From |
 | --- | --- | --- |

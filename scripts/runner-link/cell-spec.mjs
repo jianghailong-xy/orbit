@@ -4,10 +4,11 @@
 // file: "Per-operation baseline", "The live stream", "The cell's size") and written to an inputs file, each with the runs
 // it rests on; this script does the arithmetic, linear in each rate, and prints every step of it.
 //
-//   node scripts/runner-link/cell-spec.mjs <inputs.json> [--json out.json]
+//   node scripts/runner-link/cell-spec.mjs scripts/runner-link/cell-inputs.json [--json out.json]
 //
-// The inputs file: { cell, costs, rules } as in the example the README gives. Costs are CPU milliseconds per operation
-// (or cores, for a process's idle cost); rates are per second at the cell's peak.
+// The inputs file: { cell, costs, rules, sources }, as in cell-inputs.json beside this file, task O3's projection: each
+// cost with the runs it rests on. Costs are CPU milliseconds per operation (or cores, for a process's idle cost); rates
+// are per second at the cell's peak.
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const args = process.argv.slice(2);
