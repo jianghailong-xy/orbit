@@ -353,6 +353,9 @@ type codexSteerDispatcher struct {
 	active       **codexAppActiveTurn
 	emitFor      emitTurnFn
 	completeTurn turnCompleter
+	// fileWritten is how deliver files `written` once it has recorded that Codex took a message
+	// (fileWrittenReport): the seam a test holds that announcement at, behind the echo's.
+	fileWritten func(turnID string, file func())
 }
 
 // deliver writes one message into the running turn. Everything it can do ends in an answer for
@@ -400,7 +403,7 @@ func (d *codexSteerDispatcher) deliver(ctx context.Context, resp *RunInboxRespon
 	if markCodexSteerWritten(d.activeMu, d.active, resp.TurnID) {
 		// Codex has it; the model has not seen it yet. That gap has been measured at 31 seconds,
 		// and "Delivering…" for that long is the truth, not a stall (§4.6).
-		d.announce(resp.TurnID, deliveryWritten, "", false)
+		d.fileWritten(resp.TurnID, func() { d.announce(resp.TurnID, deliveryWritten, "", false) })
 	}
 }
 

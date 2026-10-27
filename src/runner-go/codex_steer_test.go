@@ -179,6 +179,7 @@ func newCodexSteerSession(t *testing.T) *codexSteerSession {
 			s.completions = append(s.completions, req)
 			return nil
 		},
+		fileWritten: fileWrittenReport,
 	}
 	// The notification pump, as the session loop runs it: one goroutine, so an echo and the
 	// turn/completed that follows it can never be observed out of order.
@@ -868,6 +869,137 @@ func TestEchoesAreMatchedByIdRatherThanArrivalOrder(t *testing.T) {
 
 	s.echo(steerOrbitTurn)
 	waitFor(t, "the first steer to be acknowledged", func() bool { return s.completionFor(steerOrbitTurn) != nil })
+}
+
+// heldWrittenReport is a steer worker held between recording its message written and announcing it,
+// the way one the scheduler set aside right there would be (codexSteerSession.holdWritten).
+type heldWrittenReport struct {
+	// held is closed once the worker has recorded the write and is waiting to announce it.
+	held chan struct{}
+	// filed receives once the worker has handed its announcement on, and says whether what it was
+	// held for came first.
+	filed chan bool
+}
+
+// holdWritten holds the dispatcher's `written` announcement for turnID back until release says the
+// session has moved on, then hands it on.
+func (s *codexSteerSession) holdWritten(turnID string, release func() bool) *heldWrittenReport {
+	late := &heldWrittenReport{held: make(chan struct{}), filed: make(chan bool, 1)}
+	s.dispatch.fileWritten = func(id string, file func()) {
+		if id != turnID {
+			file()
+			return
+		}
+		close(late.held)
+		for deadline := time.Now().Add(3 * time.Second); !release() && time.Now().Before(deadline); {
+			time.Sleep(time.Millisecond)
+		}
+		released := release()
+		file()
+		late.filed <- released
+	}
+	return late
+}
+
+// waitHeld returns once the worker has recorded the message written and is being held.
+func (l *heldWrittenReport) waitHeld(t *testing.T) {
+	t.Helper()
+	select {
+	case <-l.held:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the worker never recorded the message written")
+	}
+}
+
+// wait returns once the held worker has handed its announcement on.
+func (l *heldWrittenReport) wait(t *testing.T) {
+	t.Helper()
+	select {
+	case released := <-l.filed:
+		if !released {
+			t.Fatal("the announcement the worker was held behind never came")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the held worker never handed its announcement on")
+	}
+}
+
+// Codex can echo a steer back before its response to turn/steer has been read (§3), and the two are
+// read by different goroutines: the worker that sent the request records the message written and
+// announces that, the notification reader records it acknowledged and announces that. Each announces
+// after letting go of activeMu, so a worker set aside between recording the write and saying so
+// announces `written` after the echo's `acknowledged`. Filed last, that is every client's last word on
+// the message, and one the model has read goes back to "Waiting to be read". This makes that
+// interleaving happen every time.
+func TestAnEchoedSteerStaysAcknowledgedWhenItsWrittenReportComesLate(t *testing.T) {
+	s := newCodexSteerSession(t)
+	s.startTurn()
+	s.name(steerCodexTurn)
+	late := s.holdWritten(steerOrbitTurn, func() bool {
+		return asString(s.lastDelivery(steerOrbitTurn)["delivery"]) == string(deliveryAcknowledged)
+	})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.steer(context.Background(), steerOrbitTurn, "actually, call it gadget")
+	}()
+	s.fake.answer(s.fake.take("turn/steer"), map[string]interface{}{"turnId": steerCodexTurn})
+	late.waitHeld(t)
+	s.echo(steerOrbitTurn)
+	late.wait(t)
+	<-done
+
+	// The echo's announcement opened the one bubble, and nothing older came after it.
+	want := []string{string(deliveryAcknowledged), string(deliveryAcknowledged)}
+	if got := s.deliveries(steerOrbitTurn); !equalStrings(got, want) {
+		t.Fatalf("the steer's bubble and delivery states = %v, want %v: a written report filed after the echo must not walk it back", got, want)
+	}
+	if n := s.bubbles(steerOrbitTurn); n != 1 {
+		t.Errorf("user events for the steer = %d, want exactly one", n)
+	}
+	if c := s.completionFor(steerOrbitTurn); c == nil || c.Status != stSucceeded || c.Subtype != subtypeSteer {
+		t.Fatalf("the steer settled as %+v, want its ordinary steer completion", c)
+	}
+}
+
+// The same late report against the other last word a steer can get while its worker is held: the turn
+// ends with the message still in Codex's buffer, which Codex drops without a word (§4.4), and the turn
+// ending reports it undelivered. Nothing is ever going to read it, so the late `written` must not put it
+// back on "Waiting to be read".
+func TestADroppedSteerStaysFailedWhenItsWrittenReportComesLate(t *testing.T) {
+	s := newCodexSteerSession(t)
+	s.startTurn()
+	s.name(steerCodexTurn)
+	late := s.holdWritten(steerOrbitTurn, func() bool {
+		return asString(s.lastDelivery(steerOrbitTurn)["delivery"]) == string(deliveryFailed)
+	})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.steer(context.Background(), steerOrbitTurn, "actually, call it gadget")
+	}()
+	s.fake.answer(s.fake.take("turn/steer"), map[string]interface{}{"turnId": steerCodexTurn})
+	late.waitHeld(t)
+	s.fake.say(map[string]interface{}{
+		"method": "turn/completed",
+		"params": map[string]interface{}{
+			"threadId": steerThreadID,
+			"turn":     map[string]interface{}{"id": steerCodexTurn, "status": "interrupted"},
+		},
+	})
+	late.wait(t)
+	<-done
+
+	want := []string{string(deliveryFailed), string(deliveryFailed)}
+	if got := s.deliveries(steerOrbitTurn); !equalStrings(got, want) {
+		t.Fatalf("the steer's bubble and delivery states = %v, want %v: a written report filed after the turn dropped it must not undo that", got, want)
+	}
+	if n := s.bubbles(steerOrbitTurn); n != 1 {
+		t.Errorf("user events for the steer = %d, want exactly one", n)
+	}
+	assertSteerFailedVisibly(t, s, steerOrbitTurn, true)
 }
 
 // The turn's own opening message is echoed the same way, under the turn's own id. It must not be
