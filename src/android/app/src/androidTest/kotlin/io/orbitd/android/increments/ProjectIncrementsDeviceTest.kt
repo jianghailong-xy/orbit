@@ -236,6 +236,9 @@ class ProjectIncrementsDeviceTest : IncrementDeviceTest() {
         landings = true
         openSessionsPage()
         val list = compose.onNodeWithTag("project-sessions-list")
+        // The page opens on the app's own lists, which carry no landing: the row comes with the page's member read, after its first
+        // frame, and performScrollToNode does not wait for it (the race of A15 F-51 above).
+        await("the Landings row") { exists(hasTestTag("landings-row")) }
         list.performScrollToNode(hasTestTag("landings-row"))
         verify("one Landings heading", count(hasText("Landings") and isHeading()) == 1)
         verify("one Landings row", count(hasTestTag("landings-row")) == 1)
