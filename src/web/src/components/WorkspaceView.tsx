@@ -144,6 +144,7 @@ import {
   listShowsFolders,
   type SessionFolderRow,
 } from '../lib/sessionFolders';
+import { rememberListFolder } from '../lib/workspaceListFolder';
 import {
   SESSION_LANDINGS_COPY,
   SESSION_PROJECT_COPY,
@@ -3386,9 +3387,11 @@ export function WorkspaceView({
   }, [folderParam, foldersShown, workspaceFolders, openProjectId]);
   // A folder page whose folder is gone — deleted here or on another client, or a link into another
   // workspace's — goes back to the list. Only once both the folders and the list's workspace are
-  // known: before that a missing folder is one not loaded yet.
+  // known: before that a missing folder is one not loaded yet. Arriving from another workspace, the
+  // list is that one's until the scope catches up with the route, and its folders are not these.
   useEffect(() => {
     if (openProjectId || !folderParam || openFolder || !foldersQ.isSuccess || !scopeWorkspaceId) return;
+    if (scopeWorkspaceId !== resolvedWorkspaceId) return;
     if (!listShowsFolders(effectiveView, listByTag)) return;
     setSearchParams(
       (current) => {
@@ -3398,7 +3401,14 @@ export function WorkspaceView({
       },
       { replace: true },
     );
-  }, [folderParam, openFolder, foldersQ.isSuccess, scopeWorkspaceId, effectiveView, listByTag, setSearchParams, openProjectId]);
+  }, [folderParam, openFolder, foldersQ.isSuccess, scopeWorkspaceId, resolvedWorkspaceId, effectiveView, listByTag,
+    setSearchParams, openProjectId]);
+  // The folder page is kept for the workspace whose list it is, so the sidebar opens the workspace on
+  // it again after a trip to another one (lib/workspaceListFolder). A project's sessions page over
+  // the list leaves it as it was.
+  useEffect(() => {
+    if (resolvedWorkspaceId && !openProjectId) rememberListFolder(resolvedWorkspaceId, folderParam);
+  }, [resolvedWorkspaceId, openProjectId, folderParam]);
   // The list split into its folder rows and the sessions in no folder — the ones the Pinned and
   // time sections below are made of. A folder's page lists the sessions filed in it instead.
   const folderListing = useMemo(

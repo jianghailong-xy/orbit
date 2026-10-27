@@ -36,6 +36,9 @@ data class OrbitNavigation(
     val section: String = "workspaces",
     val stacks: Map<String, List<OrbitRoute>> = mapOf("workspaces" to listOf(OrbitRoute(Destination.WORKSPACES))),
     val pending: OrbitRoute? = null,
+    /** The folder page each workspace's list was on when the reader left it, by the workspace's destination key: what
+     * its drawer row opens again (iOS `NavState.foldersLeftOpen`). */
+    val foldersLeftOpen: Map<String, OrbitRoute> = emptyMap(),
 ) {
     val frames get() = stacks.getValue(section)
     val current get() = frames.last()
@@ -46,15 +49,26 @@ data class OrbitNavigation(
     fun back(): OrbitNavigation = if (!canGoBack) this else copy(stacks = stacks + (section to frames.dropLast(1)))
     /** A drawer row's tap (iOS `openDrawerDestination`, 3d50935b4): the row of the destination already showing leaves
      * its page as it is — the tap only closes the drawer — and any other lands on its destination's root page, the
-     * stack being left going with it. */
-    fun select(key: String, root: OrbitRoute): OrbitNavigation = if (key == section) this else land(key, root)
+     * stack being left going with it. A workspace's lands on the folder page its list was left on, while [hasFolder]
+     * still has that folder (owner, 2026-10-27; iOS `NavState.switchWorkspace`). */
+    fun select(key: String, root: OrbitRoute, hasFolder: (String) -> Boolean = { true }): OrbitNavigation {
+        if (key == section) return this
+        val landed = land(key, root)
+        val folder = landed.foldersLeftOpen[key]?.takeIf { hasFolder(it.id.orEmpty()) } ?: return landed
+        return landed.copy(stacks = mapOf(key to listOf(root, folder)))
+    }
     /** A session completed or moved to Trash from its page leaves the stack it showed on (iOS `NavState.removeConsole`). */
     fun dropSession(id: String): OrbitNavigation {
         val kept = frames.filterNot { it.destination == Destination.SESSION && ObjectId.same(it.id, id) }
         return if (kept.isEmpty() || kept.size == frames.size) this else copy(stacks = stacks + (section to kept))
     }
-    /** [key]'s root page whatever was showing: where a page that sends the reader to a destination lands. */
-    fun land(key: String, root: OrbitRoute): OrbitNavigation = copy(section = key, stacks = mapOf(key to listOf(root)))
+    /** [key]'s root page whatever was showing: where a page that sends the reader to a destination lands. A workspace's
+     * stack it leaves notes the folder page its list is on, or that it is on none ([foldersLeftOpen]). */
+    fun land(key: String, root: OrbitRoute): OrbitNavigation {
+        val folder = frames.takeIf { it.first().destination == Destination.WORKSPACE }?.firstOrNull { it.destination == Destination.FOLDER }
+        val left = if (folder != null) foldersLeftOpen + (section to folder) else foldersLeftOpen - section
+        return copy(section = key, stacks = mapOf(key to listOf(root)), foldersLeftOpen = left)
+    }
     /** A link opens over the page showing. One that [waitsForDirectory] stays [pending], signed in or not, and a later link
      * replaces it. */
     fun receive(route: OrbitRoute): OrbitNavigation {

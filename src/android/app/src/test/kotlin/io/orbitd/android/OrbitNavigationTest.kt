@@ -32,7 +32,8 @@ class OrbitNavigationTest {
      * a folder, a search, a session the search opened and the objects it links to — and a drawer row for another
      * destination lands on that destination's root, the stack it leaves going with it. This replaces
      * `folderSearchAndCrossObjectReturnPathsAreRetainedPerSection`, which pinned every section keeping its stack
-     * across a switch: switching to Tasks and back used to bring the whole path back. */
+     * across a switch: switching to Tasks and back used to bring the whole path back. Of a workspace's path only the
+     * folder page its list was on comes back (owner, 2026-10-27). */
     @Test fun returnPathsHoldWithinADestinationAndEachDrawerRowLandsOnItsRoot() {
         val root = OrbitRoute(Destination.WORKSPACE, "w1")
         val folder = OrbitRoute(Destination.FOLDER, "f1", "w1")
@@ -51,8 +52,35 @@ class OrbitNavigationTest {
         assertEquals(listOf(OrbitRoute(Destination.TASKS)), tasks.frames)
         assertEquals("the stack it left goes", setOf("Tasks"), tasks.stacks.keys)
         val again = tasks.select("w1", root)
-        assertEquals("the workspace again, at its root", listOf(root), again.frames)
-        assertFalse(again.canGoBack)
+        assertEquals("the workspace again, on its folder's page", listOf(root, folder), again.frames)
+        assertEquals(listOf(root), again.back().frames)
+    }
+
+    /** The owner's rule (2026-10-27, iOS `NavState.switchWorkspace`): a workspace left on one of its folders comes back to
+     * that folder's page from its drawer row — each workspace its own, through the process state too — and back to its list
+     * when the list was left on it, or when the folder is no longer in the directory. */
+    @Test fun aWorkspacesDrawerRowComesBackToTheFolderItsListWasLeftOn() {
+        val w1 = OrbitRoute(Destination.WORKSPACE, "w1", "w1", origin = Origin.DRAWER)
+        val w2 = OrbitRoute(Destination.WORKSPACE, "w2", "w2", origin = Origin.DRAWER)
+        val release = OrbitRoute(Destination.FOLDER, "f1", "w1")
+        val bugs = OrbitRoute(Destination.FOLDER, "f2", "w2")
+        val inFolder = OrbitNavigation().bindAccount("server|user").select("w1", w1).push(release)
+            .push(OrbitRoute(Destination.SESSION, uuid, "w1"))
+
+        val away = inFolder.select("w2", w2)
+        assertEquals(listOf(w2), away.frames)
+        val back = away.select("w1", w1)
+        assertEquals("the folder's page, not the conversation over it", listOf(w1, release), back.frames)
+        val restored = Wire.json.decodeFromString<OrbitNavigation>(Wire.json.encodeToString(away))
+        assertEquals(listOf(w1, release), restored.select("w1", w1).frames)
+
+        val both = back.select("w2", w2).push(bugs).select("w1", w1)
+        assertEquals(listOf(w1, release), both.frames)
+        assertEquals(listOf(w2, bugs), both.select("w2", w2).frames)
+
+        val leftOnList = back.back().select("w2", w2).select("w1", w1)
+        assertEquals(listOf(w1), leftOnList.frames)
+        assertEquals("a folder deleted while away", listOf(w1), away.select("w1", w1) { false }.frames)
     }
 
     /** The row of the destination already showing only closes the drawer: the page on top of it stays. */
