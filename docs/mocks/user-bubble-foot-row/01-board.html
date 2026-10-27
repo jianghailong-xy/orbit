@@ -1,0 +1,244 @@
+<!doctype html>
+<!-- Design board: one row under a user bubble on the web session page — the bubble's state (a steer's "Read in this turn",
+     a message that did not land) joins the copy · time row, ⧉ first (owner, 2026-10-27: "⧉ 放在最前面").
+     Every frame is a screenshot of the real session page (WorkspaceView + Transcript + index.css on vite, Chromium,
+     1280-wide desktop at 2x / 390-wide phone at 3x), fed by src/web/ui-migration's fixtures plus a conversation shaped
+     like the owner's screenshot. "现在" is main 546c57383; A is the same tree with the change in it (Transcript.tsx +
+     index.css); B and C are A with one <style> on top that reorders or hides the row's children. Dashed outlines and
+     labels are drawn on top. Kit: /var/tmp/steer-foot-mock (new/ = the change as code; capture.mjs inside run-ns.sh;
+     gen.py; render.mjs). Decided 2026-10-27: A, and the red line joins the row too (按推荐落地), and implemented; the
+     implementation's frames, shot from the change on main 17619133f, are pixel-identical to A's from the bubble down. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Web · 消息下面的灰色小字并成一行</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1500px; }
+  .head { display: grid; grid-template-columns: minmax(0, 1fr) 440px; gap: 34px; align-items: start; }
+  .ref { background: #f5f6f8; border-radius: 10px; padding: 12px 14px 10px; }
+  .ref img { display: block; width: 100%; border-radius: 6px; background: #fff; }
+  .why { margin: 14px 0 0; padding: 12px 16px; border-radius: 8px; background: #fff; border: 1px solid #dde0e6;
+         font-size: 13px; line-height: 1.85; color: var(--text-2); }
+  .why b { color: var(--text-1); }
+  .cols2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .pair { display: grid; grid-template-columns: 296px 296px; gap: 18px; align-items: start; }
+  .four { display: grid; grid-template-columns: repeat(4, 296px); gap: 22px; align-items: start; }
+  .fail { display: grid; grid-template-columns: 376px 376px minmax(0, 1fr); gap: 22px; align-items: start; }
+  .phones { display: grid; grid-template-columns: 330px 330px minmax(0, 1fr); gap: 22px; align-items: start; }
+  .fig { position: relative; }
+  .lbl { font-size: 12px; font-weight: 600; color: var(--text-2); margin: 0 0 6px 2px; }
+  .lbl .ui { font-weight: 400; }
+  .shot { display: block; width: 100%; border-radius: 10px; box-shadow: 0 0 0 1px rgba(15, 23, 42, .09), 0 1px 3px rgba(15, 23, 42, .06); }
+  .m-cap { font-size: 12.5px; line-height: 1.75; color: var(--text-2); margin: 10px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .side { font-size: 12.5px; line-height: 1.8; color: var(--text-2); margin: 22px 0 0; padding: 0; list-style: none; }
+  .side li + li { margin-top: 8px; }
+  .side b { color: var(--text-1); }
+  .ui { font-family: -apple-system, "Inter", sans-serif; font-size: 12px; padding: 0 5px; border-radius: 4px; background: #f0f2f5; color: var(--text-1); white-space: nowrap; }
+  .mk { position: absolute; border: 1.5px dashed var(--warning-solid); border-radius: 6px; pointer-events: none; }
+  .mk-l { position: absolute; top: 50%; transform: translateY(-50%); white-space: nowrap; font-size: 11.5px; font-weight: 700;
+          color: #fff; background: var(--warning-solid); border-radius: 5px; padding: 0 6px; line-height: 18px; }
+  .mk-l-left { right: calc(100% + 8px); }
+  .mk-l-down { top: calc(100% + 6px); transform: none; right: -2px; }
+  .mk.ok { border-color: #16a34a; }
+  .mk.ok .mk-l { background: #16a34a; }
+  .m-k.rec { background: #e8f7ee; color: #16833a; }
+  .m-k.alt { background: #fff1e8; color: #c2410c; }
+  .rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.65; width: 100%; }
+  .rules th, .rules td { border: 1px solid #dde0e6; padding: 7px 11px; text-align: left; vertical-align: top; }
+  .rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules td:first-child { font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules .dim { color: var(--text-3); }
+  .rules .red { color: var(--error-solid); }
+  .rules code, .files code, .ask code, .m-cap code, .side code, .notes code { font-size: 11.5px; }
+  .notes { margin: 10px 0 0; padding: 0 0 0 18px; font-size: 12.5px; line-height: 1.75; color: var(--text-2); }
+  .notes b { color: var(--text-1); }
+  .bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .files { margin: 0; padding: 12px 16px; list-style: none; background: #f5f6f8; border-radius: 8px;
+           font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .files li + li { margin-top: 6px; }
+  .files b { color: var(--text-1); }
+  .ask { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e;
+         font-size: 12.5px; line-height: 1.85; color: #5c4210; }
+  .ask b { color: #3d2b08; }
+  .ask ol { margin: 6px 0 0; padding-left: 20px; }
+  .ask li + li { margin-top: 6px; }
+  .ask .rec { color: #16833a; font-weight: 700; }
+  .foot { margin: 22px 2px 0; font-size: 11.5px; line-height: 1.7; color: var(--text-3); }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet">
+  <div class="head">
+    <div>
+      <h1 class="m-h1 zh">消息下面的灰色小字并成一行</h1>
+      <p class="m-sub zh" style="line-height:1.8;margin-bottom:0">Web 会话页，用户消息气泡的下方。回合进行中发出的消息（steer）现在有两行小字；改后并成一行，<b>⧉ 放在最前面</b>（你 10-27 说的）。<br><b>已定（10-27）：A，红色那行也并，按推荐落地。</b></p>
+      <div class="why zh">
+        <b>为什么现在是两行：</b>气泡下面竖着排了两个各自独立的元素——
+        <br>① 这条消息送到哪一步了（<span class="ui">Read in this turn</span>，旧版叫 <span class="ui">Sent into this turn</span>）：只有 steer 有，<b>一直显示</b>，因为 steer 没有自己的回复，这行字是它唯一的回执；
+        <br>② 每条消息都有的 <b>⧉ 复制 + 时间</b>：<b>悬停才出现</b>，不悬停时也空着占一行高。
+        <br>两者显示规则不同，是不同时间加的，一直没合并。iOS/macOS 早就是一行（<span class="ui">⧉ Read in this turn</span>）。
+      </div>
+    </div>
+    <div class="ref">
+      <img src="00-owner-ref.png" alt="">
+      <p class="m-cap zh" style="margin-top:8px">你的截图：网页端，鼠标停在图片上，所以 ② 也出来了。文案是 10-16 之前的版本。</p>
+    </div>
+  </div>
+
+  <div class="cols2" style="margin-top:26px">
+    <div class="m-stage">
+      <div class="m-stage-l zh"><span class="m-k">① 现在</span>main 546c57383：两行</div>
+      <div class="pair">
+        <div>
+          <div class="lbl zh">不悬停</div>
+          <div class="fig">
+            <img class="shot" src="01a-today-rest.png" alt="">
+            <div class="mk" style="left:69.088%;top:66.912%;width:25.169%;height:21.053%"><span class="mk-l mk-l-left zh">② 空着，也占一行</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="lbl zh">悬停</div>
+          <div class="fig">
+            <img class="shot" src="01b-today-hover.png" alt="">
+            <div class="mk" style="left:61.166%;top:49.544%;width:33.091%;height:20.000%"><span class="mk-l mk-l-left zh">①</span></div>
+            <div class="mk" style="left:69.088%;top:66.912%;width:25.169%;height:21.053%"><span class="mk-l mk-l-left zh">②</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="m-cap zh">① 状态一直在；② ⧉ 和时间只在悬停时出现，但不悬停时那一行也空着。</p>
+    </div>
+    <div class="m-stage">
+      <div class="m-stage-l zh"><span class="m-k rec">② 方案 A · 已定</span><span class="ui">⧉ 2m ago · Read in this turn</span></div>
+      <div class="pair">
+        <div>
+          <div class="lbl zh">不悬停</div>
+          <div class="fig">
+            <img class="shot" src="02a-a-rest.png" alt="">
+          </div>
+        </div>
+        <div>
+          <div class="lbl zh">悬停</div>
+          <div class="fig">
+            <img class="shot" src="02b-a-hover.png" alt="">
+            <div class="mk ok" style="left:32.797%;top:49.544%;width:61.459%;height:21.053%"><span class="mk-l mk-l-down zh">一行</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="m-cap zh"><b>不悬停：</b>和现在一样，只有状态，位置不变（低了 0.6px，看不出来）。<b>悬停：</b>⧉ 和时间在状态<b>左边</b>淡入，同一行；状态不动，什么都不挪。气泡下少了一行，下一条消息往上提 20px。</p>
+    </div>
+  </div>
+
+  <div class="m-stage" style="margin-top:22px">
+    <div class="m-stage-l zh"><span class="m-k alt">③ 另外两种排法 · 不推荐</span>⧉ 都在最前面，区别在时间放哪</div>
+    <div class="four">
+      <div>
+        <div class="lbl zh">B 不悬停 <span class="ui">Read in this turn · 2m ago</span></div>
+        <img class="shot" src="03a-b-rest.png" alt="">
+      </div>
+      <div>
+        <div class="lbl zh">B 悬停 <span class="ui">⧉ Read in this turn · 2m ago</span></div>
+        <img class="shot" src="03b-b-hover.png" alt="">
+      </div>
+      <div>
+        <div class="lbl zh">B 如果时间也悬停才出现</div>
+        <div class="fig">
+          <img class="shot" src="03c-b-gap.png" alt="">
+          <div class="mk" style="left:74.334%;top:50.070%;width:18.909%;height:20.000%"><span class="mk-l mk-l-down zh">空出一截</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="lbl zh">C 悬停 <span class="ui">⧉ Read in this turn</span></div>
+        <img class="shot" src="03d-c-hover.png" alt="">
+      </div>
+    </div>
+    <div class="pair" style="grid-template-columns: 622px 622px; gap: 22px">
+      <p class="m-cap zh"><b>B：时间放在状态后面。</b>时间要是也只在悬停时出现，不悬停时右边就空出一截，状态离开了气泡的右边缘（第三张）；要对齐，只能让 steer 的时间一直显示（前两张），这就和别的消息「时间只在悬停时出现」不一样了。</p>
+      <p class="m-cap zh"><b>C：不显示时间。</b>iOS/macOS 现在就是这样。网页上 steer 就看不到发送时间了；不悬停时和 A 一样。</p>
+    </div>
+  </div>
+
+  <div class="m-stage" style="margin-top:22px">
+    <div class="m-stage-l zh"><span class="m-k state">④ 红色的「没送达」也是两行</span>一起并（已定）</div>
+    <div class="fail">
+      <div>
+        <div class="lbl zh">现在 · 悬停</div>
+        <div class="fig">
+          <img class="shot" src="04a-failed-today-hover.png" alt="">
+          <div class="mk" style="left:28.894%;top:49.544%;width:66.585%;height:20.000%"></div>
+          <div class="mk" style="left:75.665%;top:66.912%;width:19.814%;height:21.053%"></div>
+        </div>
+      </div>
+      <div>
+        <div class="lbl zh">A · 悬停</div>
+        <div class="fig">
+          <img class="shot" src="04b-failed-a-hover.png" alt="">
+          <div class="mk ok" style="left:6.561%;top:49.544%;width:88.918%;height:21.053%"><span class="mk-l mk-l-down zh">一行</span></div>
+        </div>
+      </div>
+      <ul class="side zh">
+        <li><span class="ui">⚠ Not delivered</span>（以及 <span class="ui">⚠ Couldn't confirm it was read</span>）现在也是单独一行，悬停时下面再多出一行 ⧉ 时间——和你截图里是同一个问题。</li>
+        <li>并进同一行后，红字照样<b>一直显示</b>，不用悬停；<span class="ui">Put back in the composer</span> 还在它后面。iOS/macOS 也早就是一行。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="m-stage" style="margin-top:22px">
+    <div class="m-stage-l zh"><span class="m-k">⑤ 手机 · 390 宽</span>A</div>
+    <div class="phones">
+      <div>
+        <div class="lbl zh">⧉ 和时间出来时</div>
+        <img class="shot" src="05a-phone-a-hover.png" alt="">
+      </div>
+      <div>
+        <div class="lbl zh">最长的一行</div>
+        <img class="shot" src="05b-phone-failed-a-hover.png" alt="">
+      </div>
+      <ul class="side zh" style="margin-top:20px">
+        <li>最长的一行（⧉ 时间 · 没送达 · Put back in the composer）宽 328px，可以比气泡那一列宽、往左伸：390 宽放得下，360 宽也放得下（量过，左边还剩 18px）。</li>
+        <li>手机没有悬停：⧉ 和时间什么时候出来，和现在完全一样，这次不改这条规则（截图里用鼠标悬停代替）。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="bottom" style="margin-top:22px">
+    <div class="m-stage">
+      <div class="m-stage-l zh"><span class="m-k">规则</span>按 A，气泡下只有这一行</div>
+      <table class="rules zh">
+        <tr><th>消息</th><th>不悬停</th><th>悬停</th></tr>
+        <tr><td>普通消息</td><td class="dim">（空）</td><td><span class="ui">⧉ 2m ago</span> <span class="dim">— 不变</span></td></tr>
+        <tr><td>回合中发的，已读</td><td><span class="ui">Read in this turn</span></td><td><span class="ui">⧉ 2m ago · Read in this turn</span></td></tr>
+        <tr><td>没送达</td><td><span class="ui red">⚠ Not delivered</span> <span class="ui">Put back in the composer</span></td><td><span class="ui">⧉ 2m ago ·</span> <span class="ui red">⚠ Not delivered</span> <span class="ui">Put back…</span></td></tr>
+        <tr><td>没法确认已读</td><td><span class="ui red">⚠ Couldn't confirm it was read</span></td><td><span class="ui">⧉ 2m ago ·</span> <span class="ui red">⚠ Couldn't confirm it was read</span></td></tr>
+        <tr><td>只有图片，没有文字</td><td>状态（有的话）</td><td>同左 <span class="dim">— 没有文字可复制，和现在一样不出 ⧉ 和时间</span></td></tr>
+      </table>
+      <ul class="notes zh">
+        <li>「·」只跟着时间一起出现；状态永远在这一行的最右边，贴着气泡的右边缘。</li>
+        <li>还没被读的消息（<span class="ui">Waiting to be read</span> · <span class="ui">Withdraw</span>）不在气泡下面，在输入框上方的托盘里，不受影响。</li>
+        <li>导出的 HTML 本来就不放 ⧉：显示 <span class="ui">2m ago · Read in this turn</span>。</li>
+      </ul>
+    </div>
+    <div class="m-stage">
+      <div class="m-stage-l zh"><span class="m-k">改动范围</span>只改 Web</div>
+      <ul class="files zh">
+        <li><b><code>src/web/src/components/Transcript.tsx</code></b> — <code>UserBubble</code>：状态（steer 的进度 / 没送达）挪进 <code>.chat-user-meta</code>，排在 ⧉ 和时间后面，中间一个「·」。</li>
+        <li><b><code>src/web/src/index.css</code></b> — <code>.chat-user-meta</code>：「悬停才出现」从整行挪到 ⧉ / 时间 / 「·」三样上；状态在行里去掉上边距。</li>
+        <li><b><code>src/web/src/lib/sessionExport.tsx</code></b> — 导出时时间和「·」照常显示。</li>
+        <li><b>测试</b> — <code>Transcript.test.tsx</code> 里现有的计数不受影响；加一条：这一行里的顺序是 ⧉、时间、「·」、状态。</li>
+        <li><b>iOS/macOS</b> 已经是一行，不动；<b>Android</b> 不在这次范围。</li>
+      </ul>
+      <div class="ask zh">
+        <b>已定（10-27）</b>
+        <ol>
+          <li>时间放哪：<span class="rec">A <span class="ui">⧉ 2m ago · Read in this turn</span></span>（B、C 没选）</li>
+          <li>红色的 <span class="ui">Not delivered</span> / <span class="ui">Couldn't confirm it was read</span> 也并进这一行：<span class="rec">并</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+  <p class="foot zh">每张截图都是真实页面：main 546c57383 的 Web 代码（① 现在），以及同一份代码加上改动（A）；B、C 是在 A 上加一段 CSS 调顺序或隐藏时间。Chromium，桌面 1280 宽 2x，手机 390 宽 3x；字体用 Inter 代替 SF、Noto Sans SC 代替苹方。虚线框和标签是后画的。</p>
+</section>
+</body>
+</html>
