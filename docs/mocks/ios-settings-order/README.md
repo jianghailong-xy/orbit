@@ -22,7 +22,7 @@ FONTCONFIG_FILE=<fonts.conf> node docs/mocks/ios-settings-order/calib.mjs
 
 ## 已实现
 
-781a7e61f（`feat(clients): Settings opens with Machines & models; the session settings get a page of their own`；分支上测过的是同一个补丁 00f5ccbdc，合入前 rebase 到 main）：
+7934e514b（`feat(clients): Settings opens with Machines & models; the session settings get a page of their own`；分支上测过的是同一个补丁 00f5ccbdc，合入前 rebase 到 main）：
 
 - **iPhone / iPad**：`SettingsHome` 的组是 Machines & models → Preferences → Account；Preferences 第一行 Sessions（`SettingsPage.sessions`），点进去是 `SessionSettingsPage`：五项各一段、说明作段脚，照 Notifications 页的样子；Default permission 补上 web 的那句说明（`SettingsCopy.defaultPermissionHint`）。写入和默认值不变。
 - **Android**：同一张列表、同一页（`"sessions"`），五项顺序跟 iOS；`ic_sessions` 是新行的图标，原来那几行专用的 `ic_orchestration`、`ic_sparkles` 删了。
