@@ -6,6 +6,8 @@ import io.orbitd.android.core.protocol.ProtocolException
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitLinks
+import io.orbitd.android.navigation.OrbitRoute
+import io.orbitd.android.navigation.Origin
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.*
@@ -28,6 +30,14 @@ class PushAuthorityTest {
         assertEquals(0, sync.payload.badge)
         assertEquals(setOf(sid), sync.payload.clearSessions)
         assertNull(sync.link)
+    }
+
+    @Test fun deviceTestCorpusIsTheSharedCardsCorpus() {
+        val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
+            .first { File(it, "src/shared/src/interaction-cards.fixture.json").isFile }
+        // The device APK cannot read the repository, so it carries a byte-identical asset copy.
+        assertArrayEquals(File(root, "src/shared/src/interaction-cards.fixture.json").readBytes(),
+            File(root, "src/android/app/src/androidTest/assets/push/interaction-cards.fixture.json").readBytes())
     }
 
     @Test fun parserRejectsMalformedEnvelopeAndPartialRoutesWithoutRewritingOpaqueBinding() {
@@ -60,9 +70,32 @@ class PushAuthorityTest {
         assertEquals(rid, OrbitLinks.parse(confirmation.link!!)!!.recordId)
         assertEquals(Destination.WATCH, OrbitLinks.parse(message("watch-matched", "watchID" to wid, "generation" to 3).link!!)!!.destination)
         assertEquals(Destination.RUNNER, OrbitLinks.parse(message("engine-signed-out", "runnerID" to runnerId, "engine" to "codex").link!!)!!.destination)
-        // Existing OrbitLinks has no wiki-space entry; an entry URL would be the wrong object.
-        assertNull(message("wiki-review-mode-manual", "wikiSpaceID" to pid).link)
+        // The space URI handed to A12, never an entry URL (that would be the wrong object). Its parse
+        // branch belongs to A12, so this asserts only the URI this module emits.
+        assertEquals("orbit://wiki/$pid", message("wiki-review-mode-manual", "wikiSpaceID" to pid).link)
         assertNull(message("agent-message").link)
+    }
+
+    /** A11-9's push (iOS 6b4bef713 `Notifications.intent`, Phase3LogicTests): a merge into main waiting on the owner opens its project's
+     * sessions page — with or without a coordinator conversation — named without a workspace (OrbitNavigationTest pins how it lands).
+     * Every other owner item still opens its conversation (its project's page without one), and every session's alert its session. A
+     * merge naming no project falls back to its conversation, as on iOS; no server sends one, and the parser refuses it. */
+    @Test fun aMergeIntoMainOpensItsProjectsSessionsPageAndEveryOtherAlertKeepsItsRoute() {
+        fun route(push: PushMessage) = push.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) }
+        val project = OrbitRoute(Destination.PROJECT_SESSIONS, pid, origin = Origin.EXTERNAL)
+        val session = OrbitRoute(Destination.SESSION, sid, origin = Origin.EXTERNAL)
+        val merge = message("approve-merge-to-main", "sessionID" to sid, "projectID" to pid, "openItemID" to iid)
+        assertEquals("orbit://project/$pid", merge.link)
+        assertEquals(project, route(merge))
+        assertEquals(project, route(message("approve-merge-to-main", "projectID" to pid, "openItemID" to iid)))
+        for (kind in listOf("coordinator-question", "escalated-to-you", "fuse-paused")) {
+            assertEquals(kind, session, route(message(kind, "sessionID" to sid, "projectID" to pid, "openItemID" to iid)))
+            assertEquals(kind, OrbitRoute(Destination.PROJECT, pid, origin = Origin.EXTERNAL), route(message(kind, "projectID" to pid, "openItemID" to iid)))
+        }
+        for (kind in listOf("approval", "finished", "failed", "agent-message")) assertEquals(kind, session, route(message(kind, "sessionID" to sid)))
+        assertEquals(session, PushPayload(kind = "approve-merge-to-main", sessionId = sid).link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
+        assertNull(PushMessage.parse(fixtureData() + ("payload" to
+            """{"title":"A","body":"B","kind":"approve-merge-to-main","sessionID":"$sid","openItemID":"$iid"}""")))
     }
 
     @Test fun needsYouUsesAuthenticatedOpenSnapshotWithPublicAliasesAndExcludesStartOnlyAndFiledRows() = runBlocking {

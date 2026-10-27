@@ -332,6 +332,10 @@ class GoogleSignInFlowTest {
         assertEquals(emptyList<String>(), handlers("orbit://auth/other?ticket=t&state=s"))
         // An object deep link opens the app's own page, never the redirect.
         assertEquals(listOf(MainActivity::class.java.name), handlers("orbit://session/1"))
+        // So does a bare orbit:// (the empty host, as iOS's DeepLink reads it), while a blank host is no link (A05h).
+        assertEquals(listOf(MainActivity::class.java.name), handlers("orbit://"))
+        assertEquals(listOf(MainActivity::class.java.name), handlers("orbit:///"))
+        assertEquals(emptyList<String>(), handlers("orbit:// "))
     }
 
     private fun auth() = androidx.lifecycle.ViewModelProvider(compose.activity)[AuthViewModel::class.java]

@@ -1,6 +1,10 @@
 package io.orbitd.android
 
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.directory.DirectoryData
+import io.orbitd.android.directory.DirectorySession
+import io.orbitd.android.directory.DirectoryWorkspace
+import io.orbitd.android.directory.SessionProjectMembership
 import io.orbitd.android.navigation.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
@@ -28,7 +32,8 @@ class OrbitNavigationTest {
      * a folder, a search, a session the search opened and the objects it links to — and a drawer row for another
      * destination lands on that destination's root, the stack it leaves going with it. This replaces
      * `folderSearchAndCrossObjectReturnPathsAreRetainedPerSection`, which pinned every section keeping its stack
-     * across a switch: switching to Tasks and back used to bring the whole path back. */
+     * across a switch: switching to Tasks and back used to bring the whole path back. Of a workspace's path only the
+     * folder page its list was on comes back (owner, 2026-10-27). */
     @Test fun returnPathsHoldWithinADestinationAndEachDrawerRowLandsOnItsRoot() {
         val root = OrbitRoute(Destination.WORKSPACE, "w1")
         val folder = OrbitRoute(Destination.FOLDER, "f1", "w1")
@@ -47,8 +52,35 @@ class OrbitNavigationTest {
         assertEquals(listOf(OrbitRoute(Destination.TASKS)), tasks.frames)
         assertEquals("the stack it left goes", setOf("Tasks"), tasks.stacks.keys)
         val again = tasks.select("w1", root)
-        assertEquals("the workspace again, at its root", listOf(root), again.frames)
-        assertFalse(again.canGoBack)
+        assertEquals("the workspace again, on its folder's page", listOf(root, folder), again.frames)
+        assertEquals(listOf(root), again.back().frames)
+    }
+
+    /** The owner's rule (2026-10-27, iOS `NavState.switchWorkspace`): a workspace left on one of its folders comes back to
+     * that folder's page from its drawer row — each workspace its own, through the process state too — and back to its list
+     * when the list was left on it, or when the folder is no longer in the directory. */
+    @Test fun aWorkspacesDrawerRowComesBackToTheFolderItsListWasLeftOn() {
+        val w1 = OrbitRoute(Destination.WORKSPACE, "w1", "w1", origin = Origin.DRAWER)
+        val w2 = OrbitRoute(Destination.WORKSPACE, "w2", "w2", origin = Origin.DRAWER)
+        val release = OrbitRoute(Destination.FOLDER, "f1", "w1")
+        val bugs = OrbitRoute(Destination.FOLDER, "f2", "w2")
+        val inFolder = OrbitNavigation().bindAccount("server|user").select("w1", w1).push(release)
+            .push(OrbitRoute(Destination.SESSION, uuid, "w1"))
+
+        val away = inFolder.select("w2", w2)
+        assertEquals(listOf(w2), away.frames)
+        val back = away.select("w1", w1)
+        assertEquals("the folder's page, not the conversation over it", listOf(w1, release), back.frames)
+        val restored = Wire.json.decodeFromString<OrbitNavigation>(Wire.json.encodeToString(away))
+        assertEquals(listOf(w1, release), restored.select("w1", w1).frames)
+
+        val both = back.select("w2", w2).push(bugs).select("w1", w1)
+        assertEquals(listOf(w1, release), both.frames)
+        assertEquals(listOf(w2, bugs), both.select("w2", w2).frames)
+
+        val leftOnList = back.back().select("w2", w2).select("w1", w1)
+        assertEquals(listOf(w1), leftOnList.frames)
+        assertEquals("a folder deleted while away", listOf(w1), away.select("w1", w1) { false }.frames)
     }
 
     /** The row of the destination already showing only closes the drawer: the page on top of it stays. */
@@ -74,6 +106,56 @@ class OrbitNavigationTest {
             .select(projectDestination(publicId), OrbitRoute(Destination.PROJECT, publicId, origin = Origin.DRAWER))
         assertEquals(listOf(OrbitRoute(Destination.PROJECT, publicId, origin = Origin.DRAWER)), project.frames)
         assertFalse(project.canGoBack)
+    }
+
+    /** A11-9's push (iOS 6b4bef713): `orbit://project/<id>` is a merge's project sessions page, which names no workspace, so it waits —
+     * through the login and the process state, and while signed in, over whatever is showing — until the shell has read the directory
+     * and lands it as its project's root, as the drawer's row does. A later link replaces it; a switch of account drops it. */
+    @Test fun aMergesPushWaitsForTheDirectoryAndLandsAsItsProjectsRoot() {
+        val arrival = OrbitLinks.parse("orbit://project/$publicId", origin = Origin.EXTERNAL)!!
+        assertEquals(OrbitRoute(Destination.PROJECT_SESSIONS, uuid, origin = Origin.EXTERNAL), arrival)
+        assertTrue(arrival.waitsForDirectory)
+        val showing = OrbitNavigation().bindAccount("server|user").select("w1", OrbitRoute(Destination.WORKSPACE, "w1", "w1"))
+            .push(OrbitRoute(Destination.SESSION, uuid, "w1"))
+        val waiting = showing.receive(arrival)
+        assertEquals(showing.stacks, waiting.stacks)
+        assertEquals(arrival, waiting.pending)
+        val root = OrbitRoute(Destination.PROJECT_SESSIONS, uuid, "w2", origin = Origin.EXTERNAL)
+        assertFalse(root.waitsForDirectory)
+        val landed = waiting.landPending(root)
+        assertEquals(projectDestination(publicId), landed.section)
+        assertEquals(listOf(root), landed.frames)
+        assertEquals("the stack it left goes", setOf(projectDestination(uuid)), landed.stacks.keys)
+        assertFalse(landed.canGoBack)
+        assertNull(landed.pending)
+
+        val cold = Wire.json.decodeFromString<OrbitNavigation>(Wire.json.encodeToString(OrbitNavigation().receive(arrival)))
+            .bindAccount("server|user")
+        assertEquals(listOf(OrbitRoute(Destination.WORKSPACES)), cold.frames)
+        assertEquals(arrival, cold.pending)
+        assertNull(cold.bindAccount("server|other").pending)
+
+        val task = OrbitRoute(Destination.TASK, uuid, origin = Origin.EXTERNAL)
+        val later = waiting.receive(task)
+        assertNull(later.pending)
+        assertEquals(task, later.current)
+        assertTrue(later.canGoBack)
+    }
+
+    /** A project's root page (iOS `openProjectSessions(_:inColumn: false)`): its sessions page over its coordinator's workspace — or the
+     * one showing, or the first in the drawer's order — and the project's own page when no workspace is known. */
+    @Test fun aProjectsRootIsItsSessionsPageOverItsCoordinatorsWorkspace() {
+        val workspaces = listOf(DirectoryWorkspace("w2", "Beta", "r1", position = 1), DirectoryWorkspace("w1", "Alpha", "r1", position = 0))
+        val coordinator = DirectorySession("c1", agentId = "w2",
+            projectMembership = SessionProjectMembership(uuid, role = "COORDINATOR"))
+        val member = DirectorySession("m1", agentId = "w1", projectMembership = SessionProjectMembership(uuid, role = "TASK"))
+        val data = DirectoryData(workspaces = workspaces, sessions = mapOf("open" to listOf(member), "completed" to listOf(coordinator)))
+        assertEquals(OrbitRoute(Destination.PROJECT_SESSIONS, publicId, "w2", origin = Origin.EXTERNAL),
+            projectRoot(publicId, data, "w1", Origin.EXTERNAL))
+        val noCoordinator = data.copy(sessions = mapOf("open" to listOf(member)))
+        assertEquals("w2", projectRoot(publicId, noCoordinator, "w2", Origin.DRAWER).workspaceId)
+        assertEquals("w1", projectRoot(publicId, noCoordinator, null, Origin.DRAWER).workspaceId)
+        assertEquals(OrbitRoute(Destination.PROJECT, publicId, origin = Origin.EXTERNAL), projectRoot(publicId, DirectoryData(), null, Origin.EXTERNAL))
     }
 
     /** A05-3: a session completed or moved to Trash from its own page leaves the stack, in either spelling of its id
@@ -106,7 +188,7 @@ class OrbitNavigationTest {
     @Test fun rejectsForeignInstancePrivilegedPathsMalformedIdsAndUnsupportedIosSchemes() {
         listOf("https://other.test/tasks/$publicId", "https://orbitd.io:444/tasks/$publicId",
             "https://orbitd.io/api/sessions/$publicId", "https://orbitd.io/s/$publicId",
-            "orbit://project/$publicId", "orbit://session/../x",
+            "orbit://projects/$publicId", "orbit://session/../x",
             "orbit-task:invalid!", "orbit://watch/zzzzzzzzzzzzzzzzzzzzzz", "https://orbitd.io/lists/none").forEach {
             assertNull(it, OrbitLinks.parse(it, "https://orbitd.io"))
         }
@@ -114,6 +196,38 @@ class OrbitNavigationTest {
         assertEquals(uuid, OrbitLinks.parse("https://orbitd.io/install1/tasks/$publicId", "https://orbitd.io/install1")!!.id)
         assertNull(OrbitLinks.parse("https://orbitd.io/tasks/$publicId", "https://orbitd.io/install1"))
         assertNull(OrbitLinks.parse("orbit://session/$publicId?at=bad!", null)!!.recordId)
+    }
+
+    /** DL-1 (A05h): a bare `orbit://` opens the workspaces home, as iOS's DeepLink does (`case "active", ""`), and each variant
+     * goes where iOS sends it. The two lists are what OrbitKit's own DeepLink.parse answered for these links over Foundation's
+     * URL(string:) (swift-foundation, Swift 6.1.3): a blank inside the host is no URL there, so nothing opens; one after it is
+     * percent-encoded and never read. Text that is no `orbit:` link stays no link, and the object links keep their pages. */
+    @Test fun aBareOrbitLinkAndEachOfItsVariantsGoWhereIosDeepLinkSendsThem() {
+        val home = OrbitRoute(Destination.WORKSPACES, origin = Origin.EXTERNAL)
+        listOf("orbit://", "orbit:///", "ORBIT://", "Orbit://", "ORBIT:///", "orbit:/// ", "orbit:///\n", "orbit://?x=1", "orbit://#top",
+            "orbit:", "orbit:/", "orbit: ", "orbit:active", "orbit://active", "orbit://ACTIVE", "ORBIT://Active/", "orbit://active/x",
+            "orbit://active/ ", "orbit:///x", "orbit:///session/$publicId", "orbit://u@active", "orbit://u:p@active:5/", "orbit://%61ctive",
+            "orbit://@", "orbit://:5").forEach { assertEquals(it, home, OrbitLinks.parse(it, "https://orbitd.io", Origin.EXTERNAL)) }
+        listOf("orbit:// ", "orbit://\n", "orbit://\t", "orbit://\r\n", " orbit://", "orbit://　", "orbit:// ", "orbit://%20",
+            "orbit://active ", "orbit://active%20", "orbit://a_b", "orbit://a+b", "orbit://%zz", "orbit://[::1]", "orbit://é",
+            "orbit://auth/google", "active", "orbit", "//", "://", "orbit//", "", "home").forEach {
+            assertNull(it, OrbitLinks.parse(it, "https://orbitd.io", Origin.EXTERNAL))
+        }
+        assertEquals(OrbitRoute(Destination.SESSION, uuid, origin = Origin.EXTERNAL), OrbitLinks.parse("ORBIT://SESSION/$publicId", origin = Origin.EXTERNAL))
+        assertEquals(OrbitRoute(Destination.TASK, uuid, origin = Origin.LINK), OrbitLinks.parse("orbit://task/$publicId"))
+        assertEquals(OrbitRoute(Destination.WORKSPACES, origin = Origin.LINK), OrbitLinks.parse("orbit://"))
+
+        // Over a workspace the home is pushed, and Back returns to the workspace.
+        val workspace = OrbitRoute(Destination.WORKSPACE, "w1", "w1")
+        val over = OrbitNavigation().bindAccount("server|user").land("w1", workspace).receive(OrbitLinks.parse("orbit://", origin = Origin.EXTERNAL)!!)
+        assertEquals(home, over.current)
+        assertEquals(workspace, over.back().current)
+        // Before sign-in it waits, and signing in lands on the home.
+        val cold = OrbitNavigation().receive(OrbitLinks.parse("ORBIT://", origin = Origin.EXTERNAL)!!)
+        assertEquals(home, cold.pending)
+        val signedIn = cold.bindAccount("server|user")
+        assertEquals(Destination.WORKSPACES, signedIn.current.destination)
+        assertNull(signedIn.pending)
     }
 
     @Test fun objectLinksConsumeExistingCrossPlatformGoldenTargets() {

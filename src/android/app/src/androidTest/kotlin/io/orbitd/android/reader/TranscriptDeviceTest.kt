@@ -14,6 +14,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.auth.chooseServer
+import io.orbitd.android.auth.pressSignIn
 import io.orbitd.android.*
 import io.orbitd.android.core.auth.AuthState
 import java.io.File
@@ -189,6 +190,9 @@ class TranscriptDeviceTest {
         capture("a06c-context-opened")
         // Engine stderr, a recoverable diagnostic and a notice, and Codex's exhausted 429 as a transient row (A06-1, A06-2).
         list.performScrollToNode(hasText("--dangerously-skip-permissions cannot be used with root/sudo privileges"))
+        // The diagnostic is brought into view too: at 360×640 dp over API 29's three-button bar, the stderr row ends just
+        // above the reader's bottom bar and the row after it is not composed.
+        list.performScrollToNode(hasText("Startup · model_catalog · codex_model_catalog_auth:", substring = true))
         compose.onNodeWithText("Startup · model_catalog · codex_model_catalog_auth:", substring = true).assertExists()
         list.performScrollToNode(hasText("exceeded retry limit, last status: 429 Too Many Requests", substring = true))
         compose.onNodeWithText("Provider unavailable").assertIsDisplayed()
@@ -565,7 +569,7 @@ class TranscriptDeviceTest {
         compose.chooseServer(server)
         compose.onNodeWithText("Email").performTextReplacement("a06@example.test")
         compose.onNodeWithText("Password").performTextReplacement("a06-fixture-password")
-        compose.onNodeWithText("Sign In").performScrollTo().performClick()
+        compose.pressSignIn()
         compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
     }
     private fun openSession() {

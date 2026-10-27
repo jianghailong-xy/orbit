@@ -36,6 +36,9 @@ data class OrbitNavigation(
     val section: String = "workspaces",
     val stacks: Map<String, List<OrbitRoute>> = mapOf("workspaces" to listOf(OrbitRoute(Destination.WORKSPACES))),
     val pending: OrbitRoute? = null,
+    /** The folder page each workspace's list was on when the reader left it, by the workspace's destination key: what
+     * its drawer row opens again (iOS `NavState.foldersLeftOpen`). */
+    val foldersLeftOpen: Map<String, OrbitRoute> = emptyMap(),
 ) {
     val frames get() = stacks.getValue(section)
     val current get() = frames.last()
@@ -46,27 +49,47 @@ data class OrbitNavigation(
     fun back(): OrbitNavigation = if (!canGoBack) this else copy(stacks = stacks + (section to frames.dropLast(1)))
     /** A drawer row's tap (iOS `openDrawerDestination`, 3d50935b4): the row of the destination already showing leaves
      * its page as it is — the tap only closes the drawer — and any other lands on its destination's root page, the
-     * stack being left going with it. */
-    fun select(key: String, root: OrbitRoute): OrbitNavigation = if (key == section) this else land(key, root)
+     * stack being left going with it. A workspace's lands on the folder page its list was left on, while [hasFolder]
+     * still has that folder (owner, 2026-10-27; iOS `NavState.switchWorkspace`). */
+    fun select(key: String, root: OrbitRoute, hasFolder: (String) -> Boolean = { true }): OrbitNavigation {
+        if (key == section) return this
+        val landed = land(key, root)
+        val folder = landed.foldersLeftOpen[key]?.takeIf { hasFolder(it.id.orEmpty()) } ?: return landed
+        return landed.copy(stacks = mapOf(key to listOf(root, folder)))
+    }
     /** A session completed or moved to Trash from its page leaves the stack it showed on (iOS `NavState.removeConsole`). */
     fun dropSession(id: String): OrbitNavigation {
         val kept = frames.filterNot { it.destination == Destination.SESSION && ObjectId.same(it.id, id) }
         return if (kept.isEmpty() || kept.size == frames.size) this else copy(stacks = stacks + (section to kept))
     }
-    /** [key]'s root page whatever was showing: where a page that sends the reader to a destination lands. */
-    fun land(key: String, root: OrbitRoute): OrbitNavigation = copy(section = key, stacks = mapOf(key to listOf(root)))
+    /** [key]'s root page whatever was showing: where a page that sends the reader to a destination lands. A workspace's
+     * stack it leaves notes the folder page its list is on, or that it is on none ([foldersLeftOpen]). */
+    fun land(key: String, root: OrbitRoute): OrbitNavigation {
+        val folder = frames.takeIf { it.first().destination == Destination.WORKSPACE }?.firstOrNull { it.destination == Destination.FOLDER }
+        val left = if (folder != null) foldersLeftOpen + (section to folder) else foldersLeftOpen - section
+        return copy(section = key, stacks = mapOf(key to listOf(root)), foldersLeftOpen = left)
+    }
+    /** A link opens over the page showing. One that [waitsForDirectory] stays [pending], signed in or not, and a later link
+     * replaces it. */
     fun receive(route: OrbitRoute): OrbitNavigation {
         val arrived = route.arrived()
-        return if (account == null) copy(pending = arrived) else push(arrived)
+        return if (account == null || arrived.waitsForDirectory) copy(pending = arrived) else copy(pending = null).push(arrived)
     }
+    /** The [pending] project's sessions page lands at [root], the shell's pick once the directory is read: its project's own
+     * destination, whatever was showing, as the drawer's row lands it. */
+    fun landPending(root: OrbitRoute): OrbitNavigation = copy(pending = null).land(projectDestination(root.id!!), root)
 
     /** No previous account's paths survive logout/switch. Cold-start links survive the login screen. */
     fun bindAccount(key: String?): OrbitNavigation {
         if (key == account) return this
         val next = OrbitNavigation(account = key, pending = if (account == null) pending else null)
-        return if (key != null && next.pending != null) next.copy(pending = null).push(next.pending) else next
+        return if (key != null && next.pending != null && !next.pending.waitsForDirectory) next.copy(pending = null).push(next.pending) else next
     }
 }
+
+/** A project's sessions page from a link (`orbit://project/<id>`, a merge's push) names no workspace to open over: it waits for
+ * the directory, which says which one ([OrbitNavigation.landPending]). */
+val OrbitRoute.waitsForDirectory get() = destination == Destination.PROJECT_SESSIONS && workspaceId == null
 
 /** The destination of a drawer project row: the project's own page (iOS `DrawerDestination.project`). The two
  * spellings of its id are one destination. */
@@ -109,10 +132,20 @@ object ObjectId {
 object OrbitLinks {
     private val references = mapOf("session" to Destination.SESSION, "task" to Destination.TASK,
         "project" to Destination.PROJECT, "wiki" to Destination.WIKI_ENTRY, "list" to Destination.LIST)
+    // `orbit://project/<id>` is a merge push's (A11-9): the project's sessions page. Like `orbit://wiki/<space>`, no iOS DeepLink host.
     private val deepLinks = references.filterKeys { it !in setOf("project", "wiki") } +
-        mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER, "wiki" to Destination.WIKI)
+        mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER, "wiki" to Destination.WIKI, "project" to Destination.PROJECT_SESSIONS)
+    /** iOS DeepLink's `case "active", ""` (A05h, DL-1): an `orbit:` link with no host, an empty one or `active` (percent-decoded,
+     * in any case) opens the workspaces home, whatever path, query or fragment follows — iOS's URL percent-encodes a blank there
+     * and DeepLink never reads it — while a blank in the host is no URL there, so nothing opens. Read off the link itself:
+     * java.net.URI refuses `orbit://` and `orbit:`, and reads no host in `orbit://%20`. Group 1 is the host. */
+    private val home = Regex("""orbit:(?:(?!//).*|//(?:[^/?#@\s]*@)?([^/?#:@\s]*)(?::\d*)?(?:[/?#].*)?)""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
 
     fun parse(raw: String, server: String? = null, origin: Origin = Origin.LINK): OrbitRoute? { return try {
+        home.matchEntire(raw)?.let {
+            if (URLDecoder.decode(it.groupValues[1], "UTF-8").lowercase() in setOf("", "active")) return OrbitRoute(Destination.WORKSPACES, origin = origin)
+        }
         val uri = URI(raw)
         val scheme = uri.scheme?.lowercase().orEmpty()
         var kind: Destination? = null
@@ -121,7 +154,6 @@ object OrbitLinks {
             kind = references[scheme.removePrefix("orbit-")]
             id = if (kind == Destination.SESSION) uri.schemeSpecificPart.substringBefore('?') else uri.schemeSpecificPart
         } else if (scheme == "orbit") {
-            if (uri.host in listOf(null, "", "active") && uri.path.orEmpty().trim('/').isEmpty()) return OrbitRoute(Destination.WORKSPACES, origin = origin)
             kind = deepLinks[uri.host?.lowercase()]
             val parts = uri.path.orEmpty().trim('/').split('/')
             if (parts.size == 1) id = parts.first()

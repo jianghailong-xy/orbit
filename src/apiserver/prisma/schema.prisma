@@ -1635,6 +1635,11 @@ model Session {
   // Stable UUID of the runner process authorized to activate new generations. Process takeover
   // is an expected-owner CAS, so a delayed request from a superseded process cannot regain control.
   inboxLeaseOwner      String?   @map("inbox_lease_owner") @db.Uuid
+  // The runner link request id (Rpc.request_id) of the newest link inbox fetch that handed a turn out,
+  // and that turn, so the same fetch sent again is answered with it rather than the next one
+  // (RunnerApiController.dequeueTurn). Written by link fetches only, under the session lock (0448).
+  inboxRequestId       String?   @map("inbox_request_id")
+  inboxRequestTurnId   String?   @map("inbox_request_turn_id") @db.Uuid
   // Explicit/snapshotted model. Null uses the rolling legacy Agent bridge when present, otherwise
   // the runner Runtime/catalog default; first claim materializes whichever value was inherited.
   model                String?

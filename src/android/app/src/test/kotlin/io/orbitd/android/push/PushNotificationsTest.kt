@@ -118,13 +118,62 @@ class PushNotificationsTest {
         assertTrue(manager.activeNotifications.isEmpty())
     }
 
-    @Test fun headlessAgentMessageDoesNotInventASessionDestination() {
+    @Test fun headlessAgentMessageOpensOrbitWithoutInventingADestination() {
         val data = changedKind("agent-message", removeSession = true)
         val message = PushMessage.parse(data)!!
         assertTrue(notifications.show(message, data))
         val notification = manager.activeNotifications.single().notification
-        assertNull(notification.contentIntent)
+        val pending = shadowOf(notification.contentIntent)
+        assertTrue(pending.isImmutable)
+        assertEquals(Intent.ACTION_MAIN, pending.savedIntent.action)
+        assertNull(pending.savedIntent.data)
+        assertEquals(MainActivity::class.java.name, pending.savedIntent.component!!.className)
         assertEquals(PushNotifications.UPDATES, notification.channelId)
+    }
+
+    @Test fun needsYouChannelPopsUpLikeTheIosBannerWhileOthersStayDefault() {
+        assertEquals("orbit.needs-you.alert", PushNotifications.NEEDS_YOU)
+        assertEquals(NotificationManager.IMPORTANCE_HIGH, manager.getNotificationChannel(PushNotifications.NEEDS_YOU).importance)
+        assertEquals(NotificationManager.IMPORTANCE_DEFAULT, manager.getNotificationChannel(PushNotifications.SESSIONS).importance)
+        assertEquals(NotificationManager.IMPORTANCE_DEFAULT, manager.getNotificationChannel(PushNotifications.UPDATES).importance)
+        assertNull(manager.getNotificationChannel("orbit.needs-you"))
+    }
+
+    @Test fun upgradeReplacesTheUntouchedDefaultNeedsYouChannel() {
+        // 482b132e8 created orbit.needs-you at DEFAULT, and Android never raises an existing channel.
+        manager.deleteNotificationChannel(PushNotifications.NEEDS_YOU)
+        manager.createNotificationChannel(NotificationChannel("orbit.needs-you", "Needs your reply", NotificationManager.IMPORTANCE_DEFAULT))
+        val upgraded = PushNotifications(app)
+        assertNull(manager.getNotificationChannel("orbit.needs-you"))
+        assertEquals(NotificationManager.IMPORTANCE_HIGH, manager.getNotificationChannel("orbit.needs-you.alert").importance)
+        val data = data()
+        assertTrue(upgraded.show(PushMessage.parse(data)!!, data))
+        assertEquals("orbit.needs-you.alert", manager.activeNotifications.single().notification.channelId)
+    }
+
+    @Test fun upgradeKeepsANeedsYouChannelWhoseImportanceTheUserChanged() {
+        manager.deleteNotificationChannel(PushNotifications.NEEDS_YOU)
+        val chosen = NotificationChannel("orbit.needs-you", "Needs your reply", NotificationManager.IMPORTANCE_LOW)
+        // What Android records when the user changes the importance in its settings (hidden API).
+        NotificationChannel::class.java.getMethod("lockFields", Int::class.javaPrimitiveType).invoke(chosen, 0x4)
+        manager.createNotificationChannel(chosen)
+        val upgraded = PushNotifications(app)
+        assertEquals(NotificationManager.IMPORTANCE_LOW, manager.getNotificationChannel("orbit.needs-you").importance)
+        assertNull(manager.getNotificationChannel("orbit.needs-you.alert"))
+        val data = data()
+        assertTrue(upgraded.show(PushMessage.parse(data)!!, data))
+        assertEquals("orbit.needs-you", manager.activeNotifications.single().notification.channelId)
+    }
+
+    @Test fun silentPostJoinsAGroupThatOnlyItsAbsentSummaryMayAlert() {
+        val data = data()
+        assertTrue(notifications.show(PushMessage.parse(data)!!, data, silent = true))
+        val silent = manager.activeNotifications.single().notification
+        assertEquals(PushNotifications.SILENT_GROUP, silent.group)
+        assertEquals(Notification.GROUP_ALERT_SUMMARY, silent.groupAlertBehavior)
+        notifications.clear()
+        assertTrue(notifications.show(PushMessage.parse(data)!!, data))
+        assertNull(manager.activeNotifications.single().notification.group)
     }
 
     private fun changedKind(kind: String, removeSession: Boolean = false): Map<String, String> {

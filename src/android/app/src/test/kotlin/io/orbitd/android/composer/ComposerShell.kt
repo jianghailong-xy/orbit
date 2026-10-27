@@ -38,6 +38,8 @@ internal object ComposerShell {
     @Volatile var events: List<JsonObject> = emptyList()
     /** The page GET …/events/page?around= answers — the window a record link opens — when a test sets one. */
     @Volatile var around: JsonObject? = null
+    /** Holds every GET …/events/page until it completes, suspended rather than blocking a thread: a transcript still on its way. */
+    @Volatile var pageGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     /** GET …/retry-message. */
     @Volatile var retryMessage = """{"text":""}"""
     /** Attachment bytes by id. */
@@ -49,7 +51,7 @@ internal object ComposerShell {
         while (frames.tryReceive().isSuccess) Unit
         calls.clear(); bodies.clear(); answers.clear(); disk.clear()
         session = emptyMap(); workspace = emptyMap(); providers = "[]"; pools = "[]"; sharedPools = "[]"
-        events = emptyList(); around = null; retryMessage = """{"text":""}"""; attachments = emptyMap()
+        events = emptyList(); around = null; pageGate = null; retryMessage = """{"text":""}"""; attachments = emptyMap()
         runner = obj("""{"id":"$RUNNER","name":"Fixture runner","online":true,"status":"ONLINE","version":"0.1.230",
             "engines":[{"engine":"claude","installed":true,"auth":"yes"},{"engine":"codex","installed":true,"auth":"yes"}],
             "modelCatalog":{"claude":[{"value":"claude-opus-5-5","label":"Opus 5.5"}],"codex":[{"value":"gpt-6","label":"GPT-6"}]}}""")
@@ -76,6 +78,7 @@ internal object ComposerShell {
         val query = api.query.joinToString("&") { (k, v) -> "$k=$v" }
         calls += "$method $path" + if (query.isEmpty()) "" else "?$query"
         if (method != "GET") bodies += "$method $path" to (api.body?.decodeToString() ?: "")
+        if (path == "sessions/$SESSION/events/page") pageGate?.await()
         answers["$method $path"]?.let { return@HttpTransport it() }
         val attachment = api.path.takeIf { it.size == 2 && it[0] == "attachments" }?.get(1)
         when {

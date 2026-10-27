@@ -20,8 +20,20 @@ import { PrismaService } from '../prisma/prisma.service';
  * `lastHeartbeatAt`, which is what every client has always read it from.
  */
 
+/**
+ * How often a runner heartbeats: runner-go's `heartbeatInterval`, and the link gateway's
+ * Welcome.heartbeat_interval_ms.
+ */
+export const RUNNER_HEARTBEAT_EVERY_MS = 30_000;
+
 /** Runners heartbeat every 30 s; three missed beats and a runner reads as offline. */
 export const RUNNER_OFFLINE_AFTER_MS = 90_000;
+
+/**
+ * A beat missed: no beat for a heartbeat period and a half. Not a verdict on any one runner (that is
+ * RUNNER_OFFLINE_AFTER_MS); what RunnerPresenceService.fleetSilence counts a runner silent by.
+ */
+export const RUNNER_SILENT_AFTER_MS = 1.5 * RUNNER_HEARTBEAT_EVERY_MS;
 
 /**
  * How often a heartbeat also rewrites the runner row's own record of it (`last_heartbeat_at`). Every
@@ -163,7 +175,7 @@ export async function markRunnersChanged(
   `;
 }
 
-/** The cell's runners heard from lately (`heard`), and how many of those have since gone quiet (`silent`). */
+/** The cell's runners heard from lately (`heard`), and how many of those have since missed a beat (`silent`). */
 export interface FleetSilence {
   heard: number;
   silent: number;
@@ -200,9 +212,19 @@ export class RunnerPresenceService {
   }
 
   /**
-   * The cell's runners last heard from within `windowMs` before the offline line — at most
-   * RUNNER_OFFLINE_AFTER_MS + windowMs ago — and how many of those are past the line now: silent for
-   * longer than RUNNER_OFFLINE_AFTER_MS. Read on Postgres' clock, like every SQL liveness reading.
+   * The cell's runners last heard from within `windowMs` before the silence line — at most
+   * RUNNER_SILENT_AFTER_MS + windowMs ago — and how many of those are past the line now: silent for
+   * longer than RUNNER_SILENT_AFTER_MS, a beat missed. Read on Postgres' clock, like every SQL liveness
+   * reading.
+   *
+   * The line is a missed beat, not the RUNNER_OFFLINE_AFTER_MS that calls one runner offline. Runners
+   * cut off at the same moment had their last beats spread across a heartbeat period, so they cross
+   * the offline line one by one over a whole period, and a count taken at that line reads an outage as
+   * a machine or two until the last of them is across (the C1b drill, 2026-10-26: a sweep between two
+   * such crossings saw a tenth of the cell and reaped a run). When the first of them is across, it and
+   * every runner cut off with it have been silent for at least RUNNER_OFFLINE_AFTER_MS less a period —
+   * two periods — while a runner still beating is about a period from its last beat at most: a period
+   * and a half leaves half a period of room on either side.
    *
    * Only runners that can LOSE contact are counted, in either number. Not one marked OFFLINE: that is
    * written when a managed runner's row is created, before it has beaten, or reported by a runner about
@@ -214,7 +236,7 @@ export class RunnerPresenceService {
     const [row] = await this.prisma.$queryRaw<Array<{ heard: number; silent: number }>>(Prisma.sql`
       SELECT count(*)::int AS "heard",
              (count(*) FILTER (
-               WHERE beats."at" < now() - (${RUNNER_OFFLINE_AFTER_MS} * interval '1 millisecond')
+               WHERE beats."at" < now() - (${RUNNER_SILENT_AFTER_MS} * interval '1 millisecond')
              ))::int AS "silent"
         FROM (
           SELECT ${runnerLastBeatSql('r')} AS "at"
@@ -225,7 +247,7 @@ export class RunnerPresenceService {
                 WHERE mr."runner_id" = r."id" AND mr."management_state" IN ('DRAINING', 'SLEEPING')
              )
         ) beats
-       WHERE beats."at" >= now() - (${RUNNER_OFFLINE_AFTER_MS + windowMs} * interval '1 millisecond')
+       WHERE beats."at" >= now() - (${RUNNER_SILENT_AFTER_MS + windowMs} * interval '1 millisecond')
     `);
     return { heard: row?.heard ?? 0, silent: row?.silent ?? 0 };
   }

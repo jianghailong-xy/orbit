@@ -355,6 +355,13 @@ import {
   type LinkTombstone,
 } from './link-events';
 import {
+  countRunEventSeqConflicts,
+  describeRunEventSeqConflicts,
+  runEventSeqConflicts,
+  type RunEventDoor,
+  type RunEventSeqConflict,
+} from './run-event-seq-conflicts';
+import {
   deriveTaskCompletionStatus,
   type TaskCompletionCriterionValue,
 } from '../tasks/task-completion-criterion';
@@ -543,6 +550,9 @@ interface IngestOutcome {
   events: NormalizedRunEvent[];
   durable: NormalizedRunEvent[];
   alreadyStored: number;
+  /** The batch's events not stored because their seq holds another event, and the door they came by. */
+  seqConflicts: RunEventSeqConflict[];
+  door: RunEventDoor;
 }
 /**
  * A merged link call's own transaction, as each of its batches' ingest runs inside it (ingestLinkEventCall): the
@@ -606,14 +616,20 @@ const TURN_COMPLETE_TRANSACTION_TIMEOUT_MS = 120_000;
 // the whole batch relies on is unchanged.
 const CREATE_MANY_CHUNK_ROWS = 256;
 
-/** Run one createMany in bounded chunks so no single compile can stall the event loop. */
+/**
+ * Run one createMany in bounded chunks so no single compile can stall the event loop. Returns how many rows the chunks
+ * inserted, or null when one of them does not say.
+ */
 async function chunkedCreateMany(
   insert: (data: never[]) => Promise<unknown>,
   data: never[],
-): Promise<void> {
+): Promise<number | null> {
+  let inserted: number | null = 0;
   for (let offset = 0; offset < data.length; offset += CREATE_MANY_CHUNK_ROWS) {
-    await insert(data.slice(offset, offset + CREATE_MANY_CHUNK_ROWS));
+    const count = ((await insert(data.slice(offset, offset + CREATE_MANY_CHUNK_ROWS))) as { count?: unknown } | null)?.count;
+    inserted = inserted !== null && typeof count === 'number' ? inserted + count : null;
   }
+  return inserted;
 }
 const LONG_POLL_MS = 25_000;
 const DEVICE_TTL_MS = 10 * 60 * 1000;
@@ -621,6 +637,18 @@ const DEVICE_POLL_INTERVAL_S = 3;
 // Interactive sessions (Route B): per-session input long-poll + at-least-once lease.
 const INBOX_LONG_POLL_MS = 25_000;
 const INBOX_LEASE_MS = 300_000;
+/** A turn the inbox hands out, as dequeueTurn reads it: from the claim that leases it, or again for a resend. */
+interface HandedTurn {
+  id: string;
+  seq: number;
+  kind: string;
+  content: string | null;
+  clientTurnId: string;
+  sendIntent: string | null;
+  targetTurnId: string | null;
+  coordinatorContextKey: string | null;
+  senderSessionId: string | null;
+}
 // How many times one message may be handed to an engine with nothing under it answering before the
 // control plane stops putting it back on the queue at once. A message that deserves another delivery
 // deserves it promptly, and everything that legitimately needs one — an engine still starting, a
@@ -4166,6 +4194,9 @@ export class RunnerApiController {
     const redelivery = link && runningTurnId !== undefined
       ? { leaseOwner: link.leaseOwner, runningTurnId: parseRunningTurnId(runningTurnId) }
       : undefined;
+    // A link call's request id, which every resend of the call keeps: a fetch sent again under the id of one that
+    // handed a turn out is answered with that turn (dequeueTurn). None over HTTPS.
+    const resend = link?.requestId ? { leaseOwner: link.leaseOwner, requestId: link.requestId } : undefined;
     // A link call answers at once (wait=0): a hint says when there is something to fetch.
     const deadline = Date.now() + (link ? 0 : INBOX_LONG_POLL_MS);
     for (let round = 0; ; round += 1) {
@@ -4179,6 +4210,7 @@ export class RunnerApiController {
         acceptsSteer === '1',
         declared,
         redelivery,
+        resend,
       );
       if (turn) return turn;
       const remaining = deadline - Date.now();
@@ -4320,6 +4352,9 @@ export class RunnerApiController {
     /** A link poller's word about what it is running — see the inbox route — and the process the
      *  link call came from. Absent over HTTPS, where only an expired lease is handed out again. */
     redelivery?: { leaseOwner: string; runningTurnId: string | null },
+    /** A link call's request id and the process it came from: a fetch sent again under the id of one
+     *  that handed a turn out is answered with that turn. Absent over HTTPS. */
+    resend?: { leaseOwner: string; requestId: string },
   ): Promise<RunInboxResponse | null> {
     let pauseRequeued = false;
     // Requeued because the engine is resident on a Default its owner removed from Orbit, not for a pause.
@@ -4355,12 +4390,16 @@ export class RunnerApiController {
           taskId: string | null;
           /** The runner dispatch pause (queue/dispatch-pause.ts), read with the lock. */
           dispatchPaused?: boolean;
+          /** The newest link fetch that handed a turn out, and that turn (migration 0448). */
+          inboxRequestId?: string | null;
+          inboxRequestTurnId?: string | null;
         }>
       >`
         SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
                "inbox_lease_owner" AS "inboxLeaseOwner", status,
                "owner_id" AS "ownerId", provider, "provider_builtin" AS "providerBuiltin", engine
                , "task_id" AS "taskId", ${DISPATCH_PAUSED} AS "dispatchPaused"
+               , "inbox_request_id" AS "inboxRequestId", "inbox_request_turn_id" AS "inboxRequestTurnId"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runnerId}::uuid
         FOR UPDATE
@@ -4436,12 +4475,57 @@ export class RunnerApiController {
         declaredCapabilities,
         leaseGeneration,
       );
+      // A link fetch of the process that holds this session's inbox lease, under a lease generation:
+      // the one whose hand-out a resend of it can be answered with (below), and so the one that records it.
+      const ownFetch = resend != null
+        && leaseGeneration != null
+        && owned[0].inboxLeaseOwner != null
+        && owned[0].inboxLeaseOwner === resend.leaseOwner
+        ? resend
+        : null;
+      // That fetch sent again — its answer lost on the way back, or a gateway retrying it on another
+      // replica — is answered with the turn it handed out, whatever its kind, and dequeues nothing
+      // (§5.6). A control turn was answered as it was handed out and a steer is never leased again, so
+      // nothing else would ever hand either out again. Only while it can still be handed out as it was:
+      // a message, shell or steer still leased to this generation, not settled, withdrawn or put back
+      // in the queue since; a withdraw still fresh, as below. Decided under the session lock, so a fetch
+      // and its resend running at once hand out one turn between them, and before the pauses below,
+      // which hold work that has not started: this was handed out already. Otherwise the fetch is
+      // served as a new one.
+      const resent = ownFetch && ownFetch.requestId === owned[0].inboxRequestId && owned[0].inboxRequestTurnId
+        ? await tx.$queryRaw<HandedTurn[]>`
+            SELECT id, seq, kind, content, "client_turn_id" AS "clientTurnId",
+                   "send_intent" AS "sendIntent",
+                   "target_turn_id" AS "targetTurnId",
+                   "coordinator_context_key" AS "coordinatorContextKey",
+                   "sender_session_id" AS "senderSessionId"
+            FROM "conversation_turn" turn
+            WHERE turn.id = ${owned[0].inboxRequestTurnId}::uuid
+              AND turn."session_id" = ${sessionId}::uuid
+              AND turn."lease_generation" = ${leaseGeneration}::uuid
+              AND CASE
+                WHEN turn.kind IN ('message', 'shell', 'steer') THEN turn.status = 'IN_FLIGHT'
+                WHEN turn.kind = 'withdraw' THEN ${deliverWithdraw}::boolean
+                  AND turn."created_at" > now() - (${STEER_WITHDRAW_DELIVERY_WINDOW_MS} * interval '1 millisecond')
+                ELSE true
+              END
+          `
+        : [];
+      // A message or shell turn handed back this way is leased again from now, as the re-delivery below leases
+      // it: the same delivery, its lease counted from when the process has the turn.
+      if (resent[0]?.kind === 'message' || resent[0]?.kind === 'shell') {
+        await tx.$executeRaw`
+          UPDATE "conversation_turn"
+          SET "lease_deadline_at" = now() + (${INBOX_LEASE_MS} * interval '1 millisecond')
+          WHERE id = ${resent[0].id}::uuid
+        `;
+      }
       // The pause may have been requested after the claim but before inbox delivery. Only
       // executable work that has not started is held; control messages and the active turn stay.
       // So may the Default a resident engine runs on have been removed from Orbit by its owner: its
       // next message waits for the claim that moves the session off it (QueueService.accountsForClaim),
       // and the turn it is running finishes there.
-      if (owned[0].status === RunStatus.RUNNING) {
+      if (resent.length === 0 && owned[0].status === RunStatus.RUNNING) {
         if (owned[0].providerBuiltin && isAccountEngine(owned[0].provider)) {
           // Pause writes this same row. Hold the read until the lease commits, so a pause
           // either precedes this turn or waits for its delivery and lets that turn finish.
@@ -4562,17 +4646,7 @@ export class RunnerApiController {
           }
         }
       }
-      const rows = await tx.$queryRaw<Array<{
-        id: string;
-        seq: number;
-        kind: string;
-        content: string | null;
-        clientTurnId: string;
-        sendIntent: string | null;
-        targetTurnId: string | null;
-        coordinatorContextKey: string | null;
-        senderSessionId: string | null;
-      }>>`
+      const rows = resent.length > 0 ? resent : await tx.$queryRaw<HandedTurn[]>`
         UPDATE "conversation_turn"
           SET status = 'IN_FLIGHT',
               -- The same engine deduplicates a re-delivery of its running turn. Keep
@@ -4913,6 +4987,15 @@ export class RunnerApiController {
         reloadRefused = true;
         return null;
       }
+      // What a resend of this fetch is answered with (above), on the row this transaction holds: a
+      // write of two columns no session trigger names.
+      if (ownFetch && resent.length === 0) {
+        await tx.$executeRaw`
+          UPDATE "session"
+          SET "inbox_request_id" = ${ownFetch.requestId}, "inbox_request_turn_id" = ${t.id}::uuid
+          WHERE id = ${sessionId}::uuid
+        `;
+      }
       return {
         turnId: t.id,
         targetTurnId: t.targetTurnId ?? undefined,
@@ -4960,8 +5043,9 @@ export class RunnerApiController {
     }
     if (reloadRefused) {
       this.realtime.publishSessionUpdated(sessionId);
-      // What was queued behind it is this poll's to hand out.
-      return this.dequeueTurn(sessionId, runnerId, leaseGeneration, acceptsSteer, declaredCapabilities, redelivery);
+      // What was queued behind it is this poll's to hand out. Refused, the reload is no longer leased
+      // to this generation, so the poll is not answered with it again as a resend.
+      return this.dequeueTurn(sessionId, runnerId, leaseGeneration, acceptsSteer, declaredCapabilities, redelivery, resend);
     }
     return outcome ?? null;
   }
@@ -7192,6 +7276,12 @@ export class RunnerApiController {
       const stored = merged ? merged.stored : link ? await this.storedSeqs(tx, sessionId, batch, link.tombstones) : new Set<number>();
       const events = stored.size > 0 ? batch.filter((e) => !stored.has(e.seq)) : batch;
       const tombstones = link ? link.tombstones.filter((t) => !stored.has(t.seq)) : [];
+      // What was left out is the same event sent again, or another at its seq, which nothing will store: that one is
+      // logged and counted once the batch commits (run-event-seq-conflicts.ts). Over HTTPS it is found by the insert.
+      let seqConflicts = stored.size > 0
+        ? await runEventSeqConflicts(tx, sessionId, batch.filter((e) => stored.has(e.seq)
+          && !NON_REPLAYABLE_EVENT_TYPES.includes(e.type) && !isNoiseSystemEvent(e)))
+        : [];
       // Persist idempotently — RunEvent has @@unique([sessionId, seq]) + skipDuplicates.
       // text_delta / thinking_delta are streaming-animation increments: broadcast them
       // live (below) but DON'T persist them — the full reply is durably saved as the
@@ -7309,7 +7399,8 @@ export class RunnerApiController {
         // has nothing to swallow. A batch that is nothing but pings stores nothing at all
         // (chunkedCreateMany's loop does not run on an empty list). A merged link call inserts
         // the rows built here itself, every session's in one statement (MergedIngest.runEvents).
-        const rows = durable.filter((e) => !isNoiseSystemEvent(e)).map((e) => ({
+        const storable = durable.filter((e) => !isNoiseSystemEvent(e));
+        const rows = storable.map((e) => ({
           sessionId,
           seq: e.seq,
           type: e.type,
@@ -7320,10 +7411,16 @@ export class RunnerApiController {
           ingestedUnderLeaseGeneration: leaseOwner,
         }));
         if (merged?.runEvents) merged.runEvents.push(...rows);
-        else await chunkedCreateMany(
-          (data) => tx.runEvent.createMany({ data, skipDuplicates: true }),
-          rows as never[],
-        );
+        else {
+          const inserted = await chunkedCreateMany(
+            (data) => tx.runEvent.createMany({ data, skipDuplicates: true }),
+            rows as never[],
+          );
+          // Over HTTPS a batch is taken whole: a row skipped here is the same event sent again, or another at its seq.
+          if (!link && inserted !== null && inserted < rows.length) {
+            seqConflicts = await runEventSeqConflicts(tx, sessionId, storable);
+          }
+        }
         // Persisted conversation/background activity is liveness. Session-level system events
         // are different: every reclaimed idle session emits init/resumed when its runner restarts,
         // and counting that handshake would move every waiting session to "now" and scramble the
@@ -7836,7 +7933,10 @@ export class RunnerApiController {
           },
         });
       }
-      return { session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size };
+      return {
+        session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size,
+        seqConflicts, door: link ? 'link' : 'https',
+      };
     };
     if (merged) return ingest(merged.tx);
     const eventOutcome = await withTransactionRetry(this.prisma, ingest, loggedRetry(this.logger, 'runnerApi.events', { transaction: { timeout: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS, maxWait: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS } }));
@@ -7857,6 +7957,14 @@ export class RunnerApiController {
   ): Promise<void> {
     // What the attempt that committed stored: the whole batch, or for a link batch what was not already stored.
     const { events, durable } = eventOutcome;
+    if (eventOutcome.seqConflicts.length > 0) {
+      // Each of them is an event nothing will store, acknowledged with the batch (run-event-seq-conflicts.ts).
+      const { seqConflicts, door } = eventOutcome;
+      const total = countRunEventSeqConflicts(door, seqConflicts.length);
+      this.logger.error(`session ${sessionId}: ${seqConflicts.length} event(s) sent over ${door === 'link' ? 'the runner link' : 'HTTPS'} `
+        + `are not stored, because the session already holds another event at their seq; ${describeRunEventSeqConflicts(seqConflicts)} `
+        + `(${total} such event(s) over ${door === 'link' ? 'the link' : 'HTTPS'} since this server started)`);
+    }
 
     if (eventOutcome.accountReload) this.realtime.notifyInbox(sessionId);
     // One frame per collected card, as a takeover sends: the clients re-read the conversation's

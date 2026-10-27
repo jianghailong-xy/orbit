@@ -1,6 +1,7 @@
 package io.orbitd.android.push
 
 import android.content.Context
+import android.util.Log
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailabilityLight
 import com.google.firebase.FirebaseApp
@@ -47,12 +48,17 @@ class OrbitFirebaseMessagingService : FirebaseMessagingService() {
     private val push get() = (application as OrbitApplication).push
     override fun onMessageReceived(message: RemoteMessage) {
         if (!push.configured) return
+        // D09 P07 timing on a target phone (`adb logcat -v epoch -s OrbitPush`): the server's and FCM's send times
+        // beside this receipt, keyed by the event.
+        Log.i(TAG, "received eventId=${message.data["eventId"]} type=${message.data["type"]} sentAt=${message.data["sentAt"]} " +
+            "fcmSentTime=${message.sentTime} priority=${message.priority}/${message.originalPriority}")
         if (!process { push.receive(message.data) }) PushWorker.enqueue(this, message.data, message.priority == RemoteMessage.PRIORITY_HIGH)
     }
     override fun onNewToken(token: String) {
         if (!process { push.tokenChanged(token) }) PushWorker.enqueue(this, null, false)
     }
     override fun onDeletedMessages() {
+        Log.i(TAG, "FCM deleted pending messages")
         if (push.configured && !process { push.messagesDeleted() }) PushWorker.enqueue(this, null, false)
     }
     private fun process(block: suspend () -> Boolean): Boolean = runBlocking(Dispatchers.IO) {
@@ -61,4 +67,5 @@ class OrbitFirebaseMessagingService : FirebaseMessagingService() {
             catch (_: Exception) { false }
         } ?: false
     }
+    private companion object { const val TAG = "OrbitPush" }
 }

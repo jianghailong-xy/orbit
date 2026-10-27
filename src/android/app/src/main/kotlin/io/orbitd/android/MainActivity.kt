@@ -3,6 +3,7 @@ package io.orbitd.android
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -31,6 +32,7 @@ import io.orbitd.android.auth.loginBackground
 import io.orbitd.android.auth.openInSignInBrowser
 import io.orbitd.android.core.BuildIdentity
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.reader.LastPageMarks
 import io.orbitd.android.reader.SessionDestination
 import io.orbitd.android.reader.WorktreeModel
 import io.orbitd.android.toast.OrbitToasts
@@ -87,10 +89,20 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); acceptIntent(intent) }
     // After onNewIntent: back from the browser with Google's answer, or without one (A03c).
     override fun onResume() { super.onResume(); auth.onResumed() }
+    // D09 P02: a session a tap opens is stamped with the tap's own time (LastPageMarks).
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked != MotionEvent.ACTION_UP) return super.dispatchTouchEvent(event)
+        LastPageMarks.touchNanos = if (Build.VERSION.SDK_INT >= 34) event.eventTimeNanos else event.eventTime * 1_000_000
+        return try { super.dispatchTouchEvent(event) } finally { LastPageMarks.touchNanos = LastPageMarks.NO_TOUCH }
+    }
     private fun acceptIntent(intent: Intent) {
         // `orbit://auth/google`, from GoogleSignInRedirectActivity; any other address is not Google's answer.
         intent.data?.let { auth.handleGoogleCallback(it.toString()) }
-        if (intent.action == Intent.ACTION_VIEW) intent.dataString?.let { incoming = ++linkSequence to it }
+        if (intent.action == Intent.ACTION_VIEW) intent.dataString?.let {
+            // A notification's tap carries the notification's tag as the intent's identifier (PushNotifications.show).
+            LastPageMarks.delivered(it, intent.identifier != null)
+            incoming = ++linkSequence to it
+        }
     }
 }
 
@@ -118,6 +130,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
     LaunchedEffect(incoming) {
         incoming?.second?.let { raw ->
             OrbitLinks.parse(raw, signedIn?.handle?.account?.server, Origin.EXTERNAL)?.let { route ->
+                if (navigation.current != route) LastPageMarks.arrived(route, raw)
                 navigation = navigation.receive(route)
             }
         }
@@ -173,13 +186,28 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             wikiHeld += kept.filter { it.isWikiOrWatch }
         }
         val route = navigation.current
-        fun open(next: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.push(next) }
-        // A drawer row: the destination already showing only closes the drawer, any other opens at its root (A05-8).
+        fun open(next: OrbitRoute) {
+            keyboard?.hide(); focus.clearFocus()
+            if (navigation.current != next) LastPageMarks.opened(next)
+            navigation = navigation.push(next)
+        }
+        // A drawer row: the destination already showing only closes the drawer, any other opens at its root (A05-8) — a
+        // workspace's, on the folder page its list was left on, while the directory still has that folder.
         fun select(key: String, root: OrbitRoute) {
-            keyboard?.hide(); focus.clearFocus(); navigation = navigation.select(key, root); scope.launch { drawer.close() }
+            keyboard?.hide(); focus.clearFocus()
+            navigation = navigation.select(key, root) { id -> data.folders.any { ObjectId.same(it.id, id) } }
+            scope.launch { drawer.close() }
         }
         // A page sending the reader to a destination: its root, whatever was showing.
         fun land(key: String, root: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.land(key, root) }
+        // A merge's push (A11-9) names its project only: once the directory is read, its sessions page lands as the project's root
+        // over the workspace the drawer's row would pick (iOS 6b4bef713 `openProjectMerge`).
+        val arrival = navigation.pending?.takeIf { it.waitsForDirectory }
+        LaunchedEffect(arrival, data.ready, data.error) {
+            val id = arrival?.id ?: return@LaunchedEffect
+            if (data.ready || data.error != null)
+                navigation = navigation.landPending(projectRoot(id, data, navigation.current.workspaceId, arrival.origin))
+        }
         LaunchedEffect(route, signedIn.handle, live.first) {
             // A landing session is the platform's, not a conversation's: it opens no `sessions/:id/events` stream (LS6), and
             // SessionDestination never mounts the reader for one. The reader selects the conversation it shows, and clears
@@ -237,14 +265,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         // A drawer project row: the project's sessions page as its root, over its coordinator's workspace — or the one
                         // showing, or the first — and the project's page when there is no workspace to open it over (iOS 6f5f883c8).
                         DrawerProjects(projects, ProjectAttention.coordinatorPulses(data.sessions["open"].orEmpty()), drawerLive,
-                            navigation.section, root = { id ->
-                            val coordinator = (data.sessions["open"].orEmpty() + data.sessions["completed"].orEmpty()).firstOrNull {
-                                it.projectMembership?.isCoordinator == true && ObjectId.same(it.projectMembership?.projectId, id)
-                            }
-                            val over = coordinator?.workspace ?: route.workspaceId ?: workspaces.firstOrNull()?.id
-                            if (over == null) OrbitRoute(Destination.PROJECT, id, origin = Origin.DRAWER)
-                            else OrbitRoute(Destination.PROJECT_SESSIONS, id, over, origin = Origin.DRAWER)
-                        }) { key, root -> select(key, root) }
+                            navigation.section, root = { id -> projectRoot(id, data, route.workspaceId, Origin.DRAWER) }) { key, root -> select(key, root) }
                         Spacer(Modifier.height(24.dp))
                         val workspace = route.workspaceId ?: workspaces.firstOrNull()?.id
                         Button(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.DRAFT, workspaceId = workspace, origin = Origin.DRAWER)) },
@@ -362,7 +383,10 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
 
 @Composable
 private fun WorkspaceHome(data: DirectoryData, open: (DirectoryWorkspace) -> Unit, refresh: () -> Unit) {
-    androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize()) {
+    // A launcher's cold start lands here. Its rows are the workspaces, after the status item; "No workspaces" is not one.
+    val list = androidx.compose.foundation.lazy.rememberLazyListState()
+    ReportDirectoryDrawn(data, list) { it.index in 1..data.workspaces.size }
+    androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize(), state = list) {
         item { DirectoryStatus(data, refresh) }
         if (data.ready && data.workspaces.isEmpty()) item { StatusMessage("No workspaces", "Add a workspace to start a session.") }
         val workspaces = orderedWorkspaces(data.workspaces)

@@ -28,7 +28,7 @@ func TestTransportDeclaresDshOnClaimReclaimAndHeartbeat(t *testing.T) {
 	defer server.Close()
 
 	transport := NewTransport(server.URL, "runner-token")
-	if _, err := transport.claimSession(context.Background()); err != nil {
+	if _, err := transport.claimSession(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := transport.reclaim(context.Background()); err != nil {

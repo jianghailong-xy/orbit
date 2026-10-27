@@ -79,6 +79,8 @@ grep -F "package: name='$package'" "$output/apk-badging.txt" >/dev/null
 "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk" > "$output/signature.txt"
 adb -s "$serial" install -r "$apk" > "$output/install-app.txt"
 adb -s "$serial" install -r "$tests" > "$output/install-tests.txt"
+# Captures an earlier run left in this installation must not count for this one.
+adb -s "$serial" shell run-as "$package" rm -rf files/a03-auth files/a03c-login files/a03-captures.tar
 adb -s "$serial" shell input keyevent KEYCODE_WAKEUP
 adb -s "$serial" shell wm dismiss-keyguard
 
@@ -120,11 +122,29 @@ fi
 [[ "$night" =~ ^(yes|no|auto|custom)$ ]] || { echo "Unreadable night mode: $night" >&2; exit 1; }
 for phase in light dark; do
   adb -s "$serial" shell cmd uimode night "$([[ "$phase" == dark ]] && echo yes || echo no)" > /dev/null
+  # The configuration takes the night mode a moment after the command answers: wait (up to 10 s) until the device's
+  # configuration carries this phase's qualifier. A device that never does is said beside the phase, which then runs (and
+  # fails) under the other mode: the API 29 image locks its night mode (mNightModeLocked=true) and keeps "Night mode: no".
+  want="$([[ "$phase" == dark ]] && echo night || echo notnight)"
+  for _ in $(seq 1 40); do
+    config="$(adb -s "$serial" shell am get-config 2> /dev/null | tr -d '\r' || true)"
+    [[ "$config" == *"-$want-"* ]] && break
+    sleep 0.25
+  done
+  if [[ "$config" != *"-$want-"* ]]; then
+    { adb -s "$serial" shell cmd uimode night; adb -s "$serial" shell dumpsys uimode | grep mNightMode; echo "$config"; } 2>&1 \
+      | tr -d '\r' > "$output/login-page-$phase-night.txt" || true
+  fi
   run_test "login-page-$phase" io.orbitd.android.auth.LoginPageDeviceTest 1 -e a03c_phase "$phase"
 done
 adb -s "$serial" shell cmd uimode night "$night" > /dev/null
-adb -s "$serial" pull "/sdcard/Android/data/$package/files/a03-auth" "$output/screenshots" > "$output/pull.txt" 2>&1
-adb -s "$serial" pull "/sdcard/Android/data/$package/files/a03c-login" "$output/login-screenshots" >> "$output/pull.txt" 2>&1
+# The tests keep their captures in the app's own files, taken out with run-as: Android 11 lets adb read none of
+# /sdcard/Android/data, neither with pull nor through run-as.
+adb -s "$serial" shell run-as "$package" tar -cf files/a03-captures.tar -C files a03-auth a03c-login > "$output/capture-create.txt" 2>&1
+adb -s "$serial" exec-out run-as "$package" cat files/a03-captures.tar > "$output/captures.tar"
+tar --no-same-owner -xf "$output/captures.tar" -C "$output"
+mv "$output/a03-auth" "$output/screenshots"
+mv "$output/a03c-login" "$output/login-screenshots"
 python3 - "$output" <<'PY'
 import pathlib
 import re

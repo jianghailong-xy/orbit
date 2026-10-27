@@ -7,6 +7,7 @@ import io.orbitd.android.core.auth.MemoryInstances
 import io.orbitd.android.core.auth.tokens
 import io.orbitd.android.core.protocol.SignInMethods
 import io.orbitd.android.core.protocol.Wire
+import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -117,6 +118,46 @@ class HttpTransportTest {
             assertEquals(1, server.requestCount)
             assertEquals(503, transport.execute(request).status)
             assertEquals(2, server.requestCount)
+        }
+    }
+
+    @Test fun aReadTimeoutOnLocalhostLeavesTheNextCallsReachingTheServer() = runBlocking {
+        MockWebServer().use { server ->
+            // localhost is 127.0.0.1 and ::1, and nothing listens on ::1. OkHttp tries an address it timed out on last, so
+            // the next call reaches the server only by falling back from the refused ::1; without that, every later call failed.
+            server.start(InetAddress.getByName("127.0.0.1"), 0)
+            server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
+            repeat(5) { server.enqueue(MockResponse().setBody("{}")) }
+            val transport = OkHttpTransport()
+            val address = ServerAddress.parse("http://localhost:${server.port}/", true)
+            try { transport.execute(HttpRequest(address, ApiRequest(listOf("sessions")), "test")); fail("A silent server times out") }
+            catch (_: NetworkException) { }
+            val turn = """{"clientTurnId":"same-turn","message":"Hello"}""".encodeToByteArray()
+            val send = ApiRequest(listOf("sessions", "s1", "turn"), HttpMethod.POST, body = turn)
+            assertEquals(200, transport.execute(HttpRequest(address, send, "test")).status)
+            repeat(4) { assertEquals(200, transport.execute(HttpRequest(address, ApiRequest(listOf("sessions")), "test")).status) }
+            assertEquals(6, server.requestCount)
+            server.takeRequest()
+            assertArrayEquals(turn, server.takeRequest().body.readByteArray())
+        }
+    }
+
+    @Test fun aRequestWithoutABodyIsNotSentAgainAfterADroppedConnectionOrA408() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("{}"))
+            // The pooled connection drops once the server has read the request.
+            server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST))
+            server.enqueue(MockResponse().setResponseCode(408))
+            server.enqueue(MockResponse().setBody("{}"))
+            val transport = OkHttpTransport()
+            val delete = HttpRequest(server.address(), ApiRequest(listOf("sessions", "s1", "auto-retry"), HttpMethod.DELETE),
+                "test", "fixture-token")
+            assertEquals(200, transport.execute(delete).status)
+            try { transport.execute(delete); fail("The request may have reached the server") }
+            catch (_: NetworkException) { }
+            assertEquals(2, server.requestCount)
+            assertEquals(408, transport.execute(delete).status)
+            assertEquals(3, server.requestCount)
         }
     }
 

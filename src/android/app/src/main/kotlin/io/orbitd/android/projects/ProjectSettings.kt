@@ -21,12 +21,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.directory.StatusMessage
+import io.orbitd.android.management.CodexSignInText
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.*
 import java.time.Instant
 
@@ -235,17 +238,35 @@ internal fun MergeCheckEditor(view: JsonObject, automatic: Boolean, enabled: Boo
         dismissButton = { TextButton(onClick = close, enabled = !saving) { Text("Cancel") } })
 }
 
+/** The start sheets' own reads (A11i, A15 F-25). Android reads a start card afresh as its sheet opens, where iOS draws it from the
+ * page's reads, so a read that fails or never answers is said on the sheet with Retry, not left to a spinner for as long as it lasts. */
+internal object StartSheetLoad {
+    /** A read with no answer by then has failed. OkHttp's own timeouts (10 s per read, 30 s per call) start only once a call leaves its
+     * queue of five per host, and a queued call has none: against a silent server, five of ten calls at once failed after 10 s and the
+     * other five after 20 s. */
+    const val timeoutMs = 15_000L
+    const val couldNotLoad = "Couldn't load the start card"
+    const val noAnswer = "The server didn't answer in time."
+
+    /** [block]'s answer, or null when it failed or did not answer within [timeoutMs], with why handed to [failed]. */
+    suspend fun <T : Any> read(failed: (String) -> Unit = {}, block: suspend () -> T): T? = try {
+        withTimeoutOrNull(timeoutMs) { block() }.also { if (it == null) failed(noAnswer) }
+    } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { failed(CodexSignInText.sentence(failureReason(error))); null }
+}
+
 /** "Start…" — the start card over the project page for a project whose coordinator has not asked: the default rule's
- * settings, the same door, no request to answer, nobody quoted and no Chat about this (`OwnerStartProjectSheet`). */
+ * settings, the same door, no request to answer, nobody quoted and no Chat about this (`OwnerStartProjectSheet`). [failure] is why a
+ * sheet that reads the document itself could not, said with [retry] in the spinner's place. */
 @Composable
 internal fun OwnerStartSheet(api: ProjectApi, id: String, state: ProjectPageState, enabled: Boolean, viewTasks: () -> Unit, close: () -> Unit,
-    start: suspend (JsonObject) -> String?) {
+    failure: String? = null, retry: () -> Unit = {}, start: suspend (JsonObject) -> String?) {
     var confirmation by remember { mutableStateOf<JsonObject?>(null) }
     var unread by remember { mutableStateOf(false) }
     // While the start is being sent the sheet cannot be cancelled away from it (iOS keeps its card up).
     var starting by remember { mutableStateOf(false) }
     LaunchedEffect(id) {
-        try { confirmation = api.confirmation(id); unread = false } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { unread = true }
+        confirmation = StartSheetLoad.read { api.confirmation(id) }
+        unread = confirmation == null
     }
     Dialog(onDismissRequest = { if (!starting) close() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxWidth(0.94f).testTag("project-start-sheet"), shape = MaterialTheme.shapes.large) {
@@ -263,8 +284,11 @@ internal fun OwnerStartSheet(api: ProjectApi, id: String, state: ProjectPageStat
                             color = MaterialTheme.colorScheme.primary)
                         cancel()
                     }
-                    if (unread || state.integrationReadFailed) Note(StartProjectCopy.unreadSeal)
-                    else CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
+                    when {
+                        doc == null && failure != null -> StatusMessage(StartSheetLoad.couldNotLoad, failure, retry)
+                        unread || state.integrationReadFailed -> Note(StartProjectCopy.unreadSeal)
+                        else -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
+                    }
                 }
             }
         }
@@ -324,19 +348,24 @@ internal fun RequestedStartSheet(api: ProjectApi, id: String, enabled: Boolean, 
     var edited by remember { mutableStateOf<StartProjectCopy.Draft?>(null) }
     var starting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Why the last round could not read the document or the open items, said with Retry until a round does; Retry asks at once.
+    var failure by remember { mutableStateOf<String?>(null) }
+    var retries by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     // Read as the sheet opens; a read that did not answer is asked again every 4 s, as the page's own reads are, until the card can
     // be drawn — this sheet holds nothing from before it opened to fall back on.
-    LaunchedEffect(id) {
-        suspend fun <T> read(block: suspend () -> T): T? = try { block() } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
+    LaunchedEffect(id, retries) {
         while (document == null || openItems == null || confirmation == null) {
             coroutineScope {
-                val doc = async { document ?: read { api.document(id) } }; val items = async { openItems ?: read { api.openItems(id) } }
-                val plan = async { graph ?: read { api.graph(id) } }; val seal = async { confirmation ?: read { api.confirmation(id) } }
-                val line = async { if (integrationAnswered) integration else read { api.integration(id) } }
+                var documentFailed: String? = null; var itemsFailed: String? = null
+                val doc = async { document ?: StartSheetLoad.read({ documentFailed = it }) { api.document(id) } }
+                val items = async { openItems ?: StartSheetLoad.read({ itemsFailed = it }) { api.openItems(id) } }
+                val plan = async { graph ?: StartSheetLoad.read { api.graph(id) } }; val seal = async { confirmation ?: StartSheetLoad.read { api.confirmation(id) } }
+                val line = async { if (integrationAnswered) integration else StartSheetLoad.read { api.integration(id) } }
                 document = doc.await(); openItems = items.await(); graph = plan.await(); confirmation = seal.await()
                 integration = line.await(); integrationAnswered = true
                 unread = confirmation == null
+                failure = documentFailed ?: itemsFailed
             }
             if (document == null || openItems == null || confirmation == null) delay(4_000)
         }
@@ -377,8 +406,10 @@ internal fun RequestedStartSheet(api: ProjectApi, id: String, enabled: Boolean, 
                             color = MaterialTheme.colorScheme.primary)
                         cancel()
                     }
+                    val failed = failure
                     when {
                         doc != null && confirmation != null && openItems != null && integrationAnswered -> Note(StartProjectCopy.requestGone)
+                        failed != null -> StatusMessage(StartSheetLoad.couldNotLoad, failed) { retries++ }
                         unread -> Note(StartProjectCopy.unreadSeal)
                         else -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
                     }

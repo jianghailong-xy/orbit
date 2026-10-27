@@ -11,6 +11,8 @@ import io.orbitd.android.storage.AndroidInstanceStore
 import io.orbitd.android.storage.AndroidSessionDataStore
 import io.orbitd.android.core.realtime.RealtimeStore
 import io.orbitd.android.realtime.RealtimeLifecycle
+import io.orbitd.android.realtime.RealtimeLines
+import io.orbitd.android.realtime.p06ProcessStart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,7 +34,12 @@ open class OrbitApplication : Application() {
     /** The Google sign-in this process started, if any: its verifier is in memory only. */
     val googleSignIn = GoogleSignIn()
     internal val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    val realtime: RealtimeStore by lazy { RealtimeStore(session, processScope).also { RealtimeLifecycle(this, it) } }
+    val realtime: RealtimeStore by lazy {
+        RealtimeStore(session, processScope, Dispatchers.Default, RealtimeLines).also { realtimeLifecycle = RealtimeLifecycle(this, it) }
+    }
+    /** [realtime]'s Android side, installed with it: what the session page asks about a relaunch (D09 P06). */
+    internal var realtimeLifecycle: RealtimeLifecycle? = null
+        private set
     /** The sessions on their way to Trash from this device, kept out of every list until their move has settled (A05-9). */
     internal val trashing = TrashingSessions()
     /** Each landing job as the last integration read described it: a landing page opened while the server cannot be read draws it,
@@ -50,7 +57,10 @@ open class OrbitApplication : Application() {
     }
     override fun onCreate() {
         super.onCreate()
+        p06ProcessStart()
         realtime // Register lifecycle/network callbacks before the first Activity starts.
+        // D09 P03: each window's frames, while `log.tag.OrbitPerf` is D; otherwise one property read per Activity callback.
+        registerActivityLifecycleCallbacks(io.orbitd.android.perf.WindowFrames)
         push.start()
         updates.start()
         clearAttachmentHandoffs(this)

@@ -7,6 +7,7 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.directoryError
 import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.realtime.RestoredPosition
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.Serializable
@@ -18,7 +19,11 @@ internal data class ReadingBookmark(val seq: Long = 0, val offset: Int = 0, val 
 internal data class ReadingState(val window: ReadingWindow = ReadingWindow(), val session: SessionState? = null,
     val ready: Boolean = false, val loading: Boolean = false, val error: String? = null,
     val targetSeq: Long? = null, val targetOffset: Int = 0, val targetTick: Long = 0,
-    val denied: Boolean = false)
+    val denied: Boolean = false, val firstSeed: ReadingSource? = null)
+
+/** Where a reading window's first content came from, kept once it is seeded (D09 P02 `source`): the device's saved copies — the
+ * reader's bookmark, or the store's transcript as RealtimeCache held it — or a read from the server. */
+internal enum class ReadingSource(val wire: String) { CACHE("cache"), NETWORK("network") }
 
 /** One route/account lifetime; the application's A04 store continues to own all SSE and authority. */
 internal class SessionReaderModel(private val auth: AuthSession, private val handle: SessionHandle,
@@ -30,6 +35,9 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
     private val mutable = MutableStateFlow(ReadingState())
     val state = mutable.asStateFlow()
     var following: Boolean = record == null
+        private set
+    /** The reading position this page restored from disk, if it did (D09 P06's `p06_restored` checks the list against it). */
+    var restored: RestoredPosition? = null
         private set
     private var bookmark = ReadingBookmark()
     private var pageJob: Job? = null
@@ -50,8 +58,10 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
                 !access.denied && saved.accessRevision == access.revision && saved.window.events.size <= ReadingWindow.LIMIT
             if (restoreSaved) {
                 bookmark = saved; following = saved.following
+                restored = RestoredPosition(saved.seq, saved.offset, saved.following)
                 mutable.value = ReadingState(window = saved.window, ready = true,
-                    targetSeq = saved.seq.takeIf { !saved.following }, targetOffset = saved.offset, targetTick = 1)
+                    targetSeq = saved.seq.takeIf { !saved.following }, targetOffset = saved.offset, targetTick = 1,
+                    firstSeed = ReadingSource.CACHE.takeIf { saved.window.seeded })
                 if (!saved.following && !saved.window.seeded) restore(saved.seq, saved.offset)
             } else mutable.value = ReadingState(ready = true, denied = access.denied)
             if (record != null && !restoreSaved && !access.denied) openRecord(record)
@@ -75,7 +85,8 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
                     val restoring = !old.window.seeded && old.targetSeq != null
                     val window = if ((previousEvents !== s.transcript.events || !old.window.seeded && s.transcript.seeded) && !old.loading && !restoring) old.window.live(s.transcript, following) else old.window
                     previousEvents = if (!old.loading) s.transcript.events else previousEvents
-                    mutable.value = old.copy(window = window, session = s, denied = false)
+                    val seed = old.firstSeed ?: if (!window.seeded) null else if (s.seededFromCache) ReadingSource.CACHE else ReadingSource.NETWORK
+                    mutable.value = old.copy(window = window, session = s, denied = false, firstSeed = seed)
                 }
             }
         }
@@ -178,8 +189,9 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
                 val loaded = load(old)
                 ensureActive()
                 if (version == generation) mutable.update {
-                    loaded.copy(session = it.session, loading = false,
-                        window = it.session?.transcript?.let { tail -> loaded.window.live(tail, following) } ?: loaded.window)
+                    val window = it.session?.transcript?.let { tail -> loaded.window.live(tail, following) } ?: loaded.window
+                    loaded.copy(session = it.session, loading = false, window = window,
+                        firstSeed = it.firstSeed ?: ReadingSource.NETWORK.takeIf { window.seeded })
                 }
                 save()
             } catch (cancel: CancellationException) { throw cancel }

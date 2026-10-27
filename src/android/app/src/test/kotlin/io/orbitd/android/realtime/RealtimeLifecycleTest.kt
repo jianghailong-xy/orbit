@@ -4,6 +4,9 @@ import android.app.Activity
 import android.app.Application
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.os.Bundle
+import android.util.Log
+import io.orbitd.android.perf.OrbitPerf
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.LoginResponse
@@ -19,6 +22,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowNetwork
+import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowNetworkCapabilities
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -104,6 +108,56 @@ class RealtimeLifecycleTest {
             withTimeout(60_000) { while (store.state.value.session?.connection != ConnectionState.STOPPED) delay(10) }
         } finally {
             lifecycle.close(); store.close(); owner.cancel(); auth.logout(); server.shutdown()
+        }
+    }
+
+    /** D09 P06's start points (P06Marks.kt), from the callbacks themselves: the default network's INTERNET+VALIDATED edges, an
+     * Activity's onStart and onResume; and the process's first Activity created with saved state is what a relaunch is. */
+    @Test fun theCallbacksWriteTheRecoveryStartsAndTheFirstActivityTellsARelaunch() {
+        ShadowLog.setLoggable(OrbitPerf.TAG, Log.DEBUG)
+        val auth = AuthSession(OkHttpTransport(), object : CredentialStore {
+            override suspend fun load(): StoredSession? = null
+            override suspend fun save(session: StoredSession) = Unit
+            override suspend fun clear() = Unit
+        }, object : InstanceStore {
+            override suspend fun load(): String? = null
+            override suspend fun save(server: String) = Unit
+        }, object : SessionDataStore {
+            override suspend fun read(account: AccountKey, kind: DataKind, key: String): ByteArray? = null
+            override suspend fun write(account: AccountKey, kind: DataKind, key: String, bytes: ByteArray) = Unit
+            override suspend fun clearAll() = Unit
+        }, "test")
+        val owner = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val store = RealtimeStore(auth, owner)
+        val app = RuntimeEnvironment.getApplication()
+        val lifecycle = RealtimeLifecycle(app, store)
+        try {
+            val callback = shadowOf(app.getSystemService(ConnectivityManager::class.java)).networkCallbacks.single()
+            val network = ShadowNetwork.newInstance(101)
+            val validated = ShadowNetworkCapabilities.newInstance()
+            shadowOf(validated).addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            shadowOf(validated).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            shadowOf(validated).addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            val unvalidated = ShadowNetworkCapabilities.newInstance()
+            shadowOf(unvalidated).addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            shadowOf(unvalidated).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            shadowOf(unvalidated).removeCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            callback.onAvailable(network)
+            callback.onCapabilitiesChanged(network, unvalidated)
+            callback.onCapabilitiesChanged(network, validated)
+            callback.onCapabilitiesChanged(network, validated)
+            callback.onLost(network)
+            val activity = Activity()
+            lifecycle.onActivityCreated(activity, Bundle())
+            lifecycle.onActivityStarted(activity)
+            lifecycle.onActivityResumed(activity)
+            lifecycle.onActivityCreated(Activity(), null)
+            assertEquals(listOf("p06_net_validated net=wifi netId=101", "p06_net_lost net=wifi netId=101",
+                "p06_start_cb activity=Activity", "p06_foreground activity=Activity"),
+                ShadowLog.getLogsForTag(OrbitPerf.TAG).map { it.msg.removePrefix("v=1 ev=").substringBefore(" rt=") })
+            assertTrue("the first Activity came with saved state", lifecycle.relaunched)
+        } finally {
+            lifecycle.close(); store.close(); owner.cancel()
         }
     }
 }

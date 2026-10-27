@@ -1,12 +1,14 @@
 #!/usr/bin/env node
-// The API calls rollback-drill.sh and lost-answer-drill.sh make on the staging stack (README.md beside this file): as its
+// The API calls rollback-drill.sh, lost-answer-drill.sh, release-outage-drill.sh and mass-disconnect-drill.sh make on the staging stack (README.md beside this file): as its
 // owner, who is also its administrator, or as the drill runner. Each prints one line of JSON and exits non-zero on an
 // answer outside 2xx.
 //
 //   node rollback-drill.mjs <origin> <state dir> switch on|off|get
+//   node rollback-drill.mjs <origin> <state dir> enrollment-token <label>
 //   node rollback-drill.mjs <origin> <state dir> workspace <runner id> <work dir> <name>
 //   node rollback-drill.mjs <origin> <state dir> session <workspace id> <prompt>
 //   node rollback-drill.mjs <origin> <state dir> turn <session id> <content>
+//   node rollback-drill.mjs <origin> <state dir> diff-refresh <session id>
 //   node rollback-drill.mjs <origin> <state dir> runner <runner id>
 //   node rollback-drill.mjs <origin> <state dir> update-now <runner id>
 //   node rollback-drill.mjs <origin> <state dir> release <runner config.json> <latest> <previous>
@@ -63,6 +65,12 @@ switch (command) {
       : await call('PUT', '/admin/runner-link-required', { token, body: { required: args[0] === 'on' } });
     break;
   }
+  case 'enrollment-token': {
+    // One more runner's registration: an enrollment token is good for one.
+    const enrollment = await call('POST', '/runners/enrollment-tokens', { token: await owner(), body: { label: args[0] } });
+    out = { token: enrollment.token };
+    break;
+  }
   case 'workspace': {
     const [runnerId, workDir, name] = args;
     const ws = await call('POST', '/workspaces', { token: await owner(), body: { name, runnerId, workDir } });
@@ -81,6 +89,11 @@ switch (command) {
     out = { id: turn?.id ?? null };
     break;
   }
+  case 'diff-refresh':
+    // A person opening a file's diff: a 'diff' control turn queued for the session's runner (requestDiffRefresh).
+    await call('POST', `/sessions/${args[0]}/diff/refresh`, { token: await owner() });
+    out = { ok: true };
+    break;
   case 'runner': {
     const r = await call('GET', `/runners/${args[0]}`, { token: await owner() });
     out = { name: r.name, version: r.version, status: r.status, online: r.online, lastHeartbeatAt: r.lastHeartbeatAt, selfUpdate: r.selfUpdate };

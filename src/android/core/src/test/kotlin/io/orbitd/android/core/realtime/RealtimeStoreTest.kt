@@ -100,12 +100,12 @@ class RealtimeStoreTest {
             }
         }, credentials, instances, data, "test", dispatcher = dispatcher, eventTransport = streams)
 
-        suspend fun start(): Pair<AuthSession, RealtimeStore> {
+        suspend fun start(witness: RealtimeWitness? = null): Pair<AuthSession, RealtimeStore> {
             credentials.value = StoredSession(serverA.value, tokens())
             instances.value = serverA.value
             val auth = client()
             auth.restore()
-            val store = RealtimeStore(auth, scope.backgroundScope)
+            val store = RealtimeStore(auth, scope.backgroundScope, witness = witness)
             store.selectSession("s1")
             store.setNetwork(true, "wifi")
             store.setForeground(true)
@@ -343,6 +343,30 @@ class RealtimeStoreTest {
         assertEquals(3, restored.state.value.session!!.transcript.events.size)
     }
 
+    /** P01's fully-drawn report names where the directory's rows came from: the copy the cache restored, until a read from the
+     * server replaces it — not while one is still on the wire. */
+    @Test fun aRestoredDirectoryIsCachedUntilAServerReadReplacesIt() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        assertTrue(store.state.value.directoryFresh)
+        assertFalse(store.state.value.directoryCached)
+        advanceTimeBy(101); runCurrent()
+        store.close(); runCurrent()
+        val auth = rig.client()
+        auth.restore()
+        val restored = RealtimeStore(auth, backgroundScope)
+        runCurrent()
+        assertNotNull(restored.state.value.directory)
+        assertTrue(restored.state.value.directoryCached)
+        rig.heldDirectory = CompletableDeferred()
+        restored.setNetwork(true, "wifi"); restored.setForeground(true); runCurrent()
+        assertTrue(restored.state.value.directoryRefreshing)
+        assertTrue(restored.state.value.directoryCached)
+        rig.heldDirectory!!.complete(Unit); runCurrent()
+        assertTrue(restored.state.value.directoryFresh)
+        assertFalse(restored.state.value.directoryCached)
+    }
+
     /** Live frames never move the REST frontier, so the next connect after a drop or a clean close would replay all
      * they carried over the uncompressed stream. It closes that gap over REST pages first and resumes past it. */
     @Test fun aDroppedOrClosedStreamClosesItsGapOverRestBeforeReconnecting() = runTest {
@@ -437,6 +461,31 @@ class RealtimeStoreTest {
         advanceTimeBy(1001); runCurrent()
         assertEquals("2001", rig.streams.session().request.api.query.toMap()["sinceSeq"])
         assertEquals(listOf(2001L), store.state.value.session!!.transcript.events.map { it.seq })
+    }
+
+    /** D09 P02's `source`: a transcript the server's tail seeded is not the cache's; one restored from RealtimeCache is, through
+     * the pages that close its gap, until a resync re-seeds it from the tail. */
+    @Test fun aTranscriptSaysWhetherItsSeedCameFromTheCache() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        assertEquals(listOf(1L), store.state.value.session!!.transcript.events.map { it.seq })
+        assertFalse("the cold open read its tail", store.state.value.session!!.seededFromCache)
+        advanceTimeBy(101); runCurrent()
+        store.close(); runCurrent()
+        rig.rows = rig.rows + rig.row(2)
+        val auth2 = rig.client()
+        auth2.restore()
+        val restored = RealtimeStore(auth2, backgroundScope)
+        runCurrent()
+        assertEquals(listOf(1L), restored.state.value.session!!.transcript.events.map { it.seq })
+        assertTrue("restored from the device", restored.state.value.session!!.seededFromCache)
+        restored.setNetwork(true, "wifi"); restored.setForeground(true); runCurrent()
+        assertEquals(listOf(1L, 2L), restored.state.value.session!!.transcript.events.map { it.seq })
+        assertTrue("the gap's pages leave the seed the cache's", restored.state.value.session!!.seededFromCache)
+        rig.streams.session().emit("""{"type":"resync","seq":0,"payload":{}}""")
+        runCurrent(); advanceTimeBy(1001); runCurrent()
+        assertEquals(listOf(1L, 2L), restored.state.value.session!!.transcript.events.map { it.seq })
+        assertFalse("a resync re-seeds it from the tail", restored.state.value.session!!.seededFromCache)
     }
 
     @Test fun openingPingCannotResetRepeatedResyncBackoff() = runTest {
@@ -638,6 +687,35 @@ class RealtimeStoreTest {
         assertSame(next, store.state.value.handle)
         assertEquals("s2", store.state.value.session?.id)
         assertEquals("s2", RealtimeCache.read(auth, next).lastSessionId)
+    }
+
+    /** D09 P06's witness (A15): each durable event the window took in, by frame or page, says whether the window held it already;
+     * live deltas and pings say nothing; each account event is told; and while the witness is off the store asks nothing more. */
+    @Test fun theWitnessIsToldEachDurableEventWithItsDuplicateFlagAndEachAccountEvent() = runTest {
+        class Recorded(override val enabled: Boolean) : RealtimeWitness {
+            val lines = mutableListOf<String>()
+            override fun durable(sessionId: String, seq: Long, duplicate: Boolean, via: String) { lines += "$sessionId $seq $duplicate $via" }
+            override fun account(type: String, sessionId: String) { lines += "account $type $sessionId" }
+        }
+        for (on in listOf(true, false)) {
+            val rig = Rig(this)
+            val witness = Recorded(on)
+            val (_, store) = rig.start(witness)
+            val first = rig.streams.session()
+            first.emit(rig.row(2)); first.emit(rig.row(2))
+            first.emit("""{"seq":0,"type":"text_delta","payload":{"delta":"live only"}}""")
+            runCurrent()
+            rig.streams.control().emit("""{"type":"session.updated","sessionId":"s1","data":{}}""")
+            rig.streams.control().emit("""{"type":"ping","sessionId":"","data":{}}""")
+            runCurrent()
+            rig.rows = rig.rows + (2L..5L).map { rig.row(it) }
+            first.frames.close(NetworkException())
+            runCurrent(); advanceTimeBy(1_001); runCurrent()
+            assertEquals((1L..5L).toList(), store.state.value.session!!.transcript.events.map { it.seq })
+            assertEquals(if (!on) emptyList() else listOf("s1 1 false tail", "s1 2 false sse", "s1 2 true sse",
+                "account session.updated s1", "s1 2 true page", "s1 3 false page", "s1 4 false page", "s1 5 false page"), witness.lines)
+            store.close(); runCurrent()
+        }
     }
 
     @Test fun corruptOrVersionedCacheRestoresAsColdOpen() = runTest {

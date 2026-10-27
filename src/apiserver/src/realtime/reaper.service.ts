@@ -36,6 +36,7 @@ import { RUNNER_LINK_REVOCATION_WINDOW_MS } from '../runner-api/runner-link-toke
 import {
   RUNNER_BEATS,
   RUNNER_OFFLINE_AFTER_MS,
+  RUNNER_SILENT_AFTER_MS,
   RunnerPresenceService,
   runnerLastBeatAt,
   type RunnerBeats,
@@ -63,9 +64,9 @@ const STARTUP_GRACE_MS = 3 * 60_000;
  */
 const MASS_SILENCE_SHARE = 0.2;
 /**
- * "Together": crossed the offline line within this long of each other, and of now. It also bounds
- * how long one such silence holds the reaping: a runner quiet for longer than this past the line
- * leaves the count, and its sessions are reaped as anybody's are.
+ * "Together": missed a beat (RUNNER_SILENT_AFTER_MS) within this long of each other, and of now. It
+ * also bounds how long one such silence holds the reaping: a runner quiet for longer than this past
+ * that line leaves the count, and its sessions are reaped as anybody's are.
  */
 const MASS_SILENCE_WINDOW_MS = 10 * 60_000;
 // A cancel/end a live (online) runner hasn't honored within this window means the
@@ -486,21 +487,25 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    *    or beside a database that just came back — has not yet had the time to hear every live runner.
    *  - A heartbeat write failed in this process within OFFLINE_AFTER_MS: the beat that would have
    *    answered may be one the database refused, here.
-   *  - A fifth of the cell's runners crossed the offline line together (MASS_SILENCE_SHARE,
-   *    MASS_SILENCE_WINDOW_MS). Read again every sweep that needs it, and held for OFFLINE_AFTER_MS
-   *    past the last sweep that saw it, so the runners whose beats were lost get a whole window to be
-   *    heard again before their silence counts. Only runners that can lose contact are counted
+   *  - A fifth of the cell's runners missed a beat together (MASS_SILENCE_SHARE, MASS_SILENCE_WINDOW_MS):
+   *    silent for over RUNNER_SILENT_AFTER_MS, a heartbeat period and a half, whether or not they are
+   *    past OFFLINE_AFTER_MS yet. Runners cut off at the same moment cross the offline line one by one
+   *    over a whole period, and a sweep between two of those crossings, counting at that line, reaped
+   *    a run (the C1b drill, 2026-10-26); by the time the first is across, every runner cut off with it
+   *    has missed a beat. Read again every sweep that needs it, and held for OFFLINE_AFTER_MS past the
+   *    last sweep that saw it, so the runners whose beats were lost get a whole window to be heard again
+   *    before their silence counts. Only runners that can lose contact are counted
    *    (RunnerPresenceService.fleetSilence): one that signed off, or a managed runner its manager is
    *    putting to sleep, is quiet on purpose. In a cell of one to four runners one crashed runner is
-   *    already a fifth, which holds its sessions for up to MASS_SILENCE_WINDOW_MS past the line — the
-   *    price of not reaping a small cell's sessions through a partition on this side, and the window
-   *    in which a restarted runner takes its sessions back.
+   *    already a fifth, which holds its sessions for up to MASS_SILENCE_WINDOW_MS past the silence
+   *    line — the price of not reaping a small cell's sessions through a partition on this side, and
+   *    the window in which a restarted runner takes its sessions back.
    *
    * None of them is a latch. The grace ends; a failed write ages out; a silence that does not lift
-   * leaves the count MASS_SILENCE_WINDOW_MS past the line, and its sessions are then reaped like any
-   * others. Nothing else here waits on it: a cancel or an end the runner never honored is still
-   * finalized, and so is the run of a runner that signed off (`offlineFromSilence`), since neither
-   * verdict is read from silence.
+   * leaves the count MASS_SILENCE_WINDOW_MS past the silence line, and its sessions are then reaped
+   * like any others. Nothing else here waits on it: a cancel or an end the runner never honored is
+   * still finalized, and so is the run of a runner that signed off (`offlineFromSilence`), since
+   * neither verdict is read from silence.
    */
   private async silenceHold(now: number): Promise<string | null> {
     const s = (ms: number) => `${Math.round(ms / 1000)}s`;
@@ -516,7 +521,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     if (fleet.heard > 0 && fleet.silent / fleet.heard >= MASS_SILENCE_SHARE) {
       this.massSilenceHeldUntil = now + OFFLINE_AFTER_MS;
       return `${fleet.silent} of the ${fleet.heard} runners heard from in the last `
-        + `${s(OFFLINE_AFTER_MS + MASS_SILENCE_WINDOW_MS)} have been silent for over ${s(OFFLINE_AFTER_MS)} at once`;
+        + `${s(RUNNER_SILENT_AFTER_MS + MASS_SILENCE_WINDOW_MS)} have been silent for over `
+        + `${s(RUNNER_SILENT_AFTER_MS)} at once (each missed a heartbeat)`;
     }
     if (now < this.massSilenceHeldUntil) {
       return `a fifth of the cell's runners went silent together less than ${s(OFFLINE_AFTER_MS)} ago`;

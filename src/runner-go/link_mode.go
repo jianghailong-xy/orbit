@@ -34,7 +34,9 @@ import (
 // Heartbeat frame whose parts are sent by digest (link_heartbeat.go). Every other call, the agent tool API, the
 // release check and the attachments, stays on HTTPS (D14). Each call has one request_id, which every resend of it
 // keeps: after a lost connection or a failure that says the call can be sent again, it is sent again under that id,
-// and the control plane answers a repeated claim with the session the first one claimed (task B2).
+// and the control plane answers a repeated claim with the session the first one claimed (task B2), and a repeated
+// inbox fetch with the turn the first one handed out (task B2b). A claim or an inbox fetch that got no answer at all
+// is followed by one under the same id, however much later, until one gets an answer (linkRequestIDs).
 //
 // The long polls do not hang on the server in link mode (§5.6): a claim, an inbox fetch or the wake is asked only
 // once a hint says something waits, or the HeartbeatAck's HintState does (link_hints.go); a session's inbox poller
@@ -97,6 +99,9 @@ func startLink(cfg *RunnerConfig, t *Transport) func() {
 	t.caller = ""
 	if off, why := linkModeOff(cfg); off {
 		logln("runner link mode: off (" + why + "); daemon calls stay on HTTPS")
+		// What a process in link mode left unacknowledged in the spool still goes first, over HTTPS, and nothing
+		// newer is numbered over it (session.go): the spool is the session's, whatever carries its events now.
+		t.spooled = newLinkEvents(nil, logln)
 	} else {
 		t.link = newLinkMode(t, logln)
 	}
@@ -105,6 +110,9 @@ func startLink(cfg *RunnerConfig, t *Transport) func() {
 		stopShadow()
 		if t.link != nil {
 			t.link.close()
+		}
+		if t.spooled != nil {
+			t.spooled.close() // what is still held goes back to the spool, for the next process
 		}
 	}
 }
@@ -222,6 +230,17 @@ func (m *linkMode) linkUnusable(why string) {
 	}
 	m.server = linkpb.Mode_MODE_UNSPECIFIED
 	m.updateLocked(why)
+}
+
+// stopping takes that the runner has begun to stop (runLoop): from then on a link without a connection is not waited
+// for. Unless the control plane refused HTTPS, the work goes back to HTTPS at once when the link has no connection now,
+// or loses the one it has (linkWork.stopping), and with it what the sessions' event streams hold: their last flushes
+// reach the control plane within the stop's grace instead of waiting for the link until it runs out. What HTTPS does
+// not store within it stays in the spool, as before (close).
+func (m *linkMode) stopping() {
+	if m.work.stopping() {
+		m.linkUnusable("the runner is stopping and the runner link is not connected")
+	}
 }
 
 // updateLocked starts or stops the work connection as the link comes into use or goes out of it, and tells whoever
@@ -355,7 +374,7 @@ func (m *linkMode) call(ctx context.Context, route, method, path string, body, o
 		// was lost, rather than when its lease runs out. Every resend of the call says what the first said.
 		path = linkWithQuery(path, "runningTurnId", m.runningTurn(linkPathSegment(path, 2)))
 	}
-	rpc := &linkpb.Rpc{RequestId: m.newRequestID(), Body: &linkpb.Rpc_Tunnel{Tunnel: &linkpb.TunnelRequest{
+	rpc := &linkpb.Rpc{RequestId: m.requestIDFor(ctx), Body: &linkpb.Rpc_Tunnel{Tunnel: &linkpb.TunnelRequest{
 		Method: method, Path: path, JsonBody: payload,
 	}}}
 	var session string
@@ -421,6 +440,71 @@ func (m *linkMode) call(ctx context.Context, route, method, path string, body, o
 // to this runner, and a count.
 func (m *linkMode) newRequestID() string {
 	return "r:" + m.t.leaseOwner + ":" + strconv.FormatUint(m.requestSeq.Add(1), 10)
+}
+
+// requestIDFor is the request_id of a call made with ctx: the id its caller keeps (linkRequestIDs.with), or a new one.
+func (m *linkMode) requestIDFor(ctx context.Context) string {
+	if ids, _ := ctx.Value(linkRequestIDsKey{}).(*linkRequestIDs); ids != nil {
+		if ids.id == "" {
+			ids.id = m.newRequestID()
+		}
+		ids.sent = true
+		return ids.id
+	}
+	return m.newRequestID()
+}
+
+// linkRequestIDs is the request_id the fetches of one caller go under over the link: an inbox poller's, and the claim
+// loop's (task B2b). A fetch that went over the link and got no answer, a transport error, a timeout or the link
+// down, is followed by one under the same id, however much later, until a fetch gets an answer: a turn or a session,
+// nothing, or a refusal. The one after that goes under a new id. The control plane answers a fetch under the id of
+// one that handed out a turn or claimed a session with that turn or session (dequeueTurn, trySessionClaim in the
+// apiserver), so what an answer lost on its way handed out comes back however long the link was down, not only
+// within the one call's deadline. A fetch over HTTPS carries no request id, and is followed by one under a new id.
+// Used by one goroutine at a time: the caller's, which the call it makes runs on.
+type linkRequestIDs struct {
+	id   string // the id of the last fetch, while it went over the link and got no answer; "" otherwise
+	sent bool   // whether the fetch under way went over the link
+}
+
+type linkRequestIDsKey struct{}
+
+// with is ctx for the next fetch, which goes over the link under the id the last one kept, or a new one.
+func (r *linkRequestIDs) with(ctx context.Context) context.Context {
+	if r == nil {
+		return ctx
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	r.sent = false
+	return context.WithValue(ctx, linkRequestIDsKey{}, r)
+}
+
+// settle takes how the fetch made with with's context ended: its id is kept only when it went over the link and got
+// no answer.
+func (r *linkRequestIDs) settle(err error) {
+	if r == nil {
+		return
+	}
+	if !r.sent || linkAnswered(err) {
+		r.id = ""
+	}
+	r.sent = false
+}
+
+// kept reports whether the next fetch goes under the id of the last, which went over the link and got no answer.
+func (r *linkRequestIDs) kept() bool { return r != nil && r.id != "" }
+
+// linkAnswered reports whether a call got an answer: any the control plane gave, or a refusal the link gave in its
+// place (both a transportHTTPError), as against a transport error, a timeout or the link down, after which the
+// question the call asked is still open.
+func linkAnswered(err error) bool {
+	if err == nil {
+		return true
+	}
+	var httpErr *transportHTTPError
+	return errors.As(err, &httpErr)
 }
 
 // linkAnswerCode is an error answer's code, read from its JSON body.

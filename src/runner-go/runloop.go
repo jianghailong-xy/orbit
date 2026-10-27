@@ -952,6 +952,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 
 	loopCtx, stopLoop := context.WithCancelCause(context.Background())
 	loopCancel := func() { stopLoop(nil) }
+	// Once the runner stops, a runner link with no connection is not waited for: the sessions' last events go over
+	// HTTPS while the control plane still takes it (linkMode.stopping).
+	if t.link != nil {
+		stopLinkStopping := context.AfterFunc(loopCtx, t.link.stopping)
+		defer stopLinkStopping()
+	}
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	monitorCtx, stopMonitor := context.WithCancel(context.Background())
@@ -2017,12 +2023,16 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 
 	// Consecutive claim failures at the transport, which is what the retry backoff below is paced by.
 	claimFailures := 0
+	// The request id claims go under over the runner link (linkRequestIDs): a claim that got no answer there goes again
+	// under it, and the control plane answers it with the session it claimed, if it claimed one (task B2b). While one
+	// waits for its answer nothing reconciles: a reclaim would start that session, and the answer would start it again.
+	var claims linkRequestIDs
 	for loopCtx.Err() == nil {
 		// Sessions set aside by an earlier reclaim have authoritative rows but no local
 		// supervisor; their inbox is never polled until a takeover succeeds. Keep retrying
 		// here — the server fails an abandoned worktree operation over after its staleness
 		// window, at which point the takeover passes and the session re-attaches.
-		if !reclaimRetryAt.IsZero() && time.Now().After(reclaimRetryAt) {
+		if !reclaimRetryAt.IsZero() && time.Now().After(reclaimRetryAt) && !claims.kept() {
 			recovered, skipped, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
 			if recoverErr != nil {
 				if loopCtx.Err() == nil {
@@ -2049,7 +2059,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				pool.endUnclaimedHostlessJobs()
 			}
 		}
-		if !lateClaimCheckAt.IsZero() && time.Now().After(lateClaimCheckAt) {
+		if !lateClaimCheckAt.IsZero() && time.Now().After(lateClaimCheckAt) && !claims.kept() {
 			lateClaimCheckAt = time.Time{}
 			recovered, skipped, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
 			if recoverErr != nil {
@@ -2089,7 +2099,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			continue
 		}
-		job, err := t.claimSession(loopCtx)
+		job, err := t.claimSession(loopCtx, &claims)
 		if err != nil {
 			if loopCtx.Err() != nil {
 				break
@@ -2103,27 +2113,33 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				loopCancel()
 				break
 			}
-			// The claim transaction may have committed before its response was lost.
-			// Reclaim all runner-owned rows and attach any authoritative RUNNING row
-			// missing from the local pool before issuing another claim.
-			recovered, skipped, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
-			if recoverErr != nil {
-				if loopCtx.Err() == nil {
-					logln("ambiguous claim reconciliation failed; stopping runner:", recoverErr)
-					loopCancel()
+			if claims.kept() {
+				// No answer over the link: the claim goes again under its request id, and its answer is the session
+				// it claimed, if it claimed one. The reconciliation it owes is the late check's, once it is answered.
+				lateClaimCheckAt = time.Now()
+			} else {
+				// The claim transaction may have committed before its response was lost.
+				// Reclaim all runner-owned rows and attach any authoritative RUNNING row
+				// missing from the local pool before issuing another claim.
+				recovered, skipped, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
+				if recoverErr != nil {
+					if loopCtx.Err() == nil {
+						logln("ambiguous claim reconciliation failed; stopping runner:", recoverErr)
+						loopCancel()
+					}
+					break
 				}
-				break
+				if skipped {
+					reclaimRetryAt = time.Now().Add(reclaimRetryInterval)
+				}
+				for _, pending := range recovered {
+					logln(fmt.Sprintf("recovering ambiguously claimed session %s — %s", pending.job.SessionID, pending.job.Title))
+					startSession(pending.job, pending.initiallyActive)
+					pending.endTakeover()
+				}
+				// The failed request's claim may still be committing (lateClaimWindow).
+				lateClaimCheckAt = time.Now().Add(lateClaimWindow)
 			}
-			if skipped {
-				reclaimRetryAt = time.Now().Add(reclaimRetryInterval)
-			}
-			for _, pending := range recovered {
-				logln(fmt.Sprintf("recovering ambiguously claimed session %s — %s", pending.job.SessionID, pending.job.Title))
-				startSession(pending.job, pending.initiallyActive)
-				pending.endTakeover()
-			}
-			// The failed request's claim may still be committing (lateClaimWindow).
-			lateClaimCheckAt = time.Now().Add(lateClaimWindow)
 			// Back off before trying again. Retrying a broken claim immediately turns one bad request
 			// into a storm, and it is worse here than anywhere else: every attempt above also runs
 			// the reclaim reconciliation, so each failed claim costs two requests against a link

@@ -89,6 +89,9 @@ data class SessionState(
     val connection: ConnectionState = ConnectionState.STOPPED,
     val error: RealtimeError? = null,
     val accessDenied: Boolean = false,
+    /** The transcript is the device's own copy from when the session was selected (RealtimeCache), not since re-seeded from
+     * the server's tail: what a reader draws first came off the disk. D09 P02 tells its warm-cache case apart by it. */
+    val seededFromCache: Boolean = false,
 )
 
 data class RealtimeState(
@@ -96,6 +99,8 @@ data class RealtimeState(
     val directory: DirectorySnapshot? = null,
     val directoryRefreshing: Boolean = false,
     val directoryFresh: Boolean = false,
+    /** [directory] is the copy this device's cache restored, and no read from the server has replaced it yet. */
+    val directoryCached: Boolean = false,
     val directoryError: RealtimeError? = null,
     val session: SessionState? = null,
     val controlConnection: ConnectionState = ConnectionState.STOPPED,

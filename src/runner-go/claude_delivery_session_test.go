@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -200,6 +201,9 @@ func runDeliverySessionWith(t *testing.T, script []fakeStep, turns []scriptedTur
 		if next.afterEngineRead != "" && !run.engineRead(frameText[next.afterEngineRead]) {
 			return RunInboxResponse{}, false // the turn it must arrive behind has not started
 		}
+		if next.afterAcknowledged != "" && !slices.Contains(run.deliveryStates(next.afterAcknowledged), string(deliveryAcknowledged)) {
+			return RunInboxResponse{}, false // the runner has not seen that turn read yet
+		}
 		switch {
 		case next.ungated:
 		case next.turn.Kind == "steer":
@@ -316,6 +320,13 @@ type scriptedTurn struct {
 	// nothing to steer. A test whose assertions are about which turn was running has to wait
 	// for this signal, not for either of those. Empty leaves the turn ungated by it.
 	afterEngineRead string
+	// afterAcknowledged holds the turn back until the RUNNER has reported the named turn's frame
+	// read: the CLI's echo of it has come through the stdout reader. That reader takes the CLI's
+	// output in order, so by then it has handled everything the CLI wrote before the echo too —
+	// the init handshake, which is where the runner learns which CLI it is writing to.
+	// afterEngineRead cannot say that much: the fake's own stdin reader answers it, however far
+	// the runner has got through the CLI's output. Empty leaves the turn ungated by it.
+	afterAcknowledged string
 }
 
 func messageTurn(id, text string) scriptedTurn {

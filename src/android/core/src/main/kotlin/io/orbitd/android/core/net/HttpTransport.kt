@@ -1,6 +1,7 @@
 package io.orbitd.android.core.net
 
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -58,7 +59,20 @@ class OkHttpTransport : HttpTransport {
     private val client = OkHttpClient.Builder()
         .followRedirects(false)
         .followSslRedirects(false)
-        .retryOnConnectionFailure(false)
+        // A connect that fails has sent nothing, so the call may go on to the host's next address. Without this, after a
+        // read timeout on 127.0.0.1 (which OkHttp then tries last), every later call to localhost failed on a refused ::1.
+        .retryOnConnectionFailure(true)
+        // Past connecting, the request may have reached the server: nothing the option retries from there is sent again.
+        .addNetworkInterceptor { chain ->
+            val response = try {
+                chain.proceed(chain.request())
+            } catch (e: IOException) {
+                // OkHttp recovers from no InterruptedIOException other than a connect timeout.
+                throw InterruptedIOException(e.message).apply { initCause(e) }
+            }
+            // OkHttp repeats a request answered 408 unless the answer asks it to wait.
+            if (response.code == 408) response.newBuilder().header("Retry-After", "1").build() else response
+        }
         .callTimeout(30, TimeUnit.SECONDS)
         .build()
 

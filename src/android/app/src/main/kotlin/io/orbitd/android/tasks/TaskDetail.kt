@@ -176,7 +176,10 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
 
     /** A write belongs to the app, not to this page (iOS's model-owned Task): leaving does not cancel it,
      * so a Run's resends and a comment still go out. A sheet that sent it closes only once it is taken, and its
-     * answer is that sheet's alone — shown under it, or on the page's banner once it (or the page) is gone. */
+     * answer is that sheet's alone — shown under it, or on the page's banner once it (or the page) is gone.
+     * The page is busy until it has read the write back, where iOS's `mutate` ends `mutating`: a Run pressed before that read
+     * lands goes out over the task as it was before its run started, under a new trigger, and the server refuses it as already
+     * running (A15 F-22's kind). */
     fun mutate(fromSheet: String? = null, done: () -> Unit = {}, operation: suspend () -> Unit) {
         if (data.busy) return
         data.busy = true; data.error = null; data.conflict = null; data.sheetError = null
@@ -192,9 +195,10 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                     else -> data.error = taskError(failure)
                 }
             } finally {
-                data.busy = false
-                app.realtime.refreshDirectory()
-                if (data.attached) load()
+                try {
+                    app.realtime.refreshDirectory()
+                    if (data.attached) load()
+                } finally { data.busy = false }
             }
         }
     }
