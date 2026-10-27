@@ -228,14 +228,13 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             cards.forEach { TranscriptCardView(it, open, shown) }
             val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
             val attachmentOnly = shown.type == "user" && shown.body().isBlank() && atts.isNotEmpty()
-            // What delivery appended is not the person's: their bubble holds their words, the card the rest.
+            // What delivery appended is not the person's: their row holds their words, and one line at its foot names the rest.
             val note = shown.fields.string("controlPlaneNote")?.takeIf { it.isNotBlank() }
                 // A wake's blocks are its line (A08-11); only what else the note carried is an attached entry.
                 ?.let { if (cards.any { card -> card.key.endsWith(":wake") }) withoutWakeBlocks(it) else it }?.takeIf { it.isNotBlank() }
             val words = if (shown.type == "user") shown.personWords() else shown.body()
             if (cards.isEmpty() && !attachmentOnly) { if (note == null || words.isNotBlank()) MarkdownText(words.ifBlank { shown.payload.toString() }, open = open) }
             else if (shown.body().isNotBlank()) DetailFold("Orbit attached") { MarkdownText(shown.body(), open = open) }
-            note?.let { AttachedNoteCard(it.trim()) }
             atts.forEach { attachment -> attachment.string("id")?.let { id ->
                 val name = attachment.string("name") ?: "Attachment"
                 if (attachment.string("mime")?.startsWith("image/") == true) TranscriptImage("orbit-attachment:$id", name, open)
@@ -253,6 +252,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 SteerStateLine(steer, putBack = composer?.takeIf { loaded }?.let { box -> { box.putBack(words) } })
             }
             if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
+            // Last, in the meta voice of the steer's line above it: the person's words stay what the eye lands on.
+            note?.let { AttachedNoteEntry(it.trim()) }
         }
     }
     copyOverflow?.let { LongTextDialog(it) { copyOverflow = null } }

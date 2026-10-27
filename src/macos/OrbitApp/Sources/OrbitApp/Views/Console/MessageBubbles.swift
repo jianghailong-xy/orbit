@@ -24,6 +24,8 @@ struct UserBubbleView: View {
     @State private var expanded = false
     @State private var hovering = false
     @State private var copied = false
+    /// Whether what Orbit attached is open: its line ends the meta row, its rows go under that row.
+    @State private var noteOpen = false
     // Collapse a giant pasted bubble: one huge Text lays out synchronously and stalls the UI.
     private let truncateAt = 6000
     // The meta row reserves its height even when hidden (so hover-reveal never shifts the bubble);
@@ -67,27 +69,9 @@ struct UserBubbleView: View {
                 if !files.isEmpty {
                     attachmentRow { ForEach(files) { ChatAttachmentFile(attachment: $0) } }
                 }
-                if let attached = bubble.attached {
-                    // What delivery appended, in the person's bubble under their words and parted
-                    // from them by a rule: one entry however it was told apart (web's
-                    // ControlPlaneNote). Hiding it outright would trade one problem for a worse one —
-                    // the agent answering about a quota outage nobody appears to have raised — so it
-                    // is named, and opens to exactly what the model read.
-                    Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
-                        if !bubble.text.isEmpty {
-                            GridRow { typedText(shown, showsCard: showsCard) }
-                            // Unsized across: the rule runs as wide as the words and the entry need,
-                            // where a bare Divider would stretch a bubble that hugs its text to the row.
-                            Divider()
-                                .padding(.top, 6).padding(.bottom, 5)
-                                .gridCellUnsizedAxes(.horizontal)
-                        }
-                        GridRow { AttachedNoteEntry(attached: attached) }
-                    }
-                    .padding(.horizontal, bubbleInset(showsCard))
-                    .padding(.vertical, showsCard ? 5 : 8)
-                    .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
-                } else if !bubble.text.isEmpty {
+                // The bubble is the person's words and nothing else: what delivery appended is named
+                // on a line in the meta row under it (`AttachedNoteLine`), never in it.
+                if !bubble.text.isEmpty {
                     typedText(shown, showsCard: showsCard)
                         .padding(.horizontal, bubbleInset(showsCard))
                         .padding(.vertical, showsCard ? 5 : 8)
@@ -103,6 +87,14 @@ struct UserBubbleView: View {
                 }
                 meta
                 why
+                if noteOpen, let attached = bubble.attached {
+                    // What the line in the meta row opened, in the bubble's column on a quiet panel of
+                    // its own (web's `.chat-user-wrap > .chat-injected-panel`).
+                    AttachedNoteBody(attached: attached)
+                        .padding(.horizontal, 10).padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                }
             }
             // Hover over the bubble column (not the full-width row) reveals the meta — web parity.
             // contentShape makes the WHOLE column rect (incl. the 3pt spacing gaps and the meta's
@@ -224,11 +216,12 @@ struct UserBubbleView: View {
     // "Queued" (a turn was already in flight) or "Sending…" in place of the time, and "Not
     // delivered" once the run has ended without ever taking it. A message written into the running
     // turn instead of queued behind it (a steer) shows how far it got there instead — see
-    // SteerDelivery. Always laid out so revealing it doesn't move the bubble. An image-only turn
-    // (empty text) has nothing to copy, so the row is suppressed — web parity (`{node.text && …}`).
+    // SteerDelivery. The line naming what Orbit attached ends the row and is always shown. Always
+    // laid out so revealing it doesn't move the bubble. An image-only turn (empty text) has nothing
+    // to copy, so the row is suppressed unless it has a state or a note to show — web parity.
     @ViewBuilder
     private var meta: some View {
-        if !bubble.text.isEmpty || unconfirmed {
+        if !bubble.text.isEmpty || unconfirmed || bubble.attached != nil {
             HStack(spacing: 6) {
                 if !bubble.text.isEmpty {
                     Button { copy() } label: {
@@ -295,8 +288,14 @@ struct UserBubbleView: View {
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
                         .opacity(timeShown ? 1 : 0)
                 }
+                if let attached = bubble.attached {
+                    // Named, not hidden: without it the agent answers about a quota outage nobody
+                    // appears to have raised. Opened, its rows go under this row (`noteOpen`).
+                    AttachedNoteLine(attached: attached, open: $noteOpen)
+                }
             }
-            .frame(height: metaHeight)
+            // At least one line: a long note line wraps on a phone rather than being cut.
+            .frame(minHeight: metaHeight)
             .animation(.easeOut(duration: 0.12), value: hovering)
         }
     }

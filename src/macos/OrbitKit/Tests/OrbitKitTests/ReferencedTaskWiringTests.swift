@@ -59,8 +59,9 @@ final class ReferencedTaskWiringTests: XCTestCase {
 
     // MARK: the blocks open as cards
 
-    /// The entry reads the blocks, and the line that names the note shut carries their counts.
-    func testTheAttachedEntryReadsTheBlocksAndCountsThemOnTheShutLine() throws {
+    /// The entry reads the blocks, and the line that names the note carries their counts in its
+    /// accessibility label: its words name what was attached and nothing more (owner, 2026-10-27).
+    func testTheAttachedEntryReadsTheBlocksAndCountsThemInTheLinesLabel() throws {
         let entry = try section(try source(Self.notePath),
                                 from: "struct AttachedNoteEntry", to: "struct BackgroundJobsNoteView")
 
@@ -69,8 +70,7 @@ final class ReferencedTaskWiringTests: XCTestCase {
         XCTAssertTrue(entry.contains("ReferencedTaskText.parse(jobs?.rest ?? attached.text)"),
                       "the entry must read the references out of what the inventory left")
         XCTAssertTrue(entry.contains("ReferencedTaskNote.summary(tasks.tasks)"),
-                      "the count on the shut line is the whole point of it: \"referenced task\" "
-                          + "alone never said whether opening it was worth the tap")
+                      "the count rides in the line's accessibility label, as in web's accessible name")
         XCTAssertTrue(entry.contains("ReferencedTaskNoteView(tasks: tasks.tasks)"),
                       "a note that read as references opens as cards")
         // Whatever neither reading took is still drawn, and a note neither could read is untouched.

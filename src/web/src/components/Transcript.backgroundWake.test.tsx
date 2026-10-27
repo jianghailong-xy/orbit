@@ -352,7 +352,8 @@ describe('a wake turn in the transcript', () => {
     const toggle = [...fold().querySelectorAll('button')].find((b) =>
       b.textContent?.startsWith('⊕ Orbit attached:'),
     );
-    expect(toggle?.textContent).toBe('⊕ Orbit attached: background jobs · 1 ended, exit 0');
+    expect(toggle?.textContent).toBe('⊕ Orbit attached: background jobs');
+    expect(toggle?.getAttribute('aria-label')).toBe('⊕ Orbit attached: background jobs · 1 ended, exit 0');
     // The wake itself is still the line's own subject, not one of the entry's rows.
     expect(row().querySelector('.bgwake-title')?.textContent).toBe('Background job finished');
   });
