@@ -20,19 +20,23 @@
 #   mass-disconnect-drill.sh stop       Stop the drill runners.
 #
 # Settings, besides the staging stack's own (staging-lib.sh, staging-up.sh):
-#   ORBIT_MASS_DISCONNECT_RUNNERS  runners                                                      10
-#   ORBIT_MASS_DISCONNECT_CUT      runners the partition cuts off, a fifth of them or more       2
-#   ORBIT_MASS_DISCONNECT_SECONDS  how long each outage lasts                                   180
+#   ORBIT_MASS_DISCONNECT_RUNNERS      runners                                                      10
+#   ORBIT_MASS_DISCONNECT_CUT          runners the partition cuts off, a fifth of them or more       2
+#   ORBIT_MASS_DISCONNECT_SECONDS      how long each outage lasts                                   180
+#   ORBIT_MASS_DISCONNECT_SWEEP_AFTER  the partition: how many seconds after the first runner cut off crosses the
+#                                      reaper's offline line its next sweep is to fall, under 30; the runners cut off
+#                                      and the moment are chosen for it (README.md). Unset, the partition cuts off
+#                                      runners spread across the fleet, whenever it gets to the cut.
 #
 # Run it as root on a stack no other runner works on: each runner runs in a mount namespace of its own (as
 # lost-answer-drill.sh's does) and in a systemd unit of its own, and the partition cuts a runner off with an nftables
 # rule that drops the packets of its unit's cgroup. It needs docker, systemd, nft, node, go and curl. The records go to
 # <state>/client/mass-disconnect/: timeline.txt is the drill's account, outages.tsv has a line per outage and
 # sessions.tsv a line per session in it, beside each outage's samples of the sessions, the runners' silence and the cell
-# as the reaper reads it, and the apiserver's and the link gateway's logs. Each runner, its log and its scripted
-# claude's records are in <state>/mass-disconnect/r<n>/; the runners keep running after the drill until
-# `mass-disconnect-drill.sh stop`. Setting up exits non-zero at the first step that does not hold; an outage is judged
-# whole, and `all` runs both before it exits non-zero for either.
+# as the reaper reads it, the crossings of its offline line, and the apiserver's and the link gateway's logs. Each
+# runner, its log and its scripted claude's records are in <state>/mass-disconnect/r<n>/; the runners keep running
+# after the drill until `mass-disconnect-drill.sh stop`. Setting up exits non-zero at the first step that does not
+# hold; an outage is judged whole, and `all` runs both before it exits non-zero for either.
 set -euo pipefail
 # shellcheck source=../staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../staging-lib.sh"
@@ -47,14 +51,19 @@ gateway="$project-link-gateway"
 count="${ORBIT_MASS_DISCONNECT_RUNNERS:-10}"
 cut="${ORBIT_MASS_DISCONNECT_CUT:-2}"
 outage="${ORBIT_MASS_DISCONNECT_SECONDS:-180}"
+sweep_after="${ORBIT_MASS_DISCONNECT_SWEEP_AFTER:-}"
 # The reaper's own numbers (src/apiserver/src/realtime/reaper.service.ts, src/apiserver/src/runners/runner-presence.ts):
 # silent for longer than offline_after, a runner reads as offline; a sweep every sweep_every; nothing reaped as offline
-# for startup_grace after the apiserver starts; the mass silence counts the runners heard from within window of the
-# offline line. And the runner's heartbeat interval (src/runner-go/runloop.go).
-offline_after=90 sweep_every=30 startup_grace=180 window=600 heartbeat=30
+# for startup_grace after the apiserver starts; the mass silence counts the runners that missed a beat (silent for
+# longer than silent_after) among those heard from within window of that line. And the runner's heartbeat interval
+# (src/runner-go/runloop.go).
+offline_after=90 silent_after=45 sweep_every=30 startup_grace=180 window=600 heartbeat=30
 [[ "$count" =~ ^[1-9][0-9]*$ ]] || die "ORBIT_MASS_DISCONNECT_RUNNERS must be a positive whole number, not $count"
 [[ "$cut" =~ ^[1-9][0-9]*$ ]] || die "ORBIT_MASS_DISCONNECT_CUT must be a positive whole number, not $cut"
 [[ "$outage" =~ ^[1-9][0-9]*$ ]] || die "ORBIT_MASS_DISCONNECT_SECONDS must be a positive whole number, not $outage"
+[ -z "$sweep_after" ] || { [[ "$sweep_after" =~ ^[0-9]+(\.[0-9]+)?$ ]] &&
+  awk -v s="$sweep_after" -v e="$sweep_every" 'BEGIN { exit !(s > 0 && s < e) }'; } ||
+  die "ORBIT_MASS_DISCONNECT_SWEEP_AFTER must be a number of seconds above 0 and under $sweep_every, not $sweep_after"
 [ "$cut" -lt "$count" ] || die "ORBIT_MASS_DISCONNECT_CUT ($cut) must leave some of the $count runners connected"
 [ $((cut * 5)) -ge "$count" ] || die "ORBIT_MASS_DISCONNECT_CUT ($cut) must be a fifth of the $count runners or more"
 # A runner that beat just before the cut is past the offline line 90 s into it, and the sweep after that comes within
@@ -81,24 +90,25 @@ stack_settings() {
 }
 api() { node "$helper" "$origin" "$state" "$@"; }
 # The reaper's reading of the cell (RunnerPresenceService.fleetSilence), as "heard silent": the runners heard from
-# within window of the offline line that can lose contact, and how many of them are past the line now.
-fleet_sql="SELECT count(*)::text, (count(*) FILTER (WHERE b.at < now() - interval '$offline_after seconds'))::text
+# within window of the silence line that can lose contact, and how many of them are past that line now: a beat missed.
+fleet_sql="SELECT count(*)::text, (count(*) FILTER (WHERE b.at < now() - interval '$silent_after seconds'))::text
   FROM (SELECT GREATEST((SELECT p.last_beat_at FROM runner_presence p WHERE p.runner_id = r.id), r.last_heartbeat_at) AS at
           FROM runner r
          WHERE r.status <> 'OFFLINE'
            AND NOT EXISTS (SELECT 1 FROM managed_runner mr
                             WHERE mr.runner_id = r.id AND mr.management_state IN ('DRAINING', 'SLEEPING'))) b
- WHERE b.at >= now() - interval '$((offline_after + window)) seconds'"
+ WHERE b.at >= now() - interval '$((silent_after + window)) seconds'"
 fleet() { psql_rows "$fleet_sql" | tr '\t' ' '; }
 # reaper_log SINCE: the apiserver's log since SINCE, each line with Docker's timestamp and without its colours.
 reaper_log() { docker logs --timestamps --since "$1" "$project-apiserver" 2>&1 | sed 's/\x1b\[[0-9;]*m//g'; }
 held_pattern='not reaping [0-9]+ session\(s\) whose runner looks offline'
 # quiet_cell PHASE: the cell as an outage starts from, so that whatever holds the reaping in it is the outage's doing:
 # the apiserver past its startup grace by a sweep; no hold left from an earlier silence (the reaper keeps one for 90 s
-# past the last sweep that saw it); and no runner the reaper counts silent. A runner stopped without signing off stays
-# in the count until it is past the window, up to 11.5 minutes.
+# past the last sweep that saw it); no runner the reaper counts silent; and the drill's runners all the cell it hears,
+# so that the runners an outage cuts off are the share of it the drill says. A runner stopped without signing off stays
+# in the count until it is past the window, up to 10¾ minutes.
 quiet_cell() {
-  local phase=$1 deadline=$((SECONDS + offline_after + window + 120)) started up reading last wait
+  local phase=$1 deadline=$((SECONDS + silent_after + window + 120)) started up reading last wait
   started="$(docker inspect -f '{{.State.StartedAt}}' "$project-apiserver")"
   up="$(since "$started")"
   if awk -v up="$up" -v need=$((startup_grace + sweep_every)) 'BEGIN { exit !(up < need) }'; then
@@ -120,7 +130,15 @@ quiet_cell() {
     sleep 30
     reading="$(fleet)"
   done
+  [ "${reading% *}" = "$count" ] || fail "$phase: the reaper hears ${reading% *} runners, not the drill's $count"
   say "$phase: the cell as the reaper reads it: ${reading% *} runners heard from, none silent; the apiserver up since $started"
+}
+
+# last_sweep: when the reaper last held a sweep, as the apiserver's log stamped it; nothing when it has held none since
+# it started. The reaper sweeps on a timer, every sweep_every from when it started, so this says when its sweeps fall.
+last_sweep() {
+  reaper_log "$(docker inspect -f '{{.State.StartedAt}}' "$project-apiserver")" | grep -E "$held_pattern" | tail -n 1 |
+    cut -d' ' -f1 || true
 }
 
 # --- The runners. -----------------------------------------------------------------------------------------------------
@@ -337,7 +355,7 @@ restore_stack() {
 }
 
 # The samples an outage takes every 2 s: the sessions' statuses, each runner's silence, the cell as the reaper reads it.
-declare -A statuses=() silence_max=() crossed_at=()
+declare -A statuses=() silence_max=()
 sample() {
   local phase=$1 at kind a b i seen
   at="$(now)"
@@ -354,7 +372,6 @@ sample() {
         for i in $(runners); do
           [ "${rid[$i]}" = "$a" ] || continue
           if awk -v s="$b" -v m="${silence_max[$i]:-0}" 'BEGIN { exit !(s > m) }'; then silence_max[$i]="$b"; fi
-          if [ -z "${crossed_at[$i]:-}" ] && awk -v s="$b" -v l="$offline_after" 'BEGIN { exit !(s > l) }'; then crossed_at[$i]="$at"; fi
         done ;;
     esac
   done < <(psql_rows "SELECT 'S', s.id::text, s.status::text FROM session s WHERE s.id IN ($(session_ids_sql))
@@ -365,23 +382,110 @@ sample() {
     SELECT 'F', f.* FROM ($fleet_sql) f")
 }
 
+# --- The reaper's sweeps against the crossings. -----------------------------------------------------------------------
+# A runner beats every 30 s from when it started and is past the offline line 90 s after its last beat; the reaper
+# sweeps every 30 s on a timer. As both keep time with the same period, where a sweep falls against a runner's crossing
+# is where it falls in the interval against the runner's beats: the same in every outage, whenever the cut comes.
+#
+# aim_cut RUN: for ORBIT_MASS_DISCONNECT_SWEEP_AFTER, the runners the partition cuts off, and the moment, chosen so that
+# the reaper's first sweep after the first of them crosses the line falls that many seconds after the crossing. The
+# sweeps are timed from the last one the reaper held. The first runner is the one whose crossings come closest to that
+# long before a sweep; the others the ones whose beats come after its across the interval, as partition_runners spreads
+# them; and the cut comes halfway between the last of their beats and its next one, so that its last beat is the oldest
+# and no beat of theirs is on its way. Sets CUT, and sleeps until the cut is due.
+aim_cut() {
+  local run=$1 swept i plan due ahead spread
+  swept="$(last_sweep)"
+  [ -n "$swept" ] ||
+    fail "$run: ORBIT_MASS_DISCONNECT_SWEEP_AFTER times the reaper's sweeps from the last one it held, and it has held none since it started: run the gateway phase first"
+  plan="$(for i in $(runners); do printf '%s %s\n' "$i" "$(presence "$i" | cut -d' ' -f3)"; done | node -e '
+    const [swept, after, cut, line, beat, sweep] = process.argv.slice(1).map((v, k) => (k ? Number(v) : Date.parse(v) / 1000));
+    const mod = (a, m) => ((a % m) + m) % m;
+    const beats = require("fs").readFileSync(0, "utf8").trim().split("\n")
+      .map((l) => l.split(" ")).map(([i, at]) => ({ i, at: Date.parse(at) / 1000 }));
+    const closest = (list, f) => list.reduce((x, y) => (f(y) < f(x) ? y : x));
+    // How long after a runner is past the line the next sweep comes; how long after one runner another beats.
+    const sweepAfter = (b) => mod(swept - (b.at + line), sweep);
+    const beatsAfter = (b, a) => mod(b.at - a.at, beat);
+    const first = closest(beats, (b) => Math.abs(sweepAfter(b) - after));
+    const chosen = [first];
+    for (let j = 1; j < cut; j += 1) {
+      chosen.push(closest(beats.filter((b) => !chosen.includes(b)), (b) => Math.abs(beatsAfter(b, first) - (j * beat) / cut)));
+    }
+    const spread = Math.max(...chosen.map((b) => beatsAfter(b, first)));
+    const soon = Date.now() / 1000 + 2;
+    const due = soon + mod(first.at + (spread + beat) / 2 - soon, beat);
+    console.log([chosen.map((b) => b.i).join(" "), due.toFixed(3), sweepAfter(first).toFixed(1), spread.toFixed(1)].join("\t"));
+  ' "$swept" "$sweep_after" "$cut" "$offline_after" "$heartbeat" "$sweep_every")" || fail "$run: aiming the cut"
+  IFS=$'\t' read -r CUT due ahead spread <<< "$plan"
+  say "$run: aimed: the reaper's sweeps fall as the one it held at $swept did, every $sweep_every s. Runners $(for i in $CUT; do printf 'r%s ' "$i"; done)to be cut off at $(date -u -d "@$due" +%H:%M:%S.%3NZ): r${CUT%% *} crosses the offline line first, the reaper's next sweep $ahead s after it (asked: $sweep_after s), and the others' beats come up to $spread s after its"
+  sleep "$(awk -v due="$due" -v now="$(date -u +%s.%N)" 'BEGIN { d = due - now; printf "%.3f", (d > 0 ? d : 0) }')"
+}
+
+# sweeps RUN RESTORE_AT: the sweeps the reaper held in RUN ($out/RUN-apiserver.log), each against the crossings of the
+# offline line of the runners cut off ($out/RUN-crossings.tsv): one line "S AT AFTER PAST NEXT IN READING" a sweep since
+# the first crossing: AFTER s after it, PAST runners cut off past the line then, the next one, NEXT, crossing IN s later,
+# and what the reaper read. Then whether it held from the first crossing on: the first sweep after it held and named that
+# runner's session, and so did every sweep after it until the control plane was back, none more than a sweep interval
+# (and 5 s for a sweep's own work) after the crossing or the sweep before it. One line "V RUNNER CROSSED AFTER PAST
+# SWEEPS WRONG": the first runner past the line and when, the first held sweep AFTER s later with PAST past the line
+# then, how many sweeps held since, and what does not hold ("none" when all of it does).
+sweeps() {
+  node -e '
+    const fs = require("fs");
+    const [crossFile, logFile, restoreAt, every, slack] = process.argv.slice(1);
+    const t = (at) => Date.parse(at) / 1000;
+    const iso = (s) => new Date(s * 1000).toISOString();
+    const crossings = fs.readFileSync(crossFile, "utf8").trim().split("\n").map((l) => l.split("\t"))
+      .map(([name, at, session]) => ({ name, at: t(at), session })).sort((a, b) => a.at - b.at);
+    const held = fs.readFileSync(logFile, "utf8").split("\n")
+      .map((l) => /^(\S+) .*not reaping \d+ session\(s\) whose runner looks offline \(([^)]*)\): (.*)$/.exec(l))
+      .filter(Boolean).map(([, at, ids, reading]) => ({ at: t(at), ids, reading }));
+    const first = crossings[0];
+    const since = held.filter((h) => h.at >= first.at);
+    const past = (at) => crossings.filter((c) => c.at <= at).length;
+    for (const h of since) {
+      const next = crossings.find((c) => c.at > h.at);
+      console.log(["S", iso(h.at), (h.at - first.at).toFixed(1), past(h.at), next ? next.name : "none",
+        next ? (next.at - h.at).toFixed(1) : "none", h.reading].join("\t"));
+    }
+    const gap = Number(every) + Number(slack);
+    const restore = t(restoreAt);
+    const wrong = [];
+    if (since.length === 0) wrong.push(`no sweep held after ${first.name} crossed the offline line`);
+    else {
+      const lag = since[0].at - first.at;
+      if (lag > gap) wrong.push(`the first sweep held came ${lag.toFixed(1)} s after ${first.name} crossed the offline line`);
+      if (!since[0].ids.includes(first.session)) wrong.push(`the first sweep held after ${first.name} crossed does not name its session`);
+      since.forEach((h, k) => {
+        if (k > 0 && h.at - since[k - 1].at > gap) wrong.push(`no sweep held from ${iso(since[k - 1].at)} to ${iso(h.at)}`);
+      });
+      const last = since.filter((h) => h.at <= restore).pop();
+      if (!last || restore - last.at > gap) wrong.push(`no sweep held in the last ${gap} s before the restore`);
+    }
+    console.log(["V", first.name, iso(first.at), since.length ? (since[0].at - first.at).toFixed(1) : "none",
+      since.length ? past(since[0].at) : "none", since.length, wrong.length ? wrong.join("; ") : "none"].join("\t"));
+  ' "$out/$1-crossings.tsv" "$out/$1-apiserver.log" "$2" "$sweep_every" 5
+}
+
 # outage PHASE: one outage, as the phase lays it out. The sessions open and run a turn each, held open; the runners in
 # CUT lose the control plane at once for ORBIT_MASS_DISCONNECT_SECONDS. Halfway through, every engine writes one event
 # more, and the runners still connected end their turns. Then the control plane is back, and every runner cut off must
 # be heard again, as the same process; every session must have stored what its engine wrote during the outage, end its
 # turn and answer one message more; and the reaper, having held the silence of those cut off for an outage, must have
-# reaped none of them. Sets failed when any of it does not hold. Each run of the phase is numbered (gateway-1,
-# partition-2, …), and names its sessions' release gates and its records.
+# reaped none of them, holding every sweep from the first crossing of its offline line on. Sets failed when any of it
+# does not hold. Each run of the phase is numbered (gateway-1, partition-2, …), and names its sessions' release gates
+# and its records.
 outage() {
   local phase=$1 run i line since_at cut_at restore_at reading held_lines reaped_lines reason first_reading="" last_reading=""
   local held_count=0 most_held=0 reaped=0 passed=0 n verdict lead released=0 mid ends deadline
   local status_during final_status during_at turn_at ran_seqs rows distinct first last runtime starts told
+  local kind a b c d e f first_past="" first_after="" past_then="" wrong=""
   local -a why=() verdicts=() log_from=()
-  local -A is_cut=() process0=() beat0=() back=() reconnected=()
+  local -A is_cut=() process0=() beat_cut=() crossing=() back=() reconnected=()
   # Each run of a phase has a number: its sessions' release gates and texts, and its records, are its own.
   run="$phase-$(($(awk -F'\t' -v p="$phase" 'index($1, p "-") == 1' "$outages" | wc -l) + 1))"
-  for i in $CUT; do is_cut[$i]=1; done
-  statuses=() silence_max=() crossed_at=()
+  statuses=() silence_max=()
   : > "$out/$run-samples.tsv"
   since_at="$(now)"
   [ "$(json "$(api switch get)" required)" = true ] || fail "$run: RUNNER_LINK_REQUIRED is off: run prepare"
@@ -394,12 +498,12 @@ outage() {
   # interval more, and each runner's last beat before the cut is its own, wherever it falls in the interval.
   sleep $((heartbeat + 2))
   for i in $(runners); do
-    line="$(presence "$i")"
-    process0[$i]="$(cut -d' ' -f2 <<< "$line")"
-    beat0[$i]="${line##* }"
+    process0[$i]="$(presence "$i" | cut -d' ' -f2)"
     log_from[$i]="$(log_lines "$i")"
   done
   sample "$run"
+  if [ "$phase" = partition ] && [ -n "$sweep_after" ]; then aim_cut "$run"; fi
+  for i in $CUT; do is_cut[$i]=1; done
 
   # The cut.
   if [ "$phase" = gateway ]; then kill_gateway; else cut_off $CUT; fi
@@ -409,14 +513,10 @@ outage() {
   else
     say "$run: runners $(for i in $CUT; do printf 'r%s ' "$i"; done)cut off, $(wc -w <<< "$CUT") of $count: every packet their processes send is dropped (nft table inet $nft_table)"
   fi
-  # Where each runner cut off stood: its last beat before the cut, and so when the reaper reads it as offline.
-  for i in $CUT; do
-    lead="$(awk -v a="$(epoch "$cut_at")" -v b="$(epoch "${beat0[$i]}")" 'BEGIN { printf "%.1f", a - b }')"
-    say "$run: runner r$i last beat $lead s before the cut: past the reaper's $offline_after s line at +$(awk -v l="$lead" -v o="$offline_after" 'BEGIN { printf "%.1f", o - l }') s"
-  done
 
   # The outage, sampled every 2 s. Halfway, every engine writes its event during the outage, and the runners still
-  # connected end their turns.
+  # connected end their turns; and by then each runner cut off has been heard last for good, with a beat that was on its
+  # way at the cut, so where it stood is read then: its last beat, and so when it crossed the reaper's offline line.
   mid=$((SECONDS + outage / 2))
   ends=$((SECONDS + outage))
   while [ $SECONDS -lt $ends ]; do
@@ -428,6 +528,12 @@ outage() {
       done
       released=1
       say "$run: halfway: every engine writes an event; the runners still connected end their turns"
+      for i in $CUT; do
+        beat_cut[$i]="$(presence "$i" | cut -d' ' -f3)"
+        lead="$(awk -v a="$(epoch "$cut_at")" -v b="$(epoch "${beat_cut[$i]}")" 'BEGIN { printf "%.1f", a - b }')"
+        crossing[$i]="$(date -u -d "@$(awk -v b="$(epoch "${beat_cut[$i]}")" -v o="$offline_after" 'BEGIN { printf "%.3f", b + o }')" +%Y-%m-%dT%H:%M:%S.%3NZ)"
+        say "$run: runner r$i last beat at ${beat_cut[$i]}, $lead s before the cut: past the reaper's $offline_after s line at ${crossing[$i]}, +$(awk -v l="$lead" -v o="$offline_after" 'BEGIN { printf "%.1f", o - l }') s"
+      done
     fi
     sleep 2
   done
@@ -494,6 +600,19 @@ outage() {
   fi
   # A hold the outage did not make (the startup grace, a heartbeat write that failed) says nothing of the mass silence.
   reason="$(sed -nE 's/.*whose runner looks offline \([^)]*\): //p' <<< "$held_lines" | grep -vE 'have been silent for over|went silent together' | head -n 1 || true)"
+  # The reaper's sweeps against the crossings: each held sweep since the first crossing, and whether it held from then on.
+  for i in $CUT; do printf 'r%s\t%s\t%s\n' "$i" "${crossing[$i]}" "${suuid[$i]}"; done > "$out/$run-crossings.tsv"
+  while IFS=$'\t' read -r kind a b c d e f; do
+    case "$kind" in
+      S) say "$run: sweep held at $a, +$b s after the first crossing: $c of the $(wc -w <<< "$CUT") runners cut off past the offline line$([ "$d" = none ] || echo ", $d crossing $e s later"); the reaper read: \"$f\"" ;;
+      V) first_past="$a at $b" first_after="$c" past_then="$d" wrong="$f"
+         if [ "$wrong" = none ]; then
+           say "$run: the reaper held from the first crossing on: $a crossed the offline line first, at $b; the first sweep after it held $c s later, naming its session, with $d of the $(wc -w <<< "$CUT") runners cut off past the line; and so did every sweep after it until the control plane was back, $e in all"
+         else
+           say "$run: the reaper did not hold from the first crossing on ($a, at $b): $wrong"
+         fi ;;
+    esac
+  done < <(sweeps "$run" "$restore_at")
 
   # Each session's account.
   for i in $(runners); do
@@ -542,7 +661,7 @@ outage() {
     [ -z "$told" ] || why+=("its runner was told it no longer holds it: $told")
     if [ ${#why[@]} -eq 0 ]; then verdict=PASS; passed=$((passed + 1)); else verdict="$(printf '%s; ' "${why[@]}")"; verdict="${verdict%; }"; fi
     printf '%s\tr%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$run" "$i" "${suuid[$i]}" "${is_cut[$i]:+cut}" \
-      "${silence_max[$i]:-}" "${crossed_at[$i]:-}" "$n" "$status_during" "${back[$i]:-}" "${reconnected[$i]:-}" \
+      "${silence_max[$i]:-}" "${crossing[$i]:-}" "$n" "$status_during" "${back[$i]:-}" "${reconnected[$i]:-}" \
       "$during_at" "$final_status" "$ran_seqs" "$verdict" >> "$sessions_table"
     if [ "$verdict" != PASS ]; then
       say "$run: r$i session ${sid[$i]}: $verdict"
@@ -556,12 +675,14 @@ outage() {
   [ "$reaped" = 0 ] || verdicts+=("$reaped session(s) reaped")
   [ "$held_count" -gt 0 ] || verdicts+=("the reaper held no sweep: the outage did not reach its offline line")
   [ -z "$reason" ] || verdicts+=("the reaper held for another reason than the mass silence: $reason")
+  [ "$wrong" = none ] || verdicts+=("the reaper did not hold from the first crossing on: ${wrong:-the sweeps could not be read}")
   [ "$passed" = "$count" ] || verdicts+=("$((count - passed)) of $count sessions did not hold")
   if [ ${#verdicts[@]} -eq 0 ]; then verdict=PASS; else verdict="$(printf '%s; ' "${verdicts[@]}")"; verdict="${verdict%; }"; fi
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$run" "$count" "$(wc -w <<< "$CUT")" "$outage" "$cut_at" \
-    "$restore_at" "$held_count" "$first_reading" "$reaped" "$passed/$count" "$verdict" >> "$outages"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$run" "$count" "$(wc -w <<< "$CUT")" "$outage" "$cut_at" \
+    "$restore_at" "$held_count" "$first_reading" "$first_past" "$first_after" "$past_then" "$reaped" "$passed/$count" \
+    "$verdict" >> "$outages"
   if [ "$verdict" = PASS ]; then
-    say "$run holds: $(wc -w <<< "$CUT") of $count runners out of reach for $outage s; the reaper held their silence in $held_count sweep(s) (\"$first_reading\") and reaped no session; every session ended its turn, stored what its engine wrote during the outage and answered its next message"
+    say "$run holds: $(wc -w <<< "$CUT") of $count runners out of reach for $outage s; the reaper held their silence in $held_count sweep(s) (\"$first_reading\"), from the first sweep after $first_past, $first_after s later, and reaped no session; every session ended its turn, stored what its engine wrote during the outage and answered its next message"
   else
     say "FAIL: $run: $verdict"
     failed=1
@@ -626,7 +747,7 @@ EOF
     api workspace "${rid[$i]}" "$(rdir "$i")/work" "$name-r$i" > "$(rdir "$i")/workspace.json" ||
       fail "creating runner r$i's workspace"
   done
-  printf 'phase\trunners\tcut\toutage_s\tcut_at\trestore_at\tsweeps_held\treaper_reading\treaped\tsessions_held\tverdict\n' > "$outages"
+  printf 'phase\trunners\tcut\toutage_s\tcut_at\trestore_at\tsweeps_held\treaper_reading\tfirst_past_offline_line\tfirst_held_sweep_after_s\tcut_past_line_then\treaped\tsessions_held\tverdict\n' > "$outages"
   printf 'phase\trunner\tsession\tcut\tsilence_max_s\tpast_offline_line_at\tsweeps_held\tstatus_during\theard_again_at\treconnect\tduring_event_stored_at\tstatus_after\tseqs\tverdict\n' > "$sessions_table"
   say "prepare holds: $count runners, each with a configuration directory and a unit of its own, working over the link"
 }
@@ -657,7 +778,7 @@ partition_phase() {
 }
 
 summary() {
-  say "summary: $(awk -F'\t' 'NR > 1 { printf "%s%s: %s of %s runners cut, %s sweeps held, %s reaped, %s sessions held: %s", (NR > 2 ? "; " : ""), $1, $3, $2, $7, $9, $10, $11 }' "$outages")"
+  say "summary: $(awk -F'\t' 'NR > 1 { printf "%s%s: %s of %s runners cut, %s sweeps held (the first %s s after %s, %s cut off past the line then), %s reaped, %s sessions held: %s", (NR > 2 ? "; " : ""), $1, $3, $2, $7, $10, $9, $11, $12, $13, $14 }' "$outages")"
 }
 
 case "${1:-}" in
@@ -671,6 +792,6 @@ case "${1:-}" in
   partition) partition_phase; summary; exit "$failed" ;;
   all) prepare; gateway_phase; partition_phase; summary; exit "$failed" ;;
   stop) reconnect; stop_runners ;;
-  -h|--help|"") sed -n '2,35p' "$0" ;;
+  -h|--help|"") sed -n '2,39p' "$0" ;;
   *) die "unknown phase $1 (see --help)" ;;
 esac
