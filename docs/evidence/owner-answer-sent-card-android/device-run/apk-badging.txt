@@ -1,0 +1,1 @@
+package: name='io.orbitd.android.debug' versionCode='1' versionName='0.1.0-internal.1' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'
