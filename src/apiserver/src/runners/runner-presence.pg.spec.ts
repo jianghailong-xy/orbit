@@ -7,9 +7,11 @@
  *       primary key, link_state CHECK and a foreign key to `runner` that cascades; 0447 added the two
  *       columns a link heartbeat's fast path reads (`changes`, `reconciled_at`);
  *   (2) RunnerPresenceService.fleetSilence counts the cell's runners heard from within the window and
- *       those of them now past the offline line, leaving out a runner that signed off and managed
- *       runners their manager is putting to sleep or has — read before anything else here makes
- *       runners, so no other runner of the cell can cross a line between its two reads;
+ *       those of them that have since missed a beat — 45 s without one, whether or not they are past
+ *       the offline line — while a runner beating every 30 s, a beat a few seconds late included, is
+ *       not silent; it leaves out a runner that signed off and managed runners their manager is
+ *       putting to sleep or has — read before anything else here makes runners, so no other runner of
+ *       the cell can cross a line between its two reads;
  *   (3) the reaper, sweeping this database through its real SQL and transactions: a RUNNING session
  *       whose runner went quiet is reaped `runner offline` in a cell where nearly every runner is heard,
  *       and still when a fifth or more of the runners signed off or were put to sleep by their manager
@@ -164,14 +166,19 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     assert.equal(await db.runnerPresence.count({ where: { runnerId: r.id } }), 0, 'the row goes with its runner');
   });
 
-  await t.test('(2) fleetSilence counts the runners heard from within the window, and those since gone quiet', async () => {
+  await t.test('(2) fleetSilence counts the runners heard from within the window, and those that have since missed a beat', async () => {
     const erin = await owner('erin');
     const presence = new RunnerPresenceService(db as unknown as PrismaService);
     const window = 10 * MINUTE;
     const before = await presence.fleetSilence(window);
     const now = Date.now();
-    const lastHeard = [20_000, 3 * MINUTE, 6 * MINUTE, 30 * MINUTE];
-    for (const [i, ago] of lastHeard.entries()) {
+    // Heard the way a runner beating every 30 s is, a beat a few seconds late included: counted, and not silent.
+    const beating = [0, 9_000, 18_000, 27_000, 35_000];
+    // A beat missed — most of these well inside the 90 s that calls one runner offline — or many: silent.
+    const missed = [50_000, 70_000, 3 * MINUTE, 6 * MINUTE, 10 * MINUTE + 30_000];
+    // Quiet for longer than the window past the silence line: in neither count.
+    const gone = [11 * MINUTE, 30 * MINUTE];
+    for (const [i, ago] of [...beating, ...missed, ...gone].entries()) {
       const r = await runner(erin.id, `fleet-${i}`, { lastHeartbeatAt: new Date(now - 40 * MINUTE) });
       await db.runnerPresence.create({ data: { runnerId: r.id, lastBeatAt: new Date(now - ago), linkState: 'HTTP' } });
     }
@@ -186,10 +193,13 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     const after = await presence.fleetSilence(window);
     assert.deepEqual(
       { heard: after.heard - before.heard, silent: after.silent - before.silent },
-      { heard: 4, silent: 3 },
-      'heard within 90 s + 10 min: 20 s, 3 min, 5 min (record) and 6 min ago; past the line: all but the 20 s one; '
+      { heard: beating.length + missed.length + 1, silent: missed.length + 1 },
+      'heard within 45 s + 10 min: the five beating, the five that missed a beat (50 s, 70 s, 3, 6 and 10.5 min ago) and '
+        + 'the record 5 min ago; past the 45 s line: all but the five beating; 11 and 30 min ago are past the window; '
         + 'the runner that signed off and the two managed runners put to sleep are not counted',
     );
+    // (3) reads a cell of its own: these runners go, before the ones beating here age past the line in it.
+    await db.runner.deleteMany({ where: { ownerId: erin.id } });
   });
 
   await t.test('(3) the reaper on this database: a silent runner’s run is reaped in a quiet cell and among runners quiet on purpose, and held while a fifth of the cell is silent or the reaper has just started', async () => {
@@ -226,13 +236,15 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
       return id;
     };
     const stateOf = (id: string) => db.session.findUniqueOrThrow({ where: { id }, select: { status: true, error: true } });
-    // Thirty runners heard five seconds ago: one silent runner among them is a machine, not an outage.
+    // Thirty runners heard five seconds ago: one silent runner among them is a machine, not an outage. They beat again
+    // before each reading below that wants them heard, as runners beating every 30 s would: none of them misses a beat.
     const crowd: string[] = [];
     for (let i = 0; i < 30; i += 1) {
       const r = await runner(fay.id, `crowd-${i}`, { lastHeartbeatAt: new Date(now - 10 * MINUTE) });
       await db.runnerPresence.create({ data: { runnerId: r.id, lastBeatAt: new Date(now - 5_000), linkState: 'HTTP' } });
       crowd.push(r.id);
     }
+    const crowdBeats = () => db.runnerPresence.updateMany({ where: { runnerId: { in: crowd } }, data: { lastBeatAt: new Date() } });
     const quiet = await presence.fleetSilence(10 * MINUTE);
     assert.ok(quiet.silent / quiet.heard < 0.2, `the cell is quiet: ${JSON.stringify(quiet)}`);
     const reaped = await running('reaped in a quiet cell');
@@ -241,6 +253,7 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
 
     // Fifteen runners sign off: a third of every runner here went quiet together, on purpose. That is
     // no outage — the cell's count leaves them out — and their runs are reaped as they always were.
+    await crowdBeats();
     const beforeSignOff = await presence.fleetSilence(10 * MINUTE);
     const signedOff: string[] = [];
     for (let i = 0; i < 15; i += 1) {
@@ -256,6 +269,7 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     assert.deepEqual(await stateOf(ofSignedOff), { status: RunStatus.FAILED, error: 'runner offline' });
 
     // Twelve managed runners put to sleep, or being put to sleep, by their manager: quiet on purpose too.
+    await crowdBeats();
     const beforeSleep = await presence.fleetSilence(10 * MINUTE);
     const asleep = [];
     for (let i = 0; i < 12; i += 1) asleep.push(await managedRunner(i % 2 === 0 ? 'SLEEPING' : 'DRAINING', 2 * MINUTE));
