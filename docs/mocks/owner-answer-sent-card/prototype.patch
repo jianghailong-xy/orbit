@@ -1,0 +1,444 @@
+diff --git a/src/web/src/components/OwnerAnswerLine.tsx b/src/web/src/components/OwnerAnswerLine.tsx
+index 1b90862..c8466ec 100644
+--- a/src/web/src/components/OwnerAnswerLine.tsx
++++ b/src/web/src/components/OwnerAnswerLine.tsx
+@@ -1,29 +1,31 @@
+ import type { ReactNode } from 'react';
+-import { ArrowRightOutlined } from '@ant-design/icons';
++import { ArrowRightOutlined, CheckCircleFilled, RightOutlined, SendOutlined } from '@ant-design/icons';
+ import type { OwnerAnswerCard } from '@orbit/shared';
+-import { sentToCoordinatorLine } from './EvidenceDecisionCard';
++import { decisionReceiptTime, EVIDENCE_DECISION_SENT_TO_COORDINATOR, sentToCoordinatorLine } from './EvidenceDecisionCard';
++import { markdownToPlainText } from '../lib/markdownText';
+ 
+ /**
+  * The turn telling a coordinator the owner's answer, drawn as one line — `Sent to the coordinator ·
+  * 08:29` — instead of the owner's own bubble (design: docs/mocks/coordinator-question-answered/
+  * board.html, 「落地」第 4 条 and 5-landing.png).
+  *
+- * The owner already reads what they answered on the question's own card. The turn under it is the
+- * platform handing that answer on, in words written for the AGENT — the question replayed in full,
+- * the answer, an ISO moment — and it used to be drawn as the owner's bubble: the question asked twice,
+- * signed with the reader's name. What the reader needs from it is that it was sent and when; the
+- * words stay one press away, behind the line, for whoever wants to check what the coordinator read.
+- *
+- * The line is the pill a version that waited for its coordinator leaves once it is handed over, and
+- * says it in the same words and the same clock (`sentToCoordinatorLine`), so a reader sees one
+- * sentence for one thing. A native disclosure rather than a dialog, so it still opens in a static
+- * export. The native clients draw the same line (OrbitKit `OwnerAnswer`), and
+- * `OwnerAnswerCopyParityTests.swift` holds their words to this file's.
++ * PROTOTYPE (docs/mocks/owner-answer-sent-card): `oa-variant` in localStorage picks the look the
++ * board draws — `today` (the pill), `A` (a delivery card on the reader's side), `B` (nothing here:
++ * the question's own card says it was sent), `C` (a full-width card in the question card's shape).
+  */
+ 
+ /** The heading over the words the coordinator was handed, once the line is opened. */
+ export const OWNER_ANSWER_TOLD = 'What the coordinator was told';
+ 
++export const OWNER_ANSWER_VARIANT =
++  (typeof localStorage !== 'undefined' && localStorage.getItem('oa-variant')) || 'today';
++
++/** "Your answer to “…”": which question, on one line, for a card read away from its question. */
++function answerTo(card: OwnerAnswerCard): string | null {
++  if (card.kind === 'DONE_REQUEST') return 'Your answer to its request to record the project done';
++  return card.question ? `Your answer to “${markdownToPlainText(card.question)}”` : null;
++}
++
+ export function OwnerAnswerLine({
+   card,
+   text,
+@@ -42,6 +44,79 @@ export function OwnerAnswerLine({
+   /** The queue's own line, while the turn still waits behind a running one. */
+   queued?: ReactNode;
+ }) {
++  const variant = OWNER_ANSWER_VARIANT;
++  const to = answerTo(card);
++  if (variant === 'B' && !queued && !undelivered) {
++    // Said on the question's own card; the turn keeps its anchor for ⌘F and the sticky bar.
++    return <div className="oa-merged" data-seq={seq} data-owner-answer={card.itemId} />;
++  }
++  if (variant === 'A') {
++    return (
++      <div className="oa-card-wrap">
++        <div
++          className={`oa-card${queued ? ' is-queued' : ''}`}
++          data-seq={seq}
++          data-owner-answer={card.itemId}
++        >
++          <div className="oa-card-head">
++            <span className="oa-card-mark"><SendOutlined /></span>
++            <span>{EVIDENCE_DECISION_SENT_TO_COORDINATOR}</span>
++            <span className="oa-card-time">{decisionReceiptTime(card.deliveredAt)}</span>
++          </div>
++          {to ? <div className="oa-card-to">{to}</div> : null}
++          {card.answer ? (
++            <div className="oa-card-answer">
++              <CheckCircleFilled className="oa-card-tick" aria-hidden="true" />
++              <span>{card.answer}</span>
++            </div>
++          ) : null}
++          {undelivered && (
++            <div className="oa-card-undelivered">The session has not confirmed it received this.</div>
++          )}
++          <details className="oa-card-raw">
++            <summary>{OWNER_ANSWER_TOLD}</summary>
++            <pre>{text}</pre>
++            {attached}
++          </details>
++          {queued && <div className="oa-card-queued">{queued}</div>}
++        </div>
++      </div>
++    );
++  }
++  if (variant === 'C') {
++    return (
++      <div className={`oa-twin${queued ? ' is-queued' : ''}`} data-seq={seq} data-owner-answer={card.itemId}>
++        <details className="oa-twin-fold">
++          <summary className="oa-twin-card">
++            <span className="oa-twin-head">
++              <span className="oa-twin-icon" aria-hidden="true"><SendOutlined /></span>
++              <span className="oa-twin-heading">{EVIDENCE_DECISION_SENT_TO_COORDINATOR}</span>
++              <span className="oa-twin-time">{decisionReceiptTime(card.deliveredAt)}</span>
++            </span>
++            {to ? <span className="oa-twin-to">{to}</span> : null}
++            {card.answer ? (
++              <span className="oa-twin-answer">
++                <CheckCircleFilled className="oa-twin-tick" aria-hidden="true" />
++                <span>{card.answer}</span>
++              </span>
++            ) : null}
++            <span className="oa-twin-open">
++              {OWNER_ANSWER_TOLD}
++              <RightOutlined className="oa-twin-caret" aria-hidden="true" />
++            </span>
++          </summary>
++          <div className="oa-twin-told">
++            <pre>{text}</pre>
++            {attached}
++          </div>
++        </details>
++        {undelivered && (
++          <div className="owner-answer-undelivered">The session has not confirmed it received this.</div>
++        )}
++        {queued && <div className="owner-answer-queued">{queued}</div>}
++      </div>
++    );
++  }
+   return (
+     <div className={`owner-answer${queued ? ' is-queued' : ''}`} data-seq={seq} data-owner-answer={card.itemId}>
+       <details className="owner-answer-fold">
+diff --git a/src/web/src/lib/ownerAnswer.ts b/src/web/src/lib/ownerAnswer.ts
+index e5aeb4c..0c93d06 100644
+--- a/src/web/src/lib/ownerAnswer.ts
++++ b/src/web/src/lib/ownerAnswer.ts
+@@ -28,5 +28,12 @@ export function parseOwnerAnswer(payload: unknown): OwnerAnswerCard | null {
+   ) {
+     return null;
+   }
+-  return { itemId: card.itemId, kind: card.kind, sessionId: card.sessionId, deliveredAt: card.deliveredAt };
++  return {
++    itemId: card.itemId,
++    kind: card.kind,
++    sessionId: card.sessionId,
++    deliveredAt: card.deliveredAt,
++    ...(typeof card.question === 'string' && card.question !== '' ? { question: card.question } : {}),
++    ...(typeof card.answer === 'string' && card.answer !== '' ? { answer: card.answer } : {}),
++  };
+ }
+diff --git a/src/shared/src/project-progress.ts b/src/shared/src/project-progress.ts
+index 179a2fb..191e52d 100644
+--- a/src/shared/src/project-progress.ts
++++ b/src/shared/src/project-progress.ts
+@@ -1361,6 +1361,13 @@ export interface OwnerAnswerCard {
+    * coordinator rotated in after the answer is when IT was told, not when the owner answered.
+    */
+   deliveredAt: string;
++  /**
++   * PROTOTYPE (docs/mocks/owner-answer-sent-card): the question as it was asked and the answer in
++   * the words the turn tells it (`answerInWords`), read off the item row with the card, so the
++   * delivery card can say what was sent without parsing the agent's words.
++   */
++  question?: string;
++  answer?: string;
+ }
+ 
+ /**
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index e990295..1611338 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -25621,3 +25621,214 @@ button.agent-progress-agent:hover {
+     font-size: 26px;
+   }
+ }
++/* PROTOTYPE (docs/mocks/owner-answer-sent-card) ─────────────────────────────────────────────────
++   A: the owner's answer handed to the coordinator, as a delivery card on the reader's side — the
++   shape the exception item, the task's start and another session's message already take (.oic,
++   .tsc, .smc) — in green, so it never reads as the blue question card above it. */
++.oa-card-wrap {
++  display: flex;
++  justify-content: flex-end;
++  margin: 8px 0;
++}
++.oa-card {
++  width: min(560px, 88%);
++  padding: 10px 12px;
++  border: 1px solid var(--success-border);
++  border-radius: 12px;
++  background: color-mix(in srgb, var(--success-bg) 60%, var(--bg-raised));
++  color: var(--text-1);
++}
++.oa-card.is-queued {
++  border-style: dashed;
++}
++.oa-card-head {
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  color: var(--success);
++  font-weight: 600;
++}
++.oa-card-mark {
++  flex: none;
++  display: inline-flex;
++}
++.oa-card-time {
++  margin-left: auto;
++  flex: none;
++  color: var(--text-3);
++  font-size: 12px;
++  font-weight: 400;
++}
++.oa-card-to {
++  margin-top: 4px;
++  overflow: hidden;
++  white-space: nowrap;
++  text-overflow: ellipsis;
++  color: var(--text-3);
++  font-size: 12.5px;
++}
++.oa-card-answer {
++  display: flex;
++  align-items: baseline;
++  gap: 6px;
++  margin-top: 2px;
++  font-size: 14px;
++}
++.oa-card-tick {
++  flex: none;
++  color: var(--success);
++}
++.oa-card-undelivered {
++  margin-top: 4px;
++  color: var(--warning);
++  font-size: 12px;
++}
++.oa-card-raw {
++  margin-top: 8px;
++  padding-top: 6px;
++  border-top: 1px solid var(--success-border);
++  font-size: 12px;
++}
++.oa-card-raw summary {
++  color: var(--text-2);
++  cursor: pointer;
++}
++.oa-card-raw pre {
++  max-height: 320px;
++  margin: 6px 0 0;
++  padding: 8px;
++  overflow: auto;
++  border-radius: 6px;
++  background: var(--fill-inset);
++  font-size: 11px;
++  white-space: pre-wrap;
++  word-break: break-word;
++}
++.oa-card-queued {
++  margin-top: 6px;
++}
++.oa-card-queued .chat-queued-meta {
++  flex-wrap: wrap;
++  justify-content: flex-start;
++  row-gap: 2px;
++}
++/* B: nothing in the stream — the question's card says where its answer went. */
++.oa-merged {
++  height: 6px;
++}
++.answered-question-open.is-sent {
++  gap: 12px;
++}
++.answered-question-sent {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  min-width: 0;
++  color: var(--success);
++  font-weight: 500;
++}
++.answered-question-open-link {
++  display: inline-flex;
++  align-items: center;
++  gap: 8px;
++  flex: none;
++}
++/* C: a card in the question card's own shape, full width under it, white and green instead of blue. */
++.oa-twin {
++  margin: 8px 0;
++}
++.oa-twin-card {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++  padding: 12px 14px;
++  border: 1px solid var(--success-border);
++  border-radius: 10px;
++  background: var(--bg-raised);
++  list-style: none;
++  cursor: pointer;
++}
++.oa-twin-card::-webkit-details-marker {
++  display: none;
++}
++.oa-twin.is-queued .oa-twin-card {
++  border-style: dashed;
++}
++.oa-twin-head {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++}
++.oa-twin-icon {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  flex: none;
++  width: 22px;
++  height: 22px;
++  border-radius: 6px;
++  background: var(--success-bg);
++  color: var(--success);
++  font-size: 12px;
++}
++.oa-twin-heading {
++  min-width: 0;
++  font-weight: 600;
++  font-size: 15px;
++}
++.oa-twin-time {
++  margin-left: auto;
++  flex: none;
++  font-size: 12px;
++  color: var(--text-3);
++}
++.oa-twin-to {
++  overflow: hidden;
++  white-space: nowrap;
++  text-overflow: ellipsis;
++  font-size: 12.5px;
++  line-height: 1.55;
++  color: var(--text-3);
++}
++.oa-twin-answer {
++  display: flex;
++  align-items: baseline;
++  gap: 6px;
++  font-size: 14px;
++  color: var(--text-1);
++}
++.oa-twin-tick {
++  flex: none;
++  color: var(--success);
++}
++.oa-twin-open {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  padding-top: 8px;
++  border-top: 1px solid var(--success-border);
++  font-size: 13px;
++  font-weight: 600;
++  color: var(--success);
++}
++.oa-twin-caret {
++  transition: transform 0.15s ease;
++}
++.oa-twin-fold[open] .oa-twin-caret {
++  transform: rotate(90deg);
++}
++.oa-twin-told {
++  margin-top: 6px;
++  font-size: 12px;
++}
++.oa-twin-told pre {
++  max-height: 320px;
++  margin: 0;
++  padding: 8px;
++  overflow: auto;
++  border-radius: 6px;
++  background: var(--fill-inset);
++  font-size: 11px;
++  white-space: pre-wrap;
++  word-break: break-word;
++}
+diff --git a/src/web/src/components/CoordinatorQuestionCard.tsx b/src/web/src/components/CoordinatorQuestionCard.tsx
+index e339810..377a439 100644
+--- a/src/web/src/components/CoordinatorQuestionCard.tsx
++++ b/src/web/src/components/CoordinatorQuestionCard.tsx
+@@ -6,6 +6,7 @@ import {
+   QuestionCircleFilled,
+   RightOutlined,
+   RollbackOutlined,
++  SendOutlined,
+ } from '@ant-design/icons';
+ import Markdown from 'react-markdown';
+ import remarkGfm from 'remark-gfm';
+@@ -16,7 +17,7 @@ import type {
+   ProjectOpenItemsView,
+ } from '@orbit/shared';
+ import { CardActionButton, CardActions } from './CardAction';
+-import { decisionReceiptTime } from './EvidenceDecisionCard';
++import { decisionReceiptTime, sentToCoordinatorLine } from './EvidenceDecisionCard';
+ import { ReviewCard } from './ReviewCard';
+ import { Alert } from './ui/Alert';
+ import { Textarea } from './ui/Textarea';
+@@ -93,6 +94,8 @@ export const OWN_ANSWER_PROMPT = 'Or type your own answer…';
+ export const OTHER_OPTION = 'Other — say it in my own words';
+ export const RECOMMENDED = 'Recommended';
+ export const ANSWERED_HEADING = 'Answered';
++/** PROTOTYPE: option B draws the delivery on the question's card. */
++const SENT_ON_CARD = typeof localStorage !== 'undefined' && localStorage.getItem('oa-variant') === 'B';
+ /** An answer with nobody to tell yet: R11 tells the next coordinator when one is bound. */
+ export const WAITING_FOR_COORDINATOR = 'Waiting for this project’s next coordinator';
+ export const DELIVERED_TO_COORDINATOR = 'Delivered to the current coordinator';
+@@ -551,10 +554,25 @@ export function AnsweredQuestionCard({
+             ) : null}
+             {lines.withdrew ? <span className="answered-question-withdrew">{lines.withdrew}</span> : null}
+             {lines.reason ? <span className="answered-question-reason">{lines.reason}</span> : null}
+-            <span className="answered-question-open">
+-              {VIEW_DETAILS}
+-              <RightOutlined aria-hidden="true" />
+-            </span>
++            {/* PROTOTYPE (docs/mocks/owner-answer-sent-card, option B): the card says where its answer
++                went, in the line its delivery turn used to be drawn as. */}
++            {SENT_ON_CARD && record.delivery ? (
++              <span className="answered-question-open is-sent">
++                <span className="answered-question-sent">
++                  <SendOutlined aria-hidden="true" />
++                  {sentToCoordinatorLine(record.delivery.at, now)}
++                </span>
++                <span className="answered-question-open-link">
++                  {VIEW_DETAILS}
++                  <RightOutlined aria-hidden="true" />
++                </span>
++              </span>
++            ) : (
++              <span className="answered-question-open">
++                {VIEW_DETAILS}
++                <RightOutlined aria-hidden="true" />
++              </span>
++            )}
+           </>
+         ),
+       }}
