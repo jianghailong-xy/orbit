@@ -477,6 +477,54 @@ func TestWithNoCompletionKeptTheTurnIsHandedOutAgain(t *testing.T) {
 	}
 }
 
+// Over the link the same: with nothing kept, the first fetch hands turn-0 back with its resume continuation, the engine
+// runs it, and its completion goes once, from that run.
+func TestWithNoCompletionKeptTheTurnIsHandedOutAgainOverTheLink(t *testing.T) {
+	r, in := newLinkEventsRig(t)
+	const continuation = "Your previous run of this message was interrupted because its runner restarted."
+	var mu sync.Mutex
+	var completions, fetchesBefore int
+	s := superviseClaudeSessionOverLinkVia(t, r, newSessionPool(4), context.Background(), func(s *supervisedSession) {
+		s.job.MaxSeq = 9
+		in.preload(s.job.SessionID, seqRangeU(1, 9)...)
+		s.mu.Lock()
+		s.inbox = []RunInboxResponse{{TurnID: "turn-0", Kind: "message", Content: continuation}}
+		s.mu.Unlock()
+		serve := r.g.backend
+		r.g.mu.Lock()
+		r.g.backend = func(c *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResult {
+			if strings.HasSuffix(rpc.GetTunnel().GetPath(), "/turn-complete") {
+				var req TurnCompleteRequest
+				_ = json.Unmarshal(rpc.GetTunnel().GetJsonBody(), &req)
+				mu.Lock()
+				if req.TurnID == "turn-0" {
+					completions++
+					fetchesBefore = len(r.g.rpcsTo("/runner/sessions/" + s.job.SessionID + "/inbox"))
+				}
+				mu.Unlock()
+			}
+			return serve(c, rpc)
+		}
+		r.g.mu.Unlock()
+	}, oneTurnScript("answered again")...)
+	s.awaitParked("turn-0")
+	var handed []string
+	for _, frame := range s.fake.Stdin() {
+		if frame["type"] == frameUser {
+			handed = append(handed, userFrameText(t, frame))
+		}
+	}
+	if len(handed) != 1 || !strings.Contains(handed[0], continuation) {
+		t.Errorf("over the link the engine was handed %q, want turn-0's continuation", handed)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if completions != 1 || fetchesBefore == 0 {
+		t.Errorf("over the link turn-0's completion went %d time(s), after %d fetch(es); want once, after the fetch that handed it back",
+			completions, fetchesBefore)
+	}
+}
+
 // A kept completion of a failed turn is the run's end, as the failed turn's own acknowledgement is: the control plane
 // answers it with a terminal status, and the supervisor returns without an engine.
 func TestAKeptCompletionOfAFailedTurnEndsTheRun(t *testing.T) {
