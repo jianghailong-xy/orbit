@@ -1932,7 +1932,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// lightweight until their first real claim instead of starting one flush
 			// ticker, background tailer, and transcript watcher per cold session.
 			// Jobs adopted for the session across a self-update need their host now, not at its next claim.
-			if !activeAtRegister && !pool.hasAdoptedJobs(j.SessionID) && !pool.waitActive(live, jobCtx, loopCtx) {
+			// What an earlier process left in the session's spool goes now too (link_events_idle.go).
+			if !activeAtRegister && !pool.hasAdoptedJobs(j.SessionID) && !waitActiveSendingHeld(t, pool, live, j.SessionID, jobCtx, loopCtx) {
 				if loopCtx.Err() != nil || jobCtx.Err() == nil {
 					return
 				}
