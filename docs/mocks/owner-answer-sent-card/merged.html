@@ -1,0 +1,145 @@
+<!doctype html>
+<!-- DESIGN MOCK (2026-10-27), follow-up to board.html. Owner, 10-27: 「不能合并为一个卡吗，answered 我认为已经回答
+     agent 了，是否需要再显示一个我发给 agent 的卡片」. Option M: the Answered card is the only thing drawn — the turn
+     that hands the answer to the coordinator draws that card (looked up by item in the ended questions the
+     conversation already reads) instead of the pill, and the card is not inserted a second time at the moment
+     of answering. Frames are real web pages from the prototype tree (prototype.patch, `oa-variant` = M),
+     same kit and sample data as board.html. Render: /var/tmp/owner-answer-card-mock/scripts/render.mjs merged.html -->
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>合并成一张卡：Answered 就是交给协调者的那条 — Web 设计图</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; width: max-content; padding: 40px 48px 48px; background: #e9e9ee; color: #16161a;
+         font: 15px/1.6 "Inter", "Noto Sans SC", sans-serif; letter-spacing: -.005em; -webkit-font-smoothing: antialiased; }
+  .b-part { background: #f7f7f9; border-radius: 26px; padding: 30px 36px 34px; width: 1530px; }
+  .b-part + .b-part { margin-top: 30px; }
+  h1 { font-size: 27px; line-height: 1.3; margin: 0 0 10px; letter-spacing: -.015em; }
+  h2.b-h { font-size: 21px; letter-spacing: -.015em; margin: 0 0 6px; display: flex; gap: 10px; align-items: center; }
+  .b-lede { color: #4a4a52; margin: 0 0 8px; }
+  .b-sub { color: #4a4a52; margin: 0 0 20px; }
+  .b-lede b, .b-sub b, .b-notes b, .b-q b, .b-land b, td b { color: #16161a; }
+  code { font: 12.5px/1 "DejaVu Sans Mono", ui-monospace, monospace; background: rgba(0,0,0,.06); padding: 2px 5px; border-radius: 5px; }
+  .tag { white-space: nowrap; display: inline-block; font-size: 12.5px; font-weight: 700; border-radius: 999px; padding: 2px 11px; }
+  .tag.now { background: #ffe1dc; color: #b3261e; }
+  .tag.rec { background: #d7f2dd; color: #1d6b31; }
+  .tag.alt { background: #e6e6ec; color: #3a3a40; }
+  .tag.open { background: #fff0d1; color: #8a5300; }
+  .b-grid { display: grid; grid-template-columns: 691px 691px; column-gap: 76px; row-gap: 30px; align-items: start; }
+  .b-frame { margin: 0; }
+  .b-frame figcaption { font-size: 14px; color: #3a3a40; font-weight: 650; margin: 0 0 9px; min-height: 22px; }
+  .b-shot { position: relative; border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 10px 30px rgba(0,0,0,.08); }
+  .b-shot img { display: block; width: 100%; height: auto; border-radius: 12px; }
+  .b-ring { position: absolute; border: 2px dashed #f5222d; border-radius: 9px; pointer-events: none; }
+  .b-tick { position: absolute; height: 2px; background: #f5222d; border-radius: 1px; }
+  .b-badge { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #f5222d; color: #fff;
+             font: 700 12px/22px "Inter", sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+  ul.b-notes { margin: 22px 0 0; padding: 0; list-style: none; color: #2a2a30; font-size: 14.5px; line-height: 1.65; columns: 2; column-gap: 76px; }
+  ul.b-notes.one { columns: 1; margin-top: 0; }
+  ul.b-notes li { margin: 0 0 9px; padding-left: 28px; position: relative; break-inside: avoid; }
+  ul.b-notes li::before { content: '•'; position: absolute; left: 9px; color: #8a8a92; }
+  ul.b-notes li.n::before { content: attr(data-n); left: 0; top: 2px; width: 20px; height: 20px; border-radius: 50%; background: #f5222d;
+         color: #fff; font: 700 11.5px/20px "Inter", sans-serif; text-align: center; }
+  .b-box { background: #fff; border-radius: 16px; padding: 16px 22px 12px; box-shadow: 0 1px 0 rgba(0,0,0,.05); }
+  .b-box + .b-box { margin-top: 18px; }
+  table.b-cmp { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  table.b-cmp th { text-align: left; color: #3a3a40; font-weight: 700; padding: 8px 12px; border-bottom: 2px solid #ececf0; }
+  table.b-cmp th.rec { color: #1d6b31; }
+  table.b-cmp td { padding: 9px 12px; border-bottom: 1px solid #f1f1f4; vertical-align: top; }
+  table.b-cmp tr:last-child td { border-bottom: 0; }
+  table.b-cmp td:first-child { font-weight: 650; white-space: nowrap; color: #3a3a40; }
+  table.b-cmp td.good { background: #f1faf3; }
+  table.b-cmp td.bad { background: #fdf3f2; }
+  .b-q h3 { font-size: 16px; margin: 0 0 6px; display: flex; gap: 8px; align-items: center; }
+  .b-q p { margin: 4px 0 6px; font-size: 14.5px; color: #2a2a30; }
+  ol.b-land { margin: 0; padding-left: 22px; font-size: 14.5px; line-height: 1.7; }
+  ol.b-land li { margin: 0 0 10px; }
+  .b-cost { display: inline-block; font-size: 12px; font-weight: 700; color: #3a3a40; background: #e6e6ec; border-radius: 6px; padding: 0 7px; margin-left: 6px; }
+  pre.b-patch { margin: 16px 0 0; padding: 14px 18px; border-radius: 12px; background: #1f1f24; color: #dedee4; max-height: 1180px;
+                font: 12px/1.5 "DejaVu Sans Mono", ui-monospace, monospace; white-space: pre; overflow: hidden; }
+  pre.b-patch .a { color: #95de64; } pre.b-patch .d { color: #ff9c9c; } pre.b-patch .h { color: #8fb8ff; }
+</style>
+<script src="marks.js"></script>
+</head>
+<body>
+
+<section id="part-1" class="b-part">
+  <h1>合并成一张卡：Answered 本身就代表你的回答已经交给协调者</h1>
+  <p class="b-lede">照你的意见改：<b>不再单独画「发给 agent」的东西</b>，对话里只留 Answered 这一张卡，下面的胶囊去掉。只有两种情况卡上会多一行：协调者正忙、你的回答还在排队；或者协调者没有确认收到。协调者收到的原文放进 View details 里。图都是真实页面截图（原型补丁里的方案 M），数据是样例。</p>
+  <div class="b-grid">
+    <figure class="b-frame" data-shot="M-adjacent" data-marks="1:1,2:2">
+      <figcaption>协调者空闲：只剩这一张卡</figcaption>
+      <div class="b-shot"><img src="shots/M-adjacent.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" data-shot="M-apart" data-marks="3:1">
+      <figcaption>协调者正忙：11:30 答，11:41 它这一轮做完才读到</figcaption>
+      <div class="b-shot"><img src="shots/M-apart.png" alt=""></div>
+    </figure>
+  </div>
+  <ul class="b-notes">
+    <li class="n" data-n="1">和今天的 Answered 卡一模一样，只是下面那条「Sent to the coordinator」胶囊没了。</li>
+    <li class="n" data-n="2">紧接着就是协调者读到回答后开始的这一轮（Worked for 1m 28s），所以这张卡同时也是这一轮的开头。</li>
+    <li class="n" data-n="3">卡画在协调者<b>真正读到</b>的位置（11:41，P2 那一轮之后），卡上仍写 11:30（你回答的时间）。今天这张卡会插在 P2 那一轮中间，看起来好像协调者一边查 P2 一边已经收到了答案，其实它那时还没读到。</li>
+    <li>没有协调者可交时（项目暂时没有协调者），照旧画在你回答的那一刻，卡上写「Waiting for this project’s next coordinator」，这一点不变。</li>
+  </ul>
+</section>
+
+<section id="part-2" class="b-part">
+  <h2 class="b-h"><span class="tag rec">排队中 · View details</span>卡上只在需要时多一行</h2>
+  <div class="b-grid">
+    <figure class="b-frame" data-shot="M-queued" data-marks="1:1,2:2">
+      <figcaption>还在排队：协调者这一轮还没做完</figcaption>
+      <div class="b-shot"><img src="shots/M-queued.png" alt=""></div>
+    </figure>
+    <figure class="b-frame" data-shot="M-details" data-marks="3:1,4:2">
+      <figcaption>点 View details</figcaption>
+      <div class="b-shot"><img src="shots/M-details.png" alt=""></div>
+    </figure>
+  </div>
+  <ul class="b-notes">
+    <li class="n" data-n="1">协调者还没读到时，卡停在对话最底下，用虚线框，和排队中的消息一个样子。</li>
+    <li class="n" data-n="2">多一行「Queued — the coordinator reads it when its current turn ends」。协调者一读到，这一行消失、虚线变实线，卡留在原地，它的回复接在下面。</li>
+    <li class="n" data-n="3">协调者收到的原文，折叠放在详情里，平时看不到，要核对时再点开。</li>
+    <li class="n" data-n="4">底栏照旧：谁答的、几点答的，以及 Delivered to the current coordinator。</li>
+    <li><b>不变的两处</b>：完成项目的请求被你回了 Not yet… 时，对话里没有对应的卡可以合并，还是画成一行；超过最近 50 条的旧回答读不到卡，也还是画成一行。</li>
+    <li><b>落地</b>：Web 小（对话里那一轮改画它对应的 Answered 卡，同一张卡不再按回答时刻另插一次，详情里加原文）；服务端不用改；iOS / macOS / Android 照同样规则改，OwnerAnswerCopyParityTests 和 web 在同一次提交里一起改。</li>
+  </ul>
+</section>
+
+<script>
+  // Numbered marks over each shot, from the boxes the capture kit measured (marks.js): "badge:box".
+  window.drawMarks = () => {
+    for (const fig of document.querySelectorAll('[data-shot]')) {
+      const m = window.SHOT_MARKS[fig.dataset.shot];
+      const holder = fig.querySelector('.b-shot');
+      holder.querySelectorAll('.b-ring, .b-badge, .b-tick').forEach((e) => e.remove());
+      const scale = holder.clientWidth / m.w;
+      for (const spec of (fig.dataset.marks || '').split(',').filter(Boolean)) {
+        const [n, key, at] = spec.split(':');
+        const b = m.boxes[key];
+        if (!b) { console.error('missing box', fig.dataset.shot, key); continue; }
+        const badge = document.createElement('div');
+        badge.className = 'b-badge';
+        badge.textContent = n;
+        if (at === 'l') {
+          // Rows too close together for rings: the number sits just left of its row, pointing at it.
+          const top = (b[1] + b[3] / 2) * scale - 11;
+          Object.assign(badge.style, { left: `${Math.max(2, b[0] * scale - 36)}px`, top: `${top}px` });
+          const tick = document.createElement('div');
+          tick.className = 'b-tick';
+          Object.assign(tick.style, { left: `${Math.max(2, b[0] * scale - 36) + 22}px`, top: `${top + 10}px`, width: `${Math.max(4, 36 - 22 - 3)}px` });
+          holder.append(badge, tick);
+          continue;
+        }
+        const pad = 4;
+        const x = b[0] * scale - pad, y = b[1] * scale - pad;
+        const ring = document.createElement('div');
+        ring.className = 'b-ring';
+        Object.assign(ring.style, { left: `${x}px`, top: `${y}px`, width: `${b[2] * scale + 2 * pad}px`, height: `${Math.max(b[3] * scale, 6) + 2 * pad}px` });
+        Object.assign(badge.style, { left: `${Math.max(-8, x - 13)}px`, top: `${Math.max(-8, y - 13)}px` });
+        holder.append(ring, badge);
+      }
+    }
+  };
+  window.addEventListener('load', () => window.drawMarks());
+</script>
+</body></html>
