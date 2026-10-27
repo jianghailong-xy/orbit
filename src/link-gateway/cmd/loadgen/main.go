@@ -50,6 +50,8 @@ type options struct {
 	// session's beats on which its worktree snapshot moved.
 	volatile      bool
 	volatileEdits float64
+	// liveRate is the live deltas a second across the fleet, on the sessions somebody watches (live.go); 0 sends none.
+	liveRate float64
 }
 
 // fleetRunner is one line of the fleet file (loadgen-seed.sh): a runner, the credential and process it connects with,
@@ -80,6 +82,8 @@ type loadgen struct {
 	ever           atomic.Int64
 	notesMu        sync.Mutex
 	notes          map[string]int64
+	// watched is how many of the fleet's running sessions somebody watches live now, as the gateway said (live.go).
+	watched atomic.Int64
 }
 
 func main() { os.Exit(run(os.Args[1:])) }
@@ -107,6 +111,7 @@ func run(args []string) int {
 	fs.BoolVar(&o.spreadRenewals, "spread-renewals", true, "renew each runner's first connection at a random point of its token's life, as a fleet that has run for a while does")
 	fs.BoolVar(&o.volatile, "volatile", false, "move the reports that move in production at the runner's own rates: plan usage, directory probes, running sessions' worktrees, engine checks (volatile.go)")
 	fs.Float64Var(&o.volatileEdits, "volatile-edits", 0.5, "with -volatile, the share of a running session's beats on which its worktree snapshot moved")
+	fs.Float64Var(&o.liveRate, "live-rate", 0, "live reply deltas per second across the fleet, shared by the running sessions somebody watches (live.go); 0 sends none")
 	fs.Uint64Var(&o.seed, "seed", 1, "the random seed")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -115,8 +120,8 @@ func run(args []string) int {
 		fmt.Fprintln(os.Stderr, "loadgen needs -fleet, -api and -out")
 		return 2
 	}
-	if o.flushMax < o.flushMin || o.maxBatch < 1 || o.rampRate <= 0 {
-		fmt.Fprintln(os.Stderr, "loadgen: -flush-max must be at least -flush-min, -max-batch at least 1, -ramp-rate above 0")
+	if o.flushMax < o.flushMin || o.maxBatch < 1 || o.rampRate <= 0 || o.liveRate < 0 {
+		fmt.Fprintln(os.Stderr, "loadgen: -flush-max must be at least -flush-min, -max-batch at least 1, -ramp-rate above 0, -live-rate not below 0")
 		return 2
 	}
 	if err := os.MkdirAll(o.out, 0o755); err != nil {
@@ -247,6 +252,9 @@ func (g *loadgen) run(ctx context.Context) (*summary, int) {
 	started := time.Now()
 	fmt.Fprintf(os.Stderr, "loadgen: %d runners, %d active sessions, %.0f events/s (%.3f per session), ramp %.0f/s, steady window %s\n",
 		len(g.runners), g.activeSessions, o.eventRate, g.perSessionRate, o.rampRate, o.duration)
+	if g.live() {
+		fmt.Fprintf(os.Stderr, "loadgen: %.0f live deltas/s across the sessions somebody watches\n", o.liveRate)
+	}
 
 	// The ramp: one first connection per tick.
 	rampCtx, rampDone := context.WithCancel(ctx)
@@ -286,7 +294,7 @@ func (g *loadgen) run(ctx context.Context) (*summary, int) {
 		lastFold = now
 		line := seriesLine{At: now.UTC().Format(time.RFC3339), ElapsedS: round1(now.Sub(started).Seconds()), Phase: p,
 			Connected: connected, counters: w.counters, AckBatch: w.ackBatch.summary(), AckEvent: w.ackEvent.summary(),
-			BeatAck: w.beatAck.summary(), Errors: w.errors}
+			BeatAck: w.beatAck.summary(), Errors: w.errors, Watched: g.watched.Load()}
 		if span > 0 {
 			line.EventRate = round1(float64(w.EventsAcked) / span)
 			line.BeatRate = round1(float64(w.HeartbeatAcks) / span)
@@ -386,7 +394,7 @@ func (g *loadgen) run(ctx context.Context) (*summary, int) {
 			RampRate: o.rampRate, Duration: o.duration.String(), Settle: o.settle.String(), FlushMin: o.flushMin.String(), FlushMax: o.flushMax.String(),
 			MaxBatch: o.maxBatch, RenewBefore: o.renewBefore.String(), SpreadRenewals: o.spreadRenewals, API: o.api,
 			LinkURL: o.linkURL, Connect: o.connect, Seed: o.seed, EventCycle: cycle, BoundaryEvent: "tool_result",
-			Volatile: o.volatile, VolatileEdits: o.volatileEdits,
+			Volatile: o.volatile, VolatileEdits: o.volatileEdits, LiveRate: o.liveRate,
 		},
 		StartedAt: started.UTC().Format(time.RFC3339Nano), EndedAt: ended.UTC().Format(time.RFC3339Nano),
 		RampSeconds: round1(rampSeconds), EverConnected: everConnected,
@@ -447,6 +455,8 @@ type summaryConfig struct {
 	BoundaryEvent  string   `json:"boundaryEvent"`
 	Volatile       bool     `json:"volatile"`
 	VolatileEdits  float64  `json:"volatileEdits"`
+	// LiveRate is -live-rate; left out at 0, as every live figure is, so a run without it writes what it wrote before.
+	LiveRate float64 `json:"liveRate,omitempty"`
 }
 
 type summary struct {
@@ -477,6 +487,8 @@ type windowReport struct {
 	Dial       histSummary      `json:"dialToWelcome"`
 	Errors     map[string]int64 `json:"errors"`
 	ErrorTotal int64            `json:"errorTotal"`
+	// LiveRate is the live deltas sent a second (live.go); left out at 0.
+	LiveRate float64 `json:"liveEventsSentPerSecond,omitempty"`
 }
 
 func windowSummary(w *window, d time.Duration) windowReport {
@@ -487,6 +499,7 @@ func windowSummary(w *window, d time.Duration) windowReport {
 		rep.EventRate = round1(float64(w.EventsAcked) / s)
 		rep.BatchRate = round1(float64(w.BatchesAcked) / s)
 		rep.BeatRate = round1(float64(w.HeartbeatAcks) / s)
+		rep.LiveRate = round1(float64(w.LiveEventsSent) / s)
 	}
 	return rep
 }
