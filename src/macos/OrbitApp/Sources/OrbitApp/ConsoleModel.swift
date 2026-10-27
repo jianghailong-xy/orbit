@@ -4827,6 +4827,21 @@ final class ConsoleModel {
         return openItems?.closedQuestions.first { $0.itemId == itemID }
     }
 
+    /// Every ended question this conversation holds, by item key, read as `questionRecord` reads one
+    /// (`CoordinatorQuestions.held`): what a turn handing one's answer to the coordinator is drawn as
+    /// (`OwnerAnswerLineView`), instead of its line.
+    var answeredQuestions: [String: ProjectClosedQuestion] {
+        CoordinatorQuestions.held(drawn: decisionCards, read: openItems)
+    }
+
+    /// The words the turn of this conversation that handed one question's answer to its coordinator
+    /// told it (`OwnerAnswer.handover`) — folded at the foot of that question's sheet. Nil where no
+    /// turn here did.
+    func questionTold(_ itemID: String) -> OwnerAnswerTold? {
+        guard let turn = OwnerAnswer.handover(of: itemID, in: state), let card = turn.ownerAnswer else { return nil }
+        return OwnerAnswerTold(card: card, text: turn.text, attached: turn.attached)
+    }
+
     /// Where one delivered proposal stands right now — the whole of what decides whether its
     /// buttons may be pressed, and never a frame this card kept.
     func criteriaStanding(_ intentID: String) -> CriteriaDecisionStanding {

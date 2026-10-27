@@ -509,7 +509,18 @@ public enum TranscriptRows {
         // Every record is placed against the same rows, so their clocks are read once — and only
         // when there is a record to place (`ReceiptAnchor.Clocks`) and the caller has not read them.
         var clocks: ReceiptAnchor.Clocks? = known
-        for card in decisionCards {
+        // A question's record that a turn of this conversation draws itself — the turn handing the
+        // owner's answer to the coordinator is that question's card, where the coordinator was told
+        // (`OwnerAnswer.handedOver`) — is not drawn a second time at the moment it was answered. The
+        // turns are read once, and only when there is a question's record to drop.
+        var handedOver: Set<String>?
+        let cards = decisionCards.filter { card in
+            guard case .coordinatorQuestionRecord(let record) = card.kind else { return true }
+            let keys = handedOver ?? OwnerAnswer.handedOver(state)
+            handedOver = keys
+            return !keys.contains(OwnerAnswer.itemKey(record.itemId))
+        }
+        for card in cards {
             switch card.placement {
             case .onArrival(nil):
                 trailingDecisions.append(card)
@@ -569,7 +580,7 @@ public enum TranscriptRows {
         // somebody, so it is shown at the tail rather than dropped with the item it arrived after.
         // Only a question: a record's own moment was resolved against the rows above, and the two
         // other answers it can give — the head of the window, or nothing at all — are already told.
-        for card in decisionCards {
+        for card in cards {
             guard case .onArrival(let anchor?) = card.placement,
                   anchoredDecisions[anchor] != nil else { continue }
             trailingDecisions.append(card)

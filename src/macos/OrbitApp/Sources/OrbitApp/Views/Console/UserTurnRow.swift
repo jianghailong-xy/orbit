@@ -92,7 +92,8 @@ struct UserTurnRow: View {
             // The owner's answer handed to the coordinator is the platform's message too: the question
             // replayed in full and the answer, written for the AGENT — as a bubble, the reader's own
             // question asked a second time. What the reader needs is that it was sent and when, so it
-            // is one line (`ownerAnswer`, `OwnerAnswer.parse`) that opens to those words, queued or
+            // is the question's own Answered card where the conversation holds its record, else one
+            // line (`ownerAnswer`, `OwnerAnswer.parse`) — either opening to those words, queued or
             // delivered alike. Outcomes riding on it are the replies branch's below. No payload, the
             // old reading.
             OwnerAnswerLineView(card: card, text: b.text, undelivered: undelivered,
@@ -139,7 +140,8 @@ struct UserTurnRow: View {
             // blocks the cards draw, so it has no bubble.
             VStack(alignment: .leading, spacing: 6) {
                 if queued == nil, !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    // The owner's answer handed to the coordinator is still nobody's message: its line.
+                    // The owner's answer handed to the coordinator is still nobody's message: its card
+                    // or its line.
                     if let answer = b.ownerAnswer {
                         OwnerAnswerLineView(card: answer, text: b.text, undelivered: undelivered)
                     } else {

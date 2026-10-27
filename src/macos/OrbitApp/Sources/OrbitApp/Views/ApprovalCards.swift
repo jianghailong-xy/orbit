@@ -65,13 +65,15 @@ extension View {
     /// `dimmed` takes the whole card down to 72% — content, wash and hairline together, the mock's
     /// `opacity: .72` — for a delivered card that is no longer a question (the owner's call,
     /// 2026-09-11). It is set here and nowhere else, so no card is dimmed twice.
-    func approvalChrome(_ tone: Color, dimmed: Bool = false) -> some View {
+    ///
+    /// `dashed` draws the hairline dashed, as every card still waiting on the queue is.
+    func approvalChrome(_ tone: Color, dimmed: Bool = false, dashed: Bool = false) -> some View {
         padding(ApprovalMetrics.padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(tone.opacity(0.07), in: RoundedRectangle(cornerRadius: ApprovalMetrics.radius))
             .overlay {
                 RoundedRectangle(cornerRadius: ApprovalMetrics.radius)
-                    .strokeBorder(tone.opacity(0.28))
+                    .strokeBorder(tone.opacity(0.28), style: StrokeStyle(lineWidth: 1, dash: dashed ? [4, 3] : []))
             }
             .opacity(dimmed ? 0.72 : 1)
     }
@@ -2096,8 +2098,11 @@ struct DeliveredDecisionCardView: View {
                 CoordinatorQuestionCardView(console: console, itemID: itemID)
             case .coordinatorQuestionRecord(let record):
                 // The read's newest copy of it, when it has one: a sheet opened on the copy this
-                // console drew from its own press goes on to show the server's.
-                CoordinatorQuestionRecordView(record: console.questionRecord(record.itemId) ?? record)
+                // console drew from its own press goes on to show the server's. The sheet of a card
+                // a turn handing the answer over draws (`OwnerAnswerLineView`) folds the words that
+                // turn told the coordinator at its foot.
+                CoordinatorQuestionRecordView(record: console.questionRecord(record.itemId) ?? record,
+                                              told: console.questionTold(record.itemId))
             case .escalatedItem(let itemID):
                 OwnerItemCardView(console: console, itemID: itemID, isPause: false)
             case .fusePause(let itemID):
@@ -3903,14 +3908,28 @@ private struct CoordinatorQuestionCardView: View {
 /// open, and in the browser (`AnsweredQuestionCard`). Every word is `CoordinatorQuestions`, the
 /// browser's own copy, held to it by `OwnerItemCardsTests`.
 ///
-/// The card in the conversation says what was asked and how it ended, in the question card's own
-/// dimmed blue; the sheet replays the question and every option as they were asked, with the answer
-/// ticked, and says who answered, when, and where the answer went where Send answer used to be.
-private struct CoordinatorQuestionRecordView: View {
+/// The card in the conversation says what was asked and how it ended, in the neutral frame of a
+/// record at rest with the answer ticked green — the blue stays with the open question, still waiting
+/// on the owner (docs/mocks/owner-answer-sent-card/tone.html); the sheet replays the question and every
+/// option as they were asked, with the answer ticked, and says who answered, when, and where the answer
+/// went where Send answer used to be.
+///
+/// Drawn by the turn that handed the answer to the coordinator, too (`OwnerAnswerLineView`): dashed
+/// while that turn waits on the queue, saying so, or saying its delivery went unconfirmed; and the
+/// words it told the coordinator fold at the foot of the sheet. Web: `AnsweredQuestionCard`'s
+/// `handover`.
+struct CoordinatorQuestionRecordView: View {
     @Environment(\.inApprovalReview) private var inReview
     @Environment(\.approvalReviewTarget) private var target
     @Environment(\.openApprovalReview) private var openReview
     let record: ProjectClosedQuestion
+    /// The turn handing the answer over still waits on the queue behind the coordinator's turn.
+    var queued = false
+    /// What to say when that turn's delivery went unconfirmed.
+    var notice: String? = nil
+    /// The words that turn told the coordinator, for the sheet.
+    var told: OwnerAnswerTold? = nil
+    @State private var toldOpen = false
 
     var body: some View {
         if inReview {
@@ -3929,20 +3948,18 @@ private struct CoordinatorQuestionRecordView: View {
         }
     }
 
-    /// A withdrawn question's chip is grey: nothing was decided on it.
-    private var iconTone: Color { record.withdrawn ? Color.gray : Color.blue }
-
     /// The card: what was asked, in its opening lines, and how it ended — the option chosen, or the
-    /// owner's own words; the note beside the option; an answer no coordinator has had yet; or who
-    /// withdrew it and why.
+    /// owner's own words; the note beside the option; an answer no coordinator has had yet, or one
+    /// still on the queue; or who withdrew it and why. Its chip is grey, answered or withdrawn: the
+    /// question has ended.
     private var card: some View {
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
             HStack(spacing: 8) {
                 Image(systemName: "questionmark.bubble.fill")
                     .font(.orbitMeta)
-                    .foregroundStyle(iconTone)
+                    .foregroundStyle(Color.gray)
                     .frame(width: 22, height: 22)
-                    .background(iconTone.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
+                    .background(Color.gray.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
                 Text(CoordinatorQuestions.recordHeading(record))
                     .font(.orbitProse.bold())
                     .foregroundStyle(.primary)
@@ -3961,7 +3978,7 @@ private struct CoordinatorQuestionRecordView: View {
             }
             .font(.orbitLabel.weight(.semibold)).foregroundStyle(Color.accentColor)
         }
-        .approvalChrome(.blue, dimmed: true)
+        .approvalChrome(.gray, dashed: queued)
         .contentShape(Rectangle())
     }
 
@@ -3976,7 +3993,7 @@ private struct CoordinatorQuestionRecordView: View {
             if let answer = CoordinatorQuestions.answerLine(record) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.orbitMeta).foregroundStyle(Color.blue)
+                        .font(.orbitMeta).foregroundStyle(Color.green)
                     Text(answer).font(.orbitProse)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -3994,6 +4011,18 @@ private struct CoordinatorQuestionRecordView: View {
                     Text(waiting)
                 }
                 .font(.orbitLabel).foregroundStyle(Color.orange)
+            }
+            if queued {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "clock")
+                    Text(CoordinatorQuestions.queuedForCoordinator)
+                }
+                .font(.orbitLabel).foregroundStyle(Color.orange)
+            }
+            if let notice {
+                Text(notice)
+                    .font(.orbitLabel).foregroundStyle(Color.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             if let withdrew = CoordinatorQuestions.withdrewLine(record) {
                 Text(withdrew)
@@ -4039,6 +4068,30 @@ private struct CoordinatorQuestionRecordView: View {
                 wordsBox(label: CoordinatorQuestions.freeAnswerPrompt, words: words,
                          background: Color.blue.opacity(0.08))
             }
+            if let told { toldFold(told) }
+        }
+    }
+
+    /// The words the turn handing the answer over told the coordinator, verbatim and folded: there for
+    /// whoever wants to check what it read, and out of the way of what was asked and answered.
+    private func toldFold(_ told: OwnerAnswerTold) -> some View {
+        DisclosureGroup(isExpanded: $toldOpen) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(told.text)
+                    .font(.orbitMono)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(Color.secondary.opacity(0.08),
+                                in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+                if let attached = told.attached { AttachedNoteEntry(attached: attached) }
+            }
+            .padding(.top, 4)
+        } label: {
+            Text(OwnerAnswerCard.told)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
         }
     }
 

@@ -121,4 +121,152 @@ final class OwnerAnswerTests: XCTestCase {
         XCTAssertFalse(StickySummary.isAnchor(text: Self.told, ownerAnswer: expected))
         XCTAssertTrue(StickySummary.isAnchor(text: Self.told), "with no card it is the reader's message, as before")
     }
+
+    // MARK: - the question's own card (docs/mocks/owner-answer-sent-card/merged.html)
+    //
+    // The web suite's half is `OwnerAnswerLine.test.tsx` ("the question's own card"); the rule is held to
+    // the browser's by `OwnerAnswerCopyParityTests`.
+
+    private static let answeredAt = "2026-10-09T00:29:36.828Z"
+
+    /// The record the open-items read publishes for the answered question.
+    private func record(_ itemId: String = "01a0d6a9-d763-70e1-b4cf-8793e971b511",
+                        at resolved: String = OwnerAnswerTests.answeredAt) -> ProjectClosedQuestion {
+        ProjectClosedQuestion(itemId: itemId, question: CoordinatorQuestion(question: "请批准重开灰度。",
+                                                                            options: [.init(label: "现在重开")]),
+                              askedAt: "2026-10-09T00:10:00.000Z", resolvedAt: resolved,
+                              answer: .init(option: 0), delivery: .init(sessionId: "C1", at: resolved))
+    }
+
+    private func answer(_ kind: OwnerAnswer.Kind = .coordinatorQuestion,
+                        item: String = "01a0d6a9-d763-70e1-b4cf-8793e971b511") -> OwnerAnswer {
+        OwnerAnswer(itemId: item, kind: kind, sessionId: "01a0d6a9-d763-70e1-b4cf-8793e971b512",
+                    deliveredAt: "2026-10-09T00:29:37.104Z")
+    }
+
+    /// The turn that hands the answer over, echoed.
+    private func turn(_ card: OwnerAnswer?, id: String = "told") -> UserBubble {
+        UserBubble(id: id, text: Self.told, ts: "2026-10-09T00:29:38.000Z", pending: false, ownerAnswer: card)
+    }
+
+    /// The same turn still on the queue behind the coordinator's running turn, as the server lists it:
+    /// written by the control plane, so it waits in the transcript's tail and not in the tray.
+    private func waiting(_ card: OwnerAnswer?, authoredByOrbit: Bool = true) -> UserBubble {
+        UserBubble(id: "queued-told", text: Self.told, turnId: "tq1", pending: true, queued: true,
+                   ownerAnswer: card, authoredByOrbit: authoredByOrbit)
+    }
+
+    private func assistant(_ id: String, _ ts: String) -> TranscriptItem {
+        .assistant(AssistantBubble(id: id, text: "…", streamingText: "", seq: 1, turnId: "t", ts: ts))
+    }
+
+    private func rows(_ state: TranscriptState, records: [ProjectClosedQuestion]) -> [String] {
+        let cards = records.map {
+            DeliveredDecisionCard(kind: .coordinatorQuestionRecord(record: $0), placement: .at($0.resolvedAt))
+        }
+        return TranscriptRows.build(state: state, statusCards: [], canPageOlder: false,
+                                    showWorkingIndicator: false, decisionCards: cards).map(\.id)
+    }
+
+    /// The open-items read and the turn's card each name the item, and either may have been served in
+    /// the other spelling.
+    func testTheItemKeyIsOneSpellingWhicheverTheReadUsed() {
+        let uuid = "01a0d6a9-d763-70e1-b4cf-8793e971b511"
+        let base62 = PublicID.toPublic(uuid)
+        XCTAssertNotEqual(base62, uuid)
+        XCTAssertEqual(OwnerAnswer.itemKey(base62), OwnerAnswer.itemKey(uuid))
+        XCTAssertEqual(OwnerAnswer.itemKey(uuid.uppercased()), OwnerAnswer.itemKey(uuid))
+        XCTAssertEqual(OwnerAnswer.itemKey("Q1"), OwnerAnswer.itemKey("Q1"), "an id that is neither is still a key")
+        XCTAssertNotEqual(OwnerAnswer.itemKey("Q1"), OwnerAnswer.itemKey("Q2"))
+    }
+
+    /// The turn is the question's card where the conversation holds the question's record — by the item
+    /// in one spelling — and the line everywhere else: a Not yet… to a done request has no card, and a
+    /// question the conversation does not hold cannot be drawn.
+    func testATurnHandingAQuestionsAnswerOverIsThatQuestionsCard() {
+        let held = CoordinatorQuestions.held(drawn: [], read: ProjectOpenItemsView(closedQuestions: [record()]))
+        XCTAssertEqual(OwnerAnswer.record(of: answer(), in: held), record())
+        XCTAssertEqual(OwnerAnswer.record(of: answer(item: PublicID.toPublic(answer().itemId)), in: held), record(),
+                       "the card served in the other spelling is the same question")
+        XCTAssertNil(OwnerAnswer.record(of: answer(.doneRequest), in: held), "a Not yet… keeps its line")
+        XCTAssertNil(OwnerAnswer.record(of: answer(item: "01a0d6a9-d763-70e1-b4cf-8793e971b5ff"), in: held),
+                     "a question the conversation holds no record of keeps its line")
+        XCTAssertNil(OwnerAnswer.record(of: answer(), in: [:]), "anywhere that reads no open items keeps the line")
+    }
+
+    /// The records a conversation holds: the ones it draws — which keep what the read has let go of, and
+    /// the copy drawn from a press until the read has it — over the read's own.
+    func testTheConversationHoldsTheRecordsItDrawsElseTheReads() {
+        let drawn = record(at: "2026-10-09T00:30:00.000Z")
+        let older = record("01a0d6a9-d763-70e1-b4cf-8793e971b5aa")
+        let held = CoordinatorQuestions.held(
+            drawn: [DeliveredDecisionCard(kind: .coordinatorQuestionRecord(record: drawn)),
+                    DeliveredDecisionCard(kind: .coordinatorQuestion(itemID: "open-1"))],
+            read: ProjectOpenItemsView(closedQuestions: [record(PublicID.toPublic(drawn.itemId))]))
+        XCTAssertEqual(held[OwnerAnswer.itemKey(drawn.itemId)], drawn, "the drawn copy wins, in either spelling")
+        XCTAssertEqual(held.count, 1, "an open question is no record")
+        let fromRead = CoordinatorQuestions.held(drawn: [], read: ProjectOpenItemsView(closedQuestions: [older]))
+        XCTAssertEqual(fromRead[OwnerAnswer.itemKey(older.itemId)], older)
+        XCTAssertTrue(CoordinatorQuestions.held(drawn: [], read: nil).isEmpty)
+    }
+
+    /// The card is drawn once, by the turn: the conversation does not draw the record again at the moment
+    /// the question was answered. Another question's record stays where it ended.
+    func testTheConversationDoesNotDrawTheRecordASecondTime() {
+        let other = record("01a0d6a9-d763-70e1-b4cf-8793e971b5aa", at: "2026-10-09T00:25:00.000Z")
+        var state = TranscriptState()
+        state.items = [assistant("asked", "2026-10-09T00:10:00.000Z"), assistant("working", "2026-10-09T00:20:00.000Z"),
+                       .user(turn(answer(item: PublicID.toPublic(answer().itemId)))),
+                       assistant("reply", "2026-10-09T00:30:00.000Z")]
+        XCTAssertEqual(OwnerAnswer.handedOver(state), [OwnerAnswer.itemKey(answer().itemId)])
+        XCTAssertEqual(rows(state, records: [record(), other]),
+                       ["asked", "working", "question-record-01a0d6a9-d763-70e1-b4cf-8793e971b5aa", "told", "reply",
+                        "transcript-bottom"])
+    }
+
+    /// A turn still on the queue is the card too, dashed at the tail: the record is not drawn at its
+    /// moment either. Nor is it for the accepted head, which waits on its echo where the echo will land.
+    func testATurnStillOnTheQueueOrAcceptedHandsItOverToo() {
+        var state = TranscriptState()
+        state.items = [assistant("asked", "2026-10-09T00:10:00.000Z"), assistant("working", "2026-10-09T00:40:00.000Z")]
+        state.queued = [waiting(answer())]
+        XCTAssertEqual(rows(state, records: [record()]), ["asked", "working", "queued-queued-told", "transcript-bottom"])
+
+        var accepted = TranscriptState()
+        accepted.items = state.items
+        accepted.accepted = [turn(answer(), id: "accepted-told")]
+        XCTAssertEqual(rows(accepted, records: [record()]), ["asked", "working", "accepted-told", "transcript-bottom"])
+
+        // What waits in the tray is not drawn in the tail, so it is not the card either: an answer's turn
+        // never is one (the server writes it), but the rule is the one the rows are drawn by.
+        var tray = TranscriptState()
+        tray.items = state.items
+        tray.queued = [waiting(answer(), authoredByOrbit: false)]
+        XCTAssertTrue(OwnerAnswer.handedOver(tray).isEmpty)
+    }
+
+    /// Everything else leaves the record where it ended: a Not yet… to a done request, and a turn that
+    /// carries no card at all.
+    func testANotYetAndAnOrdinaryTurnLeaveTheRecordWhereItEnded() {
+        var state = TranscriptState()
+        state.items = [assistant("asked", "2026-10-09T00:10:00.000Z"), .user(turn(answer(.doneRequest))),
+                       .user(turn(nil, id: "plain")), assistant("reply", "2026-10-09T00:40:00.000Z")]
+        XCTAssertTrue(OwnerAnswer.handedOver(state).isEmpty)
+        XCTAssertEqual(rows(state, records: [record()]),
+                       ["asked", "question-record-01a0d6a9-d763-70e1-b4cf-8793e971b511", "told", "plain", "reply",
+                        "transcript-bottom"])
+    }
+
+    /// The card's sheet folds the words the coordinator was told: those of the turn that handed this
+    /// question over — the newest, in either spelling — and none for a question no turn handed over.
+    func testTheSheetFindsTheTurnThatToldTheCoordinator() {
+        var state = TranscriptState()
+        state.items = [.user(turn(answer(.doneRequest), id: "not-yet")),
+                       .user(turn(answer(item: PublicID.toPublic(answer().itemId)), id: "told"))]
+        XCTAssertEqual(OwnerAnswer.handover(of: answer().itemId, in: state)?.id, "told")
+        XCTAssertEqual(OwnerAnswer.handover(of: answer().itemId, in: state)?.text, Self.told)
+        XCTAssertNil(OwnerAnswer.handover(of: "01a0d6a9-d763-70e1-b4cf-8793e971b5ff", in: state))
+        state.queued = [waiting(answer())]
+        XCTAssertEqual(OwnerAnswer.handover(of: answer().itemId, in: state)?.id, "queued-told", "the newest turn")
+    }
 }

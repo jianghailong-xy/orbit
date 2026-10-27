@@ -378,12 +378,12 @@ final class CoordinatorQuestionRecordTests: XCTestCase {
                       "a record is not a question: the open-questions bar does not count it")
         let cards = try source(Self.cardPath)
         XCTAssertTrue(cards.contains("case .coordinatorQuestionRecord(let record):"))
-        XCTAssertTrue(cards.contains("CoordinatorQuestionRecordView(record: console.questionRecord(record.itemId) ?? record)"))
+        XCTAssertTrue(cards.contains("CoordinatorQuestionRecordView(record: console.questionRecord(record.itemId) ?? record,"))
         let questionCard = try section(cards, from: "private struct CoordinatorQuestionCardView: View {",
                                        to: "private var questionCard: some View {")
         XCTAssertTrue(questionCard.contains("if let record = console.questionRecord(itemID) {"),
                       "a sheet left open on the question shows the record once it has ended")
-        let view = try section(cards, from: "private struct CoordinatorQuestionRecordView: View {",
+        let view = try section(cards, from: "struct CoordinatorQuestionRecordView: View {",
                                to: "/// The exception that became the owner's without anybody asking")
         for line in ["CoordinatorQuestions.lead(record.question)", "CoordinatorQuestions.answerLine(record)",
                      "CoordinatorQuestions.noteLine(record)", "CoordinatorQuestions.waitingLine(record)",

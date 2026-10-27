@@ -17,6 +17,7 @@ final class OwnerAnswerCopyParityTests: XCTestCase {
     private static let webLine = "src/web/src/components/OwnerAnswerLine.tsx"
     private static let webEvidence = "src/web/src/components/EvidenceDecisionCard.tsx"
     private static let webTranscript = "src/web/src/components/Transcript.tsx"
+    private static let webConsole = "src/web/src/components/WorkspaceView.tsx"
     private static let shared = "src/shared/src/project-progress.ts"
 
     private enum ParityError: Error, CustomStringConvertible {
@@ -145,5 +146,34 @@ final class OwnerAnswerCopyParityTests: XCTestCase {
                     Self.webTranscript)
         assertBuilt(transcript, "if (node.ownerAnswer) {", "the line's branch", Self.webTranscript)
         assertBuilt(transcript, "<OwnerAnswerLine", "the line", Self.webTranscript)
+    }
+
+    // MARK: the question's own card
+
+    /// Where the conversation holds the question's record, both ends draw the turn as that question's
+    /// card: only a coordinator's question, looked up by the item in one spelling (`OwnerAnswer.record`);
+    /// dashed while queued unless its delivery went unconfirmed, which it says instead. And neither draws
+    /// the record again at the moment it was answered — for a turn echoed or still on the queue
+    /// (`OwnerAnswer.handedOver`).
+    func testTheWebDrawsTheQuestionsOwnCardWhereItHoldsTheRecord() throws {
+        let question = OwnerAnswer.Kind.coordinatorQuestion.rawValue
+        let line = try flat(Self.webLine)
+        assertBuilt(line, "const record = useContext(AnsweredQuestionsCtx)?.get(answeredItemKey(card.itemId));",
+                    "the record, by the item's one spelling", Self.webLine)
+        assertBuilt(line, "if (card.kind === '\(question)' && record) {", "only a question is its card", Self.webLine)
+        assertBuilt(line, "queued: Boolean(queued) && !undelivered,", "queued, unless unconfirmed", Self.webLine)
+        assertBuilt(line, "notice: undelivered ? '\(OwnerAnswerCard.undelivered)' : null,",
+                    "what an unconfirmed answer's card says", Self.webLine)
+
+        let reader = try flat(Self.webReader)
+        assertBuilt(reader, "return routeId(itemId) ?? itemId;", "one spelling of an item", Self.webReader)
+        assertBuilt(reader, "if (card?.kind === '\(question)') items.add(answeredItemKey(card.itemId));",
+                    "the echoed turns that hand a question over", Self.webReader)
+        assertBuilt(reader, "if (turn.ownerAnswer?.kind === '\(question)') items.add(answeredItemKey(turn.ownerAnswer.itemId));",
+                    "the queued turns that hand a question over", Self.webReader)
+
+        let console = try flat(Self.webConsole)
+        assertBuilt(console, ".filter(({ record }) => !handedOver.has(answeredItemKey(record.itemId)))",
+                    "the record left out at the moment it was answered", Self.webConsole)
     }
 }

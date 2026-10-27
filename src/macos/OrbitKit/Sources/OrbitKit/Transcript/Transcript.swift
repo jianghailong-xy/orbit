@@ -139,9 +139,10 @@ public struct UserBubble: Equatable, Sendable, Codable {
     public var itemCard: OpenItemDelivery?
     /// The owner's answer handed to the coordinator, when the control plane recorded which item and
     /// when this conversation was told beside the echo (`ownerAnswer`, see `OwnerAnswer.parse`). Nobody
-    /// typed it either: the console draws one line, "Sent to the coordinator · 08:29", that opens to
-    /// `text` — the words written for the agent. Nil for every other turn, and for every answer stored
-    /// before the payload existed, which keeps the reading it has always had.
+    /// typed it either: the console draws the question's own Answered card where it holds that
+    /// question's record (`OwnerAnswer.record`), and otherwise one line, "Sent to the coordinator ·
+    /// 08:29" — each opening to `text`, the words written for the agent. Nil for every other turn, and
+    /// for every answer stored before the payload existed, which keeps the reading it has always had.
     public var ownerAnswer: OwnerAnswer?
     /// The turn that starts a task's run, when the control plane recorded the task its brief was built
     /// from beside the echo (`taskStart`, see `TaskStart.parse`). Nobody typed this turn either: the
