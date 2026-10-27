@@ -17,7 +17,7 @@ const { SESSION, SESSION_PATH } = await import(`${WT}/src/web/ui-migration/sessi
 
 const OUT = `${KIT}/shots`;
 mkdirSync(OUT, { recursive: true });
-const DISTS = { today: `${KIT}/today-dist`, a: `${KIT}/proto-a-dist`, b: `${KIT}/proto-b-dist`, c: `${KIT}/proto-c-dist`, d: `${KIT}/proto-d-dist` };
+const DISTS = { today: `${KIT}/today-dist`, a: `${KIT}/proto-a-dist`, b: `${KIT}/proto-b-dist`, c: `${KIT}/proto-c-dist`, d: `${KIT}/proto-d-dist`, final: `${KIT}/final-dist` };
 const PORTS = {};
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml',
   '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2' };
@@ -135,10 +135,11 @@ const noteSel = (n) => ({
 });
 
 async function openNote(page, n) {
-  const note = page.locator('.chat-user-wrap').nth(n).locator('.chat-injected');
-  const action = note.locator('.chat-injected-action');
+  // Today's card has its own action; every later tree opens on the line itself, wherever it sits.
+  const wrap = page.locator('.chat-user-wrap').nth(n);
+  const action = wrap.locator('.chat-injected-action');
   if (await action.count()) await action.click();
-  else await note.locator('.chat-injected-head').click();
+  else await wrap.locator('.chat-injected-head').first().click();
   await page.waitForTimeout(250);
 }
 
