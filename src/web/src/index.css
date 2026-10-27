@@ -4168,7 +4168,8 @@ button.toast--pill:focus-visible {
   align-items: center;
   gap: 6px;
 }
-/* Non-git: ran in the shared dir; amber bar with the one-click enable. */
+/* No worktree: the session edits its workspace's folder directly. Amber bar: why, the folder and
+   what that costs on a second line, Initialize git… and ✕. */
 .wt-bar-nogit {
   border-color: var(--warning-border);
   background: var(--warning-bg);
@@ -4194,6 +4195,58 @@ button.toast--pill:focus-visible {
 .wt-enable:disabled {
   opacity: 0.55;
   cursor: default;
+}
+.wt-notice-close {
+  flex: none;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+.wt-notice-close:hover {
+  color: var(--text-1);
+}
+.wt-notice-close:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+/* The folder and what working in it directly costs: wraps rather than truncating, since it is the
+   explanation. */
+.wt-notice-detail {
+  display: block;
+  min-height: 0;
+  padding-top: 0;
+  padding-bottom: 7px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+/* The folder, named in the notice's headline: long paths wrap anywhere rather than overflow. */
+.wt-notice-path {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+/* Initialize git…'s confirmation: the folder, then what the runner will do to it. */
+.wt-init-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wt-init-steps p,
+.wt-init-steps ul {
+  margin: 0;
+}
+.wt-init-steps ul {
+  padding-left: 18px;
+}
+.wt-init-steps .wt-wedge-root {
+  align-self: flex-start;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-subtle);
 }
 /* The machine's shared checkout is mid-merge/rebase: every session's merge here is blocked, so
    this sits above the per-session bar wearing the same amber as the other "fix this first" state. */

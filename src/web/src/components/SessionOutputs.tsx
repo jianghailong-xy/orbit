@@ -45,8 +45,8 @@ for (const [name, lang] of Object.entries({
  * Worktree status bar shown directly above the composer: the branch this session's work
  * lives on + its diff, collapsed to one line by default and expandable to the changed-file
  * list. The diff updates live each turn (uncommitted working-tree state) and settles to the
- * committed branch once the session ends. For a session whose workspace dir isn't a git repo it
- * morphs into an amber "not isolated" nudge with a one-click enable.
+ * committed branch once the session ends. For a session that runs directly in its workspace's
+ * folder (no worktree) it becomes an amber notice that says why, offers Initialize git… and closes.
  *
  * Clicking a file opens a right-side drawer with that file's unified diff (lazily fetched
  * from /sessions/:id/diff — the patch text never rides the session payload), with the file
@@ -57,6 +57,8 @@ export function SessionOutputs({
   committed,
   onEnableIsolation,
   enabling,
+  sharedFolder,
+  onKeepShared,
   onMergeToMain,
   onRecoverMerge,
   onRepairRecovery,
@@ -87,9 +89,18 @@ export function SessionOutputs({
    *  on — so the bar holds "Merge to main" (hidden) and "Commit" (disabled) until the turn
    *  finishes; committing a half-built mid-turn tree would capture an inconsistent snapshot. */
   turnActive?: boolean;
-  /** Provided by the parent (which owns the mutation); enables the non-git nudge's button. */
+  /** Provided by the parent (which owns the mutation); the notice's Initialize git… button. */
   onEnableIsolation?: () => void;
   enabling?: boolean;
+  /** The folder a session without a worktree edits directly, as the runner last saw it: the notice
+   *  names it, and `isGit` tells a folder that is not a repository (Initialize git…) from a
+   *  repository git could not branch. `settled`: the workspace already answered the notice —
+   *  isolation turned off, or git initialization queued — so no session of it shows the notice. */
+  sharedFolder?: { path?: string | null; isGit?: boolean | null; settled?: boolean } | null;
+  /** Provided by the parent (owns the mutation): the ✕ on a folder that is not a repository. It
+   *  keeps the folder as it is by turning worktree isolation off for the workspace, so later
+   *  sessions do not raise the notice again. */
+  onKeepShared?: () => void;
   /** Provided by the parent (owns the mutation); enables the "Merge to main" button. Receives
    *  the chosen target branch (undefined → the default, which the runner auto-detects: main,
    *  else master). The outcome surfaces via detail.mergeStatus/mergeError (parent polls). */
@@ -131,6 +142,9 @@ export function SessionOutputs({
   // open session changes so a switched-to session never inherits the previous one's open file.
   const [openFile, setOpenFile] = useState<string | null>(null);
   useEffect(() => setOpenFile(null), [detail?.id]);
+  // The session whose no-branch notice was closed with ✕ (a repository git could not branch: the
+  // workspace has nothing to change, so closing only hides it here).
+  const [noticeHiddenFor, setNoticeHiddenFor] = useState<string | null>(null);
   const copy = (text: string, what: 'branch' | 'command') => {
     const [done, failed] =
       what === 'branch'
@@ -149,22 +163,21 @@ export function SessionOutputs({
   const iso = detail?.isolationStatus;
   if (!iso) return wedge;
 
-  // Non-git: ran in the shared workDir (no isolation). Offer the one-click enable.
+  // No worktree: the session edits its workspace's folder directly. Say why, offer the fix, and close.
   if (iso === 'shared-nogit') {
+    if (sharedFolder?.settled || noticeHiddenFor === detail?.id) return wedge;
+    // Unknown (an older runner never probed the folder) reads as the common case: not a repository.
+    const notGit = sharedFolder?.isGit !== true;
     return (
       <>
         {wedge}
-        <div className="wt-bar wt-bar-nogit">
-          <div className="wt-row">
-            <span className="wt-warn">⚠ Shared workDir — not isolated</span>
-            <span className="wt-spacer" />
-            {onEnableIsolation && (
-              <button type="button" className="wt-enable" disabled={enabling} onClick={onEnableIsolation}>
-                {enabling ? 'Enabling…' : 'Enable isolation'}
-              </button>
-            )}
-          </div>
-        </div>
+        <SharedFolderNotice
+          path={sharedFolder?.path}
+          notGit={notGit}
+          onInitialize={notGit ? onEnableIsolation : undefined}
+          initializing={enabling}
+          onClose={notGit ? onKeepShared : () => setNoticeHiddenFor(detail?.id ?? null)}
+        />
       </>
     );
   }
@@ -410,6 +423,85 @@ function RepoWedgeNotice({
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The notice above the composer for a session without a worktree: it edits its workspace's folder
+ * directly. Says why in plain words, names the folder and what that costs, and offers the way out —
+ * Initialize git… for a folder that is not a repository — plus ✕.
+ */
+function SharedFolderNotice({
+  path,
+  notGit,
+  onInitialize,
+  initializing,
+  onClose,
+}: {
+  path?: string | null;
+  notGit: boolean;
+  onInitialize?: () => void;
+  initializing?: boolean;
+  onClose?: () => void;
+}) {
+  const folder = path ? <code className="wt-notice-path">{path}</code> : 'This folder';
+  return (
+    <div className="wt-bar wt-bar-nogit">
+      <div className="wt-row">
+        <span className="wt-warn">
+          {notGit ? (
+            <>⚠ {folder} isn’t a git repository</>
+          ) : (
+            <>⚠ No branch for this session: it edits {path ? folder : 'the folder'} directly</>
+          )}
+        </span>
+        <span className="wt-spacer" />
+        {onInitialize && (
+          <button type="button" className="wt-enable" disabled={initializing} onClick={onInitialize}>
+            Initialize git…
+          </button>
+        )}
+        {onClose && (
+          <Tooltip
+            content={notGit ? 'Keep it as a plain folder: turns off worktree isolation for this workspace' : 'Hide for this session'}
+          >
+            <button
+              type="button"
+              className="wt-notice-close"
+              aria-label={notGit ? 'Keep it as a plain folder' : 'Hide for this session'}
+              onClick={onClose}
+            >
+              ✕
+            </button>
+          </Tooltip>
+        )}
+      </div>
+      <div className="wt-row wt-notice-detail">
+        {notGit
+          ? 'Sessions here edit the folder directly: no branch or diff to review, and sessions running at the same time can overwrite each other’s changes.'
+          : 'The folder is a git repository, but git couldn’t add a worktree for this session. A repository with no commits has nothing to branch from.'}
+      </div>
+    </div>
+  );
+}
+
+/** What Initialize git… does, spelled out in its confirmation: the runner's `initGitRepo`, step by step. */
+export function InitializeGitSteps({ path, workspace }: { path?: string | null; workspace?: string | null }) {
+  return (
+    <div className="wt-init-steps">
+      {path && <code className="wt-wedge-root">{path}</code>}
+      <p>When the next session starts in {workspace ? `“${workspace}”` : 'this workspace'}, Orbit will:</p>
+      <ul>
+        <li>
+          run <code>git init</code>
+        </li>
+        <li>
+          add a <code>.gitignore</code> for dependencies, build output and <code>.env</code> files, unless the folder has one
+        </li>
+        <li>commit the existing files as “orbit: baseline”. Nothing is pushed anywhere.</li>
+      </ul>
+      <p>Each new session then works on its own branch, with a diff you review and merge. This session keeps editing the folder directly.</p>
     </div>
   );
 }

@@ -227,7 +227,7 @@ import {
   dirtyContextSeed,
   type ContextSeedState,
 } from '../lib/contextSeed';
-import { SessionOutputs } from './SessionOutputs';
+import { InitializeGitSteps, SessionOutputs } from './SessionOutputs';
 import { mergeRepairLoopLive } from './MergeRecoveryPanel';
 import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
@@ -284,6 +284,7 @@ import {
   deleteSessionFolder,
   cleanUpWorkspaceRepo,
   enableWorkspaceIsolation,
+  setWorkspaceWorktree,
   getBackgroundShells,
   getSession,
   interruptSession,
@@ -477,6 +478,7 @@ import {
 import { lastTypedUserMessage } from '../lib/deliveredMessage';
 import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
+import { showToast } from '../lib/toastStore';
 import { setSessionTags } from '../lib/sessionTags';
 import {
   isSessionBusy,
@@ -6887,26 +6889,55 @@ export function WorkspaceView({
       void qc.invalidateQueries({ queryKey: ['session', id], exact: true });
     },
   });
-  // Enable worktree isolation for a non-git workspace: flip autoInitGit so the runner `git
-  // init`s the workDir on the next run (the shared-nogit nudge clears once a run isolates).
+  // Initialize git… on a folder that is not a repository: flip autoInitGit so the runner `git
+  // init`s the workDir when the workspace's next session starts. Refetching workspaces settles
+  // the notice: every session of the workspace has had its answer.
   const enableIsoMut = useMutation({
     mutationFn: (workspaceId: string) => enableWorkspaceIsolation(workspaceId),
-    onSuccess: () =>
-      message.success('Isolation enabled — the next run will initialize git and isolate.'),
-    onError: (e: Error) => message.error("Couldn't enable worktree isolation", e.message),
+    onSuccess: (_data, workspaceId) => {
+      message.success(
+        'Git will be set up when the next session starts',
+        workspacesForRunner.find((a) => a.id === workspaceId)?.workDir ?? undefined,
+      );
+      void qc.invalidateQueries({ queryKey: workspacesQuery().queryKey });
+    },
+    onError: (e: Error) => message.error("Couldn't turn on git setup", e.message),
   });
-  const askEnableIsolation = (workspaceId: string) =>
+  const askEnableIsolation = (workspaceId: string) => {
+    const ws = workspacesForRunner.find((a) => a.id === workspaceId);
     void confirm({
-      title: 'Enable worktree isolation?',
-      description:
-        "This initializes a git repo in the workspace's working directory (a default .gitignore" +
-        ' + a baseline commit of the existing files) on its next run, so concurrent sessions' +
-        ' each get their own branch instead of sharing the directory.',
-      confirmText: 'Enable',
+      title: 'Initialize git in this folder?',
+      width: 460,
+      description: <InitializeGitSteps path={ws?.workDir} workspace={ws?.name} />,
+      confirmText: 'Initialize git',
       // Swallow a rejected enable (onError already toasts) so the confirmation closes cleanly
       // instead of holding its own copy of the error.
       onConfirm: () => enableIsoMut.mutateAsync(workspaceId).catch(() => {}),
     });
+  };
+  // The notice's ✕ on a folder that is not a repository: keep it as a plain folder by turning the
+  // workspace's isolation off, which is what its sessions already do. Undo turns it back on.
+  const keepSharedMut = useMutation({
+    mutationFn: ({ workspaceId, on }: { workspaceId: string; on: boolean }) => setWorkspaceWorktree(workspaceId, on),
+    onSuccess: (_data, { workspaceId, on }) => {
+      void qc.invalidateQueries({ queryKey: workspacesQuery().queryKey });
+      if (on) return;
+      const ws = workspacesForRunner.find((a) => a.id === workspaceId);
+      showToast({
+        message: `Worktree isolation is off for ${ws?.name ? `“${ws.name}”` : 'this workspace'}`,
+        detail: 'Its sessions keep editing the folder directly, without this notice. Turn it back on in the workspace’s settings.',
+        tone: 'neutral',
+        key: `keep-shared-${workspaceId}`,
+        action: {
+          label: 'Undo',
+          ariaLabel: 'Turn worktree isolation back on',
+          onClick: () => keepSharedMut.mutate({ workspaceId, on: true }),
+        },
+      });
+    },
+    onError: (e: Error, { on }) =>
+      message.error(on ? "Couldn't turn worktree isolation back on" : "Couldn't turn off worktree isolation", e.message),
+  });
   // Repair the machine's shared checkout when the runner reports it stuck mid-merge (which blocks
   // every session's merge there). Async like the others: the runner does it on its next heartbeat,
   // and refetching workspaces is what clears the warning, since repoHealth rides that payload.
@@ -11441,6 +11472,12 @@ export function WorkspaceView({
               ? () => askEnableIsolation(detailForSelected.workspace!.id)
               : undefined
           }
+          sharedFolder={sharedFolderOf(workspacesForRunner.find((a) => a.id === detailForSelected?.workspace?.id))}
+          onKeepShared={
+            detailForSelected?.workspace?.id
+              ? () => keepSharedMut.mutate({ workspaceId: detailForSelected.workspace!.id, on: false })
+              : undefined
+          }
           merging={mergeMut.isPending || repairRecoveryMut.isPending}
           onMergeToMain={
             selectedId && detailForSelected?.branch
@@ -12294,4 +12331,12 @@ export function WorkspaceView({
       {confirmation}
     </div>
   );
+}
+
+/** What the no-branch notice needs from the session's workspace row: the folder, whether the runner
+ *  found a repository there, and whether the workspace already answered the notice (isolation off,
+ *  or git initialization queued). */
+function sharedFolderOf(ws: any): { path?: string | null; isGit?: boolean | null; settled?: boolean } | null {
+  if (!ws) return null;
+  return { path: ws.workDir, isGit: ws.workDirIsGit, settled: ws.enableWorktree === false || ws.autoInitGit === true };
 }

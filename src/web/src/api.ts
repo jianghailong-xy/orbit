@@ -1950,6 +1950,11 @@ export const refreshSessionRecap = (idOrPublicId: string) =>
 export const enableWorkspaceIsolation = (workspaceId: string) =>
   api(`/workspaces/${workspaceId}`, { method: 'PATCH', body: { autoInitGit: true } });
 
+/** Turn a workspace's worktree isolation on or off: the no-branch notice's ✕ keeps a folder that is
+ *  not a repository as it is (off), and its Undo puts the setting back (on). */
+export const setWorkspaceWorktree = (workspaceId: string, enableWorktree: boolean) =>
+  api(`/workspaces/${workspaceId}`, { method: 'PATCH', body: { enableWorktree } });
+
 /** Ask this workspace's runner to clean up the shared checkout it works in: the runner saves whatever
  *  the checkout is holding onto an `orbit/rescue-*` branch, then returns it to HEAD. Queued for
  *  the runner's next heartbeat; the outcome arrives on the workspace's `repoCleanup`. */
