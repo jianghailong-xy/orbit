@@ -657,6 +657,27 @@ describe('a message steered into the running turn', () => {
     expect(html).toContain('Not delivered');
     expect(html).not.toContain('Put back in the composer');
   });
+
+  it('says it at the end of the one row under the bubble, after the copy button and the time', () => {
+    // One row, not two (owner, 2026-10-27): the state ends the row that holds copy · time. Those
+    // wait for hover and the state does not, so the state keeps its place at the bubble's edge.
+    const under = (events: RunEvent[], text: string) => {
+      const doc = new JSDOM(renderToStaticMarkup(<Transcript events={events} />)).window.document;
+      const wrap = [...doc.querySelectorAll('.chat-user-wrap')].find((el) => el.textContent?.includes(text))!;
+      return {
+        rows: [...wrap.children].slice(1).map((el) => el.className),
+        row: [...wrap.querySelectorAll('.chat-user-meta > *')].map((el) => el.className),
+      };
+    };
+    const at = (event: RunEvent): RunEvent => ({ ...event, ts: '2026-09-28T11:58:00.000Z' });
+
+    expect(under([at(steerEvent(1, 't1', 'use the other endpoint')), deliveryEvent(2, 't1', 'acknowledged')], 'use the other endpoint'))
+      .toEqual({ rows: ['chat-user-meta'], row: ['chat-copy', 'chat-time', 'chat-meta-sep', 'chat-steer-state'] });
+    expect(under([at(steerEvent(1, 't1', 'use the other endpoint')), deliveryEvent(2, 't1', 'failed', 'no turn is running')], 'use the other endpoint'))
+      .toEqual({ rows: ['chat-user-meta'], row: ['chat-copy', 'chat-time', 'chat-meta-sep', 'chat-undelivered'] });
+    expect(under([at(messageEvent(1, 't1', 'refactor the parser'))], 'refactor the parser'))
+      .toEqual({ rows: ['chat-user-meta'], row: ['chat-copy', 'chat-time'] });
+  });
 });
 
 /**

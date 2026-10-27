@@ -365,10 +365,12 @@ func deliveryProgress(state deliveryState) int {
 	return 3
 }
 
-// fileWrittenReport files the report that a frame's bytes reached the CLI, which the receipt watcher
-// does on its own schedule. A variable only so a test can hold that report back until another
-// goroutine has reported the same message further along — the interleaving orderedDeliveryReports
-// exists for, at a moment nothing outside the watcher can observe.
+// fileWrittenReport files the report that a message reached its engine, which whoever saw it get
+// there does on its own schedule: the receipt watcher once a frame's bytes are in the CLI's stdin,
+// the Codex steer worker once turn/steer has answered. A variable only so a test can hold that report
+// back until another goroutine has reported the same message further along — the interleaving a
+// message's reports are put in order for (orderedDeliveryReports), at a moment nothing outside that
+// goroutine can observe.
 var fileWrittenReport = func(turnID string, file func()) { file() }
 
 // failUndeliveredTurn settles a turn whose message never reached the CLI. It is reported

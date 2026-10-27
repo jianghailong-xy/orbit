@@ -2792,6 +2792,13 @@ func (t *Transport) listAgents(sessionID, orchestrationToken string) (json.RawMe
 	return out, err
 }
 
+// listRunners is the account's runners, for the runnerId createAgent and updateAgent take.
+func (t *Transport) listRunners(sessionID, orchestrationToken string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doOrchestration("GET", "/runner/runners", nil, &out, sessionID, orchestrationToken)
+	return out, err
+}
+
 func (t *Transport) createAgent(sessionID, orchestrationToken string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
 	err := t.doOrchestration("POST", "/runner/agents", body, &out, sessionID, orchestrationToken)
