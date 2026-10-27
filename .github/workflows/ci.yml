@@ -9,9 +9,17 @@ on:
 permissions:
   contents: read
 
+# On main a run in progress is never cancelled by a later push; everywhere else a newer run still
+# cancels it, pull requests into main included, since their ref is refs/pull/<n>/merge. A run takes
+# about 31 minutes (the slowest pg shard) and main is often pushed sooner than that. While each push
+# cancelled the run before it, 137 of main's last 300 runs (to 2026-10-27) were cancelled, and 66 of
+# 74 on 2026-10-08: those commits never got a verdict from the pg specs. Nothing piles up instead: a
+# concurrency group holds at most one pending run, and a newer run replaces the pending one, never
+# the running one. So main runs back to back, each run on the newest commit pushed while the
+# previous one ran.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   javascript:
