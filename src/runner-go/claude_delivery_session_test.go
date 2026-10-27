@@ -161,6 +161,9 @@ func runDeliverySession(t *testing.T, script []fakeStep, turns []scriptedTurn, u
 type deliveryOptions struct {
 	claim     func(*ClaimedSession)
 	onRequest func(path string, body []byte)
+	// started is handed the run before the session starts, for a seam that has to read what the run
+	// has recorded so far (holdWrittenReport).
+	started func(*deliverySession)
 }
 
 func runDeliverySessionWith(t *testing.T, script []fakeStep, turns []scriptedTurn, until func(*deliverySession) bool, opts deliveryOptions) *deliverySession {
@@ -170,6 +173,9 @@ func runDeliverySessionWith(t *testing.T, script []fakeStep, turns []scriptedTur
 	t.Setenv("ORBIT_HOME", t.TempDir())
 
 	run := &deliverySession{fake: fake}
+	if opts.started != nil {
+		opts.started(run)
+	}
 	// The inbox hands turns out under the same rule dequeueTurn applies, because that rule
 	// is half of what is being tested: an executable turn waits for the slot, and a steer
 	// is deliverable only BECAUSE something holds it. A harness that simply handed over
@@ -203,6 +209,13 @@ func runDeliverySessionWith(t *testing.T, script []fakeStep, turns []scriptedTur
 		}
 		if next.afterAcknowledged != "" && !slices.Contains(run.deliveryStates(next.afterAcknowledged), string(deliveryAcknowledged)) {
 			return RunInboxResponse{}, false // the runner has not seen that turn read yet
+		}
+		if next.afterHeld != nil {
+			select {
+			case <-next.afterHeld:
+			default:
+				return RunInboxResponse{}, false // the watcher it must arrive behind is not held yet
+			}
 		}
 		switch {
 		case next.ungated:
@@ -327,6 +340,10 @@ type scriptedTurn struct {
 	// afterEngineRead cannot say that much: the fake's own stdin reader answers it, however far
 	// the runner has got through the CLI's output. Empty leaves the turn ungated by it.
 	afterAcknowledged string
+	// afterHeld holds the turn back until the channel is closed: a receipt watcher held by
+	// holdWrittenReport has recorded its frame written and is waiting to say so. Nil leaves the turn
+	// ungated by it.
+	afterHeld <-chan struct{}
 }
 
 func messageTurn(id, text string) scriptedTurn {

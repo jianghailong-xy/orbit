@@ -2142,8 +2142,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// reportDelivery publishes one message's delivery state. The turn is named in the
 	// payload rather than left to the event's own attribution: a delivery settles on the
 	// writer's schedule, not the conversation's, so the turn in progress when it settles
-	// is often a different one.
-	reportDelivery := deliveryReporter(func(turnID string, state deliveryState, reason string, retryable bool) {
+	// is often a different one. Several goroutines settle a message's states and nothing
+	// orders them, so the reports go out one at a time and never move a turn backwards.
+	reportDelivery := orderedDeliveryReports(func(turnID string, state deliveryState, reason string, retryable bool) {
 		p := map[string]interface{}{"turnId": turnID, "delivery": string(state)}
 		if reason != "" {
 			p["reason"] = reason
@@ -2151,6 +2152,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		}
 		emit(evUserDelivery, p)
 	})
+	// How the receipt watcher below files `written` (fileWrittenReport). Read once per process, here
+	// rather than on each watcher's goroutine, so a test that swaps it for one run never races a watcher
+	// another run left behind.
+	fileWritten := fileWrittenReport
 	// requeueSteer takes a steer back before it has been offered to anything and files it as the
 	// ordinary queued message it would have been had it arrived a moment later.
 	//
@@ -2447,7 +2452,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					switch err := receipt.wait(procCtx); {
 					case err == nil:
 						if deliveries.markWritten(d) {
-							reportDelivery(turnID, deliveryWritten, "", false)
+							fileWritten(turnID, func() { reportDelivery(turnID, deliveryWritten, "", false) })
 						}
 					case procCtx.Err() != nil:
 						// The process is going away; its teardown accounts for what it
