@@ -48,7 +48,7 @@ Options:
   --system-prompt TEXT
   --append-system-prompt TEXT
   --work-dir PATH                Project directory on the runner
-  --runner-id ID                 Defaults to the current runner
+  --runner-id ID                 Defaults to the current runner; 'orbit runner list' shows the ids
   --enable-worktree[=BOOL]       Run each of the agent's sessions in its own git worktree
   --env KEY=VALUE                Repeatable; REPLACES the whole environment map
   --default-merge-target BRANCH  Branch this agent's sessions merge into by default
@@ -65,7 +65,7 @@ Options:
   --system-prompt TEXT
   --append-system-prompt TEXT
   --work-dir PATH
-  --runner-id ID
+  --runner-id ID                 'orbit runner list' shows the ids
   --enable-worktree[=BOOL]
   --env KEY=VALUE                Repeatable; REPLACES the whole environment map
   --default-merge-target BRANCH

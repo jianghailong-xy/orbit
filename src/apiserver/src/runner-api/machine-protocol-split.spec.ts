@@ -11,6 +11,7 @@ import { RunnerLinkEventsController } from './runner-link-events.controller';
 import { RunnerLinkModeController } from './runner-link-required.controller';
 import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
 import { RunnerProjectsController } from './runner-projects.controller';
+import { RunnerRunnersController } from './runner-runners.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerTaskProgressController } from './runner-task-progress.controller';
@@ -59,6 +60,7 @@ test('only the machine protocol keeps UUIDs', () => {
     RunnerTasksController,
     RunnerSessionsController,
     RunnerAgentsController,
+    RunnerRunnersController,
     RunnerProjectsController,
     RunnerServiceTokensController,
     RunnerWatchesController,
