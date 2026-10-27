@@ -467,6 +467,15 @@ from it. [docs/self-hosting.md](../../docs/self-hosting.md#the-cells-size) gives
     processes carry everything at 52%, 70% with one down.
 - **The database** takes 2.8 cores on average (heartbeats 1.03, events 1.52, the live relay's estimate 0.19, renewals
   0.04, the processes' own work), 4.2 at the 10-second peak: 8 cores at 53%.
+- **The database's memory, 32 GB,** is mostly cache for the newest events.
+  - What the runners' calls keep hot is small. On the test's 3,000 runners, the runners, their presence, workspaces and
+    15,000 sessions took 55 MB (`o3-ev400-1`'s `sizes.txt`), so a cell's take a few hundred MB. Its connections are
+    55: 11 for each of four apiservers and the wiki worker.
+  - A stored event takes about 1.5 KB, so the peak stores about 10.8 GB of events an hour, and an average day
+    (4,000 events a person) 2.5 GB an hour.
+  - With `shared_buffers` at 8 GB, a quarter, and the OS's cache most of the rest, about 25 GB of cache holds the last
+    two hours of events at the peak, and about ten hours' at the average rate. That is where each insert lands and what
+    people open first. People's reads of older sessions are not measured here.
 - **A gateway node's loss** sends its 5,000 runners to the other two nodes at 400 a second, for 12.5 s. Meanwhile it
   adds 1.9 apiserver and 3.45 database cores.
 - **Each percent of beats reconciled in full** adds 0.009 apiserver and 0.029 database cores.
