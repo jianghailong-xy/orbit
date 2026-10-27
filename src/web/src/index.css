@@ -1374,6 +1374,12 @@ button.toast--pill:focus-visible {
   .app-shell .app-nav:not(.collapsed) .tp-item.menu-open .tp-workspace-shortcut {
     display: none;
   }
+  /* A needs-you count holds the ⌘N's slot, and it keeps it while the ⋯ shows: the ⋯ comes in
+     before the count instead of pushing it along. The drawer, which shows every row's ⋯, leaves the
+     ⋯ at the row's end. */
+  .app-shell .app-nav:not(.collapsed) .tp-workspace-label ~ .tp-count.needs-you {
+    order: 1;
+  }
   .app-shell .app-nav:not(.collapsed) .tp-nav-shortcut {
     display: inline;
   }
