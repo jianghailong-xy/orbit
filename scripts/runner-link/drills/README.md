@@ -264,7 +264,8 @@ A runner that never runs in link mode on that machine again loses all 56 once th
 
 ## Records
 
-The records go to `<state>/client/durable-events/`:
+The records go to `<state>/client/durable-events/`, which `prepare` empties first, so that a run's records are its
+own; keep a copy of one you want to compare:
 
 - `timeline.txt` is the drill's account.
 - `phases.tsv` has a line per fault and one for the whole session, and `rollback.tsv` a line per step of the rollback.
