@@ -1,11 +1,15 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func assertPrivateMode(t *testing.T, path string, want os.FileMode) {
@@ -204,5 +208,60 @@ func TestServiceNames(t *testing.T) {
 	}
 	if launchdLabel != "com.orbit.runner" {
 		t.Errorf("launchdLabel = %q, want com.orbit.runner", launchdLabel)
+	}
+}
+
+// The terminal half of the browser approval: it waits through pending polls and ends on what the
+// approval page decided — the runner's credential, a denial that adds nothing, or a request that ran out.
+func TestAwaitDeviceApprovalEndsOnTheBrowsersDecision(t *testing.T) {
+	cases := []struct {
+		name    string
+		answers []string // the poll's answers, in order; the last one repeats
+		wantErr string
+	}{
+		{"approved after a pending poll", []string{`{"status":"pending"}`, `{"status":"approved","runnerId":"r1","runnerToken":"tok","name":"devbox"}`}, ""},
+		{"denied in the browser", []string{`{"status":"pending"}`, `{"status":"denied"}`}, "registration was denied in the browser; nothing was added to your account"},
+		{"expired before anyone decided it", []string{`{"status":"expired"}`}, "registration timed out — please run `orbit register` again"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			polls := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost || r.URL.Path != "/api/runner/device/poll" {
+					t.Errorf("asked %s %s", r.Method, r.URL.Path)
+					http.NotFound(w, r)
+					return
+				}
+				var body map[string]string
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body["deviceCode"] != "device-code" {
+					t.Errorf("polled with %v (%v)", body, err)
+				}
+				answer := tc.answers[min(polls, len(tc.answers)-1)]
+				polls++
+				_, _ = w.Write([]byte(answer))
+			}))
+			defer srv.Close()
+
+			start := &DeviceStartResponse{DeviceCode: "device-code", UserCode: "ABCDE-FGHJK", Interval: 3, ExpiresIn: 600}
+			poll, err := awaitDeviceApproval(NewTransport(srv.URL, ""), start, func(time.Duration) {})
+			if tc.wantErr != "" {
+				if err == nil || err.Error() != tc.wantErr {
+					t.Fatalf("err = %v, want %q", err, tc.wantErr)
+				}
+				if poll != nil {
+					t.Fatalf("answered %+v beside the error", poll)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if poll.RunnerID != "r1" || poll.RunnerToken != "tok" || poll.Name != "devbox" {
+				t.Fatalf("poll = %+v", poll)
+			}
+			if polls != 2 {
+				t.Fatalf("polled %d times, want 2", polls)
+			}
+		})
 	}
 }

@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react';
+import { useState, type JSX, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircleFilled,
@@ -95,6 +95,8 @@ export const RECOMMENDED = 'Recommended';
 export const ANSWERED_HEADING = 'Answered';
 /** An answer with nobody to tell yet: R11 tells the next coordinator when one is bound. */
 export const WAITING_FOR_COORDINATOR = 'Waiting for this project’s next coordinator';
+/** An answer on the queue behind the turn its coordinator is running: told, but not read yet. */
+export const QUEUED_FOR_COORDINATOR = 'Queued — the coordinator reads it when its current turn ends';
 export const DELIVERED_TO_COORDINATOR = 'Delivered to the current coordinator';
 /** The box a question asked without options is answered in, and the record's read-only copy of it. */
 export const YOUR_ANSWER = 'Your answer';
@@ -502,13 +504,24 @@ function RecordOption({ label, why, recommended, chosen, said, saidLabel }: {
 /**
  * An ended question, as the conversation draws it: the card, and the review it opens. `now` is
  * passed in so a test reads a fixed clock.
+ *
+ * In the neutral frame a decided evidence card takes, with the answer ticked green: the blue is the
+ * open question's, which is still waiting on the owner, and the two read apart at a glance
+ * (docs/mocks/owner-answer-sent-card/tone.html).
  */
 export function AnsweredQuestionCard({
   record,
   now = new Date(),
+  handover,
 }: {
   record: ProjectClosedQuestion;
   now?: Date;
+  /**
+   * Drawn as the turn that handed the answer to the coordinator (OwnerAnswerLine): whether that turn
+   * still waits on the queue, what to say when its delivery went unconfirmed, and the words the
+   * coordinator was told, folded at the foot of the review.
+   */
+  handover?: { queued: boolean; notice: string | null; told: ReactNode };
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const isWithdrawn = withdrawn(record);
@@ -528,7 +541,7 @@ export function AnsweredQuestionCard({
       open={open}
       onOpenChange={setOpen}
       preview={{
-        className: `answered-question-card${isWithdrawn ? ' is-withdrawn' : ''}`,
+        className: `answered-question-card${isWithdrawn ? ' is-withdrawn' : ''}${handover?.queued ? ' is-queued' : ''}`,
         content: (
           <>
             <span className="answered-question-head">
@@ -549,6 +562,12 @@ export function AnsweredQuestionCard({
                 <ClockCircleOutlined aria-hidden="true" /> {lines.waiting}
               </span>
             ) : null}
+            {handover?.queued ? (
+              <span className="answered-question-waiting">
+                <ClockCircleOutlined aria-hidden="true" /> {QUEUED_FOR_COORDINATOR}
+              </span>
+            ) : null}
+            {handover?.notice ? <span className="answered-question-waiting">{handover.notice}</span> : null}
             {lines.withdrew ? <span className="answered-question-withdrew">{lines.withdrew}</span> : null}
             {lines.reason ? <span className="answered-question-reason">{lines.reason}</span> : null}
             <span className="answered-question-open">
@@ -598,6 +617,7 @@ export function AnsweredQuestionCard({
             </span>
           ) : null}
         </div>
+        {handover?.told}
         <div className="card-actions approval-actions answered-question-footer">
           <span className="answered-question-footer-line">
             {isWithdrawn ? <RollbackOutlined aria-hidden="true" /> : <CheckCircleFilled aria-hidden="true" />}

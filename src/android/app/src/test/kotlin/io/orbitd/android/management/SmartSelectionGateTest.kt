@@ -132,7 +132,7 @@ class SmartSelectionGateTest {
             AccountAppearance(app) {
                 Column {
                     Text("smart selection: " + if (LocalSmartSelection.current) "on" else "off")
-                    SettingsScreen(api, OrbitRoute(Destination.SETTINGS), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
+                    SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "sessions"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
                         deviceAlerts = { true }, notifications = {}, about = {})
                 }
             }
@@ -146,7 +146,7 @@ class SmartSelectionGateTest {
     @Test fun settingsHasTheSwitchWrittenAloneAsModelRouting() {
         val api = api()
         compose.setContent {
-            SettingsScreen(api, OrbitRoute(Destination.SETTINGS), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
+            SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "sessions"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
                 deviceAlerts = { true }, notifications = {}, about = {})
         }
         await("Smart model selection")

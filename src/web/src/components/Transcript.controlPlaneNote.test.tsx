@@ -20,9 +20,9 @@ import { ExportCtx, type RunEvent, Transcript } from './Transcript';
  * The apiserver records the appended part beside the echo, as `controlPlaneNote`, when it stores
  * the event: it holds what the person actually wrote (the turn row), so where their words end is a
  * fact of the write rather than a guess about the text. Each block is checked from both sides. With
- * the note, the person's words stand alone and the block is one folded entry under them, in the
- * same bubble, named ⊕ Orbit attached: and the kind of block it is. Without it — someone who typed
- * those very characters — the bubble shows exactly what they typed and there is no entry, however
+ * the note, the bubble is the person's words alone and the block is one folded line under it, in
+ * its meta row, named ⊕ Orbit attached: and the kind of block it is. Without it — someone who typed
+ * those very characters — the bubble shows exactly what they typed and there is no line, however
  * much it looks like a block.
  *
  * That holds for every block, a `#`-reference and a coordinator's role included: events stored
@@ -30,6 +30,8 @@ import { ExportCtx, type RunEvent, Transcript } from './Transcript';
  */
 
 const LABEL = '⊕ Orbit attached:';
+/** What the same line says once it is open: the plus turns to a minus (owner, 2026-10-27). */
+const OPEN_LABEL = '⊖ Orbit attached:';
 
 // The shapes the server appends (background-jobs-context.ts, list-events.service.ts,
 // coordinator-opening.ts, reference-expansion.ts).
@@ -109,9 +111,18 @@ function bubble(): Element {
   return el;
 }
 
-/** The entry's toggle, found by what it says rather than by how it is styled. */
+/** The entry's toggle, found by what it says rather than by how it is styled — shut or open. */
 function attachedToggle(): HTMLButtonElement | null {
-  return [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith(LABEL)) ?? null;
+  return (
+    [...container.querySelectorAll('button')].find(
+      (b) => b.textContent?.startsWith(LABEL) || b.textContent?.startsWith(OPEN_LABEL),
+    ) ?? null
+  );
+}
+
+/** What the line opened: under the bubble's meta row, in the bubble's column. */
+function opened(): Element | null {
+  return container.querySelector('.chat-user-wrap > .chat-injected-panel');
 }
 
 async function click(el: Element) {
@@ -121,9 +132,10 @@ async function click(el: Element) {
 }
 
 /**
- * How every appended block must read once it is known to be Orbit's: last in the person's bubble,
- * under their words, named for its kind, folded until clicked, what the model read once open, and
- * folded again on a second click.
+ * How every appended block must read once it is known to be Orbit's: never in the person's bubble,
+ * but one line ending the meta row under it, named for its kind — how the block stands is the
+ * line's accessible name, not its words — folded until clicked, what the model read once open
+ * under that row, and folded again on a second click.
  *
  * Two of them open as something other than their own text — the inventory a returning engine is
  * handed, and the tasks a person named with `#` (`card`, whose title is the link the block's id
@@ -142,27 +154,32 @@ async function expectFoldedEntry({ typed, block, kind, count, marker, card }: {
 }) {
   const toggle = attachedToggle();
   expect(toggle, `no entry signed ${LABEL}:\n${container.innerHTML}`).not.toBeNull();
-  expect(toggle!.textContent).toBe(`${LABEL} ${kind}${count}`);
-  const entry = toggle!.parentElement!;
-  expect(bubble().lastElementChild, 'the entry closes the person’s own bubble').toBe(entry);
-  // Everything else the bubble says is exactly what the person typed.
-  const words = () => (bubble().textContent ?? '').replace(entry.textContent ?? '', '').trim();
+  expect(toggle!.textContent).toBe(`${LABEL} ${kind}`);
+  expect(toggle!.getAttribute('aria-label')).toBe(`${LABEL} ${kind}${count}`);
+  expect(toggle!.closest('.chat-user-meta'), 'the line ends the meta row under the bubble').not.toBeNull();
+  // The bubble is exactly what the person typed, and nothing of the note is in it.
+  const words = () => (bubble().textContent ?? '').trim();
   expect(words()).toBe(typed);
+  expect(bubble().contains(toggle)).toBe(false);
   // Folded: the entry is named, but what the model read is not on the page until asked for.
   expect(toggle!.getAttribute('aria-expanded')).toBe('false');
+  expect(opened()).toBeNull();
   expect(container.textContent).not.toContain(marker);
 
   await click(toggle!);
 
   expect(toggle!.getAttribute('aria-expanded')).toBe('true');
+  expect(toggle!.textContent).toBe(`${OPEN_LABEL} ${kind}`);
+  const entry = opened();
+  expect(entry, `nothing opened under the meta row:\n${container.innerHTML}`).not.toBeNull();
   if (card) {
-    const link = entry.querySelector('a.reftask-title');
+    const link = entry!.querySelector('a.reftask-title');
     expect(link?.textContent, `the opened entry is not a card:\n${container.innerHTML}`).toBe(card.title);
     expect(link?.getAttribute('href')).toBe(card.href);
     // The table is what the card replaced, the sentence addressed to the agent with it.
-    expect(entry.textContent).not.toContain('详情请用 task_get 自取');
+    expect(entry!.textContent).not.toContain('详情请用 task_get 自取');
   } else {
-    const original = [...entry.querySelectorAll('*')].find((el) => el.textContent === block);
+    const original = [...entry!.querySelectorAll('*')].find((el) => el.textContent === block);
     expect(original, `the opened entry does not show the block verbatim:\n${container.innerHTML}`).toBeTruthy();
   }
   expect(words()).toBe(typed);
@@ -170,6 +187,7 @@ async function expectFoldedEntry({ typed, block, kind, count, marker, card }: {
   await click(toggle!);
 
   expect(toggle!.getAttribute('aria-expanded')).toBe('false');
+  expect(toggle!.textContent).toBe(`${LABEL} ${kind}`);
   expect(container.textContent).not.toContain(marker);
 }
 
@@ -201,21 +219,34 @@ describe.each([
   });
 });
 
-it('folded context uses a compact summary and a direct action before showing the raw block', async () => {
-  const appended = `\n\n${COORDINATOR}`;
-  await mount([userEvent(`把这个项目协调起来${appended}`, appended)]);
+it('is one line after the hidden copy and time, the counts in its name and tooltip, and nothing else to press', async () => {
+  // The owner's ruling (2026-10-27, docs/mocks/attached-context-note): what the person typed is what
+  // the eye lands on. So no card in the bubble — the line is in the meta row's own voice and says
+  // what was attached; how it stands ("1 ended, exit 0") waits in its name and its tooltip.
+  const appended = `\n\n${BACKGROUND_JOBS}`;
+  await mount([userEvent(`已经部署，请帮我测试${appended}`, appended)]);
 
-  const entry = bubble().querySelector('.chat-injected')!;
-  expect(entry.querySelector('.chat-injected-summary strong')?.textContent).toBe('Orbit context');
-  expect(entry.querySelector('.chat-injected-action')?.textContent).toContain('View full context');
-  expect(entry.querySelector('.chat-injected-body')).toBeNull();
+  const row = container.querySelector('.chat-user-wrap > .chat-user-meta')!;
+  const line = row.lastElementChild as HTMLButtonElement;
+  expect(line.textContent).toBe(`${LABEL} background jobs`);
+  expect(line.getAttribute('aria-label')).toBe(`${LABEL} background jobs · 1 ended, exit 0`);
+  expect(line.title).toBe('Orbit attached: background jobs · 1 ended, exit 0. The agent read it with this message.');
+  expect([...row.children].map((child) => child.className)).toEqual([
+    'chat-copy',
+    'chat-time',
+    'chat-meta-sep',
+    'chat-injected-head',
+  ]);
+  // The line is the one control: nothing in the bubble or under it offers a second way in.
+  expect(bubble().querySelector('button')).toBeNull();
+  expect(container.querySelectorAll('.chat-user-wrap button')).toHaveLength(2);
 
-  await click(entry.querySelector('.chat-injected-action')!);
+  await click(line);
 
-  expect(entry.querySelector('.chat-injected-action')).toBeNull();
-  expect(entry.querySelector<HTMLButtonElement>('.chat-injected-head')?.getAttribute('aria-expanded'))
-    .toBe('true');
-  expect(entry.querySelector('.chat-injected-body')?.textContent).toBe(COORDINATOR);
+  const wrap = container.querySelector('.chat-user-wrap')!;
+  expect(wrap.lastElementChild?.className, 'the rows open under the meta row').toBe('chat-injected-panel');
+  expect(line.textContent).toBe(`${OPEN_LABEL} background jobs`);
+  expect(bubble().textContent?.trim()).toBe('已经部署，请帮我测试');
 });
 
 describe('the exported transcript', () => {
@@ -223,7 +254,7 @@ describe('the exported transcript', () => {
   // <Transcript> — through renderToStaticMarkup, so the export has no user-bubble code of its own.
   // Rendered here rather than imported: that module inlines the stylesheet through Vite `?raw`
   // imports, which Vite refuses to serve from a node_modules linked in from outside the tree.
-  it('is drawn by the same component, so the entry is in the bubble there too — and open, since a file has nothing to click', () => {
+  it('is drawn by the same component, so the line is under the bubble there too — and open, since a file has nothing to click', () => {
     const appended = `\n\n${BACKGROUND_JOBS}`;
     const html = renderToStaticMarkup(
       <ExportCtx.Provider value={{ images: new Map() }}>
@@ -232,15 +263,18 @@ describe('the exported transcript', () => {
         </div>
       </ExportCtx.Provider>,
     );
-    const exported = new DOMParser().parseFromString(html, 'text/html').querySelector('.chat-user');
-    const toggle = [...(exported?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.startsWith(LABEL));
+    const exported = new DOMParser().parseFromString(html, 'text/html').querySelector('.chat-user-wrap');
+    const toggle = [...(exported?.querySelectorAll('.chat-user-meta button') ?? [])].find((b) =>
+      b.textContent?.startsWith(OPEN_LABEL),
+    );
 
-    expect(toggle?.textContent, `no entry signed ${LABEL} in the exported bubble:\n${html}`).toBe(
-      `${LABEL} background jobs · 1 ended, exit 0`,
+    expect(toggle?.textContent, `no open entry signed ${OPEN_LABEL} under the exported bubble:\n${html}`).toBe(
+      `${OPEN_LABEL} background jobs`,
     );
     expect(toggle!.getAttribute('aria-expanded')).toBe('true');
-    expect([...exported!.querySelectorAll('*')].some((el) => el.textContent === BACKGROUND_JOBS)).toBe(true);
-    expect(exported!.textContent!.replace(toggle!.parentElement!.textContent!, '').trim()).toBe('已经部署，请帮我测试');
+    const panel = exported!.querySelector(':scope > .chat-injected-panel');
+    expect([...(panel?.querySelectorAll('*') ?? [])].some((el) => el.textContent === BACKGROUND_JOBS)).toBe(true);
+    expect(exported!.querySelector('.chat-user')!.textContent!.trim()).toBe('已经部署，请帮我测试');
   });
 });
 

@@ -1,0 +1,70 @@
+Printing with useUnmergedTree = 'false'
+Node #501 at (l=0.0, t=0.0, r=411.0, b=900.0)px
+ |-Node #554 at (l=0.0, t=0.0, r=411.0, b=900.0)px
+   IsTraversalGroup = 'true'
+   VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+   Actions = [ScrollBy, ScrollByOffset]
+    |-Node #560 at (l=16.0, t=28.0, r=395.0, b=84.0)px
+    | IsContainer = 'true'
+    |  |-Node #563 at (l=16.0, t=28.0, r=395.0, b=84.0)px
+    |    Focused = 'false'
+    |    IsContainer = 'true'
+    |    Role = 'DropdownList'
+    |    Text = '[Default permission, Auto]'
+    |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |    MergeDescendants = 'true'
+    |-Node #573 at (l=32.0, t=90.0, r=379.0, b=141.0)px
+    | Text = '[The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in.]'
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |-Node #575 at (l=16.0, t=161.0, r=395.0, b=217.0)px
+    | IsContainer = 'true'
+    |  |-Node #577 at (l=16.0, t=161.0, r=395.0, b=217.0)px
+    |    Focused = 'false'
+    |    IsContainer = 'true'
+    |    Role = 'Switch'
+    |    Text = '[Session orchestration]'
+    |    ToggleableState = 'On'
+    |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |    MergeDescendants = 'true'
+    |-Node #588 at (l=32.0, t=223.0, r=379.0, b=274.0)px
+    | Text = '[Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused.]'
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |-Node #590 at (l=16.0, t=294.0, r=395.0, b=350.0)px
+    | IsContainer = 'true'
+    |  |-Node #592 at (l=16.0, t=294.0, r=395.0, b=350.0)px
+    |    Focused = 'false'
+    |    IsContainer = 'true'
+    |    Role = 'Switch'
+    |    Text = '[Smart model selection]'
+    |    ToggleableState = 'Off'
+    |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |    MergeDescendants = 'true'
+    |-Node #603 at (l=32.0, t=356.0, r=379.0, b=407.0)px
+    | Text = '[Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before.]'
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |-Node #605 at (l=16.0, t=427.0, r=395.0, b=483.0)px
+    | IsContainer = 'true'
+    |  |-Node #607 at (l=16.0, t=427.0, r=395.0, b=483.0)px
+    |    Focused = 'false'
+    |    IsContainer = 'true'
+    |    Role = 'Switch'
+    |    Text = '[Suggested replies]'
+    |    ToggleableState = 'On'
+    |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |    MergeDescendants = 'true'
+    |-Node #618 at (l=32.0, t=489.0, r=379.0, b=540.0)px
+    | Text = '[When a Claude turn ends, the empty message box offers what you'd probably type next. Each suggestion is one more request on that session's Claude account.]'
+    | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |-Node #620 at (l=16.0, t=560.0, r=395.0, b=616.0)px
+    | IsContainer = 'true'
+    |  |-Node #622 at (l=16.0, t=560.0, r=395.0, b=616.0)px
+    |    Focused = 'false'
+    |    IsContainer = 'true'
+    |    Role = 'Switch'
+    |    Text = '[Session recaps]'
+    |    ToggleableState = 'On'
+    |    Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |    MergeDescendants = 'true'
+    |-Node #633 at (l=32.0, t=622.0, r=379.0, b=691.0)px
+      Text = '[Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply, and the conversation ends with it. Off: the raw last reply, and no summary in the conversation.]'
+      Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]

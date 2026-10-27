@@ -1,0 +1,15 @@
+shown: Machines & models says what needs you (one machine offline)
+order: Machines & models@332 < Preferences@430 < Sessions@470 < Notifications@522 < Appearance@590 < Account@644 < Email@700
+shown: Machines & models, then Preferences: Sessions, Notifications, Appearance, then Account
+shown: Default permission is not on the list
+shown: Session orchestration is not on the list
+shown: Smart model selection is not on the list
+shown: Suggested replies is not on the list
+shown: Session recaps is not on the list
+sign-out: never between 120.0 and 780.0; last frame (16.0, 768.0, 370.0, 52.0)
+shown: Sign out is at the bottom
+shown: Default permission is not on the list's lower half either
+shown: Session orchestration is not on the list's lower half either
+shown: Smart model selection is not on the list's lower half either
+shown: Suggested replies is not on the list's lower half either
+shown: Session recaps is not on the list's lower half either

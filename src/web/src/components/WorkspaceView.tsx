@@ -346,6 +346,8 @@ import {
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows } from './CoordinatorQuestionCard';
+import { AnsweredQuestionsCtx } from './OwnerAnswerLine';
+import { answeredItemKey, answersHandedOver } from '../lib/ownerAnswer';
 import {
   ItemAsCard,
   exceptionCardRows,
@@ -3460,8 +3462,11 @@ export function WorkspaceView({
         return (Number.isNaN(at) ? Number.MAX_SAFE_INTEGER : at)
           - (Number.isNaN(bt) ? Number.MAX_SAFE_INTEGER : bt);
       })[0];
-    return item?.itemId ? sessionItemHref(session.id, item.itemId) : sessionPath(session.id);
-  }, [sessionPath]);
+    // A session waiting on the owner opens at that item's card, and the list's page goes along too.
+    return item?.itemId
+      ? `${sessionItemHref(session.id, item.itemId)}${listSearch.replace(/^\?/, '&')}`
+      : sessionPath(session.id);
+  }, [sessionPath, listSearch]);
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
@@ -5741,17 +5746,31 @@ export function WorkspaceView({
   // every record above is (`decisionReceiptAnchor`). The question's own card, below the transcript,
   // goes when the read drops it from `needsYou`, in the same poll that brings the record. The
   // native clients do the same (`CoordinatorQuestions.receipts`).
+  //
+  // Except an answer a turn of this conversation hands to the coordinator: that turn draws the
+  // question's card itself, where the coordinator was told (OwnerAnswerLine, from the records below),
+  // so the card is drawn once — not again at the moment it was answered.
+  const answeredQuestions = useMemo(
+    () => new Map((openItems.data?.closedQuestions ?? []).map((record) => [answeredItemKey(record.itemId), record])),
+    [openItems.data],
+  );
+  const handedOver = useMemo(
+    () => answersHandedOver(transcriptEvents, selectedTrashed ? [] : queuedTailEvents.map(({ turn }) => turn)),
+    [transcriptEvents, queuedTailEvents, selectedTrashed],
+  );
   const questionRecords = useMemo(
     () =>
       coordinatedProjectId
-        ? closedQuestionRows(openItems.data, transcriptEvents).map(({ record, placement }) => ({
-            anchor: placement,
-            moment: record.resolvedAt,
-            key: `question-record:${record.itemId}`,
-            element: <AnsweredQuestionCard record={record} />,
-          }))
+        ? closedQuestionRows(openItems.data, transcriptEvents)
+            .filter(({ record }) => !handedOver.has(answeredItemKey(record.itemId)))
+            .map(({ record, placement }) => ({
+              anchor: placement,
+              moment: record.resolvedAt,
+              key: `question-record:${record.itemId}`,
+              element: <AnsweredQuestionCard record={record} />,
+            }))
         : [],
-    [coordinatedProjectId, openItems.data, transcriptEvents],
+    [coordinatedProjectId, openItems.data, transcriptEvents, handedOver],
   );
 
   // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
@@ -11067,14 +11086,16 @@ export function WorkspaceView({
                               stateWord={orbitLinkStateWord}
                               refreshKey={sessionDetailQ.dataUpdatedAt}
                             >
-                              <Transcript
-                                events={transcriptEvents}
-                                live={live}
-                                turnImages={turnImages}
-                                artifactSessionId={selectedId}
-                                streamingAfterSeq={streamingDrafts ? streamAnchorRef.current : null}
-                                inserts={transcriptInserts}
-                              />
+                              <AnsweredQuestionsCtx.Provider value={answeredQuestions}>
+                                <Transcript
+                                  events={transcriptEvents}
+                                  live={live}
+                                  turnImages={turnImages}
+                                  artifactSessionId={selectedId}
+                                  streamingAfterSeq={streamingDrafts ? streamAnchorRef.current : null}
+                                  inserts={transcriptInserts}
+                                />
+                              </AnsweredQuestionsCtx.Provider>
                             </OrbitLinkCardsProvider>
                           </StreamingDraftsCtx.Provider>
                           </TaskActivityCtx.Provider>
@@ -11290,6 +11311,7 @@ export function WorkspaceView({
                   rememberable={approvalRememberOffered(shownEngine)}
                 />
               ))}
+              <AnsweredQuestionsCtx.Provider value={answeredQuestions}>
               {!selectedTrashed && queuedTailEvents.map(({ turn: q, event }) => {
                 // Each row is drawn from the event its echo will be, by the transcript's own dispatch
                 // (QueuedUserTurn): the card the transcript draws once a runner takes it, or the bubble
@@ -11324,6 +11346,7 @@ export function WorkspaceView({
                   />
                 );
               })}
+              </AnsweredQuestionsCtx.Provider>
               {placeholder === 'waiting' && <div className="chat-note">Waiting for the workspace…</div>}
               {selected &&
                 selectedTrashed &&

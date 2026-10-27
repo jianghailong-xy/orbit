@@ -331,6 +331,7 @@ test('the owner channel refuses a personal access token door by door and field b
       observe: async () => (await runnerRow()).tokenHash,
     },
     { reason: 'RUNNER_CREDENTIALS', route: 'POST /runners/device/:userCode/approve', path: '/runners/device/ABCD-EFGH/approve', login: 404 },
+    { reason: 'RUNNER_CREDENTIALS', route: 'POST /runners/device/:userCode/deny', path: '/runners/device/ABCD-EFGH/deny', login: 404 },
     {
       reason: 'RUNNER_CREDENTIALS',
       route: 'POST /runners/enrollment-tokens',

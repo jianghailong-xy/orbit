@@ -98,16 +98,18 @@ describe('a background-jobs note, opened', () => {
     expect(raw?.querySelector('pre')?.textContent).toBe(EN_RUNNING_AND_ENDED);
   });
 
-  it('names its count on the line that stays visible when it is folded again', async () => {
+  it('names its count in the line’s name, open and folded again alike, where its words only turn ⊖ back to ⊕', async () => {
     const toggle = await mountNote(EN_RUNNING_AND_ENDED);
 
-    expect(toggle.textContent).toBe('⊕ Orbit attached: background jobs · 1 running, 1 ended');
+    expect(toggle.getAttribute('aria-label')).toBe('⊕ Orbit attached: background jobs · 1 running, 1 ended');
+    expect(toggle.textContent).toBe('⊖ Orbit attached: background jobs');
 
     await act(async () => {
       toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(rows()).toHaveLength(0);
-    expect(toggle.textContent).toBe('⊕ Orbit attached: background jobs · 1 running, 1 ended');
+    expect(toggle.getAttribute('aria-label')).toBe('⊕ Orbit attached: background jobs · 1 running, 1 ended');
+    expect(toggle.textContent).toBe('⊕ Orbit attached: background jobs');
   });
 });

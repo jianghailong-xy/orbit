@@ -221,6 +221,8 @@ export interface DevicePollRequest {
 export type DevicePollResponse =
   | { status: 'pending' }
   | { status: 'expired' }
+  /** Denied on the approval page: nothing was minted, and the CLI stops. */
+  | { status: 'denied' }
   | {
       status: 'approved';
       /** The machine runner credential the CLI stores and runs the loop with. */

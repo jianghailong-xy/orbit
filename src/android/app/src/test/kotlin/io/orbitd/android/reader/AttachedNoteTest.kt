@@ -17,8 +17,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * A06-9 (iOS 0d23b89fc): what delivery appended to a message, split off the person's words where the
- * apiserver recorded it (OrbitKit's DeliveredMessageTests, case for case) and drawn as the new card.
+ * A06-9: what delivery appended to a message, split off the person's words where the apiserver recorded it
+ * (OrbitKit's DeliveredMessageTests, case for case) and drawn as one quiet line, ⊕ shut and ⊖ open (owner,
+ * 2026-10-27; docs/mocks/attached-context-note).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = TestOrbitApplication::class, qualifiers = "w411dp-h891dp")
@@ -60,20 +61,22 @@ class AttachedNoteTest {
         assertEquals("context", describeNote("[Image #1]"))
     }
 
-    @Test fun theCardSaysWhatIsAttachedAndOpensToWhatTheModelRead() {
-        compose.runOnUiThread { compose.activity.setContent { MaterialTheme { AttachedNoteCard(backgroundJobs) } } }
-        compose.onAllNodesWithText("Orbit context", useUnmergedTree = true).assertCountEquals(2)
-        compose.onNodeWithText("Attached · background jobs", useUnmergedTree = true).assertIsDisplayed()
-        compose.onNodeWithText("Attached to this message").assertIsDisplayed()
-        compose.onNodeWithText("Context is kept out of your message and available when you need the full details.").assertIsDisplayed()
+    @Test fun theLineSaysWhatIsAttachedAndOpensToWhatTheModelRead() {
+        compose.runOnUiThread { compose.activity.setContent { MaterialTheme { AttachedNoteEntry(backgroundJobs) } } }
+        // One line and nothing else to press: none of the card it replaced.
+        compose.onNodeWithText("⊕ Orbit attached: background jobs").assertIsDisplayed()
+        compose.onAllNodesWithText("Orbit context", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("View full context").assertCountEquals(0)
         val head = compose.onNodeWithContentDescription("⊕ Orbit attached: background jobs")
         head.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Collapsed"))
         compose.onNodeWithText(backgroundJobs).assertDoesNotExist()
-        compose.onNodeWithText("View full context").performClick()
+        head.performClick()
         compose.onNodeWithText(backgroundJobs).assertIsDisplayed()
-        compose.onNodeWithText("Attached to this message").assertDoesNotExist()
+        // The plus that opened it is a minus while it is open.
+        compose.onNodeWithText("⊖ Orbit attached: background jobs").assertIsDisplayed()
         head.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Expanded"))
         head.performClick()
         compose.onNodeWithText(backgroundJobs).assertDoesNotExist()
+        compose.onNodeWithText("⊕ Orbit attached: background jobs").assertIsDisplayed()
     }
 }

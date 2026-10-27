@@ -7878,6 +7878,9 @@ button.chat-jump-start:hover {
 .chat-user-meta {
   display: flex;
   align-items: center;
+  /* One line always: a row longer than the bubble's column (copy · time · a long note line on a
+     phone) runs out into the free gutter on its left rather than wrapping or past the bubble. */
+  justify-content: flex-end;
   gap: 6px;
   margin-top: 3px;
   height: 18px;
@@ -8187,91 +8190,32 @@ button.chat-jump-start:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* What delivery appended to a person's message (ControlPlaneNote). The folded state is a compact
-   card: the message keeps its own words, while the Orbit context gets a clear status and one
-   deliberate entry point. The raw block remains the opened state for traceability. */
+/* What delivery appended to a message (useControlPlaneNote): one quiet line in the meta voice — the
+   size and grey of the time under a message, no colour, no frame — so what the person typed stays
+   what the eye lands on. ⊕ while shut, ⊖ once open. Under a person's bubble the line ends the meta
+   row and the opened rows go under that row; at the foot of a card that is Orbit's own, the line
+   opens in place (ControlPlaneNote). */
 .chat-injected {
   margin-top: 6px;
-  overflow: hidden;
-  border: 1px solid var(--brand-border);
-  border-radius: 14px;
-  background: var(--brand-tint);
-  color: var(--text-1);
-  font-size: 12px;
 }
 .chat-injected-head {
-  position: relative;
-  display: block;
-  width: 100%;
-  min-height: 48px;
-  padding: 11px 12px 9px 38px;
+  max-width: 100%;
+  padding: 0;
   border: 0;
-  border-bottom: 1px solid var(--brand-border);
-  background: transparent;
-  color: transparent;
+  background: none;
+  color: var(--text-3);
   font: inherit;
-  font-size: 0;
+  font-size: 12px;
+  line-height: 18px;
   text-align: left;
   cursor: pointer;
 }
-.chat-injected-head::before {
-  content: '⊕  Orbit context';
-  display: block;
-  color: var(--text-1);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 17px;
-}
-.chat-injected-head::after {
-  content: 'Attached · ' attr(data-display-kind);
-  display: block;
-  color: var(--text-3);
-  font-size: 10.5px;
-  line-height: 14px;
-}
-.chat-injected-overview {
-  padding: 11px 12px 12px;
-}
-.chat-injected-summary {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.chat-injected-summary strong {
-  color: var(--text-1);
-  font-size: 13px;
-  font-weight: 600;
-}
-.chat-injected-summary span {
-  color: var(--text-3);
-  font-size: 11px;
-}
-.chat-injected-overview p {
-  margin: 7px 0 10px;
+.chat-injected-head:hover {
   color: var(--text-2);
-  font-size: 12px;
-  line-height: 1.5;
 }
-.chat-injected-action {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  min-height: 31px;
-  padding: 0 9px;
-  border: 1px solid var(--brand-border);
-  border-radius: 8px;
-  background: var(--bg-raised);
-  color: var(--brand-strong);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-.chat-injected-action .anticon {
+.chat-injected-mark {
   font-size: 10px;
-}
-.chat-injected.is-open > .chat-injected-head {
-  background: var(--bg-raised);
+  vertical-align: 1px;
 }
 /* Drop the focus ring on mouse click; keep it for keyboard navigation. */
 .chat-injected-head:focus {
@@ -8282,13 +8226,28 @@ button.chat-jump-start:hover {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
+.chat-injected-panel {
+  margin-top: 2px;
+}
+.chat-injected-panel > :first-child {
+  margin-top: 0;
+}
+/* Under a person's bubble the opened rows take the column's width, on a quiet panel of their own. */
+.chat-user-wrap > .chat-injected-panel {
+  align-self: stretch;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bg-sunken);
+}
 .chat-injected-body {
   max-height: 320px;
-  margin: 0;
-  padding: 10px 12px;
+  margin: 6px 0 0;
+  padding: 8px 10px;
   overflow: auto;
-  border-top: 1px solid var(--brand-border);
-  background: var(--bg-raised);
+  border-radius: 8px;
+  /* Translucent, as the rows above it are: it may sit on a tinted card. */
+  background: var(--fill-inset);
   color: var(--text-2);
   font-size: 11px;
   line-height: 1.5;
@@ -10872,6 +10831,30 @@ button.chat-jump-start:hover {
   justify-content: center;
   row-gap: 2px;
 }
+/* The same turn when the conversation can draw the question it answers: that question's card. */
+.owner-answer-card {
+  margin: 4px 0 6px;
+}
+/* The words the coordinator was told, folded at the foot of the answered card's review. */
+.answered-question-told {
+  margin: 4px 14px 10px;
+  font-size: 12px;
+}
+.answered-question-told summary {
+  color: var(--text-2);
+  cursor: pointer;
+}
+.answered-question-told pre {
+  max-height: 260px;
+  margin: 6px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 /* ── The owner-confirmation card ──────────────────────────────────────────────────────────
    `OwnerConfirmationCard.tsx`: an OWNER_CONFIRMED task's run has ended its turn, and its owner is
    asked to confirm it done or send it back. The evidence card's frame, with the two facts a person
@@ -12845,15 +12828,20 @@ button.chat-jump-start:hover {
   font-size: 12px;
 }
 /* What a question becomes once it has ended (`AnsweredQuestionCard`,
-   docs/mocks/coordinator-question-answered/): the question card's own blue, dimmed, with the
-   question's opening and how it ended; its review replays the question and every option. */
+   docs/mocks/coordinator-question-answered/): the question's opening and how it ended; its review
+   replays the question and every option. In the neutral frame a decided evidence card takes, with the
+   answer ticked green — the blue stays with the open question, still waiting on the owner
+   (docs/mocks/owner-answer-sent-card/tone.html). Dashed while the turn handing it over waits on the
+   queue, as a queued message is. */
 .review-card-preview.answered-question-card {
   gap: 6px;
   padding: 12px 14px;
-  border: 1px solid var(--brand-border);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--brand-tint);
-  opacity: 0.85;
+  background: var(--bg-raised);
+}
+.review-card-preview.answered-question-card.is-queued {
+  border-style: dashed;
 }
 .answered-question-head {
   display: flex;
@@ -12868,8 +12856,8 @@ button.chat-jump-start:hover {
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  background: var(--brand-tint-hover);
-  color: var(--brand);
+  background: var(--bg-hover);
+  color: var(--text-3);
   font-size: 13px;
 }
 .answered-question-card.is-withdrawn .answered-question-icon {
@@ -12906,7 +12894,7 @@ button.chat-jump-start:hover {
 }
 .answered-question-tick {
   flex: none;
-  color: var(--brand);
+  color: var(--success-solid);
 }
 .answered-question-note {
   overflow: hidden;
@@ -12933,7 +12921,7 @@ button.chat-jump-start:hover {
   align-items: center;
   justify-content: space-between;
   padding-top: 8px;
-  border-top: 1px solid var(--brand-border);
+  border-top: 1px solid var(--border-subtle);
   font-size: 13px;
   font-weight: 600;
   color: var(--brand);
@@ -25620,6 +25608,309 @@ button.agent-progress-agent:hover {
 
 .login-footer a:hover {
   color: var(--text-1);
+}
+
+/* ---- Enroll (/enroll): the browser half of `orbit register`, drawn as the login is — the machine and
+   the Orbit mark in the login's faint orbits, the code to compare, what is approved, two capsules. ---- */
+.enroll-form {
+  grid-row: 2;
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.enroll-page .login-title {
+  font-size: 26px;
+}
+
+.enroll-page code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--fill-inset);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.9em;
+  color: var(--text-1);
+}
+
+/* The machine, a link, the account's mark: dashed while it waits, green once approved. */
+.enroll-mark {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 26px;
+}
+
+/* The login's orbits, opened up to hold both marks and kept clear of the code below. */
+.enroll-mark .login-orbits {
+  width: 232px;
+  height: 232px;
+}
+
+.enroll-mark .login-orbits::before {
+  width: 316px;
+  height: 316px;
+}
+
+.enroll-mark .login-orbits::after {
+  display: none;
+}
+
+.enroll-machine,
+.enroll-mark .login-icon {
+  position: relative;
+  width: 60px;
+  height: 60px;
+}
+
+.enroll-machine {
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--bg-raised);
+  box-shadow: inset 0 0 0 1px var(--border), 0 8px 13px rgba(0, 0, 0, 0.06);
+  font-size: 28px;
+  color: var(--text-2);
+}
+
+.enroll-link {
+  position: relative;
+  width: 64px;
+  height: 2px;
+  margin: 0 8px;
+  background: repeating-linear-gradient(90deg, var(--text-4) 0 6px, transparent 6px 12px);
+}
+
+.enroll-mark-approved .enroll-link {
+  background: var(--success-solid);
+}
+
+.enroll-link-badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--text-3);
+  box-shadow: 0 0 0 4px var(--bg-base);
+  font-size: 13px;
+  color: #fff;
+  transform: translate(-50%, -50%);
+}
+
+.enroll-mark-approved .enroll-link-badge {
+  background: var(--success-solid);
+}
+
+.enroll-mark-expired .enroll-link-badge {
+  background: var(--warning-solid);
+}
+
+.enroll-mark-denied .enroll-machine,
+.enroll-mark-expired .enroll-machine {
+  color: var(--text-3);
+}
+
+.enroll-name {
+  font-weight: 600;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+
+/* The code, big enough to read against the terminal's at a glance. */
+.enroll-code {
+  margin-top: 28px;
+  padding: 10px 22px;
+  border-radius: 14px;
+  background: var(--fill-inset);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-1);
+  user-select: all;
+}
+
+.enroll-code-hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.enroll-facts {
+  width: 100%;
+  margin: 24px 0 0;
+  border-radius: 14px;
+  background: var(--fill-inset);
+  text-align: left;
+}
+
+.enroll-facts > div {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 11px 16px;
+}
+
+.enroll-facts > div + div {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.enroll-facts dt {
+  flex: none;
+  width: 72px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.enroll-facts dd {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+
+.enroll-fact-strong {
+  font-weight: 600;
+}
+
+.enroll-fact-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.enroll-fact-warning {
+  color: var(--warning);
+}
+
+.enroll-text-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--brand);
+  cursor: pointer;
+}
+
+.enroll-text-button:hover {
+  color: var(--brand-strong);
+}
+
+.enroll-alert {
+  width: 100%;
+  margin-top: 12px;
+  text-align: left;
+}
+
+.enroll-actions {
+  width: 100%;
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.enroll-actions .login-submit {
+  margin-top: 0;
+}
+
+.enroll-submit-danger.login-submit {
+  background: var(--error-solid);
+}
+
+.enroll-submit-danger.login-submit:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error-solid) 86%, #000);
+}
+
+.enroll-submit-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.enroll-submit-link:hover {
+  color: #fff;
+}
+
+.enroll-deny.orbit-button {
+  height: 50px;
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.enroll-note {
+  margin: 16px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-3);
+  text-wrap: balance;
+}
+
+.enroll-next {
+  width: 100%;
+  margin-top: 28px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--fill-inset);
+  text-align: left;
+}
+
+.enroll-next-title {
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.enroll-next-body {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.enroll-command {
+  margin-top: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 10px 16px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--fill-inset);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 15px;
+  color: var(--text-1);
+  cursor: pointer;
+}
+
+.enroll-command-prompt {
+  color: var(--text-3);
+}
+
+.enroll-command-copy {
+  margin-left: 6px;
+  color: var(--text-3);
+}
+
+.enroll-command:hover .enroll-command-copy {
+  color: var(--brand);
+}
+
+.enroll-quiet-link {
+  margin-top: 20px;
+  font-size: 14px;
+  color: var(--brand);
 }
 
 /* ---- Privacy policy (/privacy): public, the same page signed out or in, outside the app shell — the

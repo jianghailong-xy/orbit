@@ -214,6 +214,10 @@ class LinkIncrementsDeviceTest : IncrementDeviceTest() {
         capture("01-recap-line")
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         compose.onNode(hasText("Settings") and hasClickAction()).performClick()
+        // The switch is on Sessions' page (docs/mocks/ios-settings-order).
+        val sessions = hasText("Sessions") and hasClickAction()
+        await("the Sessions row") { exists(sessions) }
+        compose.onNode(sessions).performScrollTo().performClick()
         val toggle = hasText("Session recaps") and isToggleable()
         await("the Session recaps switch") { compose.onAllNodes(toggle and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(toggle).performScrollTo().assertIsOn()
@@ -221,6 +225,8 @@ class LinkIncrementsDeviceTest : IncrementDeviceTest() {
         await("the switch is written off") { bodies.any { it.first == "PATCH users/me/preferences" && it.second.replace(" ", "") == """{"recaps":false}""" } }
         await("and reads back off") { runCatching { compose.onNode(toggle).assertIsOff() }.isSuccess }
         capture("02-switch-off")
+        back()
+        await("back on Settings") { exists(hasText("Appearance")) }
         back()
         await("back on the list") { exists(hasTestTag("directory-list")) || exists(hasTestTag("workspace:$workspace")) }
         if (!exists(hasTestTag("directory-list"))) compose.onNodeWithTag("workspace:$workspace").performClick()

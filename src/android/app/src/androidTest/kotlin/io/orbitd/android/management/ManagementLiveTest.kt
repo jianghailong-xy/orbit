@@ -115,7 +115,7 @@ class ManagementLiveTest {
     private fun settings() {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         click(hasText("Settings") and hasClickAction())
-        await("Default permission")
+        await("Appearance")
     }
     private fun providers() { settings(); click(hasText("Machines & models") and hasClickAction()); await("Account pools") }
     private fun pick(row: String, option: String) { click(hasText(row) and hasClickAction()); click(hasText(option) and hasClickAction(), scroll = false) }
@@ -160,10 +160,13 @@ class ManagementLiveTest {
         ok("MEMBER sees no Admin row", !shows(hasText("Admin") and hasClickAction()))
         ok("server refuses GET admin/users to the MEMBER (403)", call("GET", "admin/users", member.token).first == 403)
         capture("live-settings-member")
+        // The five session settings are Sessions' page (docs/mocks/ios-settings-order).
+        click(hasText("Sessions") and hasClickAction()); await("Default permission")
         pick("Default permission", "Plan")
         eventually("server: defaultPermissionMode = plan") { prefs(member).s("defaultPermissionMode") == "plan" }
         click(hasText("Session orchestration") and isToggleable())
         eventually("server: enableOrchestration = false") { prefs(member).b("enableOrchestration") == false }
+        back(); await("Appearance")
         pick("Appearance", "Dark")
         eventually("server: theme = dark") { prefs(member).s("theme") == "dark" }
         capture("live-settings-member-dark")
@@ -173,12 +176,12 @@ class ManagementLiveTest {
         val finished = prefs(member).b("notifySessionFinished") ?: true   // absent = on, as the app and the push service read it
         click(hasText("When a session finishes") and isToggleable())
         eventually("server: notifySessionFinished = ${!finished}") { prefs(member).b("notifySessionFinished") == !finished }
-        back(); await("Default permission")
+        back(); await("Appearance")
         compose.onNodeWithContentDescription("Edit profile").performScrollTo().performClick(); await("Save profile")
         field("Name").performTextReplacement("Member Renamed")
         click(hasText("Save profile") and hasClickAction())
         eventually("server: name = Member Renamed") { read(member, "users/me").jsonObject.s("name") == "Member Renamed" }
-        await("Default permission")
+        await("Appearance")
         click(hasText("Change password") and hasClickAction()); await("At least 6 characters")
         field("Current password").performTextInput(member.password)
         field("New password").performTextInput("member-pass-2")
