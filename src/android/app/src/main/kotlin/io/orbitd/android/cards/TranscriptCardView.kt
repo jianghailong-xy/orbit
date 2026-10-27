@@ -21,6 +21,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.reader.AttachedNoteCard
 import io.orbitd.android.reader.personWords
 import io.orbitd.android.text.LocalReaderResources
@@ -102,14 +103,55 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
 }
 
 /**
- * The owner's answer handed to the coordinator (`OwnerAnswerLine`): one line, "Sent to the coordinator · 08:29" — the pill a revision handed to
- * its coordinator leaves (`SentToCoordinatorLine`) — in place of the owner's own bubble, which asked the question a second time in the
- * reader's name. Pressing it opens the words the agent read (web `OwnerAnswerLine.tsx`, iOS `OwnerAnswerLineView`).
+ * The ended questions this conversation draws — its rail's records — and the turns of it that hand their answers to the coordinator, each
+ * by item in one spelling, whichever each read was served ([key]; web `AnsweredQuestionsCtx`, `answeredItemKey`, `answersHandedOver`).
+ * Such a turn draws its question's record in its own place (`OwnerAnswerLineView`), so the rail leaves that record out
+ * ([leftToItsTurn]), and the record's review folds what the coordinator was told at its foot ([told]). [open] opens a record's review.
+ */
+internal class AnsweredQuestions(records: List<InteractionCard>, turns: List<RunEvent>, val open: (String) -> Unit) {
+    private val records = records.filter { it.family == CardFamily.QUESTION_RECORD }.associateBy { key(it.objectId) }
+    private val turns = turns.mapNotNull { turn -> OwnerAnswerLine.question(turn)?.let { key(it) to turn } }.toMap()
+
+    /** The record the turn handing over [answer] draws in its place, when this conversation holds it. */
+    fun record(answer: JsonObject): InteractionCard? = OwnerAnswerLine.question(answer)?.let { records[key(it)] }
+
+    /** Whether a turn of this conversation draws [card] in its own place. */
+    fun leftToItsTurn(card: InteractionCard) = card.family == CardFamily.QUESTION_RECORD && key(card.objectId).let { it in turns && it in records }
+
+    /** The turn that told the coordinator [card]'s answer, the newest where several did. */
+    fun told(card: InteractionCard): RunEvent? = if (leftToItsTurn(card)) turns[key(card.objectId)] else null
+
+    private companion object { fun key(itemId: String) = ObjectId.canonical(itemId) ?: itemId }
+}
+
+/** The conversation's [AnsweredQuestions]; none outside a conversation, where every such turn is its line. */
+internal val LocalAnsweredQuestions = compositionLocalOf<AnsweredQuestions?> { null }
+
+/**
+ * The owner's answer handed to the coordinator (`OwnerAnswerLine`). Where the conversation holds the question it answers, the turn is that
+ * question's own card, Answered, and nothing else (docs/mocks/owner-answer-sent-card/merged.html): the owner reads Answered as "the agent
+ * has my answer", so a line under it said so twice. Drawn here, where the coordinator was handed the answer, the card is dashed and says so
+ * while the turn still waits on the queue ([queued]), says when its delivery went unconfirmed, and its review folds the words the agent read.
+ *
+ * Otherwise — a Not yet… to a request to record the project done, which has no card, or a question the conversation does not hold — it is
+ * one line, "Sent to the coordinator · 08:29" — the pill a revision handed to its coordinator leaves (`SentToCoordinatorLine`) — in place of
+ * the owner's own bubble, which asked the question a second time in the reader's name. Pressing it opens the words the agent read (web
+ * `OwnerAnswerLine.tsx`, iOS `OwnerAnswerLineView`).
  */
 @Composable
-internal fun OwnerAnswerLineView(card: InteractionCard, event: RunEvent?) {
+internal fun OwnerAnswerLineView(card: InteractionCard, event: RunEvent?, queued: Boolean = false) {
     var open by rememberSaveable(card.key) { mutableStateOf(false) }
     val undelivered = event?.fields?.text("delivery") in setOf("failed", "unconfirmed")
+    val answered = LocalAnsweredQuestions.current
+    val record = answered?.record(card.source)
+    if (answered != null && record != null) {
+        Box(Modifier.fillMaxWidth().testTag(card.key)) {
+            QuestionRecordCard(record, queued = queued && !undelivered, notice = OwnerAnswerLine.undelivered.takeIf { undelivered }) {
+                answered.open(record.key)
+            }
+        }
+        return
+    }
     val tone = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxWidth().testTag(card.key), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp)) {

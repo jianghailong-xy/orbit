@@ -7,40 +7,52 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.reader.AttachedNoteCard
+import io.orbitd.android.reader.personWords
 import io.orbitd.android.text.MarkdownText
 import io.orbitd.android.ui.LocalOrbitColors
 
 /**
- * What a coordinator's question became once it ended (A08-13; iOS `CoordinatorQuestionRecordView`), where its question card was: the
- * heading and when, the question's opening, how it ended — the option chosen or the owner's own words, the note beside the option,
- * an answer no coordinator has had yet, or who withdrew it and why — and "View details", which replays it ([onOpen]). Dimmed: it
- * asks nothing, and no count reads it.
+ * What a coordinator's question became once it ended (A08-13; iOS `CoordinatorQuestionRecordView`), where its question card was — or in
+ * the place of the turn that handed its answer to the coordinator (`OwnerAnswerLineView`): the heading and when, the question's opening,
+ * how it ended — the option chosen or the owner's own words, the note beside the option, an answer no coordinator has had yet, or who
+ * withdrew it and why — and "View details", which replays it ([onOpen]). It asks nothing, and no count reads it: in the neutral frame a
+ * decided record takes, with the answer ticked green, it reads apart from the open question card, which stays blue
+ * (docs/mocks/owner-answer-sent-card/tone.html). [queued]: the turn handing it over still waits on the queue — dashed, as a queued turn
+ * is, and saying so. [notice]: what to say when that turn's delivery went unconfirmed.
  */
 @Composable
-internal fun QuestionRecordCard(card: InteractionCard, onOpen: () -> Unit) {
+internal fun QuestionRecordCard(card: InteractionCard, queued: Boolean = false, notice: String? = null, onOpen: () -> Unit) {
     val record = card.source
-    val tone = if (CoordinatorQuestions.withdrawn(record)) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
-    val chrome = MaterialTheme.colorScheme.primary
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
-    Column(Modifier.fillMaxWidth().testTag(card.key).alpha(0.72f).background(chrome.copy(alpha = 0.07f), RoundedCornerShape(14.dp))
-        .border(1.dp, chrome.copy(alpha = 0.28f), RoundedCornerShape(14.dp)).clickable(role = Role.Button, onClick = onOpen)
-        .padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    val line = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+    val shape = RoundedCornerShape(14.dp)
+    Column(Modifier.fillMaxWidth().testTag(card.key).background(MaterialTheme.colorScheme.surfaceVariant, shape)
+        .then(if (queued) Modifier.dashedBorder(line, 14.dp) else Modifier.border(1.dp, line, shape))
+        .clickable(role = Role.Button, onClick = onOpen).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.size(22.dp).background(tone.copy(alpha = 0.16f), RoundedCornerShape(6.dp)))
+            Box(Modifier.size(22.dp).background(secondary.copy(alpha = 0.16f), RoundedCornerShape(6.dp)))
             Text(CoordinatorQuestions.recordHeading(record), Modifier.weight(1f).testTag("${card.key}:heading"),
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold), maxLines = 1, overflow = TextOverflow.Ellipsis)
             CoordinatorQuestions.time(record)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = secondary) }
@@ -50,7 +62,7 @@ internal fun QuestionRecordCard(card: InteractionCard, onOpen: () -> Unit) {
                 color = secondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             CoordinatorQuestions.answerLine(record)?.let { answer ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(painterResource(R.drawable.ic_check_circle), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                    Icon(painterResource(R.drawable.ic_check_circle), null, Modifier.size(16.dp), tint = LocalOrbitColors.current.success)
                     Text(answer, Modifier.testTag("${card.key}:answer"), style = MaterialTheme.typography.bodyMedium)
                 }
             }
@@ -58,11 +70,16 @@ internal fun QuestionRecordCard(card: InteractionCard, onOpen: () -> Unit) {
                 Text(it, Modifier.padding(start = 22.dp).testTag("${card.key}:note"), style = MaterialTheme.typography.bodySmall, color = secondary,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            CoordinatorQuestions.waitingLine(record)?.let {
+            val clockLine: @Composable (String, String) -> Unit = { words, tag ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Icon(painterResource(R.drawable.ic_clock), null, Modifier.size(14.dp), tint = LocalOrbitColors.current.needsYou)
-                    Text(it, Modifier.testTag("${card.key}:waiting"), style = MaterialTheme.typography.bodySmall, color = LocalOrbitColors.current.needsYou)
+                    Text(words, Modifier.testTag("${card.key}:$tag"), style = MaterialTheme.typography.bodySmall, color = LocalOrbitColors.current.needsYou)
                 }
+            }
+            CoordinatorQuestions.waitingLine(record)?.let { clockLine(it, "waiting") }
+            if (queued) clockLine(CoordinatorQuestions.queuedForCoordinator, "queued")
+            notice?.let {
+                Text(it, Modifier.testTag("${card.key}:notice"), style = MaterialTheme.typography.bodySmall, color = LocalOrbitColors.current.needsYou)
             }
             CoordinatorQuestions.withdrewLine(record)?.let {
                 Text(it, Modifier.testTag("${card.key}:withdrew"), style = MaterialTheme.typography.bodySmall, color = secondary)
@@ -71,7 +88,7 @@ internal fun QuestionRecordCard(card: InteractionCard, onOpen: () -> Unit) {
                 Text(it, Modifier.testTag("${card.key}:reason"), style = MaterialTheme.typography.bodyMedium)
             }
         }
-        HorizontalDivider(color = chrome.copy(alpha = 0.28f))
+        HorizontalDivider(color = line)
         Row(Modifier.testTag("${card.key}:details"), verticalAlignment = Alignment.CenterVertically) {
             Text(CoordinatorQuestions.viewDetails, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = MaterialTheme.colorScheme.primary)
@@ -84,10 +101,11 @@ internal fun QuestionRecordCard(card: InteractionCard, onOpen: () -> Unit) {
  * The record's review (iOS `CoordinatorQuestionRecordView` in its sheet): the question as it was asked and every option as it was
  * offered — the one chosen ticked, the recommendation marked, the owner's note inside the chosen one, the Other row ticked over their
  * own words, or a read-only box for a question asked without options — and, where Send answer was, who ended it and when, then where
- * the answer went or why it was withdrawn. What the question blocked while it waited is not repeated: it waits no more.
+ * the answer went or why it was withdrawn. What the question blocked while it waited is not repeated: it waits no more. Drawn in the
+ * place of the turn that [told] the coordinator its answer, the words that turn handed over are folded at the foot of the replay.
  */
 @Composable
-internal fun QuestionRecordReview(card: InteractionCard, open: (String) -> Unit) {
+internal fun QuestionRecordReview(card: InteractionCard, told: RunEvent? = null, open: (String) -> Unit) {
     val record = card.source
     val question = record.obj("question")
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
@@ -110,6 +128,7 @@ internal fun QuestionRecordReview(card: InteractionCard, open: (String) -> Unit)
             if (question?.objects("options").isNullOrEmpty()) CoordinatorQuestions.ownWords(record)?.let {
                 Words("${card.key}:own", CoordinatorQuestions.freeAnswerPrompt, it, MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
             }
+            told?.let { ToldFold("${card.key}:told", it) }
         }
         HorizontalDivider()
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("${card.key}:footer"),
@@ -144,6 +163,29 @@ internal fun ReplayOption(tag: String, label: String, why: String?, recommended:
                 color = MaterialTheme.colorScheme.primary)
             why?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = secondary) }
             words?.let { Words("$tag:words", wordsLabel, it, null, Modifier.padding(top = 4.dp)) }
+        }
+    }
+}
+
+/** What the coordinator was told (web `answered-question-told`): folded under its heading, the words verbatim, and what delivery appended
+ * folded under them. */
+@Composable
+private fun ToldFold(tag: String, event: RunEvent) {
+    var open by rememberSaveable(tag) { mutableStateOf(false) }
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.fillMaxWidth().padding(top = 4.dp).testTag(tag), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.clickable(role = Role.Button) { open = !open }.semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
+            .padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("▸", Modifier.rotate(if (open) 90f else 0f).clearAndSetSemantics { }, color = secondary, style = MaterialTheme.typography.labelMedium)
+            Text(OwnerAnswerLine.told, color = secondary, style = MaterialTheme.typography.bodySmall)
+        }
+        if (open) {
+            SelectionContainer {
+                Text(event.personWords(), Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+                    RoundedCornerShape(6.dp)).padding(8.dp).testTag("$tag:words"), fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            event.fields.text("controlPlaneNote")?.takeIf { it.isNotBlank() }?.let { AttachedNoteCard(it.trim()) }
         }
     }
 }
