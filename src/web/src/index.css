@@ -8988,27 +8988,46 @@ button.chat-jump-start:hover {
   margin-left: -4px;
 }
 /* The conversation's last row while it is at rest (SessionRecapCard): the recap its list row reads
-   in one line, here whole. Inset like .chat-assistant's text, on a grey wash like the native card's
-   (grey 12%), so it reads as the session's summary rather than as one more reply. */
+   in one line, here whole. A footnote, not a panel (the owner, 2026-10-27,
+   docs/mocks/session-recap-display/05-quiet A): no wash, no corners, inset like .chat-assistant's
+   text, and one paragraph in the list line's own size and colour (.session-preview), so it reads as
+   a note on the conversation rather than as something laid over it. */
 .chat-recap {
-  margin: 4px 12px 16px;
-  padding: 8px 12px 11px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--text-3) 12%, transparent);
-}
-.chat-recap-head {
   display: flex;
-  align-items: center;
-  gap: 5px;
-  height: 24px;
-  font-size: 12px;
-  color: var(--text-3);
+  align-items: flex-start;
+  gap: 6px;
+  margin: 4px 12px 16px;
+}
+.chat-recap-line {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.chat-recap.is-busy .chat-recap-line {
+  opacity: 0.45;
+}
+/* The head runs into the recap: the word and when it was written, then the sentence. */
+.chat-recap-head {
+  margin-right: 7px;
+  white-space: nowrap;
+}
+.chat-recap-head .anticon {
+  margin-right: 5px;
 }
 .chat-recap-word {
   font-weight: 600;
 }
+.chat-recap-when {
+  margin-left: 4px;
+}
+/* Beside the first line. Shown under the pointer, on keyboard focus and while it is asking; hidden
+   otherwise but still in place, so the words never move when it appears. */
 .chat-recap-refresh {
-  margin: 0 -6px 0 auto;
+  flex: none;
+  margin: -2px -6px 0 0;
   width: 24px;
   height: 24px;
   display: inline-flex;
@@ -9019,6 +9038,13 @@ button.chat-jump-start:hover {
   background: transparent;
   color: var(--text-3);
   cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease-out;
+}
+.chat-recap:hover .chat-recap-refresh,
+.chat-recap.is-busy .chat-recap-refresh,
+.chat-recap-refresh:focus-visible {
+  opacity: 1;
 }
 .chat-recap-refresh:hover:not(:disabled) {
   background: var(--bg-hover);
@@ -9027,14 +9053,11 @@ button.chat-jump-start:hover {
 .chat-recap-refresh:disabled {
   cursor: default;
 }
-.chat-recap-text {
-  margin-top: 2px;
-  font-size: 14px;
-  line-height: 1.55;
-  color: var(--text-1);
-}
-.chat-recap.is-busy .chat-recap-text {
-  opacity: 0.45;
+/* A screen with no hover has no way to show it: there it stays, as on the phones' native cards. */
+@media (hover: none) {
+  .chat-recap-refresh {
+    opacity: 1;
+  }
 }
 /* A turn's head row (TurnHead): how long the turn worked, over its own output — the line Codex
    draws above an answer. Inset like .chat-assistant's text so it starts on the reply's edge, and
