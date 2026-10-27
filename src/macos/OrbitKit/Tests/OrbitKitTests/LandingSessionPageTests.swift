@@ -537,7 +537,7 @@ final class LandingSessionPageTests: XCTestCase {
                        "Ends this attempt · nothing was pushed")
     }
 
-    // MARK: - the header and the read-only footer
+    // MARK: - the title a landing goes by
 
     func testTheHeaderTitlesALinkedLandingWithItsServerTitleAndAPreRowOneFromTheView() {
         XCTAssertEqual(LandingPageCopy.headerTitle(landing(), rowTitle: "Land · Ledger migration order"),
@@ -553,35 +553,35 @@ final class LandingSessionPageTests: XCTestCase {
         XCTAssertTrue(title.hasSuffix(" → main · #7"), title)
     }
 
-    func testTheHeaderNamesTheRunnerWhileItRunsAndTheSettlementOnceItHasSettled() {
-        XCTAssertEqual(LandingPageCopy.headerSub(landing()), "Run by Orbit · runner wikova")
-        XCTAssertEqual(LandingPageCopy.headerSub(landing {
-            $0.settledAt = at(9, 51); $0.settledAs = "LANDED"
-        }), "Run by Orbit · settled \(ProjectPage.landingClockTime(date(9, 51)))")
-    }
+    // MARK: - a merge row's receipt in the Landings window (board 03 e)
 
-    func testTheFooterPointsATaskSegmentAtTheCoordinatorARoundAtItsCardAndASettledOneAtNothing() {
-        let task = LandingPageCopy.footer(landing(), onPass: nil)
-        XCTAssertEqual(task.line, "Orbit runs this landing — nothing to type here.")
-        XCTAssertEqual(task.detail, "Decisions: the coordinator")
-        XCTAssertEqual(task.link, .coordinator)
-
-        let round = landing { $0.subject = "PROMOTION" }
-        XCTAssertEqual(LandingPageCopy.footer(round, onPass: "MERGE").detail,
-                       "A clean pass merges on its own")
-        XCTAssertEqual(LandingPageCopy.footer(round, onPass: "ASK").detail,
-                       "Merging is decided on the merge card")
-        let bare = LandingPageCopy.footer(round, onPass: nil)
-        XCTAssertEqual(bare.detail, "Merging is decided on the merge card")
-        XCTAssertEqual(bare.link, .reviewCard)
-
-        let settled = LandingPageCopy.footer(landing {
-            $0.subject = "PROMOTION"; $0.episode = 9
+    func testAMergeRowsReceiptSaysWhatIsOnMainTheCheckThatPassedAndTheTreeThatLanded() {
+        let round = landing {
+            $0.subject = "PROMOTION"; $0.taskId = nil; $0.promotionId = "promo-1"
             $0.settledAt = at(9, 51); $0.settledAs = "MERGED"
-        }, onPass: nil)
-        XCTAssertEqual(settled.line, "This landing is complete — nothing to type here.")
-        XCTAssertNil(settled.link)
-        XCTAssertEqual(settled.next, "The next merge into main opens a new landing (#10).")
+            $0.checks = [LandingCheckResult(name: "MERGE_CHECK", exitCode: 0, expectedExitCode: 0,
+                                            timedOut: false, durationMs: 17 * 60_000 + 41_000)]
+        }
+        XCTAssertEqual(LandingPageCopy.mergeReceipt(promotion: promotion(), landing: round), LandingMergeReceipt(
+            heading: "Now on main · 2 tasks",
+            tasks: ["Ledger migration order", "Payout retry budget"],
+            checkLine: "✓ Passed on the combined tree · 17m 41s",
+            treeLine: "Landed exactly the tested tree 5e5bfca · as a merge commit"))
+        // A round past the read's 20 records keeps to what its landing view has.
+        XCTAssertEqual(LandingPageCopy.mergeReceipt(promotion: nil, landing: round), LandingMergeReceipt(
+            heading: "Now on main", tasks: [], checkLine: "✓ Passed on the combined tree · 17m 41s", treeLine: nil))
+        // A merge older than landing sessions has its record alone, whose checks it reads first.
+        let recorded = ProjectPromotionView(
+            promotionId: "promo-0", state: .merged, sourceRef: "refs/heads/project/p1", sourceSha: "a",
+            upstreamRef: "refs/heads/main", taskIds: ["task-1"],
+            tasks: [PromotionTask(taskId: "task-1", title: "Ledger migration order")],
+            checks: [IntegrationCheckResult(name: "MERGE_CHECK", command: "npm test", expectedExitCode: 0,
+                                            exitCode: 0, timedOut: false, durationMs: 9 * 60_000)],
+            landsAs: "FAST_FORWARD", landsTreeSha: "5e5bfca" + String(repeating: "0", count: 33))
+        XCTAssertEqual(LandingPageCopy.mergeReceipt(promotion: recorded, landing: nil), LandingMergeReceipt(
+            heading: "Now on main · 1 task", tasks: ["Ledger migration order"],
+            checkLine: "✓ Passed on the combined tree · 9m 00s",
+            treeLine: "Landed exactly the tested tree 5e5bfca · by fast-forward"))
     }
 
     // MARK: - the settled round is the outcome

@@ -2,166 +2,60 @@ import SwiftUI
 import Observation
 import OrbitKit
 
-/// The landing session page (contract §2.9 LS1/LS6/LS7; design §3; mockups v4
-/// `docs/mocks/landing-session/v4/05-landing-session-page`): a session the platform drives, drawn as
-/// its own reader — the status card over the newest attempt, the server's timeline, the check output
-/// a line opens, and the owner doors the landing view's facts allow.
-///
-/// It is a reading surface, not a conversation: no composer, no engine, no model, no rename, fork,
-/// share or merge bar (LS6). The one way out that matters — the coordinator, or the merge card that
-/// decides a round — is named in the footer.
-///
-/// Every word and every door condition is `LandingPageCopy`'s, tested on Linux; this view only lays
-/// them out. The page reads `GET /sessions/:id` on its own cadence (§2.7a: RUNNING 4 s, QUEUED 15 s,
-/// nothing once settled), beside the project's integration, coordinator and promotion reads the head
-/// and the gates take their facts from.
-struct LandingSessionPageView: View {
+// One landing in a project's Landings window (contract §2.9 LS1/LS6/LS7, revision 28; design §3;
+// mockups v4 `docs/mocks/landing-session/v4/05-landing-session-page` and
+// `docs/mocks/landings-one-window`): the single landing page these pieces were drawn on is now the
+// window focused on that landing (`ProjectLandingsWindowView`), and the page's body is reused there —
+// its status card is a landing's card under `Now`, its timeline the record a landing opens to.
+//
+// Every word and every door condition is `LandingPageCopy`'s, tested on Linux; these views only lay
+// them out.
+
+/// A landing's status card (mockup 05's head over the newest attempt, board 02 d): V6's step clock,
+/// budget bar and liveness while it is in hand, what stopped it and the doors to the people who
+/// decide while it waits, the outcome once it settled. The window adds the task's name under the head.
+struct LandingStatusCardView: View {
     let sessionID: String
+    let landing: SessionLandingView?
+    /// The task's name (a round's own title): the one line the window adds under the head.
+    let title: String?
+    let now: Date
+    /// When this device last got an answer, and whether that read failed.
+    let readAt: Date?
+    let readFailed: Bool
+    let facts: LandingFacts
+    /// The candidate a round is about: on offer while it runs, its merged record once it settled.
+    let promotion: ProjectPromotionView?
+    /// The doors a landing that waits for a decision carries (board 02 d): the coordinator, and the
+    /// task or the round's own card.
+    let waitDoors: [LandingMenuAction]
+    let acting: Bool
+    let act: (LandingMenuAction) -> Void
     @Environment(AppModel.self) private var app
 
-    @State private var landing: SessionLandingView?
-    @State private var rowTitle: String?
-    /// When this device last got an answer, and whether that read failed.
-    @State private var readAt: Date?
-    @State private var readFailed = false
-    @State private var integration: ProjectIntegrationView?
-    @State private var coordinator: ProjectCoordinatorStatus?
-    @State private var promotion: ProjectPromotionView?
-    @State private var mergedPromotions: [ProjectPromotionView] = []
-    @State private var taskTitle: String?
-    @State private var refusal: String?
-    @State private var now = Date()
-    @State private var openLog: LandingLogSelectors?
-    @State private var reviewOpen = false
-    @State private var acting = false
-    @State private var reviewSource: LandingPromotionSource?
-
-    private var api: APIClient? {
-        guard let baseURL = app.baseURL else { return nil }
-        return APIClient(baseURL: baseURL, tokenStore: app.tokenStore)
-    }
-
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                header
-                if let landing {
-                    statusCard(landing)
-                } else if readFailed {
-                    offlineCard
-                } else {
-                    loadingCard
-                }
-                if let refusal {
-                    Text(refusal)
-                        .font(.orbitMeta).foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                if let landing {
-                    timeline(landing)
-                }
-            }
-            .padding(16)
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity)
-        }
-
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if let landing { footer(landing) }
-        }
-        .task(id: sessionID) { await run() }
-        .task(id: sessionID) {
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                if Task.isCancelled { return }
-                now = Date()
-            }
-        }
-        .sheet(isPresented: $reviewOpen) {
-            if let source = reviewSource, let promotionID = landing?.promotionId {
-                PromotionReviewSheet(source: source, promotionID: promotionID)
-            }
+        if let landing {
+            statusCard(landing)
+        } else if readFailed {
+            offlineCard
+        } else {
+            loadingCard
         }
     }
 
-    // MARK: - the head
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(LandingPageCopy.headerTitle(landing, rowTitle: rowTitle, taskTitle: taskTitle))
-                    .font(.title3.weight(.semibold))
-                    .lineLimit(2)
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                    Text(LandingPageCopy.chip)
-                }
-                .font(.orbitMeta.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8).padding(.vertical, 2)
-                .background(Color.secondary.opacity(0.12), in: Capsule())
-                Spacer(minLength: 8)
-                if let landing, !menuItems(landing).isEmpty {
-                    menu(landing)
-                }
-            }
-            Text(LandingPageCopy.headerSub(landing))
-                .font(.orbitListSubtitle)
-                .foregroundStyle(.secondary)
+    @ViewBuilder private var titleLine: some View {
+        if let title, !title.isEmpty {
+            Text(title)
+                .font(.orbitLabel)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
-
-    private func menuItems(_ landing: SessionLandingView) -> [LandingMenuItem] {
-        let gates = LandingPageCopy.gates(landing, now: now, updatedAt: readAt, failed: readFailed)
-        let attempt = landing.currentAttempt
-        let nothingPushed = attempt.map { attempt in
-            attempt.kind == "CHECK_PROMOTION"
-                || (attempt.timedOut
-                    && LandingPageCopy.pushSentence(landing, attempt: attempt)
-                        == LandingPageCopy.nothingPushedSentence)
-        } ?? false
-        return LandingPageCopy.menuItems(
-            landing, gates: gates,
-            hasCoordinator: coordinator?.coordination.sessionId != nil,
-            hasReview: currentPromotion(landing) != nil,
-            nothingPushed: nothingPushed)
-    }
-
-    private func menu(_ landing: SessionLandingView) -> some View {
-        Menu {
-            ForEach(menuItems(landing)) { item in
-                Button(role: item.danger ? ButtonRole.destructive : nil) {
-                    press(item, landing: landing)
-                } label: {
-                    if let sub = item.sub {
-                        Text("\(item.label) — \(sub)")
-                    } else {
-                        Text(item.label)
-                    }
-                }
-            }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-                .font(.orbitGlyph)
-        }
-        // The board's plain ⋯ rather than macOS's pull-down bezel (iOS's Menu already draws one),
-        // and one identifier a screenshot test can press: the console's own session menu is not
-        // drawn on a landing session.
-        #if os(macOS)
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        #endif
-        .fixedSize()
-        .accessibilityIdentifier("landing-more")
-        .accessibilityLabel("More actions")
-    }
-
-    // MARK: - the status card
 
     @ViewBuilder private func statusCard(_ landing: SessionLandingView) -> some View {
         let card = LandingPageCopy.attemptCard(landing, now: now, updatedAt: readAt,
-                                               failed: readFailed, facts: facts(landing))
-        let outcome = LandingPageCopy.outcomeCard(landing, promotion: currentPromotion(landing))
+                                               failed: readFailed, facts: facts)
+        let outcome = LandingPageCopy.outcomeCard(landing, promotion: promotion)
         VStack(alignment: .leading, spacing: 8) {
             if let outcome {
                 ProjectLandingHead(
@@ -169,6 +63,7 @@ struct LandingSessionPageView: View {
                     head: ProjectPage.LandingHead(right: outcome.right, isClock: false,
                                                   detail: outcome.detail ?? ""),
                     running: false, timedOut: false, ok: outcome.ok)
+                titleLine
                 if let heading = outcome.tasksHeading {
                     Text(heading).font(.orbitLabel.weight(.semibold))
                     ForEach(outcome.tasks, id: \.self) { title in
@@ -190,6 +85,7 @@ struct LandingSessionPageView: View {
                     head: ProjectPage.LandingHead(right: card.right, isClock: card.rightIsClock,
                                                   detail: card.detail),
                     running: card.running, timedOut: card.timedOut)
+                titleLine
                 if let budget = card.budget {
                     Text(budget).font(.orbitMeta).foregroundStyle(.secondary)
                     if let progress = card.progress {
@@ -208,12 +104,12 @@ struct LandingSessionPageView: View {
                 // learns now whether to wait for a question or walk away. Web: `promotionOnPassLine`.
                 if landing.subject == "PROMOTION", landing.settledAt == nil, card.running,
                    landing.currentAttempt?.kind == "CHECK_PROMOTION",
-                   let onPass = PromotionCards.onPassLine(currentPromotion(landing)) {
+                   let onPass = PromotionCards.onPassLine(promotion) {
                     Text(onPass).font(.orbitMeta).foregroundStyle(.secondary)
                 }
                 if card.timedOut, let attempt = landing.currentAttempt {
                     Text(LandingPageCopy.timeoutLine(landing, attempt: attempt,
-                                                     main: facts(landing).mainBranch))
+                                                     main: facts.mainBranch))
                         .font(.orbitMeta).foregroundStyle(.secondary)
                     if let push = LandingPageCopy.pushSentence(landing, attempt: attempt) {
                         Text(push).font(.orbitMeta).foregroundStyle(.secondary)
@@ -227,6 +123,10 @@ struct LandingSessionPageView: View {
                 }
             } else {
                 Text(LandingPageCopy.queued).font(.orbitMeta).foregroundStyle(.secondary)
+                titleLine
+            }
+            if !waitDoors.isEmpty {
+                waitingDoors
             }
         }
         .padding(12)
@@ -279,11 +179,11 @@ struct LandingSessionPageView: View {
         let gates = LandingPageCopy.gates(landing, now: now, updatedAt: readAt, failed: readFailed)
         HStack(spacing: 8) {
             if gates.retry {
-                Button(LandingPageCopy.retry) { act(.retry, landing) }
+                Button(LandingPageCopy.retry) { act(.retry) }
                     .buttonStyle(.borderedProminent).controlSize(.small).disabled(acting)
             }
             if gates.recheck {
-                Button(LandingPageCopy.rerunTheCheck) { act(.rerunTheCheck, landing) }
+                Button(LandingPageCopy.rerunTheCheck) { act(.rerunTheCheck) }
                     .buttonStyle(.borderedProminent).controlSize(.small).disabled(acting)
             }
             if gates.abandon {
@@ -291,7 +191,7 @@ struct LandingSessionPageView: View {
                 // default danger button. A bordered button takes its fill from the tint: the
                 // destructive role alone reddens the word on a grey fill, so the red tint gives the
                 // light red wash. A Mac push button keeps the word black unless the label itself is red.
-                Button(role: .destructive) { act(.abandon, landing) } label: {
+                Button(role: .destructive) { act(.abandon) } label: {
                     Text(LandingPageCopy.abandon)
                         #if os(macOS)
                         .foregroundStyle(.red)
@@ -303,7 +203,7 @@ struct LandingSessionPageView: View {
         }
     }
 
-    /// The offline page: the last integration snapshot, frozen, and no door — a press against a stale
+    /// The offline card: the last integration snapshot, frozen, and no door — a press against a stale
     /// fact is a decision made on nothing.
     private var offlineCard: some View {
         let placeholder = LandingPageCopy.offlinePlaceholder(
@@ -319,12 +219,14 @@ struct LandingSessionPageView: View {
                     head: ProjectPage.LandingHead(right: card.right, isClock: card.rightIsClock,
                                                   detail: card.detail),
                     running: false, timedOut: false)
+                titleLine
                 if let live = card.live {
                     Text(live).font(.orbitMeta).foregroundStyle(.secondary)
                 }
             } else {
                 Text(LandingPageCopy.updateUnavailable)
                     .font(.orbitLabel).foregroundStyle(.secondary)
+                titleLine
             }
         }
         .padding(12)
@@ -333,24 +235,64 @@ struct LandingSessionPageView: View {
     }
 
     private var loadingCard: some View {
-        HStack(spacing: 8) {
-            ProgressView().controlSize(.small)
-            Text(LandingPageCopy.loadingLanding)
-                .font(.orbitLabel).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(LandingPageCopy.loadingLanding)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+            }
+            titleLine
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
     }
 
-    // MARK: - the timeline
+    /// The doors a landing that waits for a decision carries (board 02 d): the first is the solid
+    /// one, as the board draws Open Coordinator beside a plain Open Task.
+    private var waitingDoors: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(waitDoors.enumerated()), id: \.offset) { index, action in
+                if index == 0 {
+                    Button(Self.doorLabel(action)) { act(action) }
+                        .buttonStyle(.borderedProminent).controlSize(.small)
+                } else {
+                    Button(Self.doorLabel(action)) { act(action) }
+                        .buttonStyle(.bordered).controlSize(.small)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    static func doorLabel(_ action: LandingMenuAction) -> String {
+        switch action {
+        case .openCoordinator: return LandingPageCopy.openCoordinator
+        case .openTask: return LandingPageCopy.openTask
+        default: return LandingPageCopy.reviewCard
+        }
+    }
+}
+
+/// A landing's record (mockups 05 a/e/g/i): the server's timeline, one section per attempt, with the
+/// check a finished line names opening its output. In the Landings window it is what a landing opens
+/// to, under its card or its row.
+struct LandingTimelineView: View {
+    let sessionID: String
+    let landing: SessionLandingView
+    let now: Date
+    @State private var openLog: LandingLogSelectors?
+
+    var body: some View {
+        timeline(landing)
+    }
 
     @ViewBuilder private func timeline(_ landing: SessionLandingView) -> some View {
         if let timeline = landing.timeline,
            !timeline.sections.isEmpty || !timeline.facts.isEmpty {
             VStack(alignment: .leading, spacing: 14) {
-                // The current round's state is the status card's to say; the board's timeline does
-                // not repeat it as a fact above the sections.
+                // The current round's state is the card's or the row's to say; the board's timeline
+                // does not repeat it as a fact above the sections.
                 ForEach(Array(timeline.facts.filter { $0.kind != "PROMOTION_STATE" }.enumerated()),
                         id: \.offset) { _, fact in
                     Text(fact.text).font(.orbitMeta).foregroundStyle(.secondary)
@@ -494,193 +436,6 @@ struct LandingSessionPageView: View {
                     + ProjectPage.landingClock(max(0, now.timeIntervalSince(
                         RelativeTime.parse(check.startedAt) ?? now))))
                 .padding(.leading, 24)
-        }
-    }
-
-    // MARK: - the footer
-
-    @ViewBuilder private func footer(_ landing: SessionLandingView) -> some View {
-        let footer = LandingPageCopy.footer(landing, onPass: currentPromotion(landing)?.onPass)
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
-                Text(footer.line).font(.orbitMeta).foregroundStyle(.secondary)
-                if let detail = footer.detail {
-                    Text(detail).font(.orbitMeta.weight(.semibold)).foregroundStyle(.secondary)
-                }
-                if let link = footer.link {
-                    if link == .coordinator, let session = coordinator?.coordination.sessionId {
-                        Button("\(LandingPageCopy.openCoordinatorLink) ›") {
-                            if let url = URL(string: "orbit-session:\(PublicID.toPublic(session))") {
-                                openURL(url)
-                            }
-                        }
-                        .font(.orbitMeta).buttonStyle(.plain).foregroundStyle(Color.accentColor)
-                    } else if link == .reviewCard, currentPromotion(landing) != nil {
-                        Button("\(LandingPageCopy.reviewCard) ›") { openReview(landing) }
-                            .font(.orbitMeta).buttonStyle(.plain).foregroundStyle(Color.accentColor)
-                    }
-                }
-            }
-            if let next = footer.next {
-                Text(next).font(.orbitMeta).foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16).padding(.vertical, 8)
-        .background(.bar)
-    }
-
-    @Environment(\.openURL) private var openURL
-
-    // MARK: - the reads
-
-    private func facts(_ landing: SessionLandingView) -> LandingFacts {
-        let job = integration?.inFlightJobs?.first { $0.jobId == landing.currentAttempt?.jobId }
-        return LandingFacts(stepStartedAt: job?.stepStartedAt, typicalMs: job?.typicalMs,
-                            main: RunSettings.mainBranchName(integration?.upstreamRef))
-    }
-
-    private func currentPromotion(_ landing: SessionLandingView) -> ProjectPromotionView? {
-        guard landing.subject == "PROMOTION" else { return nil }
-        if landing.settledAt != nil {
-            return mergedPromotions.first { $0.promotionId == landing.promotionId }
-        }
-        return promotion
-    }
-
-    private func run() async {
-        while !Task.isCancelled {
-            await refresh()
-            // §2.7a's cadence once there is an attempt to read; a page with nothing yet, or a read
-            // that failed, asks again every 15 s; a settled subject stops.
-            let interval: TimeInterval?
-            if let landing {
-                interval = LandingPageCopy.refetchInterval(landing)
-            } else {
-                interval = 15
-            }
-            guard let interval else { return }
-            do { try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000)) }
-            catch { return }
-        }
-    }
-
-    private func refresh() async {
-        guard let api else { return }
-        rowTitle = app.session(id: sessionID)?.title
-        do {
-            let detail = try await api.sessionDetail(sessionID)
-            landing = detail.landing ?? landing
-            if let title = app.session(id: sessionID)?.title { rowTitle = title }
-            readAt = Date()
-            readFailed = false
-        } catch {
-            readFailed = true
-        }
-        guard let landing else { return }
-        let projectID = landing.projectId
-        if !projectID.isEmpty, landing.settledAt == nil {
-            integration = try? await api.projectIntegration(projectID)
-            if let integration { app.rememberLandingJobs(integration) }
-            coordinator = try? await api.projectCoordinatorStatus(projectID)
-            if landing.subject == "PROMOTION" {
-                promotion = try? await api.currentPromotion(projectID: projectID)
-            }
-        }
-        if landing.subject == "PROMOTION", landing.settledAt != nil, !projectID.isEmpty {
-            mergedPromotions = (try? await api.mergedPromotions(projectID: projectID)) ?? []
-        }
-        if landing.subject == "TASK", taskTitle == nil, let taskID = landing.taskId {
-            taskTitle = (try? await api.taskRow(taskID))?.title
-        }
-        if promotion != nil || currentPromotion(landing) != nil {
-            ensureReviewSource(projectID: projectID)
-        }
-    }
-
-    private func ensureReviewSource(projectID: String) {
-        guard let api else { return }
-        if reviewSource == nil { reviewSource = LandingPromotionSource(api: api, projectID: projectID) }
-        reviewSource?.promotion = promotion
-        reviewSource?.landings = integration?.landTasks ?? []
-    }
-
-    private func openReview(_ landing: SessionLandingView) {
-        ensureReviewSource(projectID: landing.projectId)
-        Task { await reviewSource?.refreshPromotion() }
-        reviewOpen = true
-    }
-
-    // MARK: - the presses
-
-    private func press(_ item: LandingMenuItem, landing: SessionLandingView) {
-        switch item.action {
-        case .openTask:
-            if let taskID = landing.taskId, let url = URL(string: "orbit-task:\(PublicID.toPublic(taskID))") {
-                openURL(url)
-            }
-        case .openSourceSession:
-            if let source = landing.currentAttempt?.sourceSessionId,
-               let url = URL(string: "orbit-session:\(PublicID.toPublic(source))") {
-                openURL(url)
-            }
-        case .openCoordinator:
-            if let session = coordinator?.coordination.sessionId,
-               let url = URL(string: "orbit-session:\(PublicID.toPublic(session))") {
-                openURL(url)
-            }
-        case .reviewCard:
-            openReview(landing)
-        default:
-            act(item.action, landing)
-        }
-    }
-
-    private func act(_ action: LandingMenuAction, _ landing: SessionLandingView) {
-        guard !acting, let api else { return }
-        acting = true
-        Task {
-            defer { acting = false }
-            do {
-                switch action {
-                case .stop:
-                    guard let taskID = landing.taskId else { return }
-                    try await api.stopTaskIntegration(projectID: landing.projectId, taskID: taskID)
-                case .cancel:
-                    guard let promotionID = landing.promotionId else { return }
-                    _ = try await api.cancelPromotion(projectID: landing.projectId,
-                                                      promotionID: promotionID)
-                case .abandon:
-                    guard let jobID = landing.currentAttempt?.jobId else { return }
-                    try await api.abandonIntegrationJob(projectID: landing.projectId, jobID: jobID)
-                case .retry:
-                    guard let jobID = landing.currentAttempt?.jobId else { return }
-                    _ = try await api.retryIntegrationJob(landing.projectId, jobID: jobID)
-                case .rerunTheCheck:
-                    guard let promotionID = landing.promotionId else { return }
-                    try await api.rerunPromotionCheck(projectID: landing.projectId,
-                                                      promotionID: promotionID,
-                                                      reason: LandingPageCopy.rerunLandingCheckReason)
-                default:
-                    return
-                }
-                refusal = nil
-            } catch {
-                let label: String
-                switch action {
-                case .stop: label = LandingPageCopy.stopFailed
-                case .cancel: label = LandingPageCopy.cancelFailed
-                case .abandon: label = LandingPageCopy.abandonFailed
-                case .retry: label = LandingPageCopy.retryFailed
-                default: label = LandingPageCopy.rerunFailed
-                }
-                var reason = APIClient.failureReason(error)
-                while reason.hasSuffix(".") { reason.removeLast() }
-                refusal = "\(label) — \(reason)."
-            }
-            // The landing and the project reads are what the card was drawn from; read again.
-            readAt = nil
-            await refresh()
         }
     }
 }

@@ -42,8 +42,8 @@ open class OrbitApplication : Application() {
         private set
     /** The sessions on their way to Trash from this device, kept out of every list until their move has settled (A05-9). */
     internal val trashing = TrashingSessions()
-    /** Each landing job as the last integration read described it: a landing page opened while the server cannot be read draws it,
-     *  frozen (A11-20 e, iOS `landingInFlightCache`). */
+    /** Each landing job as the last integration read described it: a landing opened while the server cannot be read draws it as a
+     *  card in its project's Landings window, frozen (A11-20 e, iOS `landingInFlightCache`). */
     internal val landingJobs = LandingJobSnapshots()
     val push: io.orbitd.android.push.PushController by lazy { createPush() }
     val updates: io.orbitd.android.update.AppUpdater by lazy { createUpdates() }

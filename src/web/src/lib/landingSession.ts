@@ -17,9 +17,11 @@ import { DEFAULT_MAIN_BRANCH, mainBranchName } from './projectStart';
 import { routeId } from './idCodec';
 
 /**
- * The landing session page (contract §2.9 LS1, LS6, LS7; design §3; mockups v4
- * `docs/mocks/landing-session/v4/05-landing-session-page`): what a LANDING session's page says,
- * and the conditions its owner doors appear under.
+ * One landing in a project's Landings window (contract §2.9 LS1, LS6, LS7; design §3; mockups v4
+ * `docs/mocks/landing-session/v4/05-landing-session-page`, and since revision 28 the window of
+ * `docs/mocks/landings-one-window`): what a LANDING session's card and its record say, and the
+ * conditions its owner doors appear under. The single landing page these were drawn on is now the
+ * window focused on that landing.
  *
  * Everything here is read from `GET /sessions/:id`'s landing view — the subject, its newest
  * attempt, the phase/round/check facts the runner reported, and the timeline the server already
@@ -40,7 +42,6 @@ export const LANDING_PAGE_COPY = {
   /** The page's own word for the subject, beside the title (mockup 05's `Landing` chip). */
   CHIP: 'Landing',
   RUN_BY_ORBIT: 'Run by Orbit',
-  SETTLED: 'settled',
 
   /** A TASK subject's title when no session row exists yet and the task is not read. */
   LAND: 'Land',
@@ -136,9 +137,6 @@ export const LANDING_PAGE_COPY = {
   LEGACY_PUSH_VARIANT:
     'An older runner (reports only between steps): may have been pushed — Orbit can’t rule it out.',
 
-  /** The read-only footer (LS6: nothing to type here). */
-  ORBIT_RUNS_THIS_LANDING: 'Orbit runs this landing — nothing to type here.',
-  THIS_LANDING_IS_COMPLETE: 'This landing is complete — nothing to type here.',
   LOADING_LANDING: 'Loading this landing…',
   LOADING_LOG: 'Loading the log…',
   LOG_UNAVAILABLE: 'Couldn’t read this log',
@@ -147,10 +145,8 @@ export const LANDING_PAGE_COPY = {
   LOG: 'Log',
   OLDER_ATTEMPTS_HIDDEN: 'Older attempts are not shown here.',
   BYTES_OMITTED: (bytes: number): string => `${bytes} bytes omitted`,
+  /** The window's read-only footer names who decides (LS6: nothing to type here). */
   DECISIONS_THE_COORDINATOR: 'Decisions: the coordinator',
-  A_CLEAN_PASS_MERGES_ON_ITS_OWN: 'A clean pass merges on its own',
-  MERGING_IS_DECIDED_ON_THE_CARD: 'Merging is decided on the merge card',
-  NEXT_MERGE_OPENS: (next: number): string => `The next merge into main opens a new landing (#${next}).`,
 } as const;
 
 /**
@@ -210,18 +206,6 @@ export function landingHeaderTitle(
     return `${LANDING_PAGE_COPY.MERGE_ROUND} ${project} → ${LANDING_PAGE_COPY.INTO_MAIN} · #${landing.episode}`;
   }
   return taskTitle ? `${LANDING_PAGE_COPY.LAND} · ${taskTitle}` : LANDING_PAGE_COPY.LAND;
-}
-
-/** `Run by Orbit · runner <name>` while it runs, `Run by Orbit · settled 9:51` once it has. */
-export function landingHeaderSub(landing: SessionLandingView | null | undefined): string {
-  if (!landing) return LANDING_PAGE_COPY.RUN_BY_ORBIT;
-  if (landing.settledAt) {
-    return `${LANDING_PAGE_COPY.RUN_BY_ORBIT} · ${LANDING_PAGE_COPY.SETTLED} ${landingClockTime(landing.settledAt)}`;
-  }
-  const runner = landing.currentAttempt?.runnerName;
-  return runner
-    ? `${LANDING_PAGE_COPY.RUN_BY_ORBIT} · runner ${runner}`
-    : LANDING_PAGE_COPY.RUN_BY_ORBIT;
 }
 
 function instant(value: string | null | undefined): number {
@@ -705,6 +689,48 @@ function branchName(ref: string): string {
   return ref.replace(/^refs\/heads\//u, '');
 }
 
+/** The receipt a merge row opens to in the Landings window (board 03 e): what is now on main, the
+ *  check that passed on the combined tree, and the tree that landed. */
+export interface LandingMergeReceipt {
+  /** `Now on main · 2 tasks`. */
+  heading: string;
+  tasks: string[];
+  checkLine: string | null;
+  treeLine: string | null;
+}
+
+/**
+ * A merge round's receipt, from its merged record (`promotions/merged`): the record keeps the tasks,
+ * the checks that passed on the combined tree and the tree that landed. The round's landing view
+ * adds its checks where the record carries none; a merge older than landing sessions has only the
+ * record, and a round past the read's 20 records only its landing view.
+ */
+export function landingMergeReceipt(
+  promotion: ProjectPromotionView | null | undefined,
+  landing: SessionLandingView | null | undefined,
+): LandingMergeReceipt {
+  const main = mainBranchName(promotion?.upstreamRef);
+  const recorded = (promotion?.checks ?? []) as Array<{ durationMs?: number; timedOut?: boolean; exitCode?: number; expectedExitCode?: number }>;
+  const checks = recorded.length > 0
+    ? recorded
+    : (landing?.checks ?? []) as Array<{ durationMs?: number; timedOut?: boolean; exitCode?: number; expectedExitCode?: number }>;
+  const passed = checks.length > 0 && checks.every((check) =>
+    check.timedOut !== true && (check.exitCode == null || check.exitCode === check.expectedExitCode));
+  const duration = checks.reduce((total, check) => total + (check.durationMs ?? 0), 0);
+  const tree = shortSha(promotion?.landsTreeSha);
+  return {
+    heading: promotion
+      ? `${LANDING_PAGE_COPY.NOW_ON} ${main} · ${plural(promotion.taskIds.length, 'task')}`
+      : `${LANDING_PAGE_COPY.NOW_ON} ${main}`,
+    tasks: (promotion?.tasks ?? []).map((task) => task.title),
+    checkLine: passed ? `${LANDING_PAGE_COPY.PASSED_ON_THE_TREE} · ${landingDuration(duration)}` : null,
+    treeLine: tree
+      ? `${LANDING_PAGE_COPY.LANDED_EXACTLY} ${tree} · ${promotion?.landsAs === 'MERGE_COMMIT'
+        ? LANDING_PAGE_COPY.AS_A_MERGE_COMMIT : LANDING_PAGE_COPY.BY_FAST_FORWARD}`
+      : null,
+  };
+}
+
 /** Which of the owner's doors the landing view's own facts open (LS6: none is inferred here). */
 export interface LandingGates {
   stop: boolean;
@@ -899,46 +925,6 @@ export function landingNoReportBand(
   return {
     text: `${who} ${LANDING_PAGE_COPY.SINCE} ${landingClockTime(at)}`,
     at,
-  };
-}
-
-/** The footer: what this page is, and the one way out of it that matters. */
-export interface LandingFooter {
-  line: string;
-  detail: string | null;
-  link: 'COORDINATOR' | 'REVIEW_CARD' | null;
-  next: string | null;
-}
-
-export function landingFooter(
-  landing: SessionLandingView,
-  onPass: 'MERGE' | 'ASK' | null | undefined,
-): LandingFooter {
-  if (landing.settledAt) {
-    return {
-      line: LANDING_PAGE_COPY.THIS_LANDING_IS_COMPLETE,
-      detail: null,
-      link: null,
-      next: landing.subject === 'PROMOTION'
-        ? LANDING_PAGE_COPY.NEXT_MERGE_OPENS(landing.episode + 1)
-        : null,
-    };
-  }
-  if (landing.subject === 'TASK') {
-    return {
-      line: LANDING_PAGE_COPY.ORBIT_RUNS_THIS_LANDING,
-      detail: LANDING_PAGE_COPY.DECISIONS_THE_COORDINATOR,
-      link: 'COORDINATOR',
-      next: null,
-    };
-  }
-  return {
-    line: LANDING_PAGE_COPY.ORBIT_RUNS_THIS_LANDING,
-    detail: onPass === 'MERGE'
-      ? LANDING_PAGE_COPY.A_CLEAN_PASS_MERGES_ON_ITS_OWN
-      : LANDING_PAGE_COPY.MERGING_IS_DECIDED_ON_THE_CARD,
-    link: 'REVIEW_CARD',
-    next: null,
   };
 }
 

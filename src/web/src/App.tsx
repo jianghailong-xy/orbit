@@ -468,6 +468,8 @@ export function App() {
               {/* Pre-rename URL, still in people's bookmarks and history. */}
               <Route path="agents/:id/*" />
               <Route path="sessions/:id" />
+              {/* A project's Landings window (owner 2026-10-27): the console's right pane. */}
+              <Route path="projects/:id/landings" />
             </Route>
           </Route>
           <Route path="/workspaces/:id/sessions/:sessionId" element={<LegacySessionRedirect />} />

@@ -32,7 +32,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
-import io.orbitd.android.cards.PromotionReceiptSheet
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
@@ -41,6 +40,7 @@ import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.Origin
 import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.projects.LandingJobsSheet
+import io.orbitd.android.projects.LandingRing
 import io.orbitd.android.projects.OwnerStartSheet
 import io.orbitd.android.projects.ProjectApi
 import io.orbitd.android.projects.ProjectDoc
@@ -49,6 +49,7 @@ import io.orbitd.android.projects.ProjectLandingCardView
 import io.orbitd.android.projects.ProjectPage
 import io.orbitd.android.projects.ProjectPageState
 import io.orbitd.android.projects.ProjectSettledCard
+import io.orbitd.android.projects.RunSettings
 import io.orbitd.android.projects.RequestedStartSheet
 import io.orbitd.android.projects.StartProjectCopy
 import io.orbitd.android.projects.StartSheetLoad
@@ -176,7 +177,7 @@ internal fun ProjectRowMenu(row: SessionProjectRow, fresh: Boolean, close: () ->
 /** What the page has read: its members and when, the landing read, and — while nobody has started the project — its open items. */
 private class ProjectSessionsState(initial: List<DirectorySession>) {
     var members by mutableStateOf(initial.filterNot { it.isLanding })
-    /** The landing sessions the same read carries (`includeLanding=1`): the Landings group's rows, never the page's timeline. */
+    /** The landing sessions the same read carries (`includeLanding=1`): what the Landings row counts, never the page's timeline. */
     var landings by mutableStateOf(initial.filter { it.isLanding })
     /** The Completed members as last read: what a poll takes them from. */
     var completed: List<DirectorySession> = initial.filter { it.effectiveLifecycleState != "OPEN" }
@@ -197,10 +198,10 @@ private enum class StartSheet { ASKED, OWN }
 /**
  * A project's sessions (iOS `SessionProjectPage`, A05-7), pushed over the list it was opened from, or the root of the drawer's project
  * row: its progress — with the start while nobody has started the project — then the landing in flight as a card of its own (A11-11),
- * then the merge into main (A11-9) while there is one to show, then its coordinator, then every other member by recency, Open and
- * Completed together, with the merges already made among them at their own instant. No search and no Pinned: it lists one project's
- * sessions. A member opens over this page, and the workspace the page was entered from stays the one beneath it. Members, the landing,
- * the merge and the start are each read every 4 s; the progress comes from `GET /projects/sidebar`.
+ * then the merge into main (A11-9) while there is one to show, then its coordinator, then the one Landings row that opens the project's
+ * Landings window (owner 2026-10-27), then every other member by recency, Open and Completed together. No search and no Pinned: it
+ * lists one project's sessions. A member opens over this page, and the workspace the page was entered from stays the one beneath it.
+ * Members, the landing, the merge and the start are each read every 4 s; the progress comes from `GET /projects/sidebar`.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -225,16 +226,13 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     var action by remember { mutableStateOf<DirectoryDialog?>(null) }
     var startSheet by remember { mutableStateOf<StartSheet?>(null) }
     var showsJobs by remember { mutableStateOf(false) }
-    // Whether the Landings group's `Earlier · …` fold is open (owner 2026-10-19, board v4 04 c1).
-    var landingsExpanded by remember(projectId) { mutableStateOf(false) }
     // The merge into main (iOS `ProjectMergeModel`): this project's candidate and merges, never another project's.
     val merge = remember(handle, projectId) { ProjectMergeModel(projects, projectId) }
-    // Hosted here rather than by the card or the row, so a poll redrawing either cannot dismiss what the owner is reading.
+    // Hosted here rather than by the card, so a poll redrawing it cannot dismiss what the owner is reading.
     var promotionReview by remember(projectId) { mutableStateOf<String?>(null) }
-    var promotionReceipt by remember(projectId) { mutableStateOf<JsonObject?>(null) }
 
     // `includeLanding=1` (LS6): the page's read carries the project's LANDING rows beside its conversations, which is what the
-    // Landings group is drawn from. No other list asks for them, so no other list grows a row it cannot place.
+    // Landings row counts. No other list asks for them, so no other list grows a row it cannot place.
     suspend fun read(view: String): List<DirectorySession> =
         api.read(listOf("sessions"), ListSerializer(DirectorySession.serializer()), listOf("view" to view, "projectId" to projectId, "includeLanding" to "1"))
     /** Both lists; an older server may ignore projectId, so only the project's members are kept, and never one in Trash — nor one on
@@ -286,17 +284,15 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         val view = try { projects.integration(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
         if (view != null) {
             state.integration = view; state.integrationReadAt = Instant.now(); state.integrationReadFailed = false
-            // Each landing job's description, for its landing page to draw frozen when the server cannot be read (A11-20 e).
-            app.landingJobs.remember(handle, view)
+            // Each landing job's description, for its card in the Landings window to draw frozen when the server cannot be read
+            // (A11-20 e).
+            app.landingJobs.remember(handle, projectId, view)
         } else state.integrationReadFailed = true
     }
-    /** The start row's read, while the sidebar says nobody has started the project — and the Landings group's holders, on any
-     *  project whose landing waits on a decision (§2.9 LS6): its rows say what stopped the landing and which side holds it. One
-     *  read serves both. A read that fails keeps the last answer. */
+    /** The start row's read, while the sidebar says nobody has started the project. A read that fails keeps the last answer. */
     suspend fun loadStart() {
         val row = currentProject
-        val landingWaits = state.landings.any { it.landing?.state == "AWAITING_DECISION" }
-        if (row?.text("status") != "OPEN" || (ProjectDoc.started(row) != false && !landingWaits)) { state.openItems = null; return }
+        if (row?.text("status") != "OPEN" || ProjectDoc.started(row) != false) { state.openItems = null; return }
         val items = try { projects.openItems(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
         if (items != null) state.openItems = items
     }
@@ -396,7 +392,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                 }
             }
             // The merge into main, under the landing: the candidate's card while it asks, merges or is blocked, and the merge check's
-            // live line before that. Absent otherwise — a merge already made is a row on the timeline instead.
+            // live line before that. Absent otherwise — a merge already made is a row of the project's Landings window instead.
             ProjectMergeCard.shape(merge.current, state.integration)?.let { shape ->
                 item(key = "merge") {
                     val integration = state.integration
@@ -426,30 +422,21 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                 item(key = "heading:coordinator") { SectionHeading(SessionProjectCopy.coordinatorSection) }
                 item(key = c.id) { MemberRow(c) }
             }
-            // The landings waiting on a decision and the ones that settled in the last day (owner 2026-10-19, board v4 04 c1):
-            // under the coordinator, above the timeline, and absent entirely when it has nothing to list. A row opens the landing
-            // session itself; an in-flight one is on the Landing card above, and a merge that merged is a timeline row.
-            val landingGroup = SessionProjectLandings.group(state.landings, now, SessionProjectLandings.holders(state.openItems))
-            landingGroup?.let { group ->
+            // The project's landings, summed up in one row (owner 2026-10-27, board docs/mocks/landings-one-window 01 b): under the
+            // coordinator, above the timeline, and absent for a project that has never had a landing. The whole row opens the project's
+            // Landings window, at its bottom; the window lists every landing, and the merges into main among them.
+            SessionProjectLandings.rowSummary(state.landings, merge.merged, now,
+                main = RunSettings.mainBranchName(state.integration?.text("upstreamRef")))?.let { summary ->
                 item(key = "heading:landings") { SectionHeading(SessionLandingsCopy.title) }
-                val openLanding: (String) -> Unit = { id -> open(OrbitRoute(Destination.SESSION, id, route.workspaceId, origin = Origin.LIST)) }
-                items(group.waiting + group.settled, key = { "landing:${it.id}" }) { row -> LandingGroupRowView(row, openLanding) }
-                group.earlier?.let { earlier ->
-                    item(key = "landings:earlier") { EarlierLandingsRow(earlier, landingsExpanded) { landingsExpanded = !landingsExpanded } }
-                    // The older rows are the fold's alone: with no fold, an open state left over draws none of them.
-                    if (landingsExpanded) items(group.older, key = { "landing:${it.id}" }) { row -> LandingGroupRowView(row, openLanding) }
+                item(key = "landings") {
+                    LandingsRowView(summary) { open(OrbitRoute(Destination.LANDINGS, projectId, route.workspaceId, origin = Origin.LIST)) }
                 }
             }
-            // The members by recency, newest first, in the list's day sections — without Pinned: the page has none — and the merges
-            // into main already made among them, each at its own instant.
-            ProjectTimeline.sections(members.filter { it.projectMembership?.isCoordinator != true }, merge.receipts).forEach { section ->
+            // The members by recency, newest first, in the list's day sections — without Pinned: the page has none. Sessions only: the
+            // merges into main are rows of the Landings window.
+            ProjectTimeline.sections(members.filter { it.projectMembership?.isCoordinator != true }).forEach { section ->
                 item(key = "heading:${section.id}") { SectionHeading(section.title) }
-                items(section.items, key = { it.key }) { row ->
-                    when (row) {
-                        is ProjectTimelineSection.Item.Session -> MemberRow(row.session)
-                        is ProjectTimelineSection.Item.Merge -> ProjectMergeTimelineRow(row.receipt, now) { promotionReceipt = row.receipt.promotion }
-                    }
-                }
+                items(section.sessions, key = { it.id }) { session -> MemberRow(session) }
             }
             if (members.isEmpty()) {
                 val reason = state.error
@@ -506,10 +493,6 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     promotionReview?.let { id ->
         ProjectMergeReviewSheet(merge, id, merge.standing(id)?.let { ProjectMergeCard.blockedByLine(it, state.integration) }) { promotionReview = null }
     }
-    // The receipt's foot still opens the round's landing (方案 A), on the same route a member opens on.
-    promotionReceipt?.let { receipt -> PromotionReceiptSheet(receipt,
-        openLanding = { id -> promotionReceipt = null; open(OrbitRoute(Destination.SESSION, id, route.workspaceId, origin = Origin.LIST)) }) {
-        promotionReceipt = null } }
     // The jobs the landing card counts, read off the page's own landing read, which its poll keeps current.
     if (showsJobs) LandingJobsSheet(state.integration?.let { ProjectPage.landingJobLines(it, now, state.integrationReadAt, state.integrationReadFailed) }.orEmpty(),
         retry = { retryJob(it) }, openTask = { taskId -> showsJobs = false; open(OrbitRoute(Destination.TASK, taskId)) },
@@ -517,50 +500,39 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         close = { showsJobs = false })
 }
 
-/** One landing in the Landings group (iOS `landingGroupRow`): the mark that says how it stands, its title, its age and one line
- * under both — the whole row opens the landing session itself. */
+/** The project's one Landings row (owner 2026-10-27, board docs/mocks/landings-one-window 01 b; iOS `landingsRow`, web
+ * `SessionProjectLandings`): the merged line's head — one circle with the mark of the most urgent landing (✕ one waits for a decision,
+ * the blue ring one is in flight, ✓ all settled), the title, how long the longest of them has waited or how long ago the last one
+ * settled, and the counts under them, two lines at most. The whole row opens the project's Landings window. */
 @Composable
-private fun LandingGroupRowView(row: LandingGroupRow, openLanding: (String) -> Unit) {
-    val ink = landingToneInk(row.tone)
+private fun LandingsRowView(summary: LandingsRowSummary, onOpen: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { openLanding(row.id) }.padding(horizontal = 16.dp, vertical = 10.dp)
-        .testTag("landing-row:${row.id}"), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
-        Box(Modifier.size(30.dp).background(ink.copy(alpha = 0.14f), CircleShape), contentAlignment = Alignment.Center) {
-            Text(landingMark(row.tone), fontWeight = FontWeight.SemiBold, color = ink)
+    val ink = when (summary.mark) {
+        LandingsRowMark.FAIL -> MaterialTheme.colorScheme.error
+        LandingsRowMark.RUNNING -> MaterialTheme.colorScheme.primary
+        LandingsRowMark.OK -> LocalOrbitColors.current.success
+    }
+    Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onOpen).padding(horizontal = 16.dp, vertical = 10.dp)
+        .testTag("landings-row"), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
+        Box(Modifier.size(30.dp).background(ink.copy(alpha = 0.14f), CircleShape).testTag("landings-row:mark:${summary.mark.name.lowercase()}"),
+            contentAlignment = Alignment.Center) {
+            when (summary.mark) {
+                LandingsRowMark.FAIL -> Text("✕", fontWeight = FontWeight.SemiBold, color = ink)
+                LandingsRowMark.RUNNING -> LandingRing(running = true, size = 15.dp)
+                LandingsRowMark.OK -> Text("✓", fontWeight = FontWeight.SemiBold, color = ink)
+            }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(row.title, Modifier.weight(1f), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (row.time.isNotEmpty()) Text(row.time, style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1, softWrap = false)
+                Text(SessionLandingsCopy.title, Modifier.weight(1f).testTag("landings-row:title"), fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis)
+                if (summary.time.isNotEmpty()) Text(summary.time, Modifier.testTag("landings-row:time"), style = MaterialTheme.typography.labelMedium,
+                    color = muted, maxLines = 1, softWrap = false)
             }
-            Text(row.detail, style = MaterialTheme.typography.bodyMedium, color = muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(summary.line, Modifier.testTag("landings-row:line"), style = MaterialTheme.typography.bodyMedium, color = muted, maxLines = 2,
+                overflow = TextOverflow.Ellipsis)
         }
     }
-}
-
-/** `Earlier · 31 landed · 3 nothing to land` — the group's fold; pressing it shows those rows under it. */
-@Composable
-private fun EarlierLandingsRow(earlier: LandingEarlier, expanded: Boolean, toggle: () -> Unit) {
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = toggle).padding(horizontal = 16.dp, vertical = 10.dp)
-        .testTag("landings:earlier"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(if (expanded) "◌" else "✓", fontWeight = FontWeight.SemiBold, color = muted)
-        Text(SessionProjectLandings.earlierLine(earlier), style = MaterialTheme.typography.labelLarge, color = muted)
-        Spacer(Modifier.weight(1f))
-        Text(if (expanded) "⌄" else "›", fontWeight = FontWeight.SemiBold, color = muted)
-    }
-}
-
-private fun landingMark(tone: LandingGroupTone) = when (tone) {
-    LandingGroupTone.FAIL -> "✕"; LandingGroupTone.OK -> "✓"; LandingGroupTone.MERGE -> "⇢"; LandingGroupTone.QUIET -> "◌"
-}
-
-@Composable
-private fun landingToneInk(tone: LandingGroupTone): Color = when (tone) {
-    LandingGroupTone.FAIL -> MaterialTheme.colorScheme.error
-    LandingGroupTone.OK -> LocalOrbitColors.current.success
-    LandingGroupTone.MERGE -> MaterialTheme.colorScheme.primary
-    LandingGroupTone.QUIET -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 /** The progress card (iOS `progressCard`): the mini bar and "done/total done · running" — "Not started · N tasks" for a project

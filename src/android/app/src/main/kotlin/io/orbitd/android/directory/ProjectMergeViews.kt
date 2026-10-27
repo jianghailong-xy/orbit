@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,7 +22,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
-import io.orbitd.android.cards.PromotionHints
 import io.orbitd.android.cards.PromotionReview
 import io.orbitd.android.cards.SheetHead
 import io.orbitd.android.core.cards.*
@@ -34,7 +32,6 @@ import io.orbitd.android.reader.AbandonButton
 import io.orbitd.android.reader.LandingSessionCopy
 import io.orbitd.android.reader.landingEntry
 import io.orbitd.android.ui.LocalOrbitColors
-import io.orbitd.android.wiki.WikiDate
 import java.time.Instant
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
@@ -278,31 +275,6 @@ private fun Blocked(view: JsonObject, holder: PromotionHolder, blockedBy: String
 private fun DetailsPress(view: JsonObject, onDetails: (String) -> Unit) {
     TextButton(onClick = { onDetails(view.text("promotionId").orEmpty()) }, modifier = Modifier.testTag("project-merge-card:details")) {
         Text("${PromotionCards.details} ›", fontWeight = FontWeight.SemiBold)
-    }
-}
-
-/** A merge already made, as a row on the project's timeline (iOS `ProjectMergeTimelineRow`): what went onto main and who merged it, at
- * the instant it happened. Shaped unlike a session row because it is not one, and a tap opens its receipt. */
-@Composable
-internal fun ProjectMergeTimelineRow(receipt: PromotionReceipt, now: Instant, onOpen: () -> Unit) {
-    val view = receipt.promotion
-    val success = LocalOrbitColors.current.success
-    Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = PromotionHints.receipt, onClick = onOpen)
-        .padding(horizontal = 16.dp, vertical = 10.dp).testTag("project-merge-row:${view.text("promotionId").orEmpty()}"),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
-        Box(Modifier.size(30.dp).background(success.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
-            Icon(painterResource(R.drawable.ic_merge), null, Modifier.size(16.dp), tint = success)
-        }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(PromotionCards.timelineTitle(view), Modifier.weight(1f), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                WikiDate.relative(view.obj("merged")?.text("at"), now)?.let {
-                    Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false)
-                }
-            }
-            Text(PromotionCards.timelineDetail(view), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
     }
 }
 

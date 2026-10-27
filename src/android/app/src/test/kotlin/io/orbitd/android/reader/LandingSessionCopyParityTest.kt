@@ -2,14 +2,15 @@ package io.orbitd.android.reader
 
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The landing session page says the Swift's words (project rule: Kotlin ⊆ Swift). Every fixed word of
- * [LandingSessionCopy] is a literal in OrbitKit's `LandingSessionPage.swift`, and every built sentence — rendered with
- * sentinels, put back as Swift's own interpolations — is one literal there too.
+ * A landing's card, record, menu and receipt in the Landings window say the Swift's words (project rule: Kotlin ⊆ Swift). Every
+ * fixed word of [LandingSessionCopy] is a literal in OrbitKit's `LandingSessionPage.swift`, and every built sentence — rendered
+ * with sentinels, put back as Swift's own interpolations — is one literal there too.
  *
  * The ⋯ menu's labels are the one deliberate difference: the board's v4 07 frame draws Android's menu in sentence case
  * (`Open task`, `Stop landing`), where the Swift page holds iOS's Title Case (`Open Task`, `Stop Landing`). Those six are
@@ -66,9 +67,37 @@ class LandingSessionCopyParityTest {
         }
         sentence(LandingSessionCopy.taskAcceptanceExited("§a", "§b"), "§a" to "\\(code)", "§b" to "\\(expected)")
         sentence(LandingSessionCopy.mayHavePushedAt("§t"), "§t" to "\\(time)")
-        sentence(LandingSessionCopy.nextMergeOpens(7), "7" to "\\(next)")
         assertEquals("+2 jobs queued", LandingSessionCopy.moreJobsQueued(3)); assertNull(LandingSessionCopy.moreJobsQueued(1))
         sentence("+2 jobs queued", "2" to "\\(others)", "jobs" to "job\\(others == 1 ? \"\" : \"s\")")
         sentence(LandingSessionCopy.bytesOmitted(2048), "2048" to "\\(bytes)")
+    }
+
+    /** A merge row's receipt (board 03 e) is the Swift's `mergeReceipt`, expression for expression: the heading, the check that
+     *  passed on the combined tree, and the tree that landed. */
+    @Test fun theMergeReceiptIsTheSwiftsExpression() {
+        val page = File(root, "${kit}LandingSessionPage.swift").readText()
+        listOf("heading = \"\\(LandingPageCopy.nowOn) \\(main) · \\(plural(promotion.taskIds.count, \"task\"))\"",
+            "heading = \"\\(LandingPageCopy.nowOn) \\(main)\"",
+            "treeLine = \"\\(LandingPageCopy.landedExactly) \\(String(sha.prefix(7))) · \\(landsAs)\"",
+            "checkLine: passed ? \"\\(LandingPageCopy.passedOnTheTree) · \\(duration(ms: durationMs))\" : nil,",
+            "if checks.isEmpty {").forEach {
+            assertTrue("LandingSessionPage.swift no longer builds the receipt with $it", page.contains(it))
+        }
+    }
+
+    /** The landing page's own header line and read-only footer went with the page (owner 2026-10-27): the window has its own
+     *  footer, in [io.orbitd.android.directory.SessionLandingsCopy]. None of their words is left here, nor in the Swift. */
+    @Test fun thePagesHeaderAndFooterWordsAreGone() {
+        val page = File(root, "${kit}LandingSessionPage.swift").readText()
+        val words = strings(LandingSessionCopy)
+        listOf("settled", "Orbit runs this landing — nothing to type here.", "This landing is complete — nothing to type here.",
+            "A clean pass merges on its own", "Merging is decided on the merge card").forEach {
+            assertFalse("LandingSessionCopy still says \"$it\"", words.containsValue(it))
+            assertFalse("LandingSessionPage.swift still says \"$it\"", page.contains("\"$it\""))
+        }
+        listOf("headerSub", "footer", "nextMergeOpens").forEach { name ->
+            assertFalse("LandingSessionModel.$name is still here", LandingSessionModel::class.java.declaredMethods.any { it.name == name })
+            assertFalse("LandingSessionCopy.$name is still here", LandingSessionCopy::class.java.declaredMethods.any { it.name == name })
+        }
     }
 }

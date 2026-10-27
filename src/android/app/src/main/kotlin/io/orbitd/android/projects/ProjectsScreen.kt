@@ -313,8 +313,9 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                 integration.await().let {
                     if (it != null) {
                         state.integration = it; state.integrationReadAt = Instant.now(); state.integrationReadFailed = false
-                        // Each landing job's description, for its landing page to draw frozen when the server cannot be read (A11-20 e).
-                        app.landingJobs.remember(handle, it)
+                        // Each landing job's description, for its card in the Landings window to draw frozen when the server cannot be
+                        // read (A11-20 e).
+                        app.landingJobs.remember(handle, id, it)
                     } else state.integrationReadFailed = true
                 }
                 openItems.await().let { if (it != null) { state.openItems = it; state.openItemsUnread = false } else state.openItemsUnread = state.openItems == null }

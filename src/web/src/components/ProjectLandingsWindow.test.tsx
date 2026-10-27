@@ -12,7 +12,7 @@ import type {
 } from '@orbit/shared';
 import { api, getSession, type SessionDetail } from '../api';
 import { landingClockTime } from './ProjectPanoramaHeader';
-import { LandingSessionView } from './LandingSessionView';
+import { ProjectLandingsWindow } from './ProjectLandingsWindow';
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
@@ -120,6 +120,11 @@ const promo = (over: Partial<ProjectPromotionView> = {}): ProjectPromotionView =
 });
 
 let view: SessionLandingView = landing();
+/** The project's other landings, as its LANDING rows list them; `view`'s own row is added from it. */
+let otherRows: Array<Record<string, unknown>> = [];
+/** Their views, read when a row is opened. */
+let otherViews: Record<string, SessionLandingView> = {};
+let awaiting = false;
 let mergedRows: ProjectPromotionView[] = [];
 let currentPromotion: ProjectPromotionView | null = null;
 let sessionAnswer: () => Promise<unknown> = () => Promise.resolve(detail(view));
@@ -128,6 +133,7 @@ let logAnswer: () => Promise<unknown> = () => Promise.resolve({ jobId: 'job-1', 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 let opened: string | null = null;
+let openedSession: string | null = null;
 /** Every api() call the page made, with its options: the presses' bodies are what the owner routes read. */
 let calls: Array<{ path: string; options?: { method?: string; body?: unknown } }> = [];
 
@@ -139,7 +145,35 @@ async function settle(): Promise<void> {
   }
 }
 
-async function mount(node: ReactNode): Promise<void> {
+/** The landing's own row on the project's list (`includeLanding=1`): its summary, from its view. */
+function ownRow(): Record<string, unknown> {
+  return {
+    id: SESSION,
+    sessionKind: 'LANDING',
+    title: view.subject === 'PROMOTION' ? 'Merge project/p1 → main · #1' : 'Land · Ledger migration order',
+    createdAt: view.openedAt,
+    lastTurnAt: view.openedAt,
+    lifecycleState: view.settledAt ? 'COMPLETED' : 'OPEN',
+    landing: {
+      subject: view.subject,
+      state: view.settledAt ? 'SETTLED' : awaiting ? 'AWAITING_DECISION' : 'IN_FLIGHT',
+      settledAs: view.settledAs,
+      settledAt: view.settledAt,
+    },
+  };
+}
+
+/** Every row the project's two list reads answer, by view. */
+function listRows(viewName: string): Array<Record<string, unknown>> {
+  return [ownRow(), ...otherRows].filter((row) => (row.lifecycleState === 'COMPLETED') === (viewName === 'completed'));
+}
+
+/** The window, opened on this landing (a landing id's route) unless told otherwise. */
+function windowOn(focusId: string | null = SESSION): ReactNode {
+  return <ProjectLandingsWindow projectId={PROJECT} focusId={focusId} onOpenSession={(id) => { openedSession = id; }} />;
+}
+
+async function mount(node: ReactNode = windowOn()): Promise<void> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -179,6 +213,10 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(NOW);
   view = landing();
+  otherRows = [];
+  otherViews = {};
+  awaiting = false;
+  openedSession = null;
   mergedRows = [];
   currentPromotion = null;
   sessionAnswer = () => Promise.resolve(detail(view));
@@ -188,10 +226,25 @@ beforeEach(() => {
   calls = [];
   vi.mocked(api).mockReset();
   vi.mocked(getSession).mockReset();
-  vi.mocked(getSession).mockImplementation((() => sessionAnswer()) as never);
+  vi.mocked(getSession).mockImplementation(((id: string) => {
+    calls.push({ path: `getSession:${id}` });
+    if (id !== SESSION) {
+      const other = otherViews[id];
+      return other ? Promise.resolve({ ...detail(other), id, title: String(otherRows.find((row) => row.id === id)?.title) })
+        : Promise.reject(new Error('not found'));
+    }
+    return sessionAnswer();
+  }) as never);
   vi.mocked(api).mockImplementation(((path: string, options?: { method?: string; body?: unknown }) => {
     opened = path;
     calls.push({ path, options });
+    if (path.startsWith('/sessions?')) {
+      const query = new URLSearchParams(path.split('?')[1]);
+      expect(query.get('projectId')).toBe(PROJECT);
+      expect(query.get('includeLanding')).toBe('1');
+      return Promise.resolve(listRows(query.get('view') ?? 'open'));
+    }
+    if (path === `/projects/${PROJECT}`) return Promise.resolve({ id: PROJECT, title: 'Wiki server' });
     if (path === `/projects/${PROJECT}/integration`) return Promise.resolve(integration);
     if (path === `/projects/${PROJECT}/coordinator/status`) return Promise.resolve(coordinator);
     if (path === `/projects/${PROJECT}/promotions/current`) return Promise.resolve(currentPromotion);
@@ -211,8 +264,8 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-describe('the landing session page', () => {
-  it('draws the header, the status card, the sections and the read-only footer', async () => {
+describe('a landing in the window', () => {
+  it('draws the window’s head, the landing’s card and its record, and the read-only footer', async () => {
     view = landing({
       timeline: {
         sections: [
@@ -279,14 +332,16 @@ describe('the landing session page', () => {
         truncated: false,
       },
     });
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    await mount();
 
-    expect(page().textContent).toContain('Land · Ledger migration order');
-    expect(page().textContent).toContain('Run by Orbit · runner wikova');
+    // The window's own head: Landings, run by Orbit for this project.
+    expect(page().querySelector('.landing-page-title')?.textContent).toBe('Landings');
+    expect(page().querySelector('.landing-page-sub')?.textContent).toBe('Run by Orbit · Wiki server');
+    // The landing is a card under Now, with its task under the head.
+    expect(page().querySelector('.landings-window-now .landings-window-day-head')?.textContent).toBe('Now');
+    expect(page().querySelector('.landings-window-card-task')?.textContent).toBe('Ledger migration order');
     expect(page().textContent).toContain('Landing');
-    // The board's chip carries the little refresh mark; the live row carries its green dot; the
-    // budget bar marks where the check USUALLY finishes.
-    expect(page().querySelector('.landing-page-chip-glyph')?.textContent).toBe('↻');
+    // The live row carries its green dot; the budget bar marks where the check USUALLY finishes.
     expect(page().querySelector('.landing-live-dot')).toBeTruthy();
     expect(page().querySelector('.landing-card-meter-tick')).toBeTruthy();
     // The check in hand says its name and how long it has been live.
@@ -311,8 +366,8 @@ describe('the landing session page', () => {
       '≡:is-queued', '✗:is-failed',
       '↻:is-running', '↻:is-running', '↗:is-takeover', '↩:is-queued', '✓:is-ok',
     ]);
-    expect(page().textContent).toContain('Orbit runs this landing — nothing to type here.');
-    expect(page().textContent).toContain('Decisions: the coordinator');
+    expect(page().querySelector('.landing-page-foot')?.textContent)
+      .toBe('Orbit runs these landings — nothing to type here.Decisions: the coordinator · Open coordinator ›');
     // No conversation anatomy: no composer, no model, no rename, no share.
     expect(page().querySelector('textarea')).toBeNull();
     expect(page().querySelector('.composer-model-chip')).toBeNull();
@@ -349,7 +404,7 @@ describe('the landing session page', () => {
       }],
       nextCursor: null,
     });
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    await mount();
     // A failed check shows the tail it died on inline (05 g), and its Log › still opens the page.
     expect(page().querySelector('.landing-live-output')?.textContent)
       .toContain('FAIL  server-execution > runs on the server');
@@ -403,7 +458,7 @@ describe('the landing session page', () => {
       }],
       nextCursor: null,
     });
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    await mount();
     const marks = [...page().querySelectorAll<HTMLElement>('.landing-timeline-glyph')]
       .map((mark) => `${mark.textContent}:${mark.className.replace('landing-timeline-glyph ', '')}`);
     expect(marks).toEqual([
@@ -452,7 +507,7 @@ describe('the landing session page', () => {
         facts: [], truncated: false,
       },
     });
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    await mount();
     const marks = (job: string) => [
       ...page().querySelectorAll<HTMLElement>(`section[data-job="${job}"] .landing-timeline-glyph`),
     ].map((mark) => `${mark.textContent}:${mark.className.replace('landing-timeline-glyph ', '')}`);
@@ -468,7 +523,7 @@ describe('the landing session page', () => {
       promotionId: 'promo-1',
       currentAttempt: attempt({ kind: 'CHECK_PROMOTION', state: 'READY', phase: null, check: null, liveness: null }),
     });
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    await mount();
     const card = page().querySelector('.landing-status-card')!;
     expect(card.textContent).toContain('Merge check');
     expect(card.textContent).toContain('Passed the check · waiting for the owner');
@@ -478,7 +533,7 @@ describe('the landing session page', () => {
 
   it('a cancelled landing really stopped, and its card still says so', async () => {
     view = landing({ currentAttempt: attempt({ state: 'CANCELLED', phase: null, check: null, liveness: null }) });
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    await mount();
     const card = page().querySelector('.landing-status-card')!;
     expect([...card.querySelectorAll('.landing-card-line')].map((line) => line.textContent))
       .toEqual(['Stopped · not landed']);
@@ -515,7 +570,7 @@ describe('the check in hand', () => {
       ],
       nextCursor: null,
     });
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    await mount();
     expect(page().textContent).toContain('Merge check · live 1m 50s');
     const block = page().querySelector('.landing-live-output');
     expect(block?.textContent).toContain('$ npm run build && npm test -w @orbit/apiserver');
@@ -546,7 +601,7 @@ describe('a timed-out landing', () => {
         facts: [], truncated: false,
       },
     });
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    await mount();
     expect(page().textContent).toContain('Timed out');
     expect(page().textContent).toContain('No report for 23m · limit 10m');
     expect(page().textContent).toContain(
@@ -571,7 +626,7 @@ describe('a timed-out landing', () => {
         kind: 'CHECK_PROMOTION', phase: 'CHECK', liveness: 'LEASE_EXPIRED', timedOut: true,
       }),
     });
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    await mount();
     // The facts line says where the runner was; the push sentence is not written for a check
     // (owner 2026-10-19: "检查作业超时不写推送一句").
     expect(page().textContent).not.toContain('A check pushes nothing');
@@ -591,7 +646,7 @@ describe('a timed-out landing', () => {
         kind: 'CHECK_PROMOTION', phase: 'CHECK', liveness: 'LEASE_EXPIRED', timedOut: true,
       }),
     });
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    await mount();
     await click(button('Re-run the check'), 'Re-run the check');
     // RetryIntegrationDto.reason is @MinLength(1): a bodyless press is refused before the queue sees it.
     const press = calls.find((call) => call.path.endsWith('/promotions/promo-1/integration/retry'));
@@ -608,7 +663,7 @@ describe('a read this device cannot make', () => {
       currentAttempt: attempt({ liveness: 'LEASE_EXPIRED', timedOut: true, retryable: true }),
     });
     sessionAnswer = () => Promise.reject(new Error('network down'));
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    await mount();
     expect(page().textContent).toContain('Update unavailable');
     expect(button('Retry')).toBeNull();
     expect(button('Abandon')).toBeNull();
@@ -646,7 +701,7 @@ describe('the merge round’s sections and its gates', () => {
         facts: [], truncated: false,
       },
     });
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    await mount();
     expect(page().textContent).toContain('Merge check · 1');
     expect(page().textContent).toContain('Merge to main · 1');
     expect(page().textContent).toContain('Merge check started · claim 1 · wikova');
@@ -660,8 +715,8 @@ describe('the merge round’s sections and its gates', () => {
       promotionId: 'promo-1',
       currentAttempt: attempt({ kind: 'LAND_PROMOTION', phase: 'CHECK' }),
     });
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
-    await click(page().querySelector('button[aria-label="More actions"]'), 'the ⋯ menu');
+    await mount();
+    await click(page().querySelector('button[aria-label="Landing actions"]'), 'the ⋯ menu');
     expect(document.body.textContent).toContain('Review Card');
     expect(document.body.textContent).toContain('Cancel Merge');
     expect(document.body.textContent).toContain('Before the push only · stops at the runner’s next report');
@@ -675,8 +730,8 @@ describe('the merge round’s sections and its gates', () => {
         liveness: 'LEASE_EXPIRED', timedOut: true, retryable: true, phase: 'REBASE',
       }),
     });
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
-    await click(page().querySelector('button[aria-label="More actions"]'), 'the ⋯ menu');
+    await mount();
+    await click(page().querySelector('button[aria-label="Landing actions"]'), 'the ⋯ menu');
     expect(document.body.textContent).toContain('Abandon');
     expect(document.body.textContent).toContain('Retry');
     expect(document.body.textContent).toContain('Ends this attempt · nothing was pushed');
@@ -685,14 +740,14 @@ describe('the merge round’s sections and its gates', () => {
 
   it('drops Stop Landing once the attempt is past the push boundary', async () => {
     view = landing({ currentAttempt: attempt({ phase: 'PUSH', pushBoundaryPassed: true }) });
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
-    await click(page().querySelector('button[aria-label="More actions"]'), 'the ⋯ menu');
+    await mount();
+    await click(page().querySelector('button[aria-label="Landing actions"]'), 'the ⋯ menu');
     expect(document.body.textContent).not.toContain('Stop Landing');
   });
 
   it('offers Stop Landing before the push, and takes it away after', async () => {
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
-    const trigger = page().querySelector<HTMLButtonElement>('button[aria-label="More actions"]');
+    await mount();
+    const trigger = page().querySelector<HTMLButtonElement>('button[aria-label="Landing actions"]');
     await click(trigger, 'the ⋯ menu');
     expect(document.body.textContent).toContain('Stop Landing');
     expect(document.body.textContent).toContain('Before the push only · nothing pushed yet');
@@ -701,31 +756,181 @@ describe('the merge round’s sections and its gates', () => {
 });
 
 describe('a settled merge round', () => {
-  it('draws the outcome head and the tasks now on main', async () => {
+  it('is one Merged into main row that opens to its receipt and its own record', async () => {
     view = landing({
       subject: 'PROMOTION',
       taskId: null,
       promotionId: 'promo-1',
       settledAt: at(9, 51),
       settledAs: 'MERGED',
+      currentAttempt: attempt({ kind: 'LAND_PROMOTION', state: 'LANDED', phase: null, check: null, liveness: null }),
       timeline: {
-        sections: [], facts: [{ kind: 'PROMOTION_STATE', text: 'Merge round · merged', data: null }],
+        sections: [{
+          title: 'Merge check · 1', jobId: 'job-0', kind: 'CHECK_PROMOTION', generation: 1, state: 'READY',
+          entries: [{
+            id: 'm1', seq: 1, kind: 'CHECK_FINISHED', at: at(9, 50), claim: 1, round: 1,
+            check: { name: 'MERGE_CHECK', index: 1 }, phase: 'CHECK', step: null, actor: { type: 'RUNNER' },
+            reason: null, data: { exitCode: 0, expectedExitCode: 0, timedOut: false },
+            text: 'Merge check passed · 17m 41s',
+          }],
+        }],
+        facts: [{ kind: 'PROMOTION_STATE', text: 'Merge round · merged', data: null }],
         truncated: false,
       },
       checks: [{ name: 'MERGE_CHECK', exitCode: 0, expectedExitCode: 0, timedOut: false, durationMs: 17 * 60_000 + 41_000 }],
     });
-    mergedRows = [promo()];
-    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
-    expect(page().textContent).toContain('Merged into main');
-    expect(page().textContent).toContain('8ed0ea7 · 2 tasks · automatically');
-    expect(page().textContent).toContain('Now on main · 2 tasks');
-    expect(page().textContent).toContain('Ledger migration order');
-    expect(page().textContent).toContain('✓ Passed on the combined tree · 17m 41s');
-    expect(page().textContent).toContain('Landed exactly the tested tree 5e5bfca · as a merge commit');
-    expect(page().textContent).toContain('This landing is complete — nothing to type here.');
-    // The status card says the round; the board does not repeat it as a timeline fact (05 c).
+    mergedRows = [promo({ landingSessionId: SESSION })];
+    await mount();
+    // One row, not a session's and a merge's: the record and the round, joined by landingSessionId.
+    const rows = [...page().querySelectorAll<HTMLElement>('.landings-window-row')];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector('.session-project-merge-row-title')?.textContent).toBe('Merged into main');
+    expect(rows[0].querySelector('.session-time')?.textContent).toBe(landingClockTime(at(9, 51)));
+    expect(rows[0].querySelector('.session-project-merge-row-detail')?.textContent).toBe('8ed0ea7 · 2 tasks · automatically');
+    expect(rows[0].querySelector('.session-project-landing-mark')?.textContent).toBe('⇢');
+    // Opened on it: the receipt over the round's own record, and the up arrow on its row.
+    expect(rows[0].getAttribute('aria-expanded')).toBe('true');
+    expect(rows[0].querySelector('.landings-window-up')).not.toBeNull();
+    const record = page().querySelector('.landings-window-record')!;
+    expect(record.querySelector('.landings-window-receipt')?.textContent).toBe([
+      'Now on main · 2 tasks', 'Ledger migration order', 'Payout retry budget',
+      '✓ Passed on the combined tree · 17m 41s', 'Landed exactly the tested tree 5e5bfca · as a merge commit',
+    ].join(''));
+    expect(record.textContent).toContain('Merge check · 1');
+    expect(record.textContent).toContain('Merge check passed · 17m 41s');
+    // The round's state is said by its row; the board does not repeat it as a timeline fact.
     expect(page().textContent).not.toContain('Merge round · merged');
-    expect(page().textContent).toContain('The next merge into main opens a new landing (#2).');
-    expect(page().textContent).toContain(`Run by Orbit · settled ${landingClockTime(at(9, 51))}`);
+    // Pressing the row closes it.
+    await click(rows[0], 'the merge row');
+    expect(page().querySelector('.landings-window-record')).toBeNull();
+  });
+});
+
+describe('the window', () => {
+  const settledRow = (id: string, title: string, settledAs: string, settledAt: string, subject = 'TASK') => ({
+    id, sessionKind: 'LANDING', title, createdAt: settledAt, lastTurnAt: settledAt, lifecycleState: 'COMPLETED',
+    landing: { subject, state: 'SETTLED', settledAs, settledAt },
+  });
+  const yesterday = (hour: number, minute: number): string => new Date(2026, 8, 24, hour, minute).toISOString();
+
+  it('groups the settled landings by day above Now, oldest first, one row each', async () => {
+    otherRows = [
+      settledRow('landed-yesterday', 'Land · Wiki review link', 'LANDED', yesterday(18, 10)),
+      settledRow('nothing-today', 'Land · Fix the deep link', 'NOTHING_TO_LAND', at(8, 30)),
+      settledRow('landed-today', 'Land · Runner model order', 'LANDED', at(10, 2)),
+    ];
+    await mount(windowOn(null));
+    const days = [...page().querySelectorAll<HTMLElement>('.landings-window-day')].map((day) => [
+      day.querySelector('.landings-window-day-head')?.textContent,
+      [...day.querySelectorAll('.session-project-merge-row-title, .landings-window-card-task')].map((title) => title.textContent),
+    ]);
+    expect(days).toEqual([
+      ['Yesterday', ['Wiki review link']],
+      ['Today', ['Fix the deep link', 'Runner model order']],
+      ['Now', ['Ledger migration order']],
+    ]);
+    const today = [...page().querySelectorAll<HTMLElement>('.landings-window-day')][1];
+    expect([...today.querySelectorAll('.session-project-landing-mark')].map((mark) => mark.textContent)).toEqual(['◌', '✓']);
+    expect([...today.querySelectorAll('.session-time')].map((time) => time.textContent))
+      .toEqual([landingClockTime(at(8, 30)), landingClockTime(at(10, 2))]);
+    // Opened from the Landings row, nothing is opened and nothing is outlined.
+    expect(page().querySelector('.landings-window-record')).toBeNull();
+    expect(page().querySelector('.is-outlined')).toBeNull();
+  });
+
+  it('reads a settled row’s record only when it is opened, and opens it in place', async () => {
+    otherRows = [settledRow('landed-today', 'Land · Runner model order', 'LANDED', at(10, 2))];
+    otherViews = {
+      'landed-today': landing({
+        sessionId: 'landed-today', settledAt: at(10, 2), settledAs: 'LANDED',
+        currentAttempt: attempt({ state: 'LANDED', sourceSessionId: 'source-9' }),
+        timeline: {
+          sections: [{
+            title: 'Generation 1', jobId: 'job-9', kind: 'LAND_TASK', generation: 1, state: 'LANDED',
+            entries: [{
+              id: 'x1', seq: 1, kind: 'RESULT', at: at(10, 2), claim: 1, round: 1, check: null, phase: 'PUSH',
+              step: null, actor: { type: 'RUNNER' }, reason: null, data: { state: 'LANDED' },
+              text: 'Landed on project/p1 · 9c2e7d1',
+            }],
+          }],
+          facts: [], truncated: false,
+        },
+      }),
+    };
+    await mount(windowOn(null));
+    expect(calls.some((call) => call.path === 'getSession:landed-today')).toBe(false);
+    const row = page().querySelector<HTMLElement>('[data-landing-entry="landed-today"] .landings-window-row');
+    await click(row, 'the settled row');
+    expect(calls.filter((call) => call.path === 'getSession:landed-today')).toHaveLength(1);
+    const record = page().querySelector('[data-landing-entry="landed-today"] .landings-window-record')!;
+    expect(record.textContent).toContain('Landed on project/p1 · 9c2e7d1');
+    // A task segment's record ends in its two ways out.
+    expect([...record.querySelectorAll('.landings-window-links button')].map((link) => link.textContent))
+      .toEqual(['Open Task ›', 'Open Source Session ›']);
+  });
+
+  it('opens a merge older than landing sessions to its receipt alone', async () => {
+    mergedRows = [promo({ promotionId: 'promo-old', landingSessionId: null, merged: {
+      sha: '3f1c2a9000000000000000000000000000000000', at: at(9, 51), automatic: false, byUserId: 'u1',
+    } })];
+    await mount(windowOn(null));
+    const row = page().querySelector<HTMLElement>('[data-landing-entry="merge:promo-old"] .landings-window-row');
+    expect(row?.textContent).toContain('Merged into main');
+    expect(row?.textContent).toContain('3f1c2a9 · 2 tasks · by you');
+    await click(row, 'the old merge');
+    const record = page().querySelector('[data-landing-entry="merge:promo-old"] .landings-window-record')!;
+    expect(record.querySelector('.landings-window-receipt')?.textContent).toContain('Now on main · 2 tasks');
+    expect(record.querySelector('.landing-timeline')).toBeNull();
+    expect(calls.some((call) => call.path.startsWith('getSession:merge'))).toBe(false);
+  });
+
+  it('opens a row’s menu on a right-click, with the old page’s ⋯ rows', async () => {
+    otherRows = [settledRow('landed-today', 'Land · Runner model order', 'LANDED', at(10, 2))];
+    otherViews = { 'landed-today': landing({ sessionId: 'landed-today', settledAt: at(10, 2), settledAs: 'LANDED',
+      currentAttempt: attempt({ state: 'LANDED' }) }) };
+    await mount(windowOn(null));
+    const entry = page().querySelector<HTMLElement>('[data-landing-entry="landed-today"]')!;
+    await act(async () => {
+      entry.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    });
+    await settle();
+    const menu = [...document.querySelectorAll<HTMLElement>('.orbit-menu-item')].map((item) => item.textContent);
+    expect(menu).toEqual(['Open Task', 'Open Source Session', 'Open Coordinator']);
+  });
+
+  it('gives a landing that waits for a decision its doors to the people who decide', async () => {
+    awaiting = true;
+    view = landing({
+      currentAttempt: attempt({ state: 'CHECK_FAILED', phase: null, check: null, liveness: null }),
+      checks: [{ name: 'MERGE_CHECK', exitCode: 1, expectedExitCode: 0, timedOut: false, durationMs: 232_000 }],
+    });
+    await mount();
+    const card = page().querySelector('.landings-window-card')!;
+    expect(card.textContent).toContain('Not landed');
+    expect(card.textContent).toContain('checks failed · exit 1 after 3m 52s');
+    expect([...card.querySelectorAll('.landing-card-actions button')].map((door) => door.textContent))
+      .toEqual(['Open Coordinator', 'Open Task']);
+    await click(button('Open Coordinator'), 'Open Coordinator');
+    expect(openedSession).toBe('coord-1');
+  });
+
+  it('outlines the landing it was opened on for a moment, opened', async () => {
+    await mount();
+    const entry = page().querySelector<HTMLElement>(`[data-landing-entry="${SESSION}"]`)!;
+    expect(entry.className).toContain('is-outlined');
+    expect(entry.className).toContain('is-open');
+    expect(entry.querySelector('.landings-window-record')).not.toBeNull();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1_600));
+    });
+    expect(entry.className).not.toContain('is-outlined');
+    expect(entry.className).toContain('is-open');
+  });
+
+  it('keeps the window’s own ⋯ to the coordinator and the project', async () => {
+    await mount();
+    await click(page().querySelector('.landings-window-head button[aria-label="More actions"]'), 'the window ⋯');
+    expect([...document.querySelectorAll<HTMLElement>('.orbit-menu-item')].map((item) => item.textContent))
+      .toEqual(['Open Coordinator', 'Open Project']);
   });
 });

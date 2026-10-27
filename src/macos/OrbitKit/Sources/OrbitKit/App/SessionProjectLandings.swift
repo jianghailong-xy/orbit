@@ -1,32 +1,30 @@
 import Foundation
 
-/// The Landings group of a project's sessions page (owner 2026-10-19, board v4 04 c1; contract §2.9
-/// LS6): the landings waiting on a decision and the ones that settled in the last day, under the
-/// coordinator and above the page's own timeline.
+/// The Landings row on a project's sessions page and the project's Landings window (owner
+/// 2026-10-27, docs/mocks/landings-one-window; contract §2.9 LS6, revision 28): the row's count
+/// sentence, the window's day sections and its `Now`, and the read-only footer.
 ///
-/// Each row wears the merged line's head — a mark that says how it ended, the title, how long it has
-/// waited or how long ago it settled, and one line under them saying the outcome and who holds it —
-/// and opens the landing session itself. A landing still in flight is not here (it is on the Landing
-/// card), and neither is a round of merging that merged (the timeline already has its own row).
-/// Everything older folds into one line that opens.
-///
-/// A direct port of `src/web/src/lib/sessionProjects.ts`'s `landingGroup`; the words live once, in
-/// `SessionLandingsCopy`, held to the web's `SESSION_LANDINGS_COPY` by the copy-parity suite.
+/// A direct port of `src/web/src/lib/sessionProjects.ts`'s `landingsWindow` and
+/// `landingsRowSummary`; the words live once, in `SessionLandingsCopy`, held to the web's
+/// `SESSION_LANDINGS_COPY` by the copy-parity suite.
 public enum SessionLandingsCopy {
     public static let title = "Landings"
-    public static let earlier = "Earlier"
+    public static let waiting = "waiting for a decision"
+    public static let inFlight = "in flight"
     public static let landed = "landed"
-    public static let nothingToLand = "nothing to land"
-    public static let withYou = "with you"
-    public static let withCoordinator = "with the coordinator"
-    public static let waiting = "Waiting for a decision"
+    public static let mergedInto = "merged into"
+    public static let today = "today"
+    public static let nothingLandedToday = "Nothing landed today"
+    public static let now = "Now"
+    public static let orbitRunsTheseLandings = "Orbit runs these landings — nothing to type here."
+    /// A merge round's row when its record is past the read's 20: the round merged into main.
+    public static let mergedIntoMain = "Merged into main"
 
     // The derived label on a source work session (board v4 06 e), the web's
     // `SESSION_SOURCE_LANDING_COPY`.
     public static let landing = "Landing"
     public static let on = "On"
-    /// The source label's own spelling, capitalized because it stands alone on the chip — the
-    /// group's fold says the same fact in lower case (`nothingToLand`).
+    /// The source label's own spelling, capitalized because it stands alone on the chip.
     public static let sourceNothingToLand = "Nothing to land"
     public static let checksFailed = "checks failed"
     public static let conflict = "conflict"
@@ -35,156 +33,254 @@ public enum SessionLandingsCopy {
     public static let running = "running"
 }
 
-/// How far back a settled landing is still listed in the group: 24 hours (owner 2026-10-19).
-public let landingsSettledWindow: TimeInterval = 24 * 60 * 60
-
-/// The mark a landing group row's head carries: ✕ stopped, ✓ landed, ⇢ merged, ◌ nothing to land.
-public enum LandingGroupTone: String, Equatable, Sendable {
-    case fail, ok, merge, quiet
+/// The mark a settled row's head carries: ✓ landed, ⇢ merged into main, ◌ nothing to land and every
+/// other quiet ending.
+public enum LandingsWindowTone: String, Equatable, Sendable {
+    case ok, merge, quiet
 }
 
-public struct LandingGroupRow: Equatable, Sendable, Identifiable {
-    public let id: String
+/// One settled landing in the window, drawn with the merged line's head: the mark that says how it
+/// ended, the task's name, the moment it settled, and one line under them.
+public struct LandingsWindowRow: Equatable, Sendable, Identifiable {
+    /// The row's own key: the landing session's id, or `merge:<promotionId>` for a merge into main
+    /// that has no landing session (it predates them).
+    public let key: String
+    /// The LANDING session the row opens in place; nil for a merge that has none, whose receipt is
+    /// all there is to open.
+    public let sessionId: String?
+    /// `TASK` or `PROMOTION`.
+    public let subject: String
     public let title: String
-    /// The right-hand slot: how long it has waited, or how long ago it settled.
-    public let time: String
     public let detail: String
-    public let tone: LandingGroupTone
+    public let tone: LandingsWindowTone
+    /// The clock time it settled at, `17:42`.
+    public let time: String
+    public let at: TimeInterval
+    /// The round's merged record (`promotions/merged`), joined by `landingSessionId`; nil on a
+    /// task's row and on a round older than the read's 20 records.
+    public let promotion: ProjectPromotionView?
 
-    public init(id: String, title: String, time: String, detail: String, tone: LandingGroupTone) {
-        self.id = id
+    /// What the window opens, scrolls to and outlines: the session where there is one.
+    public var id: String { sessionId ?? key }
+
+    public init(key: String, sessionId: String?, subject: String, title: String, detail: String,
+                tone: LandingsWindowTone, time: String, at: TimeInterval,
+                promotion: ProjectPromotionView? = nil) {
+        self.key = key
+        self.sessionId = sessionId
+        self.subject = subject
         self.title = title
-        self.time = time
         self.detail = detail
         self.tone = tone
+        self.time = time
+        self.at = at
+        self.promotion = promotion
     }
 }
 
-/// The fold's two counts: how many of the older landings landed, and how many had nothing to land.
-public struct LandingEarlier: Equatable, Sendable {
-    public let landed: Int
-    public let nothing: Int
+/// One landing that has not settled: a card at the bottom of the window.
+public struct LandingsWindowCard: Equatable, Sendable, Identifiable {
+    public let sessionId: String
+    /// `TASK` or `PROMOTION`.
+    public let subject: String
+    /// `IN_FLIGHT` or `AWAITING_DECISION`.
+    public let state: String
+    /// The task's name (a round's own title), the line the card adds under its head.
+    public let title: String
+    public let at: TimeInterval
 
-    public init(landed: Int, nothing: Int) {
-        self.landed = landed
-        self.nothing = nothing
+    public var id: String { sessionId }
+
+    public init(sessionId: String, subject: String, state: String, title: String, at: TimeInterval) {
+        self.sessionId = sessionId
+        self.subject = subject
+        self.state = state
+        self.title = title
+        self.at = at
     }
 }
 
-public struct LandingGroup: Equatable, Sendable {
-    public let waiting: [LandingGroupRow]
-    public let settled: [LandingGroupRow]
-    /// Everything older than the window, folded into one row; nil when there is none. Both counts
-    /// are 0 when every older one settled some other way (handled, cancelled, declined, deleted…):
-    /// the fold is still there, and reads a bare `Earlier`.
-    public let earlier: LandingEarlier?
-    /// Those same older landings, newest first — what the fold opens to. Empty exactly when
-    /// `earlier` is nil.
-    public let older: [LandingGroupRow]
+/// One of the session list's day sections, holding the landings that settled in it.
+public struct LandingsWindowDay: Equatable, Sendable, Identifiable {
+    public let title: String
+    public let rows: [LandingsWindowRow]
+    public var id: String { title }
 
-    public init(waiting: [LandingGroupRow] = [], settled: [LandingGroupRow] = [],
-                earlier: LandingEarlier? = nil, older: [LandingGroupRow] = []) {
-        self.waiting = waiting
-        self.settled = settled
-        self.earlier = earlier
-        self.older = older
-    }
-
-    /// The group draws nothing at all when it has nothing to list.
-    public var isEmpty: Bool {
-        waiting.isEmpty && settled.isEmpty && older.isEmpty
+    public init(title: String, rows: [LandingsWindowRow]) {
+        self.title = title
+        self.rows = rows
     }
 }
 
-/// What the row a landing is waiting on says: its kind's outcome, and whose it is.
-public struct LandingHolder: Equatable, Sendable {
-    public let reason: String?
-    /// `OWNER` or `COORDINATOR`.
-    public let assignee: String?
+public struct LandingsWindow: Equatable, Sendable {
+    /// The settled landings by the session list's own day sections, oldest first and oldest row
+    /// first: the window reads like a conversation, the newest at the bottom.
+    public let days: [LandingsWindowDay]
+    /// The landings still in hand, in the order they started — the window's last group.
+    public let now: [LandingsWindowCard]
 
-    public init(reason: String? = nil, assignee: String? = nil) {
-        self.reason = reason
-        self.assignee = assignee
+    public init(days: [LandingsWindowDay] = [], now: [LandingsWindowCard] = []) {
+        self.days = days
+        self.now = now
+    }
+}
+
+/// The Landings row's mark: ✕ something waits for a decision, the blue ring something is in flight,
+/// ✓ all settled.
+public enum LandingsRowMark: String, Equatable, Sendable {
+    case fail, running, ok
+}
+
+/// The Landings row's three facts: the mark of the most urgent landing, how long it has waited (or
+/// how long ago the last one settled), and the counts under them.
+public struct LandingsRowSummary: Equatable, Sendable {
+    public let mark: LandingsRowMark
+    public let time: String
+    public let line: String
+
+    public init(mark: LandingsRowMark, time: String, line: String) {
+        self.mark = mark
+        self.time = time
+        self.line = line
     }
 }
 
 public enum SessionProjectLandings {
-    /// The group of a project's landing rows, or nil when it has nothing to list.
-    ///
-    /// `holders` is what the project's open items say about a landing that is waiting (§4.7): its
-    /// kind's outcome and which side is holding it. A landing with no item still says it is waiting,
-    /// because the server's AWAITING_DECISION is the fact that put it there.
-    public static func group(_ rows: [Session], now: Date = Date(),
-                             holders: [String: LandingHolder] = [:]) -> LandingGroup? {
-        var waiting: [(row: LandingGroupRow, at: TimeInterval)] = []
-        var settled: [(row: LandingGroupRow, at: TimeInterval)] = []
-        var before: [(row: LandingGroupRow, at: TimeInterval)] = []
-        var landed = 0
-        var nothing = 0
-        var older = 0
-        for session in rows {
-            guard let landing = session.landing else { continue }
-            if landing.state == "IN_FLIGHT" { continue }
-            let title = (session.title?.isEmpty == false) ? session.title! : SessionLandingsCopy.title
-            if landing.state == "AWAITING_DECISION" {
-                let holder = holders[session.id]
-                let outcome = holder?.reason ?? SessionLandingsCopy.waiting
-                let who = holder?.assignee == "OWNER" ? SessionLandingsCopy.withYou
-                    : holder?.assignee == "COORDINATOR" ? SessionLandingsCopy.withCoordinator : nil
-                waiting.append((
-                    LandingGroupRow(
-                        id: session.id, title: title,
-                        time: ProjectAttention.elapsedLabel(session.createdAt, now: now) ?? "",
-                        detail: [outcome, who].compactMap { $0 }.joined(separator: " · "),
-                        // An item names what stopped it, and that is the red mark; a waiting landing
-                        // with no item yet says only that it is waiting.
-                        tone: holder?.reason != nil ? .fail : .quiet),
-                    instant(session.createdAt)))
-                continue
-            }
-            // A round of merging that merged is the timeline's own row, not this group's.
-            if landing.subject == "PROMOTION" && landing.settledAs == "MERGED" { continue }
-            let at = instant(landing.settledAt)
-            let word = settledWord(landing.settledAs)
-            if !at.isFinite || now.timeIntervalSince1970 - at > landingsSettledWindow {
-                older += 1
-                if landing.settledAs == "LANDED" || landing.settledAs == "ALREADY_LANDED" { landed += 1 }
-                if landing.settledAs == "NOTHING_TO_LAND" { nothing += 1 }
-                before.append((
-                    LandingGroupRow(
-                        id: session.id, title: title,
-                        time: ProjectAttention.elapsedLabel(landing.settledAt, now: now) ?? "",
-                        detail: word.text, tone: word.tone),
-                    at.isFinite ? at : -.infinity))
-                continue
-            }
-            settled.append((
-                LandingGroupRow(
-                    id: session.id, title: title,
-                    time: ProjectAttention.elapsedLabel(landing.settledAt, now: now) ?? "",
-                    detail: word.text, tone: word.tone),
-                at))
-        }
-        if waiting.isEmpty && settled.isEmpty && older == 0 { return nil }
-        // The waiting ones first, longest wait first: the page answers "what is stuck, and on whom".
-        waiting.sort { $0.at < $1.at }
-        settled.sort { $0.at > $1.at }
-        before.sort { $0.at > $1.at }
-        // The fold is there whenever something older is, and opens to all of it; it counts only what
-        // landed and what had nothing to land, so with both at 0 it reads a bare `Earlier`.
-        return LandingGroup(
-            waiting: waiting.map(\.row),
-            settled: settled.map(\.row),
-            earlier: older > 0 ? LandingEarlier(landed: landed, nothing: nothing) : nil,
-            older: before.map(\.row))
+    /// A task segment's title is the server's `Land · <task>`: the window names the task alone.
+    public static func taskName(_ title: String?) -> String {
+        let name = title ?? ""
+        let prefix = "\(LandingPageCopy.land) · "
+        return name.hasPrefix(prefix) ? String(name.dropFirst(prefix.count)) : name
     }
 
-    /// How a settled subject ended, in the group's own words.
-    static func settledWord(_ settledAs: String?) -> (text: String, tone: LandingGroupTone) {
+    /// The project's Landings window: every landing the project has had, from the two reads its
+    /// sessions page already makes — the LANDING sessions (`includeLanding=1`, open and completed)
+    /// and the merges into main (`promotions/merged`).
+    ///
+    /// A settled landing is one row in the day it settled, in the session list's own day sections,
+    /// all of them kept. A round of merging that merged is one row with its record, joined by
+    /// `landingSessionId`; a merge older than landing sessions has a row of its own that opens to its
+    /// receipt alone, and a round past the read's last 20 records keeps its session's row. A landing
+    /// still in hand — in flight, or waiting for a decision — is a card under `Now`, in the order it
+    /// started.
+    public static func window(_ rows: [Session], merges: [ProjectPromotionView], now: Date = Date(),
+                              calendar: Calendar = .current) -> LandingsWindow {
+        let records = merges.filter { $0.merged != nil }
+        var bySession: [String: ProjectPromotionView] = [:]
+        for record in records {
+            if let id = record.landingSessionId, !id.isEmpty, bySession[id] == nil { bySession[id] = record }
+        }
+        var joined = Set<String>()
+        var settled: [(row: LandingsWindowRow, at: String?)] = []
+        var cards: [LandingsWindowCard] = []
+        for session in rows {
+            guard let landing = session.landing else { continue }
+            let state = landing.state ?? (landing.settledAt != nil ? "SETTLED" : "IN_FLIGHT")
+            let name = landing.subject == "TASK" ? taskName(session.title) : (session.title ?? "")
+            if state != "SETTLED" {
+                cards.append(LandingsWindowCard(sessionId: session.id, subject: landing.subject, state: state,
+                                                title: name, at: instant(session.createdAt)))
+                continue
+            }
+            if landing.subject == "PROMOTION" && landing.settledAs == "MERGED" {
+                let record = bySession[session.id]
+                if let record { joined.insert(record.promotionId) }
+                let at = record?.merged?.at ?? landing.settledAt
+                settled.append((LandingsWindowRow(
+                    key: session.id, sessionId: session.id, subject: "PROMOTION",
+                    title: record.map(PromotionCards.timelineTitle) ?? SessionLandingsCopy.mergedIntoMain,
+                    detail: record.map(PromotionCards.timelineDetail) ?? name,
+                    tone: .merge, time: clock(at), at: instant(at), promotion: record), at))
+                continue
+            }
+            let word = settledWord(landing.settledAs)
+            settled.append((LandingsWindowRow(
+                key: session.id, sessionId: session.id, subject: landing.subject, title: name,
+                detail: word.text, tone: word.tone, time: clock(landing.settledAt),
+                at: instant(landing.settledAt)), landing.settledAt))
+        }
+        // A merge whose round has no session in the read: older than landing sessions, or a session
+        // the read did not list. It is still a merge into main, at its own instant.
+        for record in records where !joined.contains(record.promotionId) {
+            let at = record.merged?.at
+            let session = record.landingSessionId.flatMap { $0.isEmpty ? nil : $0 }
+            settled.append((LandingsWindowRow(
+                key: session ?? "merge:\(record.promotionId)", sessionId: session, subject: "PROMOTION",
+                title: PromotionCards.timelineTitle(record), detail: PromotionCards.timelineDetail(record),
+                tone: .merge, time: clock(at), at: instant(at), promotion: record), at))
+        }
+        // Oldest first, in the session list's day sections (the local calendar day): the window
+        // reads down to today, and `Now` under it.
+        let titles = SessionTimeGrouping.bucketTitles
+        let today = calendar.startOfDay(for: now)
+        var buckets: [[LandingsWindowRow]] = Array(repeating: [], count: titles.count)
+        let ordered = settled.sorted {
+            $0.row.at != $1.row.at ? $0.row.at < $1.row.at : $0.row.key > $1.row.key
+        }
+        for entry in ordered {
+            buckets[SessionTimeGrouping.bucketIndex(at: entry.at, today: today, calendar: calendar)]
+                .append(entry.row)
+        }
+        let days = buckets.enumerated().reversed().compactMap { index, rows in
+            rows.isEmpty ? nil : LandingsWindowDay(title: titles[index], rows: rows)
+        }
+        cards.sort { $0.at != $1.at ? $0.at < $1.at : $0.sessionId < $1.sessionId }
+        return LandingsWindow(days: days, now: cards)
+    }
+
+    /// `1 waiting for a decision · 1 in flight · 3 landed · 1 merged into main today` — a count of 0
+    /// is left out, today's two share one `today` at the end, and with all four at 0 the line is
+    /// `Nothing landed today`.
+    public static func countLine(waiting: Int, inFlight: Int, landed: Int, merged: Int,
+                                 main: String = "main") -> String {
+        let today = [
+            landed > 0 ? "\(landed) \(SessionLandingsCopy.landed)" : nil,
+            merged > 0 ? "\(merged) \(SessionLandingsCopy.mergedInto) \(main)" : nil,
+        ].compactMap { $0 }.joined(separator: " · ")
+        let parts = [
+            waiting > 0 ? "\(waiting) \(SessionLandingsCopy.waiting)" : nil,
+            inFlight > 0 ? "\(inFlight) \(SessionLandingsCopy.inFlight)" : nil,
+            today.isEmpty ? nil : "\(today) \(SessionLandingsCopy.today)",
+        ].compactMap { $0 }
+        return parts.isEmpty ? SessionLandingsCopy.nothingLandedToday : parts.joined(separator: " · ")
+    }
+
+    /// The project sessions page's one Landings row (owner 2026-10-27, board 01 b), in the place the
+    /// Landings group had: under the coordinator, above the page's own timeline. It opens the
+    /// project's Landings window. Nil for a project that has never had a landing, which draws no row.
+    ///
+    /// The mark follows the most urgent landing: one waiting for a decision is the red ✕ and the right
+    /// slot says how long the longest of them has waited; else one in flight is the blue ring; else ✓.
+    /// Without a waiting one the right slot says how long ago the last one settled. Today's counts are
+    /// the window's own `Today` section, so the row and the window never disagree about a day.
+    public static func rowSummary(_ rows: [Session], merges: [ProjectPromotionView], now: Date = Date(),
+                                  calendar: Calendar = .current, main: String = "main") -> LandingsRowSummary? {
+        let landings = rows.filter { $0.landing != nil }
+        if landings.isEmpty && !merges.contains(where: { $0.merged != nil }) { return nil }
+        let window = window(landings, merges: merges, now: now, calendar: calendar)
+        let waiting = window.now.filter { $0.state == "AWAITING_DECISION" }
+        let inFlight = window.now.filter { $0.state == "IN_FLIGHT" }
+        let today = window.days.first { $0.title == SessionTimeGrouping.bucketTitles[0] }?.rows ?? []
+        let lastSettled = window.days.flatMap(\.rows).map(\.at).max() ?? -.infinity
+        let time: String?
+        if let longest = waiting.map(\.at).min() {
+            time = elapsed(longest, now: now)
+        } else {
+            time = lastSettled.isFinite ? elapsed(lastSettled, now: now) : nil
+        }
+        return LandingsRowSummary(
+            mark: !waiting.isEmpty ? .fail : !inFlight.isEmpty ? .running : .ok,
+            time: time ?? "",
+            line: countLine(waiting: waiting.count, inFlight: inFlight.count,
+                            landed: today.filter { $0.tone == .ok }.count,
+                            merged: today.filter { $0.tone == .merge }.count, main: main))
+    }
+
+    /// How a settled subject ended, in the row's own words.
+    static func settledWord(_ settledAs: String?) -> (text: String, tone: LandingsWindowTone) {
         switch settledAs {
         case "LANDED": return (LandingPageCopy.landed, .ok)
         case "ALREADY_LANDED": return (LandingPageCopy.alreadyLanded, .ok)
-        case "MERGED": return ("Merged into main", .merge)
         case "NOTHING_TO_LAND": return (LandingPageCopy.nothingToLand, .quiet)
         case "HANDLED": return (LandingPageCopy.handled, .quiet)
         case "DECLINED": return (LandingPageCopy.declined, .quiet)
@@ -194,28 +290,20 @@ public enum SessionProjectLandings {
         }
     }
 
-    /// What an open item about a landing is about, in the group's words; nil for a kind that is not
-    /// a landing's outcome.
-    public static func itemReason(_ kind: ProjectOpenItemKind) -> String? {
-        switch kind {
-        case .integrationConflict: return "Merge conflict"
-        case .integrationCheckFailed: return "Checks failed"
-        case .integrationError: return "Integration error"
-        case .taskFailed: return "Task failed"
-        case .deliveryReview: return "Delivery review"
-        case .landingLeaseExpired: return "No report from the runner"
-        default: return nil
-        }
+    private static func clock(_ iso: String?) -> String {
+        iso.flatMap(RelativeTime.parse).map { ProjectPage.landingClockTime($0) } ?? ""
     }
 
-    /// `Earlier · 31 landed · 3 nothing to land` — the fold's one line. A segment whose count is 0
-    /// is left out: `Earlier · 2 landed`, and with both at 0 the line is the bare `Earlier`.
-    public static func earlierLine(landed: Int, nothing: Int) -> String {
-        var parts = [SessionLandingsCopy.earlier]
-        if landed > 0 { parts.append("\(landed) \(SessionLandingsCopy.landed)") }
-        if nothing > 0 { parts.append("\(nothing) \(SessionLandingsCopy.nothingToLand)") }
-        return parts.joined(separator: " · ")
+    /// `20m`, `2h`, `3d` — the waiting chips' own scale, for an instant the window already parsed.
+    private static func elapsed(_ at: TimeInterval, now: Date) -> String? {
+        ProjectAttention.elapsedLabel(isoFormatter.string(from: Date(timeIntervalSince1970: at)), now: now)
     }
+
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 
     /// The derived label on a source work session (board v4 06 e): three facts, three inks. A
     /// settled subject says where the work went; an open one says what the platform is doing — the

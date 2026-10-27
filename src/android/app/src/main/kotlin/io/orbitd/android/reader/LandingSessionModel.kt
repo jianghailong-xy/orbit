@@ -13,11 +13,12 @@ import kotlin.math.roundToInt
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 
-// The landing session page's model (contract §2.9 LS1, LS6, LS7; design §3; mockups v4
-// docs/mocks/landing-session/v4/05-landing-session-page and 07-android): what a LANDING session's page says, and the
-// conditions its owner doors appear under. A port of OrbitKit's `LandingPageCopy` (App/LandingSessionPage.swift),
-// itself a port of the web's `src/web/src/lib/landingSession.ts`; LandingSessionCopyParityTest holds every word to the
-// Swift source.
+// One landing in a project's Landings window (contract §2.9 LS1, LS6, LS7; design §3; mockups v4
+// docs/mocks/landing-session/v4/05-landing-session-page and 07-android, and since revision 28 the window of
+// docs/mocks/landings-one-window): what a LANDING session's card and its record say, and the conditions its owner doors
+// appear under. The single landing page these were drawn on is now the window focused on that landing. A port of
+// OrbitKit's `LandingPageCopy` (App/LandingSessionPage.swift), itself a port of the web's
+// `src/web/src/lib/landingSession.ts`; LandingSessionCopyParityTest holds every word to the Swift source.
 //
 // Everything here is read from `GET /sessions/:id`'s landing view — the subject, its newest attempt, the
 // phase/round/check facts the runner reported, and the timeline the server already wrote in English. The one exception
@@ -25,8 +26,8 @@ import kotlinx.serialization.json.JsonObject
 // read beside the landing the way the merge card reads it.
 
 /**
- * The page's own words. Everything the landing view does not write itself — the head's clauses, the timeout sentences,
- * the menu and the footer — is here, so the three clients say the same thing. The menu's labels are the board's
+ * A landing's own words. Everything the landing view does not write itself — the head's clauses, the timeout sentences,
+ * the menu and the receipt — is here, so the three clients say the same thing. The menu's labels are the board's
  * sentence case (v4 07: `Open task`, `Stop landing`), unlike iOS's title case; the parity test compares those six
  * ignoring case and says why.
  */
@@ -34,7 +35,6 @@ object LandingSessionCopy {
     /** The page's own word for the subject, beside the title (the board's `Landing` chip). */
     const val CHIP = "Landing"
     const val RUN_BY_ORBIT = "Run by Orbit"
-    const val SETTLED = "settled"
 
     /** A TASK subject's title when no session row exists yet and the task is not read. */
     const val LAND = "Land"
@@ -99,7 +99,7 @@ object LandingSessionCopy {
         "May have been pushed — an older runner reports only between steps, so Orbit can’t rule it out."
     fun mayHavePushedAt(time: String) = "May have been pushed — it reported starting the push at $time, then went silent."
 
-    /** The menu and the two presses that leave this page (design §3, LS6). The board's sentence case, unlike iOS's. */
+    /** The menu and the presses that leave a landing for its people (design §3, LS6). The board's sentence case, unlike iOS's. */
     const val OPEN_TASK = "Open task"
     const val OPEN_SOURCE_SESSION = "Open source session"
     const val OPEN_COORDINATOR = "Open coordinator"
@@ -131,9 +131,6 @@ object LandingSessionCopy {
     const val LEGACY_PUSH_VARIANT =
         "An older runner (reports only between steps): may have been pushed — Orbit can’t rule it out."
 
-    /** The read-only footer (LS6: nothing to type here). */
-    const val ORBIT_RUNS_THIS_LANDING = "Orbit runs this landing — nothing to type here."
-    const val THIS_LANDING_IS_COMPLETE = "This landing is complete — nothing to type here."
     const val LOADING_LANDING = "Loading this landing…"
     const val LOADING_LOG = "Loading the log…"
     const val LOG_UNAVAILABLE = "Couldn’t read this log"
@@ -142,10 +139,8 @@ object LandingSessionCopy {
     const val LOG = "Log"
     const val OLDER_ATTEMPTS_HIDDEN = "Older attempts are not shown here."
     fun bytesOmitted(bytes: Int) = "$bytes bytes omitted"
+    /** The window's read-only footer names who decides (LS6: nothing to type here). */
     const val DECISIONS_THE_COORDINATOR = "Decisions: the coordinator"
-    const val A_CLEAN_PASS_MERGES_ON_ITS_OWN = "A clean pass merges on its own"
-    const val MERGING_IS_DECIDED_ON_THE_CARD = "Merging is decided on the merge card"
-    fun nextMergeOpens(next: Int) = "The next merge into main opens a new landing (#$next)."
 
     /** The ways into a landing session (contract §2.9 LS6, owner 2026-10-19: 方案 A). Held to the Swift's `LandingPageCopy.openLanding`,
      * `noLandingPage` and `allJobs`. */
@@ -276,6 +271,11 @@ data class LandingAttemptCard(
 data class LandingOutcomeCard(val title: String, val right: String, val detail: String?, val tasksHeading: String?, val tasks: List<String>,
     val checkLine: String?, val treeLine: String?, val ok: Boolean)
 
+/** The receipt a merge row opens to in the Landings window (board 03 e; OrbitKit `LandingMergeReceipt`): `Now on main · 2 tasks`, the
+ *  tasks by name, the check that passed on the combined tree and the tree that landed. */
+data class LandingMergeReceipt(val heading: String, val tasks: List<String> = emptyList(), val checkLine: String? = null,
+    val treeLine: String? = null)
+
 /** Which of the owner's doors the landing view's own facts open (LS6: none is inferred here). */
 data class LandingGates(val stop: Boolean = false, val cancel: Boolean = false, val abandon: Boolean = false, val retry: Boolean = false,
     val recheck: Boolean = false)
@@ -283,12 +283,8 @@ data class LandingGates(val stop: Boolean = false, val cancel: Boolean = false, 
 /** What a landing menu row does; the page owns the navigation and the press. */
 enum class LandingMenuAction { OPEN_TASK, OPEN_SOURCE_SESSION, OPEN_COORDINATOR, REVIEW_CARD, STOP, CANCEL, ABANDON, RETRY, RERUN_THE_CHECK }
 
-/** One row of the ⋯ menu the landing page draws. */
+/** One row of the menu a landing's long-press opens (the old landing page's ⋯). */
 data class LandingMenuItem(val key: String, val action: LandingMenuAction, val label: String, val sub: String? = null, val danger: Boolean = false)
-
-/** The footer: what this page is, and the one way out of it that matters (OrbitKit `LandingFooter`). */
-data class LandingFooter(val line: String, val detail: String?, val link: LandingFooterLink?, val next: String?)
-enum class LandingFooterLink { COORDINATOR, REVIEW_CARD }
 
 /** The read-time facts §7.2 V6 takes from the project's integration read (the landing view does not carry them). */
 data class LandingFacts(val stepStartedAt: String? = null, val typicalMs: Int? = null, val main: String? = null) {
@@ -394,15 +390,6 @@ object LandingSessionModel {
             return "${LandingSessionCopy.MERGE_ROUND} $project → ${LandingSessionCopy.INTO_MAIN} · #${view.episode}"
         }
         return if (!taskTitle.isNullOrEmpty()) "${LandingSessionCopy.LAND} · $taskTitle" else LandingSessionCopy.LAND
-    }
-
-    /** `Run by Orbit · runner <name>` while it runs, `Run by Orbit · settled 9:51` once it has. */
-    fun headerSub(view: LandingView?, zone: ZoneId = ZoneId.systemDefault()): String {
-        if (view == null) return LandingSessionCopy.RUN_BY_ORBIT
-        val settled = ProjectTime.parse(view.settledAt)
-        if (settled != null) return "${LandingSessionCopy.RUN_BY_ORBIT} · ${LandingSessionCopy.SETTLED} ${ProjectPage.landingClockTime(settled, zone)}"
-        val runner = view.currentAttempt?.runnerName?.takeIf { it.isNotEmpty() } ?: return LandingSessionCopy.RUN_BY_ORBIT
-        return "${LandingSessionCopy.RUN_BY_ORBIT} · runner $runner"
     }
 
     /** `17m 41s`, `1h 05m` — the check's own duration, as the timeline's sentences spell one. */
@@ -648,6 +635,30 @@ object LandingSessionModel {
     private fun plural(n: Int, one: String) = "$n $one${if (n == 1) "" else "s"}"
 
     /**
+     * A merge round's receipt in the Landings window (board 03 e), from its merged record (`promotions/merged`): what is now on main,
+     * the checks that passed on the combined tree and the tree that landed. The round's landing view adds its checks where the record
+     * carries none; a merge older than landing sessions has only the record, and a round past the read's 20 records only its landing
+     * view (OrbitKit `LandingPageCopy.mergeReceipt`, web `landingMergeReceipt`).
+     */
+    fun mergeReceipt(promotion: JsonObject?, view: LandingView?): LandingMergeReceipt {
+        val main = RunSettings.mainBranchName(promotion?.text("upstreamRef"))
+        // One rule for both shapes: no timeout, and no exit code or the expected one.
+        val recorded = promotion?.objects("checks").orEmpty().map {
+            LandingCheckResult(it.text("name"), it.number("exitCode"), it.number("expectedExitCode"), it.flag("timedOut"), it.number("durationMs"))
+        }
+        val checks = recorded.ifEmpty { view?.checks.orEmpty() }
+        val passed = checks.isNotEmpty() && checks.all { it.passed }
+        val heading = if (promotion != null) "${LandingSessionCopy.NOW_ON} $main · ${plural(promotion.strings("taskIds").size, "task")}"
+            else "${LandingSessionCopy.NOW_ON} $main"
+        val treeLine = promotion?.text("landsTreeSha")?.takeIf { it.isNotEmpty() }?.let { sha ->
+            "${LandingSessionCopy.LANDED_EXACTLY} ${sha.take(7)} · " +
+                (if (promotion.text("landsAs") == "MERGE_COMMIT") LandingSessionCopy.AS_A_MERGE_COMMIT else LandingSessionCopy.BY_FAST_FORWARD)
+        }
+        return LandingMergeReceipt(heading, promotion?.objects("tasks").orEmpty().mapNotNull { it.text("title") },
+            if (passed) "${LandingSessionCopy.PASSED_ON_THE_TREE} · ${duration(checks.sumOf { it.durationMs ?: 0 })}" else null, treeLine)
+    }
+
+    /**
      * The doors the newest attempt's own facts open. Every condition is the view's: the job's kind, whether it is in
      * flight, the server's `timedOut`/`liveness`, the phase the runner reported, and the push boundary the server
      * computed. A read this device could not make opens nothing.
@@ -724,21 +735,6 @@ object LandingSessionModel {
             ?: "${LandingSessionCopy.NO_REPORT_FROM} the runner"
         val clock = instant(at)?.let { ProjectPage.landingClockTime(it, zone) } ?: "--:--"
         return "$who ${LandingSessionCopy.SINCE} $clock"
-    }
-
-    /** The footer: what this page is, and the one way out of it that matters. */
-    fun footer(view: LandingView, onPass: String?): LandingFooter {
-        if (view.settledAt != null) {
-            return LandingFooter(LandingSessionCopy.THIS_LANDING_IS_COMPLETE, null, null,
-                if (view.subject == "PROMOTION") LandingSessionCopy.nextMergeOpens(view.episode + 1) else null)
-        }
-        if (view.subject == "TASK") {
-            return LandingFooter(LandingSessionCopy.ORBIT_RUNS_THIS_LANDING, LandingSessionCopy.DECISIONS_THE_COORDINATOR,
-                LandingFooterLink.COORDINATOR, null)
-        }
-        return LandingFooter(LandingSessionCopy.ORBIT_RUNS_THIS_LANDING,
-            if (onPass == "MERGE") LandingSessionCopy.A_CLEAN_PASS_MERGES_ON_ITS_OWN else LandingSessionCopy.MERGING_IS_DECIDED_ON_THE_CARD,
-            LandingFooterLink.REVIEW_CARD, null)
     }
 
     /** A section's state after its title (`Generation 1 · not landed · CHECK_FAILED`). */

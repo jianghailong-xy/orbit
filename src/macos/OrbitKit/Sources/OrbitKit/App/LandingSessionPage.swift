@@ -1,8 +1,10 @@
 import Foundation
 
-/// The landing session page's model (contract §2.9 LS1, LS6, LS7; design §3; mockups v4
-/// `docs/mocks/landing-session/v4/05-landing-session-page`): what a LANDING session's page says, and
-/// the conditions its owner doors appear under.
+/// One landing in a project's Landings window (contract §2.9 LS1, LS6, LS7; design §3; mockups v4
+/// `docs/mocks/landing-session/v4/05-landing-session-page`, and since revision 28 the window of
+/// `docs/mocks/landings-one-window`): what a LANDING session's card and its record say, and the
+/// conditions its owner doors appear under. The single landing page these were drawn on is now the
+/// window focused on that landing.
 ///
 /// Everything here is read from `GET /sessions/:id`'s landing view — the subject, its newest
 /// attempt, the phase/round/check facts the runner reported, and the timeline the server already
@@ -17,7 +19,6 @@ public enum LandingPageCopy {
     /// The page's own word for the subject, beside the title (mockup 05's `Landing` chip).
     public static let chip = "Landing"
     public static let runByOrbit = "Run by Orbit"
-    public static let settled = "settled"
 
     /// A TASK subject's title when no session row exists yet and the task is not read.
     public static let land = "Land"
@@ -121,9 +122,6 @@ public enum LandingPageCopy {
     public static let legacyPushVariant =
         "An older runner (reports only between steps): may have been pushed — Orbit can’t rule it out."
 
-    /// The read-only footer (LS6: nothing to type here).
-    public static let orbitRunsThisLanding = "Orbit runs this landing — nothing to type here."
-    public static let thisLandingIsComplete = "This landing is complete — nothing to type here."
     public static let loadingLanding = "Loading this landing…"
     public static let loadingLog = "Loading the log…"
     public static let logUnavailable = "Couldn’t read this log"
@@ -132,12 +130,8 @@ public enum LandingPageCopy {
     public static let log = "Log"
     public static let olderAttemptsHidden = "Older attempts are not shown here."
     public static func bytesOmitted(_ bytes: Int) -> String { "\(bytes) bytes omitted" }
+    /// The window's read-only footer names who decides (LS6: nothing to type here).
     public static let decisionsTheCoordinator = "Decisions: the coordinator"
-    public static let aCleanPassMergesOnItsOwn = "A clean pass merges on its own"
-    public static let mergingIsDecidedOnTheCard = "Merging is decided on the merge card"
-    public static func nextMergeOpens(_ next: Int) -> String {
-        "The next merge into main opens a new landing (#\(next))."
-    }
 
     // The ways into a landing session (contract §2.9 LS6, owner 2026-10-19: 方案 A). Held to the
     // web's `LANDING_OPEN` / `LANDING_NO_PAGE` / `LANDING_ALL_JOBS` by the same parity suite.
@@ -179,18 +173,6 @@ public extension LandingPageCopy {
             return "\(LandingPageCopy.land) · \(taskTitle)"
         }
         return LandingPageCopy.land
-    }
-
-    /// `Run by Orbit · runner <name>` while it runs, `Run by Orbit · settled 9:51` once it has.
-    public static func headerSub(_ landing: SessionLandingView?) -> String {
-        guard let landing else { return LandingPageCopy.runByOrbit }
-        if let settledAt = landing.settledAt, let at = RelativeTime.parse(settledAt) {
-            return "\(LandingPageCopy.runByOrbit) · \(LandingPageCopy.settled) \(ProjectPage.landingClockTime(at))"
-        }
-        if let runner = landing.currentAttempt?.runnerName, !runner.isEmpty {
-            return "\(LandingPageCopy.runByOrbit) · runner \(runner)"
-        }
-        return LandingPageCopy.runByOrbit
     }
 
     /// `17m 41s`, `1h 05m` — the check's own duration, as the timeline's sentences spell one.
@@ -662,6 +644,52 @@ public extension LandingPageCopy {
         }
     }
 
+    /// A merge round's receipt in the Landings window (board 03 e), from its merged record
+    /// (`promotions/merged`): what is now on main, the checks that passed on the combined tree and
+    /// the tree that landed. The round's landing view adds its checks where the record carries none; a
+    /// merge older than landing sessions has only the record, and a round past the read's 20 records
+    /// only its landing view. Web: `landingMergeReceipt`.
+    public static func mergeReceipt(promotion: ProjectPromotionView?,
+                                    landing: SessionLandingView?) -> LandingMergeReceipt {
+        let main = RunSettings.mainBranchName(promotion?.upstreamRef)
+        // One rule for both shapes, as the web reads them: no timeout, and no exit code or the
+        // expected one.
+        var checks: [ReceiptCheck] = (promotion?.checks ?? []).map {
+            ReceiptCheck(durationMs: $0.durationMs ?? 0,
+                         ok: $0.timedOut != true && ($0.exitCode == nil || $0.exitCode == $0.expectedExitCode))
+        }
+        if checks.isEmpty {
+            checks = (landing?.checks ?? []).map {
+                ReceiptCheck(durationMs: $0.durationMs ?? 0,
+                             ok: $0.timedOut != true && ($0.exitCode == nil || $0.exitCode == $0.expectedExitCode))
+            }
+        }
+        let passed = !checks.isEmpty && checks.allSatisfy { $0.ok }
+        let durationMs = checks.reduce(0) { total, check in total + check.durationMs }
+        let heading: String
+        if let promotion {
+            heading = "\(LandingPageCopy.nowOn) \(main) · \(plural(promotion.taskIds.count, "task"))"
+        } else {
+            heading = "\(LandingPageCopy.nowOn) \(main)"
+        }
+        var treeLine: String?
+        if let sha = promotion?.landsTreeSha, !sha.isEmpty {
+            let landsAs = promotion?.landsAs == "MERGE_COMMIT" ? LandingPageCopy.asAMergeCommit : LandingPageCopy.byFastForward
+            treeLine = "\(LandingPageCopy.landedExactly) \(String(sha.prefix(7))) · \(landsAs)"
+        }
+        return LandingMergeReceipt(
+            heading: heading,
+            tasks: (promotion?.tasks ?? []).map { $0.title },
+            checkLine: passed ? "\(LandingPageCopy.passedOnTheTree) · \(duration(ms: durationMs))" : nil,
+            treeLine: treeLine)
+    }
+
+    /// One check as the receipt reads it.
+    private struct ReceiptCheck {
+        let durationMs: Int
+        let ok: Bool
+    }
+
     private static func branchName(_ ref: String) -> String? {
         ref.isEmpty ? nil : ref.replacingOccurrences(of: "refs/heads/", with: "")
     }
@@ -857,23 +885,6 @@ public extension LandingPageCopy {
         return ("\(who) \(LandingPageCopy.since) \(clock)", at)
     }
 
-    /// The footer: what this page is, and the one way out of it that matters.
-    static func footer(_ landing: SessionLandingView, onPass: String?) -> LandingFooter {
-        if landing.settledAt != nil {
-            return LandingFooter(
-                line: thisLandingIsComplete, detail: nil, link: nil,
-                next: landing.subject == "PROMOTION" ? nextMergeOpens(landing.episode + 1) : nil)
-        }
-        if landing.subject == "TASK" {
-            return LandingFooter(line: orbitRunsThisLanding, detail: decisionsTheCoordinator,
-                                 link: .coordinator, next: nil)
-        }
-        return LandingFooter(
-            line: orbitRunsThisLanding,
-            detail: onPass == "MERGE" ? aCleanPassMergesOnItsOwn : mergingIsDecidedOnTheCard,
-            link: .reviewCard, next: nil)
-    }
-
     /// A section's state after its title (`Generation 1 · not landed · CHECK_FAILED`).
     static func sectionState(_ state: String) -> String? {
         switch state {
@@ -917,6 +928,22 @@ public extension LandingPageCopy {
     }
 }
 
+/// The receipt a merge row opens to in the Landings window (board 03 e).
+public struct LandingMergeReceipt: Equatable, Sendable {
+    /// `Now on main · 2 tasks`.
+    public let heading: String
+    public let tasks: [String]
+    public let checkLine: String?
+    public let treeLine: String?
+
+    public init(heading: String, tasks: [String] = [], checkLine: String? = nil, treeLine: String? = nil) {
+        self.heading = heading
+        self.tasks = tasks
+        self.checkLine = checkLine
+        self.treeLine = treeLine
+    }
+}
+
 /// A landing entrance's two answers: a session id to open, or the fact that this server names none.
 public enum LandingEntry: Equatable, Sendable {
     case link(String)
@@ -933,22 +960,6 @@ public enum LandingEntry: Equatable, Sendable {
         case .link: return LandingPageCopy.openLanding
         case .noPage: return LandingPageCopy.noLandingPage
         }
-    }
-}
-
-/// The footer's shape: which way out it names, and what comes next.
-public struct LandingFooter: Equatable, Sendable {
-    public enum Link: Equatable, Sendable { case coordinator, reviewCard }
-    public let line: String
-    public let detail: String?
-    public let link: Link?
-    public let next: String?
-
-    public init(line: String = "", detail: String? = nil, link: Link? = nil, next: String? = nil) {
-        self.line = line
-        self.detail = detail
-        self.link = link
-        self.next = next
     }
 }
 

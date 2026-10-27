@@ -3,13 +3,14 @@ package io.orbitd.android.reader
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -22,26 +23,18 @@ import io.orbitd.android.R
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.number
 import io.orbitd.android.core.cards.obj
-import io.orbitd.android.core.cards.objects
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.directory.DirectoryApi
 import io.orbitd.android.directory.DirectoryData
-import io.orbitd.android.directory.ProjectMergeModel
-import io.orbitd.android.directory.ProjectMergeReviewSheet
-import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
-import io.orbitd.android.navigation.Origin
 import io.orbitd.android.projects.LandingHead
 import io.orbitd.android.projects.ProjectApi
 import io.orbitd.android.projects.ProjectLandingHead
 import io.orbitd.android.projects.ProjectPage
 import io.orbitd.android.projects.ProjectTime
 import io.orbitd.android.projects.RunSettings
-import io.orbitd.android.projects.failureReason
-import io.orbitd.android.taskprojects.canWrite
 import io.orbitd.android.ui.LocalOrbitColors
-import io.orbitd.android.wiki.PageBar
 import java.time.Instant
 import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
@@ -51,40 +44,62 @@ import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlinx.serialization.json.JsonObject
 
-// The landing session page (contract §2.9 LS1, LS6, LS7; design §3; mockups v4 05 and 07): a session the platform drives,
-// drawn as its own reader — the status card over the newest attempt, the server's timeline, the check output a line opens,
-// and the owner doors the landing view's facts allow. A reading surface, not a conversation: no composer, no engine, no
-// model, no rename, fork, share or merge bar, and no session events (the page polls §2.7a's cadence instead). Every word and
-// every door condition is LandingSessionModel's, tested on the JVM; this file only lays them out and presses them.
+// A landing session's pieces (contract §2.9 LS1, LS6, LS7; design §3; mockups v4 05 and 07): the status card over its newest attempt,
+// the server's timeline, the check output a line opens, and the owner doors the landing view's facts allow. Since revision 28 (owner
+// 2026-10-27, docs/mocks/landings-one-window) they are drawn inside the project's Landings window (ProjectLandingsWindow.kt), one card
+// or row per landing: a landing session id opens that window focused on it, and no landing has a page of its own. A reading surface,
+// not a conversation: no composer, no engine, no model, no rename, fork, share or merge bar, and no session events (each card polls
+// §2.7a's cadence instead). Every word and every door condition is LandingSessionModel's, tested on the JVM; this file only lays
+// them out.
 
 /**
- * `Destination.SESSION`'s two renderers, chosen by the DETAIL's `sessionKind` (LS6): a landing gets the landing page and
- * never the reader — its own poll, no composer, no session menu and no `sessions/:id/events` subscription — and a
- * conversation gets the reader as it always did. A session the directory does not list is asked for once (a landing link
- * reaches its subject before the session row exists, and a flat list never carries a landing), so the answer is the
- * server's, never a guess from an id. When that one read fails, an id an integration read named as a landing job's
- * ([LandingJobSnapshots]) still gets the landing page, which draws that job frozen; any other id gets the reader.
+ * `Destination.SESSION`'s two renderers, chosen by the DETAIL's `sessionKind` (LS6): a landing opens its project's Landings window
+ * (the project the detail's `landing.projectId` names), focused on that landing — scrolled to, opened and outlined — and never the
+ * reader: no composer, no session menu and no `sessions/:id/events` subscription. A conversation gets the reader as it always did. A
+ * session the directory does not list is asked for once (a landing link reaches its subject before the session row exists, and a
+ * flat list never carries a landing), so the answer is the server's, never a guess from an id. When that one read fails, an id an
+ * integration read named as a landing job's ([LandingJobSnapshots]) still opens that job's project's window, whose card draws the job
+ * frozen; any other id gets the reader. Every way into a landing — Open landing ›, the coordinator's cards, the task page's Landing
+ * section, the source session's chip, an orbit-session link — comes through here.
  */
 @Composable
 fun SessionDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
     open: (OrbitRoute) -> Unit, leave: () -> Unit = {}) {
     val id = route.id ?: return
     val listed = remember(data.sessions, id) { data.sessions.values.any { rows -> rows.any { ObjectId.same(it.id, id) } } }
-    var landing by remember(id) { mutableStateOf<Boolean?>(if (listed) false else null) }
+    var kind by remember(id) { mutableStateOf<SessionKind?>(if (listed) SessionKind.Conversation else null) }
     LaunchedEffect(id, listed) {
-        if (listed) { landing = false; return@LaunchedEffect }
-        if (landing != null) return@LaunchedEffect
-        landing = try { LandingSessionModel.isLanding(api.objectRead(listOf("sessions", id))) }
-        catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { app.landingJobs.snapshot(handle, id) != null }
+        if (listed) { kind = SessionKind.Conversation; return@LaunchedEffect }
+        if (kind != null) return@LaunchedEffect
+        kind = try { SessionKind.of(api.objectRead(listOf("sessions", id))) }
+        catch (cancel: CancellationException) { throw cancel }
+        catch (_: Exception) { app.landingJobs.snapshot(handle, id)?.let { SessionKind.Landing(it.projectId, null) } ?: SessionKind.Conversation }
     }
-    when (landing) {
+    when (val shown = kind) {
         null -> Box(Modifier.fillMaxSize().testTag("session-opening"), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        true -> LandingSessionPage(app, handle, route, api, open)
-        false -> SessionReader(app, handle, route, api, data, open, leave)
+        is SessionKind.Landing -> if (shown.projectId.isEmpty()) {
+            // A landing view that names no project has no window to open: say so rather than read every project's sessions.
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(LandingSessionCopy.UPDATE_UNAVAILABLE, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else ProjectLandingsWindow(app, handle, route, api, shown.projectId, id, open, shown.detail)
+        SessionKind.Conversation -> SessionReader(app, handle, route, api, data, open, leave)
     }
 }
 
-/** What the page holds between reads: the session detail and its landing view, when this device last got an answer, the
+/** What a session id turned out to be: a conversation, or a landing of a project (with the detail that said so, when it was read). */
+internal sealed interface SessionKind {
+    data object Conversation : SessionKind
+    data class Landing(val projectId: String, val detail: JsonObject?) : SessionKind
+
+    companion object {
+        fun of(detail: JsonObject): SessionKind = if (!LandingSessionModel.isLanding(detail)) Conversation
+            else Landing(LandingSessionModel.view(detail)?.projectId?.takeIf { it.isNotEmpty() }
+                ?: detail.obj("projectMembership")?.text("projectId").orEmpty(), detail)
+    }
+}
+
+/** What a landing's card holds between reads: the session detail and its landing view, when this device last got an answer, the
  *  project facts the head and the gates take (V6's step start and usual duration, the main branch, the coordinator and the
  *  round's candidate), a refusal the server wrote for the last press, and — while no read has answered and the last one
  *  failed — the job an integration read last described, which the card draws frozen. */
@@ -120,110 +135,7 @@ internal data class LandingSessionRead(
     }
 }
 
-@Composable
-internal fun LandingSessionPage(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi,
-    open: (OrbitRoute) -> Unit) {
-    val id = route.id ?: return
-    val projects = remember(handle) { ProjectApi(app.session, handle) { app.canWrite(handle) } }
-    var state by remember(id) { mutableStateOf(LandingSessionRead()) }
-    var now by remember(id) { mutableStateOf(Instant.now()) }
-    var menuExpanded by remember(id) { mutableStateOf(false) }
-    var reviewPromotion by remember(id) { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-    val zone = remember { ZoneId.systemDefault() }
-
-    /** A read's answer, with the press as it stands now: a read carries the page as it was when it left, and one that left before
-     *  a press, or while one was out, must neither let the doors up under it nor hold them down after it. */
-    fun publish(read: LandingSessionRead) { state = read.copy(acting = state.acting) }
-    suspend fun readOnce() = LandingSessionReads.read(api, projects, id, state, app.landingJobs, handle, ::publish)
-
-    LaunchedEffect(id) {
-        while (isActive) {
-            LandingSessionReads.read(api, projects, id, state, app.landingJobs, handle, ::publish)
-            val next = LandingSessionModel.nextReadMs(state.view) ?: break
-            delay(next)
-        }
-    }
-    // The head's clock, the freshness and the quiet meter move with the local clock between reads.
-    LaunchedEffect(id) { while (isActive) { delay(1_000); now = Instant.now() } }
-
-    val view = state.view
-    val gates = view?.let { LandingSessionModel.gates(it, now, state.updatedAt, state.failed) } ?: LandingGates()
-    val attempt = view?.currentAttempt
-    val nothingPushed = attempt != null && (attempt.kind == "CHECK_PROMOTION" ||
-        (attempt.timedOut && view?.let { LandingSessionModel.pushSentence(it, attempt) } == LandingSessionCopy.NOTHING_PUSHED_SENTENCE))
-    val items = view?.let {
-        LandingSessionModel.menuItems(it, gates, state.coordinatorId != null, state.currentPromotion() != null, nothingPushed)
-    }.orEmpty()
-
-    // The press reads the page's live state, never a composition's snapshot: the bar keeps the one lambda it was first given
-    // (Compose skips re-binding an unchanged call), and an action must still act on what the page now shows.
-    fun press(action: LandingMenuAction) {
-        val landing = state.view ?: return
-        val attempt = landing.currentAttempt
-        when (action) {
-            LandingMenuAction.OPEN_TASK -> landing.taskId?.let { open(OrbitRoute(Destination.TASK, it, origin = Origin.LINK)) }
-            LandingMenuAction.OPEN_SOURCE_SESSION -> attempt?.sourceSessionId?.let { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) }
-            LandingMenuAction.OPEN_COORDINATOR -> state.coordinatorId?.let { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) }
-            LandingMenuAction.REVIEW_CARD -> landing.promotionId?.let { reviewPromotion = it }
-            else -> scope.launch {
-                if (state.acting) return@launch
-                state = state.copy(acting = true)
-                var refusal: String? = null
-                try {
-                    when (action) {
-                        LandingMenuAction.STOP -> landing.taskId?.let { projects.stopTaskIntegration(landing.projectId, it) }
-                        LandingMenuAction.CANCEL -> landing.promotionId?.let { projects.cancelPromotion(landing.projectId, it) }
-                        LandingMenuAction.ABANDON -> attempt?.jobId?.let { projects.abandonJob(landing.projectId, it) }
-                        LandingMenuAction.RETRY -> attempt?.jobId?.let { projects.retryJob(landing.projectId, it) }
-                        LandingMenuAction.RERUN_THE_CHECK -> landing.promotionId?.let {
-                            projects.recheckPromotion(landing.projectId, it, LandingSessionCopy.RERUN_LANDING_CHECK_REASON)
-                        }
-                        else -> Unit
-                    }
-                } catch (cancel: CancellationException) { throw cancel }
-                catch (failure: Exception) {
-                    val label = when (action) {
-                        LandingMenuAction.STOP -> LandingSessionCopy.STOP_FAILED
-                        LandingMenuAction.CANCEL -> LandingSessionCopy.CANCEL_FAILED
-                        LandingMenuAction.ABANDON -> LandingSessionCopy.ABANDON_FAILED
-                        LandingMenuAction.RETRY -> LandingSessionCopy.RETRY_FAILED
-                        else -> LandingSessionCopy.RERUN_FAILED
-                    }
-                    refusal = "$label — ${failureReason(failure).trimEnd('.')}."
-                }
-                // The doors stay down until the page has read the press back, where iOS's `defer` puts it: pressed before then, a door
-                // goes out over the claim this press has just moved on, and the server refuses it (A15 F-22's kind).
-                state = state.copy(refusal = refusal)
-                try { readOnce() } finally { state = state.copy(acting = false) }
-            }
-        }
-    }
-
-    // The bar keeps the first lambda it is handed (the call is skipped once its parameters compare equal), so what changes
-    // lives behind a state the lambda reads when it draws: the rows, and the press reading the page's live state above.
-    val barItems = remember(id) { mutableStateOf(emptyList<LandingMenuItem>()) }
-    SideEffect { barItems.value = items }
-    PageBar.Bind(route, null) {
-        LandingSessionMenu(barItems.value, menuExpanded, { menuExpanded = it }, ::press)
-    }
-    val merge = remember(handle, view?.projectId) {
-        view?.projectId?.takeIf { it.isNotEmpty() }?.let { ProjectMergeModel(projects, it) }
-    }
-    LandingSessionContent(state, now, zone, ::press,
-        onReview = { view?.promotionId?.let { reviewPromotion = it; merge?.let { model -> scope.launch { model.load(force = true) } } } },
-        onOpenCoordinator = { state.coordinatorId?.let { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) } },
-        onLog = { selectors, cursor -> LandingSessionReads.log(api, id, selectors, cursor) })
-    LaunchedEffect(merge, state.promotion?.text("promotionId"), state.mergedPromotions.size) {
-        // The review sheet reads the candidate and its open items from this model; it is filled as soon as the round has one.
-        if (merge != null && state.currentPromotion() != null) merge.load(force = true)
-    }
-    reviewPromotion?.let { promotionId ->
-        merge?.let { ProjectMergeReviewSheet(it, promotionId, null) { reviewPromotion = null } }
-    }
-}
-
-/** The reads a landing page makes each round: its own detail, then the project facts beside it (iOS `refresh`). */
+/** The reads a landing's card makes each round: its own detail, then the project facts beside it (iOS `refresh`). */
 internal object LandingSessionReads {
     private suspend fun <T> attempt(read: suspend () -> T): T? =
         try { read() } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
@@ -239,13 +151,14 @@ internal object LandingSessionReads {
         val landing = next.view ?: return
         if (landing.projectId.isEmpty()) return
         if (landing.settledAt == null) {
-            attempt { projects.integration(landing.projectId) }?.let { snapshots.remember(handle, it); next = next.copy(integration = it) }
+            attempt { projects.integration(landing.projectId) }?.let { snapshots.remember(handle, landing.projectId, it); next = next.copy(integration = it) }
             attempt { projects.coordinator(landing.projectId) }?.let { next = next.copy(coordinator = it) }
             if (landing.subject == "PROMOTION") attempt { projects.currentPromotion(landing.projectId) }?.let { next = next.copy(promotion = it) }
         } else if (landing.subject == "PROMOTION") {
             attempt { projects.mergedPromotions(landing.projectId) }?.let { next = next.copy(mergedPromotions = it) }
         }
-        if (landing.subject == "TASK" && next.taskTitle == null && !landing.taskId.isNullOrEmpty()) {
+        // A landing whose row is not inserted yet (LS1) has no title of its own: its task's names it.
+        if (landing.subject == "TASK" && next.rowTitle.isNullOrEmpty() && next.taskTitle == null && !landing.taskId.isNullOrEmpty()) {
             attempt { api.objectRead(listOf("tasks", landing.taskId)).text("title") }?.let { next = next.copy(taskTitle = it) }
         }
         publish(next)
@@ -265,86 +178,77 @@ internal object LandingSessionReads {
         }
 }
 
-/** The page's ⋯ in the bar: the ways to look at this work, then the doors (design §3, LS6). No Copy Link. */
+/** The menu a landing's long-press opens — the old landing page's ⋯, row for row: the ways to look at this work, then the doors the
+ *  landing view's facts open (design §3, LS6). No Copy Link. A landing whose view has not been read yet ([items] null) has one row,
+ *  saying so, until the read lands. */
 @Composable
-private fun LandingSessionMenu(items: List<LandingMenuItem>, expanded: Boolean, onExpanded: (Boolean) -> Unit,
-    onPress: (LandingMenuAction) -> Unit) {
-    if (items.isEmpty()) return
-    Box {
-        IconButton(onClick = { onExpanded(true) }, modifier = Modifier.testTag("landing-more")) {
-            Icon(painterResource(R.drawable.ic_more), "Landing actions")
+internal fun LandingEntryMenu(expanded: Boolean, items: List<LandingMenuItem>?, onDismiss: () -> Unit, onPress: (LandingMenuAction) -> Unit) {
+    DropdownMenu(expanded, onDismiss, Modifier.testTag("landing-menu")) {
+        if (items == null) DropdownMenuItem(text = { Text(LandingSessionCopy.LOADING_LANDING) }, onClick = {}, enabled = false,
+            modifier = Modifier.testTag("landing-menu:loading"))
+        else items.forEachIndexed { index, item ->
+            if (item.danger && index > 0 && !items[index - 1].danger) HorizontalDivider()
+            DropdownMenuItem(text = {
+                Column {
+                    Text(item.label, color = if (item.danger) MaterialTheme.colorScheme.error else Color.Unspecified)
+                    item.sub?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+            }, onClick = { onDismiss(); onPress(item.action) }, modifier = Modifier.testTag("landing-menu:${item.key}"))
         }
-        DropdownMenu(expanded, { onExpanded(false) }, Modifier.testTag("landing-menu")) {
-            items.forEachIndexed { index, item ->
-                if (item.danger && index > 0 && !items[index - 1].danger) HorizontalDivider()
-                DropdownMenuItem(text = {
-                    Column {
-                        Text(item.label, color = if (item.danger) MaterialTheme.colorScheme.error else Color.Unspecified)
-                        item.sub?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    }
-                }, onClick = { onExpanded(false); onPress(item.action) }, modifier = Modifier.testTag("landing-menu:${item.key}"))
+    }
+}
+
+/** A landing's record, as its row or card opens to it in the window: the server's timeline — its facts, then one section per attempt
+ *  (a task segment's generation, or a merge round's check and merge) with the check a finished line opens — and the line that says
+ *  older attempts are not shown. */
+@Composable
+internal fun LandingRecord(view: LandingView, now: Instant, zone: ZoneId, onLog: suspend (LandingLogSelectors, String?) -> LandingLogPage?) {
+    val timeline = view.timeline ?: return
+    Column(Modifier.fillMaxWidth().testTag("landing:record"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // The current round's state is the status card's to say; the board's timeline does not repeat it as a fact (05 c).
+        timeline.facts.filter { it.kind != "PROMOTION_STATE" }.forEachIndexed { index, fact ->
+            Text(fact.text, Modifier.testTag("landing:fact:$index"), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        timeline.sections.forEach { section -> key(section.jobId) { LandingTimelineSectionView(section, view, now, zone, onLog) } }
+        if (timeline.truncated) Text(LandingSessionCopy.OLDER_ATTEMPTS_HIDDEN, style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** An open entry's up arrow, at the right of its head (board 03 e): pressing the entry again folds it. */
+@Composable
+internal fun LandingUpArrow() {
+    Icon(painterResource(R.drawable.ic_chevron_down), null, Modifier.size(14.dp).rotate(180f).testTag("landing:open-arrow"),
+        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+/** The status card's head with the line the window adds under it — the task's name — and, while the entry is open, its up arrow. */
+@Composable
+private fun LandingCardHead(taskName: String?, expanded: Boolean, head: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            head()
+            taskName?.takeIf { it.isNotEmpty() }?.let {
+                Text(it, Modifier.testTag("landing:task-name"), style = MaterialTheme.typography.bodyMedium, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis)
             }
         }
+        if (expanded) Box(Modifier.padding(top = 8.dp)) { LandingUpArrow() }
     }
 }
 
 /**
- * The page as drawn: the title and the read-only footer, the status card over the newest attempt, the server's timeline,
- * and the refusal a press came back with. Each state is written to a PNG by LandingSessionViewTest.
+ * A landing's status card (the old landing page's card, mockups v4 05): the head over its newest attempt — V6's step clock, budget bar
+ * and liveness while it moves; what stopped it while it waits; the outcome once it settled — with [taskName], the line the Landings
+ * window adds under the head. A timed-out attempt keeps its own doors (Retry, Re-run the check, Abandon); a landing that waits for a
+ * decision carries [waitDoors], the doors to the people who decide (board 02 d), the first of them the primary. [modifier] is the
+ * window's press on the card; [expanded] draws the open entry's up arrow.
  */
 @Composable
-internal fun LandingSessionContent(state: LandingSessionRead, now: Instant, zone: ZoneId = ZoneId.systemDefault(),
-    onPress: (LandingMenuAction) -> Unit = {}, onReview: () -> Unit = {}, onOpenCoordinator: () -> Unit = {},
-    onLog: suspend (LandingLogSelectors, String?) -> LandingLogPage? = { _, _ -> null }) {
-    val view = state.view
-    val card = view?.let { LandingSessionModel.attemptCard(it, now, state.updatedAt, state.failed, state.facts(), zone) }
-    val outcome = view?.let { LandingSessionModel.outcomeCard(it, state.currentPromotion(), zone) }
-    val footer = view?.let { LandingSessionModel.footer(it, state.currentPromotion()?.text("onPass")) }
-    Column(Modifier.fillMaxSize().testTag("landing-page")) {
-        LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("landing-page-list"), contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            item(key = "head") {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(LandingSessionModel.headerTitle(view, state.rowTitle, state.taskTitle), Modifier.weight(1f).testTag("landing:title"),
-                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(LandingSessionCopy.CHIP, Modifier.background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f), CircleShape)
-                            .padding(horizontal = 8.dp, vertical = 2.dp).testTag("landing:chip"), style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Text(LandingSessionModel.headerSub(view, zone), Modifier.testTag("landing:sub"), style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            item(key = "card") { LandingStatusCard(state, view, card, outcome, now, onPress) }
-            state.refusal?.let { refusal ->
-                item(key = "refusal") {
-                    Text(refusal, Modifier.testTag("landing:refusal"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                }
-            }
-            if (view != null) {
-                val timeline = view.timeline
-                timeline?.facts?.filter { it.kind != "PROMOTION_STATE" }?.forEachIndexed { index, fact ->
-                    item(key = "fact:$index") { Text(fact.text, Modifier.testTag("landing:fact:$index"), style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                }
-                timeline?.sections?.forEach { section ->
-                    item(key = "section:${section.jobId}") {
-                        LandingTimelineSectionView(section, view, now, zone, onLog)
-                    }
-                }
-                if (timeline?.truncated == true) item(key = "truncated") {
-                    Text(LandingSessionCopy.OLDER_ATTEMPTS_HIDDEN, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-        footer?.let { LandingFooterView(it, state.coordinatorId, state.currentPromotion() != null, onReview, onOpenCoordinator) }
-    }
-}
-
-@Composable
-private fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, card: LandingAttemptCard?, outcome: LandingOutcomeCard?,
-    now: Instant, onPress: (LandingMenuAction) -> Unit) {
+internal fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, card: LandingAttemptCard?, outcome: LandingOutcomeCard?,
+    now: Instant, onPress: (LandingMenuAction) -> Unit, modifier: Modifier = Modifier, taskName: String? = null, expanded: Boolean = false,
+    waitDoors: List<LandingMenuAction> = emptyList()) {
     val warning = LocalOrbitColors.current.needsYou
     val success = LocalOrbitColors.current.success
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -359,8 +263,8 @@ private fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, car
         card?.timedOut == true -> warning.copy(alpha = 0.3f)
         else -> Color.Transparent
     }
-    Column(Modifier.fillMaxWidth().background(wash, shape).border(1.dp, stroke, shape).padding(12.dp).testTag("landing-status-card"),
-        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().clip(shape).background(wash, shape).border(1.dp, stroke, shape).then(modifier).padding(12.dp)
+        .testTag("landing-status-card"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (view == null) {
             // A first read that failed draws the job an integration read last described, frozen at that read, with no door
             // (iOS `offlineCard`); with none kept, the note says only that the update is unavailable.
@@ -369,18 +273,20 @@ private fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, car
                     now, kept.readAt, failed = true, kept.facts)
             }
             if (frozen != null) {
-                ProjectLandingHead(frozen.word, LandingHead(frozen.right, frozen.rightIsClock, frozen.detail), running = false, timedOut = false)
+                LandingCardHead(taskName, expanded) {
+                    ProjectLandingHead(frozen.word, LandingHead(frozen.right, frozen.rightIsClock, frozen.detail), running = false, timedOut = false)
+                }
                 frozen.live?.let { Text(it, Modifier.testTag("landing:live"), style = MaterialTheme.typography.bodySmall, color = muted) }
-                return@Column
+            } else LandingCardHead(taskName, expanded) {
+                Text(if (state.failed) LandingSessionCopy.UPDATE_UNAVAILABLE else LandingSessionCopy.LOADING_LANDING, Modifier.testTag("landing:status-note"),
+                    style = MaterialTheme.typography.bodyMedium, color = muted)
             }
-            val text = if (state.failed) LandingSessionCopy.UPDATE_UNAVAILABLE else LandingSessionCopy.LOADING_LANDING
-            Text(text, Modifier.testTag("landing:status-note"), style = MaterialTheme.typography.bodyMedium, color = muted)
-            return@Column
-        }
-        if (outcome != null) {
+        } else if (outcome != null) {
             // A settled success wears the green ✓ the merge card's `Merged into main` row wears (mockup 05 c).
-            ProjectLandingHead(outcome.title, LandingHead(outcome.right, false, outcome.detail.orEmpty()), running = false, timedOut = false,
-                ok = outcome.ok)
+            LandingCardHead(taskName, expanded) {
+                ProjectLandingHead(outcome.title, LandingHead(outcome.right, false, outcome.detail.orEmpty()), running = false, timedOut = false,
+                    ok = outcome.ok)
+            }
             outcome.tasksHeading?.let { Text(it, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold) }
             outcome.tasks.forEach { title ->
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -390,54 +296,69 @@ private fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, car
             }
             outcome.checkLine?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = success) }
             outcome.treeLine?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = muted) }
-            return@Column
-        }
-        if (card == null) {
-            Text(LandingSessionCopy.QUEUED, style = MaterialTheme.typography.bodyMedium, color = muted)
-            return@Column
-        }
-        // The head's one line is the card's on a narrow landing row; this page has room for the claim, the round and a
-        // takeover's first start in full (mockups v4 05 h–j).
-        ProjectLandingHead(card.word, LandingHead(card.right, card.rightIsClock, card.detail), card.running, card.timedOut, detailLines = 3)
-        card.budget?.let { budget ->
-            Text(budget, Modifier.testTag("landing:budget"), style = MaterialTheme.typography.bodySmall, color = muted)
-            card.progress?.let { LandingBudgetMeter(it, card.usualProgress) }
-        }
-        card.live?.let { live ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (card.fresh) Box(Modifier.size(7.dp).background(success, CircleShape).testTag("landing:live-dot"))
-                Text(live, Modifier.testTag("landing:live"), style = MaterialTheme.typography.bodySmall, color = muted)
+        } else if (card == null) {
+            LandingCardHead(taskName, expanded) {
+                Text(LandingSessionCopy.QUEUED, style = MaterialTheme.typography.bodyMedium, color = muted)
             }
-        }
-        val attempt = view.currentAttempt
-        if (card.timedOut && attempt != null) {
-            Text(LandingSessionModel.timeoutLine(attempt, state.facts().mainBranch), Modifier.testTag("landing:timeout-line"),
-                style = MaterialTheme.typography.bodySmall, color = muted)
-            LandingSessionModel.pushSentence(view, attempt)?.let {
-                Text(it, Modifier.testTag("landing:push-sentence"), style = MaterialTheme.typography.bodySmall, color = muted)
+        } else {
+            // The head's one line is the card's on a narrow landing row; a card has room for the claim, the round and a takeover's
+            // first start in full (mockups v4 05 h–j).
+            LandingCardHead(taskName, expanded) {
+                ProjectLandingHead(card.word, LandingHead(card.right, card.rightIsClock, card.detail), card.running, card.timedOut, detailLines = 3)
             }
-        }
-        if (view.subject == "PROMOTION" && view.settledAt == null && card.running &&
-            attempt?.kind == "CHECK_PROMOTION") {
-            state.currentPromotion()?.let { promotion ->
-                io.orbitd.android.core.cards.PromotionCards.onPassLine(promotion)?.let {
-                    Text(it, Modifier.testTag("landing:on-pass"), style = MaterialTheme.typography.bodySmall, color = muted)
+            card.budget?.let { budget ->
+                Text(budget, Modifier.testTag("landing:budget"), style = MaterialTheme.typography.bodySmall, color = muted)
+                card.progress?.let { LandingBudgetMeter(it, card.usualProgress) }
+            }
+            card.live?.let { live ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (card.fresh) Box(Modifier.size(7.dp).background(success, CircleShape).testTag("landing:live-dot"))
+                    Text(live, Modifier.testTag("landing:live"), style = MaterialTheme.typography.bodySmall, color = muted)
+                }
+            }
+            val attempt = view.currentAttempt
+            if (card.timedOut && attempt != null) {
+                Text(LandingSessionModel.timeoutLine(attempt, state.facts().mainBranch), Modifier.testTag("landing:timeout-line"),
+                    style = MaterialTheme.typography.bodySmall, color = muted)
+                LandingSessionModel.pushSentence(view, attempt)?.let {
+                    Text(it, Modifier.testTag("landing:push-sentence"), style = MaterialTheme.typography.bodySmall, color = muted)
+                }
+            }
+            if (view.subject == "PROMOTION" && view.settledAt == null && card.running &&
+                attempt?.kind == "CHECK_PROMOTION") {
+                state.currentPromotion()?.let { promotion ->
+                    io.orbitd.android.core.cards.PromotionCards.onPassLine(promotion)?.let {
+                        Text(it, Modifier.testTag("landing:on-pass"), style = MaterialTheme.typography.bodySmall, color = muted)
+                    }
+                }
+            }
+            card.failure?.let { Text(it, Modifier.testTag("landing:failure"), style = MaterialTheme.typography.bodySmall, color = muted) }
+            if (card.timedOut) {
+                val gates = LandingSessionModel.gates(view, now, state.updatedAt, state.failed)
+                val push = attempt?.let { LandingSessionModel.pushSentence(view, it) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (gates.retry) Button(onClick = { onPress(LandingMenuAction.RETRY) }, enabled = !state.acting,
+                        modifier = Modifier.testTag("landing:retry")) { Text(LandingSessionCopy.RETRY) }
+                    if (gates.recheck) Button(onClick = { onPress(LandingMenuAction.RERUN_THE_CHECK) }, enabled = !state.acting,
+                        modifier = Modifier.testTag("landing:rerun")) { Text(LandingSessionCopy.RERUN_THE_CHECK) }
+                    if (gates.abandon) AbandonButton({ onPress(LandingMenuAction.ABANDON) }, !state.acting, Modifier.testTag("landing:abandon"))
+                }
+                doorHint(gates, push, attempt)?.let {
+                    Text(it, Modifier.testTag("landing:door-hint"), style = MaterialTheme.typography.bodySmall, color = muted)
                 }
             }
         }
-        card.failure?.let { Text(it, Modifier.testTag("landing:failure"), style = MaterialTheme.typography.bodySmall, color = muted) }
-        if (card.timedOut) {
-            val gates = LandingSessionModel.gates(view, now, state.updatedAt, state.failed)
-            val push = attempt?.let { LandingSessionModel.pushSentence(view, it) }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (gates.retry) Button(onClick = { onPress(LandingMenuAction.RETRY) }, enabled = !state.acting,
-                    modifier = Modifier.testTag("landing:retry")) { Text(LandingSessionCopy.RETRY) }
-                if (gates.recheck) Button(onClick = { onPress(LandingMenuAction.RERUN_THE_CHECK) }, enabled = !state.acting,
-                    modifier = Modifier.testTag("landing:rerun")) { Text(LandingSessionCopy.RERUN_THE_CHECK) }
-                if (gates.abandon) AbandonButton({ onPress(LandingMenuAction.ABANDON) }, !state.acting, Modifier.testTag("landing:abandon"))
-            }
-            doorHint(gates, push, attempt)?.let {
-                Text(it, Modifier.testTag("landing:door-hint"), style = MaterialTheme.typography.bodySmall, color = muted)
+        // A landing that waits for a decision names the people who make it: the coordinator first, then the task or the round's card.
+        if (waitDoors.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            waitDoors.forEachIndexed { index, action ->
+                val label = when (action) {
+                    LandingMenuAction.OPEN_COORDINATOR -> LandingSessionCopy.OPEN_COORDINATOR
+                    LandingMenuAction.OPEN_TASK -> LandingSessionCopy.OPEN_TASK
+                    else -> LandingSessionCopy.REVIEW_CARD
+                }
+                val tag = Modifier.testTag("landing:wait:${action.name.lowercase()}")
+                if (index == 0) Button(onClick = { onPress(action) }, modifier = tag) { Text(label) }
+                else FilledTonalButton(onClick = { onPress(action) }, modifier = tag) { Text(label) }
             }
         }
     }
@@ -617,29 +538,4 @@ private fun LandingLogBody(page: LandingLogPage?, failed: Boolean, loading: Bool
 private fun LandingDarkOutput(text: String) {
     Text(text, Modifier.fillMaxWidth().background(Color(0xFF1F1F1F), RoundedCornerShape(8.dp)).padding(10.dp).testTag("landing:output"),
         style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = Color(0xFFEBEBEB))
-}
-
-/** The read-only footer (LS6): what this page is, who decides, and the way to them. */
-@Composable
-private fun LandingFooterView(footer: LandingFooter, coordinatorId: String?, hasReview: Boolean, onReview: () -> Unit,
-    onOpenCoordinator: () -> Unit) {
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).padding(horizontal = 16.dp, vertical = 8.dp)
-        .testTag("landing:footer"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(footer.line, Modifier.testTag("landing:footer-line"), style = MaterialTheme.typography.bodySmall, color = muted)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            footer.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = muted) }
-            when {
-                footer.link == LandingFooterLink.COORDINATOR && coordinatorId != null ->
-                    TextButton(onClick = onOpenCoordinator, modifier = Modifier.heightIn(min = 0.dp).testTag("landing:open-coordinator")) {
-                        Text("${LandingSessionCopy.OPEN_COORDINATOR} ›", style = MaterialTheme.typography.bodySmall)
-                    }
-                footer.link == LandingFooterLink.REVIEW_CARD && hasReview ->
-                    TextButton(onClick = onReview, modifier = Modifier.heightIn(min = 0.dp).testTag("landing:open-review")) {
-                        Text("${LandingSessionCopy.REVIEW_CARD} ›", style = MaterialTheme.typography.bodySmall)
-                    }
-            }
-        }
-        footer.next?.let { Text(it, Modifier.testTag("landing:footer-next"), style = MaterialTheme.typography.bodySmall, color = muted) }
-    }
 }

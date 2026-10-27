@@ -12,10 +12,9 @@ import {
   landingCheckPassed,
   landingDuration,
   landingEntryOk,
-  landingFooter,
   landingGates,
-  landingHeaderSub,
   landingHeaderTitle,
+  landingMergeReceipt,
   landingNoReportBand,
   landingMenuItemList,
   landingOutcomeCard,
@@ -522,38 +521,51 @@ describe('the ⋯ menu', () => {
   });
 });
 
-describe('the header and the read-only footer', () => {
+describe('the title a landing goes by', () => {
   it('titles a linked landing with its server title, and a pre-row one from the view', () => {
     expect(landingHeaderTitle(landing(), 'Land · Ledger migration order')).toBe('Land · Ledger migration order');
     expect(landingHeaderTitle(landing(), null, 'Ledger migration order')).toBe('Land · Ledger migration order');
     const round = landing({ subject: 'PROMOTION', taskId: null, promotionId: 'p', episode: 7 });
     expect(landingHeaderTitle(round, null)).toMatch(/^Merge project .+ → main · #7$/);
   });
+});
 
-  it('names the runner while it runs and the settlement once it has settled', () => {
-    expect(landingHeaderSub(landing())).toBe('Run by Orbit · runner wikova');
-    expect(landingHeaderSub(landing({ settledAt: at(9, 51), settledAs: 'LANDED' })))
-      .toBe(`Run by Orbit · settled ${landingClockTime(at(9, 51))}`);
+/** The receipt a Merged into main row opens to in the Landings window (board 03 e). */
+describe('a merge row’s receipt', () => {
+  const round = landing({
+    subject: 'PROMOTION', taskId: null, promotionId: 'promo-1', settledAt: at(9, 51), settledAs: 'MERGED',
+    checks: [{ name: 'MERGE_CHECK', exitCode: 0, expectedExitCode: 0, timedOut: false, durationMs: 17 * 60_000 + 41_000 }],
   });
 
-  it('points a task segment at the coordinator, a round at its card, and a settled one at nothing', () => {
-    expect(landingFooter(landing(), null)).toMatchObject({
-      line: 'Orbit runs this landing — nothing to type here.',
-      detail: 'Decisions: the coordinator',
-      link: 'COORDINATOR',
+  it('says what is now on main, the check that passed on the combined tree, and the tree that landed', () => {
+    expect(landingMergeReceipt(promotion(), round)).toEqual({
+      heading: 'Now on main · 2 tasks',
+      tasks: ['Ledger migration order', 'Payout retry budget'],
+      checkLine: '✓ Passed on the combined tree · 17m 41s',
+      treeLine: 'Landed exactly the tested tree 5e5bfca · as a merge commit',
     });
-    const round = landing({ subject: 'PROMOTION' });
-    expect(landingFooter(round, 'MERGE').detail).toBe('A clean pass merges on its own');
-    expect(landingFooter(round, 'ASK').detail).toBe('Merging is decided on the merge card');
-    expect(landingFooter(round, null)).toMatchObject({
-      detail: 'Merging is decided on the merge card',
-      link: 'REVIEW_CARD',
+  });
+
+  it('reads the record’s own checks first, and the record alone for a merge older than landing sessions', () => {
+    const recorded = promotion({
+      checks: [{ name: 'MERGE_CHECK', command: 'npm test', expectedExitCode: 0, exitCode: 0, timedOut: false, durationMs: 9 * 60_000 }],
+      landsAs: 'FAST_FORWARD',
+    } as Partial<ProjectPromotionView>);
+    expect(landingMergeReceipt(recorded, round).checkLine).toBe('✓ Passed on the combined tree · 9m 00s');
+    expect(landingMergeReceipt(recorded, null)).toEqual({
+      heading: 'Now on main · 2 tasks',
+      tasks: ['Ledger migration order', 'Payout retry budget'],
+      checkLine: '✓ Passed on the combined tree · 9m 00s',
+      treeLine: 'Landed exactly the tested tree 5e5bfca · by fast-forward',
     });
-    const settled = landing({ subject: 'PROMOTION', episode: 9, settledAt: at(9, 51), settledAs: 'MERGED' });
-    expect(landingFooter(settled, null)).toMatchObject({
-      line: 'This landing is complete — nothing to type here.',
-      link: null,
-      next: 'The next merge into main opens a new landing (#10).',
+  });
+
+  it('keeps to what the landing view has for a round past the read’s 20 records', () => {
+    expect(landingMergeReceipt(null, round)).toEqual({
+      heading: 'Now on main',
+      tasks: [],
+      checkLine: '✓ Passed on the combined tree · 17m 41s',
+      treeLine: null,
     });
   });
 });

@@ -1,0 +1,8 @@
+// Evidence kit for the Android Landings window (owner 2026-10-27, docs/mocks/landings-one-window): compiles src/LandingsWindowShotsTest.kt
+// (kept in this directory) into the androidTest APK, so nothing under src/android/app/src/androidTest changes for the shots. Pass it as a
+// second -I beside a build-dir init script, with `gradlew -p src/android`: the path is taken from the Android project's root.
+allprojects { p ->
+    p.plugins.withId('com.android.application') {
+        p.android.sourceSets.androidTest.java.srcDir(new File(p.rootProject.projectDir, '../../docs/evidence/landings-one-window/android/kit/src').canonicalFile)
+    }
+}

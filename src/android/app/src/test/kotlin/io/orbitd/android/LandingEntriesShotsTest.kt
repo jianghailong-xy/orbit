@@ -51,8 +51,9 @@ import org.robolectric.annotation.GraphicsMode
  * A-2's NATIVE frames against board v4 07, light and dark: the Landing card's Open landing, the jobs list with a landing and a server
  * that names none (the grey slot), the merge check card with its queue foot, the X-E5 card, an INTEGRATION_* item's card with Open
  * landing after its existing doors (board 07 13:28), the delivery card's two links, the source session's derived label, and the
- * Landings group. Each is drawn by the production composables over the shell's controlled server (or standalone, where the frame is
- * one card), and written under `src/android/build/evidence/landing-entries-android/<theme>/` beside its semantics tree.
+ * sessions page's one Landings row (docs/mocks/landings-one-window 01 b). Each is drawn by the production composables over the shell's
+ * controlled server (or standalone, where the frame is one card), and written under
+ * `src/android/build/evidence/landing-entries-android/<theme>/` beside its semantics tree.
  */
 abstract class LandingEntriesShots {
     @get:Rule(order = 0)
@@ -215,21 +216,21 @@ abstract class LandingEntriesShots {
         compose.onNodeWithTag("source-landing:ring", useUnmergedTree = true).assertDoesNotExist()
     }
 
-    /** H · the Landings group (board 04 c1): waiting and settled rows under the Coordinator, the older ones folded. */
-    @Test fun theLandingsGroup() {
+    /** H · the sessions page's one Landings row (docs/mocks/landings-one-window 01 b): under the Coordinator, the most urgent landing's
+     *  ✕, how long it has waited, and today's counts. */
+    @Test fun theLandingsRow() {
         fun row(id: String, title: String, createdAt: String, state: String, subject: String = "TASK", settledAs: String? = null,
             settledAt: String? = null) = """{"id":"$id","title":"$title","status":"AWAITING_INPUT","createdAt":"$createdAt","lastTurnAt":"$createdAt",
             "sessionKind":"LANDING","landing":{"subject":"$subject","state":"$state","settledAs":${q(settledAs)},"settledAt":${q(settledAt)}},
             "projectMembership":{"projectId":"$launch","projectTitle":"Launch","projectStatus":"OPEN","role":"LANDING"}}"""
-        ProjectShell.landings = """[${row("l-await", "Land · Wire the page", ago(42), "AWAITING_DECISION")},
-            ${row("l-settled", "Land · Ship the drawer", ago(120), "SETTLED", settledAs = "LANDED", settledAt = ago(60))},
-            ${row("l-old", "Land · Ship the docs", ago(2 * 24 * 60), "SETTLED", settledAs = "LANDED", settledAt = ago(2 * 24 * 60))}]"""
-        ProjectShell.needsYouItems = """[{"itemId":"item-holder","kind":"INTEGRATION_CHECK_FAILED","title":"Checks failed",
-            "waitingSince":"${ago(30)}","assignee":"COORDINATOR","landingSessionId":"l-await"}]"""
+        val today = java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant()
+        ProjectShell.landings = """[${row("l-await", "Land · Wire the page", ago(18), "AWAITING_DECISION")},
+            ${row("l-flight", "Land · Ship the drawer", ago(4), "IN_FLIGHT")},
+            ${row("l-settled", "Land · Ship the docs", ago(120), "SETTLED", settledAs = "LANDED", settledAt = today.plusSeconds(60).toString())}]"""
         openPage()
-        await { exists(hasTestTag("landing-row:l-await")) && exists(hasTestTag("landings:earlier")) }
-        await { exists(hasText("Checks failed · with the coordinator", substring = true)) }
-        shot("08-landings-group")
+        await { exists(hasTestTag("landings-row")) }
+        await { exists(hasText("1 waiting for a decision · 1 in flight · 1 landed today"), unmerged = true) }
+        shot("08-landings-row")
     }
 
     /** I · the merge card while a stop is asked for (board v4 04 11:41; A11-20 p, iOS 262153779): cancelling before the push — when

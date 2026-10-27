@@ -26,31 +26,75 @@ final class LandingViewsWiringTests: XCTestCase {
             .joined(separator: "\n")
     }
 
-    /// A LANDING session draws the landing page in the console frame — the same `.console` node, so
-    /// pushes and `/sessions/<id>` links still reach it.
-    func testTheConsoleDrawsALandingSessionAsItsOwnPage() throws {
+    /// A LANDING session draws its project's Landings window, focused on it, in the console frame —
+    /// the same `.console` node, so pushes, `orbit-session:` links and `/sessions/<id>` still reach it
+    /// (owner 2026-10-27, contract §2.9 LS6 revision 28).
+    func testTheConsoleDrawsALandingSessionAsItsProjectsWindowFocusedOnIt() throws {
         let view = code(try appSource("Views/Console/ConsoleView.swift"))
-        XCTAssertTrue(view.contains("if appModel.session(id: sessionID)?.isLanding == true {"))
-        XCTAssertTrue(view.contains("LandingSessionPageView(sessionID: sessionID)"))
+        XCTAssertTrue(view.contains("if let landing = appModel.session(id: sessionID), landing.isLanding {"))
+        XCTAssertTrue(view.contains("ProjectLandingsWindowView("))
+        XCTAssertTrue(view.contains("focusID: sessionID)"))
+        XCTAssertFalse(view.contains("LandingSessionPageView("), "the single landing page is no longer reachable")
         XCTAssertTrue(view.contains("guard appModel.session(id: sessionID)?.isLanding != true else { return }"),
                       "a landing session never creates a conversation console")
-        // The landing page itself holds the mockup's parts.
+        // The landing's card and record keep the mockup's parts.
         let page = code(try appSource("Views/LandingSessionPageView.swift"))
-        for part in ["ProjectLandingHead(",
+        for part in ["struct LandingStatusCardView: View {",
+                     "struct LandingTimelineView: View {",
+                     "ProjectLandingHead(",
                      "LandingPageCopy.attemptCard(landing, now: now, updatedAt: readAt,",
-                     "LandingPageCopy.outcomeCard(landing, promotion: currentPromotion(landing))",
-                     "LandingPageCopy.menuItems(",
+                     "LandingPageCopy.outcomeCard(landing, promotion: promotion)",
                      "LandingPageCopy.gates(landing, now: now, updatedAt: readAt, failed: readFailed)",
-                     "LandingPageCopy.footer(landing, onPass: currentPromotion(landing)?.onPass)",
                      "LandingPageCopy.noReportBand(landing)",
                      "LandingPageCopy.timeoutLine(landing, attempt: attempt,",
                      "LandingCheckLogView(sessionID: sessionID, selectors: openLog)",
                      "LandingPageCopy.offlinePlaceholder(",
                      "app.landingInFlightCache[sessionID]"] {
-            XCTAssertTrue(page.contains(part), "the landing page keeps `\(part)`")
+            XCTAssertTrue(page.contains(part), "the landing's card and record keep `\(part)`")
         }
-        XCTAssertFalse(page.contains("ComposerView("), "a landing page has no composer (LS6)")
-        XCTAssertFalse(page.contains("Copy Link"), "design §3: no Copy Link on the landing menu")
+        XCTAssertFalse(page.contains("struct LandingSessionPageView"), "the page itself is gone")
+        // The window: the old page's shell over every landing of the project.
+        let window = code(try appSource("Views/ProjectLandingsWindowView.swift"))
+        for part in ["SessionProjectLandings.window(listed, merges: merges)",
+                     "LandingStatusCardView(",
+                     "LandingTimelineView(sessionID: sessionID, landing: landing, now: Date())",
+                     "LandingPageCopy.mergeReceipt(promotion: row.promotion, landing: landing)",
+                     "LandingPageCopy.menuItems(",
+                     ".contextMenu { menu(landing: landing, row: row, sessionID: row.sessionId, model: model) }",
+                     ".contextMenu { menu(landing: landing, row: nil, sessionID: id, model: model) }",
+                     "SessionLandingsCopy.orbitRunsTheseLandings",
+                     "LandingPageCopy.decisionsTheCoordinator",
+                     "dayHead(SessionLandingsCopy.now, now: true)",
+                     "Button(LandingPageCopy.openCoordinator) { open(\"orbit-session\", coordinator) }",
+                     "Button(SessionProjectCopy.openProject) { open(\"orbit-project\", projectID) }"] {
+            XCTAssertTrue(window.contains(part), "the Landings window keeps `\(part)`")
+        }
+        XCTAssertFalse(window.contains("ComposerView("), "the window has no composer (LS6)")
+        XCTAssertFalse(window.contains("Copy Link"), "design §3: no Copy Link on a landing's menu")
+    }
+
+    /// Opened on a landing, the window scrolls to it, opens it and outlines it for a moment; opened
+    /// from the Landings row, it stands at its bottom. Only a card in hand polls: a settled row reads
+    /// its record once.
+    func testTheWindowOpensOnItsLandingOrAtItsBottomAndOnlyItsCardsPoll() throws {
+        let window = code(try appSource("Views/ProjectLandingsWindowView.swift"))
+        let place = try XCTUnwrap(window.range(of: "private func place(_ proxy: ScrollViewProxy) {"))
+        let placing = String(window[place.lowerBound...].prefix(1_200))
+        XCTAssertTrue(placing.contains("expanded.insert(entry)"))
+        XCTAssertTrue(placing.contains("outlined = entry"))
+        XCTAssertTrue(placing.contains("proxy.scrollTo(entry, anchor: .top)"))
+        XCTAssertTrue(placing.contains("proxy.scrollTo(Self.bottom, anchor: .bottom)"))
+        XCTAssertTrue(window.contains("try? await Task.sleep(nanoseconds: 1_500_000_000)"), "the outline lasts 1.5 s")
+        XCTAssertTrue(window.contains("window.now.contains { details[$0.sessionId]?.currentAttempt?.state == \"RUNNING\" } ? 4 : 15"),
+                      "§2.7a's cadence while a card is in hand")
+        XCTAssertTrue(window.contains("for card in cards { await read(card.sessionId) }"), "each card reads its own view")
+        XCTAssertTrue(window.contains("if let sessionID = row.sessionId { await model.readOnce(sessionID) }"),
+                      "a settled row reads its record once")
+        XCTAssertTrue(window.contains("guard !asked.contains(id) else { return }"))
+        // The iPhone's Landings row pushes the window over the project's page; the shell draws it.
+        let shell = code(try appSource("Views/CompactShell.swift"))
+        XCTAssertTrue(shell.contains("case .landings(let projectID):"))
+        XCTAssertTrue(shell.contains("ProjectLandingsWindowView(projectID: projectID)"))
     }
 
     /// Board 05's timed-out doors: Retry and Re-run the check solid, Abandon the light red secondary
@@ -67,7 +111,7 @@ final class LandingViewsWiringTests: XCTestCase {
         let solid = String(page[start.upperBound..<split.lowerBound])
         let abandon = String(page[split.lowerBound..<end.lowerBound])
         XCTAssertTrue(solid.contains(".buttonStyle(.borderedProminent)"), "Retry and Re-run the check stay solid")
-        XCTAssertTrue(abandon.contains("Button(role: .destructive) { act(.abandon, landing) } label: {"))
+        XCTAssertTrue(abandon.contains("Button(role: .destructive) { act(.abandon) } label: {"))
         XCTAssertTrue(abandon.contains(".buttonStyle(.bordered).tint(.red).controlSize(.small).disabled(acting)"),
                       "Abandon is the bordered secondary door, its fill the light red wash of a red tint")
         XCTAssertFalse(abandon.contains(".borderedProminent"), "Abandon is not a solid red door")
@@ -114,7 +158,9 @@ final class LandingViewsWiringTests: XCTestCase {
         XCTAssertTrue(page.contains("if mergeJobKind == \"CHECK_PROMOTION\""),
                       "a timed-out check offers Re-run the check")
         XCTAssertTrue(page.contains("if let mergeJobID {"), "and every timed-out round offers Abandon")
-        XCTAssertTrue(page.contains("private func landingGroupRow(_ row: LandingGroupRow) -> some View {"))
+        XCTAssertTrue(page.contains("private func landingsRow(_ summary: LandingsRowSummary) -> some View {"),
+                      "the Landings row opens the project's Landings window")
+        XCTAssertTrue(page.contains("app.push(.landings(projectID: address.projectID))"))
 
         let overview = code(try appSource("Views/ProjectsView.swift"))
         XCTAssertTrue(overview.contains("ProjectPage.landingCard(integration, now: context.date,"))
@@ -153,7 +199,8 @@ final class LandingViewsWiringTests: XCTestCase {
     }
 
     /// Each Re-run the check door names its own sentence, as web's two doors do: the merge card on
-    /// the project sessions page sends the merge card's, the landing page the landing page's.
+    /// the project sessions page sends the merge card's, a landing in the Landings window the landing
+    /// page's.
     /// APIClient only forwards the reason it is given, so the choice is pinned here, at the doors.
     func testEachReRunDoorSendsItsOwnReason() throws {
         let collapse = { (text: String) in text.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
@@ -161,10 +208,10 @@ final class LandingViewsWiringTests: XCTestCase {
         XCTAssertTrue(collapse(card).contains("try await app.rerunPromotionCheck(address.projectID, promotionID: promotionID, reason: LandingPageCopy.rerunCheckReason)"),
                       "the merge card's Re-run the check names the merge card")
         XCTAssertFalse(card.contains("rerunLandingCheckReason"), "the merge card never sends the landing page's sentence")
-        let page = code(try appSource("Views/LandingSessionPageView.swift"))
-        XCTAssertTrue(collapse(page).contains("try await api.rerunPromotionCheck(projectID: landing.projectId, promotionID: promotionID, reason: LandingPageCopy.rerunLandingCheckReason)"),
-                      "the landing page's Re-run the check names the landing page")
-        XCTAssertFalse(page.contains("LandingPageCopy.rerunCheckReason"), "the landing page never sends the merge card's sentence")
+        let window = code(try appSource("Views/ProjectLandingsWindowView.swift"))
+        XCTAssertTrue(collapse(window).contains("try await api.rerunPromotionCheck(projectID: landing.projectId, promotionID: promotionID, reason: LandingPageCopy.rerunLandingCheckReason)"),
+                      "a landing's Re-run the check names the landing page")
+        XCTAssertFalse(window.contains("LandingPageCopy.rerunCheckReason"), "a landing never sends the merge card's sentence")
     }
 
     /// The timeline's marks read each line's structured fields, as web and Android do: the ✓ and
@@ -203,21 +250,23 @@ final class LandingViewsWiringTests: XCTestCase {
                       "a read that fails draws nothing inline, as on web")
     }
 
-    /// The sessions page's Earlier fold is a plain-style button whose label has a Spacer in the
-    /// middle, and a plain button answers only where it draws: its label's content shape makes the
-    /// whole row the target, so a press on the empty middle opens the fold too.
-    func testTheEarlierFoldAnswersAcrossItsWholeRow() throws {
+    /// The sessions page's Landings row is a plain-style button whose label has a Spacer in the middle,
+    /// and a plain button answers only where it draws: its label's content shape makes the whole row
+    /// the target, so a press on the empty middle opens the window too.
+    func testTheLandingsRowAnswersAcrossItsWholeRow() throws {
         let page = code(try appSource("Views/SessionProjectPage.swift"))
-        guard let start = page.range(of: "if let earlier = landingGroup.earlier {"),
-              let end = page.range(of: "if landingsExpanded {", range: start.upperBound..<page.endIndex) else {
-            return XCTFail("the Landings group keeps its Earlier fold")
+        guard let start = page.range(of: "private func landingsRow(_ summary: LandingsRowSummary) -> some View {"),
+              let end = page.range(of: "@ViewBuilder private func landingsMark(", range: start.upperBound..<page.endIndex) else {
+            return XCTFail("the page keeps its Landings row")
         }
-        let fold = String(page[start.upperBound..<end.lowerBound])
+        let row = String(page[start.upperBound..<end.lowerBound])
             .split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        XCTAssertTrue(fold.contains("Spacer(minLength: 8)"))
-        XCTAssertTrue(fold.contains(".rotationEffect(.degrees(landingsExpanded ? 90 : 0)) } .contentShape(Rectangle()) } "
-                                    + ".buttonStyle(.plain)"),
+        XCTAssertTrue(row.contains("Spacer(minLength: 8)"))
+        XCTAssertTrue(row.contains(".lineLimit(2) } } .contentShape(Rectangle()) } .buttonStyle(.plain)"),
                       "the label's shape, not only what it draws, takes the press")
+        XCTAssertTrue(row.contains("Text(summary.line)"))
+        XCTAssertTrue(page.contains("SessionProjectLandings.rowSummary(landingRows, merges: merge?.merged ?? [],"))
+        XCTAssertFalse(page.contains("landingsExpanded"), "the Earlier fold is gone")
     }
 
     /// The page's own reads: `includeLanding=1` on the project list, the landing's own cadence, and
@@ -231,8 +280,8 @@ final class LandingViewsWiringTests: XCTestCase {
                       && app.contains(".filter { !$0.isLanding }")
                       && app.contains("projectSessions = members + landedRows(of: address.projectID, in: kept)"),
                       "a landing row is a member too — it must not be drawn twice")
-        XCTAssertTrue(app.contains("$0.isLanding && $0.landing?.state == \"AWAITING_DECISION\""),
-                      "the Landings group's holders are read where a landing waits")
+        XCTAssertFalse(app.contains("$0.isLanding && $0.landing?.state == \"AWAITING_DECISION\""),
+                       "the Landings group's holders are gone with the group")
         XCTAssertTrue(app.contains("func abandonIntegrationJob(_ projectID: String, jobID: String) async throws"))
         XCTAssertTrue(app.contains("func rerunPromotionCheck(_ projectID: String, promotionID: String, reason: String) async throws"))
 
