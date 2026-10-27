@@ -7796,10 +7796,9 @@ button.chat-jump-start:hover {
      after a short message. fit-content shrinks to the text; margin-left:auto right-aligns. */
   width: fit-content;
 }
-/* Wraps the user bubble + a meta row (copy · relative time) beneath it as one right-aligned
-   column. The meta row sits IN FLOW (not absolute) so it reserves its own height — an earlier
-   absolute version overlapped whatever message followed. The time is always shown; the copy
-   button only fades in on hover (its slot is reserved, so revealing it shifts nothing). */
+/* Wraps the user bubble + a meta row (copy · relative time · the bubble's state) beneath it as one
+   right-aligned column. The meta row sits IN FLOW (not absolute) so it reserves its own height — an
+   earlier absolute version overlapped whatever message followed. */
 .chat-user-wrap {
   display: flex;
   flex-direction: column;
@@ -7819,9 +7818,10 @@ button.chat-jump-start:hover {
   color: var(--brand);
   text-decoration: underline;
 }
-/* The whole meta row (copy + time) is hidden until hover — the time is not shown at rest,
-   per request. It still reserves height (occupies flow), so revealing it never overlaps the
-   next message and never shifts layout. */
+/* Copy + time are hidden until hover — the time is not shown at rest, per request. The bubble's
+   state (a steer's progress, a message that did not land) ends the same row and is always shown;
+   the hidden part sits to its left, so revealing it moves nothing. The row still reserves its
+   height (occupies flow), so revealing it never overlaps the next message. */
 .chat-user-meta {
   display: flex;
   align-items: center;
@@ -7829,24 +7829,29 @@ button.chat-jump-start:hover {
   margin-top: 3px;
   height: 18px;
   white-space: nowrap;
+}
+.chat-user-meta > .chat-copy,
+.chat-user-meta > .chat-time,
+.chat-user-meta > .chat-meta-sep {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
-.chat-user-wrap:hover .chat-user-meta,
-.chat-user-meta:focus-within {
+.chat-user-wrap:hover .chat-user-meta > *,
+.chat-user-meta:focus-within > * {
   opacity: 1;
   pointer-events: auto;
 }
-.chat-time {
+.chat-time,
+.chat-meta-sep {
   font-size: 12px;
   line-height: 1;
   color: var(--text-3);
 }
-/* A message the engine never received. Always visible (unlike the hover-only meta row):
-   the whole point is that nobody has to hover to find out their message did not land. */
+/* A message the engine never received, at the end of the meta row. Always visible (unlike the
+   copy button and time before it): the whole point is that nobody has to hover to find out their
+   message did not land. */
 .chat-undelivered {
-  margin-top: 3px;
   font-size: 12px;
   line-height: 1.4;
   color: var(--error-solid);
@@ -7865,12 +7870,11 @@ button.chat-jump-start:hover {
 .chat-undelivered-retry:hover {
   text-decoration: underline;
 }
-/* How far a mid-turn message (a steer) got into the turn it joined. Muted and in the bubble's
-   own column: it is the only report that message gets — the running turn's reply answers
-   something else — but it is a progress note, not a problem, so it never competes with the
-   failure mark above, which owns the error colour. */
+/* How far a mid-turn message (a steer) got into the turn it joined, at the end of the bubble's meta
+   row where the failure mark would stand. Muted: it is the only report that message gets — the
+   running turn's reply answers something else — but it is a progress note, not a problem, so it
+   never competes with the failure mark, which owns the error colour. */
 .chat-steer-state {
-  margin-top: 3px;
   font-size: 12px;
   line-height: 1.4;
   color: var(--text-3);
