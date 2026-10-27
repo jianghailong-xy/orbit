@@ -14,6 +14,7 @@ import { RunnerTaskProgressController } from './runner-task-progress.controller'
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerAgentsController } from './runner-agents.controller';
 import { RunnerRunnersController } from './runner-runners.controller';
+import { RunnerEngineInstallController } from './runner-engine-install.controller';
 import { RunnerProvidersController } from './runner-providers.controller';
 import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
@@ -40,6 +41,7 @@ import {
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { PushModule } from '../push/push.module';
 import { ProvidersModule } from '../providers/providers.module';
+import { RunnersModule } from '../runners/runners.module';
 import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
 import { IntegrationJobRelay } from './integration-job-relay';
 import { WikiRepoOps } from '../wiki-worker/wiki-repo-ops';
@@ -74,6 +76,9 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     // And RunnerWikiController through the one WikiService the user door writes with: one entry point
     // underneath both doors is what makes "there is one write path" true rather than intended.
     WikiModule,
+    // RunnerEngineInstallController starts and reads the engine relay through the RunnersService the
+    // web's Install uses.
+    RunnersModule,
   ],
   // RunnerSessionsController is listed last so its GET sessions/:id can't shadow
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.
@@ -88,6 +93,8 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerAgentsController,
     // The account's runners, for the runnerId the agent routes above take (runner-runners.controller.ts).
     RunnerRunnersController,
+    // An engine CLI installed or updated on one of them (runner-engine-install.controller.ts).
+    RunnerEngineInstallController,
     RunnerProvidersController,
     RunnerNotifyController,
     RunnerProjectsController,

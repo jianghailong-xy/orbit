@@ -289,8 +289,11 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 			for _, action := range []string{"list", "create", "update"} {
 				rules = append(rules, "Bash("+command+" agent "+action+" *)")
 			}
-			// The runner list rides the same gate: it reads the ids those agent verbs bind to.
-			rules = append(rules, "Bash("+command+" runner list *)")
+			// The runner verbs ride the same gate: the list reads the ids those agent verbs bind to, and
+			// install runs an engine's installer on one of those machines, as the runner page's Install does.
+			for _, action := range []string{"list", "install", "install-status"} {
+				rules = append(rules, "Bash("+command+" runner "+action+" *)")
+			}
 			// The one project verb that OPENS a conversation, and so spends the orchestration
 			// credential rather than the machine's own: it is advertised where that grant exists
 			// (RequiresOrchestration), which is where its rule belongs too.
