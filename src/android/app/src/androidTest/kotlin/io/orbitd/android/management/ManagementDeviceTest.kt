@@ -507,8 +507,11 @@ class ManagementDeviceTest {
                 await("Revoked by an administrator")
                 capture("a13d-access-tokens-ended")
                 back(); await("Appearance")
-                click(hasText("Machines & models") and hasClickAction()); await("¥110.00 · $5.00"); await("Unavailable")
+                // The keys end the page, below the engines and machines, which come only once each of its lists has answered
+                // (InfrastructureModel.settled): wait for those, bring the keys up, then read their balances.
+                click(hasText("Machines & models") and hasClickAction()); await("What your agents can run on")
                 compose.onAllNodesWithText("API keys").onFirst().performScrollTo()
+                await("¥110.00 · $5.00"); await("Unavailable")
                 capture("a13d-infrastructure-keys")
                 click(hasText("DeepSeek") and hasClickAction()); await("DeepSeek account balance"); await("Total")
                 capture("a13d-deepseek-key")
