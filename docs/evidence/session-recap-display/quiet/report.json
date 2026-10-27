@@ -1,0 +1,170 @@
+[
+  {
+    "tree": "before",
+    "name": "desktop-dark",
+    "background": "color(srgb 0.545098 0.564706 0.6 / 0.12)",
+    "radius": "12px",
+    "height": 88,
+    "width": 775,
+    "left": 633,
+    "replyLeft": 633,
+    "textLeft": 645,
+    "textColor": "rgb(201, 206, 213)",
+    "fontSize": "14px",
+    "refreshOpacity": "1",
+    "focusVisible": false,
+    "hoverNone": false,
+    "text": "Recap· 7:44 PMResearch done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task.",
+    "clip": {
+      "top": 189,
+      "bottom": 591
+    }
+  },
+  {
+    "tree": "before",
+    "name": "desktop-light",
+    "background": "color(srgb 0.560784 0.584314 0.619608 / 0.12)",
+    "radius": "12px",
+    "height": 88,
+    "width": 775,
+    "left": 633,
+    "replyLeft": 633,
+    "textLeft": 645,
+    "textColor": "rgb(31, 35, 41)",
+    "fontSize": "14px",
+    "refreshOpacity": "1",
+    "focusVisible": false,
+    "hoverNone": false,
+    "text": "Recap· 7:44 PMResearch done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task.",
+    "clip": {
+      "top": 189,
+      "bottom": 591
+    }
+  },
+  {
+    "tree": "before",
+    "name": "phone-dark",
+    "background": "color(srgb 0.545098 0.564706 0.6 / 0.12)",
+    "radius": "12px",
+    "height": 110,
+    "width": 338,
+    "left": 26,
+    "replyLeft": 26,
+    "textLeft": 38,
+    "textColor": "rgb(201, 206, 213)",
+    "fontSize": "14px",
+    "refreshOpacity": "1",
+    "focusVisible": false,
+    "hoverNone": true,
+    "text": "Recap· 7:44 PMResearch done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task.",
+    "clip": {
+      "top": 201,
+      "bottom": 648
+    }
+  },
+  {
+    "tree": "after",
+    "name": "desktop-dark",
+    "background": "rgba(0, 0, 0, 0)",
+    "radius": "0px",
+    "height": 40,
+    "width": 775,
+    "left": 633,
+    "replyLeft": 633,
+    "textLeft": 633,
+    "textColor": "rgb(167, 173, 182)",
+    "fontSize": "13px",
+    "refreshOpacity": "0",
+    "focusVisible": false,
+    "hoverNone": false,
+    "text": "Recap· 7:44 PMResearch done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task.",
+    "clip": {
+      "top": 189,
+      "bottom": 543
+    }
+  },
+  {
+    "tree": "after",
+    "name": "desktop-light",
+    "background": "rgba(0, 0, 0, 0)",
+    "radius": "0px",
+    "height": 40,
+    "width": 775,
+    "left": 633,
+    "replyLeft": 633,
+    "textLeft": 633,
+    "textColor": "rgb(100, 106, 115)",
+    "fontSize": "13px",
+    "refreshOpacity": "0",
+    "focusVisible": false,
+    "hoverNone": false,
+    "text": "Recap· 7:44 PMResearch done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task.",
+    "clip": {
+      "top": 189,
+      "bottom": 543
+    }
+  },
+  {
+    "tree": "after",
+    "name": "phone-dark",
+    "background": "rgba(0, 0, 0, 0)",
+    "radius": "0px",
+    "height": 60,
+    "width": 338,
+    "left": 26,
+    "replyLeft": 26,
+    "textLeft": 26,
+    "textColor": "rgb(167, 173, 182)",
+    "fontSize": "13px",
+    "refreshOpacity": "1",
+    "focusVisible": false,
+    "hoverNone": true,
+    "text": "Recap· 7:44 PMResearch done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task.",
+    "clip": {
+      "top": 201,
+      "bottom": 598
+    }
+  },
+  {
+    "tree": "after",
+    "name": "desktop-dark-hover",
+    "background": "rgba(0, 0, 0, 0)",
+    "radius": "0px",
+    "height": 40,
+    "width": 775,
+    "left": 633,
+    "replyLeft": 633,
+    "textLeft": 633,
+    "textColor": "rgb(167, 173, 182)",
+    "fontSize": "13px",
+    "refreshOpacity": "1",
+    "focusVisible": false,
+    "hoverNone": false,
+    "text": "Recap· 7:44 PMResearch done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task.",
+    "clip": {
+      "top": 189,
+      "bottom": 543
+    }
+  },
+  {
+    "tree": "after",
+    "name": "desktop-dark-focus",
+    "background": "rgba(0, 0, 0, 0)",
+    "radius": "0px",
+    "height": 40,
+    "width": 775,
+    "left": 633,
+    "replyLeft": 633,
+    "textLeft": 633,
+    "textColor": "rgb(167, 173, 182)",
+    "fontSize": "13px",
+    "refreshOpacity": "1",
+    "focusVisible": true,
+    "hoverNone": false,
+    "text": "Recap· 7:44 PMResearch done: integrate GitHub Copilot CLI first; Droid, CodeBuddy and Qoder next. Waiting on you to file the probe task.",
+    "clip": {
+      "top": 189,
+      "bottom": 543
+    }
+  }
+]

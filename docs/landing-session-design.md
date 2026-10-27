@@ -324,12 +324,12 @@
 
 ### Work overview 行
 
-展示位与入口以契约为准（§7.2 V6、§2.9 LS6；owner 2026-10-19 批准 v4 方案 A）。今天读 `inFlight` 的落地展示位共六处：Work overview 的 Landing 卡、项目 sessions 页的 Landing 卡、合入卡的头、作业清单的每一行、会话列表项目行的第二行、web 任务页的 `LandTaskStatus`。六处的计时、活性与可点规则相同，新字段一律可选。
+展示位与入口以契约为准（§7.2 V6、§2.9 LS6；owner 2026-10-19 批准 v4 方案 A）。今天读 `inFlight` 的落地展示位共六处：Work overview 的 Landing 卡、项目 sessions 页的 Landing 卡、合入卡的头、作业清单的每一行、会话列表项目行的第二行、web 任务页的 `LandTaskStatus`。六处的计时、活性与可点规则相同，新字段一律可选。修订 28（owner 2026-10-27）起，下面打开落地会话的按压与每个「Open landing ›」，都打开所属项目的 Landings 窗口并定位到这一次（见下「落地会话页与 Landings 窗口」）。
 
 - 两张 Landing 卡（含 Work overview 卡）整张仍打开作业清单，清单的行打开任务。
 - 「Open landing ›」另写：一个作业时卡底一个；多个作业时每个作业行一个（合入作业行不放，它的入口在合入检查行）；作业清单的每一行一个（合入作业行只有它这一个按压）。
 - 合入检查行（checking 与 merging 两种形态）的整行按压打开这一轮合入的落地会话（不再叫 Watch）；作业不少于 2 个时由「All jobs ›」进清单；BLOCKED 不加。
-- 「Merged into main」仍打开回执，回执底部一个。
+- 「Merged into main」行在 Landings 窗口里（修订 28，不再在项目 sessions 页的时间线上），整行在原地展开这一轮；协调会话里那一行仍打开回执，回执底部一个，进窗口并定位到这一轮。
 - 任务页只读，当前这一代一个；会话列表的项目行保持 main 的按压（协调会话或项目）。
 - 旧服务端没有 `landingSessionId` 时，没有派的按压就是只读；只有作业清单在标题下写一句 `No landing page on this server yet.`。
 
@@ -352,11 +352,56 @@
 │   Merge check stopped at 21m 04s (09:14)     │
 ```
 
-- `inFlight` 新增的字段全部可选：`jobId`、`landingSessionId`、`taskId`、`promotionId`、`runner`、`round`、`check{name,index,count,budgetSeconds,startedAt}`、`outputMovedAt`、`progressProtocol`、`typicalMs`、`liveness`。原提的 `landings[]` 由 main 的 `inFlightJobs` 取代（契约 §1.6）：这些可选字段同样加在它的每一项上，落地展示位与项目 sessions 页的 Landings 组都读它。
+- `inFlight` 新增的字段全部可选：`jobId`、`landingSessionId`、`taskId`、`promotionId`、`runner`、`round`、`check{name,index,count,budgetSeconds,startedAt}`、`outputMovedAt`、`progressProtocol`、`typicalMs`、`liveness`。原提的 `landings[]` 由 main 的 `inFlightJobs` 取代（契约 §1.6）：这些可选字段同样加在它的每一项上，落地展示位与项目的 Landings 窗口都读它。
 
-### 落地会话页
+### 落地会话页与 Landings 窗口
 
-各端共用会话外壳，按 kind 换渲染器。
+修订 28（owner 2026-10-27，效果图 `docs/mocks/landings-one-window/`，`3c6c34f47`）起，一个项目的落地在**一个 Landings 窗口**里看，新客户端不再一次落地开一个页面。服务端不变（方案 A）：一次落地仍是一个落地会话，`landingSessionId`、`GET /sessions/:id`、`session_get` 照旧；客户端把一个落地会话 id 读成「它所属项目的 Landings 窗口 + 定位到这一条」。
+
+```text
+┌──────────────────────────────────────────────┐
+│ ‹                 Landings                 ⋯ │
+│          Run by Orbit · Wiki server          │
+│ ── Yesterday ─────────────────────────────── │
+│ ✓ Ledger migration order               17:42 │
+│   Landed                                     │
+│ ── Today ─────────────────────────────────── │
+│ ◌ Fix the wiki deep link               08:30 │
+│   Nothing to land                            │
+│ ⇡ Merged into main                   09:51 ⌃ │  ← 整行在原地展开这一轮
+│   3f1c2a9 · 2 tasks · automatically          │
+│   ┌ Now on main · 2 tasks ─────────────────┐ │  ← 回执
+│   │ ✓ Passed on the combined tree          │ │
+│   │ Landed the tested tree 5e5bfca         │ │
+│   └────────────────────────────────────────┘ │
+│   09:33 ⟳ Merge check started                │  ← 这一轮自己的记录
+│   09:50 ✓ Merge check passed · 17m 41s Log › │
+│ ✓ Runner model order                   10:02 │
+│   Landed                                     │
+│ ── Now ───────────────────────────────────── │
+│ ┌ ✕ Landing                     Not landed ┐ │  ← 等决定的：原来页头的状态卡与门
+│ │ Checks failed · exit 1 after 3m 52s      │ │
+│ │ Coordinator has it · 18m                 │ │
+│ │ [Open Coordinator]  [Open Task]          │ │
+│ └──────────────────────────────────────────┘ │
+│ ┌ ⟳ Landing                         6m 12s ┐ │  ← 在途的：V6 的时钟、预算与活性
+│ │ Merge check 6m 12s of 30m · usually ~9m  │ │
+│ │ Output 2s ago · Updated just now         │ │
+│ └──────────────────────────────────────────┘ │
+│ ──────────────────────────────────────────── │
+│ Orbit runs these landings — nothing to type. │
+│ Decisions: coordinator · Open coordinator ›  │
+└──────────────────────────────────────────────┘
+```
+
+- **打开**：项目 sessions 页的 Landings 行整行打开窗口，停在最底；别处的入口（上面的 Work overview 行、下面的「其他入口」）打开窗口并定位到那一条：滚到、展开、描边亮一下。
+- **列表**：读 `GET /sessions?projectId=&includeLanding=1`（`view=open` 与 `view=completed`，不带 `limit` 即全量），不加接口。结了的按天分组（Today、Yesterday、更早的日期），按结案时刻排，一条一行，行的样子照旧（标记说结局：落地、没东西可落、合入 main 等）；全部保留、不折叠，往上翻读更早的天。没结的在最下面的 Now：等决定的一张卡（原来页头的状态卡与它的门：Open Coordinator、Open Task，超时时 Retry、Re-run the check、Abandon），在途的一张卡（V6 的时钟、预算条与活性）；结案后这张卡收成一行，挪进上面当天那一组。
+- **合入 main**：`promotions/merged` 的每一份回执与这一轮的落地会话按 `landingSessionId` 合成一行「Merged into main」（`<sha> · <n> tasks · automatically` 或 `by you`），整行在原地展开：回执（Now on main 的任务、合并树上的检查、落到 main 的那一棵树）在上，这一轮自己的记录在下。落地会话上线之前的合入没有 id，只展开回执；`promotions/merged` 只给最近 20 条，更早的合入轮只剩落地会话自己的记录。
+- **展开**：整行按压展开，再按收起，展开的行右边一个朝上的箭头。展开里是原来落地会话页的时间线，各代分开，`Log ›` 打开检查输出；任务的一条底下有 `Open Task ›`、`Open Source Session ›`。
+- **门**：长按一张卡是原来页头 ⋯ 菜单的那几项：Open Task、Open Source Session、Open Coordinator；合入那一轮是 Review Card、Open Coordinator。推送之前还有 Stop Landing（合入那一轮是 Cancel Merge）。Abandon、Retry、Re-run the check 照旧在卡上，只在超时时出现。窗口右上角的 ⋯ 只有 Open Coordinator 与 Open Project。
+- **底部**照旧没有输入框：Orbit 跑这些落地，判断在协调会话。
+
+一条落地的内容仍是原来落地会话页的那些（各端共用会话外壳，按 kind 换渲染器）。旧客户端照旧打开这一页；新客户端把它的状态卡画成窗口里的卡，把时间线画成这张卡的展开：
 
 ```
 ┌──────────────────────────────────────────────┐
@@ -382,7 +427,7 @@
 └──────────────────────────────────────────────┘
 ```
 
-- ⋯ 菜单：Open task、Open source session、Open coordinator、Review card。owner 门按条件出现：Stop，以及租约过期后的 Abandon。
+- ⋯ 菜单：Open task、Open source session、Open coordinator、Review card。owner 门按条件出现：Stop，以及租约过期后的 Abandon。新客户端里它们挂在这一条的卡上（见上「门」）。
 - 不提供 rename、fork、share、model 和 merge 栏。
 
 ### 会话列表不被刷屏
@@ -390,10 +435,12 @@
 - **默认排除**：`GET /sessions` 默认不返回 `kind=LANDING`，带 `includeLanding=1` 才返回。
 - **新事件名**：实时推送用 `landing.updated`。旧客户端把它当未知事件忽略，所以永远看不到这些行，macOS 也不会弹本地的 "Session failed" 通知。
 - **项目分组上线前**：项目分组还没在 main 上实现。在那之前，落地会话**不进任何列表**，只能通过链接到达。
-- **项目分组上线后**：落地会话作为 `LANDING` 角色收进项目条目。项目页加一个 Landings 组：只列未结的和有待办的，已结的折叠成 "29 landed"。
-- **量级**：24 个任务的项目约有 24 个任务段，加上每个晋升候选一个会话。平铺列表里是 0 行。
+- **项目分组上线后**：落地会话作为 `LANDING` 角色收进项目条目。项目页只有一行 Landings（修订 28，owner 2026-10-27）：标记跟最急的那一条（有等决定的是 ✕，否则有在途的是蓝环，全结了是 ✓），右边是等得最久的那一条等了多久，下面一行写数——等决定的、在途的、今天落地的、今天合入 main 的；整行打开这个项目的 Landings 窗口（见上），窗口里结了的全部保留、不折叠。
+- **量级**：24 个任务的项目约有 24 个任务段，加上每个晋升候选一个会话。平铺列表里是 0 行，项目页上是 1 行。
 
 ### 其他入口
+
+修订 28 起，下面每个入口（`Open landing ›`、标签、卡片上的 `OPEN_LANDING`、合入卡的头、通知里的链接）都打开所属项目的 Landings 窗口并定位到那一条；旧客户端照旧打开单个落地会话页。
 
 - **任务页**
   - web：`LandTaskStatus` 的当前这一代加一个 `Open landing ›`（同一任务段的各代共用一个落地会话，一个就够）。
@@ -551,7 +598,7 @@
    - LAND_TASK 的叫停门，以及 owner 重跑门（需要放宽 0344 的 CHECK）。
    - Abandon 和 `integration_abandon`（同步更新 `cli_mcp_parity_test.go`），J12 加 `RUNNER_LOST`。
    - 源会话上的落地标签。
-   - 项目分组上线后，加 `LANDING` 角色和 Landings 组。
+   - 项目分组上线后，加 `LANDING` 角色，项目页一行 Landings，整行打开这个项目的 Landings 窗口（修订 28，见 §3）。
 
 ## 9. 顺带发现、无论选哪个方案都该修的缺陷
 

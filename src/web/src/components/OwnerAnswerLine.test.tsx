@@ -1,18 +1,20 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { OwnerAnswerCard, SessionReplyCard } from '@orbit/shared';
-import { parseOwnerAnswer } from '../lib/ownerAnswer';
+import { answeredItemKey, answersHandedOver, parseOwnerAnswer } from '../lib/ownerAnswer';
+import { encodeId } from '../lib/idCodec';
+import { QUEUED_FOR_COORDINATOR, type ProjectClosedQuestion } from './CoordinatorQuestionCard';
 import {
   EVIDENCE_DECISION_SENT_TO_COORDINATOR,
   decisionReceiptTime,
   sentToCoordinatorLine,
 } from './EvidenceDecisionCard';
-import { OWNER_ANSWER_TOLD } from './OwnerAnswerLine';
-import { Transcript, type RunEvent } from './Transcript';
+import { AnsweredQuestionsCtx, OWNER_ANSWER_TOLD } from './OwnerAnswerLine';
+import { QueuedUserTurn, Transcript, type RunEvent } from './Transcript';
 
 /**
  * The owner's answer handed to the coordinator is drawn from the card the control plane recorded
@@ -186,5 +188,117 @@ describe('the owner’s answer handed to the coordinator', () => {
     await mount([told(CARD, { delivery: 'failed' })]);
     expect(container.querySelector('.owner-answer-undelivered')?.textContent)
       .toBe('The session has not confirmed it received this.');
+  });
+});
+
+/**
+ * Where the conversation can draw the question the answer is to — the open-items read's ended
+ * questions, handed down as `AnsweredQuestionsCtx` — the turn is that question's card and nothing
+ * else (docs/mocks/owner-answer-sent-card/merged.html): the owner reads Answered as "the agent has my
+ * answer", so a second card, or a line under it, said it twice.
+ */
+describe('the owner’s answer, where the conversation can draw its question', () => {
+  const RECORD: ProjectClosedQuestion = {
+    itemId: CARD.itemId,
+    question: {
+      question: '灰度回退之后的收尾都做完了：新版本部署之后，维护任务恢复了。请批准重开灰度。',
+      options: [{ label: '现在重开，接受这个代价' }, { label: '先不重开' }],
+      recommendedOption: 0,
+      blocksTaskIds: [],
+      ifUnanswered: null,
+    },
+    askedAt: '2026-10-09T00:10:00.000Z',
+    resolution: 'ANSWERED',
+    resolvedBy: 'USER',
+    resolvedAt: '2026-10-09T00:29:36.828Z',
+    answer: { option: 0, text: null },
+    delivery: { sessionId: CARD.sessionId, at: CARD.deliveredAt },
+    withdrawReason: null,
+  };
+  const RECORDS = new Map([[answeredItemKey(CARD.itemId), RECORD]]);
+
+  async function drawn(node: ReactElement, records: ReadonlyMap<string, ProjectClosedQuestion> = RECORDS) {
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={client}>
+          <MemoryRouter>
+            <AnsweredQuestionsCtx.Provider value={records}>{node}</AnsweredQuestionsCtx.Provider>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+    });
+  }
+
+  const card = (): HTMLElement | null => container.querySelector('.owner-answer-card .answered-question-card');
+  /** The review is mounted behind the card (`ReviewCard` keeps it), wherever its dialog is. */
+  const review = (): Element | null => document.querySelector(`[data-question-record="${CARD.itemId}"]`);
+
+  it('is the question’s own card, Answered, where the turn stands — and no line, no bubble', async () => {
+    await drawn(<Transcript events={[told(CARD)]} />);
+
+    expect(card(), `no card was drawn:\n${container.innerHTML}`).not.toBeNull();
+    expect(line(), 'the line is drawn as well').toBeNull();
+    expect(container.querySelector('.chat-user')).toBeNull();
+    expect(container.querySelector('.owner-answer-card')?.getAttribute('data-seq')).toBe('7');
+    expect(container.querySelector('.answered-question-answer')?.textContent).toBe('现在重开，接受这个代价');
+    expect(container.querySelector('.answered-question-waiting'), 'a delivered answer says nothing more').toBeNull();
+  });
+
+  it('keeps the words the coordinator was told at the foot of the card’s review, verbatim', async () => {
+    await drawn(<Transcript events={[told(CARD)]} />);
+    expect(review()?.querySelector('.answered-question-told summary')?.textContent).toBe(OWNER_ANSWER_TOLD);
+    expect(review()?.querySelector('.answered-question-told pre')?.textContent).toBe(TOLD);
+  });
+
+  it('says on the card when the session has not confirmed it received the answer', async () => {
+    await drawn(<Transcript events={[told(CARD, { delivery: 'failed' })]} />);
+    expect(container.querySelector('.answered-question-waiting')?.textContent)
+      .toBe('The session has not confirmed it received this.');
+    expect(container.querySelector('.owner-answer-undelivered')).toBeNull();
+  });
+
+  it('says on the card, dashed, while the answer waits on the queue — with no way to cancel it', async () => {
+    const queue = <span className="chat-queued-meta">Queued for next turn <a>Cancel</a></span>;
+    await drawn(<QueuedUserTurn event={told(CARD)} queued={queue} />);
+
+    expect(container.querySelector('.answered-question-card.is-queued')).not.toBeNull();
+    expect(container.querySelector('.answered-question-waiting')?.textContent).toContain(QUEUED_FOR_COORDINATOR);
+    expect(container.textContent, 'the queue’s Cancel would leave the coordinator never told').not.toContain('Cancel');
+    expect(container.querySelector('.owner-answer-card')?.hasAttribute('data-seq')).toBe(false);
+  });
+
+  it('is still the line for a Not yet…, which has no card, and for a question it cannot draw', async () => {
+    await drawn(<Transcript events={[told({ ...CARD, kind: 'DONE_REQUEST' })]} />);
+    expect(card()).toBeNull();
+    expect(container.querySelector('.owner-answer-text')?.textContent).toBe(sentToCoordinatorLine(CARD.deliveredAt));
+
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await drawn(<Transcript events={[told(CARD)]} />, new Map());
+    expect(card()).toBeNull();
+    expect(container.querySelector('.owner-answer-text')?.textContent).toBe(sentToCoordinatorLine(CARD.deliveredAt));
+  });
+
+  it('finds the question whichever spelling of the item each read was served', async () => {
+    // The open-items read names the item by its public id; the turn's card may carry the UUID.
+    const records = new Map([[answeredItemKey(encodeId(CARD.itemId)), { ...RECORD, itemId: encodeId(CARD.itemId) }]]);
+    await drawn(<Transcript events={[told(CARD)]} />, records);
+    expect(card(), 'the card was not found across spellings').not.toBeNull();
+    expect(line()).toBeNull();
+    expect(answersHandedOver([told(CARD)], []).has(answeredItemKey(encodeId(CARD.itemId)))).toBe(true);
+  });
+
+  it('names the questions its turns hand over, so the conversation does not draw their cards twice', () => {
+    const queuedCard = { ...CARD, itemId: '01a0d6a9-d763-70e1-b4cf-8793e971b5aa' };
+    const notYet = { ...CARD, itemId: '01a0d6a9-d763-70e1-b4cf-8793e971b5bb', kind: 'DONE_REQUEST' as const };
+    const handed = answersHandedOver(
+      [
+        told(CARD),
+        told(notYet),
+        { seq: 9, type: 'assistant', payload: { text: TOLD, ownerAnswer: { ...CARD, itemId: 'not-a-turn' } } },
+      ],
+      [{ ownerAnswer: queuedCard }, {}],
+    );
+    expect([...handed].sort()).toEqual([answeredItemKey(CARD.itemId), answeredItemKey(queuedCard.itemId)].sort());
   });
 });

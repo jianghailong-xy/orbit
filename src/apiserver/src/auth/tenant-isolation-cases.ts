@@ -447,6 +447,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // ── runners ──────────────────────────────────────────────────────────────────────────────────
   'GET /runners/device/:userCode': { request: (of) => ({ params: { userCode: of.deviceUserCode } }) },
   'POST /runners/device/:userCode/approve': { request: (of) => ({ params: { userCode: of.deviceUserCode } }) },
+  'POST /runners/device/:userCode/deny': { request: (of) => ({ params: { userCode: of.deviceUserCode } }) },
   'GET /runners/:id': { request: (of) => ({ params: { id: of.runnerId } }) },
   'PATCH /runners/:id': { request: (of) => ({ params: { id: of.runnerId }, body: { displayName: 'renamed by the census' } }) },
   'DELETE /runners/:id': { request: (of) => ({ params: { id: of.spare.runnerId } }) },

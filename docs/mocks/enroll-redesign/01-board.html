@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8">
+<title>注册审批页（/enroll）重设计</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,"Noto Sans SC",sans-serif;background:#eceef2;color:#111;width:1440px}
+code{font-family:"JetBrains Mono",monospace;font-size:.88em;background:rgba(0,0,0,.06);border-radius:4px;padding:1px 4px}
+.b-part{padding:44px 52px 52px}
+.b-part+.b-part{border-top:1px solid #d6d9e0}
+h1{font-size:30px;font-weight:700;margin-bottom:8px}
+h2{font-size:24px;font-weight:700;margin-bottom:8px}
+.b-sub{font-size:15px;color:#555;line-height:1.75;margin-bottom:30px;max-width:1330px}
+.b-row{display:flex;gap:48px;align-items:flex-start}
+.b-col{width:640px;display:flex;flex-direction:column;gap:40px}
+.b-tag{font-size:13px;font-weight:700;letter-spacing:.06em;margin-bottom:6px;color:#2f6bff}
+.b-tag.b-was{color:#e5484d}
+.b-title{font-size:19px;font-weight:700;margin-bottom:14px}
+.b-rec{display:inline-block;background:#2f6bff;color:#fff;font-size:12px;font-weight:700;border-radius:6px;padding:2px 7px;margin-left:8px;vertical-align:2px;letter-spacing:0}
+.b-win{border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.08),0 16px 40px rgba(0,0,0,.10)}
+.b-bar{height:34px;background:#f3f4f6;border-bottom:1px solid #e3e5ea;display:flex;align-items:center;gap:7px;padding:0 12px}
+.b-bar i{width:11px;height:11px;border-radius:50%;background:#d5d8de}
+.b-url{margin-left:12px;flex:1;height:22px;border-radius:6px;background:#fff;border:1px solid #e3e5ea;font-size:12px;color:#666;display:flex;align-items:center;padding:0 10px}
+.b-shot{position:relative}
+.b-shot img{display:block}
+.b-pin{position:absolute;width:26px;height:26px;border-radius:50%;color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px #fff,0 2px 6px rgba(0,0,0,.25);transform:translate(-50%,-50%)}
+.b-pin.b-new,.b-n.b-new{background:#2f6bff}
+.b-pin.b-was,.b-n.b-was{background:#e5484d}
+.b-notes{margin-top:18px;font-size:14px;line-height:1.7;color:#333;list-style:none}
+.b-notes li{display:flex;gap:10px;margin-bottom:7px}
+.b-n{flex:none;width:22px;height:22px;border-radius:50%;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:2px}
+.b-n.b-none{background:none;border:2px solid #c5c9d1}
+.b-was-line{margin-top:14px;font-size:14px;line-height:1.7;color:#555;background:#fff;border-radius:10px;padding:10px 14px;border-left:4px solid #e5484d}
+.b-was-line+.b-notes{margin-top:12px}
+.b-phone{width:390px;border-radius:44px;overflow:hidden;box-shadow:0 0 0 10px #1b1b1d,0 20px 50px rgba(0,0,0,.25);margin:10px}
+.b-slice{overflow:hidden;border-radius:12px;box-shadow:0 0 0 1px rgba(0,0,0,.08)}
+.b-slice img{display:block}
+.b-dec{background:#fff;border-radius:16px;padding:24px 26px;margin-bottom:22px}
+.b-dec h3{font-size:18px;font-weight:700;margin-bottom:6px}
+.b-dec .b-q{font-size:14px;color:#555;line-height:1.7;margin-bottom:16px}
+.b-ab{display:flex;gap:16px}
+.b-opt{flex:1;border:1.5px solid #e1e4ea;border-radius:12px;padding:16px 18px;font-size:14px;line-height:1.7;color:#333}
+.b-opt.b-pick{border-color:#2f6bff;background:#f5f8ff}
+.b-opt h4{font-size:15px;font-weight:700;margin-bottom:6px;color:#111}
+.b-k{display:inline-flex;width:22px;height:22px;border-radius:6px;background:#111;color:#fff;font-size:12px;font-weight:700;align-items:center;justify-content:center;margin-right:8px;vertical-align:1px}
+.b-opt.b-pick .b-k{background:#2f6bff}
+.b-land{background:#fff;border-radius:16px;padding:24px 26px}
+.b-land h3{font-size:18px;font-weight:700;margin-bottom:12px}
+.b-land ol{margin-left:22px;font-size:14px;line-height:1.75;color:#333}
+.b-land li{margin-bottom:8px}
+.b-cost{display:inline-block;font-size:12px;font-weight:700;color:#2f6bff;background:#eef3ff;border-radius:5px;padding:0 6px;margin-left:6px}
+.b-aside{margin-top:22px;font-size:13px;line-height:1.7;color:#666}
+</style></head><body>
+
+<section class="b-part" id="part-1">
+<h1>注册审批页（/enroll）重设计 · 效果图</h1>
+<div class="b-sub">在机器上跑 <code>orbit register</code>，终端打开这个页面，你在这里批准它成为账号下的 runner。两边都是<b>真实页面截图</b>：左边是今天的页面，用你截图里同一份数据渲染；右边是新设计，原型代码在同目录 <code>prototype.patch</code>。新页面复用登录页现有的样式和组件（渐变、轨道环、App 图标、胶囊按钮、Alert、Badge），不新造外观。页面文案全部英文。</div>
+<div class="b-row">
+<div class="b-col"><div>
+<div class="b-tag b-was">今天</div><div class="b-title">卡片 + 表格</div>
+<div class="b-win" style="width:640px"><div class="b-bar"><i></i><i></i><i></i><span class="b-url">orbitd.io/enroll?code=B7RXA-EFTR7</span></div>
+<div class="b-shot"><img src="capture/today-pending.png" style="width:640px;height:900px"><span class="b-pin b-was" style="left:95px;top:314px">1</span><span class="b-pin b-was" style="left:95px;top:388px">2</span><span class="b-pin b-was" style="left:96px;top:484px">3</span><span class="b-pin b-was" style="left:96px;top:523px">4</span><span class="b-pin b-was" style="left:95px;top:574px">5</span></div></div>
+<ul class="b-notes"><li><span class="b-n b-was">1</span><span>标题用 🛰 emoji。刚经过的登录页有品牌图标和轨道环，到这里突然换成一张普通卡片，像个临时页面。</span></li><li><span class="b-n b-was">2</span><span>唯一的安全提示（只在你刚运行过 <code>orbit register</code> 时批准）埋在正文里。</span></li><li><span class="b-n b-was">3</span><span>Labels 为空也占一行，显示 “—”。</span></li><li><span class="b-n b-was">4</span><span>真正要核对的验证码排在表格最后一行，字号和其它字段一样，也没说要和终端对照。</span></li><li><span class="b-n b-was">5</span><span>只有 Approve。不是你发起的请求没法拒绝，只能关掉页面；终端会一直 “Waiting for approval…”，直到 10 分钟超时。</span></li><li><span class="b-n b-none"></span><span>看不出要加到哪个账号，也看不出还剩多久过期。页面放了 10 分钟后再点 Approve，只会弹一个 toast，内容是服务端原话。</span></li></ul>
+</div></div>
+<div class="b-col"><div>
+<div class="b-tag">新设计</div><div class="b-title">和登录页一套外观，核对、决定、后果各占一块</div>
+<div class="b-win" style="width:640px"><div class="b-bar"><i></i><i></i><i></i><span class="b-url">orbitd.io/enroll?code=B7RXA-EFTR7</span></div>
+<div class="b-shot"><img src="capture/proposal-pending.png" style="width:640px;height:900px"><span class="b-pin b-new" style="left:198px;top:155px">1</span><span class="b-pin b-new" style="left:152px;top:227px">2</span><span class="b-pin b-new" style="left:182px;top:351px">3</span><span class="b-pin b-new" style="left:100px;top:500px">4</span><span class="b-pin b-new" style="left:100px;top:646px">5</span><span class="b-pin b-new" style="left:100px;top:747px">6</span></div></div>
+<ul class="b-notes"><li><span class="b-n b-new">1</span><span>沿用登录页的品牌渐变、轨道环和 Orbit 图标。左边是机器，右边是 Orbit，中间一条线表示“这台机器接入你的账号”：等待时是虚线，批准后变绿 ✓，拒绝变灰 ✕，过期变橙 ⏱。</span></li><li><span class="b-n b-new">2</span><span>标题直接问 “Approve this machine?”。安全规则放进副标题，第一眼就能读到：只有你刚刚亲自运行过才批准。</span></li><li><span class="b-n b-new">3</span><span>验证码做主角：等宽大字，下面一行写着 “It should match the code in your terminal.”</span></li><li><span class="b-n b-new">4</span><span>核对信息：机器名加粗。Hostname 只在和机器名不同时出现，Labels 只在有值时出现。<b>Account</b> 显示要加到哪个账号，<b>Switch</b> 是退出后重新登录，登录完回到本页（码在 10 分钟内仍有效）。<b>Expires</b> 是倒计时，最后 1 分钟变橙，到 0 自动切到“已过期”页。</span></li><li><span class="b-n b-new">5</span><span><b>Approve</b>（主按钮）和 <b>Deny</b>（新增，见待定 1）两个胶囊按钮，样式和登录页的 Sign In 一样。</span></li><li><span class="b-n b-new">6</span><span>小字写清两件事：批准后这台机器能做什么，以后在哪里移除它。</span></li></ul>
+</div></div>
+</div>
+</section>
+
+<section class="b-part" id="part-2">
+<h2>其余状态（新）</h2>
+<div class="b-sub">同一套外观，靠中间那条线和标题区分状态。每张图上面一行写今天是什么样，下面写新设计改了什么。</div>
+<div class="b-row">
+<div class="b-col">
+<div>
+<div class="b-tag">状态 · 同名机器已注册</div><div class="b-title">Re-register</div>
+<div class="b-win" style="width:640px"><div class="b-bar"><i></i><i></i><i></i><span class="b-url">orbitd.io/enroll?code=B7RXA-EFTR7</span></div>
+<div class="b-shot"><img src="capture/proposal-conflict.png" style="width:640px;height:966px"><span class="b-pin b-new" style="left:100px;top:600px">1</span><span class="b-pin b-new" style="left:100px;top:772px">2</span></div></div>
+<div class="b-was-line">今天：黄色提示加一个红色的 “Re-register machine” 按钮，但看不出旧的那台现在还在不在用。</div>
+<ul class="b-notes"><li><span class="b-n b-new">1</span><span>提示里写出旧 runner 的最后在线时间（新字段）。后果讲清楚：旧凭据立即失效，工作区和历史保留。如果是另一台同名电脑，给出出路：先 Deny，再在那台机器上用 <code>--name</code> 换个名字注册。</span></li><li><span class="b-n b-new">2</span><span>按钮保持红色，因为会让另一台同名机器立刻掉线。Deny 照常可用。</span></li></ul>
+</div>
+<div>
+<div class="b-tag">变体 · 改过名、带标签</div><div class="b-title">Hostname / Labels 只在有值时出现</div>
+<div class="b-win" style="width:640px"><div class="b-bar"><i></i><i></i><i></i><span class="b-url">orbitd.io/enroll?code=B7RXA-EFTR7</span></div>
+<div class="b-shot"><img src="capture/proposal-pending-labels.png" style="width:640px;height:870px"><span class="b-pin b-new" style="left:100px;top:485px">1</span></div></div>
+<ul class="b-notes"><li><span class="b-n b-new">1</span><span><code>orbit register --name gpu-box --labels gpu,linux</code>：机器名和 hostname 不同时，多出一行 Hostname；带了 labels 才出现 Labels 行。</span></li></ul>
+</div>
+</div>
+<div class="b-col">
+<div>
+<div class="b-tag">状态 · 已批准</div><div class="b-title">Machine registered</div>
+<div class="b-win" style="width:640px"><div class="b-bar"><i></i><i></i><i></i><span class="b-url">orbitd.io/enroll?code=B7RXA-EFTR7</span></div>
+<div class="b-shot"><img src="capture/proposal-approved.png" style="width:640px;height:492px"><span class="b-pin b-new" style="left:100px;top:307px">1</span><span class="b-pin b-new" style="left:100px;top:402px">2</span></div></div>
+<div class="b-was-line">今天：“Machine approved” 加一句回终端，没有下一步。</div>
+<ul class="b-notes"><li><span class="b-n b-new">1</span><span>告诉你下一步：给这台机器登录要用的编程 CLI。终端注册完也是这么提示的。</span></li><li><span class="b-n b-new">2</span><span><b>Open machine</b> 直接打开这台机器的页面去登录引擎（需要 approve 接口返回 runnerId，拿不到时打开 Machines &amp; models）。</span></li></ul>
+</div>
+<div>
+<div class="b-tag">状态 · 已拒绝（新增）</div><div class="b-title">Request denied</div>
+<div class="b-win" style="width:640px"><div class="b-bar"><i></i><i></i><i></i><span class="b-url">orbitd.io/enroll?code=B7RXA-EFTR7</span></div>
+<div class="b-shot"><img src="capture/proposal-denied.png" style="width:640px;height:338px"></div></div>
+<ul class="b-notes"><li><span class="b-n b-none"></span><span>账号里什么都没加。那个终端里的 <code>orbit register</code> 收到 denied 后打印原因并退出（需要 CLI 配合，见待定 1）。</span></li></ul>
+</div>
+<div>
+<div class="b-tag">状态 · 过期 / 已用过</div><div class="b-title">This link has expired</div>
+<div class="b-win" style="width:640px"><div class="b-bar"><i></i><i></i><i></i><span class="b-url">orbitd.io/enroll?code=B7RXA-EFTR7</span></div>
+<div class="b-shot"><img src="capture/proposal-expired.png" style="width:640px;height:410px"><span class="b-pin b-new" style="left:197px;top:282px">1</span></div></div>
+<div class="b-was-line">今天：橙色感叹号、“Cannot register”，下面是服务端原话 “enrollment request not found or expired”。</div>
+<ul class="b-notes"><li><span class="b-n b-new">1</span><span>用大白话说明：链接只能用一次，10 分钟内有效。给出可一键复制的 <code>orbit register</code>。打开时已过期，或者页面开着时倒计时走到 0、点击时服务端返回 404，都落到这一页。链接里缺 code 时，同一个页面只换标题和副标题（下图）。</span></li></ul>
+</div>
+<div>
+<div class="b-win" style="width:640px"><div class="b-bar"><i></i><i></i><i></i><span class="b-url">orbitd.io/enroll</span></div>
+<div class="b-shot"><img src="capture/proposal-missing.png" style="width:640px;height:388px"></div></div>
+</div>
+</div>
+</div>
+</section>
+
+<section class="b-part" id="part-3">
+<h2>暗色 · 手机</h2>
+<div class="b-sub">全部用现有的语义色 token，暗色跟着主题自动变，不需要单独做一版。窄屏时（比如在手机或 iPad 的浏览器里打开链接）是同一列，按钮落在拇指区。</div>
+<div class="b-row" style="align-items:center">
+<div><div class="b-win" style="width:640px"><div class="b-bar"><i></i><i></i><i></i><span class="b-url">orbitd.io/enroll?code=B7RXA-EFTR7</span></div>
+<div class="b-shot"><img src="capture/proposal-pending-dark.png" style="width:640px;height:780px"></div></div></div>
+<div><div class="b-phone"><div class="b-shot"><img src="capture/proposal-pending-phone.png" style="width:390px;height:780px"></div></div></div>
+</div>
+</section>
+
+<section class="b-part" id="part-4">
+<h2>待定 · 要你拍板</h2>
+<div class="b-sub">下面两项会动服务端或 CLI，其余改动都只在 web。</div>
+
+<div class="b-dec">
+<h3>1. 加不加 Deny（拒绝）</h3>
+<div class="b-q">今天的页面只能批准。<code>orbit login</code> 的审批页已经有 Approve 和 Deny 两个按钮。</div>
+<div class="b-ab">
+<div class="b-opt b-pick"><h4><span class="b-k">A</span>加 Deny<span class="b-rec">推荐</span></h4>服务端：DeviceEnrollment.status 增加 <code>DENIED</code>，新增 <code>POST /runners/device/:code/deny</code>，轮询返回 <code>denied</code>。CLI：收到后打印 “registration was denied in the browser” 并以非 0 退出。两张审批页的行为一致；遇到别人发来的链接，也有一个明确的动作可以拒绝。</div>
+<div class="b-opt"><h4><span class="b-k">B</span>不加，只改页面</h4>改动只在 web。不是你发起的请求只能关掉页面，10 分钟后自动过期，终端一直等到超时。效果图里的 Deny 按钮和 “Request denied” 页去掉。</div>
+</div>
+</div>
+
+<div class="b-dec">
+<h3>2. 要不要显示请求来源 IP</h3>
+<div class="b-q">验证码防得住“开错了链接”，防不住“设备码钓鱼”：别人在自己机器上跑 <code>orbit register</code>，再把链接发给你。他发来的链接里，验证码和页面上显示的永远一致。真正能防住的是“这个请求从哪里来”。</div>
+<div class="b-ab">
+<div class="b-opt b-pick"><h4><span class="b-k">A</span>这次不做，单独开一个任务<span class="b-rec">推荐</span></h4>这次只重做页面。来源 IP 牵涉服务端怎么取到真实 IP（反向代理的 X-Forwarded-For）、IPv6 显示，以及这类信息展示多少合适，单独做更稳。</div>
+<div class="b-opt"><h4><span class="b-k">B</span>这次一起做</h4><code>device/start</code> 时记下请求方 IP，审批页在 Account 上面加一行 From，和当前浏览器的 IP 对比：<br><br><div class="b-slice" style="width:440px;height:157px"><img src="capture/proposal-pending-ip.png" style="width:440px;margin-top:-246px"></div></div>
+</div>
+</div>
+
+<div class="b-land">
+<h3>落地（按代价排）</h3>
+<ol>
+<li><b>只改 web</b><span class="b-cost">约半天</span>：重写 <code>EnrollPage.tsx</code>，<code>index.css</code> 加一段 <code>.enroll-*</code>。复用 <code>login-page</code> / <code>login-orbits</code> / <code>OrbitAppIcon</code> / <code>login-submit</code> / Alert / Button / Badge。倒计时先按 <code>createdAt</code> + 10 分钟计算。测试覆盖：空 Labels 不出行；Hostname 和机器名相同时不出行；倒计时到 0 和服务端 404 都切到过期页；Switch 带着 next 回到本页。</li>
+<li><b>服务端小改</b><span class="b-cost">约 1 小时</span>：GET 接口返回 <code>expiresAt</code> 和同名 runner 的最后在线时间；approve 接口返回 <code>runnerId</code>，供 Open machine 直达。</li>
+<li><b>Deny</b>（选 1A 时）<span class="b-cost">约半天</span>：服务端状态、接口和轮询返回值，CLI 处理 denied，在 tenant-isolation-cases 里登记新路由，补 pg spec。</li>
+<li><b>来源 IP</b>（选 2B 时）：另外估。</li>
+</ol>
+<div class="b-aside">附注：你截图里橙色的 “Register” 和 “register” 不是页面样式。页面里这两处都是纯文本；用同一份数据渲染的今天页面（第一张左图）没有橙色，所以应该是浏览器扩展（查词、翻译类）加的高亮。</div>
+</div>
+</section>
+
+</body></html>

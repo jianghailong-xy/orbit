@@ -70,6 +70,12 @@ export class RunnersController {
     return this.runners.approveDeviceEnrollment(user.userId, userCode);
   }
 
+  @PatForbidden('RUNNER_CREDENTIALS')
+  @Post('device/:userCode/deny')
+  denyDevice(@CurrentUser() user: AuthUser, @Param('userCode') userCode: string) {
+    return this.runners.denyDeviceEnrollment(user.userId, userCode);
+  }
+
   // One runner, the same shape as its entry in the list. After every static GET above, for the
   // reason `reorder` is: Nest matches in declaration order. Owner-scoped: anyone else's is a 404.
   @PatScope('runners:read', { workspaceConfinable: false })

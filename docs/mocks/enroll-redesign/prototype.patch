@@ -1,0 +1,732 @@
+diff --git a/src/web/src/pages/EnrollPage.tsx b/src/web/src/pages/EnrollPage.tsx
+index 5095c63..a0e399c 100644
+--- a/src/web/src/pages/EnrollPage.tsx
++++ b/src/web/src/pages/EnrollPage.tsx
+@@ -1,13 +1,16 @@
+-import { useEffect, useState } from 'react';
+-import { api } from '../api';
++import { CheckOutlined, ClockCircleOutlined, CloseOutlined, CopyOutlined, DesktopOutlined } from '@ant-design/icons';
++import { useQuery } from '@tanstack/react-query';
++import { useEffect, useState, type ReactNode } from 'react';
++import { api, ApiError, clearToken, logoutSession } from '../api';
+ import { Alert } from '../components/ui/Alert';
+ import { Badge } from '../components/ui/Badge';
+ import { Button } from '../components/ui/Button';
+-import { Card } from '../components/ui/Card';
+-import { Descriptions } from '../components/ui/Descriptions';
+-import { Result } from '../components/ui/Result';
+ import { Spinner } from '../components/ui/Spinner';
++import { copyText } from '../lib/clipboard';
++import { encodeId } from '../lib/idCodec';
++import { meQuery } from '../lib/queries';
+ import { useToast } from '../lib/toast';
++import { OrbitAppIcon } from './LoginPage';
+ 
+ export interface DeviceInfo {
+   userCode: string;
+@@ -17,24 +20,114 @@ export interface DeviceInfo {
+   maxConcurrent: number;
+   status: string;
+   nameConflict?: boolean;
++  createdAt?: string;
++  expiresAt?: string;
++  /** The same-name runner's last heartbeat, when `nameConflict`. */
++  existingLastSeenAt?: string | null;
+ }
+ 
+-/** The identity being approved. The user-chosen name and OS hostname are separate fields. */
+-export function EnrollmentDetails({ info }: { info: DeviceInfo }) {
++type Decision = 'APPROVED' | 'DENIED';
++type Mark = 'pending' | 'approved' | 'denied' | 'expired';
++
++const ago = (iso: string, now: number) => {
++  const m = Math.max(0, Math.round((now - Date.parse(iso)) / 60000));
++  if (m < 60) return m <= 1 ? 'just now' : `${m} minutes ago`;
++  const h = Math.round(m / 60);
++  if (h < 24) return h === 1 ? 'an hour ago' : `${h} hours ago`;
++  const d = Math.round(h / 24);
++  return d === 1 ? 'yesterday' : `${d} days ago`;
++};
++
++const clock = (ms: number) => {
++  const s = Math.max(0, Math.ceil(ms / 1000));
++  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
++};
++
++/** The machine and the account it joins, and a line between them that says how it went. */
++function EnrollMark({ mark }: { mark: Mark }) {
++  return (
++    <div className={`enroll-mark enroll-mark-${mark}`} aria-hidden>
++      <span className="login-orbits" />
++      <span className="enroll-machine">
++        <DesktopOutlined />
++      </span>
++      <span className="enroll-link">
++        {mark !== 'pending' && (
++          <span className="enroll-link-badge">
++            {mark === 'approved' ? <CheckOutlined /> : mark === 'denied' ? <CloseOutlined /> : <ClockCircleOutlined />}
++          </span>
++        )}
++      </span>
++      <OrbitAppIcon />
++    </div>
++  );
++}
++
++function EnrollShell({ mark, children }: { mark: Mark; children: ReactNode }) {
+   return (
+-    <Descriptions
+-      style={{ marginBottom: 16 }}
+-      items={[
+-        { key: 'runner', label: 'Runner', children: info.name },
+-        ...(info.hostname && info.hostname !== info.name ? [{ key: 'hostname', label: 'Hostname', children: info.hostname }] : []),
+-        {
+-          key: 'labels',
+-          label: 'Labels',
+-          children: info.labels.length ? info.labels.map((l) => <Badge key={l}>{l}</Badge>) : '—',
+-        },
+-        { key: 'code', label: 'Code', children: info.userCode },
+-      ]}
+-    />
++    <div className="login-page enroll-page">
++      <main className="enroll-form">
++        <EnrollMark mark={mark} />
++        {children}
++      </main>
++    </div>
++  );
++}
++
++/** The identity being approved. The user-chosen name and OS hostname are separate rows. */
++export function EnrollmentDetails({
++  info,
++  account,
++  expiresIn,
++  onSwitchAccount,
++}: {
++  info: DeviceInfo;
++  account?: string;
++  expiresIn?: number | null;
++  onSwitchAccount?: () => void;
++}) {
++  return (
++    <dl className="enroll-facts">
++      <div>
++        <dt>Machine</dt>
++        <dd className="enroll-fact-strong">{info.name}</dd>
++      </div>
++      {info.hostname && info.hostname !== info.name && (
++        <div>
++          <dt>Hostname</dt>
++          <dd>{info.hostname}</dd>
++        </div>
++      )}
++      {info.labels.length > 0 && (
++        <div>
++          <dt>Labels</dt>
++          <dd>
++            {info.labels.map((l) => (
++              <Badge key={l}>{l}</Badge>
++            ))}
++          </dd>
++        </div>
++      )}
++      {account && (
++        <div>
++          <dt>Account</dt>
++          <dd className="enroll-fact-row">
++            <span>{account}</span>
++            {onSwitchAccount && (
++              <button type="button" className="enroll-text-button" onClick={onSwitchAccount}>
++                Switch
++              </button>
++            )}
++          </dd>
++        </div>
++      )}
++      {expiresIn != null && (
++        <div>
++          <dt>Expires</dt>
++          <dd className={expiresIn < 60_000 ? 'enroll-fact-warning' : undefined}>in {clock(expiresIn)}</dd>
++        </div>
++      )}
++    </dl>
+   );
+ }
+ 
+@@ -42,81 +135,189 @@ export function EnrollmentDetails({ info }: { info: DeviceInfo }) {
+ export function EnrollPage() {
+   const message = useToast();
+   const code = new URLSearchParams(window.location.search).get('code') ?? '';
++  const { data: me } = useQuery(meQuery());
+   const [info, setInfo] = useState<DeviceInfo | null>(null);
+-  const [loading, setLoading] = useState(true);
+-  const [approved, setApproved] = useState(false);
+-  const [submitting, setSubmitting] = useState(false);
+-  const [error, setError] = useState<string | null>(null);
++  const [loading, setLoading] = useState(!!code);
++  const [decision, setDecision] = useState<Decision | null>(null);
++  const [runnerId, setRunnerId] = useState<string | null>(null);
++  const [submitting, setSubmitting] = useState<Decision | null>(null);
++  const [gone, setGone] = useState(false);
++  const [now, setNow] = useState(() => Date.now());
+ 
+   useEffect(() => {
+-    if (!code) {
+-      setError('Missing enrollment code.');
+-      setLoading(false);
+-      return;
+-    }
++    if (!code) return;
+     api<DeviceInfo>(`/runners/device/${encodeURIComponent(code)}`)
+       .then((d) => {
+         setInfo(d);
+-        setApproved(d.status === 'APPROVED');
++        if (d.status === 'APPROVED' || d.status === 'DENIED') setDecision(d.status);
+       })
+-      .catch((e) => setError((e as Error).message))
++      .catch(() => setGone(true))
+       .finally(() => setLoading(false));
+   }, [code]);
+ 
+-  const approve = async () => {
+-    setSubmitting(true);
++  const pending = !!info && !decision && !gone;
++  useEffect(() => {
++    if (!pending) return;
++    const t = setInterval(() => setNow(Date.now()), 1000);
++    return () => clearInterval(t);
++  }, [pending]);
++
++  const expiresIn = info?.expiresAt ? Date.parse(info.expiresAt) - now : null;
++  const expired = gone || (pending && expiresIn !== null && expiresIn <= 0);
++
++  const decide = async (wanted: Decision) => {
++    setSubmitting(wanted);
+     try {
+-      await api(`/runners/device/${encodeURIComponent(code)}/approve`, { method: 'POST' });
+-      setApproved(true);
++      const path = `/runners/device/${encodeURIComponent(code)}/${wanted === 'APPROVED' ? 'approve' : 'deny'}`;
++      const res = await api<{ runnerId?: string }>(path, { method: 'POST' });
++      setRunnerId(res?.runnerId ?? null);
++      setDecision(wanted);
+     } catch (e) {
+-      message.error("Couldn't register this machine", (e as Error).message);
++      // Expired or used up while the page sat open: say so in place of a toast.
++      if (e instanceof ApiError && e.status === 404) setGone(true);
++      else message.error(wanted === 'APPROVED' ? "Couldn't register this machine" : "Couldn't deny this request", (e as Error).message);
+     } finally {
+-      setSubmitting(false);
++      setSubmitting(null);
+     }
+   };
+ 
+-  return (
+-    <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', background: 'var(--bg-base)' }}>
+-      <Card title="🛰 Register a machine" style={{ width: 460 }}>
+-        {loading ? (
+-          <div style={{ textAlign: 'center', padding: 24 }}>
+-            <Spinner />
++  const switchAccount = async () => {
++    await logoutSession();
++    clearToken();
++    location.href = `/login?next=${encodeURIComponent('/enroll' + location.search)}`;
++  };
++
++  if (loading) {
++    return (
++      <div className="login-page enroll-page">
++        <main className="enroll-form">
++          <Spinner />
++        </main>
++      </div>
++    );
++  }
++
++  if (!code || expired || !info) {
++    return (
++      <EnrollShell mark="expired">
++        <h1 className="login-title">{code ? 'This link has expired' : 'This link is missing its code'}</h1>
++        <p className="login-subtitle">
++          {code ? (
++            <>
++              A register link works once, for 10 minutes. Run <code>orbit register</code> on the machine again — it
++              prints a new one.
++            </>
++          ) : (
++            <>
++              Open the link that <code>orbit register</code> printed in your terminal.
++            </>
++          )}
++        </p>
++        <button type="button" className="enroll-command" onClick={() => void copyText('orbit register')}>
++          <span className="enroll-command-prompt">$</span>orbit register
++          <CopyOutlined className="enroll-command-copy" />
++        </button>
++        <a className="enroll-quiet-link" href="/">
++          Go to Orbit
++        </a>
++      </EnrollShell>
++    );
++  }
++
++  if (decision === 'APPROVED') {
++    return (
++      <EnrollShell mark="approved">
++        <h1 className="login-title">Machine registered</h1>
++        <p className="login-subtitle">
++          <b className="enroll-name">{info.name}</b> is on your account. Go back to the terminal — it finishes setting
++          up by itself.
++        </p>
++        <div className="enroll-next">
++          <div className="enroll-next-title">Next: sign in its coding CLIs</div>
++          <div className="enroll-next-body">
++            Sessions run on the CLIs signed in on this machine. Sign them in from its page, or run{' '}
++            <code>orbit doctor</code> there.
+           </div>
+-        ) : error ? (
+-          <Result status="warning" title="Cannot register" subTitle={error} />
+-        ) : approved ? (
+-          <Result
+-            status="success"
+-            title="Machine approved"
+-            subTitle={`"${info?.name}" is now registered. Return to your terminal — it will continue automatically.`}
+-          />
+-        ) : (
+-          <>
+-            <p style={{ marginTop: 0 }}>
+-              A machine is requesting to register as a runner on your account. Approve it only if you
+-              just started <code>orbit register</code>.
+-            </p>
+-            {info && <EnrollmentDetails info={info} />}
+-            {info?.nameConflict && (
+-              <Alert
+-                type="warning"
+-                style={{ marginBottom: 16 }}
+-                title={`This runner ("${info.name}") is already registered on your account.`}
+-                description="Approving re-issues its credential. The old credential stops working; no duplicate runner is created."
+-              />
+-            )}
+-            <Button
+-              variant="primary"
+-              danger={!!info?.nameConflict}
+-              loading={submitting}
+-              onClick={() => void approve()}
+-              style={{ width: '100%' }}
+-            >
+-              {info?.nameConflict ? 'Re-register machine' : 'Approve'}
+-            </Button>
+-          </>
+-        )}
+-      </Card>
+-    </div>
++        </div>
++        <div className="enroll-actions">
++          <a className="login-submit enroll-submit-link" href={runnerId ? `/runners/${encodeId(runnerId)}` : '/infrastructure'}>
++            Open machine
++          </a>
++        </div>
++      </EnrollShell>
++    );
++  }
++
++  if (decision === 'DENIED') {
++    return (
++      <EnrollShell mark="denied">
++        <h1 className="login-title">Request denied</h1>
++        <p className="login-subtitle">
++          Nothing was added to your account. <code>orbit register</code> in that terminal stops and says the request was
++          denied.
++        </p>
++        <a className="enroll-quiet-link" href="/">
++          Go to Orbit
++        </a>
++      </EnrollShell>
++    );
++  }
++
++  const conflict = !!info.nameConflict;
++  return (
++    <EnrollShell mark="pending">
++      <h1 className="login-title">{conflict ? 'Re-register this machine?' : 'Approve this machine?'}</h1>
++      <p className="login-subtitle">
++        A terminal ran <code>orbit register</code> and is waiting. Approve only if that was you, just now.
++      </p>
++
++      <div className="enroll-code" aria-label="Verification code">
++        {info.userCode}
++      </div>
++      <p className="enroll-code-hint">It should match the code in your terminal.</p>
++
++      <EnrollmentDetails info={info} account={me?.email} expiresIn={expiresIn} onSwitchAccount={() => void switchAccount()} />
++
++      {conflict && (
++        <Alert
++          type="warning"
++          className="enroll-alert"
++          title={`"${info.name}" is already on your account`}
++          description={
++            <>
++              {info.existingLastSeenAt && <>Last online {ago(info.existingLastSeenAt, now)}. </>}
++              Approving gives it a new credential and the old one stops working; its workspaces and history stay. A
++              different computer with the same name? Deny, then run <code>orbit register --name &lt;new-name&gt;</code>{' '}
++              on it.
++            </>
++          }
++        />
++      )}
++
++      <div className="enroll-actions">
++        <button
++          type="button"
++          className={`login-submit${conflict ? ' enroll-submit-danger' : ''}`}
++          disabled={submitting !== null}
++          onClick={() => void decide('APPROVED')}
++        >
++          {submitting === 'APPROVED' ? 'Approving…' : conflict ? 'Re-register' : 'Approve'}
++        </button>
++        <Button
++          className="enroll-deny"
++          size="large"
++          disabled={submitting !== null}
++          loading={submitting === 'DENIED'}
++          onClick={() => void decide('DENIED')}
++        >
++          Deny
++        </Button>
++      </div>
++
++      <p className="enroll-note">
++        Once approved, it runs agents for your workspaces with the coding CLIs signed in on it. Remove it any time in
++        Settings → Machines &amp; models.
++      </p>
++    </EnrollShell>
+   );
+ }
+diff --git a/src/web/src/pages/LoginPage.tsx b/src/web/src/pages/LoginPage.tsx
+index ccee5b5..b63a3a2 100644
+--- a/src/web/src/pages/LoginPage.tsx
++++ b/src/web/src/pages/LoginPage.tsx
+@@ -228,7 +228,7 @@ export function LoginPage() {
+ }
+ 
+ /** The app icon — the favicon's mark in white on the brand tile, as the Mac and iOS login draw it. */
+-function OrbitAppIcon() {
++export function OrbitAppIcon() {
+   return (
+     <svg className="login-icon" viewBox="0 0 1024 1024" role="img" aria-label="Orbit">
+       <defs>
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index e990295..84579c0 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -25559,6 +25559,309 @@ button.agent-progress-agent:hover {
+   color: var(--text-1);
+ }
+ 
++/* ---- Enroll (/enroll): the browser half of `orbit register`, drawn as the login is — the machine and
++   the Orbit mark in the login's faint orbits, the code to compare, what is approved, two capsules. ---- */
++.enroll-form {
++  grid-row: 2;
++  width: 100%;
++  max-width: 400px;
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  text-align: center;
++}
++
++.enroll-page .login-title {
++  font-size: 26px;
++}
++
++.enroll-page code {
++  padding: 1px 5px;
++  border-radius: 5px;
++  background: var(--fill-inset);
++  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
++  font-size: 0.9em;
++  color: var(--text-1);
++}
++
++/* The machine, a link, the account's mark: dashed while it waits, green once approved. */
++.enroll-mark {
++  position: relative;
++  display: flex;
++  align-items: center;
++  margin-bottom: 26px;
++}
++
++/* The login's orbits, opened up to hold both marks and kept clear of the code below. */
++.enroll-mark .login-orbits {
++  width: 232px;
++  height: 232px;
++}
++
++.enroll-mark .login-orbits::before {
++  width: 316px;
++  height: 316px;
++}
++
++.enroll-mark .login-orbits::after {
++  display: none;
++}
++
++.enroll-machine,
++.enroll-mark .login-icon {
++  position: relative;
++  width: 60px;
++  height: 60px;
++}
++
++.enroll-machine {
++  display: grid;
++  place-items: center;
++  border-radius: 14px;
++  background: var(--bg-raised);
++  box-shadow: inset 0 0 0 1px var(--border), 0 8px 13px rgba(0, 0, 0, 0.06);
++  font-size: 28px;
++  color: var(--text-2);
++}
++
++.enroll-link {
++  position: relative;
++  width: 64px;
++  height: 2px;
++  margin: 0 8px;
++  background: repeating-linear-gradient(90deg, var(--text-4) 0 6px, transparent 6px 12px);
++}
++
++.enroll-mark-approved .enroll-link {
++  background: var(--success-solid);
++}
++
++.enroll-link-badge {
++  position: absolute;
++  left: 50%;
++  top: 50%;
++  width: 26px;
++  height: 26px;
++  display: grid;
++  place-items: center;
++  border-radius: 50%;
++  background: var(--text-3);
++  box-shadow: 0 0 0 4px var(--bg-base);
++  font-size: 13px;
++  color: #fff;
++  transform: translate(-50%, -50%);
++}
++
++.enroll-mark-approved .enroll-link-badge {
++  background: var(--success-solid);
++}
++
++.enroll-mark-expired .enroll-link-badge {
++  background: var(--warning-solid);
++}
++
++.enroll-mark-denied .enroll-machine,
++.enroll-mark-expired .enroll-machine {
++  color: var(--text-3);
++}
++
++.enroll-name {
++  font-weight: 600;
++  color: var(--text-1);
++  overflow-wrap: anywhere;
++}
++
++/* The code, big enough to read against the terminal's at a glance. */
++.enroll-code {
++  margin-top: 28px;
++  padding: 10px 22px;
++  border-radius: 14px;
++  background: var(--fill-inset);
++  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
++  font-size: 26px;
++  font-weight: 600;
++  letter-spacing: 0.06em;
++  color: var(--text-1);
++  user-select: all;
++}
++
++.enroll-code-hint {
++  margin: 8px 0 0;
++  font-size: 13px;
++  color: var(--text-3);
++}
++
++.enroll-facts {
++  width: 100%;
++  margin: 24px 0 0;
++  border-radius: 14px;
++  background: var(--fill-inset);
++  text-align: left;
++}
++
++.enroll-facts > div {
++  display: flex;
++  align-items: baseline;
++  gap: 12px;
++  padding: 11px 16px;
++}
++
++.enroll-facts > div + div {
++  border-top: 1px solid var(--border-subtle);
++}
++
++.enroll-facts dt {
++  flex: none;
++  width: 72px;
++  font-size: 13px;
++  color: var(--text-2);
++}
++
++.enroll-facts dd {
++  flex: 1;
++  min-width: 0;
++  margin: 0;
++  font-size: 14px;
++  color: var(--text-1);
++  overflow-wrap: anywhere;
++}
++
++.enroll-fact-strong {
++  font-weight: 600;
++}
++
++.enroll-fact-row {
++  display: flex;
++  align-items: baseline;
++  justify-content: space-between;
++  gap: 8px;
++}
++
++.enroll-fact-warning {
++  color: var(--warning);
++}
++
++.enroll-text-button {
++  padding: 0;
++  border: 0;
++  background: none;
++  font: inherit;
++  font-size: 13px;
++  color: var(--brand);
++  cursor: pointer;
++}
++
++.enroll-text-button:hover {
++  color: var(--brand-strong);
++}
++
++.enroll-alert {
++  width: 100%;
++  margin-top: 12px;
++  text-align: left;
++}
++
++.enroll-actions {
++  width: 100%;
++  margin-top: 24px;
++  display: flex;
++  flex-direction: column;
++  gap: 10px;
++}
++
++.enroll-actions .login-submit {
++  margin-top: 0;
++}
++
++.enroll-submit-danger.login-submit {
++  background: var(--error-solid);
++}
++
++.enroll-submit-danger.login-submit:hover:not(:disabled) {
++  background: color-mix(in srgb, var(--error-solid) 86%, #000);
++}
++
++.enroll-submit-link {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  text-decoration: none;
++}
++
++.enroll-submit-link:hover {
++  color: #fff;
++}
++
++.enroll-deny.orbit-button {
++  height: 50px;
++  border-radius: 999px;
++  font-size: 16px;
++  font-weight: 500;
++}
++
++.enroll-note {
++  margin: 16px 0 0;
++  font-size: 13px;
++  line-height: 1.5;
++  color: var(--text-3);
++  text-wrap: balance;
++}
++
++.enroll-next {
++  width: 100%;
++  margin-top: 28px;
++  padding: 14px 16px;
++  border-radius: 14px;
++  background: var(--fill-inset);
++  text-align: left;
++}
++
++.enroll-next-title {
++  font-weight: 600;
++  color: var(--text-1);
++}
++
++.enroll-next-body {
++  margin-top: 4px;
++  font-size: 13px;
++  line-height: 1.5;
++  color: var(--text-2);
++}
++
++.enroll-command {
++  margin-top: 28px;
++  display: inline-flex;
++  align-items: center;
++  gap: 10px;
++  padding: 10px 14px 10px 16px;
++  border: 0;
++  border-radius: 12px;
++  background: var(--fill-inset);
++  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
++  font-size: 15px;
++  color: var(--text-1);
++  cursor: pointer;
++}
++
++.enroll-command-prompt {
++  color: var(--text-3);
++}
++
++.enroll-command-copy {
++  margin-left: 6px;
++  color: var(--text-3);
++}
++
++.enroll-command:hover .enroll-command-copy {
++  color: var(--brand);
++}
++
++.enroll-quiet-link {
++  margin-top: 20px;
++  font-size: 14px;
++  color: var(--brand);
++}
++
+ /* ---- Privacy policy (/privacy): public, the same page signed out or in, outside the app shell — the
+    policy alone, in one reading column on the page background. It owns its scroll, as every
+    full-height view does. ---- */

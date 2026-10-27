@@ -1,0 +1,8 @@
+Test Case '-[SettingsOrderProbeUITests.SettingsOrderShotTests testSessionsOpensAPageOfTheFiveWithTheirFooters]' started.
+Test Case '-[SettingsOrderProbeUITests.SettingsOrderShotTests testSessionsOpensAPageOfTheFiveWithTheirFooters]' passed (80.529 seconds).
+Test Case '-[SettingsOrderProbeUITests.SettingsOrderShotTests testTheListOpensWithMachinesAndModels]' started.
+Test Case '-[SettingsOrderProbeUITests.SettingsOrderShotTests testTheListOpensWithMachinesAndModels]' passed (146.640 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 227.169 (227.177) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 227.169 (227.181) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 227.169 (227.187) seconds
+** TEST SUCCEEDED **

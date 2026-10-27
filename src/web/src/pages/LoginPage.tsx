@@ -228,7 +228,7 @@ export function LoginPage() {
 }
 
 /** The app icon — the favicon's mark in white on the brand tile, as the Mac and iOS login draw it. */
-function OrbitAppIcon() {
+export function OrbitAppIcon() {
   return (
     <svg className="login-icon" viewBox="0 0 1024 1024" role="img" aria-label="Orbit">
       <defs>

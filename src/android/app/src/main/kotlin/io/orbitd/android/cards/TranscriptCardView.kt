@@ -21,7 +21,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.cards.*
-import io.orbitd.android.reader.AttachedNoteCard
+import io.orbitd.android.reader.AttachedNoteEntry
 import io.orbitd.android.reader.personWords
 import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.ui.LocalOrbitColors
@@ -141,7 +141,7 @@ private fun OwnerAnswerTold(card: InteractionCard, event: RunEvent?, close: () -
                 Text(OwnerAnswerLine.line(card.source), style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 SelectionContainer { Text(words, style = MaterialTheme.typography.bodyMedium) }
-                note?.let { AttachedNoteCard(it.trim()) }
+                note?.let { AttachedNoteEntry(it.trim()) }
             }
         }
     }

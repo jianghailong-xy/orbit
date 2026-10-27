@@ -1,0 +1,346 @@
+<!doctype html>
+<!-- Design board: the order of iOS Settings' list (SettingsHome.swift, drawn by SettingsSheet.swift). Every phone is
+     drawn, not captured: 393 × 852 pt, the list's own rows, glyphs and words, colours sampled off the owner's
+     2026-10-27 TestFlight screenshot; sample account (Alex, alex@example.com). Each phone is the whole list top to
+     bottom; the dashed line is where one screen ends, and every pt in the notes is measured off the drawn layout.
+     Not shipped code. Render: render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>iOS Settings · order</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="../cursor-engine/board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<style>
+  .m-sheet { width: 2010px; }
+  .b-row { display: flex; gap: 30px; align-items: flex-start; }
+  .b-phones { display: flex; gap: 26px; align-items: flex-start; flex: none; }
+  .b-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .b-side .m-notes { margin: 0; }
+  .b-side h4 { margin: 0; font-size: 13.5px; color: var(--text-1); display: flex; align-items: center; gap: 8px; }
+  .b-cap { font-size: 12.5px; line-height: 1.75; color: var(--text-2); margin: 0; max-width: 420px; }
+  .b-cap b { color: var(--text-1); }
+  .m-notes li > span:last-child { line-height: 1.75; }
+  .b-num { font-variant-numeric: tabular-nums; }
+  .b-order { display: grid; grid-template-columns: 118px repeat(4, minmax(0, 1fr)); gap: 0; font-size: 12.5px; border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
+  .b-order > div { padding: 7px 10px; border-top: 1px solid var(--border-subtle); line-height: 1.6; }
+  .b-order > .h { background: var(--fill-muted); font-weight: 600; color: var(--text-1); border-top: 0; }
+  .b-order > .k { color: var(--text-2); font-weight: 600; }
+  .b-order .mm { color: #b35a00; font-weight: 600; }
+  .b-plan { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.8; color: var(--text-2); }
+  .b-plan li + li { margin-top: 8px; }
+  .b-plan b { color: var(--text-1); }
+  .b-plan code, .b-cap code { font: 11.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 0 4px; border-radius: 4px; background: var(--fill-muted); color: var(--text-1); }
+
+  /* the Settings sheet's list as SettingsSheet.swift draws it (inset-grouped Form, iOS 26) */
+  .ph.b-top .ph-nav { background: transparent; box-shadow: none; }
+  .sx-me { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 6px 0 2px; }
+  .sx-av { position: relative; width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+           background: linear-gradient(160deg, #9aa6bb, #6f7b91); color: #fff; font-size: 34px; font-weight: 500; }
+  .sx-av .pen { position: absolute; right: -5px; bottom: -3px; width: 30px; height: 30px; border-radius: 50%; background: #e5e5ea;
+                box-shadow: 0 0 0 2px #f2f2f6; display: flex; align-items: center; justify-content: center; color: #000; }
+  .sx-av .pen svg { width: 15px; height: 15px; }
+  .sx-nm { font-size: 17px; line-height: 22px; font-weight: 600; }
+  .sx-h { padding: 27px 36px 10px; font-size: 17px; line-height: 22px; font-weight: 600; color: #bbbbc0; }
+  .sx-f + .sx-h { padding-top: 15px; }
+  .sx-gap { height: 36px; }
+  .sx-f + .sx-gap { height: 24px; }
+  .sx-f { padding: 7px 36px 0; font-size: 13px; line-height: 17px; color: #85858a; }
+  .sx-card { margin: 0 16px; background: #fff; border-radius: 26px; overflow: hidden; }
+  .sx-r { position: relative; display: flex; align-items: center; min-height: 52px; padding: 0 18px 0 20px; box-sizing: border-box; }
+  .sx-r.tall { padding-top: 14px; padding-bottom: 14px; }
+  .sx-r + .sx-r::before { content: ''; position: absolute; top: 0; left: 60px; right: 20px; height: .5px; background: #dedee1; }
+  .sx-r.bare + .sx-r.bare::before { left: 20px; }
+  .sx-ic { flex: none; width: 24px; height: 24px; margin-right: 16px; color: #000; display: flex; align-items: center; justify-content: center; }
+  .sx-ic svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .sx-ic.red { color: #ff3b30; }
+  .sx-m { flex: 1; min-width: 0; }
+  .sx-t { font-size: 17px; line-height: 22px; color: #000; }
+  .sx-r.red .sx-t { color: #ff3b30; }
+  .sx-s { margin-top: 2px; font-size: 15px; line-height: 20px; color: #7f7f7f; }
+  .sx-v { flex: none; margin-left: 10px; font-size: 17px; line-height: 22px; color: #8a8a8d; }
+  .sx-v.amber { color: #b35a00; }
+  .sx-ch { flex: none; width: 9px; height: 15px; margin-left: 10px; fill: none; stroke: #c5c5c7; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+  .sx-ud { flex: none; width: 10px; height: 16px; margin-left: 7px; fill: none; stroke: #8a8a8d; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .sx-tg { flex: none; position: relative; width: 62px; height: 28px; margin-left: 9px; border-radius: 14px; background: #e9e9eb; }
+  .sx-tg::after { content: ''; position: absolute; top: 2px; left: 2px; width: 37px; height: 24px; border-radius: 12px; background: #fff;
+                  box-shadow: 0 1px 3px rgba(0, 0, 0, .18), 0 0 0 .5px rgba(0, 0, 0, .04); }
+  .sx-tg.on { background: #65c466; }
+  .sx-tg.on::after { left: auto; right: 2px; }
+  .sx-ver { padding: 19px 0 0; text-align: center; font-size: 13px; line-height: 17px; color: #85858a; }
+
+  /* board marks over the phones */
+  .ring.b-now { border-color: #8b93a1; }
+  .mk-n.b-now { background: #6b7280; }
+  .b-fold { position: absolute; left: 0; right: 0; height: 0; border-top: 2px dashed #e5484d; z-index: 8; }
+  .b-below { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, .07); z-index: 7; pointer-events: none; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">iOS 设置重排：要你的、常用的放上面，设一次的收进一页</h1>
+  <p class="m-sub zh" id="sub"></p>
+
+  <div class="m-stage" id="part-1">
+    <div class="m-stage-l zh">① 今天 → 建议（每台手机画的是整张列表，从上到下；红虚线是一屏的底，打开设置不滑动只看得到线上面）</div>
+    <div class="b-row">
+      <div class="b-phones" id="p1"></div>
+      <div class="b-side" id="s1"></div>
+    </div>
+  </div>
+
+  <div class="m-stage" id="part-2">
+    <div class="m-stage-l zh">② 另外两种做法（对应 ③ 里的 1B、2B）</div>
+    <div class="b-row">
+      <div class="b-phones" id="p2"></div>
+      <div class="b-side" id="s2"></div>
+    </div>
+  </div>
+
+  <div class="m-stage" id="part-3">
+    <div class="m-stage-l zh">③ 待定 · 要你拍板</div>
+    <div id="asks"></div>
+  </div>
+
+  <div class="m-stage" id="part-4">
+    <div class="m-stage-l zh">④ 落地（按代价排）和不变的</div>
+    <div class="cols2" id="plan"></div>
+  </div>
+</section>
+<script>
+/* ── the list's pieces, in SettingsHome's words and SF Symbols (drawn as line glyphs) ── */
+const GL = {
+  hand: '<path d="M8.2 12.6V6.4a1.3 1.3 0 0 1 2.6 0v5.2M10.8 11.4V4.6a1.3 1.3 0 0 1 2.6 0v6.8M13.4 11.4V5.6a1.3 1.3 0 0 1 2.6 0v6.2M16 12.2V8.4a1.3 1.3 0 0 1 2.6 0v5.4c0 4-2.7 6.9-6.4 6.9-2.5 0-4.1-1.1-5.4-3.1l-2.4-3.8a1.4 1.4 0 0 1 2.3-1.6l1.5 1.9"/>',
+  orch: '<circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="18.6" r="2.2"/><circle cx="19" cy="18.6" r="2.2"/><path d="M10.9 7.1 6.1 16.5M13.1 7.1l4.8 9.4M7.4 18.6h9.2" stroke-dasharray="1.3 2.3"/>',
+  sparkles: '<path d="M10 3.6c.6 3.7 2.5 5.6 6.1 6.2-3.6.6-5.5 2.6-6.1 6.3-.6-3.7-2.5-5.7-6.1-6.3 3.6-.6 5.5-2.5 6.1-6.2z" fill="currentColor" stroke="none"/><path d="M18 13.6c.3 1.6 1 2.4 2.6 2.7-1.6.3-2.3 1.1-2.6 2.7-.3-1.6-1-2.4-2.6-2.7 1.6-.3 2.3-1.1 2.6-2.7zM18.3 2.6c.2 1.1.7 1.6 1.8 1.8-1.1.2-1.6.7-1.8 1.8-.2-1.1-.7-1.6-1.8-1.8 1.1-.2 1.6-.7 1.8-1.8z" fill="currentColor" stroke="none"/>',
+  bubble: '<path d="M5 4.5h14a2 2 0 0 1 2 2v8.4a2 2 0 0 1-2 2h-8.2L6.6 20v-3.1H5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2z"/><path d="M7 8.6h10M7 12.2h7"/>',
+  align: '<path d="M3.5 5.5h17M3.5 10h12M3.5 14.5h17M3.5 19h12"/>',
+  desktop: '<rect x="2.2" y="3.4" width="19.6" height="13.6" rx="1.8" fill="currentColor" stroke="none"/><rect x="3.6" y="4.8" width="16.8" height="9.2" rx=".5" fill="#fff" stroke="none" opacity=".16"/><path d="M8.6 20.6h6.8M12 17v3.6"/>',
+  bell: '<path d="M12 3.4A5.6 5.6 0 0 0 6.4 9v3.7l-1.7 3c-.4.7.1 1.4.8 1.4h13c.7 0 1.2-.7.8-1.4l-1.7-3V9A5.6 5.6 0 0 0 12 3.4z"/><path d="M9.7 19.6a2.4 2.4 0 0 0 4.6 0"/>',
+  half: '<circle cx="12" cy="12" r="8.6"/><path d="M12 3.4a8.6 8.6 0 0 0 0 17.2z" fill="currentColor"/>',
+  mail: '<rect x="2.8" y="5.2" width="18.4" height="13.6" rx="2.2"/><path d="m3.7 6.5 8.3 6.5 8.3-6.5"/>',
+  globe: '<circle cx="12" cy="12" r="8.6"/><path d="M3.4 12h17.2M12 3.4c2.4 2.3 3.6 5.2 3.6 8.6s-1.2 6.3-3.6 8.6M12 3.4C9.6 5.7 8.4 8.6 8.4 12s1.2 6.3 3.6 8.6"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2"/>',
+  key: '<circle cx="7.2" cy="12" r="3.9"/><path d="M11.1 12h9.6l-1.9 2.2M16.8 12v2.6"/>',
+  lock: '<path d="M20.2 12a8.2 8.2 0 1 1-2.4-5.8"/><path d="M18.2 3v3.6h-3.6"/><rect x="9" y="11.2" width="6" height="5" rx="1"/><path d="M10.2 11.2V9.8a1.8 1.8 0 0 1 3.6 0v1.4"/>',
+  out: '<path d="M14 4.4H7.2a2 2 0 0 0-2 2v11.2a2 2 0 0 0 2 2H14"/><path d="M10.6 12h10M17.2 8.5 20.7 12l-3.5 3.5"/>',
+  sessions: '<path d="M4.2 3.8h9.6a2 2 0 0 1 2 2v5.1a2 2 0 0 1-2 2H8.6l-3.4 2.8v-2.8h-1a2 2 0 0 1-2-2V5.8a2 2 0 0 1 2-2z"/><path d="M18.4 8.4h1.4a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-.9v2.8l-3.4-2.8h-4.3a2 2 0 0 1-2-2v-.6"/>',
+  pencil: '<path d="M4 20l1-4.2L15.6 5.2a2 2 0 0 1 2.8 0l.4.4a2 2 0 0 1 0 2.8L8.2 19 4 20z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>',
+};
+const svg = (k) => `<svg viewBox="0 0 24 24">${GL[k]}</svg>`;
+const CHEV = '<svg class="sx-ch" viewBox="0 0 9 15"><path d="M1.4 1.2 7.4 7.5l-6 6.3"/></svg>';
+const UPDN = '<svg class="sx-ud" viewBox="0 0 10 16"><path d="M1.6 6 5 2.6 8.4 6M1.6 10 5 13.4 8.4 10"/></svg>';
+
+/* The words: SettingsCopy's (and the web Settings page's, byte for byte); Default permission's is the web's hint. */
+const C = {
+  perm: 'The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in.',
+  orch: 'Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused.',
+  smart: "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before.",
+  replies: "When a Claude turn ends, the empty message box offers what you'd probably type next. Each suggestion is one more request on that session's Claude account.",
+  recaps: 'Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply, and the conversation ends with it. Off: the raw last reply, and no summary in the conversation.',
+  mm: 'Where your agents run, and whose model quota they spend.',
+};
+
+/** A row: {g glyph, t title, s hint under it, v value, amber, nav chevron, pick menu, tg switch, red, id}. */
+function row(r) {
+  const trail = (r.v ? `<span class="sx-v${r.amber ? ' amber' : ''}">${r.v}</span>` : '') + (r.pick ? UPDN : '') + (r.nav ? CHEV : '')
+    + (r.tg === undefined ? '' : `<span class="sx-tg${r.tg ? ' on' : ''}"></span>`);
+  return `<div class="sx-r${r.g ? '' : ' bare'}${r.s ? ' tall' : ''}${r.red ? ' red' : ''}"${r.id ? ` id="${r.id}"` : ''}>`
+    + (r.g ? `<span class="sx-ic${r.red ? ' red' : ''}">${svg(r.g)}</span>` : '')
+    + `<div class="sx-m"><div class="sx-t">${r.t}</div>${r.s ? `<div class="sx-s">${r.s}</div>` : ''}</div>${trail}</div>`;
+}
+const card = (rows, id) => `<div class="sx-card"${id ? ` id="${id}"` : ''}>${rows.join('')}</div>`;
+const head = (t) => `<div class="sx-h">${t}</div>`;
+const gap = '<div class="sx-gap"></div>';
+const foot = (t, id) => `<div class="sx-f"${id ? ` id="${id}"` : ''}>${t}</div>`;
+
+const me = (p) => `<div class="sx-me" id="${p}-me"><div class="sx-av">A<span class="pen">${svg('pencil')}</span></div><div class="sx-nm">Alex</div></div>`;
+const sessionsInline = (p) => head('Sessions') + card([
+  row({ g: 'hand', t: 'Default permission', v: 'Auto', pick: true }),
+  row({ g: 'orch', t: 'Session orchestration', tg: true }),
+  row({ g: 'sparkles', t: 'Smart model selection', s: C.smart, tg: false }),
+  row({ g: 'bubble', t: 'Suggested replies', s: C.replies, tg: true }),
+  row({ g: 'align', t: 'Session recaps', s: C.recaps, tg: true }),
+], `${p}-sessions`);
+const machines = (p) => gap + card([row({ g: 'desktop', t: 'Machines &amp; models', v: '4 need you', amber: true, nav: true })], `${p}-mm`) + foot(C.mm);
+const prefs = (p, withSessions) => head('Preferences') + card([
+  ...(withSessions ? [row({ g: 'sessions', t: 'Sessions', nav: true, id: `${p}-srow` })] : []),
+  row({ g: 'bell', t: 'Notifications', v: 'On', nav: true }),
+  row({ g: 'half', t: 'Appearance', v: 'System', pick: true }),
+], `${p}-prefs`);
+const account = (p) => head('Account') + card([
+  row({ g: 'mail', t: 'Email', v: 'alex@example.com', id: `${p}-email` }),
+  row({ g: 'globe', t: 'Instance', v: 'orbitd.io' }),
+  row({ g: 'link', t: 'Shared links', v: '25 active', nav: true }),
+  row({ g: 'key', t: 'Access tokens', v: '3 active', nav: true }),
+  row({ g: 'lock', t: 'Change password', nav: true }),
+], `${p}-account`);
+const signOut = (p) => gap + card([row({ g: 'out', t: 'Sign out', red: true })], `${p}-out`) + `<div class="sx-ver" id="${p}-end">Orbit 0.1.2 (3581)</div>`;
+
+/* The Sessions page the new row opens: one switch a section, its words the footer — NotificationSettingsPage's shape. */
+const sessionsPage = gap + card([row({ t: 'Default permission', v: 'Auto', pick: true })], 'pg-perm') + foot(C.perm, 'pg-perm-f')
+  + gap + card([row({ t: 'Session orchestration', tg: true })], 'pg-orch') + foot(C.orch, 'pg-orch-f')
+  + gap + card([row({ t: 'Smart model selection', tg: false })]) + foot(C.smart)
+  + gap + card([row({ t: 'Suggested replies', tg: true })]) + foot(C.replies)
+  + gap + card([row({ t: 'Session recaps', tg: true })], 'pg-recaps') + foot(C.recaps);
+
+const LISTS = {
+  today: me('today') + sessionsInline('today') + machines('today') + prefs('today', false) + account('today') + signOut('today'),
+  rec: me('rec') + machines('rec') + prefs('rec', true) + account('rec') + signOut('rec'),
+  acct: me('acct') + account('acct') + machines('acct') + prefs('acct', true) + signOut('acct'),
+  keep: me('keep') + machines('keep') + prefs('keep', false) + sessionsInline('keep') + account('keep') + signOut('keep'),
+};
+
+/** A phone as tall as the whole list; the fold at 852 pt is where the screen ends. */
+function strip(id, body, opts = {}) {
+  return sheetPhone({ title: opts.title || '', back: !!opts.back, body, height: 2600, id }).replace('class="ph"', `class="ph tall${opts.title ? '' : ' b-top'}"`);
+}
+const frame = (kind, label, html) => `<div class="frame"><div class="lbl zh"><span class="m-k${kind === '今天' ? '' : ' new'}">${kind}</span>${label}</div>${html}</div>`;
+
+document.getElementById('p1').innerHTML =
+  frame('今天', 'Sessions → Machines &amp; models → Preferences → Account', strip('ph-today', LISTS.today)) +
+  frame('建议', 'Machines &amp; models → Preferences → Account', strip('ph-rec', LISTS.rec)) +
+  frame('建议', '点 Sessions 进去', strip('ph-page', sessionsPage, { title: 'Sessions', back: true }));
+document.getElementById('p2').innerHTML =
+  frame('1B', '账户紧跟头像（Sessions 仍收成一行）', strip('ph-acct', LISTS.acct)) +
+  frame('2B', '五项留在列表上，只挪位置', strip('ph-keep', LISTS.keep));
+
+/* ── measure every phone, then size it, draw its fold and its marks ── */
+const SCREEN = 852;
+const M = {};
+const y0 = (ph, sel) => Math.round(at(ph, sel).y);
+const y1 = (ph, sel) => { const r = at(ph, sel); return Math.round(r.y + r.h); };
+for (const ph of document.querySelectorAll('.ph.tall')) {
+  // `end`: where the list's last line ends, from the top of the screen.
+  const end = y1(ph, ph.querySelector('.ph-scroll').lastElementChild);
+  ph.style.height = `${end > SCREEN ? end + 30 : SCREEN}px`;
+  if (end > SCREEN) ph.insertAdjacentHTML('beforeend', `<div class="b-below" style="top:${SCREEN}px"></div><div class="b-fold" style="top:${SCREEN}px"></div>`);
+  M[ph.id] = { total: end };
+}
+const t = document.getElementById('ph-today'), r = document.getElementById('ph-rec'), pg = document.getElementById('ph-page');
+const a = document.getElementById('ph-acct'), k = document.getElementById('ph-keep');
+Object.assign(M['ph-today'], { sessH: Math.round(at(t, '#today-sessions').h), sess1: y1(t, '#today-sessions'), mm: y0(t, '#today-mm'), prefs: y0(t, '#today-prefs'), email: y0(t, '#today-email'), out: y0(t, '#today-out') });
+Object.assign(M['ph-rec'], { mm: y0(r, '#rec-mm'), mm1: y1(r, '#rec-mm'), prefs: y0(r, '#rec-prefs'), email: y0(r, '#rec-email'), out: y0(r, '#rec-out') });
+Object.assign(M['ph-page'], { end: y1(pg, '.sx-f:last-child') });
+Object.assign(M['ph-acct'], { mm: y0(a, '#acct-mm'), prefs: y0(a, '#acct-prefs'), out: y0(a, '#acct-out') });
+Object.assign(M['ph-keep'], { mm: y0(k, '#keep-mm'), sess: y0(k, '#keep-sessions'), email: y0(k, '#keep-email'), out: y0(k, '#keep-out') });
+const accRows = (ph, p) => [...ph.querySelectorAll(`#${p}-account .sx-r`)].filter((el) => at(ph, el).y + at(ph, el).h <= SCREEN).length;
+M['ph-rec'].accOnScreen = accRows(r, 'rec');
+// The three hints' lines on this 393 pt phone (20 pt a line).
+const hintLines = [...t.querySelectorAll('#today-sessions .sx-s')].map((el) => Math.round(el.getBoundingClientRect().height / 20));
+const USABLE = SCREEN - 59 - 70;   // what one screen holds under the status bar and the sheet's bar
+
+/** A dashed ring round one element, or round several as one box, with its letter or number. */
+function mark(ph, sels, n, { pad = 4, grey = false } = {}) {
+  const rs = [].concat(sels).map((s) => at(ph, s));
+  // A footer's box is the phone's full width: hold the ring to the cards' 16 pt margins.
+  const x = Math.max(16, Math.min(...rs.map((q) => q.x))), y = Math.min(...rs.map((q) => q.y));
+  const b = { x, y, w: Math.min(377, Math.max(...rs.map((q) => q.x + q.w))) - x, h: Math.max(...rs.map((q) => q.y + q.h)) - y };
+  ph.insertAdjacentHTML('beforeend', `<span class="ring${grey ? ' b-now' : ''}" style="left:${b.x - pad}px;top:${b.y - pad}px;width:${b.w + 2 * pad}px;height:${b.h + 2 * pad}px"></span>`
+    + `<span class="mk-n${grey ? ' b-now' : ''}" style="left:${b.x + b.w + pad - 13}px;top:${b.y - pad - 11}px">${n}</span>`);
+}
+mark(t, '#today-sessions', 'A', { grey: true, pad: 3 });
+mark(t, '#today-mm', 'B', { grey: true });
+mark(t, '#today-prefs', 'C', { grey: true });
+mark(t, '#today-email', 'D', { grey: true });
+mark(r, '#rec-mm', 1);
+mark(r, '#rec-srow', 2);
+mark(r, '#rec-account', 3);
+mark(pg, ['#pg-orch', '#pg-orch-f'], 4);
+mark(pg, '#pg-perm-f', 5);
+
+/* ── words, with the numbers just measured ── */
+const n = (v) => `<b class="b-num">${v.toLocaleString('en-US')}</b>`;
+const T = M['ph-today'], R = M['ph-rec'], P = M['ph-page'], A = M['ph-acct'], K = M['ph-keep'];
+
+document.getElementById('sub').innerHTML = `今天设置从上到下是 <b>Sessions → Machines &amp; models → Preferences → Account</b>。Sessions 原先只有两行（Default permission、Session orchestration），后来加的 Smart model selection、Suggested replies、Session recaps 每行都带一段说明（这台 393 宽的手机上 ${Math.min(...hintLines)}–${Math.max(...hintLines)} 行，你的 Pro Max 上 5–6 行），这一组现在 ${n(T.sessH)} pt 高，打开设置第一屏几乎全是它；列表上唯一会说「要你」的那一行（Machines &amp; models · 4 need you）被压到第一屏外，Notifications、Appearance 要滑一屏，Email 在 ${n(T.email)} pt。<b>建议</b>：Machines &amp; models 提到头像下面；Sessions 五项收成 Preferences 里的一行，点进去一页（和 Notifications 页一个样子）；Account、Sign out 顺次往下。改后列表到底从 ${n(T.total)} pt 变成 ${n(R.total)} pt，第一屏看得到 Machines &amp; models、Preferences 三行和 Account 的前 ${R.accOnScreen} 行。<br>手机是按 <code>SettingsHome.swift</code> / <code>SettingsSheet.swift</code> 的结构画的（393×852，不是截图），颜色取自你 10-27 的截图，账户是示例数据；pt 都从屏幕顶量，量的是画出来的框。画法和你的截图对过：按 Pro Max 的 440 宽重排，Suggested replies、Session recaps 两行画出来 152、172 pt，截图里是 150、171 pt。灰字母标今天的问题，橙数字标改动，要你定的在 ③。`;
+
+document.getElementById('s1').innerHTML = `
+  <h4 class="zh"><span class="m-k">今天</span>为什么顺序不对</h4>
+  ${notes([
+    ['A', `<b>Sessions 一组 ${n(T.sessH)} pt</b>：一屏扣掉状态栏和顶栏只剩 ${n(USABLE)} pt 放内容，它一组占了 ${Math.round(T.sessH / USABLE * 100)}%，底边在 ${n(T.sess1)} pt，落到第一屏外。设置的根列表本该是目录——一行一个名字和它现在的值，解释在点进去的页上（<code>SettingsHome</code> 自己的注释就这么写）；这三段说明是三个功能各加一段，累起来的。`],
+    ['B', `<b>Machines &amp; models 在 ${n(T.mm)} pt</b>：列表上唯一会说「要你」的一行（引擎掉了登录、机器离线、账号池起不了会话），也是最常点进去的一行，打开设置看不到。你的 Pro Max（440×956）上它在 917–969 pt，下半截出了屏幕底边。`],
+    ['C', `<b>Notifications、Appearance 从 ${n(T.prefs)} pt 开始</b>，要滑过五个会话开关才到。`],
+    ['D', `<b>Email 在 ${n(T.email)} pt、Sign out 在 ${n(T.out)} pt</b>：账户的几行离头像两屏远。`],
+  ])}
+  <h4 class="zh"><span class="m-k new">建议</span>改了什么</h4>
+  ${notes([
+    [1, `<b>Machines &amp; models 提到头像下面</b>（${n(R.mm)}–${n(R.mm1)} pt）：要你处理的打开就看见。行、值、下面那句说明都不变；这台设备关着通知时，「Notifications are off」那张卡仍在头像和它之间。`],
+    [2, `<b>Sessions 五项收成一行</b>，放在 Preferences 第一行，点进去是右边那页。Preferences 三行——Sessions、Notifications、Appearance——存的都是账户的 preferences，组标题照旧。`],
+    [3, `<b>Account、Sign out 顺序不变</b>，只是往上挪了：Account 从 ${n(R.email)} pt 开始（今天 ${n(T.email)}），Sign out 在 ${n(R.out)} pt（今天 ${n(T.out)}）。`],
+    [4, `<b>Sessions 页：一个开关一段，说明放段脚</b>，和 Notifications 页里那两个开关同一个样子，不新造外观。说明文字一字不改，仍是 web 设置页的原话。整页到 ${n(P.end)} pt，一屏放得下。`],
+    [5, `<b>Default permission 补上说明</b>：用 web 设置页那句（手机今天没有）。五段都有段脚，第一项不空着。`],
+  ])}
+  <p class="b-cap zh">排序的道理和 iOS 自己的设置一样：头像那一块就是账户卡；紧跟着的是要你处理的（像「软件更新可用」）；再往下是常改的；设一次的收进下一层；账户的细项和退出在底。</p>`;
+
+document.getElementById('s2').innerHTML = `
+  ${notes([
+    ['·', `<b>1B 账户紧跟头像</b>：头像 → Account → Machines &amp; models → Preferences → Sign out。ChatGPT 的设置页、Mac 的设置窗口都是账户在前。Sessions 收成一行之后 Machines &amp; models 仍在第一屏（${n(A.mm)} pt），但第一屏最好的位置给了很少点的 Shared links、Access tokens、Change password，Preferences 从 ${n(A.prefs)} pt 开始。`],
+    ['·', `<b>2B 五项留在列表上，只挪位置</b>：Machines &amp; models → Preferences → Sessions → Account。不多一层，第一屏是 Machines &amp; models 和 Preferences；可列表仍到 ${n(K.total)} pt，三段说明从 ${n(K.sess)} pt 往下铺，Email 仍在 ${n(K.email)} pt、Sign out 仍在 ${n(K.out)} pt，和今天一样远。`],
+  ])}
+  <div class="b-order zh">
+    <div class="h">顺序</div><div class="h">今天</div><div class="h">建议（1A + 2A）</div><div class="h">1B</div><div class="h">2B</div>
+    <div class="k">头像下第一组</div><div>Sessions（五行，三段说明）</div><div class="mm">Machines &amp; models</div><div>Account</div><div class="mm">Machines &amp; models</div>
+    <div class="k">第二组</div><div class="mm">Machines &amp; models</div><div>Preferences：Sessions ›、Notifications、Appearance</div><div class="mm">Machines &amp; models</div><div>Preferences：Notifications、Appearance</div>
+    <div class="k">第三组</div><div>Preferences</div><div>Account</div><div>Preferences：Sessions ›、…</div><div>Sessions（五行，三段说明）</div>
+    <div class="k">第四组</div><div>Account</div><div>—</div><div>—</div><div>Account</div>
+    <div class="k">列表到底</div><div>${n(T.total)} pt</div><div>${n(R.total)} pt</div><div>${n(A.total)} pt</div><div>${n(K.total)} pt</div>
+    <div class="k">Machines &amp; models</div><div>${n(T.mm)} pt（屏外）</div><div>${n(R.mm)} pt</div><div>${n(A.mm)} pt</div><div>${n(K.mm)} pt</div>
+  </div>`;
+
+document.getElementById('asks').innerHTML = `
+  <div class="ask zh">
+    <h4><span class="tbd">1</span>顺序</h4>
+    <div class="ab">
+      <div class="ab-opt rec"><h5><span class="ab-k">A</span>要你的在上：Machines &amp; models → Preferences → Account → Sign out</h5>
+        <div class="ab-sub">打开设置先看到要处理的那一行，常改的紧跟着，账户的细项（邮箱、服务器、令牌、改密码）和退出在底。iOS 自己的设置也是这个思路：账户卡（这里是头像）在顶，紧跟着要你处理的事。</div></div>
+      <div class="ab-opt"><h5><span class="ab-k">B</span>账户紧跟头像：Account → Machines &amp; models → Preferences → Sign out</h5>
+        <div class="ab-sub">ChatGPT 的设置页和 Mac 的设置窗口是这个顺序。代价：第一屏最显眼的五行是很少点的；Machines &amp; models 降到 ${n(A.mm)} pt。</div></div>
+    </div>
+  </div>
+  <div class="ask zh">
+    <h4><span class="tbd">2</span>Sessions 的五项</h4>
+    <div class="ab">
+      <div class="ab-opt rec"><h5><span class="ab-k">A</span>收成一行，点进去一页</h5>
+        <div class="ab-sub">根列表回到「一行一个名字和值」，列表到底从 ${n(T.total)} pt 变成 ${n(R.total)} pt。代价：改这五项要多点一下——它们都是设一次的。Sessions 页的样子照 Notifications 页，说明作段脚。</div></div>
+      <div class="ab-opt"><h5><span class="ab-k">B</span>留在列表上，挪到 Preferences 下面</h5>
+        <div class="ab-sub">不多一层，代价最小（只改顺序）。列表仍到 ${n(K.total)} pt，Account 和 Sign out 仍在两屏外。</div></div>
+    </div>
+  </div>
+  <div class="ask zh">
+    <h4><span class="tbd">3</span>范围</h4>
+    <div class="ab">
+      <div class="ab-opt rec"><h5><span class="ab-k">A</span>iPhone / iPad 和 Android 一起改</h5>
+        <div class="ab-sub">两个手机端的设置是同一张列表：Android 的 <code>SettingsScreen.kt</code> 一直照 iOS 的 <code>SettingsHome</code> 排，组标题都一样。web 设置页和 Mac 设置窗口是宽屏表单，说明都铺开着，不动；web 里写着「和 iOS 同一个顺序」的那句注释改掉。</div></div>
+      <div class="ab-opt"><h5><span class="ab-k">B</span>只改 iOS</h5>
+        <div class="ab-sub">Android 先保持今天的顺序，两个手机端暂时不一样。</div></div>
+    </div>
+  </div>`;
+
+document.getElementById('plan').innerHTML = `
+  <div>
+    <h4 class="zh" style="margin:0 0 8px;font-size:13.5px">落地（按代价排）</h4>
+    <ol class="b-plan zh">
+      <li><b>只改顺序（1A 或 1B）</b>：<code>SettingsHome.Group</code> 的 case 顺序——视图按 <code>Group.allCases</code> 画，改这一处列表就跟着变；<code>SettingsHomeTests</code> 里「组的顺序」那条断言跟着改；Android 挪 <code>SettingsScreen.kt</code> 里的几个 <code>SettingsGroup</code>。</li>
+      <li><b>Sessions 收成一页（2A）</b>：<code>SettingsHome.Row</code> 加 <code>.sessions</code>（Preferences 第一行），<code>SettingsPage</code> 加 <code>.sessions</code>（标题和行同名）；新 <code>SessionSettingsPage</code>：五个 Section、说明作段脚，照 <code>NotificationSettingsPage</code> 写，五个开关的读写原样搬过去；<code>SettingsCopy</code> 加 Default permission 的说明（web 原话，<code>SettingsCopyParityTests</code> 从 <code>SettingsPage.tsx</code> 读回来比对）；<code>SettingsHomeTests</code>、<code>SettingsStackWiringTests</code> 跟着改。Android 同样加一页。</li>
+      <li><b>真机截图验收</b>：probe 分支在 GitHub 的 macos-26 上用 XCUITest 拍设置页和 Sessions 页（一轮约 20 分钟），Android 在模拟器上拍，和这张板子对照。</li>
+    </ol>
+  </div>
+  <div>
+    <h4 class="zh" style="margin:0 0 8px;font-size:13.5px">不变的</h4>
+    <ul class="b-plan zh">
+      <li>头像和名字（点开改资料），「Notifications are off」卡仍在最上。</li>
+      <li>每一行的名字、图标、值，每个页面本身；五个开关存在哪、默认开还是关，都不变。</li>
+      <li>Sign out 的确认、版本号；iPad 上是同一个 sheet，跟着变。</li>
+      <li>Admin 行（管理员才有）仍是 Account 最后一行，图里没画。</li>
+    </ul>
+  </div>`;
+
+finish();
+</script>
+</body>
+</html>
