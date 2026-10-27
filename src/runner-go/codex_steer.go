@@ -353,6 +353,14 @@ type codexSteerDispatcher struct {
 	active       **codexAppActiveTurn
 	emitFor      emitTurnFn
 	completeTurn turnCompleter
+	// fileWritten is how deliver files `written` once it has recorded that Codex took a message
+	// (fileWrittenReport): the seam a test holds that announcement at, behind the echo's.
+	fileWritten func(turnID string, file func())
+
+	// announcing makes announcements one at a time, and filed is how far each steer's have gone
+	// (deliveryProgress), for the life of this generation: see announce.
+	announcing sync.Mutex
+	filed      map[string]int
 }
 
 // deliver writes one message into the running turn. Everything it can do ends in an answer for
@@ -400,7 +408,7 @@ func (d *codexSteerDispatcher) deliver(ctx context.Context, resp *RunInboxRespon
 	if markCodexSteerWritten(d.activeMu, d.active, resp.TurnID) {
 		// Codex has it; the model has not seen it yet. That gap has been measured at 31 seconds,
 		// and "Delivering…" for that long is the truth, not a stall (§4.6).
-		d.announce(resp.TurnID, deliveryWritten, "", false)
+		d.fileWritten(resp.TurnID, func() { d.announce(resp.TurnID, deliveryWritten, "", false) })
 	}
 }
 
@@ -494,9 +502,28 @@ func (d *codexSteerDispatcher) fail(turnID string, cause error) {
 // to it was observed (§3) — so which of them opens the bubble is a race, and only that the bubble
 // is opened exactly once is not.
 //
+// Which of them is heard first is the same race. Each records its state under activeMu and
+// announces it once that lock is gone, so a worker set aside in between would announce `written`
+// after the echo's `acknowledged`, or after a turn ending had reported the message `failed`, and
+// clients apply a turn's reports in order, the last one standing. So announcements are made one at
+// a time, the bubble with the first of them, and one that would move its steer backwards is not
+// made at all: the rule a Claude process's reports keep (orderedDeliveryReports). What each state
+// means, and when it is reached, is unchanged; this decides only what the stream hears, and in
+// which order. The bubble opens with the first state filed, and nothing filed after it is older.
+//
 // The state is passed in rather than read off the record: what a report must say is the
 // transition it belongs to, not whatever the record holds by the time the event is built.
 func (d *codexSteerDispatcher) announce(turnID string, state deliveryState, reason string, retryable bool) {
+	d.announcing.Lock()
+	defer d.announcing.Unlock()
+	if at, ok := d.filed[turnID]; ok && deliveryProgress(state) <= at {
+		return // late: this steer has already been announced as far as this, or further
+	}
+	if d.filed == nil {
+		d.filed = map[string]int{}
+	}
+	d.filed[turnID] = deliveryProgress(state)
+
 	d.activeMu.Lock()
 	rec := codexSteerRecord(*d.active, turnID)
 	opening := rec != nil && !rec.announced

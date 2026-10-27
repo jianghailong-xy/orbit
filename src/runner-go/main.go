@@ -70,6 +70,7 @@ Usage:
   orbit project <command>           Manage an Orbit project's durable context
   orbit session <command>           Orchestrate agent sessions (when enabled)
   orbit agent <command>             Inspect and configure agents (when enabled)
+  orbit runner <command>            List this account's runners, for an agent's --runner-id (when enabled)
   orbit provider <command>          List and configure the providers sessions and tasks get credentials from
   orbit watch <command>             Wait on Orbit tasks and sessions without polling
   orbit wiki <command>              Read the Orbit wiki and propose to it
@@ -203,6 +204,7 @@ running it when the machine is idle. Disable the periodic check with ORBIT_NO_EN
 	"project":   projectHelp,
 	"session":   sessionHelp,
 	"agent":     agentHelp,
+	"runner":    runnerHelp,
 	"provider":  providerHelp,
 	"notify":    notifyHelp,
 	"watch":     watchHelp,
@@ -267,7 +269,8 @@ var leafHelpFamilies = map[string]bool{
 	"provider":  true,
 	// `agent` has had per-action help since it shipped and has never been able to print it —
 	// same omission, found while checking that provider's was reachable.
-	"agent": true,
+	"agent":  true,
+	"runner": true,
 }
 
 func ownsLeafHelp(cmd string) bool { return leafHelpFamilies[cmd] }
@@ -355,6 +358,11 @@ func main() {
 	case "agent":
 		if err := cmdAgentCLI(args[1:], os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "orbit agent:", err)
+			os.Exit(1)
+		}
+	case "runner":
+		if err := cmdRunnerCLI(args[1:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit runner:", err)
 			os.Exit(1)
 		}
 	case "provider":
