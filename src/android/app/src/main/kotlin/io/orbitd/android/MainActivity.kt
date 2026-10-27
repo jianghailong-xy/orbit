@@ -33,6 +33,7 @@ import io.orbitd.android.auth.openInSignInBrowser
 import io.orbitd.android.core.BuildIdentity
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.reader.LastPageMarks
+import io.orbitd.android.reader.ProjectLandingsWindow
 import io.orbitd.android.reader.SessionDestination
 import io.orbitd.android.reader.WorktreeModel
 import io.orbitd.android.toast.OrbitToasts
@@ -303,6 +304,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, ::open, { app.realtime.refreshDirectory() },
                                     revision, watches.summaries)
                                 Destination.PROJECT_SESSIONS -> SessionProjectPage(app, signedIn.handle, route, data, api, revision, ::open)
+                                Destination.LANDINGS -> route.id?.let { project ->
+                                    ProjectLandingsWindow(app, signedIn.handle, route, api, project, route.recordId, ::open)
+                                }
                                 Destination.SEARCH -> SearchScreen(api, ::open)
                                 Destination.SESSION -> SessionDestination(app, signedIn.handle, route, api, data, ::open) {
                                     navigation = navigation.dropSession(route.id!!)
@@ -363,6 +367,7 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.SEARCH -> "Search sessions"
     Destination.DRAFT -> "New session"
     Destination.PROJECT_SESSIONS -> "Project"
+    Destination.LANDINGS -> SessionLandingsCopy.title
     Destination.WIKI, Destination.WIKI_ENTRY -> "Wiki"
     Destination.WIKI_BROWSE -> "Browse"
     Destination.WIKI_INDEX -> "Index"

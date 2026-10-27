@@ -1,4 +1,4 @@
-import { type MergeRecoveryAction, type ProjectPromotionView, type ProjectSidebarTaskCounts } from '@orbit/shared';
+import { type MergeRecoveryAction, type ProjectSidebarTaskCounts } from '@orbit/shared';
 import {
   AppstoreOutlined,
   ArrowDownOutlined,
@@ -148,8 +148,7 @@ import { rememberListFolder } from '../lib/workspaceListFolder';
 import {
   SESSION_LANDINGS_COPY,
   SESSION_PROJECT_COPY,
-  landingGroup,
-  landingItemReason,
+  landingsRowSummary,
   listShowsProjects,
   sessionProjectListing,
   sourceLandingLabel,
@@ -363,15 +362,15 @@ import {
   promotionItem,
   promotionRecordMoment,
 } from './ProjectPromotionCard';
-import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
-import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
-import { isLandingSessionDetail } from '../lib/landingSession';
+import { ProjectMergeStrip } from './ProjectMergeStrip';
+import { isMergeJob } from '../lib/projectMerge';
+import { LANDING_PAGE_COPY, isLandingSessionDetail } from '../lib/landingSession';
 import { Glyph, landingCard } from './ProjectPanoramaHeader';
 import { SessionRecapCard } from './SessionRecapCard';
 import { LandingJobsSheet } from './LandingJobsSheet';
 import { LandingLink } from './LandingLink';
 import { SessionProjectLandings } from './SessionProjectLandings';
-import { LandingSessionView } from './LandingSessionView';
+import { ProjectLandingsWindow } from './ProjectLandingsWindow';
 import { ProjectLandingCard } from './ProjectLandingCard';
 import { ProjectStartDialog } from './StartProjectCard';
 import {
@@ -1045,9 +1044,6 @@ function pushHistory(sessionId: string | undefined, entry: string): void {
 
 // Recent sessions read better as relative time ("3h ago"); anything older than a
 // day falls back to an absolute month/day stamp. hour12:false keeps it compact.
-/** A row of a project's sessions page that is not a session: a merge into main, at its instant. */
-type ProjectPageMerge = { kind: 'merge'; id: string; promotion: ProjectPromotionView };
-
 const fmtTime = (d?: string): string => {
   if (!d) return '';
   const t = new Date(d).getTime();
@@ -2102,6 +2098,10 @@ export function WorkspaceView({
   // it deep-links and survives a refresh; selecting a session = navigation.
   // Decode once here; everything downstream works with the raw session UUID.
   const selectedId = routeId(useMatch('/sessions/:id')?.params.id);
+  // A project's Landings window has an address of its own (owner 2026-10-27): the right pane, beside
+  // whichever list the left one is on. A landing session's own `/sessions/<id>` opens the same window
+  // on that landing.
+  const landingsProjectId = routeId(useMatch('/projects/:id/landings')?.params.id);
   const openProjectId = routeId(searchParams.get('project'));
   const projectView = openProjectId ? (searchParams.get('view') === 'completed' ? 'completed' : 'open') : null;
   // Latest selectedId, readable from async callbacks (loadOlder) to bail if the user has
@@ -2971,7 +2971,7 @@ export function WorkspaceView({
     refetchInterval: (q) => {
       const detail = q.state.data;
       // A landing session polls on its own cadence (§2.7a: RUNNING 4 s, QUEUED 15 s, nothing once
-      // settled), which `LandingSessionView` owns. The conversation's 5 s sweep is not it.
+      // settled), which its card in `ProjectLandingsWindow` owns. The conversation's 5 s sweep is not it.
       if (detail?.id === selectedId && detail.sessionKind === 'LANDING') return false;
       if (
         detail?.id === selectedId &&
@@ -2996,6 +2996,11 @@ export function WorkspaceView({
   // page (contract §2.9 LS1/LS6). The boolean, not the detail object, is what the stream effect
   // depends on — the detail is re-read on the page's own cadence, and the stream must not.
   const landingSession = landingDetail != null;
+  // The project whose Landings window the right pane draws: the window's own route, or the project of
+  // the landing session the route names.
+  const landingsWindowProjectId = landingsProjectId
+    ?? (landingDetail ? landingDetail.landing?.projectId ?? landingDetail.projectMembership?.projectId ?? null : null);
+  const landingPane = landingsProjectId != null || landingDetail != null;
   const selectedFromDetail = useMemo(() => {
     const d = detailForSelected as any;
     // A freshly-created session primes only id/runner/workspace into this cache; keep the
@@ -3284,8 +3289,8 @@ export function WorkspaceView({
     enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
-  // The merges into main this project has made: rows on the page's timeline at their own instant
-  // (owner decision 2026-10-06), each opening its receipt.
+  // The merges into main this project has made: they are rows of its Landings window (owner
+  // 2026-10-27), and the page's Landings row counts today's.
   const pageMergesQ = useQuery({
     ...projectMergedPromotionsQuery(openProjectId ?? ''),
     enabled: Boolean(openProjectId),
@@ -3298,7 +3303,7 @@ export function WorkspaceView({
     (Date.parse(a.lastTurnAt ?? a.createdAt ?? '') || 0)), [projectSessionsQ.data, completedProjectSessionsQ.data]);
   // A project's LANDING sessions are its subject's, not conversations: they are counted nowhere on
   // this page — not in "Project · N sessions", not in the running count, not among the status dots,
-  // not in the timeline — and are drawn once, in the Landings group below the coordinator.
+  // not in the timeline — and are summed up once, in the Landings row below the coordinator.
   const projectMembers = useMemo(
     () => allProjectMembers.filter((s) => s.sessionKind !== 'LANDING'),
     [allProjectMembers],
@@ -3351,33 +3356,11 @@ export function WorkspaceView({
   const pageStart = pageNotStarted
     ? startPageRow(pageStarted, pageOpenItemsQ.isError ? undefined : pageOpenItemsQ.data)
     : null;
-  // Who is holding each landing that waits (§4.7): the group's rows say the outcome and the holder,
-  // and both are the open items' facts about the same subject — `landingSessionId` is the join.
-  const pageLandingItemsQ = useQuery({
-    ...projectOpenItemsQuery(openProjectId ?? ''),
-    // Only a landing that WAITS needs a holder named, so a project with none pays for no read — and
-    // the page shares this key with the start row's own read, so it is one request either way.
-    enabled: !!openProjectId && landingMembers.some((s) => s.landing?.state === 'AWAITING_DECISION'),
-    refetchInterval: controlLive ? 20_000 : 4000,
-  });
-  const landingHolders = useMemo(() => {
-    const holders = new Map<string, { reason: string | null; assignee: 'OWNER' | 'COORDINATOR' | null }>();
-    const items = pageLandingItemsQ.data;
-    for (const row of [...(items?.needsYou ?? []), ...(items?.withCoordinator ?? [])]) {
-      if (!row.landingSessionId || holders.has(row.landingSessionId)) continue;
-      holders.set(row.landingSessionId, {
-        reason: landingItemReason(row.kind),
-        assignee: row.assignee === 'OWNER' ? 'OWNER' : row.assignee === 'COORDINATOR' ? 'COORDINATOR' : null,
-      });
-    }
-    return holders;
-  }, [pageLandingItemsQ.data]);
-  // The group: waiting first, then the last day's, then one folded line (§2.9 LS6, board v4 04).
-  const landingGroupView = useMemo(
-    () => (openProjectId && landingMembers.length > 0
-      ? landingGroup(landingMembers, { holders: landingHolders })
-      : null),
-    [openProjectId, landingMembers, landingHolders],
+  // The Landings row (owner 2026-10-27, board 01 b): the mark of the most urgent landing and the
+  // day's counts, over the project's landing sessions and its merges into main.
+  const landingsSummary = useMemo(
+    () => (openProjectId ? landingsRowSummary(landingMembers, pageMerges, { main: mainBranchName(pageProject?.mainBranch) }) : null),
+    [openProjectId, landingMembers, pageMerges, pageProject?.mainBranch],
   );
   // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
@@ -3506,9 +3489,9 @@ export function WorkspaceView({
   // a "Pinned" section would fight an active tag filter, so it's suppressed there (as on iOS).
   // Note the Completed view is server-ordered by completed_at while bucketing reads last activity,
   // so its rows are grouped by when they last ran, not by when they moved — same as iOS.
-  // On a project's page the merges into main it has made sit among its sessions at their own
-  // instant (`projectTimelineSections`): rows of their own kind, never sessions.
-  const sections = useMemo<Array<{ key: string; title: string; tag: SessionTagRef | null; sessions: Array<SessionProjectEntry<SessionListItem> | ProjectPageMerge> }>>(
+  // On a project's page the timeline is its sessions alone: the merges into main it has made are rows
+  // of its Landings window (owner 2026-10-27).
+  const sections = useMemo<Array<{ key: string; title: string; tag: SessionTagRef | null; sessions: Array<SessionProjectEntry<SessionListItem>> }>>(
     () => {
       if (!openProjectId) {
         return groupByTag
@@ -3530,20 +3513,18 @@ export function WorkspaceView({
       }
       const coordinator = pageCoordinator ? [{ key: 'Coordinator', title: SESSION_PROJECT_COPY.coordinatorSection, tag: null,
         sessions: [{ ...pageCoordinator, kind: 'session' as const }] }] : [];
-      const timeline = projectTimelineSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), pageMerges)
-        .map((s) => ({ key: s.title, title: s.title, tag: null, sessions: s.items.map((item) =>
-          item.kind === 'merge'
-            ? { kind: 'merge' as const, id: item.id, promotion: item.promotion }
-            : { ...item.session, kind: 'session' as const }) }));
-      // The Landings group sits below the coordinator and above the timeline, and only when it has
-      // something to list; its rows never enter `sessions`, so no count or arrow key sees one.
-      const landings = landingGroupView
+      const timeline = sessionTimeSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), { pinnedFirst: false })
+        .map((s) => ({ key: s.title, title: s.title, tag: null,
+          sessions: s.sessions.map((session) => ({ ...session, kind: 'session' as const })) }));
+      // The Landings row sits below the coordinator and above the timeline, for a project that has
+      // had a landing; it never enters `sessions`, so no count or arrow key sees it.
+      const landings = landingsSummary
         ? [{ key: 'Landings', title: SESSION_LANDINGS_COPY.TITLE, tag: null,
-            sessions: [] as Array<SessionProjectEntry<SessionListItem> | ProjectPageMerge> }]
+            sessions: [] as Array<SessionProjectEntry<SessionListItem>> }]
         : [];
       return [...coordinator, ...landings, ...timeline];
     },
-    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed, openProjectId, pageCoordinator, projectMembers, pageMerges, landingGroupView],
+    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed, openProjectId, pageCoordinator, projectMembers, landingsSummary],
   );
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
@@ -3551,7 +3532,7 @@ export function WorkspaceView({
   // and tag grouping regroups outright — so anything that moves the cursor by a row (Up/Down,
   // "open the next one after completing") has to walk this, not the pre-section list.
   const orderedSessions = useMemo(() => sections.flatMap((s) => s.sessions.flatMap((entry) =>
-    entry.kind === 'merge' ? [] : entry.kind === 'project' ? entrySession(entry) : [entry],
+    entry.kind === 'project' ? entrySession(entry) : [entry],
   )), [sections, entrySession]);
 
   // Right-pane mode. A real session (/sessions/<id>) shows its conversation; with
@@ -3559,7 +3540,7 @@ export function WorkspaceView({
   // while browsing Completed/Trash (nothing openable there), or implicitly
   // when the Open list is empty (the first-run empty state).
   const composing =
-    !selectedId &&
+    !selectedId && !landingsProjectId &&
     (composingRoute || view !== 'open' || (sessionsQ.isSuccess && listedSessions.length === 0));
   // The Projects CTA lands on the ordinary New Session route with one piece of transient framing:
   // this turn is meant to create a project. Keeping it in the URL makes refresh/back truthful and
@@ -10010,7 +9991,7 @@ export function WorkspaceView({
   };
 
   return (
-    <div className={`workspace-split${selectedId || composingRoute ? ' show-conversation' : ''}`}>
+    <div className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}`}>
       <aside className={`session-col${openProjectId ? ' session-project-page' : ''}`} style={{ width: colWidth }}>
         {openProjectId ? (
           <div className="session-col-head session-folder-head session-project-page-header">
@@ -10219,10 +10200,10 @@ export function WorkspaceView({
             folderEdit?.id === row.folder.id ? folderEditRow(row.folder.id) : folderRowView(row),
           )}
           {sections.map((sec) => (
-            sec.key === 'Landings' && landingGroupView ? (
-              <SessionProjectLandings key={sec.key} group={landingGroupView}
-                onOpen={(landingSessionId) => navigateWithPaneSlide('push', () => navigate(
-                  sessionPath(landingSessionId), { state: stampFromList() },
+            sec.key === 'Landings' && landingsSummary && openProjectId ? (
+              <SessionProjectLandings key={sec.key} summary={landingsSummary}
+                onOpen={() => navigateWithPaneSlide('push', () => navigate(
+                  `/projects/${encodeId(openProjectId)}/landings${listSearch}`, { state: stampFromList() },
                 ))} />
             ) : (
             <section key={sec.key} className={openProjectId && sec.key === 'Coordinator' ? 'session-project-coordinator' : undefined}>
@@ -10248,12 +10229,6 @@ export function WorkspaceView({
                 </div>
               )}
               {sec.sessions.map((s) => {
-                if (s.kind === 'merge') {
-                  return (
-                    <ProjectMergeTimelineRow key={s.id} promotion={s.promotion}
-                      time={fmtTime(s.promotion.merged?.at ?? undefined)} />
-                  );
-                }
                 if (s.kind === 'project') {
                   const coordinator = s.coordinator;
                   const openTarget = () => {
@@ -10540,25 +10515,39 @@ export function WorkspaceView({
       <div
         className="workspace-view"
         // A landing takes no files: it has no engine and no composer to attach one to (LS6).
-        onDragEnter={landingDetail ? undefined : onSessionDragEnter}
-        onDragOver={landingDetail ? undefined : onSessionDragOver}
-        onDragLeave={landingDetail ? undefined : onSessionDragLeave}
-        onDrop={landingDetail ? undefined : onSessionDrop}
+        onDragEnter={landingPane ? undefined : onSessionDragEnter}
+        onDragOver={landingPane ? undefined : onSessionDragOver}
+        onDragLeave={landingPane ? undefined : onSessionDragLeave}
+        onDrop={landingPane ? undefined : onSessionDrop}
       >
         {/* Drop-to-upload hint covering the whole session pane while files are dragged over it. */}
-        {dragging && !landingDetail && (
+        {dragging && !landingPane && (
           <div className="workspace-dropzone">
             <PaperClipOutlined /> Drop files to upload
           </div>
         )}
-        {landingDetail ? (
-          <LandingSessionView
-            sessionId={selectedId!}
-            detail={landingDetail}
-            onOpenCoordinator={(id) =>
-              navigateWithPaneSlide('push', () =>
-                navigate(sessionPath(id), { state: stampFromList() }))}
-          />
+        {landingPane ? (
+          landingsWindowProjectId ? (
+            <ProjectLandingsWindow
+              key={landingsWindowProjectId}
+              projectId={landingsWindowProjectId}
+              focusId={landingsProjectId ? null : selectedId}
+              onOpenSession={(id) =>
+                navigateWithPaneSlide('push', () =>
+                  navigate(sessionPath(id), { state: stampFromList() }))}
+              onBack={isMobile ? () => {
+                const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
+                const list = a ? `/workspaces/${encodeId(a)}${listSearch}` : `/runners/${encodeId(runner.id)}${listSearch}`;
+                navigateWithPaneSlide('pop', () =>
+                  arrivedFromList() ? navigate(-1) : navigate(list, { replace: true }),
+                );
+              } : null}
+            />
+          ) : (
+            <div className="landing-page">
+              <div className="landing-page-note">{LANDING_PAGE_COPY.LOADING_LANDING}</div>
+            </div>
+          )
         ) : (
         <>
         <div className="workspace-header">

@@ -84,6 +84,8 @@ internal object ProjectShell {
     // A-1 / A-2: the landing session's view, and the inFlightJobs shape that names it. `landing` is the view
     // `GET sessions/<LANDING>` answers with `sessionKind: LANDING`; null leaves that id a conversation row (an older server).
     @Volatile var landing: String? = null
+    /** A view of its own for a landing id, where one landing must read differently from the rest; the others answer [landing]. */
+    @Volatile var landingById: Map<String, String> = emptyMap()
     /** The landing session row's title; null for a row not inserted yet, which the pre-generated id answers without one. */
     @Volatile var landingTitle: String? = null
     /** `integration.inFlightJobs`, as a JSON array — each item carries its `landingSessionId` (A-2 reads the same shape). */
@@ -154,7 +156,7 @@ internal object ProjectShell {
         calls.clear(); started = true; startRequest = false; quietStatus = 200
         done = false; doneBy = "DERIVED"; doneCounts = true
         promotion = null; merged = "[]"; mergeCheck = false; mergeJobKind = "CHECK_PROMOTION"; holder = null; criteria = null; pressStatus = 200; mergeWaiting = false; bodies.clear()
-        landTasks = null; plan = null; documentStatus = 200; holdDocument = null; landing = null; landingTitle = null; inFlightJobs = null
+        landTasks = null; plan = null; documentStatus = 200; holdDocument = null; landing = null; landingById = emptyMap(); landingTitle = null; inFlightJobs = null
         landings = null; needsYouItems = null; sourceLanding = null
         landingLog = """{"jobId":"j-1","entries":[],"nextCursor":null}"""; taskTitle = "Wire the page"
         landingStatus = 200; landingLogStatus = 200
@@ -368,7 +370,7 @@ internal object ProjectShell {
     /** The LANDING detail: the subject's view with the row's shape around it, or — no row yet — LS1's fallback, which has
      *  no title and no workspace and still draws the page. */
     private fun landingDetail(id: String = LANDING): String {
-        val view = landing ?: return session(id)
+        val view = landingById[id] ?: landing ?: return session(id)
         landingServed++
         return """{"id":"$id","title":${landingTitle?.let { "\"$it\"" } ?: "null"},"status":"AWAITING_INPUT",
             "sessionKind":"LANDING","workspace":null,"assignedRunner":null,"tags":[],"landing":$view}"""

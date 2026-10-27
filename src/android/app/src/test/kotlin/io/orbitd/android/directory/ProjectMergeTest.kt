@@ -1,6 +1,5 @@
 package io.orbitd.android.directory
 
-import io.orbitd.android.core.cards.PromotionCards
 import io.orbitd.android.core.cards.PromotionStage
 import io.orbitd.android.projects.ProjectPage
 import java.time.Instant
@@ -10,16 +9,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /** The merge into main on the project's sessions page (iOS 6b4bef713's ProjectMergeCardTests): the card under the progress card,
- * the merge check's line moving into it, the merges drawn on the page's timeline, and how often the page reads them. */
+ * the merge check's line moving into it, the page's timeline of sessions, and how often the page reads the merge. */
 class ProjectMergeTest {
     private fun candidate(state: String, conflicts: List<String> = emptyList()) = Json.parseToJsonElement("""{"promotionId":"pr-1","state":"$state",
         "sourceRef":"refs/heads/project/34ZurCP3bv9yLXGVyUGnx","sourceSha":"5e5bfca23aa1","upstreamRef":"refs/heads/main","taskIds":["t1","t2"],
         "conflicts":${conflicts.joinToString(",", "[", "]") { "\"$it\"" }}}""").jsonObject
     private fun integration(kind: String?, state: String = "RUNNING") = Json.parseToJsonElement("""{"integratingCount":1,"queuedCount":0,
         "inFlight":{"state":"$state","startedAt":"2026-10-06T03:20:00Z"${kind?.let { ",\"kind\":\"$it\"" }.orEmpty()},"phase":"CHECK"}}""").jsonObject
-    private fun merge(id: String, at: String) = PromotionCards.receipts(listOf(Json.parseToJsonElement("""{"promotionId":"$id","state":"MERGED",
-        "sourceRef":"refs/heads/project/p","sourceSha":"abc","upstreamRef":"refs/heads/main","taskIds":["t1"],
-        "merged":{"sha":"8d5a868e90df","at":"$at","automatic":false,"revert":null}}""").jsonObject)).single()
     private fun session(id: String, at: String?) = DirectorySession(id, title = id, status = "AWAITING_INPUT", createdAt = at, lastTurnAt = at)
     private fun at(iso: String) = Instant.parse(iso)
 
@@ -101,28 +97,19 @@ class ProjectMergeTest {
         assertNotNull(ProjectMergeCard.blockedByLine(candidate("BLOCKED"), landings(targetRef = "refs/heads/main")))
     }
 
-    @Test fun mergesSitAmongTheSessionsAtTheirOwnInstant() {
-        val sessions = listOf(session("s-now", "2026-10-06T03:58:00Z"), session("s-p6", "2026-10-06T03:45:00Z"),
-            session("s-log", "2026-10-06T03:12:00Z"), session("s-old", "2026-10-03T08:00:00Z"))
-        val merges = listOf(merge("m-old", "2026-10-04T10:00:00Z"), merge("m-today", "2026-10-06T03:42:00Z"))
-        val out = ProjectTimeline.sections(sessions, merges, at("2026-10-06T04:01:00Z"), ZoneOffset.UTC)
-        assertEquals(listOf("Today", "2–7 days ago"), out.map { it.title })
-        assertEquals(listOf("s-now", "s-p6", merges[1].id, "s-log"), out[0].items.map { it.key })
-        assertEquals(listOf(merges[0].id, "s-old"), out[1].items.map { it.key })
-    }
-
-    @Test fun aMergeOlderThanEverySessionStillShowsAndNoMergesIsTheSessionGrouping() {
-        val sessions = listOf(session("a", "2026-10-06T03:00:00Z"))
-        val now = at("2026-10-06T04:00:00Z")
-        val out = ProjectTimeline.sections(sessions, listOf(merge("m", "2026-09-01T00:00:00Z")), now, ZoneOffset.UTC)
-        assertEquals(listOf("Today", "Older"), out.map { it.title })
-        assertEquals(1, out[1].items.size)
-        // With no merges the page is the list's own recency grouping, as it was before.
-        val plain = ProjectTimeline.sections(sessions, emptyList(), now, ZoneOffset.UTC)
+    /** The page's timeline is its sessions alone (owner 2026-10-27): the merges into main are rows of the project's Landings window,
+     * and the sections are the list's own recency grouping (OrbitKit `testTheTimelineIsTheSessionGroupingWithoutPinned`). */
+    @Test fun theTimelineIsTheSessionGroupingWithoutPinned() {
+        val sessions = listOf(session("s-now", "2026-10-06T03:58:00Z"), session("s-log", "2026-10-06T03:12:00Z"),
+            session("s-old", "2026-10-03T08:00:00Z"), session("s-ancient", "2026-09-01T00:00:00Z"))
+        val now = at("2026-10-06T04:01:00Z")
+        val out = ProjectTimeline.sections(sessions, now, ZoneOffset.UTC)
+        assertEquals(listOf("Today", "2–7 days ago", "Older"), out.map { it.title })
+        assertEquals(listOf("s-now", "s-log"), out[0].sessions.map { it.id })
         val grouping = directoryGroups(sessions, SessionView.COMPLETED, Grouping.RECENCY, now, ZoneOffset.UTC)
-        assertEquals(grouping.map { it.title }, plain.map { it.title })
-        assertEquals(grouping.flatMap { g -> g.sessions.map { it.id } }, plain.flatMap { s -> s.items.map { it.key } })
-        assertEquals(grouping.map { it.id }, plain.map { it.id })
+        assertEquals(grouping.map { it.title }, out.map { it.title })
+        assertEquals(grouping.flatMap { g -> g.sessions.map { it.id } }, out.flatMap { s -> s.sessions.map { it.id } })
+        assertEquals(grouping.map { it.id }, out.map { it.id })
     }
 
     /** iOS `ProjectMergeModel.load`: the candidate every poll; the merges when it moved or once a minute; the holder's items every

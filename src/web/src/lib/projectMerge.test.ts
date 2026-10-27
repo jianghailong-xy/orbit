@@ -7,7 +7,6 @@ import {
   isMergeJob,
   mergeCardShape,
   moreTasks,
-  projectTimelineSections,
   promotionBlockedBy,
   promotionBlockedLine,
   promotionBlockedReason,
@@ -258,29 +257,6 @@ describe('the coordinator conversation’s one line', () => {
     const automatic = merged('m', '2026-10-06T03:42:00Z', true);
     expect(promotionReceiptLine(automatic)).toBe('✓ Merged into main · 8d5a868 · 2 tasks · automatically');
     expect(promotionTimelineDetail(automatic)).toBe('8d5a868 · 2 tasks · automatically');
-  });
-});
-
-describe('the sessions view’s timeline', () => {
-  const now = new Date(2026, 9, 6, 12, 1);
-  const local = (day: number, hour: number, minute = 0): string => new Date(2026, 9, day, hour, minute).toISOString();
-  const session = (id: string, at: string) => ({ id, lastTurnAt: at, createdAt: at });
-
-  it('draws each merge among the sessions at its own instant', () => {
-    const sessions = [session('s-now', local(6, 11, 58)), session('s-p6', local(6, 11, 45)),
-      session('s-log', local(6, 11, 12)), session('s-old', local(3, 16))];
-    const sections = projectTimelineSections(sessions,
-      [merged('m-old', local(4, 18)), merged('m-today', local(6, 11, 42))], now);
-    expect(sections.map((section) => section.title)).toEqual(['Today', '2–7 days ago']);
-    expect(sections[0].items.map((item) => item.id)).toEqual(['s-now', 's-p6', 'merge-m-today', 's-log']);
-    expect(sections[1].items.map((item) => item.id)).toEqual(['merge-m-old', 's-old']);
-  });
-
-  it('keeps a merge older than every session, and ignores a candidate that never merged', () => {
-    const sections = projectTimelineSections([session('a', local(6, 11))],
-      [merged('m', local(1, 1) /* five days back */), candidate()], now);
-    expect(sections.map((section) => section.title)).toEqual(['Today', '2–7 days ago']);
-    expect(sections.flatMap((section) => section.items.map((item) => item.kind))).toEqual(['session', 'merge']);
   });
 });
 

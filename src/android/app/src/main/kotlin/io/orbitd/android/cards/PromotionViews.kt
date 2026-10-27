@@ -93,7 +93,8 @@ internal fun PromotionReceiptLine(promotion: JsonObject, lineTag: String, modifi
 }
 
 /** What a merge put on main, who merged it and when, and what was run on it (iOS `PromotionReceiptSheet`): read off the merge's own
- * row, never off the candidate the branch is offering now. Opened from the conversation's line and the sessions page's timeline. */
+ * row, never off the candidate the branch is offering now. Opened from the conversation's line, and from a merged round's Review card in
+ * the project's Landings window. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PromotionReceiptSheet(promotion: JsonObject, openLanding: ((String) -> Unit)? = null, close: () -> Unit) {

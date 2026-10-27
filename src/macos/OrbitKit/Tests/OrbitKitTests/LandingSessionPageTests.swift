@@ -537,7 +537,7 @@ final class LandingSessionPageTests: XCTestCase {
                        "Ends this attempt · nothing was pushed")
     }
 
-    // MARK: - the header and the read-only footer
+    // MARK: - the title a landing goes by
 
     func testTheHeaderTitlesALinkedLandingWithItsServerTitleAndAPreRowOneFromTheView() {
         XCTAssertEqual(LandingPageCopy.headerTitle(landing(), rowTitle: "Land · Ledger migration order"),
@@ -553,35 +553,35 @@ final class LandingSessionPageTests: XCTestCase {
         XCTAssertTrue(title.hasSuffix(" → main · #7"), title)
     }
 
-    func testTheHeaderNamesTheRunnerWhileItRunsAndTheSettlementOnceItHasSettled() {
-        XCTAssertEqual(LandingPageCopy.headerSub(landing()), "Run by Orbit · runner wikova")
-        XCTAssertEqual(LandingPageCopy.headerSub(landing {
-            $0.settledAt = at(9, 51); $0.settledAs = "LANDED"
-        }), "Run by Orbit · settled \(ProjectPage.landingClockTime(date(9, 51)))")
-    }
+    // MARK: - a merge row's receipt in the Landings window (board 03 e)
 
-    func testTheFooterPointsATaskSegmentAtTheCoordinatorARoundAtItsCardAndASettledOneAtNothing() {
-        let task = LandingPageCopy.footer(landing(), onPass: nil)
-        XCTAssertEqual(task.line, "Orbit runs this landing — nothing to type here.")
-        XCTAssertEqual(task.detail, "Decisions: the coordinator")
-        XCTAssertEqual(task.link, .coordinator)
-
-        let round = landing { $0.subject = "PROMOTION" }
-        XCTAssertEqual(LandingPageCopy.footer(round, onPass: "MERGE").detail,
-                       "A clean pass merges on its own")
-        XCTAssertEqual(LandingPageCopy.footer(round, onPass: "ASK").detail,
-                       "Merging is decided on the merge card")
-        let bare = LandingPageCopy.footer(round, onPass: nil)
-        XCTAssertEqual(bare.detail, "Merging is decided on the merge card")
-        XCTAssertEqual(bare.link, .reviewCard)
-
-        let settled = LandingPageCopy.footer(landing {
-            $0.subject = "PROMOTION"; $0.episode = 9
+    func testAMergeRowsReceiptSaysWhatIsOnMainTheCheckThatPassedAndTheTreeThatLanded() {
+        let round = landing {
+            $0.subject = "PROMOTION"; $0.taskId = nil; $0.promotionId = "promo-1"
             $0.settledAt = at(9, 51); $0.settledAs = "MERGED"
-        }, onPass: nil)
-        XCTAssertEqual(settled.line, "This landing is complete — nothing to type here.")
-        XCTAssertNil(settled.link)
-        XCTAssertEqual(settled.next, "The next merge into main opens a new landing (#10).")
+            $0.checks = [LandingCheckResult(name: "MERGE_CHECK", exitCode: 0, expectedExitCode: 0,
+                                            timedOut: false, durationMs: 17 * 60_000 + 41_000)]
+        }
+        XCTAssertEqual(LandingPageCopy.mergeReceipt(promotion: promotion(), landing: round), LandingMergeReceipt(
+            heading: "Now on main · 2 tasks",
+            tasks: ["Ledger migration order", "Payout retry budget"],
+            checkLine: "✓ Passed on the combined tree · 17m 41s",
+            treeLine: "Landed exactly the tested tree 5e5bfca · as a merge commit"))
+        // A round past the read's 20 records keeps to what its landing view has.
+        XCTAssertEqual(LandingPageCopy.mergeReceipt(promotion: nil, landing: round), LandingMergeReceipt(
+            heading: "Now on main", tasks: [], checkLine: "✓ Passed on the combined tree · 17m 41s", treeLine: nil))
+        // A merge older than landing sessions has its record alone, whose checks it reads first.
+        let recorded = ProjectPromotionView(
+            promotionId: "promo-0", state: .merged, sourceRef: "refs/heads/project/p1", sourceSha: "a",
+            upstreamRef: "refs/heads/main", taskIds: ["task-1"],
+            tasks: [PromotionTask(taskId: "task-1", title: "Ledger migration order")],
+            checks: [IntegrationCheckResult(name: "MERGE_CHECK", command: "npm test", expectedExitCode: 0,
+                                            exitCode: 0, timedOut: false, durationMs: 9 * 60_000)],
+            landsAs: "FAST_FORWARD", landsTreeSha: "5e5bfca" + String(repeating: "0", count: 33))
+        XCTAssertEqual(LandingPageCopy.mergeReceipt(promotion: recorded, landing: nil), LandingMergeReceipt(
+            heading: "Now on main · 1 task", tasks: ["Ledger migration order"],
+            checkLine: "✓ Passed on the combined tree · 9m 00s",
+            treeLine: "Landed exactly the tested tree 5e5bfca · by fast-forward"))
     }
 
     // MARK: - the settled round is the outcome
@@ -719,6 +719,43 @@ final class LandingSessionPageTests: XCTestCase {
         let check = ended(kind: "CHECK_PROMOTION", state: "CANCELLED")
         XCTAssertEqual(check.right, "Not merged")
         XCTAssertEqual(check.failure, "Stopped · not landed")
+    }
+
+    /// An attempt that stopped on a failure — a check that failed, a conflict, an error — wears the red
+    /// ✕ head (board 02 d), read from its state alone; a stop, a READY and work in hand keep the quiet
+    /// head. Web: `landingSession.test.ts`, the same cases.
+    func testAnAttemptThatStoppedOnAFailureWearsTheRedHead() {
+        XCTAssertEqual(LandingPageCopy.failureStates, ["CHECK_FAILED", "CONFLICT", "ERROR"])
+        for state in ["CHECK_FAILED", "CONFLICT", "ERROR"] {
+            XCTAssertTrue(ended(state: state).stoppedOnFailure, state)
+        }
+        XCTAssertTrue(ended(kind: "CHECK_PROMOTION", state: "CHECK_FAILED").stoppedOnFailure)
+        // Never the sentence: a failed attempt with no check record says only `Stopped · not landed`
+        // and is still a failure.
+        XCTAssertEqual(ended(state: "CHECK_FAILED").detail, "Stopped · not landed")
+        XCTAssertFalse(ended(state: "CANCELLED").stoppedOnFailure)
+        XCTAssertFalse(ended(kind: "CHECK_PROMOTION", state: "READY").stoppedOnFailure)
+        XCTAssertFalse(LandingPageCopy.attemptCard(landing(), now: now, updatedAt: now)!.stoppedOnFailure)
+        let lapsed = landing { $0.currentAttempt = attempt { $0.timedOut = true; $0.liveness = "LEASE_EXPIRED" } }
+        XCTAssertFalse(LandingPageCopy.attemptCard(lapsed, now: now, updatedAt: now)!.stoppedOnFailure)
+    }
+
+    /// The budget bar is the step's share of its budget, seconds over seconds: 6m 15s of 30m fills about
+    /// a fifth. Revision 1 of the Landings window divided seconds by milliseconds and drew an empty bar.
+    /// The usual-duration tick is milliseconds over milliseconds. Web and Kotlin draw the same fractions.
+    func testTheBudgetBarIsTheStepsShareOfItsBudget() {
+        let started = at(14, 52, 15)
+        let view = landing { $0.currentAttempt = attempt {
+            $0.startedAt = started
+            $0.check = LandingAttemptCheck(name: "MERGE_CHECK", index: 1, count: 1,
+                                           budgetSeconds: 1_800, startedAt: started)
+        } }
+        let card = LandingPageCopy.attemptCard(view, now: now, updatedAt: now,
+                                               facts: LandingFacts(typicalMs: 540_000))!
+        XCTAssertEqual(card.right, "6m 15s of 30m")
+        XCTAssertEqual(card.progress ?? -1, 375.0 / 1_800, accuracy: 0.000_1)
+        XCTAssertEqual(card.progress ?? -1, 0.208, accuracy: 0.001)
+        XCTAssertEqual(card.usualProgress ?? -1, 0.3, accuracy: 0.000_1)
     }
 
     // MARK: - the timeline's ✓ reads the line's fields, not its sentence

@@ -4,17 +4,20 @@ import {
   INTEGRATION_CLAIM_STALE_MS,
   type CoordinatorLeadKind,
   type ProjectListIntegration,
+  type ProjectPromotionView,
   type ProjectSidebarTaskCounts,
   type ProjectStartSettings,
   type SessionProjectMembership,
 } from '@orbit/shared';
 import type { SessionFolder } from '../api';
-import { JOB_PHASES, JOB_WORDS, jobPhases, jobWords } from '../components/ProjectPanoramaHeader';
+import { JOB_PHASES, JOB_WORDS, jobPhases, jobWords, landingClockTime } from '../components/ProjectPanoramaHeader';
+import { LANDING_PAGE_COPY } from './landingSession';
 import { elapsedLabel, type SidebarProject } from './projectAttention';
+import { promotionTimelineDetail, promotionTimelineTitle } from './projectMerge';
 import { DEFAULT_MAIN_BRANCH, mainBranchName, runLineMain } from './projectStart';
 import type { SessionListView } from './queries';
 import { sessionFolderListing, type FolderSessionReadings, type SessionFolderRow } from './sessionFolders';
-import type { GroupableSession } from './sessionGrouping';
+import { sessionTimeSections, type GroupableSession } from './sessionGrouping';
 
 export interface SessionProjectSession extends GroupableSession {
   title?: string | null;
@@ -260,20 +263,20 @@ export function sessionProjectLandingLine(
   };
 }
 
-/** The Landings group's heading, its fold, and the two words for who holds a landing waiting on
- *  somebody (owner 2026-10-19, board v4 04 c1). */
+/** The Landings row on a project's sessions page and the project's Landings window (owner
+ *  2026-10-27, docs/mocks/landings-one-window; contract §2.9 LS6, revision 28): the row's count
+ *  sentence, the window's last group and its read-only footer. */
 export const SESSION_LANDINGS_COPY = {
   TITLE: 'Landings',
-  EARLIER: 'Earlier',
+  WAITING: 'waiting for a decision',
+  IN_FLIGHT: 'in flight',
   LANDED: 'landed',
-  NOTHING_TO_LAND: 'nothing to land',
-  WITH_YOU: 'with you',
-  WITH_COORDINATOR: 'with the coordinator',
-  WAITING: 'Waiting for a decision',
+  MERGED_INTO: 'merged into',
+  TODAY: 'today',
+  NOTHING_LANDED_TODAY: 'Nothing landed today',
+  NOW: 'Now',
+  ORBIT_RUNS_THESE_LANDINGS: 'Orbit runs these landings — nothing to type here.',
 } as const;
-
-/** How far back a settled landing is still listed in the group: 24 hours (owner 2026-10-19). */
-export const LANDINGS_SETTLED_WINDOW_MS = 24 * 60 * 60 * 1_000;
 
 /**
  * What a LANDING session row says about its subject, as `GET /sessions?projectId=&includeLanding=1`
@@ -287,7 +290,7 @@ export interface LandingSessionSummary {
   settledAt: string | null;
 }
 
-/** The part of a session row the group reads. */
+/** The part of a session row the window reads. */
 export interface LandingSessionRow {
   id: string;
   title?: string | null;
@@ -296,161 +299,230 @@ export interface LandingSessionRow {
   landing?: LandingSessionSummary | null;
 }
 
-/** What the row a landing is waiting on says: its kind's outcome, and whose it is. */
-export interface LandingHolder {
-  /** `Checks failed`, `Merge conflict`, `Integration error`, `Task failed`, … */
-  reason: string | null;
-  assignee: 'OWNER' | 'COORDINATOR' | null;
-}
-
-export interface LandingGroupRow {
-  id: string;
+/** One settled landing in the window, drawn with the merged line's head: the mark that says how it
+ *  ended, the task's name, the moment it settled, and one line under them. */
+export interface LandingsWindowRow {
+  /** The row's own key: the landing session's id, or `merge:<promotionId>` for a merge into main
+   *  that has no landing session (it predates them). */
+  key: string;
+  /** The LANDING session the row opens in place; null for a merge that has none, whose receipt is
+   *  all there is to open. */
+  sessionId: string | null;
+  subject: 'TASK' | 'PROMOTION';
   title: string;
-  /** The right-hand slot: how long it has waited, or how long ago it settled. */
-  time: string;
   detail: string;
-  /** The mark the row's head carries: ✕ stopped, ✓ landed, ⇢ merged, ◌ nothing to land. */
-  tone: 'fail' | 'ok' | 'merge' | 'quiet';
+  /** ✓ landed, ⇢ merged into main, ◌ nothing to land and every other quiet ending. */
+  tone: 'ok' | 'merge' | 'quiet';
+  /** The clock time it settled at, `17:42`. */
+  time: string;
+  at: number;
+  /** The round's merged record (`promotions/merged`), joined by `landingSessionId`; null on a task's
+   *  row and on a round older than the read's 20 records. */
+  promotion: ProjectPromotionView | null;
 }
 
-export interface LandingGroup {
-  waiting: LandingGroupRow[];
-  settled: LandingGroupRow[];
-  /** Everything older than the window, folded into one row; null when there is none. Both counts
-   *  are 0 when every older one settled some other way (handled, cancelled, declined, deleted…):
-   *  the fold is still there, and reads a bare `Earlier`. */
-  earlier: { landed: number; nothing: number } | null;
-  /** Those same older landings, newest first — what the fold opens to. Empty exactly when
-   *  `earlier` is null. */
-  older: LandingGroupRow[];
+/** One landing that has not settled: a card at the bottom of the window. */
+export interface LandingsWindowCard {
+  sessionId: string;
+  subject: 'TASK' | 'PROMOTION';
+  state: 'IN_FLIGHT' | 'AWAITING_DECISION';
+  /** The task's name (a round's own title), the line the card adds under its head. */
+  title: string;
+  at: number;
 }
 
-/** How a settled subject ended, in the group's own words. */
-function settledWord(settledAs: string | null): { text: string; tone: LandingGroupRow['tone'] } {
+export interface LandingsWindow {
+  /** The settled landings by the session list's own day sections, oldest first and oldest row first:
+   *  the window reads like a conversation, the newest at the bottom. */
+  days: Array<{ title: string; rows: LandingsWindowRow[] }>;
+  /** The landings still in hand, in the order they started — the window's last group. */
+  now: LandingsWindowCard[];
+}
+
+/** How a settled subject ended, in the row's own words. */
+function settledWord(settledAs: string | null): { text: string; tone: LandingsWindowRow['tone'] } {
   switch (settledAs) {
-    case 'LANDED': return { text: 'Landed', tone: 'ok' };
-    case 'ALREADY_LANDED': return { text: 'Already landed', tone: 'ok' };
-    case 'MERGED': return { text: 'Merged into main', tone: 'merge' };
-    case 'NOTHING_TO_LAND': return { text: 'Nothing to land', tone: 'quiet' };
-    case 'HANDLED': return { text: 'Handled', tone: 'quiet' };
-    case 'DECLINED': return { text: 'Declined', tone: 'quiet' };
-    case 'CANCELLED': return { text: 'Cancelled', tone: 'quiet' };
-    case 'DELETED': return { text: 'Deleted', tone: 'quiet' };
+    case 'LANDED': return { text: LANDING_PAGE_COPY.LANDED, tone: 'ok' };
+    case 'ALREADY_LANDED': return { text: LANDING_PAGE_COPY.ALREADY_LANDED, tone: 'ok' };
+    case 'NOTHING_TO_LAND': return { text: LANDING_PAGE_COPY.NOTHING_TO_LAND, tone: 'quiet' };
+    case 'HANDLED': return { text: LANDING_PAGE_COPY.HANDLED, tone: 'quiet' };
+    case 'DECLINED': return { text: LANDING_PAGE_COPY.DECLINED, tone: 'quiet' };
+    case 'CANCELLED': return { text: LANDING_PAGE_COPY.CANCELLED, tone: 'quiet' };
+    case 'DELETED': return { text: LANDING_PAGE_COPY.DELETED, tone: 'quiet' };
     default: return { text: settledAs ?? 'Settled', tone: 'quiet' };
   }
 }
 
+/** A task segment's title is the server's `Land · <task>`: the window names the task alone. */
+export function landingTaskName(title: string | null | undefined): string {
+  const name = title ?? '';
+  const prefix = `${LANDING_PAGE_COPY.LAND} · `;
+  return name.startsWith(prefix) ? name.slice(prefix.length) : name;
+}
+
 /**
- * The Landings group of a project's sessions page (owner 2026-10-19, board v4 04 c1; contract §2.9
- * LS6): the landings waiting on a decision and the ones that settled within the last 24 hours, plus
- * a folded count of everything older.
+ * The project's Landings window (owner 2026-10-27, docs/mocks/landings-one-window; contract §2.9
+ * LS6 and §3.6, revision 28): every landing the project has had, from the two reads its sessions
+ * page already makes — the LANDING sessions (`includeLanding=1`, open and completed) and the merges
+ * into main (`promotions/merged`).
  *
- * What is NEVER here: a landing still in flight — it lives on the Landing card and in the jobs list
- * — and a round of merging into main that merged, because the page's own timeline already draws
- * "Merged into main" at the moment it happened. Empty is no group at all.
- *
- * `holders` is what the project's open items say about a landing that is waiting (§4.7): its kind's
- * outcome and which side is holding it. A landing with no item still says it is waiting, because
- * the server's AWAITING_DECISION is the fact that put it here.
+ * A settled landing is one row in the day it settled, in the session list's own day sections, all of
+ * them kept. A round of merging that merged is one row with its record, joined by
+ * `landingSessionId`; a merge older than landing sessions has a row of its own that opens to its
+ * receipt alone, and a round past the read's last 20 records keeps its session's row. A landing still
+ * in hand — in flight, or waiting for a decision — is a card under `Now`, in the order it started.
  */
-export function landingGroup(
+export function landingsWindow(
   rows: readonly LandingSessionRow[],
-  opts: { now?: number; holders?: ReadonlyMap<string, LandingHolder> } = {},
-): LandingGroup | null {
-  const now = opts.now ?? Date.now();
-  const waiting: Array<LandingGroupRow & { at: number }> = [];
-  const settled: Array<LandingGroupRow & { at: number }> = [];
-  const before: Array<LandingGroupRow & { at: number }> = [];
-  let landed = 0;
-  let nothing = 0;
-  let older = 0;
+  merges: readonly ProjectPromotionView[],
+  opts: { now?: Date } = {},
+): LandingsWindow {
+  const records = merges.filter((promotion) => promotion.merged != null);
+  const bySession = new Map<string, ProjectPromotionView>();
+  for (const record of records) {
+    if (record.landingSessionId && !bySession.has(record.landingSessionId)) {
+      bySession.set(record.landingSessionId, record);
+    }
+  }
+  const joined = new Set<string>();
+  const settled: Array<LandingsWindowRow & GroupableSession> = [];
+  const now: LandingsWindowCard[] = [];
+  const add = (row: LandingsWindowRow, at: string | null | undefined) =>
+    settled.push({ ...row, id: row.key, lastTurnAt: at ?? null });
   for (const row of rows) {
     const landing = row.landing;
     if (!landing) continue;
-    if (landing.state === 'IN_FLIGHT') continue;
-    const title = row.title ?? SESSION_LANDINGS_COPY.TITLE;
-    if (landing.state === 'AWAITING_DECISION') {
-      const holder = opts.holders?.get(row.id) ?? null;
-      const outcome = holder?.reason ?? SESSION_LANDINGS_COPY.WAITING;
-      const who = holder?.assignee === 'OWNER' ? SESSION_LANDINGS_COPY.WITH_YOU
-        : holder?.assignee === 'COORDINATOR' ? SESSION_LANDINGS_COPY.WITH_COORDINATOR
-          : null;
-      waiting.push({
-        id: row.id,
-        title,
-        time: elapsedLabel(row.createdAt ?? null, now) ?? '',
-        detail: [outcome, who].filter(Boolean).join(' · '),
-        // An item names what stopped it, and that is the red mark; a waiting landing with no item
-        // yet says only that it is waiting.
-        tone: holder?.reason ? 'fail' : 'quiet',
-        at: instant(row.createdAt),
-      });
+    const name = landing.subject === 'TASK' ? landingTaskName(row.title) : (row.title ?? '');
+    if (landing.state !== 'SETTLED') {
+      now.push({ sessionId: row.id, subject: landing.subject, state: landing.state, title: name, at: instant(row.createdAt) });
       continue;
     }
-    // A round of merging that merged is the timeline's own row, not this group's.
-    if (landing.subject === 'PROMOTION' && landing.settledAs === 'MERGED') continue;
-    const at = Date.parse(landing.settledAt ?? '');
+    if (landing.subject === 'PROMOTION' && landing.settledAs === 'MERGED') {
+      const record = bySession.get(row.id) ?? null;
+      if (record) joined.add(record.promotionId);
+      const at = record?.merged?.at ?? landing.settledAt;
+      add({
+        key: row.id,
+        sessionId: row.id,
+        subject: 'PROMOTION',
+        title: record ? promotionTimelineTitle(record) : `${LANDING_PAGE_COPY.MERGED_INTO} ${DEFAULT_MAIN_BRANCH}`,
+        detail: record ? promotionTimelineDetail(record) : name,
+        tone: 'merge',
+        time: at ? landingClockTime(at) : '',
+        at: instant(at),
+        promotion: record,
+      }, at);
+      continue;
+    }
     const word = settledWord(landing.settledAs);
-    if (!Number.isFinite(at) || now - at > LANDINGS_SETTLED_WINDOW_MS) {
-      older += 1;
-      if (landing.settledAs === 'LANDED' || landing.settledAs === 'ALREADY_LANDED') landed += 1;
-      if (landing.settledAs === 'NOTHING_TO_LAND') nothing += 1;
-      before.push({
-        id: row.id,
-        title,
-        time: elapsedLabel(landing.settledAt ?? null, now) ?? '',
-        detail: word.text,
-        tone: word.tone,
-        at: Number.isFinite(at) ? at : Number.NEGATIVE_INFINITY,
-      });
-      continue;
-    }
-    settled.push({
-      id: row.id,
-      title,
-      time: elapsedLabel(landing.settledAt ?? null, now) ?? '',
+    add({
+      key: row.id,
+      sessionId: row.id,
+      subject: landing.subject,
+      title: name,
       detail: word.text,
       tone: word.tone,
-      at,
-    });
+      time: landing.settledAt ? landingClockTime(landing.settledAt) : '',
+      at: instant(landing.settledAt),
+      promotion: null,
+    }, landing.settledAt);
   }
-  if (waiting.length === 0 && settled.length === 0 && older === 0) return null;
-  // The waiting ones first, longest wait first: the page answers "what is stuck, and on whom".
-  waiting.sort((a, b) => a.at - b.at);
-  settled.sort((a, b) => b.at - a.at);
-  before.sort((a, b) => b.at - a.at);
-  // The fold is there whenever something older is, and opens to all of it; it counts only what
-  // landed and what had nothing to land, so with both at 0 it reads a bare `Earlier`.
-  return {
-    waiting: waiting.map(({ at: _at, ...row }) => row),
-    settled: settled.map(({ at: _at, ...row }) => row),
-    earlier: older > 0 ? { landed, nothing } : null,
-    older: before.map(({ at: _at, ...row }) => row),
-  };
+  // A merge whose round has no session in the read: older than landing sessions, or a session the
+  // read did not list. It is still a merge into main, at its own instant.
+  for (const record of records) {
+    if (joined.has(record.promotionId)) continue;
+    const at = record.merged?.at ?? null;
+    add({
+      key: record.landingSessionId ?? `merge:${record.promotionId}`,
+      sessionId: record.landingSessionId ?? null,
+      subject: 'PROMOTION',
+      title: promotionTimelineTitle(record),
+      detail: promotionTimelineDetail(record),
+      tone: 'merge',
+      time: at ? landingClockTime(at) : '',
+      at: instant(at),
+      promotion: record,
+    }, at);
+  }
+  // Newest first into the session list's grouper (which buckets by the local calendar day and keeps
+  // the order it is given), then each section and the sections themselves turned over.
+  settled.sort((a, b) => b.at - a.at || a.key.localeCompare(b.key));
+  const days = sessionTimeSections(settled, { pinnedFirst: false, now: opts.now })
+    .map((section) => ({
+      title: section.title,
+      rows: section.sessions.map(({ id: _id, lastTurnAt: _at, ...row }) => row).reverse(),
+    }))
+    .reverse();
+  now.sort((a, b) => a.at - b.at || a.sessionId.localeCompare(b.sessionId));
+  return { days, now };
 }
 
-/** What an open item about a landing is about, in the group's words; null for a kind that is not
- *  a landing's outcome. The item says whose it is, which is the other half of the row's line. */
-export function landingItemReason(kind: string): string | null {
-  switch (kind) {
-    case 'INTEGRATION_CONFLICT': return 'Merge conflict';
-    case 'INTEGRATION_CHECK_FAILED': return 'Checks failed';
-    case 'INTEGRATION_ERROR': return 'Integration error';
-    case 'TASK_FAILED': return 'Task failed';
-    case 'DELIVERY_REVIEW': return 'Delivery review';
-    case 'LANDING_LEASE_EXPIRED': return 'No report from the runner';
-    default: return null;
-  }
+/** The Landings row's three facts: the mark of the most urgent landing, how long it has waited (or
+ *  how long ago the last one settled), and the counts under them. */
+export interface LandingsRowSummary {
+  /** ✕ something waits for a decision, the blue ring something is in flight, ✓ all settled. */
+  mark: 'fail' | 'running' | 'ok';
+  time: string;
+  line: string;
 }
 
-/** `Earlier · 31 landed · 3 nothing to land` — the fold's one line. A segment whose count is 0 is
- *  left out: `Earlier · 2 landed`, and with both at 0 the line is the bare `Earlier`. */
-export function landingEarlierLine(earlier: { landed: number; nothing: number }): string {
-  return [
-    SESSION_LANDINGS_COPY.EARLIER,
-    earlier.landed > 0 ? `${earlier.landed} ${SESSION_LANDINGS_COPY.LANDED}` : null,
-    earlier.nothing > 0 ? `${earlier.nothing} ${SESSION_LANDINGS_COPY.NOTHING_TO_LAND}` : null,
+/**
+ * `1 waiting for a decision · 1 in flight · 3 landed · 1 merged into main today` — a count of 0 is
+ * left out, today's two share one `today` at the end, and with all four at 0 the line is
+ * `Nothing landed today`.
+ */
+export function landingsCountLine(
+  counts: { waiting: number; inFlight: number; landed: number; merged: number },
+  main: string = DEFAULT_MAIN_BRANCH,
+): string {
+  const today = [
+    counts.landed > 0 ? `${counts.landed} ${SESSION_LANDINGS_COPY.LANDED}` : null,
+    counts.merged > 0 ? `${counts.merged} ${SESSION_LANDINGS_COPY.MERGED_INTO} ${main}` : null,
   ].filter(Boolean).join(' · ');
+  const parts = [
+    counts.waiting > 0 ? `${counts.waiting} ${SESSION_LANDINGS_COPY.WAITING}` : null,
+    counts.inFlight > 0 ? `${counts.inFlight} ${SESSION_LANDINGS_COPY.IN_FLIGHT}` : null,
+    today ? `${today} ${SESSION_LANDINGS_COPY.TODAY}` : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : SESSION_LANDINGS_COPY.NOTHING_LANDED_TODAY;
+}
+
+/**
+ * The project sessions page's one Landings row (owner 2026-10-27, board 01 b), in the place the
+ * Landings group had: under the coordinator, above the page's own timeline. It opens the project's
+ * Landings window. Null for a project that has never had a landing, which draws no row at all.
+ *
+ * The mark follows the most urgent landing: one waiting for a decision is the red ✕ and the right
+ * slot says how long the longest of them has waited; else one in flight is the blue ring; else ✓.
+ * Without a waiting one the right slot says how long ago the last one settled. Today's counts are the
+ * window's own `Today` section, so the row and the window never disagree about a day.
+ */
+export function landingsRowSummary(
+  rows: readonly LandingSessionRow[],
+  merges: readonly ProjectPromotionView[],
+  opts: { now?: number; main?: string } = {},
+): LandingsRowSummary | null {
+  const landings = rows.filter((row) => row.landing);
+  if (landings.length === 0 && !merges.some((promotion) => promotion.merged != null)) return null;
+  const now = opts.now ?? Date.now();
+  const window = landingsWindow(landings, merges, { now: new Date(now) });
+  const waiting = window.now.filter((card) => card.state === 'AWAITING_DECISION');
+  const inFlight = window.now.filter((card) => card.state === 'IN_FLIGHT');
+  const today = window.days.find((day) => day.title === 'Today')?.rows ?? [];
+  const settledAt = Math.max(...window.days.flatMap((day) => day.rows.map((row) => row.at)));
+  const time = waiting.length > 0
+    ? elapsedLabel(new Date(Math.min(...waiting.map((card) => card.at))).toISOString(), now)
+    : Number.isFinite(settledAt) ? elapsedLabel(new Date(settledAt).toISOString(), now) : null;
+  return {
+    mark: waiting.length > 0 ? 'fail' : inFlight.length > 0 ? 'running' : 'ok',
+    time: time ?? '',
+    line: landingsCountLine({
+      waiting: waiting.length,
+      inFlight: inFlight.length,
+      landed: today.filter((row) => row.tone === 'ok').length,
+      merged: today.filter((row) => row.tone === 'merge').length,
+    }, opts.main),
+  };
 }
 
 const instant = (at: string | null | undefined): number => {

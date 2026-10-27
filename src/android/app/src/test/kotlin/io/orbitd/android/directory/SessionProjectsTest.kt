@@ -56,7 +56,8 @@ class SessionProjectsTest {
     private fun counted(listing: SessionProjectListing, folder: String) = listing.assigned.filter { it.folderId == folder }
 
     /** §2.9 LS6: a LANDING row is platform work, never a project row's member — it adds nothing to the row's count, needs-you,
-     * running or background jobs, and it is no row of its own (it is the page's Landings group). */
+     * running or background jobs, and it is no row of its own (the page's Landings row counts it, and its project's Landings window
+     * lists it). */
     @Test fun landingRowsAreNeverAProjectRowsMembers() {
         val landing = session("land", role = "LANDING", state = "RUNNING", approvals = 1, jobs = 1).copy(
             sessionKind = "LANDING", landing = SessionLandingSummary("TASK", "AWAITING_DECISION", null, null))

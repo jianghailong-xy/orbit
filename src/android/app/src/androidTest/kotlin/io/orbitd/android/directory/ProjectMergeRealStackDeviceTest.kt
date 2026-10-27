@@ -189,18 +189,19 @@ class ProjectMergeRealStackDeviceTest {
             record("GET promotions/merged (the merge)", "${merged.brief()} merged=${merged.obj("merged")}")
             assertEquals("the merge is the candidate pressed, at the SHA the card carried", second.text("sourceSha"), merged.text("sourceSha"))
 
-            // The merge on the page's timeline, opening its receipt: the server's own record.
-            val row = hasTestTag("project-merge-row:$secondId")
-            await(90_000) { runCatching { compose.onNodeWithTag("project-sessions-list").performScrollToNode(row) }.isSuccess }
-            compose.onNode(row).assert(hasText(PromotionCards.timelineDetail(merged), substring = true))
-            capture("a11d-stack-05-timeline")
+            // The merge in the project's Landings window (owner 2026-10-27), which the page's Landings row opens: one row with its round,
+            // opening in place to its receipt — the server's own record.
+            await(90_000) { runCatching { compose.onNodeWithTag("project-sessions-list").performScrollToNode(hasTestTag("landings-row")) }.isSuccess }
+            compose.onNodeWithTag("landings-row").performClick()
+            val row = SemanticsMatcher("a Landings window row") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("landing-row:") == true } and
+                hasText(PromotionCards.timelineDetail(merged), substring = true)
+            await(90_000) { runCatching { compose.onNodeWithTag("landings-window-list").performScrollToNode(row) }.isSuccess }
+            capture("a11d-stack-05-landings-window")
             compose.onNode(row).performClick()
-            await { exists(hasTestTag("promotion-receipt")) }
-            val sha = merged.obj("merged")!!.text("sha")!!.take(7)
-            await { exists(hasText("$sha · merge of ${PromotionCards.shortRef(merged.text("sourceRef")!!)}", substring = true) and hasAnyAncestor(hasTestTag("promotion-receipt"))) }
+            await { exists(hasTestTag("landing:receipt")) }
             capture("a11d-stack-06-receipt")
-            compose.onNodeWithTag("promotion-receipt:close").performClick()
-            await { !exists(hasTestTag("promotion-receipt")) }
+            compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+            await { exists(hasTestTag("project-sessions-list")) }
 
             // The coordinator conversation: the same merge as one line.
             compose.onNodeWithTag("project-sessions-list").performScrollToIndex(0)
