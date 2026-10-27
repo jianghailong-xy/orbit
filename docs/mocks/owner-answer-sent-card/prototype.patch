@@ -144,7 +144,7 @@ index 1b90862..2cbbf8d 100644
      <div className={`owner-answer${queued ? ' is-queued' : ''}`} data-seq={seq} data-owner-answer={card.itemId}>
        <details className="owner-answer-fold">
 diff --git a/src/web/src/components/CoordinatorQuestionCard.tsx b/src/web/src/components/CoordinatorQuestionCard.tsx
-index e339810..0127f00 100644
+index e339810..f07b6e8 100644
 --- a/src/web/src/components/CoordinatorQuestionCard.tsx
 +++ b/src/web/src/components/CoordinatorQuestionCard.tsx
 @@ -6,6 +6,7 @@ import {
@@ -164,10 +164,13 @@ index e339810..0127f00 100644
  import { ReviewCard } from './ReviewCard';
  import { Alert } from './ui/Alert';
  import { Textarea } from './ui/Textarea';
-@@ -93,6 +94,12 @@ export const OWN_ANSWER_PROMPT = 'Or type your own answer…';
+@@ -93,6 +94,15 @@ export const OWN_ANSWER_PROMPT = 'Or type your own answer…';
  export const OTHER_OPTION = 'Other — say it in my own words';
  export const RECOMMENDED = 'Recommended';
  export const ANSWERED_HEADING = 'Answered';
++/** PROTOTYPE (docs/mocks/owner-answer-sent-card/tone.html): the answered card's colour — unset keeps
++ *  today's dimmed blue, `grey` the neutral frame a decided evidence card takes, `green` a success tint. */
++const ANSWERED_TONE = typeof localStorage !== 'undefined' ? localStorage.getItem('oa-tone') : null;
 +/** PROTOTYPE (option M): what the one card says while its answer waits, or went unconfirmed. */
 +export const QUEUED_FOR_COORDINATOR = 'Queued — the coordinator reads it when its current turn ends';
 +export const NOT_CONFIRMED_RECEIVED = 'The coordinator has not confirmed it received this';
@@ -177,7 +180,7 @@ index e339810..0127f00 100644
  /** An answer with nobody to tell yet: R11 tells the next coordinator when one is bound. */
  export const WAITING_FOR_COORDINATOR = 'Waiting for this project’s next coordinator';
  export const DELIVERED_TO_COORDINATOR = 'Delivered to the current coordinator';
-@@ -506,9 +513,13 @@ function RecordOption({ label, why, recommended, chosen, said, saidLabel }: {
+@@ -506,9 +516,13 @@ function RecordOption({ label, why, recommended, chosen, said, saidLabel }: {
  export function AnsweredQuestionCard({
    record,
    now = new Date(),
@@ -191,16 +194,16 @@ index e339810..0127f00 100644
  }): JSX.Element {
    const [open, setOpen] = useState(false);
    const isWithdrawn = withdrawn(record);
-@@ -528,7 +539,7 @@ export function AnsweredQuestionCard({
+@@ -528,7 +542,7 @@ export function AnsweredQuestionCard({
        open={open}
        onOpenChange={setOpen}
        preview={{
 -        className: `answered-question-card${isWithdrawn ? ' is-withdrawn' : ''}`,
-+        className: `answered-question-card${isWithdrawn ? ' is-withdrawn' : ''}${delivery?.queued ? ' is-queued' : ''}`,
++        className: `answered-question-card${isWithdrawn ? ' is-withdrawn' : ''}${delivery?.queued ? ' is-queued' : ''}${ANSWERED_TONE ? ` tone-${ANSWERED_TONE}` : ''}`,
          content: (
            <>
              <span className="answered-question-head">
-@@ -549,12 +560,35 @@ export function AnsweredQuestionCard({
+@@ -549,12 +563,35 @@ export function AnsweredQuestionCard({
                  <ClockCircleOutlined aria-hidden="true" /> {lines.waiting}
                </span>
              ) : null}
@@ -240,7 +243,7 @@ index e339810..0127f00 100644
            </>
          ),
        }}
-@@ -598,6 +632,12 @@ export function AnsweredQuestionCard({
+@@ -598,6 +635,12 @@ export function AnsweredQuestionCard({
              </span>
            ) : null}
          </div>
@@ -373,10 +376,10 @@ index 179a2fb..191e52d 100644
  
  /**
 diff --git a/src/web/src/index.css b/src/web/src/index.css
-index e990295..427cc62 100755
+index e990295..9fa4086 100755
 --- a/src/web/src/index.css
 +++ b/src/web/src/index.css
-@@ -25621,3 +25621,240 @@ button.agent-progress-agent:hover {
+@@ -25621,3 +25621,271 @@ button.agent-progress-agent:hover {
      font-size: 26px;
    }
  }
@@ -616,4 +619,35 @@ index e990295..427cc62 100755
 +  font-size: 11px;
 +  white-space: pre-wrap;
 +  word-break: break-word;
++}
++/* Tone: the answered card set apart from the open question (blue, waiting on you). */
++.review-card-preview.answered-question-card.tone-grey {
++  border-color: var(--border);
++  background: var(--bg-raised);
++  opacity: 1;
++}
++.answered-question-card.tone-grey .answered-question-icon {
++  background: var(--bg-hover);
++  color: var(--text-3);
++}
++.answered-question-card.tone-grey .answered-question-tick {
++  color: var(--success-solid);
++}
++.answered-question-card.tone-grey .answered-question-open {
++  border-top-color: var(--border-subtle);
++}
++.review-card-preview.answered-question-card.tone-green {
++  border-color: var(--success-border);
++  background: color-mix(in srgb, var(--success-bg) 60%, var(--bg-raised));
++  opacity: 1;
++}
++.answered-question-card.tone-green .answered-question-icon {
++  background: var(--success-bg);
++  color: var(--success);
++}
++.answered-question-card.tone-green .answered-question-tick {
++  color: var(--success-solid);
++}
++.answered-question-card.tone-green .answered-question-open {
++  border-top-color: var(--success-border);
 +}
