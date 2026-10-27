@@ -1,5 +1,8 @@
 package io.orbitd.android.reader
 
+import android.graphics.Insets
+import android.view.View
+import android.view.WindowInsets
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import io.orbitd.android.composer.ComposerShell
@@ -11,6 +14,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.util.ReflectionHelpers
 
 /**
  * iOS `ConsoleView.foldsChrome` in the production shell: on a phone's width, while the composer holds the keyboard,
@@ -72,6 +76,43 @@ class ReaderChromeFoldTest : ReaderChromeFoldFixture() {
         assertTrue(has(sessionMenu()))
         assertTrue(has(hasTestTag("worktree-bar")))
         assertEquals(resting, listHeight(), 1f)
+    }
+}
+
+/**
+ * A15 F-48: Android 15's first release keeps the window across `Activity.recreate()` and leaves it fitting the system bars and the
+ * keyboard itself. The decor's content root is padded above the keyboard and the window's insets say it is shown, but none of it
+ * reaches the page: Compose's IME inset stays 0 as the keyboard comes and goes. Its going still gives the chrome back.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [29], application = ComposerShellApplication::class, qualifiers = "w360dp-h640dp-xhdpi")
+class RecreatedWindowChromeFoldTest : ReaderChromeFoldFixture() {
+    /** A keyboard [height] px tall as that window takes it, never dispatched to the page: the content root padded above it, and the
+     * window's insets reporting it (below API 30 androidx reads a system-window bottom over the stable one as the keyboard). */
+    private fun windowFitsKeyboard(height: Int) = compose.runOnUiThread {
+        val decor = compose.activity.window.decorView
+        ReflectionHelpers.setField(decor.parent, "mLastWindowInsets", WindowInsets.Builder().setSystemWindowInsets(Insets.of(0, 0, 0, height)).build())
+        (compose.activity.findViewById<View>(android.R.id.content).parent as View).setPadding(0, 0, 0, height)
+    }
+
+    @Test fun theKeyboardGoingGivesTheChromeBackWhenOnlyTheWindowReportsIt() {
+        session()
+        signIn(); openSession()
+        await { has(hasTestTag("app-bar")) }
+        compose.onNodeWithTag("composer-input").performClick()
+        await { !has(hasTestTag("app-bar")) }
+        // The API 35 emulator's keyboard at 360x640 dp.
+        windowFitsKeyboard(598)
+        compose.waitForIdle()
+        assertFalse("folded while the keyboard is up", has(hasTestTag("app-bar")))
+        compose.onNodeWithTag("composer-input").assertIsFocused()
+
+        // Back puts the keyboard away: the content root gets its room back and the window's insets show no keyboard.
+        windowFitsKeyboard(0)
+        await { has(hasTestTag("app-bar")) }
+        compose.onNodeWithTag("composer-input").assertIsNotFocused()
+        assertTrue(has(sessionMenu()))
+        assertTrue(has(hasTestTag("worktree-bar")))
     }
 }
 
