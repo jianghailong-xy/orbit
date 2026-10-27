@@ -1002,6 +1002,66 @@ func TestADroppedSteerStaysFailedWhenItsWrittenReportComesLate(t *testing.T) {
 	assertSteerFailedVisibly(t, s, steerOrbitTurn, true)
 }
 
+// A steer's announcements are made only the way a message moves — written, then its last word, then
+// nothing — and the bubble opens with the first of them. One that comes in behind a later one is the
+// steer's past, whichever goroutine it comes from, and is not made at all.
+func TestASteersAnnouncementsNeverMoveItBackwards(t *testing.T) {
+	written, acknowledged, failed := string(deliveryWritten), string(deliveryAcknowledged), string(deliveryFailed)
+	for _, tc := range []struct {
+		name string
+		in   []deliveryState
+		want []string // the bubble's state, then each report's
+	}{
+		{"in order", []deliveryState{deliveryWritten, deliveryAcknowledged}, []string{written, written, acknowledged}},
+		{"written after the echo", []deliveryState{deliveryAcknowledged, deliveryWritten}, []string{acknowledged, acknowledged}},
+		{"written after the turn dropped it", []deliveryState{deliveryFailed, deliveryWritten}, []string{failed, failed}},
+		{"nothing after the last word", []deliveryState{deliveryWritten, deliveryAcknowledged, deliveryFailed, deliveryWritten}, []string{written, written, acknowledged}},
+		{"written once", []deliveryState{deliveryWritten, deliveryWritten}, []string{written, written}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newCodexSteerSession(t)
+			s.startTurn()
+			s.name(steerCodexTurn)
+			if _, err := beginCodexSteer(context.Background(), &s.activeMu, &s.active, steerOrbitTurn, "", "actually, call it gadget", nil); err != nil {
+				t.Fatalf("aim the steer: %v", err)
+			}
+			for _, state := range tc.in {
+				s.dispatch.announce(steerOrbitTurn, state, "", false)
+			}
+			if got := s.deliveries(steerOrbitTurn); !equalStrings(got, tc.want) {
+				t.Errorf("announcing %v filed %v, want %v", tc.in, got, tc.want)
+			}
+			if n := s.bubbles(steerOrbitTurn); n != 1 {
+				t.Errorf("user events for the steer = %d, want exactly one", n)
+			}
+		})
+	}
+}
+
+// Each steer is ordered on its own: one message's last word says nothing about another's.
+func TestEachSteersAnnouncementsAreOrderedOnTheirOwn(t *testing.T) {
+	s := newCodexSteerSession(t)
+	s.startTurn()
+	s.name(steerCodexTurn)
+	for _, turnID := range []string{steerOrbitTurn, steerOtherTurn} {
+		if _, err := beginCodexSteer(context.Background(), &s.activeMu, &s.active, turnID, "", "message for "+turnID, nil); err != nil {
+			t.Fatalf("aim %s: %v", turnID, err)
+		}
+	}
+	s.dispatch.announce(steerOrbitTurn, deliveryAcknowledged, "", false)
+	s.dispatch.announce(steerOtherTurn, deliveryWritten, "", false)
+	s.dispatch.announce(steerOrbitTurn, deliveryWritten, "", false)
+	s.dispatch.announce(steerOtherTurn, deliveryAcknowledged, "", false)
+
+	written, acknowledged := string(deliveryWritten), string(deliveryAcknowledged)
+	if got, want := s.deliveries(steerOrbitTurn), []string{acknowledged, acknowledged}; !equalStrings(got, want) {
+		t.Errorf("first steer filed %v, want %v", got, want)
+	}
+	if got, want := s.deliveries(steerOtherTurn), []string{written, written, acknowledged}; !equalStrings(got, want) {
+		t.Errorf("second steer filed %v, want %v", got, want)
+	}
+}
+
 // The turn's own opening message is echoed the same way, under the turn's own id. It must not be
 // mistaken for a steer: doing so would settle a conversation turn nothing is waiting to settle.
 func TestTheTurnsOwnOpeningMessageIsNotMistakenForASteer(t *testing.T) {
