@@ -52,8 +52,10 @@ type linkSpool struct {
 	log  func(...any)
 	once sync.Once
 	// lost counts the events the spool lost: in segments that did not read back whole, and those of a stopping runner
-	// the disk would not take.
-	lost atomic.Uint64
+	// the disk would not take. lostCompletions counts the turn completions kept beside them (turn_complete_journal.go)
+	// that the cleanup removed unsent.
+	lost            atomic.Uint64
+	lostCompletions atomic.Uint64
 
 	mu    sync.Mutex
 	bytes int64
@@ -83,7 +85,9 @@ func (sp *linkSpool) init() {
 		var newest time.Time
 		for _, f := range files {
 			if info, err := f.Info(); err == nil {
-				size += info.Size()
+				if strings.HasSuffix(f.Name(), ".jsonl") {
+					size += info.Size() // the segments: what the spool's bound is about
+				}
 				if info.ModTime().After(newest) {
 					newest = info.ModTime()
 				}
@@ -91,10 +95,15 @@ func (sp *linkSpool) init() {
 		}
 		if len(files) == 0 || time.Since(newest) > linkSpoolStaleAfter {
 			// Every event still in it is one the control plane never acknowledged, and none of it will reach it now: said
-			// before it goes, session by session, with how many and which, and counted as lost.
+			// before it goes, session by session, with how many and which, and counted as lost. So is every turn
+			// completion kept beside them, which the control plane never answered.
 			if n, first, last := linkSpoolDirEvents(dir, files); n > 0 {
 				sp.log(fmt.Sprintf("runner link: removing the event spool of session %s, untouched since %s: its %d events, of seqs %d-%d, were never acknowledged by the control plane and are lost (%d lost so far)",
 					entry.Name(), newest.Format(time.RFC3339), n, first, last, sp.losing(n)))
+			}
+			if turns := linkSpoolDirCompletions(dir, files); len(turns) > 0 {
+				sp.log(fmt.Sprintf("runner link: removing the event spool of session %s, untouched since %s: its %d kept turn completion(s), of turn(s) %s, were never answered by the control plane and are lost (%d lost so far)",
+					entry.Name(), newest.Format(time.RFC3339), len(turns), strings.Join(turns, ", "), sp.lostCompletions.Add(uint64(len(turns)))))
 			}
 			if err := os.RemoveAll(dir); err != nil {
 				sp.log(fmt.Sprintf("runner link: the event spool of session %s could not be removed: %v", entry.Name(), err))
@@ -588,17 +597,19 @@ func (q *linkSpoolQueue) drop(seg *linkSpoolSegment) {
 	}
 }
 
-// remove deletes the session's spool: nothing in it will ever be stored.
+// remove deletes the session's spool: nothing in it will ever be stored. The turn completions kept beside it are not its
+// to remove: they go when a supervisor sends them, or with the cleanup, each said (turn_complete_journal.go).
 func (q *linkSpoolQueue) remove() {
 	if q.w != nil {
 		_ = q.w.f.Close()
 		q.w = nil
 	}
 	for _, seg := range append(q.segs, q.taken...) {
+		_ = os.Remove(seg.path)
 		q.sp.uncharge(seg.bytes)
 	}
 	q.segs, q.taken, q.n = nil, nil, 0
-	_ = os.RemoveAll(q.dir)
+	_ = os.Remove(q.dir) // only once it is empty
 }
 
 // untake hands the taken segments back to the disk's count, and returns the events of head none of them holds: those a
