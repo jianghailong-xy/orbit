@@ -40,3 +40,41 @@ capture prints the rows' lines, how many rows mention a tag (0), and the card's 
 
 Not pictured: the iPhone and Mac Recap card. It is compiled by `client.yml` above, and its rule, time, notices and
 words are `RecapCardTests`. No native screenshot probe was run.
+
+## The card becomes a footnote (2026-10-27, board 05-quiet, option A)
+
+The owner said the card read as something floating over the conversation and got in the way. Board
+`docs/mocks/session-recap-display/05-quiet` put that down to three things: it was the only filled, rounded block in the
+transcript; it had the composer's shape and sat right on the composer; and its text was as bright as the reply. He picked
+option A, with Refresh shown only on hover.
+
+What changed, on all four clients (web `SessionRecapCard` and `.chat-recap*`, Mac/iOS `RecapCardView`, Android
+`RecapCardView`):
+
+- No fill, border or corners. The card is one paragraph flush with the reply's left edge, and the head (glyph, **Recap**,
+  `· time`) runs into the recap.
+- The paragraph uses the list line's own size and color: web 13px `--text-2` (as `.session-preview`), Mac 13pt and iOS 15pt
+  secondary, Android `bodyMedium` in `onSurfaceVariant`.
+- Refresh sits beside the first line. On Mac and web it shows under the pointer, on keyboard focus and while a refresh
+  runs; otherwise it is hidden in place, so the words never move. iPhone, iPad, Android and hover-less web screens always
+  show it.
+- Unchanged: when the card shows and when it steps aside, the refresh call and its four notices, all copy, and Settings.
+
+`quiet/capture.mjs` takes before (HEAD) and after (this change) shots from two vite builds of the app over the ui-migration
+fixtures. `quiet/report.json` holds what it measured:
+
+| | Before | After |
+|---|---|---|
+| Fill, corners | grey 12%, 12px | none, 0 |
+| Height, desktop / phone | 88 / 110 px | 40 / 60 px |
+| Text left edge (reply's at 633) | 645 | 633 |
+| Text | 14px `--text-1` | 13px `--text-2` |
+| Refresh opacity: rest / hover / keyboard focus / phone | 1 / 1 / 1 / 1 | 0 / 1 / 1 (`:focus-visible`) / 1 |
+
+Checks:
+
+- Web vitest: `SessionRecapCard` 9, `WorkspaceView.recapRow` 6, `indexCss` 2 and `copyLanguage` 2 tests, 19/19 green.
+  `tsc --noEmit` is clean.
+- Android `testDebugUnitTest`, 11/11 green: `RecapCardViewTest` (3), `RecapCardTest` (6) and `SessionRecapShotsTest` (2).
+  `RecapCardViewTest` adds a check that the first line's middle is the 48dp Refresh button's middle (24dp).
+- Swift: `swiftc -parse` in `swift:6.1` only. SwiftUI builds on macOS alone, and `client.yml` has not run on this change.
