@@ -17,7 +17,7 @@ const { SESSION, SESSION_PATH } = await import(`${WT}/src/web/ui-migration/sessi
 
 const OUT = `${KIT}/shots`;
 mkdirSync(OUT, { recursive: true });
-const DISTS = { today: `${KIT}/today-dist`, a: `${KIT}/proto-a-dist`, b: `${KIT}/proto-b-dist` };
+const DISTS = { today: `${KIT}/today-dist`, a: `${KIT}/proto-a-dist`, b: `${KIT}/proto-b-dist`, c: `${KIT}/proto-c-dist`, d: `${KIT}/proto-d-dist` };
 const PORTS = {};
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml',
   '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2' };

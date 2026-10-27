@@ -4,12 +4,15 @@ const WT = '/root/.orbit/worktrees/01a17c4a-2917-730f-b47a-4da0f9b5cd27';
 const DIR = `${WT}/docs/mocks/attached-context-note`;
 const { chromium } = await import(`${WT}/node_modules/playwright/index.mjs`);
 
-const PARTS = ['01-today-vs-line', '02-whole-page', '03-opened', '04-elsewhere', '05-dark-phone', '06-decide-a-or-b', '07-rollout'];
+// node render.mjs [board.html] [part-name,part-name,…]: #part-N is written to the N-th name.
+const BOARD = process.argv[2] ?? 'board.html';
+const PARTS = process.argv[3]?.split(',')
+  ?? ['01-today-vs-line', '02-whole-page', '03-opened', '04-elsewhere', '05-dark-phone', '06-decide-a-or-b', '07-rollout'];
 
 const browser = await chromium.launch({ env: { ...process.env, FONTCONFIG_FILE: '/var/tmp/kimi-accounts-mock/fonts.conf' } });
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 2 });
-  await page.goto(`file://${DIR}/board.html`);
+  await page.goto(`file://${DIR}/${BOARD}`);
   await page.evaluate(async () => {
     await document.fonts.ready;
     await Promise.all([...document.images].map((img) => (img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; }))));
