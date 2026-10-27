@@ -25569,6 +25569,309 @@ button.agent-progress-agent:hover {
   color: var(--text-1);
 }
 
+/* ---- Enroll (/enroll): the browser half of `orbit register`, drawn as the login is — the machine and
+   the Orbit mark in the login's faint orbits, the code to compare, what is approved, two capsules. ---- */
+.enroll-form {
+  grid-row: 2;
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.enroll-page .login-title {
+  font-size: 26px;
+}
+
+.enroll-page code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--fill-inset);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.9em;
+  color: var(--text-1);
+}
+
+/* The machine, a link, the account's mark: dashed while it waits, green once approved. */
+.enroll-mark {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 26px;
+}
+
+/* The login's orbits, opened up to hold both marks and kept clear of the code below. */
+.enroll-mark .login-orbits {
+  width: 232px;
+  height: 232px;
+}
+
+.enroll-mark .login-orbits::before {
+  width: 316px;
+  height: 316px;
+}
+
+.enroll-mark .login-orbits::after {
+  display: none;
+}
+
+.enroll-machine,
+.enroll-mark .login-icon {
+  position: relative;
+  width: 60px;
+  height: 60px;
+}
+
+.enroll-machine {
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--bg-raised);
+  box-shadow: inset 0 0 0 1px var(--border), 0 8px 13px rgba(0, 0, 0, 0.06);
+  font-size: 28px;
+  color: var(--text-2);
+}
+
+.enroll-link {
+  position: relative;
+  width: 64px;
+  height: 2px;
+  margin: 0 8px;
+  background: repeating-linear-gradient(90deg, var(--text-4) 0 6px, transparent 6px 12px);
+}
+
+.enroll-mark-approved .enroll-link {
+  background: var(--success-solid);
+}
+
+.enroll-link-badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--text-3);
+  box-shadow: 0 0 0 4px var(--bg-base);
+  font-size: 13px;
+  color: #fff;
+  transform: translate(-50%, -50%);
+}
+
+.enroll-mark-approved .enroll-link-badge {
+  background: var(--success-solid);
+}
+
+.enroll-mark-expired .enroll-link-badge {
+  background: var(--warning-solid);
+}
+
+.enroll-mark-denied .enroll-machine,
+.enroll-mark-expired .enroll-machine {
+  color: var(--text-3);
+}
+
+.enroll-name {
+  font-weight: 600;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+
+/* The code, big enough to read against the terminal's at a glance. */
+.enroll-code {
+  margin-top: 28px;
+  padding: 10px 22px;
+  border-radius: 14px;
+  background: var(--fill-inset);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-1);
+  user-select: all;
+}
+
+.enroll-code-hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.enroll-facts {
+  width: 100%;
+  margin: 24px 0 0;
+  border-radius: 14px;
+  background: var(--fill-inset);
+  text-align: left;
+}
+
+.enroll-facts > div {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 11px 16px;
+}
+
+.enroll-facts > div + div {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.enroll-facts dt {
+  flex: none;
+  width: 72px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.enroll-facts dd {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+
+.enroll-fact-strong {
+  font-weight: 600;
+}
+
+.enroll-fact-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.enroll-fact-warning {
+  color: var(--warning);
+}
+
+.enroll-text-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--brand);
+  cursor: pointer;
+}
+
+.enroll-text-button:hover {
+  color: var(--brand-strong);
+}
+
+.enroll-alert {
+  width: 100%;
+  margin-top: 12px;
+  text-align: left;
+}
+
+.enroll-actions {
+  width: 100%;
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.enroll-actions .login-submit {
+  margin-top: 0;
+}
+
+.enroll-submit-danger.login-submit {
+  background: var(--error-solid);
+}
+
+.enroll-submit-danger.login-submit:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error-solid) 86%, #000);
+}
+
+.enroll-submit-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.enroll-submit-link:hover {
+  color: #fff;
+}
+
+.enroll-deny.orbit-button {
+  height: 50px;
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.enroll-note {
+  margin: 16px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-3);
+  text-wrap: balance;
+}
+
+.enroll-next {
+  width: 100%;
+  margin-top: 28px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--fill-inset);
+  text-align: left;
+}
+
+.enroll-next-title {
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.enroll-next-body {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.enroll-command {
+  margin-top: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 10px 16px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--fill-inset);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 15px;
+  color: var(--text-1);
+  cursor: pointer;
+}
+
+.enroll-command-prompt {
+  color: var(--text-3);
+}
+
+.enroll-command-copy {
+  margin-left: 6px;
+  color: var(--text-3);
+}
+
+.enroll-command:hover .enroll-command-copy {
+  color: var(--brand);
+}
+
+.enroll-quiet-link {
+  margin-top: 20px;
+  font-size: 14px;
+  color: var(--brand);
+}
+
 /* ---- Privacy policy (/privacy): public, the same page signed out or in, outside the app shell — the
    policy alone, in one reading column on the page background. It owns its scroll, as every
    full-height view does. ---- */

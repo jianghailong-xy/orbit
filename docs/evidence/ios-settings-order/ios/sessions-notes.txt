@@ -1,0 +1,10 @@
+shown: Preferences has a Sessions row
+shown: it opens the Sessions page
+order: Default permission@182 < The mode a new session starts in@219 < Session orchestration@298 < Sessions in every workspace can spawn@350 < Smart model selection@429 < Coordinators suggest a tier for each task@481 < Suggested replies@560 < When a Claude turn ends@612 < Session recaps@691 < Session lists show the one-line summary@743
+shown: each setting, then its hint under it, in SessionSettings' order
+shown: Session orchestration reads on (1)
+shown: Smart model selection reads off (0)
+shown: Suggested replies reads on (1)
+shown: Session recaps reads on (1)
+Default permission's row: Default permission
+shown: Default permission reads Auto

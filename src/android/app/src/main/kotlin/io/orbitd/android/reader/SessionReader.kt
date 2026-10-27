@@ -334,10 +334,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         LocalSessionConsole provides console, LocalWatchTargetNames provides targetNames) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
-        val otherInputHasKeyboard = WindowInsets.ime.getBottom(LocalDensity.current) > 0 && !composerFocused
-        val composerHeight = if (otherInputHasKeyboard) 0.dp else if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
-        val compact = maxWidth < 600.dp
         val view = LocalView.current
+        val composerHeight = ComposerFold.height(maxHeight, WindowInsets.ime.getBottom(LocalDensity.current), ComposerFold.windowIme(view), composerFocused)
+        val compact = maxWidth < 600.dp
         // What D09 P02 waits for, as this frame composes it: the newest durable row of a window at the live tail (the list's
         // measure says whether it is on screen), and a composer that takes typing, with room, in a window no dialog covers.
         if (lastPage != null) {

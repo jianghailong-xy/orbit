@@ -29,6 +29,7 @@ import kotlinx.serialization.json.*
 import okhttp3.mockwebserver.*
 import java.io.File
 import java.time.Instant
+import java.util.Locale
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.*
@@ -118,9 +119,13 @@ class ManagementDeviceTest {
                 // The runner is offline here: a line of Infrastructure's Needs you, which the row counts (A13g, iOS 5e75edbde).
                 await("1 needs you"); await("1 active")
                 capture("settings-home")
-                // Default permission and Appearance are menus on their rows; each write is one preference key.
+                // Default permission and Appearance are menus on their rows — the first on Sessions' page (docs/mocks/ios-settings-order);
+                // each write is one preference key.
+                click(hasText("Sessions") and hasClickAction()); await("Default permission")
                 click(hasText("Default permission") and hasClickAction()); click(hasText("Plan") and hasClickAction(), scroll = false)
                 compose.waitUntil(10_000) { permission == "plan" }
+                capture("settings-sessions")
+                back(); await("Appearance")
                 click(hasText("Appearance") and hasClickAction()); click(hasText("Dark") and hasClickAction(), scroll = false)
                 compose.waitUntil(10_000) { theme == "dark" }
                 await("Dark")
@@ -134,7 +139,7 @@ class ManagementDeviceTest {
                 capture("edit-profile")
                 click(hasText("Save profile") and hasClickAction())
                 compose.waitUntil(10_000) { name == "Updated fixture" }
-                await("Default permission")
+                await("Appearance")
                 click(hasText("Change password") and hasClickAction())
                 await("At least 6 characters")
                 capture("change-password")
@@ -185,12 +190,12 @@ class ManagementDeviceTest {
                 await("Administrator access is required.")
                 capture("admin-demoted")
                 back(); back()
-                await("Default permission")
+                await("Appearance")
                 shell("settings put system font_scale 2.0")
                 compose.activityRule.scenario.recreate()
                 await("Updated fixture")
                 // The page reads the account again after the recreate; capture it settled, from the top.
-                compose.waitUntil(15_000) { compose.onAllNodes(hasText("Session orchestration") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+                compose.waitUntil(15_000) { compose.onAllNodes(hasText("Appearance") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
                 compose.onNodeWithContentDescription("Edit profile").performScrollTo()
                 capture("settings-home-font200")
                 assertEquals(1, calls.count { it == "PATCH /api/users/me" })
@@ -475,12 +480,15 @@ class ManagementDeviceTest {
             try {
                 role = "ADMIN"; modelRouting = null; revoked = emptySet(); deepSeekLow = false
                 signIn(server); settings()
-                await("Smart model selection"); await("2 active")
+                await("2 active")
+                // Smart model selection is on Sessions' page (docs/mocks/ios-settings-order).
+                click(hasText("Sessions") and hasClickAction()); await("Smart model selection")
                 capture("a13d-settings-sessions")
                 click(hasText("Smart model selection") and isToggleable())
                 compose.waitUntil(10_000) { modelRouting == true }
                 compose.waitUntil(10_000) { runCatching { compose.onNode(hasText("Smart model selection") and isToggleable()).assertIsOn() }.isSuccess }
                 capture("a13d-smart-selection-on")
+                back(); await("Appearance")
                 compose.onAllNodesWithText("Access tokens").onFirst().performScrollTo()
                 capture("a13d-settings-account")
                 click(hasText("Access tokens") and hasClickAction())
@@ -498,7 +506,7 @@ class ManagementDeviceTest {
                 click(hasText("Revoked & expired 3") and hasClickAction(), scroll = false)
                 await("Revoked by an administrator")
                 capture("a13d-access-tokens-ended")
-                back(); await("Default permission")
+                back(); await("Appearance")
                 click(hasText("Machines & models") and hasClickAction()); await("¥110.00 · $5.00"); await("Unavailable")
                 compose.onAllNodesWithText("API keys").onFirst().performScrollTo()
                 capture("a13d-infrastructure-keys")
@@ -758,7 +766,7 @@ class ManagementDeviceTest {
                 // Between pages: semantics actions and the back key. On each page: TalkBack's gestures only.
                 compose.onAllNodesWithContentDescription("Open navigation").onFirst().performSemanticsAction(SemanticsActions.OnClick)
                 compose.onNode(hasText("Settings") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
-                await("Default permission")
+                await("Appearance")
                 page("settings-home", report, problems)
                 activate("Machines & models", "talkback-settings-infrastructure", report, problems); await("Controlled remote")
                 report.appendLine("double tap Infrastructure -> the Infrastructure page opened")
@@ -770,14 +778,14 @@ class ManagementDeviceTest {
                 activate("Increase Max Concurrent", "talkback-runner-capacity", report, problems)
                 compose.waitUntil(10_000) { calls.any { it == "PATCH /api/runners/$runnerId" } }
                 report.appendLine("double tap Increase Max Concurrent -> PATCH /api/runners/$runnerId sent")
-                back(); back(); await("Default permission")
+                back(); back(); await("Appearance")
                 activate("Machines & models", "talkback-settings-infrastructure-pools", report, problems); await("Team Codex")
                 report.appendLine("double tap Infrastructure -> the Infrastructure page opened again")
                 // The pool's row by its SHARED mark: "Team Codex" is also the Codex engine's pool line, which opens nothing.
                 activate("SHARED", "talkback-infrastructure-pool", report, problems); await("Who can use it")
                 report.appendLine("double tap Team Codex (SHARED) -> the pool page opened")
                 page("codex-pool", report, problems)
-                back(); back(); await("Default permission")
+                back(); back(); await("Appearance")
                 activate("Shared links", "talkback-settings-shared-links", report, problems); await("Fixture shared session")
                 report.appendLine("double tap Shared links -> the shared links page opened")
                 page("shared-links", report, problems)
@@ -786,7 +794,7 @@ class ManagementDeviceTest {
                 compose.onNode(hasText("Cancel") and hasClickAction() and hasAnyAncestor(isDialog())).performSemanticsAction(SemanticsActions.OnClick)
                 // The key goes to the window in front: let the dialog go first.
                 compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
-                back(); await("Default permission")
+                back(); await("Appearance")
                 activate("Edit profile", "talkback-settings-profile", report, problems); await("Save profile")
                 report.appendLine("double tap Edit profile -> the profile card opened")
                 page("edit-profile", report, problems)
@@ -796,7 +804,7 @@ class ManagementDeviceTest {
                 // gone and the page's window is in front again (sent at once, on A15b's first 360×640 dp round, the two Backs left
                 // the profile page open).
                 back(); compose.waitUntil(5_000) { compose.onAllNodesWithText("Photo library").fetchSemanticsNodes().isEmpty() && compose.activity.hasWindowFocus() }
-                back(); await("Default permission")
+                back(); await("Appearance")
                 activate("Admin", "talkback-settings-admin", report, problems); await("Second user")
                 report.appendLine("double tap Admin -> the users list opened")
                 page("admin-users", report, problems)
@@ -874,15 +882,17 @@ class ManagementDeviceTest {
         report.appendLine("## $page — the tree")
         fun walk(node: AccessibilityNodeInfo, depth: Int) {
             val reachable = node.isVisibleToUser && (node.isClickable || node.isFocusable || node.isCheckable)
-            // A row the window's edge cuts has its words below the edge, out of the tree until TalkBack scrolls to it.
-            val cut = Rect().also(node::getBoundsInScreen).let { it.bottom >= window.bottom || it.top <= window.top }
             val said = if (node.isClickable || node.isCheckable) spoken(node) else words(node).joinToString(" | ")
+            val wordless = reachable && node.isClickable && said.isEmpty()
+            // A row the window's edge cuts has its words below the edge, out of the tree until TalkBack scrolls to it; so has a row
+            // its scrolling list's edge cuts ([rowCut]).
+            val cut = wordless && (Rect().also(node::getBoundsInScreen).let { it.bottom >= window.bottom || it.top <= window.top } || rowCut(node) != null)
             if (reachable || said.isNotEmpty()) {
                 val actions = node.actionList.mapNotNull { it.label?.toString() }.joinToString(",")
                 report.appendLine("${"  ".repeat(depth)}${node.className?.toString()?.substringAfterLast('.')} clickable=${node.isClickable} " +
                     "enabled=${node.isEnabled} says=\"$said\"" + (if (node.isClickable) " (description=\"${node.contentDescription}\" text=\"${node.text}\")" else "") +
-                    if (actions.isNotEmpty()) " actions=[$actions]" else "")
-                if (reachable && node.isClickable && said.isEmpty() && !cut)
+                    (if (actions.isNotEmpty()) " actions=[$actions]" else "") + if (cut) " — cut by the window's or its list's edge, not counted" else "")
+                if (wordless && !cut)
                     problem(report, problems, "$page: a press without words (${node.className}) at ${Rect().also(node::getBoundsInScreen)}")
                 if (reachable && (node.isClickable || node.isCheckable)) symbols(node).forEach { problem(report, problems, "$page: TalkBack reads the bare symbol \"$it\" in \"$said\"") }
             }
@@ -893,7 +903,7 @@ class ManagementDeviceTest {
 
     /**
      * TalkBack's own order: a finger on the page's first item (below the top bar, which TalkBack reaches after the
-     * page), then swipe right after swipe right, with what it reads at each stop.
+     * page), then swipe right after swipe right, with what it reads at each stop and when each swipe went out.
      */
     private fun traverse(page: String, report: StringBuilder, problems: MutableList<String>) {
         val root = appRoot() ?: return
@@ -902,34 +912,91 @@ class ManagementDeviceTest {
             it.isVisibleToUser && (it.isClickable || words(it).isNotEmpty()) && Rect().also(it::getBoundsInScreen).top > screen.height() / 10
         }
         report.appendLine("## $page — TalkBack, swipe right from \"${first?.let(::spoken)}\"")
+        val walk = SystemClock.uptimeMillis()
+        fun since(time: Long) = "+%.1f s".format(Locale.ROOT, (time - walk) / 1000.0)
+        fun inApp() = focused()?.takeIf { it.packageName?.toString() == app.packageName }
+        fun key(node: AccessibilityNodeInfo) = "${Rect().also(node::getBoundsInScreen)} ${spoken(node)}"
         first?.let { val at = Rect().also(it::getBoundsInScreen); tap(at.exactCenterX(), at.exactCenterY()); SystemClock.sleep(1_000) }
-        focused()?.let { report.appendLine("  ${it.className?.toString()?.substringAfterLast('.')} \"${spoken(it)}\" (touched)") }
+        // Where TalkBack's focus was before each swipe, as it was read then.
+        var last = inApp()?.also { report.appendLine("  ${it.className?.toString()?.substringAfterLast('.')} \"${spoken(it)}\" (touched)") }?.let(::key)
         val photograph = page == "settings-home"
         if (photograph) capture("talkback-walk-$page-0")
         val stops = mutableListOf<String>()
         var unmoved = 0
-        for (step in 1..20) {
-            swipeRight(screen); SystemClock.sleep(1_000)
-            if (photograph && step <= 8) capture("talkback-walk-$page-$step")
-            var node = focused()?.takeIf { it.packageName?.toString() == app.packageName } ?: run { report.appendLine("  (TalkBack's focus left the app)"); null } ?: break
+        var swipes = 0
+        while (stops.size < 20 && swipes < 30) {
+            val before = last
+            val sent = SystemClock.uptimeMillis()
+            swipeRight(screen); swipes++
+            val took = SystemClock.uptimeMillis() - sent
+            SystemClock.sleep(1_000)
+            if (photograph && swipes <= 8) capture("talkback-walk-$page-$swipes")
+            var node = inApp() ?: run { report.appendLine("  (TalkBack's focus left the app)"); null } ?: break
+            // TalkBack 14 (API 33) sometimes moves its focus a second late: looked at again before the swipe counts as let go by.
+            if (key(node) == before) {
+                SystemClock.sleep(1_000)
+                node = inApp() ?: run { report.appendLine("  (TalkBack's focus left the app)"); null } ?: break
+            }
             // A swipe past the last item on screen makes TalkBack 14 (API 33) scroll and stop on a row the window's edge cuts, which
             // it then brings on screen: until it has, the row's words are past the edge, out of the tree. Read the row once it is there
             // (A15g, 360×640 dp: 1 s after the swipe, Admin lay cut at the bottom with no words; 0.8 s later it was on screen, "Admin").
             val settled = SystemClock.uptimeMillis() + 3_000
             while (node.isClickable && spoken(node).isEmpty() && SystemClock.uptimeMillis() < settled) {
                 SystemClock.sleep(250)
-                node = focused()?.takeIf { it.packageName?.toString() == app.packageName } ?: break
+                node = inApp() ?: break
             }
             val said = spoken(node)
             val stop = "${Rect().also(node::getBoundsInScreen)} $said"
-            if (stop == stops.lastOrNull()) { if (++unmoved >= 2) { report.appendLine("  (the last item)"); break } else continue }
+            last = stop
+            if (stop == before) {
+                // TalkBack 14 lets swipes go by: the one after a page's last item, up to six in a row after a touch on a page it has
+                // just opened (it then often goes on to the top bar), and one the console sent too slowly to be a swipe (A15g follow-up:
+                // each still made a touch interaction). Each is swiped again; after two in a row TalkBack's focus is touched again,
+                // as a person would; the list has ended only when six in a row and two touches have not moved it.
+                unmoved++
+                report.appendLine("  (swipe $swipes at ${since(sent)}, sent in $took ms, left TalkBack's focus on \"$said\")")
+                if (unmoved >= 6) { report.appendLine("  (the last item: $unmoved swipes in a row left TalkBack's focus here)"); break }
+                if (unmoved % 2 == 0) {
+                    val at = Rect().also(node::getBoundsInScreen)
+                    // Of a row a list's edge cuts, the part inside the list: its middle may lie under the top bar.
+                    scroller(node)?.let { list -> at.intersect(Rect().also(list::getBoundsInScreen)) }
+                    val touched = SystemClock.uptimeMillis()
+                    tap(at.exactCenterX(), at.exactCenterY()); SystemClock.sleep(1_000)
+                    val again = inApp()
+                    last = again?.let(::key) ?: last
+                    report.appendLine("  (touched \"$said\" again at ${since(touched)} -> TalkBack's focus on \"${again?.let(::spoken)}\")")
+                }
+                continue
+            }
+            unmoved = 0
             if (stop in stops) { report.appendLine("  (back to an earlier item)"); break }
-            stops += stop; unmoved = 0
-            report.appendLine("  ${node.className?.toString()?.substringAfterLast('.')} \"$said\"" + if (node.isClickable) " — double tap to activate" else "")
-            if (node.isClickable && said.isEmpty()) problem(report, problems, "$page: TalkBack stops on a press it has no words for")
+            stops += stop
+            report.appendLine("  ${node.className?.toString()?.substringAfterLast('.')} \"$said\"" + (if (node.isClickable) " — double tap to activate" else "") +
+                " (swipe $swipes at ${since(sent)})")
+            if (node.isClickable && said.isEmpty()) {
+                // TalkBack 14 also stops on a row its list's edge cuts — wrapping past the top bar onto one under the navigation bar or
+                // under the top bar — and says nothing there (TalkBack 16 skips such rows): recorded, not counted, as the tree's are.
+                val list = rowCut(node)
+                if (list != null) report.appendLine("    (a row its list's edge cuts: at ${Rect().also(node::getBoundsInScreen)}, the list at $list; " +
+                    "its words are past the edge, out of the tree: not counted)")
+                else problem(report, problems, "$page: TalkBack stops on a press it has no words for")
+            }
             if (!node.isClickable && !node.isCheckable) symbols(node).forEach { problem(report, problems, "$page: TalkBack stops on the bare symbol \"$it\"") }
         }
         if (stops.size < 3) problem(report, problems, "$page: TalkBack's swipes reached ${stops.size} item(s)")
+    }
+
+    /** The nearest ancestor of [node] that scrolls. */
+    private fun scroller(node: AccessibilityNodeInfo): AccessibilityNodeInfo? = generateSequence(node.parent) { it.parent }.firstOrNull { it.isScrollable }
+
+    /**
+     * Where [node]'s scrolling list is, when the list's top or bottom edge cuts it: Compose keeps such a row in the tree, under
+     * the top bar or below the list under the navigation bar, without the words of the children the edge cuts away (A15g
+     * follow-up, 360×640 dp: "Change password" at 1262–1280 px, its list at 176–1232).
+     */
+    private fun rowCut(node: AccessibilityNodeInfo): Rect? {
+        val list = scroller(node)?.let { Rect().also(it::getBoundsInScreen) } ?: return null
+        return list.takeIf { Rect().also(node::getBoundsInScreen).let { at -> at.top <= list.top || at.bottom >= list.bottom } }
     }
 
     /**
@@ -1047,7 +1114,7 @@ class ManagementDeviceTest {
     private fun settings() {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         click(hasText("Settings") and hasClickAction())
-        await("Default permission")
+        await("Appearance")
     }
     private fun await(text: String) {
         compose.waitUntil(15_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
