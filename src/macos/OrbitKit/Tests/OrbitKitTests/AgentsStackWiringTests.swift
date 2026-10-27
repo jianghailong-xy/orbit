@@ -195,7 +195,8 @@ final class AgentsStackWiringTests: XCTestCase {
         let entries = [
             ("func openNeedsYouSession(_ s: Session) {", "\n    }",
              "show(.console(sessionID: s.id, origin: .banner)"),
-            ("func openAgent(_ id: String) {", "\n    }", "nav.popToRoot()"),
+            ("func openAgent(_ id: String) {", "\n    }",
+             "nav.switchWorkspace(from: selectedAgentID, to: id, folders: sessionFolders)"),
         ]
         for (start, end, transition) in entries {
             let fn = code(try slice(app, from: start, to: end))

@@ -1836,7 +1836,8 @@ final class AppModel {
     /// Enter the Agents section focused on agent `id` — the one navigation transition behind the
     /// macOS sidebar row, the compact drawer row, and ⌘1…⌘9. Switching to a *different* agent pops
     /// that section's stack, so its pane opens on the session list (the console and the draft on it
-    /// belong to the agent you just left); re-selecting the current agent keeps the stack — a pushed
+    /// belong to the agent you just left) — on iOS, on the folder page that list was left on
+    /// (`NavState.switchWorkspace`); re-selecting the current agent keeps the stack — a pushed
     /// console stays pushed.
     ///
     /// The one entry point that opens no page, which is why it does not go through ``show``: a real
@@ -1844,8 +1845,12 @@ final class AppModel {
     func openAgent(_ id: String) {
         selectedSection = .agents
         if selectedAgentID != id {
-            selectedAgentID = id
+            #if os(iOS)
+            nav.switchWorkspace(from: selectedAgentID, to: id, folders: sessionFolders)
+            #else
             nav.popToRoot()
+            #endif
+            selectedAgentID = id
         }
     }
 
@@ -2497,7 +2502,8 @@ final class AppModel {
     }
 
     /// Every drawer row's tap. The row of the destination already showing only closes the drawer;
-    /// any other lands on its destination's root. On a phone that is the destination's whole stack;
+    /// any other lands on its destination's root — another workspace's, on the folder page its list
+    /// was left on (`NavState.switchWorkspace`). On a phone that is the destination's whole stack;
     /// in the iPad's sidebar column only the list column changes, and the detail keeps its page.
     func openDrawerDestination(_ destination: DrawerDestination, inColumn: Bool) {
         guard destination != drawerDestination else { return }
@@ -2511,8 +2517,8 @@ final class AppModel {
         case .workspace(let agentID):
             selectedSection = .agents
             if selectedAgentID != agentID {
+                nav.switchWorkspace(from: selectedAgentID, to: agentID, folders: sessionFolders)
                 selectedAgentID = agentID
-                nav.popToRoot()
             } else if inColumn {
                 nav.leaveProjectSessions()
             } else {

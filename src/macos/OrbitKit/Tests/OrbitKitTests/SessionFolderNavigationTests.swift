@@ -149,6 +149,87 @@ final class SessionFolderNavigationTests: XCTestCase {
         XCTAssertEqual(nav.path, [.compose(agentID: "a1", folderID: nil)])
     }
 
+    // MARK: - Switching workspaces (owner, 2026-10-27)
+
+    private let bugs = SessionFolderAddress(folderID: "f3", agentID: "a2", view: .open)
+    private var library: [SessionFolder] {
+        [SessionFolder(id: "f1", workspaceId: "a1", name: "Release"),
+         SessionFolder(id: "f2", workspaceId: "a1", name: "Polish"),
+         SessionFolder(id: "f3", workspaceId: "a2", name: "Bugs")]
+    }
+
+    /// Away to another workspace and back: the list is on the folder's page it was left on. The
+    /// console the pane showed was the workspace's being left, so it doesn't come back with it.
+    func testSwitchingBackToAWorkspaceOpensTheFolderItsListWasLeftOn() {
+        var nav = NavState(section: .agents)
+        nav.enterFolder(release)
+        nav.selectConsole(.console(sessionID: "s1", origin: .list))
+
+        nav.switchWorkspace(from: "a1", to: "a2", folders: library)
+        XCTAssertTrue(nav.sectionAtRoot, "the other workspace opens on its list")
+
+        nav.switchWorkspace(from: "a2", to: "a1", folders: library)
+        XCTAssertEqual(nav.path, [.folder(release)])
+        XCTAssertEqual(nav.folderColumn, release)
+        XCTAssertNil(nav.focusedConsoleSessionID)
+    }
+
+    /// Each workspace keeps its own folder, and only the last one its list was on.
+    func testEachWorkspaceKeepsItsOwnFolder() {
+        var nav = NavState(section: .agents)
+        nav.enterFolder(release)
+        nav.switchWorkspace(from: "a1", to: "a2", folders: library)
+        nav.enterFolder(bugs)
+
+        nav.switchWorkspace(from: "a2", to: "a1", folders: library)
+        XCTAssertEqual(nav.folderColumn, release)
+        nav.enterFolder(polish)
+
+        nav.switchWorkspace(from: "a1", to: "a2", folders: library)
+        XCTAssertEqual(nav.folderColumn, bugs)
+        nav.switchWorkspace(from: "a2", to: "a1", folders: library)
+        XCTAssertEqual(nav.folderColumn, polish)
+    }
+
+    /// A list that left its folder before the switch comes back as the list — after a first round
+    /// trip too, where the folder came back and was then left.
+    func testAWorkspaceLeftOnItsListComesBackToIt() {
+        var nav = NavState(section: .agents)
+        nav.enterFolder(release)
+        nav.switchWorkspace(from: "a1", to: "a2", folders: library)
+        nav.switchWorkspace(from: "a2", to: "a1", folders: library)
+        XCTAssertEqual(nav.folderColumn, release)
+
+        nav.leaveFolder(release.folderID)
+        nav.switchWorkspace(from: "a1", to: "a2", folders: library)
+        nav.switchWorkspace(from: "a2", to: "a1", folders: library)
+
+        XCTAssertTrue(nav.sectionAtRoot)
+    }
+
+    /// A folder deleted while its workspace was away isn't opened: the list is.
+    func testAFolderDeletedWhileItsWorkspaceWasAwayIsNotOpened() {
+        var nav = NavState(section: .agents)
+        nav.enterFolder(release)
+        nav.switchWorkspace(from: "a1", to: "a2", folders: library)
+
+        nav.switchWorkspace(from: "a2", to: "a1", folders: library.filter { $0.id != release.folderID })
+
+        XCTAssertTrue(nav.sectionAtRoot)
+    }
+
+    /// The folder showing is noted for the workspace it belongs to, whichever workspace the pane was
+    /// last pointed at — a console another workspace's link opened leaves the folder under it.
+    func testTheFolderShowingIsNotedForItsOwnWorkspace() {
+        var nav = NavState(section: .agents)
+        nav.enterFolder(release)
+        nav.selectConsole(.console(sessionID: "s-in-a2", origin: .deepLink))
+
+        nav.switchWorkspace(from: "a2", to: "a1", folders: library)
+
+        XCTAssertEqual(nav.path, [.folder(release)])
+    }
+
     /// The address carries the scope of the list the folder was opened from: the same folder opened
     /// from Completed is a different frame (§3.3).
     func testTheAddressCarriesTheScopeThePageWasOpenedFrom() {
