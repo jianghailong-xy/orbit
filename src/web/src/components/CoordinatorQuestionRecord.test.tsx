@@ -390,6 +390,9 @@ describe('where the records are drawn from', () => {
       'closedQuestionRows(openItems.data, transcriptEvents)',
     );
     expect(view, 'the row is not drawn as the record card').toContain('element: <AnsweredQuestionCard');
+    // An answer a turn hands to the coordinator is that turn's card (OwnerAnswerLine), drawn once.
+    expect(view, 'a handed-over answer is drawn twice').toContain('.filter(({ record }) => !handedOver.has(answeredItemKey(record.itemId)))');
+    expect(view, 'the turns are not handed the records').toContain('<AnsweredQuestionsCtx.Provider value={answeredQuestions}>');
     expect(view, 'the records are not handed to the transcript').toMatch(
       /const transcriptInserts = useMemo\(\s*\(\) => \[[^\]]*\.\.\.questionRecords/,
     );

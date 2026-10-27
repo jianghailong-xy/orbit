@@ -10809,6 +10809,30 @@ button.chat-jump-start:hover {
   justify-content: center;
   row-gap: 2px;
 }
+/* The same turn when the conversation can draw the question it answers: that question's card. */
+.owner-answer-card {
+  margin: 4px 0 6px;
+}
+/* The words the coordinator was told, folded at the foot of the answered card's review. */
+.answered-question-told {
+  margin: 4px 14px 10px;
+  font-size: 12px;
+}
+.answered-question-told summary {
+  color: var(--text-2);
+  cursor: pointer;
+}
+.answered-question-told pre {
+  max-height: 260px;
+  margin: 6px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 /* ── The owner-confirmation card ──────────────────────────────────────────────────────────
    `OwnerConfirmationCard.tsx`: an OWNER_CONFIRMED task's run has ended its turn, and its owner is
    asked to confirm it done or send it back. The evidence card's frame, with the two facts a person
@@ -12782,15 +12806,20 @@ button.chat-jump-start:hover {
   font-size: 12px;
 }
 /* What a question becomes once it has ended (`AnsweredQuestionCard`,
-   docs/mocks/coordinator-question-answered/): the question card's own blue, dimmed, with the
-   question's opening and how it ended; its review replays the question and every option. */
+   docs/mocks/coordinator-question-answered/): the question's opening and how it ended; its review
+   replays the question and every option. In the neutral frame a decided evidence card takes, with the
+   answer ticked green — the blue stays with the open question, still waiting on the owner
+   (docs/mocks/owner-answer-sent-card/tone.html). Dashed while the turn handing it over waits on the
+   queue, as a queued message is. */
 .review-card-preview.answered-question-card {
   gap: 6px;
   padding: 12px 14px;
-  border: 1px solid var(--brand-border);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--brand-tint);
-  opacity: 0.85;
+  background: var(--bg-raised);
+}
+.review-card-preview.answered-question-card.is-queued {
+  border-style: dashed;
 }
 .answered-question-head {
   display: flex;
@@ -12805,8 +12834,8 @@ button.chat-jump-start:hover {
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  background: var(--brand-tint-hover);
-  color: var(--brand);
+  background: var(--bg-hover);
+  color: var(--text-3);
   font-size: 13px;
 }
 .answered-question-card.is-withdrawn .answered-question-icon {
@@ -12843,7 +12872,7 @@ button.chat-jump-start:hover {
 }
 .answered-question-tick {
   flex: none;
-  color: var(--brand);
+  color: var(--success-solid);
 }
 .answered-question-note {
   overflow: hidden;
@@ -12870,7 +12899,7 @@ button.chat-jump-start:hover {
   align-items: center;
   justify-content: space-between;
   padding-top: 8px;
-  border-top: 1px solid var(--brand-border);
+  border-top: 1px solid var(--border-subtle);
   font-size: 13px;
   font-weight: 600;
   color: var(--brand);

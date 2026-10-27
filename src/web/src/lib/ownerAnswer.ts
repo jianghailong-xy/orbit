@@ -1,4 +1,5 @@
 import type { OwnerAnswerCard } from '@orbit/shared';
+import { routeId } from './idCodec';
 
 /**
  * The owner's answer handed to the coordinator, as the control plane recorded it beside the turn's
@@ -29,4 +30,34 @@ export function parseOwnerAnswer(payload: unknown): OwnerAnswerCard | null {
     return null;
   }
   return { itemId: card.itemId, kind: card.kind, sessionId: card.sessionId, deliveredAt: card.deliveredAt };
+}
+
+/**
+ * An answered item's key, in one spelling whichever the read it came from used: the open-items read
+ * and the turn's card each name the item, and a lookup between them must not depend on both having
+ * been served the same way.
+ */
+export function answeredItemKey(itemId: string): string {
+  return routeId(itemId) ?? itemId;
+}
+
+/**
+ * The questions a turn of this conversation hands to its coordinator — echoed, or still on the queue
+ * — by item key (`answeredItemKey`). Each such turn draws the question's own card (`OwnerAnswerLine`), so the conversation
+ * does not insert that card again at the moment the question was answered. A Not yet… to a request to
+ * record the project done has no card to be, and is left out.
+ */
+export function answersHandedOver(
+  events: ReadonlyArray<{ type: string; payload?: unknown }>,
+  queued: ReadonlyArray<{ ownerAnswer?: OwnerAnswerCard }>,
+): Set<string> {
+  const items = new Set<string>();
+  for (const event of events) {
+    const card = event.type === 'user' ? parseOwnerAnswer(event.payload) : null;
+    if (card?.kind === 'COORDINATOR_QUESTION') items.add(answeredItemKey(card.itemId));
+  }
+  for (const turn of queued) {
+    if (turn.ownerAnswer?.kind === 'COORDINATOR_QUESTION') items.add(answeredItemKey(turn.ownerAnswer.itemId));
+  }
+  return items;
 }
