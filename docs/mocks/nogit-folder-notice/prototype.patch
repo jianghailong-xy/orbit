@@ -1,0 +1,387 @@
+diff --git a/src/web/src/api.ts b/src/web/src/api.ts
+index 91ad0d7..9120c7e 100644
+--- a/src/web/src/api.ts
++++ b/src/web/src/api.ts
+@@ -1950,6 +1950,11 @@ export const refreshSessionRecap = (idOrPublicId: string) =>
+ export const enableWorkspaceIsolation = (workspaceId: string) =>
+   api(`/workspaces/${workspaceId}`, { method: 'PATCH', body: { autoInitGit: true } });
+ 
++/** Turn a workspace's worktree isolation on or off: the no-branch notice's ✕ keeps a folder that is
++ *  not a repository as it is (off), and its Undo puts the setting back (on). */
++export const setWorkspaceWorktree = (workspaceId: string, enableWorktree: boolean) =>
++  api(`/workspaces/${workspaceId}`, { method: 'PATCH', body: { enableWorktree } });
++
+ /** Ask this workspace's runner to clean up the shared checkout it works in: the runner saves whatever
+  *  the checkout is holding onto an `orbit/rescue-*` branch, then returns it to HEAD. Queued for
+  *  the runner's next heartbeat; the outcome arrives on the workspace's `repoCleanup`. */
+diff --git a/src/web/src/components/SessionOutputs.tsx b/src/web/src/components/SessionOutputs.tsx
+index db0e46e..25a19e3 100644
+--- a/src/web/src/components/SessionOutputs.tsx
++++ b/src/web/src/components/SessionOutputs.tsx
+@@ -45,8 +45,8 @@ for (const [name, lang] of Object.entries({
+  * Worktree status bar shown directly above the composer: the branch this session's work
+  * lives on + its diff, collapsed to one line by default and expandable to the changed-file
+  * list. The diff updates live each turn (uncommitted working-tree state) and settles to the
+- * committed branch once the session ends. For a session whose workspace dir isn't a git repo it
+- * morphs into an amber "not isolated" nudge with a one-click enable.
++ * committed branch once the session ends. For a session that runs directly in its workspace's
++ * folder (no worktree) it becomes an amber notice that says why, offers Initialize git… and closes.
+  *
+  * Clicking a file opens a right-side drawer with that file's unified diff (lazily fetched
+  * from /sessions/:id/diff — the patch text never rides the session payload), with the file
+@@ -57,6 +57,8 @@ export function SessionOutputs({
+   committed,
+   onEnableIsolation,
+   enabling,
++  sharedFolder,
++  onKeepShared,
+   onMergeToMain,
+   onRecoverMerge,
+   onRepairRecovery,
+@@ -87,9 +89,18 @@ export function SessionOutputs({
+    *  on — so the bar holds "Merge to main" (hidden) and "Commit" (disabled) until the turn
+    *  finishes; committing a half-built mid-turn tree would capture an inconsistent snapshot. */
+   turnActive?: boolean;
+-  /** Provided by the parent (which owns the mutation); enables the non-git nudge's button. */
++  /** Provided by the parent (which owns the mutation); the notice's Initialize git… button. */
+   onEnableIsolation?: () => void;
+   enabling?: boolean;
++  /** The folder a session without a worktree edits directly, as the runner last saw it: the notice
++   *  names it, and `isGit` tells a folder that is not a repository (Initialize git…) from a
++   *  repository git could not branch. `settled`: the workspace already answered the notice —
++   *  isolation turned off, or git initialization queued — so no session of it shows the notice. */
++  sharedFolder?: { path?: string | null; isGit?: boolean | null; settled?: boolean } | null;
++  /** Provided by the parent (owns the mutation): the ✕ on a folder that is not a repository. It
++   *  keeps the folder as it is by turning worktree isolation off for the workspace, so later
++   *  sessions do not raise the notice again. */
++  onKeepShared?: () => void;
+   /** Provided by the parent (owns the mutation); enables the "Merge to main" button. Receives
+    *  the chosen target branch (undefined → the default, which the runner auto-detects: main,
+    *  else master). The outcome surfaces via detail.mergeStatus/mergeError (parent polls). */
+@@ -131,6 +142,9 @@ export function SessionOutputs({
+   // open session changes so a switched-to session never inherits the previous one's open file.
+   const [openFile, setOpenFile] = useState<string | null>(null);
+   useEffect(() => setOpenFile(null), [detail?.id]);
++  // The session whose no-branch notice was closed with ✕ (a repository git could not branch: the
++  // workspace has nothing to change, so closing only hides it here).
++  const [noticeHiddenFor, setNoticeHiddenFor] = useState<string | null>(null);
+   const copy = (text: string, what: 'branch' | 'command') => {
+     const [done, failed] =
+       what === 'branch'
+@@ -149,22 +163,21 @@ export function SessionOutputs({
+   const iso = detail?.isolationStatus;
+   if (!iso) return wedge;
+ 
+-  // Non-git: ran in the shared workDir (no isolation). Offer the one-click enable.
++  // No worktree: the session edits its workspace's folder directly. Say why, offer the fix, and close.
+   if (iso === 'shared-nogit') {
++    if (sharedFolder?.settled || noticeHiddenFor === detail?.id) return wedge;
++    // Unknown (an older runner never probed the folder) reads as the common case: not a repository.
++    const notGit = sharedFolder?.isGit !== true;
+     return (
+       <>
+         {wedge}
+-        <div className="wt-bar wt-bar-nogit">
+-          <div className="wt-row">
+-            <span className="wt-warn">⚠ Shared workDir — not isolated</span>
+-            <span className="wt-spacer" />
+-            {onEnableIsolation && (
+-              <button type="button" className="wt-enable" disabled={enabling} onClick={onEnableIsolation}>
+-                {enabling ? 'Enabling…' : 'Enable isolation'}
+-              </button>
+-            )}
+-          </div>
+-        </div>
++        <SharedFolderNotice
++          path={sharedFolder?.path}
++          notGit={notGit}
++          onInitialize={notGit ? onEnableIsolation : undefined}
++          initializing={enabling}
++          onClose={notGit ? onKeepShared : () => setNoticeHiddenFor(detail?.id ?? null)}
++        />
+       </>
+     );
+   }
+@@ -414,6 +427,89 @@ function RepoWedgeNotice({
+   );
+ }
+ 
++/**
++ * The notice above the composer for a session without a worktree: it edits its workspace's folder
++ * directly. Says why in plain words, names the folder and what that costs, and offers the way out —
++ * Initialize git… for a folder that is not a repository — plus ✕.
++ */
++function SharedFolderNotice({
++  path,
++  notGit,
++  onInitialize,
++  initializing,
++  onClose,
++}: {
++  path?: string | null;
++  notGit: boolean;
++  onInitialize?: () => void;
++  initializing?: boolean;
++  onClose?: () => void;
++}) {
++  const folder = path ? <code className="wt-notice-path">{path}</code> : 'This folder';
++  return (
++    <div className="wt-bar wt-bar-nogit" role="status">
++      <div className="wt-row">
++        <span className="wt-warn">
++          {notGit ? (
++            <>⚠ {folder} isn’t a git repository</>
++          ) : (
++            <>⚠ No branch for this session: it edits {path ? folder : 'the folder'} directly</>
++          )}
++        </span>
++        <span className="wt-spacer" />
++        {onInitialize && (
++          <button type="button" className="wt-enable" disabled={initializing} onClick={onInitialize}>
++            Initialize git…
++          </button>
++        )}
++        {onClose && (
++          <Tooltip
++            content={notGit ? 'Keep it as a plain folder: turns off worktree isolation for this workspace' : 'Hide for this session'}
++          >
++            <button
++              type="button"
++              className="wt-notice-close"
++              aria-label={notGit ? 'Keep it as a plain folder' : 'Hide for this session'}
++              onClick={onClose}
++            >
++              ✕
++            </button>
++          </Tooltip>
++        )}
++      </div>
++      <div className="wt-row wt-notice-detail">
++        {notGit
++          ? 'Sessions here edit the folder directly: no branch or diff to review, and sessions running at the same time can overwrite each other’s changes.'
++          : 'The folder is a git repository, but git couldn’t add a worktree for this session. A repository with no commits has nothing to branch from.'}
++      </div>
++    </div>
++  );
++}
++
++/** What Initialize git… does, spelled out in its confirmation: the runner's `initGitRepo`, step by step. */
++export function InitializeGitSteps({ path, workspace }: { path?: string | null; workspace?: string | null }) {
++  return (
++    <div className="wt-init-steps">
++      {path && <code className="wt-wedge-root">{path}</code>}
++      <p>When the next session starts in {workspace ? `“${workspace}”` : 'this workspace'}, Orbit will:</p>
++      <ul>
++        <li>
++          run <code>git init</code>
++        </li>
++        <li>
++          add a <code>.gitignore</code> for dependencies, build output and <code>.env</code> files, unless the
++          folder has one
++        </li>
++        <li>commit the existing files as “orbit: baseline”. Nothing is pushed anywhere.</li>
++      </ul>
++      <p>
++        Each new session then works on its own branch, with a diff you review and merge. This session keeps
++        editing the folder directly.
++      </p>
++    </div>
++  );
++}
++
+ /** Shown in the merge slot when the worktree's real HEAD has diverged from the tracked branch (an
+  *  in-worktree `git checkout -b`): names the untracked branch and offers Adopt, which re-points the
+  *  session so Merge/diff act on the real work instead of a stale "✓ In main". */
+diff --git a/src/web/src/components/WorkspaceView.tsx b/src/web/src/components/WorkspaceView.tsx
+index 689fc3a..b143c67 100644
+--- a/src/web/src/components/WorkspaceView.tsx
++++ b/src/web/src/components/WorkspaceView.tsx
+@@ -227,7 +227,7 @@ import {
+   dirtyContextSeed,
+   type ContextSeedState,
+ } from '../lib/contextSeed';
+-import { SessionOutputs } from './SessionOutputs';
++import { InitializeGitSteps, SessionOutputs } from './SessionOutputs';
+ import { mergeRepairLoopLive } from './MergeRecoveryPanel';
+ import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
+ import { ManagedRunnerNotice } from './ManagedRunnerNotice';
+@@ -284,6 +284,7 @@ import {
+   deleteSessionFolder,
+   cleanUpWorkspaceRepo,
+   enableWorkspaceIsolation,
++  setWorkspaceWorktree,
+   getBackgroundShells,
+   getSession,
+   interruptSession,
+@@ -477,6 +478,7 @@ import {
+ import { lastTypedUserMessage } from '../lib/deliveredMessage';
+ import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
+ import { useToast } from '../lib/toast';
++import { showToast } from '../lib/toastStore';
+ import { setSessionTags } from '../lib/sessionTags';
+ import {
+   isSessionBusy,
+@@ -6887,26 +6889,53 @@ export function WorkspaceView({
+       void qc.invalidateQueries({ queryKey: ['session', id], exact: true });
+     },
+   });
+-  // Enable worktree isolation for a non-git workspace: flip autoInitGit so the runner `git
+-  // init`s the workDir on the next run (the shared-nogit nudge clears once a run isolates).
++  // Initialize git… on a folder that is not a repository: flip autoInitGit so the runner `git
++  // init`s the workDir when the workspace's next session starts. Refetching workspaces settles
++  // the notice: every session of the workspace has had its answer.
+   const enableIsoMut = useMutation({
+     mutationFn: (workspaceId: string) => enableWorkspaceIsolation(workspaceId),
+-    onSuccess: () =>
+-      message.success('Isolation enabled — the next run will initialize git and isolate.'),
+-    onError: (e: Error) => message.error("Couldn't enable worktree isolation", e.message),
++    onSuccess: (_data, workspaceId) => {
++      message.success('Git will be set up when the next session starts', workspacePathOf(workspaceId));
++      void qc.invalidateQueries({ queryKey: workspacesQuery().queryKey });
++    },
++    onError: (e: Error) => message.error("Couldn't turn on git setup", e.message),
+   });
+-  const askEnableIsolation = (workspaceId: string) =>
++  const askEnableIsolation = (workspaceId: string) => {
++    const ws = workspacesForRunner.find((a) => a.id === workspaceId);
+     void confirm({
+-      title: 'Enable worktree isolation?',
+-      description:
+-        "This initializes a git repo in the workspace's working directory (a default .gitignore" +
+-        ' + a baseline commit of the existing files) on its next run, so concurrent sessions' +
+-        ' each get their own branch instead of sharing the directory.',
+-      confirmText: 'Enable',
++      title: 'Initialize git in this folder?',
++      width: 460,
++      description: <InitializeGitSteps path={ws?.workDir} workspace={ws?.name} />,
++      confirmText: 'Initialize git',
+       // Swallow a rejected enable (onError already toasts) so the confirmation closes cleanly
+       // instead of holding its own copy of the error.
+       onConfirm: () => enableIsoMut.mutateAsync(workspaceId).catch(() => {}),
+     });
++  };
++  // The notice's ✕ on a folder that is not a repository: keep it as a plain folder by turning the
++  // workspace's isolation off, which is what its sessions already do. Undo turns it back on.
++  const keepSharedMut = useMutation({
++    mutationFn: ({ workspaceId, on }: { workspaceId: string; on: boolean }) => setWorkspaceWorktree(workspaceId, on),
++    onSuccess: (_data, { workspaceId, on }) => {
++      void qc.invalidateQueries({ queryKey: workspacesQuery().queryKey });
++      if (on) return;
++      const ws = workspacesForRunner.find((a) => a.id === workspaceId);
++      showToast({
++        message: `Worktree isolation is off for ${ws?.name ? `“${ws.name}”` : 'this workspace'}`,
++        detail: 'Its sessions keep editing the folder directly, without this notice. Turn it back on in the workspace’s settings.',
++        tone: 'neutral',
++        key: `keep-shared-${workspaceId}`,
++        action: {
++          label: 'Undo',
++          ariaLabel: 'Turn worktree isolation back on',
++          onClick: () => keepSharedMut.mutate({ workspaceId, on: true }),
++        },
++      });
++    },
++    onError: (e: Error) => message.error("Couldn't turn off worktree isolation", e.message),
++  });
++  const workspacePathOf = (workspaceId: string): string | undefined =>
++    workspacesForRunner.find((a) => a.id === workspaceId)?.workDir ?? undefined;
+   // Repair the machine's shared checkout when the runner reports it stuck mid-merge (which blocks
+   // every session's merge there). Async like the others: the runner does it on its next heartbeat,
+   // and refetching workspaces is what clears the warning, since repoHealth rides that payload.
+@@ -11441,6 +11470,12 @@ export function WorkspaceView({
+               ? () => askEnableIsolation(detailForSelected.workspace!.id)
+               : undefined
+           }
++          sharedFolder={sharedFolderOf(workspacesForRunner.find((a) => a.id === detailForSelected?.workspace?.id))}
++          onKeepShared={
++            detailForSelected?.workspace?.id
++              ? () => keepSharedMut.mutate({ workspaceId: detailForSelected.workspace!.id, on: false })
++              : undefined
++          }
+           merging={mergeMut.isPending || repairRecoveryMut.isPending}
+           onMergeToMain={
+             selectedId && detailForSelected?.branch
+@@ -12295,3 +12330,11 @@ export function WorkspaceView({
+     </div>
+   );
+ }
++
++/** What the no-branch notice needs from the session's workspace row: the folder, whether the runner
++ *  found a repository there, and whether the workspace already answered the notice (isolation off,
++ *  or git initialization queued). */
++function sharedFolderOf(ws: any): { path?: string | null; isGit?: boolean | null; settled?: boolean } | null {
++  if (!ws) return null;
++  return { path: ws.workDir, isGit: ws.workDirIsGit, settled: ws.enableWorktree === false || ws.autoInitGit === true };
++}
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index 49b56bb..eeb3fdd 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -4168,7 +4168,8 @@ button.toast--pill:focus-visible {
+   align-items: center;
+   gap: 6px;
+ }
+-/* Non-git: ran in the shared dir; amber bar with the one-click enable. */
++/* No worktree: the session edits its workspace's folder directly. Amber bar: why, the folder and
++   what that costs on a second line, Initialize git… and ✕. */
+ .wt-bar-nogit {
+   border-color: var(--warning-border);
+   background: var(--warning-bg);
+@@ -4195,6 +4196,58 @@ button.toast--pill:focus-visible {
+   opacity: 0.55;
+   cursor: default;
+ }
++.wt-notice-close {
++  flex: none;
++  padding: 2px 4px;
++  border: 0;
++  background: transparent;
++  color: var(--text-3);
++  font: inherit;
++  line-height: 1;
++  cursor: pointer;
++}
++.wt-notice-close:hover {
++  color: var(--text-1);
++}
++.wt-notice-close:focus-visible {
++  outline: 2px solid var(--brand);
++  outline-offset: 2px;
++}
++/* The folder and what working in it directly costs: wraps rather than truncating, since it is the
++   explanation. */
++.wt-notice-detail {
++  display: block;
++  min-height: 0;
++  padding-top: 0;
++  padding-bottom: 7px;
++  color: var(--text-2);
++  line-height: 1.45;
++}
++/* The folder, named in the notice's headline: long paths wrap anywhere rather than overflow. */
++.wt-notice-path {
++  font-family: var(--font-mono, ui-monospace, monospace);
++  font-weight: 500;
++  overflow-wrap: anywhere;
++}
++/* Initialize git…'s confirmation: the folder, then what the runner will do to it. */
++.wt-init-steps {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++}
++.wt-init-steps p,
++.wt-init-steps ul {
++  margin: 0;
++}
++.wt-init-steps ul {
++  padding-left: 18px;
++}
++.wt-init-steps .wt-wedge-root {
++  align-self: flex-start;
++  padding: 1px 6px;
++  border-radius: 4px;
++  background: var(--bg-subtle);
++}
+ /* The machine's shared checkout is mid-merge/rebase: every session's merge here is blocked, so
+    this sits above the per-session bar wearing the same amber as the other "fix this first" state. */
+ .wt-bar-wedged {
