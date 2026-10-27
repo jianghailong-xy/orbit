@@ -111,6 +111,32 @@ switch, so ending, deleting, reassigning, or turning orchestration off revokes a
 expiry. When orchestration is on, `orbit agent list`, `agent create`, and `agent update` expose the same
 agent-management surface to the CLI. Only a human can switch orchestration.
 
+### Installing an engine on a runner
+
+With orchestration on, `orbit runner list` (MCP `runner_list`) shows the account's runners: their ids, whether
+each is online, and the engine CLIs installed there. An agent can install a missing engine CLI on one of them,
+or update the CLIs there, as the Install and Update engines buttons on the runner's page do:
+
+```bash
+orbit runner install --runner-id <runner-id> --engine claude --wait --json
+orbit runner install --runner-id <runner-id> --engine claude --update
+orbit runner install-status --runner-id <runner-id> --json
+```
+
+The MCP tools are `runner_engine_install` and `runner_engine_install_status`. The runner must be online. Its
+next heartbeat picks the request up, and it runs that engine's own recommended installer: the request names one
+of the seven engines (`claude`, `codex`, `kimi`, `antigravity`, `opencode`, `dsh`, `cursor`) and never a
+command. `--update` runs the runner's engine update pass instead, which updates every engine CLI installed on
+that machine. The status reads as the runner's page shows it: `pending`, then `installing` with the command the
+runner runs, then `done` or `failed` with what the machine said. A finished install clears once the runner
+reports the engine installed, and `orbit runner list` then shows it. `--wait` polls until the runner reports
+the outcome, prints the command and its result, and exits non-zero on a failure.
+
+As with a press of Install, the request is the consent for that engine on that machine, so the runner runs it
+whether or not it was registered to install engines on its own. Any session with orchestration on can
+therefore install a known engine CLI on every runner of the account. Personal access tokens are unchanged: one
+with `runners:read` can read the install status, and none can start, update or dismiss an install.
+
 ## Providers
 
 `--provider` on `orbit session create`, `orbit task create` and `orbit task update` takes a built-in provider

