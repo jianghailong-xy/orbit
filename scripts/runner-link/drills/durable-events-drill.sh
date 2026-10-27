@@ -197,6 +197,7 @@ wait_presence() {
     sleep 1
   done
 }
+presence_heard() { [ -n "$(presence 2> /dev/null | cut -d' ' -f2)" ]; }
 log_lines() { if [ -f "$drill/runner.log" ]; then wc -l < "$drill/runner.log"; else echo 0; fi; }
 # log_since FROM PATTERN: the runner log's lines after line FROM that hold PATTERN, as a fixed string.
 log_since() { awk -v from="$1" -v p="$2" 'NR > from && index($0, p)' "$drill/runner.log"; }
@@ -563,6 +564,8 @@ judge() {
   fallbacks="$(log_since "$from" 'runner link mode: off' | wc -l)"
   retries="$(log_since "$from" 'were not stored (' | wc -l)"
   reconnect_line="$(log_since "$from" 'carries the work of process' | tail -n 1 | sed -E 's/^.*(runner link: )/\1/')"
+  # A failover empties runner_presence (UNLOGGED): the runner's next beat writes it again.
+  wait_until 90 presence_heard || true
   pid1="$(runner_pid)"
   process1="$(presence | cut -d' ' -f2)"
   apiserver1="$(docker inspect -f '{{.RestartCount}} {{.State.StartedAt}}' "$apiserver")"
@@ -591,9 +594,11 @@ judge() {
   docker logs --since "$since_at" "$gateway" > "$out/$phase-link-gateway.log" 2>&1 || true
   docker logs --since "$since_at" "$apiserver" > "$out/$phase-apiserver.log" 2>&1 || true
   awk -v from="$from" 'NR > from' "$drill/runner.log" > "$out/$phase-runner.log"
-  reaper="$(sed 's/\x1b\[[0-9;]*m//g' "$out/$phase-apiserver.log" | grep -E 'not reaping [0-9]+ session' | head -n 1 | sed -E 's/^.*(not reaping)/\1/' || true)"
-  if [ -n "$reaper" ]; then reaper="held a sweep: $reaper"; else reaper="logged no held sweep"; fi
-  say "$phase: the reaper $reaper; it reaped the session $(grep -c -e "reaped session $suuid" -e "reaped session $sid" "$out/$phase-apiserver.log" || true) time(s)"
+  # Why the reaper held its sweeps over the phase, each reason with how many sweeps gave it.
+  reaper="$(sed 's/\x1b\[[0-9;]*m//g' "$out/$phase-apiserver.log" | grep -E 'not reaping' |
+    sed -E 's/^.*not reaping [^:]*: //; s/[0-9]+/N/g' | sort | uniq -c | sort -rn |
+    awk '{ n = $1; $1 = ""; printf "%s%sx \"%s\"", (NR > 1 ? ", " : ""), n, substr($0, 2) }' || true)"
+  say "$phase: the reaper held ${reaper:-no sweep}; it reaped the session $(grep -c -e "reaped session $suuid" -e "reaped session $sid" "$out/$phase-apiserver.log" || true) time(s)"
   if [ "$verdict" = PASS ]; then
     say "$phase holds: $fault; every seq of session $sid held, every tick stored once, nothing dropped"
   else
@@ -694,8 +699,15 @@ apiserver_phase() {
 }
 
 database_phase() {
-  local resolved address presence0
+  local resolved address presence0 up
   begin database stream true
+  # Past the reaper's startup grace (3 minutes, reaper.service.ts) by a sweep: an apiserver that started just before,
+  # as the apiserver phase's does, would hold every reaping through the failover for a reason of its own.
+  up="$(seconds "$(docker inspect -f '{{.State.StartedAt}}' "$apiserver")" "$(now)")"
+  if awk -v up="$up" 'BEGIN { exit !(up < 210) }'; then
+    say "database: the apiserver started $up s ago; waiting for its reaper's 180 s startup grace to be past by a sweep"
+    hold "$(awk -v up="$up" 'BEGIN { printf "%.0f", 211 - up }')"
+  fi
   start_standby
   say "database: $standby streams from $primary synchronously: $(docker exec "$primary" psql -U orbit -d orbit -tAc "SELECT application_name || ' ' || state || ' ' || sync_state || ' replay ' || replay_lsn FROM pg_stat_replication")"
   presence0="$(presence)"
