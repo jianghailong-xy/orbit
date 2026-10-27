@@ -210,11 +210,12 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 
 // advertisedCapabilityFamilies is every family `orbit capabilities` composes, paired with whether
 // the document offers that family only where the orchestration grant exists. buildCLICapabilities
-// appends sessionCLICapabilities and agentCLICapabilities inside its includeOrchestration branch and
-// every other family outside it, so a rule for an orchestration verb is needed exactly where that
-// verb is advertised — a non-orchestrator never reads those two families at all. watchCLICapabilities
-// is SessionOnly rather than gated: its rules are harmless in a session that cannot make a watch, and
-// the session told to wait on Orbit's own work is the reader they exist for.
+// appends sessionCLICapabilities, agentCLICapabilities and runnerCLICapabilities inside its
+// includeOrchestration branch and every other family outside it, so a rule for an orchestration verb
+// is needed exactly where that verb is advertised — a non-orchestrator never reads those three
+// families at all. watchCLICapabilities is SessionOnly rather than gated: its rules are harmless in a
+// session that cannot make a watch, and the session told to wait on Orbit's own work is the reader
+// they exist for.
 //
 // The list is deliberately the same one cli_mcp_parity_test.go and cli_help_flag_coverage_test.go
 // walk. Those two ask different questions of it (does every MCP tool have a command; does every
@@ -239,6 +240,7 @@ var advertisedCapabilityFamilies = []struct {
 	{"userCLICapabilities", userCLICapabilities, false},
 	{"sessionCLICapabilities", sessionCLICapabilities, true},
 	{"agentCLICapabilities", agentCLICapabilities, true},
+	{"runnerCLICapabilities", runnerCLICapabilities, true},
 }
 
 // This is the contract orbitCLIAllowedTools states about itself, asserted rather than trusted: "An
