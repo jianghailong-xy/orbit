@@ -1,0 +1,36 @@
+import SwiftUI
+import OrbitKit
+
+// TEMPORARY evidence probe (see README.md), copied from probe/answer-delivery-one-line: where one launch
+// opens — `-probe.session C1` opens that coordinator conversation's console, as a session link does.
+enum ProbeArgs {
+    static var dark: Bool { ProcessInfo.processInfo.arguments.contains("-dark") }
+
+    static func value(_ flag: String) -> String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
+        return args[i + 1]
+    }
+
+    /// Each fresh launch starts from what the stub serves, not from what an earlier launch left on disk
+    /// (Application Support/Orbit).
+    static func wipeIfFresh() {
+        guard ProcessInfo.processInfo.arguments.contains("-probe.fresh"),
+              let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        else { return }
+        try? FileManager.default.removeItem(at: support.appendingPathComponent("Orbit"))
+    }
+
+    /// The agents, then the conversation — routed twice, 2 s apart, because the shell restores its own
+    /// landing as it comes up (the Settings-order probe's note); a route replaces the stack's top, so the
+    /// second one is a no-op once the first has landed.
+    @MainActor
+    static func land(_ model: AppModel) async {
+        await model.agents?.load()
+        guard let session = value("-probe.session") else { return }
+        model.selectedAgentID = "a1"
+        model.route(to: .session(session))
+        try? await Task.sleep(for: .seconds(2))
+        model.route(to: .session(session))
+    }
+}
