@@ -584,6 +584,9 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
   'DELETE /runner/service-tokens/:id': { as: RUNNER, request: (of) => ({ params: { id: of.runner.spareServiceTokenId } }) },
   'PATCH /runner/workspaces/:id': { as: SESSION, request: (of) => ({ params: { id: of.workspaceId }, body: { description: 'renamed by the census' } }) },
   'PATCH /runner/agents/:id': { as: SESSION, request: (of) => ({ params: { id: of.workspaceId }, body: { description: 'renamed by the census' } }) },
+  // An engine CLI installed on a runner of the account at an orchestrating session's request, and its relay read back.
+  'POST /runner/runners/:id/engine-install': { as: SESSION, request: (of) => ({ params: { id: of.runnerId }, body: { engine: 'claude' } }) },
+  'GET /runner/runners/:id/engine-install': { as: SESSION, request: (of) => ({ params: { id: of.runnerId } }) },
   'PATCH /runner/providers/:slug': { as: RUNNER, request: (of) => ({ params: { slug: of.runner.providerSlug }, body: { label: 'renamed by the census' } }) },
   'DELETE /runner/providers/:slug': { as: RUNNER, request: (of) => ({ params: { slug: of.runner.spareProviderSlug } }) },
 
@@ -695,6 +698,8 @@ const ownSessionRequests: Readonly<Record<string, (mine: RunnerTenant) => Tenant
   'PATCH /runner/workspaces/:id': (mine) => ({ params: { id: mine.workspaceId }, body: { description: 'renamed by the census' } }),
   'PATCH /runner/agents/:id': (mine) => ({ params: { id: mine.workspaceId }, body: { description: 'renamed by the census' } }),
   'GET /runner/runners': () => ({ params: {} }),
+  'POST /runner/runners/:id/engine-install': (mine) => ({ params: { id: mine.runnerId }, body: { engine: 'claude' } }),
+  'GET /runner/runners/:id/engine-install': (mine) => ({ params: { id: mine.runnerId } }),
   'POST /runner/projects/:id/coordinator/ensure': (mine) => ({ params: { id: mine.projectId } }),
   'POST /runner/projects/:id/coordinator/messages': (mine) => ({ params: { id: mine.projectId }, body: { message: 'from the census' } }),
 };

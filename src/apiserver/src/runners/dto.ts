@@ -11,7 +11,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { KIMI_REGIONS, type InstallEngine, type KimiRegion, type LoginEngine } from '@orbit/shared';
+import { KIMI_REGIONS, type InstallEngine, type KimiRegion, type LoginEngine, type RelayMode } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
 
 export class CreateEnrollmentTokenDto {
@@ -75,4 +75,12 @@ export class RenameAccountDto {
  *  goes only to a runner that knows Cursor CLI (RunnersService.startInstall). */
 export class StartInstallDto {
   @IsIn(['claude', 'codex', 'kimi', 'antigravity', 'opencode', 'dsh', 'cursor']) engine!: InstallEngine;
+}
+
+/** What an in-session agent asks a runner's engine relay for (POST /runner/runners/:id/engine-install):
+ *  one of the engines Install takes, and which of the relay's two jobs — `install` that engine (the
+ *  default), or `update` every engine CLI on the machine, as the web's Update engines does. Nothing else
+ *  is read, so no command can be named. */
+export class RequestEngineInstallDto extends StartInstallDto {
+  @IsOptional() @IsIn(['install', 'update']) mode?: RelayMode;
 }
