@@ -1373,6 +1373,11 @@ class ManagementDeviceTest {
                 "/api/providers/pools" -> pools()
                 "/api/providers/shared-pools" -> "[]"
                 "/api/providers/shared-pools/P1" -> access()
+                // The rejected key's balance answers a second after the other's. Under the test rule a page's effects resume on the
+                // threads that answer them: two balances answered at once were written side by side and one was lost, its row never
+                // getting a value (A15 F-50); in the app both are written on the main thread, one after the other.
+                "/api/providers/mine/K2/balance" -> return MockResponse().setHeader("Content-Type", "application/json")
+                    .setBody(balance("K2")).setHeadersDelay(1, TimeUnit.SECONDS)
                 "/api/events" -> return MockResponse().setHeader("Content-Type", "text/event-stream")
                     .setChunkedBody(": connected\n\n".repeat(120), 13).throttleBody(13, 1, TimeUnit.SECONDS)
                 else -> when {
