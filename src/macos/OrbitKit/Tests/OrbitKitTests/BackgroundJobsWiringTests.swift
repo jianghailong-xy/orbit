@@ -62,8 +62,9 @@ final class BackgroundJobsWiringTests: XCTestCase {
 
     // MARK: the block opens as rows
 
-    /// The entry reads the block, and the line that names it shut carries the count.
-    func testTheAttachedEntryReadsTheBlockAndCountsItOnTheShutLine() throws {
+    /// The entry reads the block, and the line that names it carries the count in its accessibility
+    /// label: its words name what was attached and nothing more (owner, 2026-10-27).
+    func testTheAttachedEntryReadsTheBlockAndCountsItInTheLinesLabel() throws {
         let entry = try section(try source(Self.notePath),
                                 from: "struct AttachedNoteEntry", to: "struct BackgroundJobsNoteView")
 
@@ -72,8 +73,7 @@ final class BackgroundJobsWiringTests: XCTestCase {
         XCTAssertTrue(entry.contains("⊕ Orbit attached: \\(attached.kind)"),
                       "the shut line still names what was attached")
         XCTAssertTrue(entry.contains("BackgroundJobsNote.summary(jobs)"),
-                      "the count on the shut line is the whole point of it: \"background jobs\" "
-                          + "alone never said whether opening it was worth the tap")
+                      "the count rides in the line's accessibility label, as in web's accessible name")
         XCTAssertTrue(entry.contains("BackgroundJobsNoteView(jobs: jobs)"),
                       "a block that read as jobs opens as rows")
         // Anything that is not the inventory opens exactly as it always has.
@@ -115,13 +115,15 @@ final class BackgroundJobsWiringTests: XCTestCase {
         }
     }
 
-    /// The person's own bubble draws the entry rather than dumping the note's text into it.
+    /// The person's own bubble draws the entry's line and body rather than dumping the note's text.
     func testTheUserBubbleDrawsTheEntryRatherThanTheBlocksOwnText() throws {
         let bubble = try section(try source(Self.bubblesPath),
                                  from: "struct UserBubbleView", to: "struct AssistantBubbleView")
 
-        XCTAssertTrue(bubble.contains("AttachedNoteEntry(attached: attached)"),
-                      "the bubble draws the entry, which is what decides rows or verbatim")
+        XCTAssertTrue(bubble.contains("AttachedNoteLine(attached: attached, open: $noteOpen)"),
+                      "the bubble names the note on the entry's own line")
+        XCTAssertTrue(bubble.contains("AttachedNoteBody(attached: attached)"),
+                      "and opens it to the entry's own body, which is what decides rows or verbatim")
         XCTAssertFalse(bubble.contains("Text(attached.text)"),
                        "the whole block as one Text is what this replaced: four lines of wrapped ｜")
     }

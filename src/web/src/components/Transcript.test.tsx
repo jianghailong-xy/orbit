@@ -1501,9 +1501,11 @@ describe('injected context in a user bubble', () => {
     );
 
     // A tooltip is out of reach on a touch screen, so the entry itself opens to the block: folded
-    // here, and already open in an export, where there is nothing to click.
+    // here (⊕), and already open in an export (⊖), where there is nothing to click.
     const entry = (expanded: boolean) =>
-      new RegExp(`<button[^>]*aria-expanded="${expanded}"[^>]*>⊕ Orbit attached: project coordinator context</button>`);
+      new RegExp(
+        `<button[^>]*aria-expanded="${expanded}"[^>]*><span class="chat-injected-mark">${expanded ? '⊖' : '⊕'}</span> Orbit attached: project coordinator context</button>`,
+      );
     expect(html).toMatch(entry(false));
     expect(exported).toMatch(entry(true));
     expect(exported).toContain('的协调会话');

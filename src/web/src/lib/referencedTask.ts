@@ -122,7 +122,7 @@ function isPublicId(id: string): boolean {
 }
 
 /**
- * "DONE" — or "6 DONE, 2 OPEN" — on the line that names the note folded.
+ * "DONE" — or "6 DONE, 2 OPEN" — in the accessible name and tooltip of the line that names the note.
  *
  * What the reader came for is the state of the thing they referenced, so one task says its status
  * outright and several are counted by it, in the order the note named them.

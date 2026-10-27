@@ -62,8 +62,9 @@ async function open(note: string, typed = '这几个任务现在什么状态？'
       </MemoryRouter>,
     );
   });
+  // By its name, which says the same shut or open; its words turn ⊕ to ⊖.
   const toggle = [...container.querySelectorAll('button')].find((b) =>
-    b.textContent?.startsWith(LABEL),
+    b.getAttribute('aria-label')?.startsWith(LABEL),
   );
   expect(toggle, `no entry signed ${LABEL}:\n${container.innerHTML}`).toBeTruthy();
   await act(async () => {
@@ -110,12 +111,12 @@ describe('a `#`-referenced task in a bubble', () => {
     expect(text(queued.querySelector('.reftask-meta'))).toContain('1 run, 0 with turns');
   });
 
-  it('says so on the shut line: the state of a lone task, the count of several', async () => {
+  it('says so in the line’s name, its words naming the block alone: the state of a lone task, the count of several', async () => {
     const one = await open(ONE_TASK);
-    expect(one.textContent).toBe(`${LABEL} referenced task · FAILED`);
+    expect(one.getAttribute('aria-label')).toBe(`${LABEL} referenced task · FAILED`);
 
     const eight = await open(EIGHT_TASKS);
-    expect(eight.textContent).toBe(`${LABEL} referenced task ×8 · 7 DONE, 1 OPEN`);
+    expect(eight.getAttribute('aria-label')).toBe(`${LABEL} referenced task ×8 · 7 DONE, 1 OPEN`);
   });
 
   it('draws all eight of the most anyone has referenced at once, in the order named', async () => {
@@ -150,7 +151,7 @@ describe('a `#`-referenced task in a bubble', () => {
 
     expect(cards()).toHaveLength(1);
     expect(container.querySelectorAll('.bgjobs-job')).toHaveLength(1);
-    expect(toggle.textContent).toBe(
+    expect(toggle.getAttribute('aria-label')).toBe(
       `${LABEL} referenced task, background jobs · DONE · 1 ended, exit 1`,
     );
     // The job's own row is the block's, not a line of the card's.
@@ -163,7 +164,7 @@ describe('a `#`-referenced task in a bubble', () => {
   it('draws the English block as the same cards, the suffix and the task nothing has run included', async () => {
     const toggle = await open(IN_ENGLISH, 'What state are these two in?');
 
-    expect(toggle.textContent).toBe(`${LABEL} referenced task ×2 · 1 DONE, 1 OPEN`);
+    expect(toggle.getAttribute('aria-label')).toBe(`${LABEL} referenced task ×2 · 1 DONE, 1 OPEN`);
     expect(cards()).toHaveLength(2);
     const [verification, never] = cards();
     expect(text(verification.querySelector('.status-pill'))).toBe('Done');

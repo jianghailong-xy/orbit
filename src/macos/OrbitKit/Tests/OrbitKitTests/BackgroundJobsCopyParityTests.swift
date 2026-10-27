@@ -206,9 +206,8 @@ final class BackgroundJobsCopyParityTests: XCTestCase {
 
     // MARK: the line that names the block folded
 
-    /// The count on the shut line, word for word. It is the one sentence of this work a reader meets
-    /// without opening anything, and the two clients disagreeing about it is the drift a reader can
-    /// see from across the room.
+    /// The count, word for word: the line's accessible name and tooltip on web, its accessibility
+    /// label here. The two clients disagreeing about it is the drift a reader can hear across them.
     func testTheSummaryIsCountedInTheSameWords() throws {
         let web = try flat(Self.webJobs)
         let summarize = try section(web, from: "export function summarizeBackgroundJobs(", to: "\n}",
@@ -238,15 +237,15 @@ final class BackgroundJobsCopyParityTests: XCTestCase {
                     "which outcomes count as failed", Self.webJobs)
     }
 
-    /// The fold head the summary hangs off, which is the browser's `ControlPlaneNote`.
+    /// The line the summary hangs off, which is the browser's `useControlPlaneNote`.
     func testTheFoldHeadIsBuiltTheSameWay() throws {
         let web = try flat(Self.webTranscript)
-        let note = try section(web, from: "function ControlPlaneNote(", to: "\n}", Self.webTranscript)
+        let note = try section(web, from: "function useControlPlaneNote(", to: "\n}", Self.webTranscript)
 
         assertBuilt(note, "`⊕ Orbit attached: ${kind}`", "the line naming what was attached",
                     Self.webTranscript)
         assertBuilt(note, "` · ${summarizeBackgroundJobs(jobs)}`",
-                    "the count hung off that line", Self.webTranscript)
+                    "the count in that line's accessible name", Self.webTranscript)
         // What the fold opens to: rows for the inventory, and whatever else the note held under them.
         assertBuilt(note, "<BackgroundJobsNote jobs={jobs} />", "the rows the fold opens to",
                     Self.webTranscript)

@@ -188,7 +188,7 @@ public enum ReferencedTaskNote {
         return task.executed == task.runs ? counted : "\(counted), \(task.executed) with turns"
     }
 
-    /// "DONE" — or "6 DONE, 2 OPEN" — on the line that names the note folded.
+    /// "DONE" — or "6 DONE, 2 OPEN" — in the accessibility label of the line that names the note.
     ///
     /// What the reader came for is the state of the thing they referenced, so one task says its
     /// status outright and several are counted by it, in the order the note named them.
