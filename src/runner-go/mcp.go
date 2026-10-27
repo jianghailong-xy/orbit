@@ -1582,6 +1582,16 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "runner_list":
+		if !s.orchestrationEnabled() {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		raw, err := s.t.listRunners(s.sessionID, s.orchestrationToken)
+		if err != nil {
+			return toolResult("list runners failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "agent_create":
 		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
@@ -4538,7 +4548,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"systemPrompt":       str,
 					"appendSystemPrompt": str,
 					"workDir":            map[string]interface{}{"type": "string", "description": "Project directory on the runner the agent runs in."},
-					"runnerId":           map[string]interface{}{"type": "string", "description": "Runner to bind to; defaults to the current runner."},
+					"runnerId":           map[string]interface{}{"type": "string", "description": "Runner to bind to; defaults to the current runner. Use runner_list to look up a runner's id."},
 					"enableWorktree":     map[string]interface{}{"type": "boolean", "description": "Run each of the agent's sessions in its own git worktree."},
 					"env":                envProp,
 					"defaultMergeTarget": mergeTargetProp,
@@ -4554,11 +4564,21 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"systemPrompt":       str,
 					"appendSystemPrompt": str,
 					"workDir":            str,
-					"runnerId":           str,
+					"runnerId":           map[string]interface{}{"type": "string", "description": "Runner to bind the agent to. Use runner_list to look up a runner's id."},
 					"enableWorktree":     map[string]interface{}{"type": "boolean"},
 					"env":                envProp,
 					"defaultMergeTarget": mergeTargetProp,
 				}, "agentId"),
+			},
+			map[string]interface{}{
+				"name": "runner_list",
+				"description": "List this owner's runners — the machines that run sessions — including one no agent is bound to yet. Read-only. " +
+					"Use it to look up a runner's id to pass as runnerId to agent_create or agent_update. " +
+					"Each runner has id, name and displayName; online, whether it is reachable now, decided as the web runner list decides it " +
+					"(status is what the runner last reported about itself, and stays ONLINE on a machine that vanished without signing off, so read online, not status); " +
+					"status, version, lastHeartbeatAt and maxConcurrent; os, and engines — each installed engine CLI with auth \"yes\", \"no\" or \"unknown\" for whether it is signed in — when its heartbeats reported them; " +
+					"and workspaceCount, the number of agents bound to it.",
+				"inputSchema": obj(map[string]interface{}{}),
 			},
 			// A project tool on the orchestration gate rather than beside the other project_* ones:
 			// this is the one project door that can OPEN a conversation, and it spends a live

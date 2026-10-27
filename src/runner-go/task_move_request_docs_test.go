@@ -192,7 +192,7 @@ func TestNoDescriptionSaysADeclaredMoveIsRefused(t *testing.T) {
 
 	for _, list := range [][]cliCapabilitySpec{
 		baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities,
-		mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities,
+		mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities,
 		watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities,
 		userCLICapabilities,
 	} {

@@ -25,13 +25,15 @@
 #   durable-events-drill.sh finish         Releases the stream's last ticks, waits for its turn to end, and judges the
 #                                          session whole.
 #   durable-events-drill.sh rollback       A second session streams and the link gateway is killed; the runner is stopped
-#                                          as a service manager stops it, with events not acknowledged; then
-#                                          RUNNER_LINK_REQUIRED goes off and the runner starts again with
-#                                          ORBIT_LINK_MODE=off, as a rollback does, and answers a message; then the
-#                                          switch goes on and the runner takes the session back on the link. Records what
-#                                          the session stored of what its engine wrote, after each step, and judges each:
-#                                          nothing lost, every tick once and in the order written, every kept event at its
-#                                          own seq, and no turn_end but the prompt's own and its re-delivery's.
+#                                          as a service manager stops it, with events not acknowledged and its turn's
+#                                          completion unsent; then RUNNER_LINK_REQUIRED goes off and the runner starts
+#                                          again with ORBIT_LINK_MODE=off, as a rollback does: first killed (SIGKILL)
+#                                          while it sends its spool, with run_event locked against writes, then started
+#                                          again, and it answers a message; then the switch goes on and the runner takes
+#                                          the session back on the link. Records what the session stored of what its
+#                                          engine wrote, after each step, and judges each: nothing lost, every tick once
+#                                          and in the order written, every kept event once at its own seq, and the
+#                                          prompt's turn ended once, never handed to the engine again.
 #   durable-events-drill.sh partition-off  The partition with RUNNER_LINK_REQUIRED off and the gateway telling the runner
 #                                          MODE_LINK (ORBIT_LINK_STAGING_MODE=link), on a session of its own: past 5
 #                                          minutes without the link the runner takes its work back to HTTPS. Not in all.
@@ -47,6 +49,8 @@
 #   ORBIT_DURABLE_EVENTS_PARTITION_SECONDS  how long the runner is cut off                                  600
 #   ORBIT_DURABLE_EVENTS_CATCHUP            how long the stored ticks may take to catch up with the engine
 #                                           once a fault ends                                               300
+#   ORBIT_DURABLE_EVENTS_ROLLBACK_KILL      1 kills the rollback's runner while it sends its spool; 0 skips
+#                                           that step                                                       1
 #
 # Run it as root on a stack no other runner works on: the runner runs in a mount namespace of its own (as
 # lost-answer-drill.sh's does) and in a systemd unit of its own, whose cgroup the partition's nftables rule matches. It
@@ -82,6 +86,8 @@ apiserver_seconds="${ORBIT_DURABLE_EVENTS_APISERVER_SECONDS:-60}"
 database_seconds="${ORBIT_DURABLE_EVENTS_DATABASE_SECONDS:-20}"
 partition_seconds="${ORBIT_DURABLE_EVENTS_PARTITION_SECONDS:-600}"
 catchup="${ORBIT_DURABLE_EVENTS_CATCHUP:-300}"
+rollback_kill="${ORBIT_DURABLE_EVENTS_ROLLBACK_KILL:-1}"
+case "$rollback_kill" in 0 | 1) ;; *) die "ORBIT_DURABLE_EVENTS_ROLLBACK_KILL must be 0 or 1, not $rollback_kill" ;; esac
 whole() { [[ "$2" =~ ^[1-9][0-9]*$ ]] || die "$1 must be a positive whole number of seconds, not $2"; }
 whole ORBIT_DURABLE_EVENTS_TICK "$tick"
 whole ORBIT_DURABLE_EVENTS_GATEWAY_SECONDS "$gateway_seconds"
@@ -488,11 +494,37 @@ restore_database() {
       rm -rf "$state/postgres-before-failover" ;;
   esac
 }
+# The lock the rollback's kill step holds on run_event while its runner sends its spool: a psql session of its own in the
+# database's container, found and ended by its application name.
+lock_name="durable-events-drill-lock"
+# lock_run_event: run_event locked against writes (SHARE: reads go on, inserts wait), held until unlock_run_event.
+lock_run_event() {
+  docker exec -d "$(db)" psql -U orbit -d orbit -c "SET application_name = '$lock_name'" -c "BEGIN" \
+    -c "LOCK TABLE run_event IN SHARE MODE" -c "SELECT pg_sleep(1800)"
+  wait_until 30 run_event_locked || fail "run_event is not locked within 30 s"
+}
+run_event_locked() {
+  [ "$(psql_value "SELECT count(*) FROM pg_locks l JOIN pg_class c ON c.oid = l.relation JOIN pg_stat_activity a ON a.pid = l.pid
+    WHERE c.relname = 'run_event' AND l.granted AND l.mode = 'ShareLock' AND a.application_name = '$lock_name'")" -ge 1 ] 2> /dev/null
+}
+# writes_wait_on_run_event: some write of run_event waits on the lock.
+writes_wait_on_run_event() {
+  [ "$(psql_value "SELECT count(*) FROM pg_locks l JOIN pg_class c ON c.oid = l.relation
+    WHERE c.relname = 'run_event' AND NOT l.granted")" -ge 1 ] 2> /dev/null
+}
+# unlock_run_event: while the lock is held, the writes still waiting on it ended, rolled back, and then the lock.
+unlock_run_event() {
+  [ "$(psql_value "SELECT count(*) FROM pg_stat_activity WHERE application_name = '$lock_name'")" -ge 1 ] 2> /dev/null || return 0
+  psql_value "SELECT count(pg_terminate_backend(l.pid)) FROM pg_locks l JOIN pg_class c ON c.oid = l.relation
+    WHERE c.relname = 'run_event' AND NOT l.granted" > /dev/null || true
+  psql_value "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity WHERE application_name = '$lock_name'" > /dev/null || true
+}
 # restore_faults: every fault a phase that died left, undone: the partition lifted, a killed container started, the
-# database back in the stack's container.
+# database back in the stack's container, run_event unlocked.
 restore_faults() {
   local down
   reconnect
+  unlock_run_event 2> /dev/null || true
   down="$(cat "$drill/down" 2> /dev/null || true)"
   if [ -n "$down" ]; then
     docker start "$down" > /dev/null 2>&1 || true
@@ -842,6 +874,20 @@ spool_fate() {
         FROM run_event WHERE session_id = '$suuid' AND seq BETWEEN $first AND $last" | sort -t $'\t' -k1,1) |
     awk -F'\t' '{ if ($4 == "") n++; else if ($2 == $4 && $3 == $5) s++; else t++ } END { print s + 0, t + 0, n + 0 }'
 }
+# kept_completions: how many turn completions the drill runner's spool keeps for its next process (runner-go
+# turn_complete_journal.go).
+kept_completions() { find "$drill/orbit/link-spool" -name 'turn-complete-*.json' 2> /dev/null | wc -l; }
+# kept_gone KEPT NOW: of the events in KEPT (spool_events), how many are neither stored at their seq (the same type and
+# text) nor in NOW, the spool as it stands later: what a runner lost.
+kept_gone() {
+  local first last
+  first="$(head -n 1 "$1" | cut -f1)"
+  last="$(tail -n 1 "$1" | cut -f1)"
+  if [ -z "$first" ]; then echo 0; return; fi
+  { psql_rows "SELECT seq, type, replace(COALESCE(payload->>'text', payload->>'subtype', payload->>'delivery', ''), E'\t', ' ')
+      FROM run_event WHERE session_id = '$suuid' AND seq BETWEEN $first AND $last"; cat "$2"; } | sort -u > "$out/.kept-present"
+  sort -u "$1" | comm -23 - "$out/.kept-present" | wc -l
+}
 # The session's first message turn: the prompt's, whose end the stopped runner kept.
 prompt_turn() { psql_value "SELECT id FROM conversation_turn WHERE session_id = '$suuid' AND kind = 'message' ORDER BY seq LIMIT 1"; }
 # turn_end_seqs TURN: the seqs of TURN's turn_end rows, as "S1,S2", or nothing.
@@ -899,14 +945,15 @@ rollback_redelivery() {
   say "rollback, $1: the prompt turn's rows after seq ${last:-0} (seq, type, lease, text): $(awk -F'\t' '{ printf "%s%s %s %s \"%s\"", (NR > 1 ? "; " : ""), $1, $2, $3, substr($4, 1, 60) }' "$out/rollback-redelivery-$1.tsv"); resume continuations of the prompt delivered to the engine: $(cat "$out/rollback-continuations-delivered-$1.txt" 2> /dev/null || echo 0)"
 }
 # rollback_step STEP: a line of rollback.tsv for the session as it stands after STEP, and STEP's verdicts. After the stop,
-# every tick the engine wrote is stored or kept, once. Once the runner has started again, whatever its mode: every tick is
-# stored once and in the order it was written; every event the stopped runner kept is stored at its own seq; the spool is
-# empty; no seq is without a row; the prompt's turn has its own turn_end, the one the stopped runner kept, and at most one
-# more, the end of the resume continuation the control plane hands back a turn whose completion was lost (task
-# 34mwBTpOPo3S9LM2SXs10), after that continuation; and no other turn has more than one.
+# every tick the engine wrote is stored or kept, once. Once the runner was killed while it sent its spool, every event
+# the stopped runner kept is stored or in the spool still. Once the runner has started again, whatever its mode: every
+# tick is stored once and in the order it was written; every event the stopped runner kept is stored at its own seq; the
+# spool is empty; no seq is without a row; the prompt's turn has one turn_end, the one the stopped runner kept, and no
+# resume continuation, stored or delivered to the engine: its kept completion settled it, and nothing handed it to an
+# engine again (task 34mwBTpOPo3S9LM2SXs10); and no other turn has more than one.
 rollback_step() {
   local step=$1 s hole_list t missing order spool_n spool_range fate drops losses turn ends end_seqs conts others held
-  local first_end second_end cont_seq kept_end
+  local first_end kept_end gone delivered completions
   s="$(seqs)"
   turn="$(prompt_turn)"
   end_seqs="$(turn_end_seqs "$turn")"
@@ -924,10 +971,11 @@ rollback_step() {
   kept_end="$(awk -F'\t' '$2 == "turn_end" { print $1; exit }' "$out/rollback-spool.tsv")"
   drops="$(log_since_re "$from0" "$drop_re" | wc -l)"
   losses="$(log_since_re "$from0" "$loss_re" | wc -l)"
+  completions="$(kept_completions)"
   printf '%s\t' "$step" "$(now)" "$s" "${hole_list:-none}" "$t" "${missing:-none}" "$order" "$spool_n" "$spool_range" "$fate" \
     "$ends" "${end_seqs:--}" "${conts:--}" "$others" "$drops" >> "$rollback_table"
   printf '%s\n' "$losses" >> "$rollback_table"
-  say "rollback, $step: seqs (rows first last tombstones) $s, holes ${hole_list:-none}; ticks (rows distinct last) $t, not stored: ${missing:-none}, $order stored out of order; the prompt's turn has $ends turn_end row(s) (seqs ${end_seqs:--}), resume continuations at ${conts:--} (seq@lease), and no other turn more than $others; the spool holds $spool_n event(s) ($spool_range); of the $(wc -l < "$out/rollback-spool.tsv") the stopped runner kept, (stored, seq taken by another event, no row) = $fate; runner log since the session opened: $drops dropping line(s), $losses loss line(s)"
+  say "rollback, $step: seqs (rows first last tombstones) $s, holes ${hole_list:-none}; ticks (rows distinct last) $t, not stored: ${missing:-none}, $order stored out of order; the prompt's turn has $ends turn_end row(s) (seqs ${end_seqs:--}), resume continuations at ${conts:--} (seq@lease), and no other turn more than $others; the spool holds $spool_n event(s) ($spool_range); of the $(wc -l < "$out/rollback-spool.tsv") the stopped runner kept, (stored, seq taken by another event, no row) = $fate; runner log since the session opened: $drops dropping line(s), $losses loss line(s); turn completions kept for the next process: $completions"
 
   [ -z "$hole_list" ] || verdicts+=("$step: seqs without a row: $hole_list")
   [ "$others" -le 1 ] || verdicts+=("$step: a turn other than the prompt's has $others turn_end rows")
@@ -937,23 +985,49 @@ rollback_step() {
     [ -n "$kept_end" ] || [ "$ends" -ge 1 ] || verdicts+=("$step: the prompt turn's end is neither stored nor kept")
     return
   fi
+  if [ "$step" = killed ]; then
+    gone="$(kept_gone "$out/rollback-spool.tsv" "$out/rollback-spool-$step.tsv")"
+    [ "$gone" = 0 ] || verdicts+=("$step: $gone of the $kept_n events the stopped runner kept are neither stored nor in the spool: the killed runner took them with it")
+    return
+  fi
   [ -z "$missing" ] || verdicts+=("$step: ticks the engine wrote and the session does not store: $missing")
   [ "$t" = "$ticks_total $ticks_total $ticks_total" ] || verdicts+=("$step: ticks (rows distinct last) $t, want each of the $ticks_total once")
   [ "$order" = 0 ] || verdicts+=("$step: $order tick(s) stored at a seq below an earlier tick's")
   [ "${fate%% *}" = "$kept_n" ] || verdicts+=("$step: of the $kept_n events the stopped runner kept, (stored, seq taken by another event, no row) = $fate")
   [ "$spool_n" = 0 ] || verdicts+=("$step: the spool still holds $spool_n event(s) ($spool_range)")
+  [ "$completions" = 0 ] || verdicts+=("$step: the spool still keeps $completions turn completion(s) for the next process")
   first_end="${end_seqs%%,*}"
   if [ -n "$kept_end" ] && [ "$first_end" != "$kept_end" ]; then
     verdicts+=("$step: the prompt turn's first turn_end is at seq ${first_end:-none}, not at seq $kept_end, where the stopped runner kept it")
   fi
-  if [ "$ends" -gt 2 ]; then
-    verdicts+=("$step: the prompt's turn has $ends turn_end rows (seqs $end_seqs)")
-  elif [ "$ends" = 2 ]; then
-    second_end="${end_seqs##*,}"
-    cont_seq="$(tr ',' '\n' <<< "$conts" | cut -d@ -f1 | awk -v a="$first_end" -v b="$second_end" '$1 + 0 > a + 0 && $1 + 0 < b + 0 { print; exit }')"
-    [ -n "$cont_seq" ] || verdicts+=("$step: the prompt turn's second turn_end, at seq $second_end, follows no resume continuation after seq $first_end")
-  fi
+  [ "$ends" = 1 ] || verdicts+=("$step: the prompt's turn has $ends turn_end rows (seqs ${end_seqs:--}), not its one: its engine ran it again")
+  [ -z "$conts" ] || verdicts+=("$step: the prompt's turn holds resume continuations at $conts (seq@lease)")
+  delivered="$(cat "$out/rollback-continuations-delivered-$step.txt" 2> /dev/null || echo 0)"
+  [ "${delivered:-0}" = 0 ] || verdicts+=("$step: $delivered resume continuation(s) of the prompt were delivered to the engine")
 }
+# rollback_kill_step: the runner killed while it sends its spool (task 34mwBTpOPo3S9LM2SXs10). With run_event locked
+# against writes, the runner starts as the rollback starts it, with ORBIT_LINK_MODE=off; its supervisor sends the spool
+# before anything else, and once that batch waits on the lock the runner is killed with SIGKILL, as the OOM killer kills
+# it, and so is the apiserver, which rolls the batch back: none of it is stored. Then the lock goes and the apiserver comes
+# back. rollback_step killed judges what is left.
+rollback_kill_step() {
+  local from_k pid
+  lock_run_event
+  from_k="$(log_lines)"
+  start_runner ORBIT_LINK_MODE=off
+  wait_log "$from_k" 'runner link mode: off (ORBIT_LINK_MODE=off)' 60
+  wait_until 180 writes_wait_on_run_event ||
+    fail "rollback, killed while sending: no write of the runner's waits on the locked run_event within 180 s"
+  pid="$(runner_pid)"
+  say "rollback, killed while sending: the runner (pid $pid) sends its spool, and the batch waits on the locked run_event; runner log: $(log_since "$from_k" "an earlier process could not send" | tail -n 1 | sed -E 's/^.*(runner link: )/\1/')"
+  systemctl kill --signal=SIGKILL "$unit"
+  wait_until 30 runner_gone || fail "rollback, killed while sending: the runner (pid $pid) still runs 30 s after SIGKILL"
+  kill_container "$apiserver"
+  unlock_run_event
+  started_again "$apiserver"
+  say "rollback, killed while sending: the runner (pid $pid) killed with SIGKILL, the apiserver killed and started again, run_event unlocked; the spool holds $(spool_events | wc -l) event(s)"
+}
+runner_gone() { ! runner_running; }
 rollback_phase() {
   # verdicts is rollback_step's too: it appends each step's.
   local down_at kept kept_n from1 from2 resent verdict stored verdicts=()
@@ -989,14 +1063,19 @@ rollback_phase() {
   # The runner stopped as a service manager stops it: what is not acknowledged goes to its spool.
   stop_runner
   kept="$(log_since "$from0" 'unacknowledged events of session' | tail -n 1 | sed -E 's/^.*(runner link: )/\1/')"
-  say "rollback: runner log as it stopped: ${kept:-nothing kept for the next process}"
+  say "rollback: runner log as it stopped: ${kept:-nothing kept for the next process}; $(log_since "$from0" 'is kept for the runner'"'"'s next process' | tail -n 1 | sed -E 's/^.*(runner link: )/\1/')"
   spool_events > "$out/rollback-spool.tsv"
   kept_n="$(wc -l < "$out/rollback-spool.tsv")"
   rollback_step stopped
 
-  # The rollback: RUNNER_LINK_REQUIRED off, the gateway back, the runner started again with ORBIT_LINK_MODE=off.
+  # The rollback: RUNNER_LINK_REQUIRED off, the gateway back, the runner started again with ORBIT_LINK_MODE=off; first
+  # killed while it sends its spool, and started again after that.
   api switch off > /dev/null || fail "rollback: switching RUNNER_LINK_REQUIRED off"
   started_again "$gateway"
+  if [ "$rollback_kill" = 1 ]; then
+    rollback_kill_step
+    rollback_step killed
+  fi
   from1="$(log_lines)"
   start_runner ORBIT_LINK_MODE=off
   wait_log "$from1" 'runner link mode: off (ORBIT_LINK_MODE=off)' 60
@@ -1008,7 +1087,7 @@ rollback_phase() {
     fail "rollback: the message after the rollback is not answered within 300 s (the session is $(session_status))"
   resent="$(log_since "$from1" "an earlier process could not send" | grep -F -e "$suuid" -e "$sid" | tail -n 1 | sed -E 's/^.*(runner link: )/\1/' || true)"
   stored="$(log_since "$from1" "held through seq" | grep -F -e "$suuid" -e "$sid" | tail -n 1 | sed -E 's/^.*(runner link: )/\1/' || true)"
-  say "rollback: runner log after the rollback: ${resent:-no events of session $sid an earlier process could not send}; ${stored:-nothing said of them stored}; $(log_since "$from1" "reclaiming session $sid" | tail -n 1 | sed -E 's/^.*(reclaiming session)/\1/')"
+  say "rollback: runner log after the rollback: ${resent:-no events of session $sid an earlier process could not send}; ${stored:-nothing said of them stored}; $(log_since "$from1" "reclaiming session $sid" | tail -n 1 | sed -E 's/^.*(reclaiming session)/\1/'); $(log_since "$from1" "which an earlier process finished, is settled" | tail -n 1 | sed -E 's/^.*(runner link: )/\1/')"
   rollback_redelivery after-rollback
   rollback_step after-rollback
 
@@ -1037,7 +1116,7 @@ rollback_phase() {
   docker logs --since "$since_at" "$gateway" > "$out/rollback-link-gateway.log" 2>&1 || true
   docker logs --since "$since_at" "$apiserver" > "$out/rollback-apiserver.log" 2>&1 || true
   if [ "$verdict" = PASS ]; then
-    say "rollback holds: after the stop, the restart with ORBIT_LINK_MODE=off and the link mode again, every event the stopped runner kept is stored at its own seq, every tick once and in the order written, and the prompt's turn ends once, and once more only after the resume continuation of its lost completion"
+    say "rollback holds: after the stop, the runner killed while it sent its spool (unless ORBIT_DURABLE_EVENTS_ROLLBACK_KILL=0), the restart with ORBIT_LINK_MODE=off and the link mode again, every event the stopped runner kept is stored once at its own seq, every tick once and in the order written, and the prompt's turn ends once, never handed to the engine again"
   else
     say "FAIL: rollback: $verdict"
     failed=1

@@ -27,7 +27,10 @@ import (
 // Welcome lifted the session's floor) starts a segment of its own, so there may be a gap between two segments, never
 // inside one. An event counts once its line is in the segment's file; a write the disk refuses counts nothing and
 // finishes the segment for what it holds, and the stream keeps that event in memory instead. A process that dies while
-// writing leaves an open segment whose last line may be cut short: the next one keeps its whole lines. Every spool
+// writing leaves an open segment whose last line may be cut short: the next one keeps its whole lines. A segment read
+// into memory to be sent stays on disk until every event in it is stored (task 34mwBTpOPo3S9LM2SXs10): a process killed
+// while it sends one (SIGKILL, the OOM killer) leaves it for the next, which sends it again, and the control plane
+// stores each seq once. Every spool
 // together stays within linkSpoolMaxBytes; past it, a session's events stay in memory instead (linkEventStream.over).
 // A session's spool nobody has opened for linkSpoolStaleAfter is removed when a process starts: whatever session it
 // was is long settled. What the spool loses (a segment that does not read back whole, a stopping runner's events the
@@ -49,8 +52,10 @@ type linkSpool struct {
 	log  func(...any)
 	once sync.Once
 	// lost counts the events the spool lost: in segments that did not read back whole, and those of a stopping runner
-	// the disk would not take.
-	lost atomic.Uint64
+	// the disk would not take. lostCompletions counts the turn completions kept beside them (turn_complete_journal.go)
+	// that the cleanup removed unsent.
+	lost            atomic.Uint64
+	lostCompletions atomic.Uint64
 
 	mu    sync.Mutex
 	bytes int64
@@ -80,7 +85,9 @@ func (sp *linkSpool) init() {
 		var newest time.Time
 		for _, f := range files {
 			if info, err := f.Info(); err == nil {
-				size += info.Size()
+				if strings.HasSuffix(f.Name(), ".jsonl") {
+					size += info.Size() // the segments: what the spool's bound is about
+				}
 				if info.ModTime().After(newest) {
 					newest = info.ModTime()
 				}
@@ -88,10 +95,15 @@ func (sp *linkSpool) init() {
 		}
 		if len(files) == 0 || time.Since(newest) > linkSpoolStaleAfter {
 			// Every event still in it is one the control plane never acknowledged, and none of it will reach it now: said
-			// before it goes, session by session, with how many and which, and counted as lost.
+			// before it goes, session by session, with how many and which, and counted as lost. So is every turn
+			// completion kept beside them, which the control plane never answered.
 			if n, first, last := linkSpoolDirEvents(dir, files); n > 0 {
 				sp.log(fmt.Sprintf("runner link: removing the event spool of session %s, untouched since %s: its %d events, of seqs %d-%d, were never acknowledged by the control plane and are lost (%d lost so far)",
 					entry.Name(), newest.Format(time.RFC3339), n, first, last, sp.losing(n)))
+			}
+			if turns := linkSpoolDirCompletions(dir, files); len(turns) > 0 {
+				sp.log(fmt.Sprintf("runner link: removing the event spool of session %s, untouched since %s: its %d kept turn completion(s), of turn(s) %s, were never answered by the control plane and are lost (%d lost so far)",
+					entry.Name(), newest.Format(time.RFC3339), len(turns), strings.Join(turns, ", "), sp.lostCompletions.Add(uint64(len(turns)))))
 			}
 			if err := os.RemoveAll(dir); err != nil {
 				sp.log(fmt.Sprintf("runner link: the event spool of session %s could not be removed: %v", entry.Name(), err))
@@ -174,6 +186,9 @@ type linkSpoolQueue struct {
 	// w writes the newest segment while it is open; nil once it is finished.
 	w *linkSpoolWriter
 	n int
+	// taken are the segments read into the stream's memory (takeFirst) and kept on disk until every event in them is
+	// stored (dropThrough). Neither n nor segs counts them: their events are the stream's memory's now.
+	taken []*linkSpoolSegment
 }
 
 type linkSpoolSegment struct {
@@ -486,8 +501,10 @@ func (q *linkSpoolQueue) finish(sync bool) error {
 	return err
 }
 
-// takeFirst takes the oldest segment off the disk: its events after stored. What of it does not read back is logged
-// and counted as lost, and leaves a gap the stream crosses on its next connection.
+// takeFirst takes the oldest segment's events into memory: those after stored. The segment stays on disk, taken, until
+// every event in it is stored (dropThrough), so that a process killed before then leaves it to the next. What of it
+// does not read back is logged and counted as lost, and leaves a gap the stream crosses on its next connection; what
+// does is kept in a segment of its own in its place, so that the next process reads only that.
 func (q *linkSpoolQueue) takeFirst(stored uint64) []*linkEvent {
 	if len(q.segs) == 0 {
 		return nil
@@ -497,17 +514,56 @@ func (q *linkSpoolQueue) takeFirst(stored uint64) []*linkEvent {
 		_ = q.finish(false)
 	}
 	events, read, err := linkSpoolRead(seg.path, stored)
+	q.segs = q.segs[1:]
+	q.n -= seg.n
 	if gone := seg.n - read; gone > 0 {
 		lost := q.sp.losing(gone)
 		q.sp.log(fmt.Sprintf("runner link: the event spool lost %d events of a session, of seqs %d-%d: %v (%d lost so far)",
 			gone, seg.first, seg.last, err, lost))
+		seg = q.rewrite(seg, events)
+	} else if len(events) == 0 {
+		q.drop(seg) // every event in it is stored
+		seg = nil
 	}
-	q.dropSegment(0)
+	if seg != nil {
+		q.taken = append(q.taken, seg)
+	}
 	return events
 }
 
-// dropThrough removes every segment whose events are all stored through seq, the open one too, and returns how many
-// events they held and the highest seq among them of an event stored as a row.
+// rewrite replaces a segment that did not read back whole with one of the events that did, events, and returns it; nil
+// when there are none, or the disk does not take them, which leaves them in memory alone.
+func (q *linkSpoolQueue) rewrite(seg *linkSpoolSegment, events []*linkEvent) *linkSpoolSegment {
+	// Written before the damaged one goes, which takes the directory with it when nothing else is in it.
+	var whole *linkSpoolSegment
+	if len(events) > 0 {
+		whole = &linkSpoolSegment{path: filepath.Join(q.dir, linkSpoolSegmentName(events[0].seq, events[len(events)-1].seq, false)),
+			first: events[0].seq, last: events[len(events)-1].seq, n: len(events)}
+		if err := linkSpoolWrite(whole.path, events); err != nil {
+			_ = os.Remove(whole.path)
+			whole = nil
+		}
+	}
+	if whole != nil {
+		if info, err := os.Stat(whole.path); err == nil {
+			whole.bytes = info.Size()
+		}
+		q.sp.mu.Lock()
+		q.sp.bytes += whole.bytes
+		q.sp.mu.Unlock()
+		for _, ev := range events {
+			if ev.row {
+				whole.lastRow = ev.seq
+			}
+		}
+	}
+	q.drop(seg)
+	return whole
+}
+
+// dropThrough removes every segment whose events are all stored through seq, the open one and the taken ones too, and
+// returns how many events those not taken held and the highest seq among them of an event stored as a row: the taken
+// ones' events are the stream's memory's, which counts them itself.
 func (q *linkSpoolQueue) dropThrough(seq uint64) (dropped int, lastRow uint64) {
 	for len(q.segs) > 0 && q.segs[0].last <= seq {
 		if q.w != nil && q.w.seg == q.segs[0] {
@@ -517,40 +573,77 @@ func (q *linkSpoolQueue) dropThrough(seq uint64) (dropped int, lastRow uint64) {
 		lastRow = max(lastRow, q.segs[0].lastRow)
 		q.dropSegment(0)
 	}
+	for len(q.taken) > 0 && q.taken[0].last <= seq {
+		seg := q.taken[0]
+		q.taken = q.taken[1:]
+		q.drop(seg)
+	}
 	return dropped, lastRow
 }
 
 func (q *linkSpoolQueue) dropSegment(i int) {
 	seg := q.segs[i]
-	_ = os.Remove(seg.path)
-	q.sp.uncharge(seg.bytes)
 	q.n -= seg.n
 	q.segs = append(q.segs[:i], q.segs[i+1:]...)
-	if len(q.segs) == 0 {
+	q.drop(seg)
+}
+
+// drop deletes a segment no longer in segs or taken, and the session's directory once it holds nothing more.
+func (q *linkSpoolQueue) drop(seg *linkSpoolSegment) {
+	_ = os.Remove(seg.path)
+	q.sp.uncharge(seg.bytes)
+	if len(q.segs) == 0 && len(q.taken) == 0 {
 		_ = os.Remove(q.dir) // only once it is empty
 	}
 }
 
-// remove deletes the session's spool: nothing in it will ever be stored.
+// remove deletes the session's spool: nothing in it will ever be stored. The turn completions kept beside it are not its
+// to remove: they go when a supervisor sends them, or with the cleanup, each said (turn_complete_journal.go).
 func (q *linkSpoolQueue) remove() {
 	if q.w != nil {
 		_ = q.w.f.Close()
 		q.w = nil
 	}
-	for _, seg := range q.segs {
+	for _, seg := range append(q.segs, q.taken...) {
+		_ = os.Remove(seg.path)
 		q.sp.uncharge(seg.bytes)
 	}
-	q.segs, q.n = nil, 0
-	_ = os.RemoveAll(q.dir)
+	q.segs, q.taken, q.n = nil, nil, 0
+	_ = os.Remove(q.dir) // only once it is empty
+}
+
+// untake hands the taken segments back to the disk's count, and returns the events of head none of them holds: those a
+// taken segment holds are on disk already, for the next process.
+func (q *linkSpoolQueue) untake(head []*linkEvent) []*linkEvent {
+	if len(q.taken) == 0 {
+		return head
+	}
+	var rest []*linkEvent
+	for _, ev := range head {
+		held := false
+		for _, seg := range q.taken {
+			held = held || (ev.seq >= seg.first && ev.seq <= seg.last)
+		}
+		if !held {
+			rest = append(rest, ev)
+		}
+	}
+	for _, seg := range q.taken {
+		q.segs = append(q.segs, seg)
+		q.n += seg.n
+	}
+	q.taken = nil
+	return rest
 }
 
 // persist writes what the stream holds in memory to disk, around what is there already: head, the events before
-// everything on disk, and tail, those after it, a segment for each run of consecutive seqs. The segments are finished
-// and synced, for the next process. A failure is no reason to stop: the open segment keeps what its file holds, and
-// every run is written that the disk takes. It returns what failed; the events of a run that was not written are
-// logged and counted as lost.
+// everything on disk, and tail, those after it, a segment for each run of consecutive seqs. What of head a taken
+// segment holds stays in that segment, which is not written again. The segments are finished and synced, for the next
+// process. A failure is no reason to stop: the open segment keeps what its file holds, and every run is written that
+// the disk takes. It returns what failed; the events of a run that was not written are logged and counted as lost.
 func (q *linkSpoolQueue) persist(head, tail []*linkEvent) error {
 	errs := []error{q.finish(true)}
+	head = q.untake(head)
 	for _, events := range [][]*linkEvent{head, tail} {
 		for len(events) > 0 {
 			n := 1
