@@ -1,0 +1,28 @@
+{
+  "cell": { "connections": 15000, "heartbeatsPerSecond": 500, "eventsPerSecond": 2000, "liveDeltasPerSecond": 10000,
+            "renewalsPerSecond": 4.5, "fullReconcileShare": 0.25 },
+  "costs": {
+    "beatUnflagged": { "apiserverMs": 0.59, "databaseMs": 0.63, "gatewayMs": 0.31 },
+    "beatFull": { "apiserverMs": 2.39, "databaseMs": 6.37, "gatewayMs": 0.31 },
+    "event": { "apiserverMs": 0.47, "databaseMs": 0.761, "gatewayMs": 0.045 },
+    "liveDelta": { "apiserverMs": 0.042, "gatewayMs": 0.017, "natsMs": 0.013, "webGatewayMs": 0.0085, "databaseMs": 0.019 },
+    "connect": { "apiserverMs": 4.74, "databaseMs": 8.62, "gatewayMs": 1.05, "webGatewayMs": 0.16 },
+    "idlePerProcess": { "apiserverCores": 0.004, "databaseCores": 0.008 },
+    "apiserverMainThreadShare": 0.91,
+    "gatewayBytesPerConnection": 190000
+  },
+  "rules": { "peakOverMean": { "apiserver": 1.2, "database": 1.5 }, "apiserverMainThreadMax": 0.6,
+             "apiserverMainThreadMaxOneDown": 0.75, "databaseCpuMax": 0.6, "gatewayNodesMin": 3,
+             "gatewayConnectionsPerNodeMax": 7500, "gatewayHandshakesPerSecond": 200, "sessionStreamsSpread": false },
+  "sources": {
+    "beatUnflagged, beatFull": "O1, pinned to the P-cores, reports moving (-volatile): README 'The heartbeat after task O1'. Every O3 attempt at the split was void; O3's clean mixed beat (o3-hb-1, 10.3% in full) read 0.86/1.03 ms, 23%/14% above O1's mixed 0.70/0.90 ms.",
+    "beat gatewayMs": "O3 o3-hb-1 (clean, pinned): loadgen-baseline.mjs",
+    "event": "O2: 0.761 ms database, 0.47 ms apiserver at 400 events/s, unpinned on mixed cores with other work on the host (the coordinator's rule for sizing). O3 o3-ev400-1 (clean, pinned): 0.445/0.58 ms.",
+    "event gatewayMs": "O3 o3-ev400-1: 0.07 ms a batch of 1.55 events",
+    "liveDelta": "ORDER OF MAGNITUDE (the coordinator's fallback): 12 control and 12 live attempts on the 3,000-runner fleet, all void by swap-in (132-10,368 pages/s); per part the higher of the medians over all attempts and the means of the three least swapped (live-estimate.json).",
+    "connect": "O3 o3-hb-1's ramp: loadgen-connects.mjs",
+    "idlePerProcess": "apiserver: each of the two processes of the documented override, idle 03:00-05:55Z 2026-10-27 (threads-2.jsonl): 0.004 cores. database: O1's idle figure for the whole one-apiserver stack (0.008); per process OPEN.",
+    "apiserverMainThreadShare": "O3, o3-ev400-1 (thread sampler)",
+    "gatewayBytesPerConnection": "C2 at 12,000 connections; O3 155-194 KB at 3,000"
+  }
+}

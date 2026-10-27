@@ -57,6 +57,12 @@ type session struct {
 	started                           bool
 	step                              int
 	turn, toolUse                     string
+	// The live stream (-live-rate, live.go): whether the gateway says somebody watches the session, the live_seq of
+	// its newest delta, the deltas gathered and not sent, when the next one comes and when the gathered ones go.
+	watched                 bool
+	liveSeq                 uint64
+	liveQueue               []*linkpb.LiveEvent
+	liveNextAt, liveFlushAt time.Time
 }
 
 // pev is a produced event and when it was first sent: its acknowledgement latency is counted from there, however many
@@ -177,6 +183,9 @@ type runner struct {
 	// connection last carried it whole, for a runner whose parts move.
 	vol  *volatile
 	sent map[string]string
+	// liveRng is what the live stream draws on (live.go), apart from rng, so that the rest of a run draws as it does
+	// without it.
+	liveRng *rand.Rand
 
 	token    string
 	tokenExp time.Time
@@ -208,8 +217,9 @@ func newRunner(g *loadgen, n int, fr fleetRunner) *runner {
 	r := &runner{
 		g: g, n: n, id: fr.Runner, runnerTok: fr.Token, process: fr.Process, sessionIDs: fr.Sessions,
 		byID: map[string]*session{}, facts: runnerFacts(n),
-		rng:   rand.New(rand.NewPCG(g.seed, uint64(n))),
-		conns: make(chan dialResult, 1), firstRenewal: true,
+		rng:     rand.New(rand.NewPCG(g.seed, uint64(n))),
+		liveRng: rand.New(rand.NewPCG(g.seed^liveSeedSalt, uint64(n))),
+		conns:   make(chan dialResult, 1), firstRenewal: true,
 	}
 	r.digests = digestsOf(r.facts)
 	for _, a := range fr.Active {
@@ -357,6 +367,7 @@ func (r *runner) tick(ctx context.Context, now time.Time, generating bool) {
 			}
 		}
 	}
+	r.tickLive(now, generating)
 	// Acknowledgements that are late.
 	if !now.Before(r.nextLateCheck) {
 		r.nextLateCheck = now.Add(time.Second)
@@ -411,6 +422,7 @@ func (r *runner) nextDeadline(now time.Time, generating bool) time.Time {
 	if inflight {
 		take(r.nextLateCheck)
 	}
+	take(r.liveDeadline(generating))
 	return next
 }
 
@@ -654,6 +666,8 @@ func (r *runner) onDial(ctx context.Context, d dialResult, now time.Time) {
 			r.ackThrough(s, st.GetDurableSeq(), now)
 		}
 	}
+	// Who watches which session, as Welcome states it: nobody until the connection's first HeartbeatAck (live.go).
+	r.hintState(c.welcome.GetHints(), now)
 	// A runner beats as soon as it has read Welcome, every part whole: this connection holds none of them yet.
 	r.beatOut = time.Time{}
 	r.beatWhole = true
@@ -828,6 +842,7 @@ func (r *runner) onFrame(c *rconn, f *linkpb.Frame, now time.Time) {
 				r.vol.onAnswer(ack.GetReconcileJson())
 			}
 		}
+		r.hintState(ack.GetHints(), now)
 	case *linkpb.Frame_EventAck:
 		r.onEventAck(c, body.EventAck, now)
 	case *linkpb.Frame_Credit:
@@ -844,6 +859,11 @@ func (r *runner) onFrame(c *rconn, f *linkpb.Frame, now time.Time) {
 		}
 	case *linkpb.Frame_Hint:
 		g.stats.with(func(w *window) { w.Hints++ })
+		if wh := body.Hint.GetWatchers(); wh != nil && c == r.cur {
+			r.setWatched(r.activeSession(wh.GetSessionId()), wh.GetWatchers() > 0, now)
+		}
+	case *linkpb.Frame_TurnPrefixRequest:
+		r.answerPrefix(c, body.TurnPrefixRequest, now)
 	case *linkpb.Frame_Close:
 		// Recorded by the reader; the end of the connection says what it means.
 	default:
@@ -971,6 +991,9 @@ func (r *runner) onEnd(c *rconn, now time.Time) {
 	}
 	r.cur = nil
 	r.beatOut = time.Time{}
+	for _, s := range r.active {
+		r.dropLive(s)
+	}
 	if r.dialing && r.quiescing && c.closed.GetCode() == linkpb.CloseCode_CLOSE_CODE_SUPERSEDED {
 		// The renewal's connection is up; its dial result comes next.
 		r.supersededEarly = true
