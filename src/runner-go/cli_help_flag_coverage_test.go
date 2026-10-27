@@ -22,6 +22,7 @@ func TestPerActionHelpDocumentsEveryAdvertisedFlag(t *testing.T) {
 		"session":   sessionActionHelp,
 		"provider":  providerActionHelp,
 		"agent":     agentActionHelp,
+		"runner":    runnerActionHelp,
 		"watch":     watchActionHelp,
 		"wiki":      wikiActionHelp,
 	}
@@ -30,7 +31,7 @@ func TestPerActionHelpDocumentsEveryAdvertisedFlag(t *testing.T) {
 	for _, list := range [][]cliCapabilitySpec{
 		baseCLICapabilities, providerCLICapabilities, projectCLICapabilities,
 		notifyCLICapabilities, sessionCLICapabilities, agentCLICapabilities,
-		watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities,
+		runnerCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities,
 		userCLICapabilities,
 	} {
 		for _, spec := range list {
