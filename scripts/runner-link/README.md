@@ -458,6 +458,11 @@ from it. [docs/self-hosting.md](../../docs/self-hosting.md#the-cells-size) gives
   adds 1.9 apiserver and 3.45 database cores.
 - **Each percent of beats reconciled in full** adds 0.009 apiserver and 0.029 database cores.
 
+**The database's failover** must not lose an acknowledged commit (the coordinator, 2026-10-27, from C1a's failover
+drill). A runner drops its copy of events once their EventAck arrives, so C1a held through a failover only because its
+standby was synchronous. A cell's database needs a synchronous standby (`synchronous_commit = on`, the standby in
+`synchronous_standby_names`, or a quorum of two), or an equivalent that keeps every acknowledged commit.
+
 **Before production with more than one apiserver** (the coordinator filed these tasks on 2026-10-26):
 
 - **(a) The singleton jobs on one process** (task 34mNe88onMT6k23kHz7ce): the reaper, with a heartbeat-write-failure

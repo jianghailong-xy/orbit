@@ -607,6 +607,14 @@ arithmetic, and how to repeat both.
   - Raise `max_wal_size` to 8 GB or more. At the default 1 GB the peak's WAL forces a checkpoint every 90 seconds or
     so, each followed by full-page writes. With 8 GB, checkpoints wait for `checkpoint_timeout` (5 minutes).
   - Give `shared_buffers` a quarter of the memory.
+- **A failover must not lose an acknowledged commit.** A runner lets go of its copy of a batch of events once their
+  acknowledgement arrives, so an event the database acknowledged exists nowhere else. An asynchronous standby can lose
+  the last moments' commits when it takes over. A cell's database needs one of these:
+  - a synchronous standby: `synchronous_commit = on`, with the standby named in `synchronous_standby_names`;
+  - two standbys and a quorum (`ANY 1 (...)`), so that losing one standby does not stop commits;
+  - a managed database whose failover keeps every acknowledged commit.
+
+  Keep the standby near, since every commit that writes events waits for it.
 - **Not measured here:** people's own requests (web, apps, their streams), which go to the first apiserver, and the
   live relay's cost (pending). Each process's figures leave room for them.
 
