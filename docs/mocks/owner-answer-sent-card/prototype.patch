@@ -1,13 +1,16 @@
 diff --git a/src/web/src/components/OwnerAnswerLine.tsx b/src/web/src/components/OwnerAnswerLine.tsx
-index 1b90862..c8466ec 100644
+index 1b90862..2cbbf8d 100644
 --- a/src/web/src/components/OwnerAnswerLine.tsx
 +++ b/src/web/src/components/OwnerAnswerLine.tsx
-@@ -1,29 +1,31 @@
- import type { ReactNode } from 'react';
+@@ -1,29 +1,35 @@
+-import type { ReactNode } from 'react';
 -import { ArrowRightOutlined } from '@ant-design/icons';
-+import { ArrowRightOutlined, CheckCircleFilled, RightOutlined, SendOutlined } from '@ant-design/icons';
- import type { OwnerAnswerCard } from '@orbit/shared';
+-import type { OwnerAnswerCard } from '@orbit/shared';
 -import { sentToCoordinatorLine } from './EvidenceDecisionCard';
++import { createContext, useContext, type ReactNode } from 'react';
++import { ArrowRightOutlined, CheckCircleFilled, RightOutlined, SendOutlined } from '@ant-design/icons';
++import type { OwnerAnswerCard, ProjectClosedQuestion } from '@orbit/shared';
++import { AnsweredQuestionCard } from './CoordinatorQuestionCard';
 +import { decisionReceiptTime, EVIDENCE_DECISION_SENT_TO_COORDINATOR, sentToCoordinatorLine } from './EvidenceDecisionCard';
 +import { markdownToPlainText } from '../lib/markdownText';
  
@@ -38,6 +41,9 @@ index 1b90862..c8466ec 100644
 +export const OWNER_ANSWER_VARIANT =
 +  (typeof localStorage !== 'undefined' && localStorage.getItem('oa-variant')) || 'today';
 +
++/** PROTOTYPE (option M): the ended questions this conversation can draw, by item. */
++export const AnsweredRecordsCtx = createContext<ReadonlyMap<string, ProjectClosedQuestion> | null>(null);
++
 +/** "Your answer to “…”": which question, on one line, for a card read away from its question. */
 +function answerTo(card: OwnerAnswerCard): string | null {
 +  if (card.kind === 'DONE_REQUEST') return 'Your answer to its request to record the project done';
@@ -47,12 +53,22 @@ index 1b90862..c8466ec 100644
  export function OwnerAnswerLine({
    card,
    text,
-@@ -42,6 +44,79 @@ export function OwnerAnswerLine({
+@@ -42,6 +48,89 @@ export function OwnerAnswerLine({
    /** The queue's own line, while the turn still waits behind a running one. */
    queued?: ReactNode;
  }) {
 +  const variant = OWNER_ANSWER_VARIANT;
 +  const to = answerTo(card);
++  const records = useContext(AnsweredRecordsCtx);
++  const record = variant === 'M' ? records?.get(card.itemId) : undefined;
++  if (record) {
++    // One card: the question as it was answered, drawn where the coordinator was handed the answer.
++    return (
++      <div className="oa-one" data-seq={seq} data-owner-answer={card.itemId}>
++        <AnsweredQuestionCard record={record} delivery={{ queued: Boolean(queued), undelivered, told: text }} />
++      </div>
++    );
++  }
 +  if (variant === 'B' && !queued && !undelivered) {
 +    // Said on the question's own card; the turn keeps its anchor for ⌘F and the sticky bar.
 +    return <div className="oa-merged" data-seq={seq} data-owner-answer={card.itemId} />;
@@ -127,6 +143,199 @@ index 1b90862..c8466ec 100644
    return (
      <div className={`owner-answer${queued ? ' is-queued' : ''}`} data-seq={seq} data-owner-answer={card.itemId}>
        <details className="owner-answer-fold">
+diff --git a/src/web/src/components/CoordinatorQuestionCard.tsx b/src/web/src/components/CoordinatorQuestionCard.tsx
+index e339810..0127f00 100644
+--- a/src/web/src/components/CoordinatorQuestionCard.tsx
++++ b/src/web/src/components/CoordinatorQuestionCard.tsx
+@@ -6,6 +6,7 @@ import {
+   QuestionCircleFilled,
+   RightOutlined,
+   RollbackOutlined,
++  SendOutlined,
+ } from '@ant-design/icons';
+ import Markdown from 'react-markdown';
+ import remarkGfm from 'remark-gfm';
+@@ -16,7 +17,7 @@ import type {
+   ProjectOpenItemsView,
+ } from '@orbit/shared';
+ import { CardActionButton, CardActions } from './CardAction';
+-import { decisionReceiptTime } from './EvidenceDecisionCard';
++import { decisionReceiptTime, sentToCoordinatorLine } from './EvidenceDecisionCard';
+ import { ReviewCard } from './ReviewCard';
+ import { Alert } from './ui/Alert';
+ import { Textarea } from './ui/Textarea';
+@@ -93,6 +94,12 @@ export const OWN_ANSWER_PROMPT = 'Or type your own answer…';
+ export const OTHER_OPTION = 'Other — say it in my own words';
+ export const RECOMMENDED = 'Recommended';
+ export const ANSWERED_HEADING = 'Answered';
++/** PROTOTYPE (option M): what the one card says while its answer waits, or went unconfirmed. */
++export const QUEUED_FOR_COORDINATOR = 'Queued — the coordinator reads it when its current turn ends';
++export const NOT_CONFIRMED_RECEIVED = 'The coordinator has not confirmed it received this';
++export const WHAT_THE_COORDINATOR_WAS_TOLD = 'What the coordinator was told';
++/** PROTOTYPE: option B draws the delivery on the question's card. */
++const SENT_ON_CARD = typeof localStorage !== 'undefined' && localStorage.getItem('oa-variant') === 'B';
+ /** An answer with nobody to tell yet: R11 tells the next coordinator when one is bound. */
+ export const WAITING_FOR_COORDINATOR = 'Waiting for this project’s next coordinator';
+ export const DELIVERED_TO_COORDINATOR = 'Delivered to the current coordinator';
+@@ -506,9 +513,13 @@ function RecordOption({ label, why, recommended, chosen, said, saidLabel }: {
+ export function AnsweredQuestionCard({
+   record,
+   now = new Date(),
++  delivery,
+ }: {
+   record: ProjectClosedQuestion;
+   now?: Date;
++  /** PROTOTYPE (option M): the card drawn as the turn that handed the answer to the coordinator —
++   *  still on the queue, not confirmed received, and the words the coordinator was told. */
++  delivery?: { queued: boolean; undelivered: boolean; told: string };
+ }): JSX.Element {
+   const [open, setOpen] = useState(false);
+   const isWithdrawn = withdrawn(record);
+@@ -528,7 +539,7 @@ export function AnsweredQuestionCard({
+       open={open}
+       onOpenChange={setOpen}
+       preview={{
+-        className: `answered-question-card${isWithdrawn ? ' is-withdrawn' : ''}`,
++        className: `answered-question-card${isWithdrawn ? ' is-withdrawn' : ''}${delivery?.queued ? ' is-queued' : ''}`,
+         content: (
+           <>
+             <span className="answered-question-head">
+@@ -549,12 +560,35 @@ export function AnsweredQuestionCard({
+                 <ClockCircleOutlined aria-hidden="true" /> {lines.waiting}
+               </span>
+             ) : null}
++            {delivery?.queued ? (
++              <span className="answered-question-waiting">
++                <ClockCircleOutlined aria-hidden="true" /> {QUEUED_FOR_COORDINATOR}
++              </span>
++            ) : null}
++            {delivery?.undelivered ? (
++              <span className="answered-question-waiting">{NOT_CONFIRMED_RECEIVED}</span>
++            ) : null}
+             {lines.withdrew ? <span className="answered-question-withdrew">{lines.withdrew}</span> : null}
+             {lines.reason ? <span className="answered-question-reason">{lines.reason}</span> : null}
+-            <span className="answered-question-open">
+-              {VIEW_DETAILS}
+-              <RightOutlined aria-hidden="true" />
+-            </span>
++            {/* PROTOTYPE (docs/mocks/owner-answer-sent-card, option B): the card says where its answer
++                went, in the line its delivery turn used to be drawn as. */}
++            {SENT_ON_CARD && record.delivery ? (
++              <span className="answered-question-open is-sent">
++                <span className="answered-question-sent">
++                  <SendOutlined aria-hidden="true" />
++                  {sentToCoordinatorLine(record.delivery.at, now)}
++                </span>
++                <span className="answered-question-open-link">
++                  {VIEW_DETAILS}
++                  <RightOutlined aria-hidden="true" />
++                </span>
++              </span>
++            ) : (
++              <span className="answered-question-open">
++                {VIEW_DETAILS}
++                <RightOutlined aria-hidden="true" />
++              </span>
++            )}
+           </>
+         ),
+       }}
+@@ -598,6 +632,12 @@ export function AnsweredQuestionCard({
+             </span>
+           ) : null}
+         </div>
++        {delivery ? (
++          <details className="answered-question-told">
++            <summary>{WHAT_THE_COORDINATOR_WAS_TOLD}</summary>
++            <pre>{delivery.told}</pre>
++          </details>
++        ) : null}
+         <div className="card-actions approval-actions answered-question-footer">
+           <span className="answered-question-footer-line">
+             {isWithdrawn ? <RollbackOutlined aria-hidden="true" /> : <CheckCircleFilled aria-hidden="true" />}
+diff --git a/src/web/src/components/WorkspaceView.tsx b/src/web/src/components/WorkspaceView.tsx
+index 689fc3a..d7e32e5 100644
+--- a/src/web/src/components/WorkspaceView.tsx
++++ b/src/web/src/components/WorkspaceView.tsx
+@@ -345,6 +345,7 @@ import {
+   type CriteriaDecisionReply,
+ } from './CriteriaDecisionCard';
+ import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows } from './CoordinatorQuestionCard';
++import { AnsweredRecordsCtx, OWNER_ANSWER_VARIANT } from './OwnerAnswerLine';
+ import {
+   ItemAsCard,
+   exceptionCardRows,
+@@ -5739,17 +5740,36 @@ export function WorkspaceView({
+   // every record above is (`decisionReceiptAnchor`). The question's own card, below the transcript,
+   // goes when the read drops it from `needsYou`, in the same poll that brings the record. The
+   // native clients do the same (`CoordinatorQuestions.receipts`).
++  // PROTOTYPE (option M): an answer this conversation was handed is drawn by its turn, as one card.
++  const answeredRecords = useMemo(
++    () => (OWNER_ANSWER_VARIANT === 'M'
++      ? new Map((openItems.data?.closedQuestions ?? []).map((record) => [record.itemId, record]))
++      : null),
++    [openItems.data],
++  );
++  const handedAnswers = useMemo(() => {
++    const items = new Set<string>();
++    if (OWNER_ANSWER_VARIANT !== 'M') return items;
++    for (const event of transcriptEvents) {
++      const item = (event.payload as { ownerAnswer?: { itemId?: unknown } } | null)?.ownerAnswer?.itemId;
++      if (event.type === 'user' && typeof item === 'string') items.add(item);
++    }
++    for (const { turn } of queuedTailEvents) if (turn.ownerAnswer) items.add(turn.ownerAnswer.itemId);
++    return items;
++  }, [transcriptEvents, queuedTailEvents]);
+   const questionRecords = useMemo(
+     () =>
+       coordinatedProjectId
+-        ? closedQuestionRows(openItems.data, transcriptEvents).map(({ record, placement }) => ({
++        ? closedQuestionRows(openItems.data, transcriptEvents)
++            .filter(({ record }) => !handedAnswers.has(record.itemId))
++            .map(({ record, placement }) => ({
+             anchor: placement,
+             moment: record.resolvedAt,
+             key: `question-record:${record.itemId}`,
+             element: <AnsweredQuestionCard record={record} />,
+           }))
+         : [],
+-    [coordinatedProjectId, openItems.data, transcriptEvents],
++    [coordinatedProjectId, openItems.data, transcriptEvents, handedAnswers],
+   );
+ 
+   // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
+@@ -11036,6 +11056,7 @@ export function WorkspaceView({
+                               stateWord={orbitLinkStateWord}
+                               refreshKey={sessionDetailQ.dataUpdatedAt}
+                             >
++                              <AnsweredRecordsCtx.Provider value={answeredRecords}>
+                               <Transcript
+                                 events={transcriptEvents}
+                                 live={live}
+@@ -11044,6 +11065,7 @@ export function WorkspaceView({
+                                 streamingAfterSeq={streamingDrafts ? streamAnchorRef.current : null}
+                                 inserts={transcriptInserts}
+                               />
++                              </AnsweredRecordsCtx.Provider>
+                             </OrbitLinkCardsProvider>
+                           </StreamingDraftsCtx.Provider>
+                           </TaskActivityCtx.Provider>
+@@ -11259,6 +11281,7 @@ export function WorkspaceView({
+                   rememberable={approvalRememberOffered(shownEngine)}
+                 />
+               ))}
++              <AnsweredRecordsCtx.Provider value={answeredRecords}>
+               {!selectedTrashed && queuedTailEvents.map(({ turn: q, event }) => {
+                 // Each row is drawn from the event its echo will be, by the transcript's own dispatch
+                 // (QueuedUserTurn): the card the transcript draws once a runner takes it, or the bubble
+@@ -11293,6 +11316,7 @@ export function WorkspaceView({
+                   />
+                 );
+               })}
++              </AnsweredRecordsCtx.Provider>
+               {placeholder === 'waiting' && <div className="chat-note">Waiting for the workspace…</div>}
+               {selected &&
+                 selectedTrashed &&
 diff --git a/src/web/src/lib/ownerAnswer.ts b/src/web/src/lib/ownerAnswer.ts
 index e5aeb4c..0c93d06 100644
 --- a/src/web/src/lib/ownerAnswer.ts
@@ -164,10 +373,10 @@ index 179a2fb..191e52d 100644
  
  /**
 diff --git a/src/web/src/index.css b/src/web/src/index.css
-index e990295..1611338 100755
+index e990295..427cc62 100755
 --- a/src/web/src/index.css
 +++ b/src/web/src/index.css
-@@ -25621,3 +25621,214 @@ button.agent-progress-agent:hover {
+@@ -25621,3 +25621,240 @@ button.agent-progress-agent:hover {
      font-size: 26px;
    }
  }
@@ -382,63 +591,29 @@ index e990295..1611338 100755
 +  white-space: pre-wrap;
 +  word-break: break-word;
 +}
-diff --git a/src/web/src/components/CoordinatorQuestionCard.tsx b/src/web/src/components/CoordinatorQuestionCard.tsx
-index e339810..377a439 100644
---- a/src/web/src/components/CoordinatorQuestionCard.tsx
-+++ b/src/web/src/components/CoordinatorQuestionCard.tsx
-@@ -6,6 +6,7 @@ import {
-   QuestionCircleFilled,
-   RightOutlined,
-   RollbackOutlined,
-+  SendOutlined,
- } from '@ant-design/icons';
- import Markdown from 'react-markdown';
- import remarkGfm from 'remark-gfm';
-@@ -16,7 +17,7 @@ import type {
-   ProjectOpenItemsView,
- } from '@orbit/shared';
- import { CardActionButton, CardActions } from './CardAction';
--import { decisionReceiptTime } from './EvidenceDecisionCard';
-+import { decisionReceiptTime, sentToCoordinatorLine } from './EvidenceDecisionCard';
- import { ReviewCard } from './ReviewCard';
- import { Alert } from './ui/Alert';
- import { Textarea } from './ui/Textarea';
-@@ -93,6 +94,8 @@ export const OWN_ANSWER_PROMPT = 'Or type your own answer…';
- export const OTHER_OPTION = 'Other — say it in my own words';
- export const RECOMMENDED = 'Recommended';
- export const ANSWERED_HEADING = 'Answered';
-+/** PROTOTYPE: option B draws the delivery on the question's card. */
-+const SENT_ON_CARD = typeof localStorage !== 'undefined' && localStorage.getItem('oa-variant') === 'B';
- /** An answer with nobody to tell yet: R11 tells the next coordinator when one is bound. */
- export const WAITING_FOR_COORDINATOR = 'Waiting for this project’s next coordinator';
- export const DELIVERED_TO_COORDINATOR = 'Delivered to the current coordinator';
-@@ -551,10 +554,25 @@ export function AnsweredQuestionCard({
-             ) : null}
-             {lines.withdrew ? <span className="answered-question-withdrew">{lines.withdrew}</span> : null}
-             {lines.reason ? <span className="answered-question-reason">{lines.reason}</span> : null}
--            <span className="answered-question-open">
--              {VIEW_DETAILS}
--              <RightOutlined aria-hidden="true" />
--            </span>
-+            {/* PROTOTYPE (docs/mocks/owner-answer-sent-card, option B): the card says where its answer
-+                went, in the line its delivery turn used to be drawn as. */}
-+            {SENT_ON_CARD && record.delivery ? (
-+              <span className="answered-question-open is-sent">
-+                <span className="answered-question-sent">
-+                  <SendOutlined aria-hidden="true" />
-+                  {sentToCoordinatorLine(record.delivery.at, now)}
-+                </span>
-+                <span className="answered-question-open-link">
-+                  {VIEW_DETAILS}
-+                  <RightOutlined aria-hidden="true" />
-+                </span>
-+              </span>
-+            ) : (
-+              <span className="answered-question-open">
-+                {VIEW_DETAILS}
-+                <RightOutlined aria-hidden="true" />
-+              </span>
-+            )}
-           </>
-         ),
-       }}
++/* M: one card — the answered question, drawn as the turn that handed it over. */
++.oa-one {
++  margin: 4px 0 6px;
++}
++.review-card-preview.answered-question-card.is-queued {
++  border-style: dashed;
++}
++.answered-question-told {
++  margin: 4px 14px 10px;
++  font-size: 12px;
++}
++.answered-question-told summary {
++  color: var(--text-2);
++  cursor: pointer;
++}
++.answered-question-told pre {
++  max-height: 260px;
++  margin: 6px 0 0;
++  padding: 8px;
++  overflow: auto;
++  border-radius: 6px;
++  background: var(--fill-inset);
++  font-size: 11px;
++  white-space: pre-wrap;
++  word-break: break-word;
++}
