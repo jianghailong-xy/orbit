@@ -2,6 +2,7 @@ package io.orbitd.android.composer
 
 import android.content.ClipboardManager
 import android.net.Uri
+import android.view.ViewTreeObserver
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,6 +31,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -60,6 +62,7 @@ import io.orbitd.android.management.LocalRememberModel
 import io.orbitd.android.management.LocalSmartSelection
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.management.personalPermissions
+import io.orbitd.android.reader.ComposerFold
 import io.orbitd.android.reader.SteerDelivery
 import io.orbitd.android.reader.UnreadSteer
 import io.orbitd.android.reader.queuedTail
@@ -157,9 +160,19 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     // Android hides its keyboard without taking the field's focus with it, where iOS's first responder resigns. The
     // reader's chrome fold (iOS `ConsoleView.foldsChrome`) reads this box's editing state, so the keyboard going
     // hands the page its bar and rows back instead of leaving a phone without them.
+    // The keyboard is up when Compose's IME inset says so, or when the window's own insets do (A15 F-48, as `ComposerFold`):
+    // Android 15's recreated window fits the keyboard itself and leaves the inset at 0. Nothing composes this box again as that
+    // window's keyboard comes and goes, so the window's word is read each time the window lays out.
     val focusManager = LocalFocusManager.current
+    val view = LocalView.current
+    var windowIme by remember(view) { mutableStateOf(ComposerFold.windowIme(view)) }
+    DisposableEffect(view) {
+        val read = ViewTreeObserver.OnGlobalLayoutListener { windowIme = ComposerFold.windowIme(view) }
+        view.viewTreeObserver.addOnGlobalLayoutListener(read)
+        onDispose { view.viewTreeObserver.removeOnGlobalLayoutListener(read) }
+    }
     var imeWasUp by remember { mutableStateOf(false) }
-    val imeUp = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val imeUp = WindowInsets.ime.getBottom(LocalDensity.current) > 0 || windowIme
     LaunchedEffect(imeUp) {
         if (imeUp) imeWasUp = true
         else if (imeWasUp) { imeWasUp = false; if (inputFocused) focusManager.clearFocus() }
