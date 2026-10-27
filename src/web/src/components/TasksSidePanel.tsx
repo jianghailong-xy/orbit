@@ -59,6 +59,7 @@ import {
   wikiSpacesQuery,
   workspaceSessionCountsQuery,
 } from '../lib/queries';
+import { workspaceListPath } from '../lib/workspaceListFolder';
 import { orderWorkspaces, reorderedWorkspaceIds, workspaceRunnerId } from '../lib/workspaceOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { useToast } from '../lib/toast';
@@ -636,14 +637,15 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     [sessionCounts.data],
   );
 
-  // Open a workspace's console — the same destination the runner detail page uses.
+  // Open a workspace's console — the same destination the runner detail page uses — on the folder
+  // page its list was left on (lib/workspaceListFolder).
   // Config-only workspaces (no runner) have no console to open.
   // The lit workspace's row goes nowhere: its list is already showing.
   const openWorkspace = useCallback(
     (a: Workspace) => {
       onNavigate?.();
       if (!(a.runner?.id ?? a.runnerId) || a.id === litWorkspaceId) return;
-      navigate(`/workspaces/${encodeId(a.id)}`);
+      navigate(workspaceListPath(a.id));
     },
     [navigate, onNavigate, litWorkspaceId],
   );

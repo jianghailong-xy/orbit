@@ -131,6 +131,9 @@ public struct NavState: Equatable, Sendable {
     /// to): its own stack is then the one on screen, so a push lands there and the section's stack
     /// underneath is left exactly as it was — the same console, still streaming, when it closes.
     public var settingsPresented: Bool
+    /// The folder page each workspace's session list was on when another workspace replaced it on
+    /// the Agents stack, by agent id — what switching back opens again (``switchWorkspace(from:to:folders:)``).
+    public var foldersLeftOpen: [String: SessionFolderAddress] = [:]
 
     public init(section: AppSection = .agents, stacks: [AppSection: [NavNode]] = [:],
                 settingsPresented: Bool = false) {
@@ -472,6 +475,20 @@ public struct NavState: Equatable, Sendable {
             guard case .folder(let address) = frame else { return true }
             return folderID.map { $0 != address.folderID } ?? false
         }
+    }
+
+    /// A switch to another workspace's session list — the drawer's Workspace row, the iPad's sidebar,
+    /// ⌘1…⌘9. The stack is emptied, since its console and draft belong to the workspace left
+    /// behind, but each workspace keeps the folder page its list was on (owner, 2026-10-27): the
+    /// folder showing is noted for the workspace it belongs to, and `to`'s list opens on the one it
+    /// was left on — unless that folder is no longer among `folders`, deleted while it was away.
+    public mutating func switchWorkspace(from: String?, to: String, folders: [SessionFolder]) {
+        if let from { foldersLeftOpen[from] = nil }
+        if let folder = folderColumn { foldersLeftOpen[folder.agentID] = folder }
+        let back = foldersLeftOpen.removeValue(forKey: to).flatMap { address in
+            folders.contains { $0.id == address.folderID } ? address : nil
+        }
+        path = back.map { [.folder($0)] } ?? []
     }
 
     /// Open a project's session list over the workspace's list or its folder. The detail console

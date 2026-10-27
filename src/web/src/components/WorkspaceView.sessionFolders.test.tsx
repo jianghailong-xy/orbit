@@ -43,6 +43,9 @@ const apiModule = await import('../api');
 const apiMock = vi.mocked(apiModule.api);
 const { ApiError } = apiModule;
 const { WorkspaceView } = await import('./WorkspaceView');
+const { TasksSidePanel } = await import('./TasksSidePanel');
+const { ThemeProvider } = await import('../lib/theme');
+const { rememberListFolder } = await import('../lib/workspaceListFolder');
 const { encodeId } = await import('../lib/idCodec');
 
 const uuid = (n: number) => `0195c0de-0000-7000-8000-${String(n).padStart(12, '0')}`;
@@ -131,7 +134,8 @@ const until = async (assertion: () => void): Promise<void> => {
   });
 };
 
-async function mount(path: string, ready: () => void): Promise<void> {
+/** The console at `path`, with the sidebar beside it when `sidebar` — the rows a workspace switch is made from. */
+async function mount(path: string, ready: () => void, sidebar = false): Promise<void> {
   const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
   const nextContainer = document.createElement('div');
   const nextRoot = createRoot(nextContainer);
@@ -143,6 +147,11 @@ async function mount(path: string, ready: () => void): Promise<void> {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[path]}>
+          {sidebar && (
+            <ThemeProvider>
+              <TasksSidePanel />
+            </ThemeProvider>
+          )}
           <WorkspaceView runner={RUNNER} />
           <LocationProbe />
           <ToastViewport />
@@ -577,5 +586,103 @@ describe('Move', { timeout: 60_000 }, () => {
       vi.mocked(apiModule.moveSession).mock.invocationCallOrder[0],
     );
     await until(() => expect(document.body.textContent).toContain('Moved to wikova-develop'));
+  });
+});
+
+describe('a folder across a workspace switch', { timeout: 60_000 }, () => {
+  const ELSEWHERE_ROW = row(925, 'Elsewhere notes', {
+    workspaceId: OTHER_WORKSPACE_ID,
+    workspace: { id: OTHER_WORKSPACE_ID, name: 'wikova-develop' },
+    folderId: ELSEWHERE.id,
+  });
+  const workspaceRow = (name: string): HTMLElement => {
+    const found = [...mounted().querySelectorAll<HTMLElement>('.tp-item')].find(
+      (el) => el.querySelector('.tp-workspace-name')?.textContent === name,
+    );
+    if (!found) throw new Error(`no sidebar row ${name}`);
+    return found;
+  };
+  const folderTitle = (): string | null => mounted().querySelector('.session-folder-title')?.textContent ?? null;
+
+  beforeEach(() => {
+    // Two workspaces on the one runner, for the sidebar to switch between, each listing its own
+    // sessions as the server does.
+    const served = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(((path: string, ...rest: unknown[]) => {
+      if (path === '/workspaces') {
+        return Promise.resolve([
+          { id: WORKSPACE_ID, name: 'orbit', runnerId: RUNNER_ID, createdAt: '2026-01-01T00:00:00Z', position: 0 },
+          { id: OTHER_WORKSPACE_ID, name: 'wikova-develop', runnerId: RUNNER_ID, createdAt: '2026-01-02T00:00:00Z', position: 1 },
+        ]);
+      }
+      if (path === '/runners') return Promise.resolve([RUNNER]);
+      const reply = (served as (...args: unknown[]) => Promise<unknown>)(path, ...rest);
+      const workspaceId = path.startsWith('/sessions?') ? new URLSearchParams(path.split('?')[1]).get('workspaceId') : null;
+      return workspaceId
+        ? reply.then((list) => (list as Array<{ workspaceId: string }>).filter((s) => s.workspaceId === workspaceId))
+        : reply;
+    }) as never);
+    rows = [...rows, ELSEWHERE_ROW];
+    // What earlier cases left the console's memory on.
+    rememberListFolder(WORKSPACE_ID, null);
+    rememberListFolder(OTHER_WORKSPACE_ID, null);
+  });
+
+  it('comes back to the folder page each workspace was left on', async () => {
+    await mount(`/sessions/${LOOSE.id}`, () => expect(folderNames()).toEqual(['Release', 'Wiki']), true);
+    await click(folderRow('Release'), 'the Release folder row');
+    await click(listRow('Release notes'), 'the Release notes row');
+    await until(() => expect(location).toBe(`/sessions/${NOTES.id}?folder=${RELEASE.id}`));
+
+    await click(workspaceRow('wikova-develop'), 'the wikova-develop row');
+    await until(() => expect(folderNames()).toEqual(['Elsewhere']));
+    expect(folderTitle()).toBeNull();
+    await click(folderRow('Elsewhere'), 'the Elsewhere folder row');
+    await until(() => expect(folderTitle()).toBe('Elsewhere'));
+
+    // Back in orbit: its folder's page, and the conversation the page was left on.
+    await click(workspaceRow('orbit'), 'the orbit row');
+    await until(() => expect(location).toBe(`/sessions/${NOTES.id}?folder=${RELEASE.id}`));
+    expect(folderTitle()).toBe('Release');
+    expect(sessionTitles()).toEqual(['Release notes', 'Tag the build']);
+
+    // And wikova-develop keeps its own.
+    await click(workspaceRow('wikova-develop'), 'the wikova-develop row');
+    await until(() => expect(location).toBe(`/sessions/${ELSEWHERE_ROW.id}?folder=${ELSEWHERE.id}`));
+    expect(folderTitle()).toBe('Elsewhere');
+    expect(sessionTitles()).toEqual(['Elsewhere notes']);
+  });
+
+  it('comes back to the list when the folder was left before the switch', async () => {
+    await mount(`/sessions/${LOOSE.id}`, () => expect(folderNames()).toEqual(['Release', 'Wiki']), true);
+    await click(folderRow('Release'), 'the Release folder row');
+    await click(mounted().querySelector('.session-folder-back'), 'the back button');
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+
+    await click(workspaceRow('wikova-develop'), 'the wikova-develop row');
+    await until(() => expect(folderNames()).toEqual(['Elsewhere']));
+    await click(workspaceRow('orbit'), 'the orbit row');
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    expect(folderTitle()).toBeNull();
+    expect(folderNames()).toEqual(['Release', 'Wiki']);
+  });
+
+  it('comes back to the list when the folder was deleted while away', async () => {
+    await mount(`/sessions/${LOOSE.id}`, () => expect(folderNames()).toEqual(['Release', 'Wiki']), true);
+    await click(folderRow('Release'), 'the Release folder row');
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}?folder=${RELEASE.id}`));
+
+    await click(workspaceRow('wikova-develop'), 'the wikova-develop row');
+    await until(() => expect(folderNames()).toEqual(['Elsewhere']));
+    // Deleted on another device: its sessions go back to the list.
+    folders = folders.filter((f) => f.id !== RELEASE.id);
+    rows = rows.map((r) => (r.folderId === RELEASE.id ? { ...r, folderId: null } : r));
+    await act(async () => client!.invalidateQueries());
+    await settle();
+
+    await click(workspaceRow('orbit'), 'the orbit row');
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    expect(folderTitle()).toBeNull();
+    await until(() => expect(folderNames()).toEqual(['Wiki']));
   });
 });

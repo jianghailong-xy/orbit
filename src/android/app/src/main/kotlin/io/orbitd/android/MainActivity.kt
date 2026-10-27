@@ -191,9 +191,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             if (navigation.current != next) LastPageMarks.opened(next)
             navigation = navigation.push(next)
         }
-        // A drawer row: the destination already showing only closes the drawer, any other opens at its root (A05-8).
+        // A drawer row: the destination already showing only closes the drawer, any other opens at its root (A05-8) — a
+        // workspace's, on the folder page its list was left on, while the directory still has that folder.
         fun select(key: String, root: OrbitRoute) {
-            keyboard?.hide(); focus.clearFocus(); navigation = navigation.select(key, root); scope.launch { drawer.close() }
+            keyboard?.hide(); focus.clearFocus()
+            navigation = navigation.select(key, root) { id -> data.folders.any { ObjectId.same(it.id, id) } }
+            scope.launch { drawer.close() }
         }
         // A page sending the reader to a destination: its root, whatever was showing.
         fun land(key: String, root: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.land(key, root) }
