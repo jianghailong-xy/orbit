@@ -138,6 +138,9 @@ class ProjectIncrementsDeviceTest : IncrementDeviceTest() {
     }
 
     private fun scrollProject(matcher: SemanticsMatcher) {
+        // The page's cards come with the reads after its first frame, and performScrollToNode does not wait for them: one pass down
+        // the list and it gives up (A15 F-53). Both cards scrolled to here start on the page's first screen: wait for the card itself.
+        await("${matcher.description} on the project page") { exists(matcher) }
         compose.onNode(hasTestTag("project-detail") and hasScrollAction()).performScrollToNode(matcher)
         settle()
     }
@@ -193,6 +196,9 @@ class ProjectIncrementsDeviceTest : IncrementDeviceTest() {
             "tasks":[{"taskId":"t1","title":"Fix D1"},{"taskId":"t2","title":"Logs"}],"conflicts":[],"askedAt":"${ago(9)}","merged":null}"""
         promotion = candidate("MERGE")
         openSessionsPage()
+        // The card comes with the page's landing and promotion reads, after its first frame; performScrollToNode gives up at once on
+        // a list that cannot scroll, and on API 36 this page fits whole, card and all (A15 F-51).
+        await("the merge check's card") { exists(hasTestTag("project-merge-card:checking")) }
         compose.onNodeWithTag("project-sessions-list").performScrollToNode(hasTestTag("project-merge-card:checking"))
         await("the pass line of an automatic merge") {
             exists(hasText("Merges on its own when it passes.") and hasAnyAncestor(hasTestTag("project-merge-card:checking")), unmerged = true)
