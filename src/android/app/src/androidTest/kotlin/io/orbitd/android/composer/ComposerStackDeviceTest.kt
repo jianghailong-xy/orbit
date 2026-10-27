@@ -15,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.*
 import io.orbitd.android.auth.chooseServer
+import io.orbitd.android.auth.pressSignIn
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.protocol.Wire
 import kotlinx.coroutines.runBlocking
@@ -118,7 +119,7 @@ class ComposerStackDeviceTest {
         compose.chooseServer(server)
         compose.onNodeWithText("Email").performTextReplacement(arg("ownerEmail"))
         compose.onNodeWithText("Password").performTextReplacement(arg("ownerPassword"))
-        compose.onNodeWithText("Sign In").performScrollTo().performClick()
+        compose.pressSignIn()
         compose.waitUntil(30_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
     }
     private fun openSession(key: String) {

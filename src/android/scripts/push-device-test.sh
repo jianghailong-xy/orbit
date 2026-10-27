@@ -197,14 +197,22 @@ tray_tap() { # Host-driven: a production process posts one entry, dies, and Syst
   sleep 1
   adbx -s "$serial" exec-out screencap -p > "$output/tray-cold-shade.png"
   python3 "$scripts/push-host-ui.py" tap "$serial" 'A10 tray approval' "$output/tray-shade.xml" --timeout 20 >> "$output/tray.txt" 9>&-
-  python3 "$scripts/push-host-ui.py" wait "$serial" 'Card verification' "$output/tray-session.xml" --timeout 45 >> "$output/tray.txt" 9>&-
+  # The session page names no session in its bar since A06-18: the page is its ⋯, and the session's name is read in Session details.
+  python3 "$scripts/push-host-ui.py" wait "$serial" 'Session actions' "$output/tray-session.xml" --desc --timeout 45 >> "$output/tray.txt" 9>&-
   adbx -s "$serial" exec-out screencap -p > "$output/tray-cold-session.png"
-  python3 "$scripts/push-host-ui.py" wait "$serial" 'Allow' "$output/tray-card.xml" --timeout 30 --scroll >> "$output/tray.txt" 9>&-
+  python3 "$scripts/push-host-ui.py" tap "$serial" 'Session actions' "$output/tray-session-menu.xml" --desc --timeout 20 >> "$output/tray.txt" 9>&-
+  python3 "$scripts/push-host-ui.py" tap "$serial" 'Session details' "$output/tray-menu.xml" --timeout 10 >> "$output/tray.txt" 9>&-
+  python3 "$scripts/push-host-ui.py" wait "$serial" 'Card verification' "$output/tray-details.xml" --timeout 20 >> "$output/tray.txt" 9>&-
+  adbx -s "$serial" exec-out screencap -p > "$output/tray-cold-details.png"
+  python3 "$scripts/push-host-ui.py" tap "$serial" 'Close session details' "$output/tray-details-close.xml" --timeout 10 >> "$output/tray.txt" 9>&-
+  # It opens at the conversation's end: on a 360 dp phone the approval is above it.
+  python3 "$scripts/push-host-ui.py" wait "$serial" 'Allow' "$output/tray-card.xml" --timeout 30 --scroll-back >> "$output/tray.txt" 9>&-
   new_pid="$(adbx -s "$serial" shell pidof "$package" | tr -d '\r')"
   adbx -s "$serial" shell dumpsys activity activities > "$output/tray-activities.txt"
   adbx -s "$serial" exec-out screencap -p > "$output/tray-cold-card.png"
   python3 "$scripts/push-host-ui.py" tap "$serial" 'Allow' "$output/tray-allow.xml" --timeout 10 >> "$output/tray.txt" 9>&-
-  python3 "$scripts/push-host-ui.py" wait "$serial" 'Allowed · recorded by the server' "$output/tray-recorded.xml" --timeout 20 --contains >> "$output/tray.txt" 9>&-
+  # The answer is the card's last line, under the fold on a 360 dp phone.
+  python3 "$scripts/push-host-ui.py" wait "$serial" 'Allowed · recorded by the server' "$output/tray-recorded.xml" --timeout 20 --contains --scroll >> "$output/tray.txt" 9>&-
   adbx -s "$serial" exec-out screencap -p > "$output/tray-cold-recorded.png"
   curl --fail --silent "http://127.0.0.1:$port/__stats" > "$output/tray-stats.json"
   printf 'old_pid=%s\nnew_pid=%s\n' "$old_pid" "$new_pid" >> "$output/tray.txt"
