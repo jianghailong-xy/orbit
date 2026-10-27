@@ -5413,43 +5413,17 @@ button.toast--pill:focus-visible {
   background: var(--brand-tint);
   color: var(--brand);
 }
-.session-project-landing-fold {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 12px;
-  border: 0;
-  background: transparent;
-  color: var(--text-3);
-  font: inherit;
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
+.session-project-landing-mark.is-running {
+  background: var(--brand-tint);
+  color: var(--brand);
 }
-.session-project-landing-fold:hover {
-  background: var(--bg-hover);
-}
-.session-project-landing-fold .session-project-landing-mark {
-  width: 20px;
-  height: 20px;
-  font-size: 11px;
-}
-.session-project-landing-fold-text {
-  flex: 1;
-}
-.session-project-landing-chev {
-  color: var(--text-4);
-  font-size: 11px;
-  transition: transform 120ms ease;
-}
-.session-project-landing-chev.open {
-  transform: rotate(90deg);
-}
-@media (prefers-reduced-motion: reduce) {
-  .session-project-landing-chev {
-    transition: none;
-  }
+/* The day's counts take the two lines the board gives them, where every other row detail keeps one. */
+.session-project-merge-row-detail.session-project-landings-line {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
 }
 /* The landing the conversation's work fed, at the session's own bottom (owner 2026-10-19, board
    v4 06 e): a derived label, in the integration line's words and inks — blue while it moves, green
@@ -19455,6 +19429,14 @@ button.chat-jump-start:hover {
   background: var(--success-bg);
   color: var(--success);
 }
+/* An attempt that stopped on a failure: the Landings row's own red ✕, and the head's word in red. */
+.landing-head.is-failed .landing-head-mark {
+  background: var(--error-bg, var(--warning-bg));
+  color: var(--error);
+}
+.landing-head.is-failed .landing-head-right {
+  color: var(--error);
+}
 .landing-head-body {
   display: flex;
   flex: 1;
@@ -19974,6 +19956,181 @@ div.landing-jobs-open {
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
+}
+/* A project's Landings window (owner 2026-10-27, docs/mocks/landings-one-window): the landing
+   page's shell over every landing the project has had — the settled ones by day, the ones in hand
+   under Now at the bottom, read like a conversation. */
+.landings-window-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.landings-window-titles {
+  flex: 1;
+  min-width: 0;
+}
+.landings-window-back {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 16px;
+  cursor: pointer;
+}
+.landings-window-back:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.landings-window-body {
+  padding-top: 4px;
+}
+.landings-window-loading {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0;
+}
+.landings-window-day-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 12px 0 6px;
+  background: var(--bg-base);
+  color: var(--text-4);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+.landings-window-now .landings-window-day-head {
+  color: var(--brand);
+}
+.landings-window-entry {
+  scroll-margin-top: 40px;
+  border-radius: 10px;
+  /* Inside the entry, over what it holds: the scroller would clip an outline drawn outside it. */
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  transition: outline-color 200ms ease;
+}
+/* The landing the window was opened on, outlined for a moment (board 03 f). */
+.landings-window-entry.is-outlined {
+  outline-color: var(--brand);
+}
+.landings-window-entry.is-card {
+  margin-bottom: 10px;
+}
+.landings-window-row-line {
+  display: flex;
+  align-items: flex-start;
+}
+.landings-window-row-line .landings-window-row {
+  flex: 1;
+  min-width: 0;
+}
+.landings-window-entry.is-open .landings-window-row {
+  background: var(--bg-hover);
+}
+.landings-window-up {
+  flex: none;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.landings-window-more {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin: 6px 4px 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 15px;
+  cursor: pointer;
+}
+.landings-window-more:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+/* A row's ⋯ shows where the pointer or the keyboard is on it, or while its menu is open; a card's
+   always shows, and so does every one on a screen without hover. */
+.landings-window-row-line .landings-window-more {
+  opacity: 0;
+}
+.landings-window-entry:hover .landings-window-row-line .landings-window-more,
+.landings-window-row-line:focus-within .landings-window-more,
+.landings-window-row-line .landings-window-more[data-popup-open],
+.landings-window-row-line .landings-window-more[aria-expanded="true"] {
+  opacity: 1;
+}
+@media (hover: none) {
+  .landings-window-row-line .landings-window-more {
+    opacity: 1;
+  }
+}
+.landings-window-card {
+  margin-bottom: 0;
+}
+.landings-window-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.landings-window-card-top .landings-window-more {
+  margin: -2px -6px 0 0;
+}
+.landings-window-card-press {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+/* The task the card is about: the one line the window adds under the status card's head. */
+.landings-window-card-task {
+  display: block;
+  margin-top: 8px;
+  overflow: hidden;
+  color: var(--text-1);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.landings-window-record {
+  padding: 4px 4px 12px 50px;
+}
+.landings-window-entry.is-card .landings-window-record {
+  padding: 12px 4px 4px;
+}
+.landings-window-receipt {
+  margin-bottom: 12px;
+}
+.landings-window-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 10px;
+}
+.landings-window-links .landing-page-link {
+  margin-left: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .landings-window-entry {
+    transition: none;
+  }
 }
 .project-manual-task {
   display: -webkit-box;

@@ -50,10 +50,12 @@ export function navigateWithPaneSlide(
   });
 }
 
-/** The two routes that put a conversation on the phone's one screen. WorkspaceView draws the
- *  session list for every other route — `show-conversation` is exactly these two. */
+/** The routes that put a conversation's pane on the phone's one screen: a session, a new one, and a
+ *  project's Landings window. WorkspaceView draws the session list for every other route —
+ *  `show-conversation` is exactly these. */
 export const showsConversation = (path: string): boolean =>
-  /^\/sessions\/[^/]+$/.test(path) || /^\/(?:workspaces|agents)\/[^/]+\/new$/.test(path);
+  /^\/sessions\/[^/]+$/.test(path) || /^\/(?:workspaces|agents)\/[^/]+\/new$/.test(path)
+  || /^\/projects\/[^/]+\/landings$/.test(path);
 
 /**
  * The same slide for the backs the app never issues itself: the browser's Back button, Android's

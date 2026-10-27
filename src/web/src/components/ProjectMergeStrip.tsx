@@ -17,7 +17,6 @@ import {
   NOT_NOW,
   OPEN_COORDINATOR,
   ProjectPromotion,
-  ProjectPromotionReceipt,
   decidePromotion,
   mergeTo,
   promotionCriteriaLine,
@@ -53,8 +52,6 @@ import {
   promotionPageCounts,
   promotionPageTitle,
   promotionTaskTitles,
-  promotionTimelineDetail,
-  promotionTimelineTitle,
   recheckPromotion,
 } from '../lib/projectMerge';
 import { projectIntegrationQuery, projectOpenItemsQuery, projectPromotionQuery } from '../lib/queries';
@@ -85,7 +82,7 @@ function MergeGlyph({ size = 14 }: { size?: number }): JSX.Element {
  * decisions 2026-10-06; mocks in docs/mocks/project-merge-sessions-page and
  * docs/mocks/project-sessions-page-web). One card at four moments: the merge check running, the
  * candidate asking, merging, or blocked — and nothing at all otherwise; a merge already made is a
- * row on the view's timeline instead (`ProjectMergeTimelineRow`).
+ * row of the project's Landings window instead (owner 2026-10-27).
  *
  * Its presses are the card's own doors (`decidePromotion`), and Details opens the whole card — the
  * one the project page draws — for anyone who wants every row before pressing. It claims no
@@ -415,44 +412,5 @@ function TaskTitles({ promotion }: { promotion: ProjectPromotionView }): JSX.Ele
       ))}
       {rest ? <li className="is-more">{rest}</li> : null}
     </ul>
-  );
-}
-
-/**
- * A merge already made, as a row on the project's timeline at the instant it happened: what went
- * onto main and who merged it. Shaped unlike a session row, because it is not one, and a press
- * opens its receipt — the record the conversation's line opens too.
- */
-export function ProjectMergeTimelineRow({
-  promotion,
-  time,
-}: {
-  promotion: ProjectPromotionView;
-  /** The row's time, in the list's own format. */
-  time: string;
-}): JSX.Element {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <button type="button" className="session-row session-project-merge-row" data-promotion={promotion.promotionId}
-        onClick={() => setOpen(true)}>
-        <span className="session-project-merge-row-mark" aria-hidden="true"><MergeGlyph size={15} /></span>
-        <span className="session-project-merge-row-body">
-          <span className="session-project-merge-row-head">
-            <span className="session-project-merge-row-title">{promotionTimelineTitle(promotion)}</span>
-            <span className="session-time">{time}</span>
-          </span>
-          <span className="session-project-merge-row-detail">{promotionTimelineDetail(promotion)}</span>
-        </span>
-      </button>
-      <Dialog open={open} onClose={() => setOpen(false)} title={promotionHeading(promotion)}
-        className="review-card-dialog" width={720}>
-        {open ? (
-          <div className="review-card-content" data-review-open>
-            <ProjectPromotionReceipt promotion={promotion} />
-          </div>
-        ) : null}
-      </Dialog>
-    </>
   );
 }

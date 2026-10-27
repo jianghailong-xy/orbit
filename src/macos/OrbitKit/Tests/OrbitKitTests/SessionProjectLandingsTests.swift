@@ -2,169 +2,173 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// The Landings group (contract §2.9 LS6, board v4 04 c1): what waits on a decision, what settled in
-/// the last day, one folded line for everything older — and never a landing still in flight, nor a
-/// round of merging that already merged. Held to `src/web/src/lib/sessionProjects.test.ts`.
+/// The project's Landings window and its one row on the sessions page (owner 2026-10-27,
+/// docs/mocks/landings-one-window; contract §2.9 LS6, revision 28). Held to
+/// `src/web/src/lib/sessionProjects.test.ts`. Every instant is built in the reader's own calendar, so
+/// the day sections and today's counts read the same in any zone.
 final class SessionProjectLandingsTests: XCTestCase {
-    private let now = Date(timeIntervalSince1970: 1_790_000_000)
+    private let calendar = Calendar.current
+    /// Tuesday 2026-10-27, 10:20 — the board's moment.
+    private var now: Date { local(27, 10, 20) }
 
-    private func ago(_ minutes: Double) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.string(from: now.addingTimeInterval(-minutes * 60))
+    private func local(_ day: Int, _ hour: Int, _ minute: Int = 0) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: hour, minute: minute))!
     }
 
-    private func row(_ id: String,
-                     subject: String = "TASK",
-                     state: String,
-                     settledAs: String? = nil,
-                     settledAt: String? = nil,
-                     createdAt: String? = nil) -> Session {
-        Session(id: id, title: id, status: .succeeded, agentId: nil, assignedRunnerId: nil,
+    private func iso(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.string(from: date)
+    }
+
+    private func row(_ id: String, title: String? = nil, subject: String = "TASK", state: String,
+                     settledAs: String? = nil, settledAt: Date? = nil, createdAt: Date? = nil) -> Session {
+        Session(id: id, title: title ?? "Land · \(id)", status: .succeeded, agentId: nil, assignedRunnerId: nil,
                 pendingApprovals: nil, branch: nil, updatedAt: nil,
-                createdAt: createdAt ?? ago(15),
-                landing: SessionLandingView(subject: subject, settledAt: settledAt,
+                createdAt: iso(createdAt ?? local(27, 8)),
+                landing: SessionLandingView(subject: subject, settledAt: settledAt.map(iso),
                                             settledAs: settledAs, state: state))
     }
 
-    func testListsWhatWaitsAndWhatSettledWithinTheDayWaitingFirstAndNeverWhatMoves() throws {
-        let group = try XCTUnwrap(SessionProjectLandings.group([
-            row("in-flight", state: "IN_FLIGHT"),
-            row("waiting", state: "AWAITING_DECISION"),
-            row("landed-now", state: "SETTLED", settledAs: "LANDED", settledAt: ago(60)),
-            row("nothing-now", state: "SETTLED", settledAs: "NOTHING_TO_LAND", settledAt: ago(120)),
-        ], now: now))
-        XCTAssertEqual(group.waiting.map(\.id), ["waiting"])
-        XCTAssertEqual(group.settled.map(\.id), ["landed-now", "nothing-now"])
-        XCTAssertNil(group.earlier)
-        XCTAssertEqual(group.waiting[0].detail, "Waiting for a decision")
-        XCTAssertEqual(group.waiting[0].time, "15m")
-        XCTAssertEqual(group.waiting[0].tone, .quiet)
-        XCTAssertEqual(group.settled.map(\.detail), ["Landed", "Nothing to land"])
-        XCTAssertEqual(group.settled[0].tone, .ok)
-        XCTAssertEqual(group.settled[1].tone, .quiet)
+    private func merged(_ id: String, at: Date, session: String?, automatic: Bool = true) -> ProjectPromotionView {
+        ProjectPromotionView(promotionId: id, state: .merged, sourceRef: "refs/heads/project/p1", sourceSha: "a",
+                             upstreamRef: "refs/heads/main", taskIds: ["t1", "t2"],
+                             merged: .init(sha: "3f1c2a9000000000000000000000000000000000", at: iso(at),
+                                           automatic: automatic),
+                             landingSessionId: session)
     }
 
-    func testSaysWhichSideHoldsAWaitingLandingInTheOpenItemsOwnWords() throws {
-        let holders = [
-            "waiting": LandingHolder(reason: "Checks failed", assignee: "COORDINATOR"),
-            "mine": LandingHolder(reason: "Merge conflict", assignee: "OWNER"),
-        ]
-        let group = try XCTUnwrap(SessionProjectLandings.group([
-            row("waiting", state: "AWAITING_DECISION"),
-            row("mine", state: "AWAITING_DECISION", createdAt: ago(40)),
-            row("bare", state: "AWAITING_DECISION", createdAt: ago(5)),
-        ], now: now, holders: holders))
-        // Longest wait first: this group answers "what is stuck".
-        XCTAssertEqual(group.waiting.map(\.id), ["mine", "waiting", "bare"])
-        XCTAssertEqual(group.waiting.map(\.detail), [
-            "Merge conflict · with you", "Checks failed · with the coordinator",
-            "Waiting for a decision",
+    private func clock(_ date: Date) -> String { ProjectPage.landingClockTime(date) }
+
+    func testGroupsTheSettledOnesByTheSessionListsDaysOldestFirstAndKeepsEveryOne() {
+        let window = SessionProjectLandings.window([
+            row("Fix the deep link", state: "SETTLED", settledAs: "NOTHING_TO_LAND", settledAt: local(27, 8, 30)),
+            row("Ledger migration order", state: "SETTLED", settledAs: "LANDED", settledAt: local(26, 17, 42)),
+            row("Runner model order", state: "SETTLED", settledAs: "LANDED", settledAt: local(27, 10, 2)),
+            row("Month-old fix", state: "SETTLED", settledAs: "CANCELLED", settledAt: local(1, 9)),
+            row("Wiki review link", state: "SETTLED", settledAs: "ALREADY_LANDED", settledAt: local(27, 9, 5)),
+        ], merges: [], now: now, calendar: calendar)
+        XCTAssertEqual(window.days.map(\.title), ["8–30 days ago", "Yesterday", "Today"])
+        XCTAssertEqual(window.days[2].rows.map(\.title), ["Fix the deep link", "Wiki review link", "Runner model order"])
+        XCTAssertEqual(window.days[2].rows.map { "\($0.time) \($0.detail) \($0.tone.rawValue)" }, [
+            "\(clock(local(27, 8, 30))) Nothing to land quiet",
+            "\(clock(local(27, 9, 5))) Already landed ok",
+            "\(clock(local(27, 10, 2))) Landed ok",
         ])
-        XCTAssertEqual(group.waiting.map(\.tone), [.fail, .fail, .quiet])
+        XCTAssertEqual(window.days[0].rows[0].detail, "Cancelled")
+        XCTAssertEqual(window.now, [])
     }
 
-    func testFoldsEverythingOlderThanTheDayIntoOneLineAndKeepsItToOpen() throws {
-        let group = try XCTUnwrap(SessionProjectLandings.group([
-            row("recent", state: "SETTLED", settledAs: "LANDED", settledAt: ago(60)),
-            row("old-landed", state: "SETTLED", settledAs: "ALREADY_LANDED", settledAt: ago(26 * 60)),
-            row("old-nothing", state: "SETTLED", settledAs: "NOTHING_TO_LAND", settledAt: ago(30 * 60)),
-            row("older-still", state: "SETTLED", settledAs: "LANDED", settledAt: ago(50 * 60)),
-        ], now: now))
-        XCTAssertEqual(group.settled.map(\.id), ["recent"])
-        XCTAssertEqual(group.earlier, LandingEarlier(landed: 2, nothing: 1))
-        XCTAssertEqual(SessionProjectLandings.earlierLine(landed: 2, nothing: 1),
-                       "Earlier · 2 landed · 1 nothing to land")
-        XCTAssertEqual(group.older.map(\.id), ["old-landed", "old-nothing", "older-still"])
+    func testPutsWhatIsInHandUnderNowInTheOrderItStarted() {
+        let window = SessionProjectLandings.window([
+            row("Checks failed", state: "AWAITING_DECISION", createdAt: local(27, 10, 1)),
+            row("Still landing", state: "IN_FLIGHT", createdAt: local(27, 9, 40)),
+            row("round", title: "Merge project/p1 → main · #12", subject: "PROMOTION", state: "IN_FLIGHT",
+                createdAt: local(27, 10, 5)),
+        ], merges: [], now: now, calendar: calendar)
+        XCTAssertEqual(window.days, [])
+        XCTAssertEqual(window.now.map { "\($0.title)|\($0.state)|\($0.subject)" }, [
+            "Still landing|IN_FLIGHT|TASK",
+            "Checks failed|AWAITING_DECISION|TASK",
+            "Merge project/p1 → main · #12|IN_FLIGHT|PROMOTION",
+        ])
     }
 
-    func testLeavesASegmentWhoseCountIsZeroOutOfTheFoldsLine() throws {
-        XCTAssertEqual(SessionProjectLandings.earlierLine(landed: 2, nothing: 0), "Earlier · 2 landed")
-        XCTAssertEqual(SessionProjectLandings.earlierLine(landed: 0, nothing: 1),
-                       "Earlier · 1 nothing to land")
-        // Only landed: the fold says so, and still opens to every older row, the cancelled one too.
-        let landedOnly = try XCTUnwrap(SessionProjectLandings.group([
-            row("old-landed", state: "SETTLED", settledAs: "LANDED", settledAt: ago(26 * 60)),
-            row("old-again", state: "SETTLED", settledAs: "ALREADY_LANDED", settledAt: ago(28 * 60)),
-            row("old-cancelled", state: "SETTLED", settledAs: "CANCELLED", settledAt: ago(30 * 60)),
-        ], now: now))
-        XCTAssertEqual(landedOnly.earlier, LandingEarlier(landed: 2, nothing: 0))
-        XCTAssertEqual(landedOnly.older.map(\.id), ["old-landed", "old-again", "old-cancelled"])
-        let nothingOnly = try XCTUnwrap(SessionProjectLandings.group([
-            row("old-nothing", state: "SETTLED", settledAs: "NOTHING_TO_LAND", settledAt: ago(26 * 60)),
-        ], now: now))
-        XCTAssertEqual(nothingOnly.earlier, LandingEarlier(landed: 0, nothing: 1))
+    func testJoinsAMergeIntoMainWithItsRoundsLandingSessionByLandingSessionIdOneRow() {
+        let window = SessionProjectLandings.window([
+            row("S-12", title: "Merge project/p1 → main · #12", subject: "PROMOTION", state: "SETTLED",
+                settledAs: "MERGED", settledAt: local(27, 9, 52)),
+        ], merges: [merged("P-12", at: local(27, 9, 51), session: "S-12")], now: now, calendar: calendar)
+        XCTAssertEqual(window.days.count, 1)
+        XCTAssertEqual(window.days[0].rows.count, 1)
+        let row = window.days[0].rows[0]
+        XCTAssertEqual(row.key, "S-12")
+        XCTAssertEqual(row.sessionId, "S-12")
+        XCTAssertEqual(row.title, "Merged into main")
+        XCTAssertEqual(row.detail, "3f1c2a9 · 2 tasks · automatically")
+        XCTAssertEqual(row.tone, .merge)
+        XCTAssertEqual(row.time, clock(local(27, 9, 51)))
+        XCTAssertEqual(row.promotion?.promotionId, "P-12")
     }
 
-    func testFoldsOlderLandingsNeitherCountNamesUnderABareEarlierAndOpensToThem() throws {
-        XCTAssertEqual(SessionProjectLandings.earlierLine(landed: 0, nothing: 0), "Earlier")
-        let old = [
-            row("old-cancelled", state: "SETTLED", settledAs: "CANCELLED", settledAt: ago(26 * 60)),
-            row("old-handled", state: "SETTLED", settledAs: "HANDLED", settledAt: ago(30 * 60)),
-            row("old-declined", state: "SETTLED", settledAs: "DECLINED", settledAt: ago(32 * 60)),
-            row("no-instant", state: "SETTLED", settledAs: "CANCELLED"),
+    func testKeepsAMergeOlderThanLandingSessionsAndARoundPastTheTwentyRecords() {
+        let window = SessionProjectLandings.window([
+            row("S-3", title: "Merge project/p1 → main · #3", subject: "PROMOTION", state: "SETTLED",
+                settledAs: "MERGED", settledAt: local(25, 15)),
+        ], merges: [merged("P-1", at: local(26, 11, 30), session: nil, automatic: false)], now: now, calendar: calendar)
+        XCTAssertEqual(window.days.map(\.title), ["2–7 days ago", "Yesterday"])
+        let round = window.days[0].rows[0]
+        XCTAssertEqual(round.key, "S-3")
+        XCTAssertEqual(round.title, "Merged into main")
+        XCTAssertEqual(round.detail, "Merge project/p1 → main · #3")
+        XCTAssertNil(round.promotion)
+        let old = window.days[1].rows[0]
+        XCTAssertEqual(old.key, "merge:P-1")
+        XCTAssertNil(old.sessionId)
+        XCTAssertEqual(old.detail, "3f1c2a9 · 2 tasks · by you")
+        XCTAssertEqual(old.time, clock(local(26, 11, 30)))
+    }
+
+    func testNamesATaskSegmentByItsTaskAndARoundThatDidNotMergeByItsOwnTitle() {
+        XCTAssertEqual(SessionProjectLandings.taskName("Land · Ledger migration order"), "Ledger migration order")
+        XCTAssertEqual(SessionProjectLandings.taskName("Land · Ledger migration order (#2)"),
+                       "Ledger migration order (#2)")
+        XCTAssertEqual(SessionProjectLandings.taskName("Something else"), "Something else")
+        let window = SessionProjectLandings.window([
+            row("declined", title: "Merge project/p1 → main · #4", subject: "PROMOTION", state: "SETTLED",
+                settledAs: "DECLINED", settledAt: local(27, 9)),
+        ], merges: [], now: now, calendar: calendar)
+        XCTAssertEqual(window.days[0].rows[0].title, "Merge project/p1 → main · #4")
+        XCTAssertEqual(window.days[0].rows[0].detail, "Declined")
+    }
+
+    func testCountsTheRowAZeroIsLeftOutTodaysTwoShareOneTodayAndAllZeroIsNothingLandedToday() {
+        XCTAssertEqual(SessionProjectLandings.countLine(waiting: 1, inFlight: 1, landed: 3, merged: 1),
+                       "1 waiting for a decision · 1 in flight · 3 landed · 1 merged into main today")
+        XCTAssertEqual(SessionProjectLandings.countLine(waiting: 0, inFlight: 2, landed: 0, merged: 0), "2 in flight")
+        XCTAssertEqual(SessionProjectLandings.countLine(waiting: 0, inFlight: 0, landed: 2, merged: 0), "2 landed today")
+        XCTAssertEqual(SessionProjectLandings.countLine(waiting: 0, inFlight: 0, landed: 0, merged: 1, main: "master"),
+                       "1 merged into master today")
+        XCTAssertEqual(SessionProjectLandings.countLine(waiting: 2, inFlight: 0, landed: 0, merged: 0),
+                       "2 waiting for a decision")
+        XCTAssertEqual(SessionProjectLandings.countLine(waiting: 0, inFlight: 0, landed: 0, merged: 0),
+                       "Nothing landed today")
+    }
+
+    func testMarksTheRowByTheMostUrgentLandingAndTimesTheLongestWait() {
+        let rows = [
+            row("Checks failed", state: "AWAITING_DECISION", createdAt: now.addingTimeInterval(-18 * 60)),
+            row("Still landing", state: "IN_FLIGHT"),
+            row("a", state: "SETTLED", settledAs: "LANDED", settledAt: local(27, 9)),
+            row("b", state: "SETTLED", settledAs: "LANDED", settledAt: local(27, 9, 30)),
+            row("c", state: "SETTLED", settledAs: "ALREADY_LANDED", settledAt: local(27, 10)),
+            row("yesterday", state: "SETTLED", settledAs: "LANDED", settledAt: local(26, 22)),
+            row("nothing", state: "SETTLED", settledAs: "NOTHING_TO_LAND", settledAt: local(27, 8)),
         ]
-        let group = try XCTUnwrap(SessionProjectLandings.group(
-            [row("waiting", state: "AWAITING_DECISION")] + old, now: now))
-        XCTAssertEqual(group.waiting.map(\.id), ["waiting"])
-        let earlier = try XCTUnwrap(group.earlier)
-        XCTAssertEqual(earlier, LandingEarlier(landed: 0, nothing: 0))
-        XCTAssertEqual(SessionProjectLandings.earlierLine(landed: earlier.landed, nothing: earlier.nothing),
-                       "Earlier")
-        XCTAssertEqual(group.older.map(\.id), ["old-cancelled", "old-handled", "old-declined", "no-instant"])
-        XCTAssertEqual(group.older.map(\.detail), ["Cancelled", "Handled", "Declined", "Cancelled"])
-        // …and with nothing else to list, the group is still there: the fold is its one row.
-        let alone = try XCTUnwrap(SessionProjectLandings.group(old, now: now))
-        XCTAssertTrue(alone.waiting.isEmpty)
-        XCTAssertTrue(alone.settled.isEmpty)
-        XCTAssertEqual(alone.earlier, LandingEarlier(landed: 0, nothing: 0))
-        XCTAssertEqual(alone.older.map(\.id), ["old-cancelled", "old-handled", "old-declined", "no-instant"])
-        XCTAssertFalse(alone.isEmpty)
+        XCTAssertEqual(SessionProjectLandings.rowSummary(rows, merges: [merged("P-1", at: local(27, 9, 51), session: nil)],
+                                                         now: now, calendar: calendar),
+                       LandingsRowSummary(mark: .fail, time: "18m",
+                                          line: "1 waiting for a decision · 1 in flight · 3 landed · 1 merged into main today"))
+        XCTAssertEqual(SessionProjectLandings.rowSummary(Array(rows.dropFirst()), merges: [], now: now, calendar: calendar),
+                       LandingsRowSummary(mark: .running, time: "20m", line: "1 in flight · 3 landed today"))
+        XCTAssertEqual(SessionProjectLandings.rowSummary(Array(rows.dropFirst(2)), merges: [], now: now,
+                                                         calendar: calendar)?.mark, .ok)
     }
 
-    func testHasNoFoldWithNothingOlderAndIsNoGroupWithNothingElseToList() throws {
-        let group = try XCTUnwrap(SessionProjectLandings.group([
-            row("waiting", state: "AWAITING_DECISION"),
-            row("cancelled-now", state: "SETTLED", settledAs: "CANCELLED", settledAt: ago(60)),
-            // A round of merging that merged is never an older row, however old.
-            row("old-round", subject: "PROMOTION", state: "SETTLED", settledAs: "MERGED",
-                settledAt: ago(30 * 60)),
-        ], now: now))
-        XCTAssertEqual(group.waiting.map(\.id), ["waiting"])
-        XCTAssertEqual(group.settled.map(\.id), ["cancelled-now"])
-        XCTAssertNil(group.earlier)
-        XCTAssertTrue(group.older.isEmpty)
-        XCTAssertNil(SessionProjectLandings.group([
-            row("moving", state: "IN_FLIGHT"),
-            row("old-round", subject: "PROMOTION", state: "SETTLED", settledAs: "MERGED",
-                settledAt: ago(30 * 60)),
-        ], now: now))
-    }
-
-    func testNeverListsARoundOfMergingThatMerged() throws {
-        let group = try XCTUnwrap(SessionProjectLandings.group([
-            row("round", subject: "PROMOTION", state: "SETTLED", settledAs: "MERGED",
-                settledAt: ago(30)),
-            row("waiting", state: "AWAITING_DECISION"),
-        ], now: now))
-        XCTAssertTrue(group.settled.isEmpty)
-        XCTAssertNil(group.earlier)
-        // …and a project with nothing but that round has no group at all.
-        XCTAssertNil(SessionProjectLandings.group([
-            row("round-only", subject: "PROMOTION", state: "SETTLED", settledAs: "MERGED",
-                settledAt: ago(30)),
-            row("moving", state: "IN_FLIGHT"),
-        ], now: now))
-    }
-
-    func testIsNoGroupAtAllWhenThereIsNothingToList() {
-        XCTAssertNil(SessionProjectLandings.group([], now: now))
-        XCTAssertNil(SessionProjectLandings.group([row("moving", state: "IN_FLIGHT")], now: now))
-        // A conversation row carries no landing summary and is skipped, not drawn as a blank landing.
+    func testSaysNothingLandedTodayOverAQuietDayAndIsNoRowForAProjectThatNeverHadALanding() {
+        XCTAssertEqual(SessionProjectLandings.rowSummary([
+            row("yesterday", state: "SETTLED", settledAs: "LANDED", settledAt: local(26, 22)),
+        ], merges: [], now: now, calendar: calendar),
+                       LandingsRowSummary(mark: .ok, time: "12h", line: "Nothing landed today"))
+        // A merge older than landing sessions is a landing the project had.
+        XCTAssertEqual(SessionProjectLandings.rowSummary([], merges: [merged("P-1", at: local(20, 9), session: nil)],
+                                                         now: now, calendar: calendar)?.line, "Nothing landed today")
+        XCTAssertNil(SessionProjectLandings.rowSummary([], merges: [], now: now, calendar: calendar))
+        // A conversation carries no landing summary and is no landing.
         let chat = Session(id: "chat", title: "chat", status: .succeeded, agentId: nil,
                            assignedRunnerId: nil, pendingApprovals: nil, branch: nil,
-                           updatedAt: nil, createdAt: ago(5))
-        XCTAssertNil(SessionProjectLandings.group([chat], now: now))
+                           updatedAt: nil, createdAt: iso(local(27, 9)))
+        XCTAssertNil(SessionProjectLandings.rowSummary([chat], merges: [], now: now, calendar: calendar))
     }
 
     // MARK: - the source session's derived label
@@ -216,19 +220,6 @@ final class SessionProjectLandingsTests: XCTestCase {
 
     func testTheSourceLabelIsNothingAtAllForAConversationThatFedNoLanding() {
         XCTAssertNil(SessionProjectLandings.sourceLabel(nil))
-    }
-
-    // MARK: - the group's item reasons
-
-    func testAnOpenItemsKindNamesTheGroupsOutcome() {
-        XCTAssertEqual(SessionProjectLandings.itemReason(.integrationConflict), "Merge conflict")
-        XCTAssertEqual(SessionProjectLandings.itemReason(.integrationCheckFailed), "Checks failed")
-        XCTAssertEqual(SessionProjectLandings.itemReason(.integrationError), "Integration error")
-        XCTAssertEqual(SessionProjectLandings.itemReason(.taskFailed), "Task failed")
-        XCTAssertEqual(SessionProjectLandings.itemReason(.deliveryReview), "Delivery review")
-        XCTAssertEqual(SessionProjectLandings.itemReason(.landingLeaseExpired),
-                       "No report from the runner")
-        XCTAssertNil(SessionProjectLandings.itemReason(.coordinatorQuestion))
     }
 }
 

@@ -947,19 +947,22 @@ export function landingHead(
  * The chevron the heads used to carry is gone: the whole row is the press (the merged line opens its
  * receipt the same way), and the words beside the clock say what they have to say.
  */
-export function LandingHead({ title, head, running, timedOut, done = false }: {
+export function LandingHead({ title, head, running, timedOut, done = false, failed = false }: {
   title: string;
   head: LandingHeadShape;
   running: boolean;
   timedOut: boolean;
   /** The head of an outcome rather than of work in hand: the mark turns green and still. */
   done?: boolean;
+  /** An attempt that stopped on a failure (board 02 d): the red ✕ the Landings row wears, and its
+   *  word in red. */
+  failed?: boolean;
 }) {
-  const shape = timedOut ? ' is-timed-out' : done ? ' is-done' : running ? ' is-running' : '';
+  const shape = timedOut ? ' is-timed-out' : done ? ' is-done' : failed ? ' is-failed' : running ? ' is-running' : '';
   return (
     <span className={`landing-head${shape}`}>
       <span className="landing-head-mark">
-        <Glyph shape={timedOut ? 'exclamation' : done ? 'check' : 'spinner'}
+        <Glyph shape={timedOut ? 'exclamation' : done ? 'check' : failed ? 'cross' : 'spinner'}
           color="currentColor" size={15} />
       </span>
       <span className="landing-head-body">

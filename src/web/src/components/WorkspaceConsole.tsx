@@ -4,14 +4,14 @@ import { useMatch, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { routeId } from '../lib/idCodec';
 import { useFollowFirstSessionProvider, useManagedRunner } from '../lib/managedRunner';
-import { sessionQuery } from '../lib/queries';
+import { projectDetailsQuery, sessionQuery } from '../lib/queries';
 import { Button } from './ui/Button';
 import { Result } from './ui/Result';
 import { Spinner } from './ui/Spinner';
 import { WorkspaceView } from './WorkspaceView';
 
-// The workspace console, mounted as the layout route shared by /workspaces/:id(/new) and
-// /sessions/:id. Being their parent route, it stays mounted as the child match changes
+// The workspace console, mounted as the layout route shared by /workspaces/:id(/new),
+// /sessions/:id and a project's Landings window, /projects/:id/landings. Being their parent route, it stays mounted as the child match changes
 // between those paths — so WorkspaceView never unmounts (and never loses its SSE stream /
 // transcript or reloads the session list) on an in-console navigation.
 export function WorkspaceConsole() {
@@ -37,10 +37,20 @@ export function WorkspaceConsole() {
   const sessionQ = useQuery(sessionQuery(selectedSessionId));
   const openWorkspaceId = workspaceMatch ? routeId(workspaceMatch.params.id) : null;
   const openWorkspace = (workspaces.data ?? []).find((a: any) => a.id === openWorkspaceId) ?? null;
+  // A project's Landings window names no workspace and no session: the console is its coordinator's
+  // workspace's, or — for a project whose coordinator has none, once that read has answered — the
+  // first runner's. An in-console navigation keeps the runner it had (`lastRunner` below).
+  const landingsMatch = useMatch('/projects/:id/landings');
+  const landingsProjectId = landingsMatch ? routeId(landingsMatch.params.id) : null;
+  const landingsProjectQ = useQuery({ ...projectDetailsQuery(landingsProjectId ?? ''), enabled: landingsProjectId != null });
+  const landingsRunnerId = landingsProjectId && (landingsProjectQ.isSuccess || landingsProjectQ.isError)
+    ? (workspaces.data ?? []).find((a: any) => a.id === landingsProjectQ.data?.coordinatorWorkspaceId)?.runnerId
+      ?? runners.data?.[0]?.id ?? null
+    : null;
   // Prefer the workspace's runner; fall back to treating the id as a runner so older
   // /workspaces/<runner> links still resolve, then to the open session's runner.
   const runnerId =
-    openWorkspace?.runnerId ?? openWorkspaceId ?? sessionQ.data?.assignedRunnerId ?? null;
+    openWorkspace?.runnerId ?? openWorkspaceId ?? sessionQ.data?.assignedRunnerId ?? landingsRunnerId ?? null;
   const selectedRunner = (runners.data ?? []).find((r: any) => r.id === runnerId) ?? null;
   // Navigating /workspaces/<id>/new -> /sessions/<newId> drops the workspace from the URL, so
   // the runner can only come from getSession — undefined until that request returns.

@@ -48,6 +48,11 @@ public enum NavNode: Hashable, Sendable {
     /// notification put it up `asDestination` instead — the project's own page, the drawer row's
     /// destination (``NavState/atDestinationRoot``).
     case sessionProject(SessionProjectAddress, asDestination: Bool = false)
+    /// A project's Landings window (owner 2026-10-27, contract §2.9 LS6 revision 28): every landing the
+    /// project has had, opened at its bottom by the Landings row of the project's sessions page and
+    /// pushed over that page, so back returns there. A landing session's own id opens the same window
+    /// focused on that landing, through the console it names.
+    case landings(projectID: String)
     case taskDetail(taskID: String)
     case taskListsDirectory
     case runnerDetail(runnerID: String)

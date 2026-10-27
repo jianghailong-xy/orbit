@@ -310,10 +310,14 @@ struct ConsoleView: View {
     private func consoleBody(navTitleWidth: CGFloat) -> some View {
         Group {
             // A LANDING session is platform work, not a conversation (§2.9 LS6): the same frame
-            // (`.console`, so every push and `/sessions/<id>` link still lands here) draws the
-            // landing page instead of a transcript, and nothing ever creates a console model for it.
-            if appModel.session(id: sessionID)?.isLanding == true {
-                LandingSessionPageView(sessionID: sessionID)
+            // (`.console`, so every push, `orbit-session:` and `/sessions/<id>` link still lands
+            // here) draws its project's Landings window focused on it (revision 28, owner
+            // 2026-10-27) instead of a transcript, and nothing ever creates a console model for it.
+            if let landing = appModel.session(id: sessionID), landing.isLanding {
+                ProjectLandingsWindowView(
+                    projectID: landing.landing.flatMap { $0.projectId.isEmpty ? nil : $0.projectId }
+                        ?? landing.projectMembership?.projectId,
+                    focusID: sessionID)
             } else if let console = registry.peek(sessionID) {
                 transcriptAndBand(console, navTitleWidth: navTitleWidth)
                 // Image cache for user-turn attachments, read by `UserBubbleView` down the tree.

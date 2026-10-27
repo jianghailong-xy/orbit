@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.Uri
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
@@ -35,9 +36,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The landing session page as drawn, in the frames the board's v4 07/05 name (A-1; contract §2.9 LS1/LS6, §7.2 V6):
- * checking, a timed-out LAND_TASK, a timed-out Merge to main, after a takeover, settled, a merge round checking, the
- * task segment's ⋮ menu and the merge round's ⋮ menu. Each frame is written beside its semantics tree, light and
+ * A landing as drawn in its project's Landings window, focused on it as a link opens it (A-1; contract §2.9 LS1/LS6, §7.2 V6; the
+ * frames the board's v4 07/05 name, in the window of docs/mocks/landings-one-window): checking, a timed-out LAND_TASK, a timed-out
+ * Merge to main, after a takeover, a settled round's row and its receipt, a merge round checking, and the long-press menus of a
+ * task segment and of a merge round. Each frame is written beside its semantics tree, light and
  * dark, under `src/android/build/evidence/landing-session-android/<theme>/`, which is not committed. With
  * `ORBIT_WRITE_EVIDENCE=1` in the environment they go to the committed `docs/evidence/landing-session-android/<theme>/`
  * instead, so a plain test run never rewrites the pictures a reader checks against 07/05.
@@ -93,15 +95,21 @@ abstract class LandingSessionFrames {
 
     private var signedIn = false
 
-    /** The link again: a fresh page reads the fixture as it stands now. Whatever is up — a landing page, an open ⋮
-     *  popup, or both — is left first; a back press the popup swallows is fine, the loop checks what remains. */
+    /** The link again: a fresh window reads the fixture as it stands now. Whatever is up — a window, an open menu, or both — is
+     *  left first; a back press the popup swallows is fine, the loop checks what remains. */
     private fun openLanding(landingJson: String) {
         ProjectShell.landing = landingJson
         if (!signedIn) { signIn(); signedIn = true }
         leavePage()
         open("orbit-session:$landing")
-        await { exists(hasTestTag("landing-page")) }
+        await { exists(hasTestTag("landings-window")) }
         compose.waitForIdle()
+    }
+
+    /** The landing's menu: a long-press on its card. */
+    private fun longPress() {
+        await { exists(hasTestTag("landing-head")) }
+        compose.onNode(hasTestTag("landing-status-card")).performSemanticsAction(SemanticsActions.OnLongClick)
     }
 
     private fun backOnce() {
@@ -111,7 +119,7 @@ abstract class LandingSessionFrames {
 
     private fun leavePage() {
         repeat(4) {
-            if (menuItems().isEmpty() && !exists(hasTestTag("landing-page"))) return
+            if (menuItems().isEmpty() && !exists(hasTestTag("landings-window"))) return
             backOnce()
             compose.waitForIdle()
         }
@@ -175,25 +183,28 @@ abstract class LandingSessionFrames {
         assertTrue(exists(hasText("Taken over by a new process on runner wikova · claim 2")))
         shot("04-taken-over")
 
-        // ⑤ Settled (05 c): the round's outcome with the green ✓, the tasks now on main, the check that passed and the tree
-        // it landed.
+        // ⑤ Settled (05 c, board 03 e): the round is a row of its day — its record and its session one row, ⇢ Merged into main —
+        // opened in place to its receipt: the tasks now on main, the check that passed and the tree it landed.
         ProjectShell.merged = """[{"promotionId":"pr-1","sourceRef":"refs/heads/project/launch","upstreamRef":"refs/heads/main","landsTreeSha":"5e5bfca1234",
             "landsAs":"MERGE_COMMIT","taskIds":["t1","t2"],"tasks":[{"taskId":"t1","title":"Fix D1"},{"taskId":"t2","title":"Logs"}],
-            "merged":{"sha":"8ed0ea712345","at":"${ago(600)}","automatic":true},
+            "merged":{"sha":"8ed0ea712345","at":"${ago(600)}","automatic":true},"landingSessionId":"$landing",
             "checks":[{"name":"MERGE_CHECK","expectedExitCode":0,"exitCode":0,"timedOut":false,"durationMs":1061000}]}]"""
         openLanding(view(subject = "PROMOTION", taskId = null, promotionId = "pr-1", kind = "LAND_PROMOTION", state = "MERGED",
             settledAt = ago(600), settledAs = "MERGED",
             checks = """[{"name":"MERGE_CHECK","expectedExitCode":0,"exitCode":0,"timedOut":false,"durationMs":1061000}]"""))
-        await { text("landing-head:title") == "Merged into main" }
-        assertEquals("8ed0ea7 · 2 tasks · automatically", text("landing-head:detail"))
-        assertTrue(exists(hasTestTag("landing-head:done"), unmerged = true))
+        await { text("landing-row:title") == "Merged into main" }
+        assertEquals("8ed0ea7 · 2 tasks · automatically", text("landing-row:detail"))
+        assertEquals("⇢", text("landing-row:mark"))
         assertTrue(exists(hasText("Now on main · 2 tasks"), unmerged = true))
+        assertTrue(exists(hasText("✓ Passed on the combined tree · 17m 41s"), unmerged = true))
         assertTrue(exists(hasText("Landed exactly the tested tree 5e5bfca · as a merge commit"), unmerged = true))
-        assertEquals("This landing is complete — nothing to type here.", text("landing:footer-line"))
+        assertEquals("Orbit runs these landings — nothing to type here.", text("landings:footer-line"))
         shot("05-settled")
+        // The window lists every merge into main the project read: the frames after this one are of other rounds.
+        ProjectShell.merged = "[]"
 
-        // ⑥ A confirmed merge round, ⋮ open (05 d): Merge to main, the ways to look — Review card, Open coordinator — then
-        // Cancel merge with its consequence, and no Open task / Open source session / Copy Link.
+        // ⑥ A confirmed merge round, its menu open by a long-press (05 d, board 03 g): Merge to main, the ways to look — Review card,
+        // Open coordinator — then Cancel merge with its consequence, and no Open task / Open source session / Copy Link.
         ProjectShell.coordinatorStatus = """{"state":"LIVE","coordination":{"session":{"id":"${ProjectShell.COORD}"}}}"""
         ProjectShell.promotion = """{"promotionId":"pr-1","state":"CONFIRMED","sourceRef":"refs/heads/project/launch",
             "upstreamRef":"refs/heads/main","landsAs":"MERGE_COMMIT","taskIds":["t1","t2"],"tasks":[{"taskId":"t1","title":"Fix D1"},{"taskId":"t2","title":"Logs"}]}"""
@@ -202,26 +213,21 @@ abstract class LandingSessionFrames {
             timeline = timeline(arrayOf(Fact("STEP", ago(290), "Reported starting the push to project/launch", phase = "PUSH")),
                 title = "Merge to main · 1", kind = "LAND_PROMOTION")))
         await { text("landing-head:title") == "Merge to main" }
-        await { exists(hasTestTag("landing-more")) }
-        compose.onNodeWithTag("landing-more").performClick()
-        await { menuItems().isNotEmpty() }
-        assertEquals(listOf("Open coordinator", "Review card", "Cancel merge"), menuItems())
+        longPress()
+        await { menuItems() == listOf("Open coordinator", "Review card", "Cancel merge") }
         assertTrue(exists(hasText(LandingSessionCopy.CANCEL_BEFORE_PUSH), unmerged = true))
         shot("06-merge-menu", popup = true)
 
-        // ⑦ The task segment's ⋮ menu (07 11:05): Open task / Open source session / Open coordinator, then Stop landing.
+        // ⑦ The task segment's menu (07 11:05, board 03 g): Open task / Open source session / Open coordinator, then Stop landing.
         openLanding(view(timeline = timeline(arrayOf(
             Fact("ENQUEUED", ago(240), "Task marked done · queued to land on project/launch"),
             Fact("CLAIMED", ago(180), "Claimed by runner wikova · claim 1")))))
-        await { exists(hasTestTag("landing-more")) }
-        compose.onNodeWithTag("landing-more").performClick()
-        await { menuItems().isNotEmpty() }
-        assertEquals(listOf("Open task", "Open source session", "Open coordinator", "Stop landing"), menuItems())
+        longPress()
+        await { menuItems() == listOf("Open task", "Open source session", "Open coordinator", "Stop landing") }
         assertTrue(exists(hasText("Before the push only · nothing pushed yet"), unmerged = true))
         shot("07-task-menu", popup = true)
 
-        // ⑧ A merge round checking alone (05 a): Merge check's budget and usually, the live line, the on-pass sentence and
-        // the footer's `A clean pass merges on its own` — no menu over it.
+        // ⑧ A merge round checking alone (05 a): Merge check's budget and usually, the live line and the on-pass sentence.
         ProjectShell.promotion = """{"promotionId":"pr-1","state":"CHECKING","onPass":"MERGE","sourceRef":"refs/heads/project/launch",
             "upstreamRef":"refs/heads/main","landsAs":"MERGE_COMMIT","taskIds":["t1","t2"],"tasks":[{"taskId":"t1","title":"Fix D1"},{"taskId":"t2","title":"Logs"}]}"""
         openLanding(view(subject = "PROMOTION", taskId = null, promotionId = "pr-1", kind = "CHECK_PROMOTION", phase = "CHECK",
@@ -229,7 +235,6 @@ abstract class LandingSessionFrames {
                 title = "Merge check · 1", kind = "CHECK_PROMOTION")))
         await { text("landing-head:title") == "Merge check" }
         assertEquals("Merges on its own when it passes.", text("landing:on-pass"))
-        assertTrue(exists(hasText("A clean pass merges on its own")))
         assertTrue(text("landing:budget")!!.matches(Regex("Merge check 2m 4\\ds of 60m")))
         assertTrue(text("landing:live")!!.matches(Regex("Output \\d+s ago · Updated just now")))
         // A merge check has one round per claim: the head names the round and no M.
@@ -269,12 +274,12 @@ abstract class LandingSessionFrames {
         assertInkFollowsTheTheme("landing:log-text")
         shot("10-log-open")
 
-        // ⑪ Opened again while the server cannot be read (A11-20 e): the job this page's last read kept, its clock frozen at that
-        // read, `Update unavailable`, how long ago that was, and no door and no menu.
+        // ⑪ Opened again while the server cannot be read (A11-20 e): the job this card's last read kept, its clock frozen at that
+        // read, `Update unavailable`, how long ago that was, and no door.
         ProjectShell.landingStatus = 503
         openLanding(view())
         await { text("landing-head:detail") == "Update unavailable" }
-        assertFalse(exists(hasTestTag("landing-more")))
+        assertFalse(exists(hasTestTag("landing:retry")) || exists(hasTestTag("landing:abandon")))
         assertTrue(text("landing:live")!!.startsWith("Updated "))
         shot("11-offline-frozen")
     }
@@ -300,7 +305,7 @@ abstract class LandingSessionFrames {
         else assertTrue("dark ink on the light theme: $light light and $dark dark pixels", dark > 50)
     }
 
-    /** The page's ⋮ rows, in the order the board draws them. */
+    /** The landing menu's rows, in the order the board draws them. */
     private fun menuItems() = compose.onAllNodes(hasAnyAncestor(isPopup()) and hasClickAction()).fetchSemanticsNodes()
         .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
 
@@ -331,17 +336,18 @@ abstract class LandingSessionFrames {
     }
 
     /** Compose draws a DropdownMenu in its own window; the activity's bitmap does not hold it. Draw the popup's own view
-     *  where the menu anchors (its end under the ⋮), and keep the popup on its own too. */
+     *  over the card it was opened on (a long-press), kept inside the window, and keep the popup on its own too. */
     private fun drawPopup(window: Bitmap): Bitmap? {
         val shadow = Shadows.shadowOf(compose.activity.windowManager) as org.robolectric.shadows.ShadowWindowManagerImpl
         val popup = shadow.views.lastOrNull { it !== compose.activity.window.decorView } ?: return null
         if (popup.width <= 0 || popup.height <= 0) return null
-        val anchor = compose.onNodeWithTag("landing-more").fetchSemanticsNode().boundsInWindow
+        val anchor = compose.onNode(hasTestTag("landing-status-card")).fetchSemanticsNode().boundsInWindow
         val own = Bitmap.createBitmap(popup.width, popup.height, Bitmap.Config.ARGB_8888)
         popup.draw(Canvas(own))
         val canvas = Canvas(window)
         canvas.save()
-        canvas.translate((anchor.right - popup.width).coerceAtLeast(0f), anchor.bottom)
+        canvas.translate((anchor.right - popup.width).coerceIn(0f, (window.width - popup.width).coerceAtLeast(0).toFloat()),
+            anchor.top.coerceIn(0f, (window.height - popup.height).coerceAtLeast(0).toFloat()))
         popup.draw(canvas)
         canvas.restore()
         return own

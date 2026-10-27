@@ -242,12 +242,12 @@ struct SessionProjectPage: View {
     @State private var sharingSession: Session?
     @State private var movingSession: Session?
     @State private var promotionReview: PromotionReviewTarget?
-    @State private var promotionReceipt: PromotionReceiptTarget?
     @State private var startSheet: StartSheet?
     /// The jobs a landing row counts, opened by pressing that row on a server that lists them.
     @State private var showsLandingJobs = false
-    /// Whether the Landings group's `Earlier · …` fold is open.
-    @State private var landingsExpanded = false
+    /// The project's Landings window over this page on an iPad, whose session column is this page:
+    /// a phone pushes it instead.
+    @State private var showsLandings = false
 
     /// Which start card the start row opened over the page.
     private enum StartSheet: String, Identifiable {
@@ -261,28 +261,21 @@ struct SessionProjectPage: View {
 
     /// This page's members — never what the model still holds for another address. Its first frame
     /// comes before its load has begun, and the load opens on what the app already holds. The
-    /// LANDING rows the same read carries are not members: they are the Landings group's.
+    /// LANDING rows the same read carries are not members: they are the Landings row's.
     private var sessions: [Session] {
         (app.projectSessionsAddress == address ? app.projectSessions : []).filter { !$0.isLanding }
     }
-    /// The landings this project's page lists in its Landings group (§2.9 LS6), under the
-    /// coordinator and above the timeline.
+    /// The landings this project's page sums up in its one Landings row (§2.9 LS6, revision 28),
+    /// under the coordinator and above the timeline.
     private var landingRows: [Session] {
         (app.projectSessionsAddress == address ? app.projectSessions : []).filter(\.isLanding)
     }
-    /// Who holds each landing that waits: the open items' facts about the same subject, joined by
-    /// `landingSessionId`. Only a landing that WAITS needs a holder named.
-    private var landingGroup: LandingGroup? {
-        guard !landingRows.isEmpty else { return nil }
-        var holders: [String: LandingHolder] = [:]
-        for row in (app.projectSessionsOpenItems?.needsYou ?? [])
-            + (app.projectSessionsOpenItems?.withCoordinator ?? []) {
-            guard let sessionID = row.landingSessionId, holders[sessionID] == nil else { continue }
-            holders[sessionID] = LandingHolder(reason: SessionProjectLandings.itemReason(row.kind),
-                                               assignee: row.assignee == .owner ? "OWNER"
-                                                   : row.assignee == .coordinator ? "COORDINATOR" : nil)
-        }
-        return SessionProjectLandings.group(landingRows, holders: holders)
+    /// The Landings row (owner 2026-10-27, board 01 b): the most urgent landing's mark and the day's
+    /// counts, over the project's landing sessions and its merges into main. Nil for a project that
+    /// has never had a landing, which draws no row.
+    private var landingsSummary: LandingsRowSummary? {
+        SessionProjectLandings.rowSummary(landingRows, merges: merge?.merged ?? [],
+                                          main: RunSettings.mainBranchName(app.projectSessionsIntegration?.upstreamRef))
     }
     /// The merge job in flight, if one is — its id, kind and the sentence where it stopped.
     private var mergeJob: ProjectIntegrationJob? {
@@ -338,11 +331,10 @@ struct SessionProjectPage: View {
     private var titleText: String {
         project?.title ?? sessions.first?.projectMembership?.projectTitle ?? "Project"
     }
-    /// The member sessions by recency, with the merges into main already made drawn among them at
-    /// their own instant (owner decision 2026-10-06). No Pinned section: the page has none.
+    /// The member sessions by recency. No Pinned section: the page has none; and no merges into
+    /// main, which are rows of the project's Landings window (owner 2026-10-27).
     private var timeSections: [ProjectTimelineSection] {
-        ProjectTimeline.sections(sessions: sessions.filter { $0.projectMembership?.role != .coordinator },
-                                 merges: merge?.receipts ?? [])
+        ProjectTimeline.sections(sessions: sessions.filter { $0.projectMembership?.role != .coordinator })
     }
     private var selection: Binding<String?>? {
         guard rowNavigation == .selection else { return nil }
@@ -362,50 +354,14 @@ struct SessionProjectPage: View {
             if let coordinator {
                 Section(SessionProjectCopy.coordinatorSection) { sessionRow(coordinator) }
             }
-            // The landings waiting on a decision and the ones that settled in the last day
-            // (owner 2026-10-19, board v4 04 c1): under the coordinator, above the timeline, and
-            // absent entirely when it has nothing to list.
-            if let landingGroup {
-                Section(SessionLandingsCopy.title) {
-                    ForEach(landingGroup.waiting) { row in landingGroupRow(row) }
-                    ForEach(landingGroup.settled) { row in landingGroupRow(row) }
-                    if let earlier = landingGroup.earlier {
-                        Button {
-                            PlatformHaptics.tap()
-                            withAnimation { landingsExpanded.toggle() }
-                        } label: {
-                            HStack(spacing: 8) {
-                                Text(landingsExpanded ? "◌" : "✓")
-                                    .font(.orbitMeta.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                Text(SessionProjectLandings.earlierLine(landed: earlier.landed,
-                                                                        nothing: earlier.nothing))
-                                    .font(.orbitLabel).foregroundStyle(.secondary)
-                                Spacer(minLength: 8)
-                                Image(systemName: "chevron.right")
-                                    .font(.orbitMeta.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
-                                    .rotationEffect(.degrees(landingsExpanded ? 90 : 0))
-                            }
-                            // A plain button answers only where it draws: the whole row is the
-                            // fold's target, the empty middle under the Spacer included.
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        if landingsExpanded {
-                            ForEach(landingGroup.older) { row in landingGroupRow(row) }
-                        }
-                    }
-                }
+            // The one Landings row (owner 2026-10-27, board 01 b): under the coordinator, above the
+            // timeline, for a project that has had a landing; it opens the project's Landings window.
+            if let landingsSummary {
+                Section(SessionLandingsCopy.title) { landingsRow(landingsSummary) }
             }
             ForEach(timeSections) { section in
                 Section {
-                    ForEach(section.items) { item in
-                        switch item {
-                        case .session(let session): sessionRow(session)
-                        case .merge(let receipt): mergeRow(receipt)
-                        }
-                    }
+                    ForEach(section.sessions) { session in sessionRow(session) }
                 } header: {
                     Text(section.title).textCase(nil)
                 }
@@ -465,7 +421,17 @@ struct SessionProjectPage: View {
         .sheet(item: $promotionReview) { target in
             if let merge { PromotionReviewSheet(source: merge, promotionID: target.id) }
         }
-        .sheet(item: $promotionReceipt) { PromotionReceiptSheet(promotion: $0.promotion) }
+        // The window over an iPad's session column; a phone pushes it (`landingsRow`).
+        .sheet(isPresented: $showsLandings) {
+            NavigationStack {
+                ProjectLandingsWindowView(projectID: address.projectID)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { showsLandings = false }
+                        }
+                    }
+            }
+        }
         // The start card over this page, from the project page's own store, read afresh as it opens:
         // this page holds none of the criteria, the plan or the line it is set from.
         .sheet(item: $startSheet) { sheet in
@@ -749,14 +715,6 @@ struct SessionProjectPage: View {
         }
     }
 
-    /// A merge already made, on the timeline at its own instant. Not a session: it has no selection,
-    /// swipe or menu, and a tap opens its receipt.
-    private func mergeRow(_ receipt: PromotionCards.Receipt) -> some View {
-        ProjectMergeTimelineRow(promotion: receipt.promotion) {
-            promotionReceipt = PromotionReceiptTarget(promotion: receipt.promotion)
-        }
-    }
-
     /// On a phone the project's page is pushed over this one, so back returns here and the drawer
     /// keeps this project selected; the iPad opens it in the Projects section.
     private func openProject() {
@@ -770,30 +728,33 @@ struct SessionProjectPage: View {
         .accessibilityLabel(SessionProjectCopy.openProject)
     }
 
-    /// One landing in the Landings group: the mark that says how it stands, its title, its age and
-    /// one line under both — the whole row opens the landing session itself.
-    private func landingGroupRow(_ row: LandingGroupRow) -> some View {
+    /// The Landings row: the merged line's head — one circle with the most urgent landing's mark, the
+    /// title, how long it has waited (or since the last one settled), and the day's counts under them,
+    /// two lines at most. The whole row opens the project's Landings window, at its bottom.
+    private func landingsRow(_ summary: LandingsRowSummary) -> some View {
         Button {
             PlatformHaptics.tap()
-            app.openFromConversation(.session(row.id), overConsole: rowNavigation == .push)
+            if rowNavigation == .push {
+                app.push(.landings(projectID: address.projectID))
+            } else {
+                showsLandings = true
+            }
         } label: {
             HStack(alignment: .top, spacing: 11) {
-                Text(mark(row.tone))
-                    .font(.orbitGlyph.weight(.semibold))
-                    .foregroundStyle(ink(row.tone))
+                landingsMark(summary.mark)
                     .frame(width: 30, height: 30)
-                    .background(ink(row.tone).opacity(0.14), in: Circle())
+                    .background(landingsInk(summary.mark).opacity(0.14), in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 8) {
-                        Text(row.title).fontWeight(.semibold).lineLimit(1)
+                        Text(SessionLandingsCopy.title).fontWeight(.semibold).lineLimit(1)
                         Spacer(minLength: 8)
-                        if !row.time.isEmpty {
-                            Text(row.time)
+                        if !summary.time.isEmpty {
+                            Text(summary.time)
                                 .font(.orbitListSubtitle)
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    Text(row.detail)
+                    Text(summary.line)
                         .font(.orbitListSubtitle)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -802,23 +763,28 @@ struct SessionProjectPage: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("landings-row")
     }
 
-    private func mark(_ tone: LandingGroupTone) -> String {
-        switch tone {
-        case .fail: return "✕"
-        case .ok: return "✓"
-        case .merge: return "⇢"
-        case .quiet: return "◌"
+    /// ✕ something waits for a decision, the blue ring something is in flight, ✓ all settled.
+    @ViewBuilder private func landingsMark(_ mark: LandingsRowMark) -> some View {
+        switch mark {
+        case .fail:
+            Text("✕").font(.orbitGlyph.weight(.semibold)).foregroundStyle(.red)
+        case .ok:
+            Text("✓").font(.orbitGlyph.weight(.semibold)).foregroundStyle(.green)
+        case .running:
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.orbitMeta.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
         }
     }
 
-    private func ink(_ tone: LandingGroupTone) -> Color {
-        switch tone {
+    private func landingsInk(_ mark: LandingsRowMark) -> Color {
+        switch mark {
         case .fail: return .red
         case .ok: return .green
-        case .merge: return .accentColor
-        case .quiet: return .secondary
+        case .running: return .accentColor
         }
     }
 
@@ -1214,41 +1180,6 @@ private struct ProjectMergeCardView: View {
             actionError = await run()
             acting = false
         }
-    }
-}
-
-/// A merge already made, as a row on the project's timeline: what went onto main and who merged it,
-/// at the instant it happened. Shaped unlike a session row (the mark, no status line) because it is
-/// not one, and a tap opens its receipt.
-private struct ProjectMergeTimelineRow: View {
-    let promotion: ProjectPromotionView
-    let onOpen: () -> Void
-
-    var body: some View {
-        Button(action: onOpen) {
-            HStack(spacing: 11) {
-                Image(systemName: "arrow.triangle.merge")
-                    .font(.orbitGlyph.weight(.semibold))
-                    .foregroundStyle(.green)
-                    .frame(width: 30, height: 30)
-                    .background(Color.green.opacity(0.15), in: Circle())
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 8) {
-                        Text(PromotionCards.timelineTitle(promotion))
-                            .fontWeight(.semibold).lineLimit(1)
-                        Spacer(minLength: 8)
-                        if let at = promotion.merged?.at, let relative = RelativeTime.format(at) {
-                            Text(relative).font(.orbitMeta).foregroundStyle(.secondary).fixedSize()
-                        }
-                    }
-                    Text(PromotionCards.timelineDetail(promotion))
-                        .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityHint("Opens the merge's receipt")
     }
 }
 

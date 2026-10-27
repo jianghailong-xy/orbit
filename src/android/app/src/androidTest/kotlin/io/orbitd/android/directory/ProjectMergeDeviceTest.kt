@@ -104,20 +104,23 @@ class ProjectMergeDeviceTest {
                 await { exists(hasTestTag("project-merge-card:checking")) }
                 capture("05-checking")
 
-                // C · merged: the candidate became the merge, as the server records one — no card; a row on the timeline at its own
-                // instant, opening its receipt. (The page reads the merges again when the candidate moves, else once a minute.)
+                // C · merged: the candidate became the merge, as the server records one — no card; the page's Landings row counts it,
+                // and the project's Landings window has it as a row that opens in place to its receipt (owner 2026-10-27). (The page
+                // reads the merges again when the candidate moves, else once a minute.)
                 job = "LAND_TASK"
                 val made = """{"sha":"8d5a868e90df","at":"${ago(7)}","automatic":false,"revert":null}"""
                 merged = "[${candidate("MERGED", merged = made)}]"
                 promotion = candidate("MERGED", merged = made)
                 await { !exists(hasTestTag("project-merge-card:checking")) }
-                compose.awaitListed(hasTestTag("project-merge-row:pr-1"))
-                capture("06-timeline")
-                compose.onNodeWithTag("project-merge-row:pr-1").performClick()
-                await { exists(hasTestTag("promotion-receipt")) && exists(hasText("Fix D1") and hasAnyAncestor(hasTestTag("promotion-receipt"))) }
+                compose.awaitListed(hasTestTag("landings-row"))
+                capture("06-landings-row")
+                compose.onNodeWithTag("landings-row").performClick()
+                await { exists(hasTestTag("landing-row:merge:pr-1")) }
+                compose.onNodeWithTag("landing-row:merge:pr-1").performClick()
+                await { exists(hasTestTag("landing:receipt")) && exists(hasText("Fix D1") and hasAnyAncestor(hasTestTag("landing:receipt")), unmerged = true) }
                 capture("07-receipt")
-                compose.onNodeWithTag("promotion-receipt:close").performClick(); settle()
-                await { !exists(hasTestTag("promotion-receipt")) }
+                instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK); settle()
+                await { exists(hasTestTag("project-sessions")) }
 
                 // A press the server refuses says why under the card.
                 promotion = candidate("READY", id = "pr-2"); refuse = true
