@@ -952,6 +952,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 
 	loopCtx, stopLoop := context.WithCancelCause(context.Background())
 	loopCancel := func() { stopLoop(nil) }
+	// Once the runner stops, a runner link with no connection is not waited for: the sessions' last events go over
+	// HTTPS while the control plane still takes it (linkMode.stopping).
+	if t.link != nil {
+		stopLinkStopping := context.AfterFunc(loopCtx, t.link.stopping)
+		defer stopLinkStopping()
+	}
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	monitorCtx, stopMonitor := context.WithCancel(context.Background())

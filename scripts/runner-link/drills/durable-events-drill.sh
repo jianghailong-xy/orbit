@@ -29,7 +29,9 @@
 #                                          RUNNER_LINK_REQUIRED goes off and the runner starts again with
 #                                          ORBIT_LINK_MODE=off, as a rollback does, and answers a message; then the
 #                                          switch goes on and the runner takes the session back on the link. Records what
-#                                          the session stored of what its engine wrote, after each step.
+#                                          the session stored of what its engine wrote, after each step, and judges each:
+#                                          nothing lost, every tick once and in the order written, every kept event at its
+#                                          own seq, and no turn_end but the prompt's own and its re-delivery's.
 #   durable-events-drill.sh partition-off  The partition with RUNNER_LINK_REQUIRED off and the gateway telling the runner
 #                                          MODE_LINK (ORBIT_LINK_STAGING_MODE=link), on a session of its own: past 5
 #                                          minutes without the link the runner takes its work back to HTTPS. Not in all.
@@ -840,28 +842,121 @@ spool_fate() {
         FROM run_event WHERE session_id = '$suuid' AND seq BETWEEN $first AND $last" | sort -t $'\t' -k1,1) |
     awk -F'\t' '{ if ($4 == "") n++; else if ($2 == $4 && $3 == $5) s++; else t++ } END { print s + 0, t + 0, n + 0 }'
 }
-# rollback_step STEP: a line of rollback.tsv for the session as it stands after STEP.
+# The session's first message turn: the prompt's, whose end the stopped runner kept.
+prompt_turn() { psql_value "SELECT id FROM conversation_turn WHERE session_id = '$suuid' AND kind = 'message' ORDER BY seq LIMIT 1"; }
+# turn_end_seqs TURN: the seqs of TURN's turn_end rows, as "S1,S2", or nothing.
+turn_end_seqs() {
+  psql_value "SELECT COALESCE(string_agg(seq::text, ',' ORDER BY seq), '') FROM run_event WHERE session_id = '$suuid'
+    AND type = 'turn_end' AND turn_id = '$1'"
+}
+# others_turn_ends TURN: the most turn_end rows any other turn of the session has.
+others_turn_ends() {
+  psql_value "SELECT COALESCE(max(n), 0) FROM (SELECT count(*) AS n FROM run_event WHERE session_id = '$suuid'
+    AND type = 'turn_end' AND turn_id IS NOT NULL AND turn_id <> '$1' GROUP BY turn_id) t"
+}
+# continuations TURN: TURN's user rows that hold the control plane's resume continuation, as "SEQ@LEASE,...": dequeueTurn
+# hands a turn whose runner restarted, its lease expired by takeoverLeases, back with it (resume-continuation.ts).
+continuations() {
+  psql_value "SELECT COALESCE(string_agg(seq::text || '@' || COALESCE(ingested_under_lease_generation::text, '-'), ','
+      ORDER BY seq), '') FROM run_event WHERE session_id = '$suuid' AND type = 'user' AND turn_id = '$1'
+    AND payload::text LIKE '%was interrupted because its runner restarted%'"
+}
+# ticks_out_of_order: how many stored ticks have a seq below an earlier tick's; 0 when they are stored in the order the
+# engine wrote them.
+ticks_out_of_order() {
+  psql_value "SELECT count(*) FROM (SELECT seq, lag(seq) OVER (ORDER BY k, seq) AS prev FROM ($(ticks_query)) t
+    WHERE k IS NOT NULL) o WHERE prev IS NOT NULL AND prev >= seq"
+}
+# kept_ticks FILE: the ticks a spool file (spool_events) holds, one a line.
+kept_ticks() { sed -nE "s/^[0-9]+\tassistant\tDurable events drill, $label: tick ([0-9]+)\.\$/\1/p" "$1"; }
+# ticks_held_once FILE: of the ticks 1..ticks_total, those not stored nor in FILE's spool, and those both or twice, as
+# "MISSING TWICE" ranges ("-" for none): whether the stopped runner lost or doubled any.
+ticks_held_once() {
+  { psql_value "SELECT k FROM ($(ticks_query)) t WHERE k IS NOT NULL"; kept_ticks "$1"; } | node -e '
+    const n = Number(process.argv[1]);
+    const count = new Map();
+    for (const k of require("fs").readFileSync(0, "utf8").split("\n").filter(Boolean).map(Number)) count.set(k, (count.get(k) ?? 0) + 1);
+    const ranges = (ks) => ks.length ? ks.reduce((r, k) => { const last = r[r.length - 1];
+      if (last && last[1] === k - 1) last[1] = k; else r.push([k, k]); return r; }, []).map(([a, b]) => a === b ? `${a}` : `${a}-${b}`).join(",") : "-";
+    const missing = [], twice = [];
+    for (let k = 1; k <= n; k += 1) { const c = count.get(k) ?? 0; if (c === 0) missing.push(k); if (c > 1) twice.push(k); }
+    console.log(`${ranges(missing)} ${ranges(twice)}`);' "$ticks_total"
+}
+# rollback_redelivery STEP: rollback-redelivery-STEP.tsv, the prompt turn's rows after the last seq the stopped runner
+# kept: seq, type, the lease generation that stored it, and its text, where a re-delivered turn's resume continuation and
+# its answer show; and what the scripted claude was handed and how it was started (stdin.jsonl, spawns.jsonl).
+rollback_redelivery() {
+  local last turn
+  last="$(tail -n 1 "$out/rollback-spool.tsv" | cut -f1)"
+  turn="$(prompt_turn)"
+  psql_rows "SELECT seq, type, COALESCE(ingested_under_lease_generation::text, '-'),
+      left(replace(replace(COALESCE(payload->>'text', payload->>'subtype', payload::text), E'\n', ' '), E'\t', ' '), 160)
+    FROM run_event WHERE session_id = '$suuid' AND turn_id = '$turn' AND seq > ${last:-0} ORDER BY seq" \
+    > "$out/rollback-redelivery-$1.tsv"
+  grep -F -e 'was interrupted because its runner restarted' "$drill/fake/stdin.jsonl" 2> /dev/null | grep -c -F "$(prompt_marker)" \
+    > "$out/rollback-continuations-delivered-$1.txt" || true
+  cp "$drill/fake/spawns.jsonl" "$out/rollback-spawns-$1.jsonl" 2> /dev/null || true
+  say "rollback, $1: the prompt turn's rows after seq ${last:-0} (seq, type, lease, text): $(awk -F'\t' '{ printf "%s%s %s %s \"%s\"", (NR > 1 ? "; " : ""), $1, $2, $3, substr($4, 1, 60) }' "$out/rollback-redelivery-$1.tsv"); resume continuations of the prompt delivered to the engine: $(cat "$out/rollback-continuations-delivered-$1.txt" 2> /dev/null || echo 0)"
+}
+# rollback_step STEP: a line of rollback.tsv for the session as it stands after STEP, and STEP's verdicts. After the stop,
+# every tick the engine wrote is stored or kept, once. Once the runner has started again, whatever its mode: every tick is
+# stored once and in the order it was written; every event the stopped runner kept is stored at its own seq; the spool is
+# empty; no seq is without a row; the prompt's turn has its own turn_end, the one the stopped runner kept, and at most one
+# more, the end of the resume continuation the control plane hands back a turn whose completion was lost (task
+# 34mwBTpOPo3S9LM2SXs10), after that continuation; and no other turn has more than one.
 rollback_step() {
-  local step=$1 s hole_list t missing spool_n spool_range fate drops losses ends
+  local step=$1 s hole_list t missing order spool_n spool_range fate drops losses turn ends end_seqs conts others held
+  local first_end second_end cont_seq kept_end
   s="$(seqs)"
-  ends="$(psql_value "SELECT count(*) FROM run_event WHERE session_id = '$suuid' AND type = 'turn_end' AND turn_id =
-    (SELECT id FROM conversation_turn WHERE session_id = '$suuid' AND kind = 'message' ORDER BY seq LIMIT 1)")"
+  turn="$(prompt_turn)"
+  end_seqs="$(turn_end_seqs "$turn")"
+  ends="$(awk -F, '{ print ($0 == "" ? 0 : NF) }' <<< "$end_seqs")"
+  conts="$(continuations "$turn")"
+  others="$(others_turn_ends "$turn")"
   hole_list="$(holes)"
   t="$(stored_ticks)"
   missing="$(missing_ticks "$ticks_total")"
+  order="$(ticks_out_of_order)"
   spool_events > "$out/rollback-spool-$step.tsv"
   spool_n="$(wc -l < "$out/rollback-spool-$step.tsv")"
   spool_range="$(awk -F'\t' 'NR == 1 { a = $1 } { b = $1 } END { if (NR) print a "-" b; else print "-" }' "$out/rollback-spool-$step.tsv")"
   fate="$(spool_fate "$out/rollback-spool.tsv")"
+  kept_end="$(awk -F'\t' '$2 == "turn_end" { print $1; exit }' "$out/rollback-spool.tsv")"
   drops="$(log_since_re "$from0" "$drop_re" | wc -l)"
   losses="$(log_since_re "$from0" "$loss_re" | wc -l)"
-  printf '%s\t' "$step" "$(now)" "$s" "${hole_list:-none}" "$t" "${missing:-none}" "$spool_n" "$spool_range" "$fate" "$ends" "$drops" >> "$rollback_table"
+  printf '%s\t' "$step" "$(now)" "$s" "${hole_list:-none}" "$t" "${missing:-none}" "$order" "$spool_n" "$spool_range" "$fate" \
+    "$ends" "${end_seqs:--}" "${conts:--}" "$others" "$drops" >> "$rollback_table"
   printf '%s\n' "$losses" >> "$rollback_table"
-  say "rollback, $step: seqs (rows first last tombstones) $s, holes ${hole_list:-none}; ticks (rows distinct last) $t, not stored: ${missing:-none}; the prompt's turn has $ends turn_end row(s); the spool holds $spool_n event(s) ($spool_range); of the $(wc -l < "$out/rollback-spool.tsv") the stopped runner kept, (stored, seq taken by another event, no row) = $fate; runner log since the session opened: $drops dropping line(s), $losses loss line(s)"
-}
+  say "rollback, $step: seqs (rows first last tombstones) $s, holes ${hole_list:-none}; ticks (rows distinct last) $t, not stored: ${missing:-none}, $order stored out of order; the prompt's turn has $ends turn_end row(s) (seqs ${end_seqs:--}), resume continuations at ${conts:--} (seq@lease), and no other turn more than $others; the spool holds $spool_n event(s) ($spool_range); of the $(wc -l < "$out/rollback-spool.tsv") the stopped runner kept, (stored, seq taken by another event, no row) = $fate; runner log since the session opened: $drops dropping line(s), $losses loss line(s)"
 
+  [ -z "$hole_list" ] || verdicts+=("$step: seqs without a row: $hole_list")
+  [ "$others" -le 1 ] || verdicts+=("$step: a turn other than the prompt's has $others turn_end rows")
+  if [ "$step" = stopped ]; then
+    held="$(ticks_held_once "$out/rollback-spool.tsv")"
+    [ "$held" = "- -" ] || verdicts+=("$step: ticks neither stored nor kept, and ticks stored and kept or twice: $held")
+    [ -n "$kept_end" ] || [ "$ends" -ge 1 ] || verdicts+=("$step: the prompt turn's end is neither stored nor kept")
+    return
+  fi
+  [ -z "$missing" ] || verdicts+=("$step: ticks the engine wrote and the session does not store: $missing")
+  [ "$t" = "$ticks_total $ticks_total $ticks_total" ] || verdicts+=("$step: ticks (rows distinct last) $t, want each of the $ticks_total once")
+  [ "$order" = 0 ] || verdicts+=("$step: $order tick(s) stored at a seq below an earlier tick's")
+  [ "${fate%% *}" = "$kept_n" ] || verdicts+=("$step: of the $kept_n events the stopped runner kept, (stored, seq taken by another event, no row) = $fate")
+  [ "$spool_n" = 0 ] || verdicts+=("$step: the spool still holds $spool_n event(s) ($spool_range)")
+  first_end="${end_seqs%%,*}"
+  if [ -n "$kept_end" ] && [ "$first_end" != "$kept_end" ]; then
+    verdicts+=("$step: the prompt turn's first turn_end is at seq ${first_end:-none}, not at seq $kept_end, where the stopped runner kept it")
+  fi
+  if [ "$ends" -gt 2 ]; then
+    verdicts+=("$step: the prompt's turn has $ends turn_end rows (seqs $end_seqs)")
+  elif [ "$ends" = 2 ]; then
+    second_end="${end_seqs##*,}"
+    cont_seq="$(tr ',' '\n' <<< "$conts" | cut -d@ -f1 | awk -v a="$first_end" -v b="$second_end" '$1 + 0 > a + 0 && $1 + 0 < b + 0 { print; exit }')"
+    [ -n "$cont_seq" ] || verdicts+=("$step: the prompt turn's second turn_end, at seq $second_end, follows no resume continuation after seq $first_end")
+  fi
+}
 rollback_phase() {
-  local down_at kept kept_n from1 from2 resent fate verdicts=() verdict missing
+  # verdicts is rollback_step's too: it appends each step's.
+  local down_at kept kept_n from1 from2 resent verdict stored verdicts=()
   phase=rollback
   stack_settings
   runner_running || fail "rollback: the drill runner is not running: run prepare"
@@ -876,8 +971,9 @@ rollback_phase() {
   from0="$(log_lines)"
   start_ticker 1
   wait_until 180 caught_up 5 || fail "rollback: session $sid stored no fifth tick within 180 s (it is $(session_status))"
-  printf '%s\t' step at 'seqs(rows,first,last,tombstones)' holes 'ticks(rows,distinct,last)' missing_ticks spool_events \
-    spool_seqs 'kept_events(stored,taken,none)' prompt_turn_ends drops > "$rollback_table"
+  printf '%s\t' step at 'seqs(rows,first,last,tombstones)' holes 'ticks(rows,distinct,last)' missing_ticks \
+    ticks_out_of_order spool_events spool_seqs 'kept_events(stored,taken,none)' prompt_turn_ends prompt_turn_end_seqs \
+    'continuations(seq@lease)' other_turns_max_turn_ends drops > "$rollback_table"
   printf 'losses\n' >> "$rollback_table"
 
   # The link gateway goes down; the engine writes on, and ends its turn.
@@ -910,6 +1006,10 @@ rollback_phase() {
     fail "rollback: sending the message after the rollback"
   wait_until 300 answered_with "a message after the rollback" ||
     fail "rollback: the message after the rollback is not answered within 300 s (the session is $(session_status))"
+  resent="$(log_since "$from1" "an earlier process could not send" | grep -F -e "$suuid" -e "$sid" | tail -n 1 | sed -E 's/^.*(runner link: )/\1/' || true)"
+  stored="$(log_since "$from1" "held through seq" | grep -F -e "$suuid" -e "$sid" | tail -n 1 | sed -E 's/^.*(runner link: )/\1/' || true)"
+  say "rollback: runner log after the rollback: ${resent:-no events of session $sid an earlier process could not send}; ${stored:-nothing said of them stored}; $(log_since "$from1" "reclaiming session $sid" | tail -n 1 | sed -E 's/^.*(reclaiming session)/\1/')"
+  rollback_redelivery after-rollback
   rollback_step after-rollback
 
   # On the link again: RUNNER_LINK_REQUIRED on, the runner started again as it was, on the same machine.
@@ -928,20 +1028,16 @@ rollback_phase() {
   wait_until 120 spool_sent || true
   resent="$(log_since "$from2" "an earlier process could not send" | grep -F -e "$suuid" -e "$sid" | tail -n 1 | sed -E 's/^.*(runner link: )/\1/' || true)"
   say "rollback: runner log on the link again: ${resent:-no events of session $sid an earlier process could not send}"
+  rollback_redelivery on-link-again
   rollback_step on-link-again
 
-  missing="$(missing_ticks "$ticks_total")"
-  fate="$(spool_fate "$out/rollback-spool.tsv")"
-  [ -z "$missing" ] || verdicts+=("ticks the engine wrote and the session never stored: $missing")
-  [ "${fate%% *}" = "$kept_n" ] || verdicts+=("of the $kept_n events the stopped runner kept, (stored, seq taken by another event, no row) = $fate")
-  [ -z "$(holes)" ] || verdicts+=("seqs without a row: $(holes)")
   if [ ${#verdicts[@]} -eq 0 ]; then verdict=PASS; else verdict="$(printf '%s; ' "${verdicts[@]}")"; verdict="${verdict%; }"; fi
   printf 'verdict\t%s\n' "$verdict" >> "$rollback_table"
   awk -v from="$from0" 'NR > from' "$drill/runner.log" > "$out/rollback-runner.log"
   docker logs --since "$since_at" "$gateway" > "$out/rollback-link-gateway.log" 2>&1 || true
   docker logs --since "$since_at" "$apiserver" > "$out/rollback-apiserver.log" 2>&1 || true
   if [ "$verdict" = PASS ]; then
-    say "rollback holds: every event the stopped runner kept is stored, every tick once"
+    say "rollback holds: after the stop, the restart with ORBIT_LINK_MODE=off and the link mode again, every event the stopped runner kept is stored at its own seq, every tick once and in the order written, and the prompt's turn ends once, and once more only after the resume continuation of its lost completion"
   else
     say "FAIL: rollback: $verdict"
     failed=1
@@ -987,8 +1083,8 @@ summary() {
     awk -F'\t' 'NR > 1 { printf "%s: %s; %s ticks during, caught up %s s after; seqs %s, holes %s; ticks %s; drops %s, losses %s, fallbacks %s; statuses %s: %s\n",
       $1, $2, $6, $7, $10, $11, $12, $15, $16, $17, $19, $20 }' "$table"
     if [ -f "$rollback_table" ]; then
-      awk -F'\t' 'NR > 1 && $1 != "verdict" { printf "rollback %s: seqs %s, holes %s; ticks %s, not stored %s; spool %s (%s); kept (stored, taken, none) %s; prompt turn_end rows %s; drops %s, losses %s\n",
-        $1, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12 } $1 == "verdict" { print "rollback: " $2 }' "$rollback_table"
+      awk -F'\t' 'NR > 1 && $1 != "verdict" { printf "rollback %s: seqs %s, holes %s; ticks %s, not stored %s, out of order %s; spool %s (%s); kept (stored, taken, none) %s; prompt turn_end rows %s (seqs %s), resume continuations %s, other turns at most %s; drops %s, losses %s\n",
+        $1, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16 } $1 == "verdict" { print "rollback: " $2 }' "$rollback_table"
     fi
   } > "$summary_file"
   say "summary: $(tr '\n' '|' < "$summary_file")"
