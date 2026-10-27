@@ -2,103 +2,51 @@ import SwiftUI
 import OrbitKit
 
 /// What the control plane appended to a message — a reference's summary, a list's condition board,
-/// the background work a returning engine is told about, a coordinator's standing role — gets a
-/// compact summary card before the reader opens exactly what the model read. The old raw block is
-/// still the opened state, one tap away and selectable on a phone where a tooltip is not available.
+/// the background work a returning engine is told about, a coordinator's standing role — named on one
+/// quiet line as Orbit's rather than the person's, and opening to exactly what the model read,
+/// selectable on a phone where a tooltip is not available.
 ///
-/// Two of the blocks open as something other than their own text: the inventory a returning engine
-/// is handed, whose lines are a list of outcomes (`BackgroundJobsNoteView`), and the tasks a person
-/// named with `#`, whose table holds an id nobody could tap (`ReferencedTaskNoteView`). One note can
-/// carry both, so each reading is handed what the one before it did not take and what is left over
-/// is drawn as it always was. Their counts go on the line that names the note shut: "background
-/// jobs" alone never said whether opening it was worth the tap.
+/// The line is in the voice of the time under a message and says what is attached, nothing more:
+/// "⊕ Orbit attached: background jobs", ⊖ once open. What the person typed is what the eye should
+/// land on (owner, 2026-10-27; docs/mocks/attached-context-note), so how the block stands — "2
+/// running, 1 failed" — is the line's accessibility label, and the opened rows say it job by job.
 ///
-/// Drawn under the person's words in their bubble (`UserBubbleView`), and inside the card on a turn
-/// nobody typed (`BackgroundWakeCardView`). Web parity: `Transcript.tsx`'s `ControlPlaneNote`.
+/// Under a person's bubble the line ends the bubble's meta row and what it opens to goes under that
+/// row (`UserBubbleView`, which holds the open state for both). Inside a card that is Orbit's own — a
+/// turn nobody typed (`BackgroundWakeCardView`), a task's brief — the two stand together, here.
+/// Web parity: `Transcript.tsx`'s `useControlPlaneNote` and `ControlPlaneNote`.
 struct AttachedNoteEntry: View {
     let attached: (kind: String, text: String)
     @State private var open = false
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            AttachedNoteLine(attached: attached, open: $open)
+            if open { AttachedNoteBody(attached: attached) }
+        }
+    }
+}
+
+/// The line that names the note: ⊕ while it is shut, ⊖ while it is open, the counts in its
+/// accessibility label (web: the line's accessible name and tooltip).
+struct AttachedNoteLine: View {
+    let attached: (kind: String, text: String)
+    @Binding var open: Bool
+
+    var body: some View {
         let jobs = BackgroundJobsText.parse(attached.text)
         let tasks = ReferencedTaskText.parse(jobs?.rest ?? attached.text)
-        let rest = tasks?.rest ?? jobs?.rest ?? attached.text
-        return VStack(alignment: .leading, spacing: 4) {
-            Button {
-                open.toggle()
-            } label: {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "arrow.up.right.square.fill")
-                        .font(.orbitLabel)
-                        .foregroundStyle(.tint)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Orbit context")
-                            .font(.orbitLabel.weight(.semibold))
-                        Text("Attached · \(attached.kind)")
-                            .font(.orbitMeta)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 8)
-                    Image(systemName: open ? "chevron.up" : "chevron.down")
-                        .font(.orbitMeta.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text(head(jobs, tasks)))
-            if open {
-                if tasks != nil || jobs != nil {
-                    if let tasks { ReferencedTaskNoteView(tasks: tasks.tasks) }
-                    if let jobs { BackgroundJobsNoteView(jobs: jobs) }
-                    // Another block the same note carried is neither reading's to draw as rows.
-                    if !rest.isEmpty { verbatim(rest) }
-                } else {
-                    verbatim(attached.text)
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text("Orbit context")
-                            .font(.orbitLabel.weight(.semibold))
-                        Text("Attached to this message")
-                            .font(.orbitMeta)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text("Context is kept out of your message and available when you need the full details.")
-                        .font(.orbitMeta)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button {
-                        open = true
-                    } label: {
-                        HStack {
-                            Text("View full context")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.orbitMeta.weight(.semibold))
-                        }
-                        .font(.orbitMeta.weight(.semibold))
-                        .foregroundStyle(.tint)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 7)
-                        .background(.background, in: RoundedRectangle(cornerRadius: 8))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.accentColor.opacity(0.24), lineWidth: 1)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.top, 4)
-            }
+        return Button {
+            open.toggle()
+        } label: {
+            Text(open ? "⊖ Orbit attached: \(attached.kind)" : "⊕ Orbit attached: \(attached.kind)")
+                .font(.orbitMeta)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
         }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 10)
-        .background(.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.accentColor.opacity(0.18), lineWidth: 1)
-        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(head(jobs, tasks)))
+        .help(head(jobs, tasks))
     }
 
     /// "⊕ Orbit attached: background jobs · 2 running, 1 failed".
@@ -107,6 +55,31 @@ struct AttachedNoteEntry: View {
         if let tasks { line += " · " + ReferencedTaskNote.summary(tasks.tasks) }
         if let jobs { line += " · " + BackgroundJobsNote.summary(jobs) }
         return line
+    }
+}
+
+/// What the line opens to. Two of the blocks open as something other than their own text: the
+/// inventory a returning engine is handed, whose lines are a list of outcomes
+/// (`BackgroundJobsNoteView`), and the tasks a person named with `#`, whose table holds an id nobody
+/// could tap (`ReferencedTaskNoteView`). One note can carry both, so each reading is handed what the
+/// one before it did not take, and what is left over is drawn as it always was: the block verbatim.
+struct AttachedNoteBody: View {
+    let attached: (kind: String, text: String)
+
+    var body: some View {
+        let jobs = BackgroundJobsText.parse(attached.text)
+        let tasks = ReferencedTaskText.parse(jobs?.rest ?? attached.text)
+        let rest = tasks?.rest ?? jobs?.rest ?? attached.text
+        return VStack(alignment: .leading, spacing: 4) {
+            if tasks != nil || jobs != nil {
+                if let tasks { ReferencedTaskNoteView(tasks: tasks.tasks) }
+                if let jobs { BackgroundJobsNoteView(jobs: jobs) }
+                // Another block the same note carried is neither reading's to draw as rows.
+                if !rest.isEmpty { verbatim(rest) }
+            } else {
+                verbatim(attached.text)
+            }
+        }
     }
 
     private func verbatim(_ text: String) -> some View {

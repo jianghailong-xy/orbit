@@ -7825,6 +7825,9 @@ button.chat-jump-start:hover {
 .chat-user-meta {
   display: flex;
   align-items: center;
+  /* One line always: a row longer than the bubble's column (copy · time · a long note line on a
+     phone) runs out into the free gutter on its left rather than wrapping or past the bubble. */
+  justify-content: flex-end;
   gap: 6px;
   margin-top: 3px;
   height: 18px;
@@ -8134,91 +8137,32 @@ button.chat-jump-start:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* What delivery appended to a person's message (ControlPlaneNote). The folded state is a compact
-   card: the message keeps its own words, while the Orbit context gets a clear status and one
-   deliberate entry point. The raw block remains the opened state for traceability. */
+/* What delivery appended to a message (useControlPlaneNote): one quiet line in the meta voice — the
+   size and grey of the time under a message, no colour, no frame — so what the person typed stays
+   what the eye lands on. ⊕ while shut, ⊖ once open. Under a person's bubble the line ends the meta
+   row and the opened rows go under that row; at the foot of a card that is Orbit's own, the line
+   opens in place (ControlPlaneNote). */
 .chat-injected {
   margin-top: 6px;
-  overflow: hidden;
-  border: 1px solid var(--brand-border);
-  border-radius: 14px;
-  background: var(--brand-tint);
-  color: var(--text-1);
-  font-size: 12px;
 }
 .chat-injected-head {
-  position: relative;
-  display: block;
-  width: 100%;
-  min-height: 48px;
-  padding: 11px 12px 9px 38px;
+  max-width: 100%;
+  padding: 0;
   border: 0;
-  border-bottom: 1px solid var(--brand-border);
-  background: transparent;
-  color: transparent;
+  background: none;
+  color: var(--text-3);
   font: inherit;
-  font-size: 0;
+  font-size: 12px;
+  line-height: 18px;
   text-align: left;
   cursor: pointer;
 }
-.chat-injected-head::before {
-  content: '⊕  Orbit context';
-  display: block;
-  color: var(--text-1);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 17px;
-}
-.chat-injected-head::after {
-  content: 'Attached · ' attr(data-display-kind);
-  display: block;
-  color: var(--text-3);
-  font-size: 10.5px;
-  line-height: 14px;
-}
-.chat-injected-overview {
-  padding: 11px 12px 12px;
-}
-.chat-injected-summary {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.chat-injected-summary strong {
-  color: var(--text-1);
-  font-size: 13px;
-  font-weight: 600;
-}
-.chat-injected-summary span {
-  color: var(--text-3);
-  font-size: 11px;
-}
-.chat-injected-overview p {
-  margin: 7px 0 10px;
+.chat-injected-head:hover {
   color: var(--text-2);
-  font-size: 12px;
-  line-height: 1.5;
 }
-.chat-injected-action {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  min-height: 31px;
-  padding: 0 9px;
-  border: 1px solid var(--brand-border);
-  border-radius: 8px;
-  background: var(--bg-raised);
-  color: var(--brand-strong);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-.chat-injected-action .anticon {
+.chat-injected-mark {
   font-size: 10px;
-}
-.chat-injected.is-open > .chat-injected-head {
-  background: var(--bg-raised);
+  vertical-align: 1px;
 }
 /* Drop the focus ring on mouse click; keep it for keyboard navigation. */
 .chat-injected-head:focus {
@@ -8229,13 +8173,28 @@ button.chat-jump-start:hover {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
+.chat-injected-panel {
+  margin-top: 2px;
+}
+.chat-injected-panel > :first-child {
+  margin-top: 0;
+}
+/* Under a person's bubble the opened rows take the column's width, on a quiet panel of their own. */
+.chat-user-wrap > .chat-injected-panel {
+  align-self: stretch;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bg-sunken);
+}
 .chat-injected-body {
   max-height: 320px;
-  margin: 0;
-  padding: 10px 12px;
+  margin: 6px 0 0;
+  padding: 8px 10px;
   overflow: auto;
-  border-top: 1px solid var(--brand-border);
-  background: var(--bg-raised);
+  border-radius: 8px;
+  /* Translucent, as the rows above it are: it may sit on a tinted card. */
+  background: var(--fill-inset);
   color: var(--text-2);
   font-size: 11px;
   line-height: 1.5;
@@ -10819,6 +10778,30 @@ button.chat-jump-start:hover {
   justify-content: center;
   row-gap: 2px;
 }
+/* The same turn when the conversation can draw the question it answers: that question's card. */
+.owner-answer-card {
+  margin: 4px 0 6px;
+}
+/* The words the coordinator was told, folded at the foot of the answered card's review. */
+.answered-question-told {
+  margin: 4px 14px 10px;
+  font-size: 12px;
+}
+.answered-question-told summary {
+  color: var(--text-2);
+  cursor: pointer;
+}
+.answered-question-told pre {
+  max-height: 260px;
+  margin: 6px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 /* ── The owner-confirmation card ──────────────────────────────────────────────────────────
    `OwnerConfirmationCard.tsx`: an OWNER_CONFIRMED task's run has ended its turn, and its owner is
    asked to confirm it done or send it back. The evidence card's frame, with the two facts a person
@@ -12792,15 +12775,20 @@ button.chat-jump-start:hover {
   font-size: 12px;
 }
 /* What a question becomes once it has ended (`AnsweredQuestionCard`,
-   docs/mocks/coordinator-question-answered/): the question card's own blue, dimmed, with the
-   question's opening and how it ended; its review replays the question and every option. */
+   docs/mocks/coordinator-question-answered/): the question's opening and how it ended; its review
+   replays the question and every option. In the neutral frame a decided evidence card takes, with the
+   answer ticked green — the blue stays with the open question, still waiting on the owner
+   (docs/mocks/owner-answer-sent-card/tone.html). Dashed while the turn handing it over waits on the
+   queue, as a queued message is. */
 .review-card-preview.answered-question-card {
   gap: 6px;
   padding: 12px 14px;
-  border: 1px solid var(--brand-border);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--brand-tint);
-  opacity: 0.85;
+  background: var(--bg-raised);
+}
+.review-card-preview.answered-question-card.is-queued {
+  border-style: dashed;
 }
 .answered-question-head {
   display: flex;
@@ -12815,8 +12803,8 @@ button.chat-jump-start:hover {
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  background: var(--brand-tint-hover);
-  color: var(--brand);
+  background: var(--bg-hover);
+  color: var(--text-3);
   font-size: 13px;
 }
 .answered-question-card.is-withdrawn .answered-question-icon {
@@ -12853,7 +12841,7 @@ button.chat-jump-start:hover {
 }
 .answered-question-tick {
   flex: none;
-  color: var(--brand);
+  color: var(--success-solid);
 }
 .answered-question-note {
   overflow: hidden;
@@ -12880,7 +12868,7 @@ button.chat-jump-start:hover {
   align-items: center;
   justify-content: space-between;
   padding-top: 8px;
-  border-top: 1px solid var(--brand-border);
+  border-top: 1px solid var(--border-subtle);
   font-size: 13px;
   font-weight: 600;
   color: var(--brand);

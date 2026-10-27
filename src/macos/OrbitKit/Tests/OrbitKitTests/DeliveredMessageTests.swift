@@ -163,29 +163,35 @@ final class DeliveredMessageTests: XCTestCase {
         XCTAssertEqual(web, injectedTagLabels, "a block goes by the same name on both clients")
 
         let entry = try section(try source("src/web/src/components/Transcript.tsx"),
-                                from: "function ControlPlaneNote", to: "\n}\n")
+                                from: "function useControlPlaneNote(", to: "\n}\n")
         XCTAssertTrue(entry.contains("`⊕ Orbit attached: ${kind}`"),
                       "and web's entry is signed the way the native one is")
     }
 
-    func testTheBubbleDrawsOneEntryInsideItselfWhicheverWayItWasToldApart() throws {
+    /// The bubble holds the person's words and nothing else; what delivery appended is one line at
+    /// the end of the meta row under it, and opens under that row (owner, 2026-10-27:
+    /// docs/mocks/attached-context-note).
+    func testTheBubbleHoldsTheWordsAndItsMetaRowNamesTheNote() throws {
         let view = try section(
             try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/MessageBubbles.swift"),
             from: "struct UserBubbleView: View", to: "struct AssistantBubbleView: View")
-        let bubble = try section(view, from: "if let attached = bubble.attached {",
+        let tinted = try section(view, from: "if !bubble.text.isEmpty {",
                                  to: ".background(.tint.opacity(0.15)")
-        // The entry itself moved out of the bubble when a turn nobody typed needed to draw the same
-        // one inside its card (`AttachedNoteEntry`); what it says is still what is asserted here.
+        let meta = try section(view, from: "private var meta: some View", to: "private var why")
+        let column = try section(view, from: "meta\n", to: ".contentShape(Rectangle())")
         let entry = try section(
             try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/AttachedNoteView.swift"),
             from: "struct AttachedNoteEntry", to: "struct BackgroundJobsNoteView")
 
-        XCTAssertTrue(bubble.contains("GridRow { AttachedNoteEntry(attached: attached) }"),
-                      "the entry is drawn inside the tinted bubble, not under it")
-        XCTAssertTrue(bubble.contains(".gridCellUnsizedAxes(.horizontal)"),
-                      "parted from the words by a rule that does not widen a bubble hugging its text")
+        XCTAssertFalse(tinted.contains("AttachedNote"), "nothing of the note is in the tinted bubble")
+        XCTAssertTrue(meta.contains("AttachedNoteLine(attached: attached, open: $noteOpen)"),
+                      "the line ends the meta row under the bubble")
+        XCTAssertTrue(column.contains("AttachedNoteBody(attached: attached)"),
+                      "and what it opens to goes under that row, in the bubble's column")
         XCTAssertTrue(entry.contains(#""⊕ Orbit attached: \(attached.kind)""#),
                       "signed as web signs it, with the kind its note was named")
+        XCTAssertTrue(entry.contains(#""⊖ Orbit attached: \(attached.kind)""#),
+                      "and the plus is a minus while it is open")
         XCTAssertTrue(entry.contains("verbatim(attached.text)"),
                       "and opening to the text the model read")
         XCTAssertFalse(view.contains("bubble.injected"),

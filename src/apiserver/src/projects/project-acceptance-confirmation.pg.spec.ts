@@ -708,7 +708,10 @@ test('the owner confirms one version of a project’s acceptance standard set, a
       criteriaCount: 1,
       held: [{ id: waiting.heldId, title: HELD }],
       heldCount: 1,
-      settings: { line: 'MAIN', automatic: true, maxConcurrentTasks: 3, mergeCheckCommand: null },
+      settings: {
+        line: 'MAIN', automatic: true, maxConcurrentTasks: 3, mergeCheckCommand: null,
+        mergeCheckTimeoutSeconds: null,
+      },
       differsFromRequest: [],
     });
     const key = projectStartOfTurn(message.client_turn_id);

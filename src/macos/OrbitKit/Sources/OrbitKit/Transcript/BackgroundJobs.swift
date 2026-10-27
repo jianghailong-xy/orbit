@@ -213,11 +213,12 @@ public enum BackgroundJobsNote {
         return "\(job.status) · \(reason)"
     }
 
-    /// "2 running, 1 failed" — what the block holds, on the line that names it folded.
+    /// "2 running, 1 failed" — what the block holds, in the accessibility label of the line that
+    /// names it.
     ///
-    /// The count is the whole point of the line: "background jobs" alone never said whether opening
-    /// it was worth it. A lone job that ended says how, because that one number is what its reader
-    /// came for.
+    /// "background jobs" alone never said whether opening it was worth it. The count stays off the
+    /// line's words, where what the person typed is what the eye should land on (owner, 2026-10-27).
+    /// A lone job that ended says how, because that one number is what its reader came for.
     public static func summary(_ jobs: BackgroundJobs) -> String {
         if jobs.running.isEmpty, jobs.ended.count == 1, let only = jobs.ended.first {
             if let code = only.exitCode { return "1 ended, exit \(code)" }
